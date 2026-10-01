@@ -9,7 +9,6 @@ autotests = false
 anyhow = { workspace = true }
 csv = { workspace = true }
 hex = { workspace = true }
-contacts = { path = "../../libs/contacts" }
 go-sms-mms = { path = "../../libs/go-sms-mms" }
 message-crate-core = { path = "../../core/message-crate-core" }
 message-ir = { path = "../../libs/ir" }

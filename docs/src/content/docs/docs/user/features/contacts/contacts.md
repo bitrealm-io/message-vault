@@ -75,7 +75,8 @@ Enter saves the name.
 Escape, or a click anywhere else, cancels the edit.
 
 An empty name is refused, so a name can be changed but not removed this way.
-A typed name is the contact's name from then on: no later import and no address book load replaces it.
+A typed name is the contact's name from then on: no later import replaces it.
+An Address Book load replaces it only when the file gives the contact a different name.
 
 ## Add or remove an identity
 
@@ -134,10 +135,10 @@ When a number arrives as an iMessage address and again as an SMS address, both l
 
 ## Where a contact's name comes from
 
-Three things can name a contact, and they rank in this order:
+Three things can name a contact:
 
-1. **A name typed in Edit name.** Nothing replaces it.
-2. **An address book load.** It replaces a name an import supplied and leaves a typed name alone.
+1. **A name typed in Edit name.** It replaces whatever name the contact had.
+2. **An Address Book load.** The file is the same person typing in a spreadsheet, so a name in the file replaces whatever name the contact had. A blank name in the file leaves the name alone.
 3. **An import.** It names only a contact that has no name.
 
 Because an import names only a nameless contact, the first backup that knows a name wins.
@@ -162,25 +163,99 @@ The import then discards the trashed contact with every identity it had and make
 
 ## The Address Book
 
-An Address Book load puts names to the phone numbers already in the account.
-It lives in **Settings**, on the **Profile** tab, under **Address book**.
+The Address Book is a CSV file of contacts and their identities, for editing many contacts at once in a spreadsheet.
+Contacts themselves arrive with message imports.
+The file is how fifty Unknown contacts are named in one sitting, how a wrongly linked number is moved, and how Contact Groups are filled in bulk.
 
-**Choose a file** takes a `.vcf` file or a vCard `.csv` file of at most 8 MB.
+The work has three steps: export the file, edit it, load it back.
+
+### Export the file
+
+**Export** sits above the Contacts list, beside the sort menu.
+It writes the contacts the list is showing:
+
+- With rows checked, the file holds the checked contacts.
+- With a search or a Contact Group open, the file holds the contacts that match. **Unknown** in the left panel followed by **Export** gives a file of every contact that still needs a name.
+- With neither, the file holds every contact.
+
+The file is named `address-book.csv`.
+A browser saves it to its downloads, and the desktop app asks where to save it.
+
+### What the file holds
+
+The file has one row for each identity, and six columns.
+
+| Column | What it holds |
+|---|---|
+| `contact_id` | The number Message Crate knows the contact by. Rows with the same value are one contact. |
+| `display_name` | The contact's name. Blank for a contact with no name. |
+| `groups` | The contact's Contact Groups, separated by `;`. |
+| `service` | `phone` for a text message identity, `whatsapp` for a WhatsApp one. |
+| `handle_type` | `phone`, `email`, `username`, or `other`. |
+| `identity` | The phone number, email address, or username. |
+
+A contact with three identities is three rows, and its name and Contact Groups repeat on each.
+A contact with no identity is one row with the last three columns blank.
+
+```csv title="address-book.csv"
+contact_id,display_name,groups,service,handle_type,identity
+12,Ada Lovelace,Family;Work,phone,phone,+15555550100
+12,Ada Lovelace,Family;Work,whatsapp,phone,+15555550100
+12,Ada Lovelace,Family;Work,phone,email,ada@example.com
+31,,,phone,phone,+15555550142
+```
+
+Contact 31 above is Unknown: it has an identity and no name.
+
+### Edit the file
+
+Any spreadsheet opens the file.
+The `identity` column should be kept as text, because a spreadsheet that reads `+6591234567` as a number drops the `+`, and the number is then read as a US one.
+
+- **Name a contact.** Fill in `display_name` on its rows.
+- **Put a contact in a Contact Group.** Add the group's name to `groups`. A name that matches no Contact Group creates one.
+- **Give a contact another identity.** Add a row with the same `contact_id`.
+- **Move an identity to another contact.** Change the row's `contact_id` to the other contact's.
+- **Make a new contact.** Leave `contact_id` blank. To give a new contact several identities, put the same made-up word, such as `new-1`, in `contact_id` on each of its rows.
+- **Leave a contact alone.** Delete its rows from the file. A contact the file does not mention is never changed.
+
+The rows of one contact must agree on `display_name` and on `groups`.
+A blank cell agrees with anything, so the name needs filling in only once.
+
+### Load the file
+
+The load is in **Settings**, on the **Profile** tab, under **Address book**.
+**How to load it** has two choices:
+
+- **Append** creates the contacts the file adds, renames the ones it holds, and adds the identities and Contact Groups it lists. It removes nothing.
+- **Edit** does the same, then makes each contact in the file hold exactly the identities and Contact Groups its rows list. A row taken out of the file takes that identity off the contact. The identity stays in its conversations, which show the number again in place of the name.
+
+**Choose a file** takes a `.csv` file of at most 8 MB.
 A larger file is refused with **That file is larger than 8 MB.**
-Any other file type is refused with **Choose a .vcf or .csv file.**
 
-The load reads names and phone numbers only.
-A card with no phone number is skipped, because a name with no number matches no message.
+When the load finishes, the section lists what it changed: contacts created, updated and deleted, identities added, moved and removed, and Contact Groups created.
+A file exported and loaded straight back changes nothing, and every count is zero.
 
-For each card, the load looks for a contact that already has one of the card's phone numbers:
+No load deletes a contact, with one exception: a contact left with neither a name nor an identity is deleted, because nothing could reach it.
 
-- A contact with no name, or with a name an import supplied, takes the card's name.
-- A contact with a typed name keeps it.
-- A card that matches no contact makes a new contact.
+### When a load is refused
 
-When the load finishes, the section reports what it read, such as **Loaded 120 contacts and 134 phone numbers.**
-A number the load could not read with certainty is counted in the same line as a number that needs a look.
+A file with a mistake in it is refused whole, and nothing is loaded.
+The section lists each row at fault with its row number and the reason, so the fix is made in the spreadsheet and the file loaded again.
+Row 1 is the header.
 
-Loading a file again updates the contacts earlier loads made.
-A contact an earlier load made that the new file no longer lists is deleted.
-Contacts found in messages, typed names, and Contact Groups are left as they are, and a load never creates a Contact Group.
+A load refuses:
+
+- A phone number that is not 4 to 15 digits, or holds anything but digits, spaces, and `+ - ( ) .`
+- An email address without exactly one `@` and text on both sides of it.
+- A `service` or `handle_type` that is not one of the values in the table above.
+- Two rows of one contact that give different names or different Contact Groups.
+- One identity listed under two contacts.
+- A Contact Group name the product reserves, such as `Unknown`.
+- An identity that belongs to a named contact the file does not mention.
+
+The last rule protects a named contact from losing an identity unseen.
+An identity moves freely from a contact with no name, which is what naming the Unknown contacts needs.
+To move an identity between two named contacts, both must be in the file.
+
+Message Crate does not read a phone's vCard (`.vcf`) file.

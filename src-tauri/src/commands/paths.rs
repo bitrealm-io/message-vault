@@ -145,6 +145,35 @@ pub fn open_path(path: String, staging_root: String) -> Result<(), String> {
     open::that_detached(&resolved).map_err(|error| format!("Could not open path: {error}"))
 }
 
+/// Write `contents` to the file at `path`, replacing a file already there.
+///
+/// The window calls this with the path the person chose in the Save dialog,
+/// for a file the server answered as text, such as the address book. A
+/// desktop window has no downloads folder of its own, so the app writes the
+/// file where the person asked.
+///
+/// # Errors
+///
+/// Returns an error when the path is empty or not absolute, or the file
+/// cannot be written.
+#[tauri::command]
+pub fn save_text_file(path: String, contents: String) -> Result<(), String> {
+    save_text_file_inner(&path, &contents)
+}
+
+/// The work of [`save_text_file`], apart from the command wrapper.
+pub(crate) fn save_text_file_inner(path: &str, contents: &str) -> Result<(), String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("The path to save to is empty".to_string());
+    }
+    let path = Path::new(trimmed);
+    if !path.is_absolute() {
+        return Err(format!("The path to save to must be absolute: {trimmed}"));
+    }
+    std::fs::write(path, contents).map_err(|error| format!("Could not save {trimmed}: {error}"))
+}
+
 /// Error when a resolved staging path is not on disk yet.
 ///
 /// The OS opener often reports success for a missing path (for example
@@ -260,6 +289,38 @@ fn reject_filesystem_root(root: &Path) -> Result<(), String> {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn save_text_file_writes_the_text_and_replaces_what_was_there() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("address-book.csv");
+        fs::write(&path, "old").unwrap();
+
+        save_text_file_inner(path.to_str().unwrap(), "contact_id,display_name\n").unwrap();
+
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "contact_id,display_name\n"
+        );
+    }
+
+    #[test]
+    fn save_text_file_refuses_an_empty_or_relative_path_and_reports_a_failed_write() {
+        assert!(
+            save_text_file_inner("  ", "x")
+                .unwrap_err()
+                .contains("empty")
+        );
+        assert!(
+            save_text_file_inner("address-book.csv", "x")
+                .unwrap_err()
+                .contains("absolute")
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("no-such-folder").join("address-book.csv");
+        let err = save_text_file_inner(missing.to_str().unwrap(), "x").unwrap_err();
+        assert!(err.starts_with("Could not save "), "{err}");
+    }
 
     #[test]
     fn rejects_empty_path() {

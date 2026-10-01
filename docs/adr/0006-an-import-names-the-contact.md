@@ -27,6 +27,11 @@ import wins, and a person can correct a name once. Marking the name as
 imported keeps the address-book refresh rule from #286 intact, because a
 refresh replaces only what the address book owns and a typed name still wins.
 
+Since #270 the address book is Message Crate's own CSV, exported, edited and
+loaded back, and a name in the file replaces a typed one too, because the
+file is the person typing. The rule for an import, which this record
+decides, is unchanged. See `docs/architecture/contacts-identities-and-messages.md`.
+
 ## Consequences
 
 - Display name for a participant is one rule in one loader used by the

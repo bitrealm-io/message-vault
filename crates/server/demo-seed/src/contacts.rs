@@ -1,4 +1,4 @@
-//! Writes contact cards and the small config files used by `reset-demo`.
+//! Writes the demo's address book and the small config files used by `reset-demo`.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -8,59 +8,56 @@ use anyhow::{Context, Result};
 
 use crate::personas::{OWNER_EMAIL, OWNER_PHONE, Roster};
 
-/// Write `contacts.vcf`, one vCard (a contact card) per roster contact.
+/// The columns of the address book, as the server's Export writes them.
+const ADDRESS_BOOK_HEADER: &str = "contact_id,display_name,groups,service,handle_type,identity";
+
+/// Write `contacts.csv`, the demo's address book, in the format the server
+/// exports and loads: one row per identity.
 ///
-/// Cards with no name use the primary phone as the display name so the file
-/// stays valid.
+/// The demo is built the way a person builds theirs. The three backups are
+/// imported first and carry no names for these people, so each arrives as an
+/// Unknown. `reset-demo` then loads this file, which names them: every
+/// contact here is a new one under a key of the file's own (`demo-1`,
+/// `demo-2`, ...), and its identities move to it from the Unknown the import
+/// made. A contact on WhatsApp lists its number once for each service, so the
+/// Unknown is left holding nothing and goes.
 ///
 /// # Errors
 ///
 /// Returns an error if the file cannot be written.
-pub fn write_vcf(config_dir: &Path, roster: &Roster) -> Result<()> {
-    let contacts_path = config_dir.join("contacts.vcf");
-    let mut out = String::new();
-    for c in &roster.contacts {
-        let display_name = c.display_hint();
-        writeln!(out, "BEGIN:VCARD")?;
-        writeln!(out, "VERSION:3.0")?;
-        if display_name.is_empty() {
-            // A card with no name still needs FN. Use the primary phone so the
-            // vCard stays valid.
-            writeln!(out, "FN:{}", escape_vcf(c.primary_phone()))?;
-            writeln!(out, "N:;;;;")?;
-        } else {
-            writeln!(out, "FN:{}", escape_vcf(&display_name))?;
+pub fn write_address_book(config_dir: &Path, roster: &Roster) -> Result<()> {
+    let contacts_path = config_dir.join("contacts.csv");
+    let mut out = String::from(ADDRESS_BOOK_HEADER);
+    out.push('\n');
+    for (index, c) in roster.contacts.iter().enumerate() {
+        let lead = format!(
+            "demo-{},{},{}",
+            index + 1,
+            csv_field(&c.display_hint()),
+            csv_field(&c.groups.join(";"))
+        );
+        for phone in &c.phones {
+            writeln!(out, "{lead},phone,phone,{}", csv_field(phone))?;
+        }
+        if c.has_whatsapp {
             writeln!(
                 out,
-                "N:{};{};{};;",
-                escape_vcf(&c.last_name),
-                escape_vcf(&c.first_name),
-                escape_vcf(&c.middle_name)
+                "{lead},whatsapp,phone,{}",
+                csv_field(c.primary_phone())
             )?;
         }
-        for phone in &c.phones {
-            writeln!(out, "TEL:{}", escape_vcf(phone))?;
-        }
-        if !c.groups.is_empty() {
-            let mut categories = Vec::with_capacity(c.groups.len());
-            for group in &c.groups {
-                categories.push(escape_vcf(group));
-            }
-            writeln!(out, "CATEGORIES:{}", categories.join(","))?;
-        }
-        writeln!(out, "END:VCARD")?;
     }
     fs::write(&contacts_path, out).with_context(|| format!("write {}", contacts_path.display()))?;
     Ok(())
 }
 
-/// Escape characters that would break a vCard field (`\`, newlines, `;`, `,`).
-fn escape_vcf(value: &str) -> String {
-    value
-        .replace('\\', "\\\\")
-        .replace('\n', "\\n")
-        .replace(';', "\\;")
-        .replace(',', "\\,")
+/// One CSV field: quoted when it holds a comma, a quote, or a line break.
+fn csv_field(value: &str) -> String {
+    if value.contains([',', '"', '\n', '\r']) {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
+    }
 }
 
 /// Write `config.toml` with the database and asset folder paths used after a demo reset.

@@ -299,8 +299,6 @@ async fn import_files(conn: &mut sqlx::SqliteConnection, files: &[(&str, String)
     let opts = crate::imports_api::ImportOptions::fixed(crate::imports_api::FixedImportArgs {
         assets_dir: &assets,
         asset_root: tmp.path(),
-        contacts: None,
-        overwrite_contacts: false,
         mode: crate::imports_api::ImportMode::Append,
         source: "imessage",
         account_id: TEST_ACCOUNT,

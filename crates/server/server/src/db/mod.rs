@@ -1,6 +1,7 @@
 //! Schema and tenant data helpers (accounts, tokens, contacts) over SQLite.
 
 pub mod account_profile;
+pub mod address_book;
 pub mod api_tokens;
 pub mod contacts;
 pub mod conversation_messages;

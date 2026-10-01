@@ -1,8 +1,6 @@
 use super::*;
-use crate::db::contacts;
 use crate::db::contacts::read::DEFAULT_CONTACT_SORT;
 use crate::paging::{DEFAULT_LIST_LIMIT, parse_sort};
-use address_book::address_book_file_name;
 use edit::ContactEditError;
 use message_ir::HandleType;
 
@@ -1863,56 +1861,177 @@ async fn list_contacts_filters_service_or() {
     assert!(names.contains(&"Sms"));
 }
 
-/// A file that is not the address book it claims to be is the caller's to
-/// fix, so it answers `422`, not the `500` that says the server broke; and a
-/// book that does parse is still loaded.
-#[tokio::test]
-async fn a_broken_address_book_is_a_422_and_a_good_one_loads() {
-    let (fixture, account) = fixture_with_account().await;
-    let (status, text) = crate::test_support::post_raw(
+/// The header every address book starts with.
+const ADDRESS_BOOK_HEADER: &str = "contact_id,display_name,groups,service,handle_type,identity";
+
+/// `POST /v1/contacts` with a `text/csv` body.
+async fn load_address_book(
+    fixture: &TestFixture,
+    account: &RegisteredAccount,
+    query: &str,
+    body: impl Into<reqwest::Body>,
+) -> (StatusCode, String) {
+    crate::test_support::post_raw(
         &fixture.state,
-        "/v1/contacts",
+        &format!("/v1/contacts{query}"),
         &account.token,
-        "text/vcard",
-        "this is not a vCard",
+        "text/csv",
+        body,
     )
-    .await;
+    .await
+}
+
+/// `POST /v1/contacts/address-book`: the status, the two headers that make
+/// the answer a file, and the body.
+async fn export_address_book(
+    fixture: &TestFixture,
+    account: &RegisteredAccount,
+    body: serde_json::Value,
+    accept: Option<&str>,
+) -> (StatusCode, String, String, String) {
+    let server = crate::test_support::serve(&fixture.state).await;
+    let mut request = reqwest::Client::new()
+        .post(format!("{}/v1/contacts/address-book", server.base()))
+        .bearer_auth(&account.token)
+        .json(&body);
+    if let Some(accept) = accept {
+        request = request.header(reqwest::header::ACCEPT, accept);
+    }
+    let response = request.send().await.unwrap();
+    let status = response.status();
+    let header = |name: reqwest::header::HeaderName| {
+        response
+            .headers()
+            .get(name)
+            .map(|v| v.to_str().unwrap().to_string())
+            .unwrap_or_default()
+    };
+    let content_type = header(reqwest::header::CONTENT_TYPE);
+    let disposition = header(reqwest::header::CONTENT_DISPOSITION);
+    // Read the body before `server` drops and aborts the task.
+    let text = response.text().await.unwrap();
+    (status, content_type, disposition, text)
+}
+
+/// A good file loads and answers the seven counts; a file that breaks a rule
+/// is the caller's to fix, so it answers `422` with one sentence for each bad
+/// row and stores nothing.
+#[tokio::test]
+async fn an_address_book_loads_and_a_bad_one_is_a_422_naming_each_row() {
+    let (fixture, account) = fixture_with_account().await;
+    let bad = format!(
+        "{ADDRESS_BOOK_HEADER}\n\
+         a,Dana,,phone,phone,+15555550100\n\
+         b,Eli,,carrier pigeon,phone,+15555550101\n\
+         c,Flo,,phone,email,flo.example.com\n"
+    );
+    let (status, text) = load_address_book(&fixture, &account, "", bad).await;
     let problem = crate::test_support::expect_problem(
         status,
         &text,
         crate::problem::ProblemType::ValidationFailed,
     );
-    let errors = problem.errors.unwrap().join(" ");
-    assert!(
-        errors.contains("BEGIN:VCARD"),
-        "says what is wrong: {errors}"
-    );
-    assert!(
-        !errors.contains("address-book.vcf"),
-        "never names the server's temp file: {errors}"
-    );
+    let errors = problem.errors.unwrap();
+    assert_eq!(errors.len(), 2, "{errors:?}");
+    assert!(errors[0].starts_with("row 3: service"), "{errors:?}");
+    assert!(errors[1].starts_with("row 4: "), "{errors:?}");
+    let page: serde_json::Value =
+        crate::test_support::get_json(&fixture.state, "/v1/contacts", &account.token).await;
+    assert_eq!(page["total"], 0, "the good row did not go in");
 
+    let good = format!(
+        "{ADDRESS_BOOK_HEADER}\n\
+         a,Dana,Family,phone,phone,+15555550100\n\
+         a,Dana,Family,phone,email,dana@example.com\n"
+    );
+    let (status, text) = load_address_book(&fixture, &account, "", good).await;
+    assert_eq!(status, StatusCode::OK, "{text}");
+    let body: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(
+        body,
+        serde_json::json!({
+            "contacts_created": 1,
+            "contacts_updated": 0,
+            "contacts_deleted": 0,
+            "identities_added": 2,
+            "identities_moved": 0,
+            "identities_removed": 0,
+            "groups_created": 1,
+        })
+    );
+}
+
+/// `mode` is how the file is applied. Absent is `append`, which removes
+/// nothing; `edit` takes off what the rows do not list; any other word is
+/// refused before the file is read.
+#[tokio::test]
+async fn the_mode_parameter_picks_append_or_edit() {
+    let (fixture, account) = contacts_fixture_with_handles(&["+15555550100"]).await;
+    let page: serde_json::Value =
+        crate::test_support::get_json(&fixture.state, "/v1/contacts", &account.token).await;
+    let id = page["items"][0]["id"].as_i64().unwrap();
+    // The contact stays in the file with a different identity.
+    let file = format!("{ADDRESS_BOOK_HEADER}\n{id},Contact 0,,phone,email,zero@example.com\n");
+
+    for query in ["", "?mode=append"] {
+        let (status, text) = load_address_book(&fixture, &account, query, file.clone()).await;
+        assert_eq!(status, StatusCode::OK, "{text}");
+        let body: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(body["identities_removed"], 0, "{query}: {text}");
+    }
+    let (status, text) = load_address_book(&fixture, &account, "?mode=edit", file.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{text}");
+    let body: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(body["identities_removed"], 1, "{text}");
+    assert_eq!(body["contacts_updated"], 1, "{text}");
+
+    let (status, text) = load_address_book(&fixture, &account, "?mode=replace", file).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{text}");
+}
+
+/// The file is the body and `text/csv` is its only format. A vCard, which
+/// the route once read, is `415` like any other type.
+#[tokio::test]
+async fn an_address_book_that_is_not_text_csv_is_a_415() {
+    let (fixture, account) = fixture_with_account().await;
+    for content_type in ["text/vcard", "application/json", "text/plain"] {
+        let (status, text) = crate::test_support::post_raw(
+            &fixture.state,
+            "/v1/contacts",
+            &account.token,
+            content_type,
+            "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Dana\r\nTEL:+15555550100\r\nEND:VCARD\r\n",
+        )
+        .await;
+        crate::test_support::expect_problem(
+            status,
+            &text,
+            crate::problem::ProblemType::UnsupportedMediaType,
+        );
+    }
     let (status, text) = crate::test_support::post_raw(
         &fixture.state,
         "/v1/contacts",
         &account.token,
-        "text/vcard",
-        "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Dana\r\nTEL:+15555550100\r\nEND:VCARD\r\n",
+        "text/csv; charset=utf-8",
+        format!("{ADDRESS_BOOK_HEADER}\n,Dana,,phone,phone,+15555550100\n"),
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "{text}");
-    let body: serde_json::Value = serde_json::from_str(&text).unwrap();
-    assert_eq!(body["contacts"], 1, "{text}");
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "a charset parameter is still text/csv: {text}"
+    );
 }
 
-/// A vCard file of exactly `len` bytes: one card whose `NOTE` line, which the
-/// reader ignores, is padded to make up the size.
+/// An address book of exactly `len` bytes: one contact whose name is padded
+/// to make up the size.
 fn address_book_of(len: usize) -> String {
-    let head = "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Dana\r\nTEL:+15555550100\r\nNOTE:";
-    let tail = "\r\nEND:VCARD\r\n";
+    let head = format!("{ADDRESS_BOOK_HEADER}\n,");
+    let tail = ",,phone,phone,+15555550100\n";
     let padding = len
         .checked_sub(head.len() + tail.len())
-        .expect("len holds the fixed part of the card");
+        .expect("len holds the fixed part of the file");
     let book = format!("{head}{}{tail}", "a".repeat(padding));
     assert_eq!(book.len(), len);
     book
@@ -1928,23 +2047,21 @@ async fn an_address_book_at_the_size_cap_loads_and_one_byte_over_is_a_413() {
     use address_book::MAX_ADDRESS_BOOK_BYTES;
     let (fixture, account) = fixture_with_account().await;
 
-    let (status, text) = crate::test_support::post_raw(
-        &fixture.state,
-        "/v1/contacts",
-        &account.token,
-        "text/vcard",
+    let (status, text) = load_address_book(
+        &fixture,
+        &account,
+        "",
         address_book_of(MAX_ADDRESS_BOOK_BYTES),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{text}");
     let body: serde_json::Value = serde_json::from_str(&text).unwrap();
-    assert_eq!(body["contacts"], 1, "{text}");
+    assert_eq!(body["contacts_created"], 1, "{text}");
 
-    let (status, text) = crate::test_support::post_raw(
-        &fixture.state,
-        "/v1/contacts",
-        &account.token,
-        "text/vcard",
+    let (status, text) = load_address_book(
+        &fixture,
+        &account,
+        "",
         address_book_of(MAX_ADDRESS_BOOK_BYTES + 1),
     )
     .await;
@@ -1960,587 +2077,143 @@ async fn an_address_book_at_the_size_cap_loads_and_one_byte_over_is_a_413() {
     );
 }
 
-#[test]
-fn the_media_type_alone_decides_the_address_book_format() {
-    assert_eq!(
-        address_book_file_name(Some("text/vcard")),
-        Some("address-book.vcf")
-    );
-    assert_eq!(
-        address_book_file_name(Some("Text/X-VCard")),
-        Some("address-book.vcf")
-    );
-    assert_eq!(
-        address_book_file_name(Some("text/csv")),
-        Some("address-book.csv")
-    );
-    // No file name is ever read, so nothing can name a path.
-    assert_eq!(address_book_file_name(Some("application/json")), None);
-    assert_eq!(address_book_file_name(None), None);
+/// The export answers a file, not JSON: `text/csv`, a `Content-Disposition`
+/// naming it, and one row per identity. It is let past the JSON `Accept`
+/// check, so a client that asks for `text/csv` is answered, not refused
+/// with `406 Not Acceptable`.
+#[tokio::test]
+async fn the_address_book_export_answers_a_csv_attachment() {
+    let (fixture, account) = contacts_fixture_with_handles(&["+15555550100", "+15555550101"]).await;
+    for accept in [None, Some("text/csv"), Some("application/json")] {
+        let (status, content_type, disposition, text) =
+            export_address_book(&fixture, &account, serde_json::json!({}), accept).await;
+        assert_eq!(status, StatusCode::OK, "{accept:?}: {text}");
+        assert_eq!(content_type, "text/csv; charset=utf-8", "{accept:?}");
+        assert_eq!(
+            disposition, "attachment; filename=\"address-book.csv\"",
+            "{accept:?}"
+        );
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines[0], ADDRESS_BOOK_HEADER);
+        assert_eq!(lines.len(), 3, "{text}");
+        assert!(
+            lines[1].ends_with(",Contact 0,,phone,phone,+15555550100"),
+            "{text}"
+        );
+        assert!(
+            lines[2].ends_with(",Contact 1,,phone,phone,+15555550101"),
+            "{text}"
+        );
+    }
 }
 
+/// `q` is the Contacts list's search and `ids` its checked rows. Either
+/// narrows the file, both together keep the checked rows the search matches,
+/// and a search the list would refuse is refused here the same way.
 #[tokio::test]
-async fn an_address_book_renames_a_contact_an_import_named() {
-    let fixture = test_fixture().await;
-    let account = fixture.account_with_id(101, "alice").await;
-    let dir = fixture.dir();
-    let mut conn = fixture.conn().await;
+async fn the_address_book_export_holds_the_contacts_the_search_and_the_checked_rows_pick() {
+    let (fixture, account) =
+        contacts_fixture_with_handles(&["+15555550100", "+15555550101", "+15555550102"]).await;
+    let page: serde_json::Value =
+        crate::test_support::get_json(&fixture.state, "/v1/contacts", &account.token).await;
+    let id_of = |name: &str| {
+        page["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"] == name)
+            .unwrap()["id"]
+            .as_i64()
+            .unwrap()
+    };
+    let names = |text: &str| -> Vec<String> {
+        text.lines()
+            .skip(1)
+            .map(|line| line.split(',').nth(1).unwrap().to_string())
+            .collect()
+    };
 
-    // What an import leaves behind: a contact named by the backup, holding
-    // the phone, marked as the import's.
-    let discovered = insert_contact_with_handle(&mut conn, account, "Bobby", "+15551234567").await;
-    sqlx::query("UPDATE contacts SET origin = 'import' WHERE id = $1")
-        .bind(discovered)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-
-    let book = dir.join("book.vcf");
-    std::fs::write(
-        &book,
-        "BEGIN:VCARD\nVERSION:3.0\nFN:Robert Smith\nN:Smith;Robert;;;\nTEL:+15551234567\nEND:VCARD\n",
-    )
-    .unwrap();
-    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, account)
-        .await
-        .unwrap();
-
-    let names: Vec<String> = sqlx::query_scalar(
-        "SELECT preferred_name FROM contacts WHERE account_id = $1 ORDER BY preferred_name",
-    )
-    .bind(account)
-    .fetch_all(&mut *conn)
-    .await
-    .unwrap();
-    assert_eq!(
-        names,
-        vec!["Robert Smith".to_string()],
-        "the book renames the imported contact instead of making a second one: {names:?}"
-    );
-
-    let name: String = sqlx::query_scalar("SELECT preferred_name FROM contacts WHERE id = $1")
-        .bind(discovered)
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
-    assert_eq!(name, "Robert Smith");
-
-    // The identity stays the import's, so a later book that drops the card
-    // does not take the person's messages' contact with it.
-    let origin: String = sqlx::query_scalar("SELECT origin FROM contacts WHERE id = $1")
-        .bind(discovered)
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
-    assert_eq!(origin, "import");
-}
-
-#[tokio::test]
-async fn a_nameless_card_does_not_blank_an_imported_name() {
-    let fixture = test_fixture().await;
-    let account = fixture.account_with_id(101, "alice").await;
-    let dir = fixture.dir();
-    let mut conn = fixture.conn().await;
-
-    // An import already named this person; the book only lists their
-    // number, nothing more.
-    let discovered = insert_contact_with_handle(&mut conn, account, "Bobby", "+15551234567").await;
-    sqlx::query("UPDATE contacts SET origin = 'import' WHERE id = $1")
-        .bind(discovered)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-
-    let book = dir.join("book.vcf");
-    std::fs::write(
-        &book,
-        "BEGIN:VCARD\nVERSION:3.0\nTEL:+15551234567\nEND:VCARD\n",
-    )
-    .unwrap();
-    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, account)
-        .await
-        .unwrap();
-
-    // A card with no name has nothing to say about who this person is,
-    // so it does not get to unname them.
-    let name: String = sqlx::query_scalar("SELECT preferred_name FROM contacts WHERE id = $1")
-        .bind(discovered)
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
-    assert_eq!(name, "Bobby");
-
-    let origin: String = sqlx::query_scalar("SELECT origin FROM contacts WHERE id = $1")
-        .bind(discovered)
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
-    assert_eq!(origin, "import");
-}
-
-#[tokio::test]
-async fn an_address_book_does_not_rename_a_contact_the_person_typed() {
-    let fixture = test_fixture().await;
-    let account = fixture.account_with_id(101, "alice").await;
-    let dir = fixture.dir();
-    let mut conn = fixture.conn().await;
-
-    // An import discovered this person and gave them the name that backup
-    // used, holding the phone the book is about to load a card for.
-    let hand_typed = insert_contact_with_handle(&mut conn, account, "Bobby", "+15551234567").await;
-    sqlx::query("UPDATE contacts SET origin = 'import' WHERE id = $1")
-        .bind(hand_typed)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-    // The person is in a Contact Group they built by hand.
-    crate::db::named_membership::set_membership(
-        crate::db::named_membership::group_spec(),
-        &mut conn,
-        account,
-        &[hand_typed],
-        "Family",
-        true,
-    )
-    .await
-    .unwrap();
-
-    // Then the person renamed them in the drawer, the way a person does —
-    // through the same route the web app calls. That, not raw SQL, is what
-    // makes the row theirs.
-    mutate_contact(
-        &mut conn,
-        account,
-        hand_typed,
-        &UpdateContactRequest {
-            name: Some("My Friend Bob".to_string()),
-            add_identity: None,
-            update_identity: None,
-            remove_identity: None,
-        },
-    )
-    .await
-    .unwrap();
-    let origin: String = sqlx::query_scalar("SELECT origin FROM contacts WHERE id = $1")
-        .bind(hand_typed)
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
-    assert_eq!(origin, "user", "naming someone makes the row the person's");
-
-    let book = dir.join("book.vcf");
-    std::fs::write(
-        &book,
-        "BEGIN:VCARD\nVERSION:3.0\nFN:Robert Smith\nN:Smith;Robert;;;\nTEL:+15551234567\nEND:VCARD\n",
-    )
-    .unwrap();
-    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, account)
-        .await
-        .unwrap();
-
-    // The name the person typed survives untouched.
-    let hand_typed_name: String =
-        sqlx::query_scalar("SELECT preferred_name FROM contacts WHERE id = $1")
-            .bind(hand_typed)
-            .fetch_one(&mut *conn)
-            .await
-            .unwrap();
-    assert_eq!(hand_typed_name, "My Friend Bob");
-
-    // The card joins that person instead of standing a second contact
-    // beside them. A second row would be the worse outcome: the phone is
-    // already linked, so the new row would end up with no identity at all
-    // and anything the card carried would land on it instead of on the
-    // person.
-    let ids: Vec<i64> =
-        sqlx::query_scalar("SELECT id FROM contacts WHERE account_id = $1 ORDER BY id")
-            .bind(account)
-            .fetch_all(&mut *conn)
-            .await
-            .unwrap();
-    assert_eq!(
-        ids,
-        vec![hand_typed],
-        "the card joins the person the database already has: {ids:?}"
-    );
-
-    // They keep the identity that made them findable.
-    let handles: Vec<String> = sqlx::query_scalar(
-        "SELECT h.raw FROM contact_handles ch JOIN handles h ON h.id = ch.handle_id
-         WHERE ch.account_id = $1 AND ch.contact_id = $2",
-    )
-    .bind(account)
-    .bind(hand_typed)
-    .fetch_all(&mut *conn)
-    .await
-    .unwrap();
-    assert_eq!(handles, vec!["+15551234567".to_string()]);
-
-    // And the Contact Group still points at them, not at a stranded row.
-    let members: Vec<i64> = sqlx::query_scalar(
-        "SELECT gm.contact_id FROM contact_group_members gm
-         JOIN contact_groups g ON g.id = gm.group_id
-         WHERE g.account_id = $1 AND g.name = 'Family'",
-    )
-    .bind(account)
-    .fetch_all(&mut *conn)
-    .await
-    .unwrap();
-    assert_eq!(members, vec![hand_typed]);
-}
-
-#[tokio::test]
-async fn loading_an_address_book_replaces_only_its_own_rows() {
-    let fixture = test_fixture().await;
-    let account = fixture.account_with_id(101, "alice").await;
-    let dir = fixture.dir();
-    let mut conn = fixture.conn().await;
-
-    // An identity the server learned from imported messages, and a Contact
-    // Group the person built by hand.
-    let discovered =
-        insert_contact_with_handle(&mut conn, account, "From Import", "+15555550999").await;
-    sqlx::query("UPDATE contacts SET origin = 'import' WHERE id = $1")
-        .bind(discovered)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-    crate::db::named_membership::set_membership(
-        crate::db::named_membership::group_spec(),
-        &mut conn,
-        account,
-        &[discovered],
-        "Family",
-        true,
-    )
-    .await
-    .unwrap();
-
-    let book = dir.join("book.vcf");
-    std::fs::write(
-        &book,
-        "BEGIN:VCARD\nVERSION:3.0\nFN:Ada Lovelace\nN:Lovelace;Ada;;;\nTEL:+15551234567\nEND:VCARD\n",
-    )
-    .unwrap();
-    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, account)
-        .await
-        .unwrap();
-
-    // A second load of a book that dropped Ada removes her, because the
-    // server knows that row was the book's.
-    let book2 = dir.join("book2.vcf");
-    std::fs::write(
-        &book2,
-        "BEGIN:VCARD\nVERSION:3.0\nFN:Grace Hopper\nN:Hopper;Grace;;;\nTEL:+15557654321\nEND:VCARD\n",
-    )
-    .unwrap();
-    contacts::load_contacts_if_needed(&mut conn, Some(&book2), true, account)
-        .await
-        .unwrap();
-
-    let names: Vec<String> = sqlx::query_scalar(
-        "SELECT preferred_name FROM contacts WHERE account_id = $1 ORDER BY preferred_name",
-    )
-    .bind(account)
-    .fetch_all(&mut *conn)
-    .await
-    .unwrap();
-    assert!(
-        names.contains(&"From Import".to_string()),
-        "an import-discovered contact must survive a book reload: {names:?}"
-    );
-    assert!(
-        names.contains(&"Grace Hopper".to_string()),
-        "the new book's contact must be present: {names:?}"
-    );
-    assert!(
-        !names.contains(&"Ada Lovelace".to_string()),
-        "a contact the book dropped must go: {names:?}"
-    );
-
-    let groups: Vec<String> =
-        sqlx::query_scalar("SELECT name FROM contact_groups WHERE account_id = $1 ORDER BY name")
-            .bind(account)
-            .fetch_all(&mut *conn)
-            .await
-            .unwrap();
-    assert_eq!(
-        groups,
-        vec!["Family".to_string()],
-        "a Contact Group the person built must survive a book reload"
-    );
-}
-
-#[tokio::test]
-async fn reloading_an_address_book_keeps_a_contact_still_in_the_file() {
-    let fixture = test_fixture().await;
-    let account = fixture.account_with_id(101, "alice").await;
-    let dir = fixture.dir();
-    let mut conn = fixture.conn().await;
-
-    // Ada exists only because of the book.
-    let book = dir.join("book.vcf");
-    std::fs::write(
-        &book,
-        "BEGIN:VCARD\nVERSION:3.0\nFN:Ada Lovelace\nN:Lovelace;Ada;;;\nTEL:+15551234567\nEND:VCARD\n",
-    )
-    .unwrap();
-    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, account)
-        .await
-        .unwrap();
-    let (ada, origin): (i64, String) =
-        sqlx::query_as("SELECT id, origin FROM contacts WHERE account_id = $1")
-            .bind(account)
-            .fetch_one(&mut *conn)
-            .await
-            .unwrap();
-    assert_eq!(origin, "address_book");
-
-    // Three things hang off her id: a Contact Group the person built, a
-    // conversation her number is in, and the record of the import that met
-    // her.
-    crate::db::named_membership::set_membership(
-        crate::db::named_membership::group_spec(),
-        &mut conn,
-        account,
-        &[ada],
-        "Family",
-        true,
-    )
-    .await
-    .unwrap();
-    insert_direct_conversation(
-        &mut conn,
-        account,
-        1,
-        "+15551234567",
-        "sms",
-        &["2024-01-01T00:00:00Z"],
+    let (_, _, _, text) = export_address_book(
+        &fixture,
+        &account,
+        serde_json::json!({ "q": "+15555550101" }),
+        None,
     )
     .await;
-    sqlx::query("UPDATE participants SET contact_id = $1 WHERE conversation_id = 1")
-        .bind(ada)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-    let run_id: i64 = sqlx::query_scalar(
-        "INSERT INTO imports (account_id, source, mode, status, started_at)
-         VALUES ($1, 'imessage', 'push', 'completed', '2024-01-01T00:00:00Z') RETURNING id",
-    )
-    .bind(account)
-    .fetch_one(&mut *conn)
-    .await
-    .unwrap();
-    crate::db::import_contacts::record(
-        &mut conn,
-        Some(run_id),
-        ada,
-        crate::db::import_contacts::ContactReason::HandleAdded,
-    )
-    .await
-    .unwrap();
+    assert_eq!(names(&text), ["Contact 1"]);
 
-    // The same file again, with her name corrected and a second number.
-    std::fs::write(
-        &book,
-        "BEGIN:VCARD\nVERSION:3.0\nFN:Ada King\nN:King;Ada;;;\nTEL:+15551234567\nTEL:+15559990000\nEND:VCARD\n",
-    )
-    .unwrap();
-    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, account)
-        .await
-        .unwrap();
-
-    // Same row, new name.
-    let rows: Vec<(i64, String)> =
-        sqlx::query_as("SELECT id, preferred_name FROM contacts WHERE account_id = $1")
-            .bind(account)
-            .fetch_all(&mut *conn)
-            .await
-            .unwrap();
-    assert_eq!(rows, vec![(ada, "Ada King".to_string())]);
-
-    let mut phones: Vec<String> = sqlx::query_scalar(
-        "SELECT h.normalized FROM contact_handles ch JOIN handles h ON h.id = ch.handle_id
-         WHERE ch.account_id = $1 AND ch.contact_id = $2",
-    )
-    .bind(account)
-    .bind(ada)
-    .fetch_all(&mut *conn)
-    .await
-    .unwrap();
-    phones.sort();
-    assert_eq!(
-        phones,
-        vec!["+15551234567".to_string(), "+15559990000".to_string()]
-    );
-
-    let members: Vec<i64> = sqlx::query_scalar(
-        "SELECT gm.contact_id FROM contact_group_members gm
-         JOIN contact_groups g ON g.id = gm.group_id
-         WHERE g.account_id = $1 AND g.name = 'Family'",
-    )
-    .bind(account)
-    .fetch_all(&mut *conn)
-    .await
-    .unwrap();
-    assert_eq!(members, vec![ada], "the Contact Group membership survives");
-
-    let participant_contact: Option<i64> =
-        sqlx::query_scalar("SELECT contact_id FROM participants WHERE conversation_id = 1")
-            .fetch_one(&mut *conn)
-            .await
-            .unwrap();
-    assert_eq!(
-        participant_contact,
-        Some(ada),
-        "the participant link survives"
-    );
-
-    let import_contacts = crate::db::import_contacts::contact_ids(&mut conn, run_id)
-        .await
-        .unwrap();
-    assert_eq!(import_contacts, vec![ada], "the import record survives");
-}
-
-#[tokio::test]
-async fn reloading_an_address_book_drops_a_number_the_card_no_longer_lists() {
-    let fixture = test_fixture().await;
-    let account = fixture.account_with_id(101, "alice").await;
-    let dir = fixture.dir();
-    let mut conn = fixture.conn().await;
-
-    let book = dir.join("book.vcf");
-    std::fs::write(
-        &book,
-        "BEGIN:VCARD\nVERSION:3.0\nFN:Ada Lovelace\nN:Lovelace;Ada;;;\nTEL:+15551234567\nTEL:+15559990000\nEND:VCARD\n",
-    )
-    .unwrap();
-    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, account)
-        .await
-        .unwrap();
-    let ada: i64 = sqlx::query_scalar("SELECT id FROM contacts WHERE account_id = $1")
-        .bind(account)
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
-
-    // The second number is in a conversation; the first never was.
-    insert_direct_conversation(
-        &mut conn,
-        account,
-        1,
-        "+15559990000",
-        "sms",
-        &["2024-01-01T00:00:00Z"],
+    let (_, _, _, text) = export_address_book(
+        &fixture,
+        &account,
+        serde_json::json!({ "ids": [id_of("Contact 0"), id_of("Contact 2")] }),
+        None,
     )
     .await;
+    assert_eq!(names(&text), ["Contact 0", "Contact 2"]);
 
-    // The card drops the second number, and a new card changes its number
-    // entirely, which reads as one person gone and one arrived.
-    std::fs::write(
-        &book,
-        "BEGIN:VCARD\nVERSION:3.0\nFN:Ada Lovelace\nN:Lovelace;Ada;;;\nTEL:+15551234567\nEND:VCARD\n",
+    let (_, _, _, text) = export_address_book(
+        &fixture,
+        &account,
+        serde_json::json!({
+            "q": "+15555550101",
+            "ids": [id_of("Contact 0"), id_of("Contact 1")],
+        }),
+        None,
     )
-    .unwrap();
-    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, account)
-        .await
-        .unwrap();
+    .await;
+    assert_eq!(names(&text), ["Contact 1"]);
 
-    let phones: Vec<String> = sqlx::query_scalar(
-        "SELECT h.normalized FROM contact_handles ch JOIN handles h ON h.id = ch.handle_id
-         WHERE ch.account_id = $1 AND ch.contact_id = $2",
+    let (status, _, _, text) = export_address_book(
+        &fixture,
+        &account,
+        serde_json::json!({ "q": "nosuchword:1" }),
+        None,
     )
-    .bind(account)
-    .bind(ada)
-    .fetch_all(&mut *conn)
-    .await
-    .unwrap();
-    assert_eq!(phones, vec!["+15551234567".to_string()]);
-
-    // The dropped number stays an identity because a conversation holds it;
-    // it is just nobody's any more.
-    let conversations: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM conversations c JOIN handles h ON h.id = c.chat_handle_id
-         WHERE c.account_id = $1 AND h.normalized = '+15559990000'",
-    )
-    .bind(account)
-    .fetch_one(&mut *conn)
-    .await
-    .unwrap();
-    assert_eq!(
-        conversations, 1,
-        "a conversation on a dropped number survives"
+    .await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::SearchQueryInvalid,
     );
 }
 
+/// Another account's contact id selects nothing: the file holds only the
+/// caller's contacts.
 #[tokio::test]
-async fn a_card_whose_number_changed_is_a_new_contact() {
-    let fixture = test_fixture().await;
-    let account = fixture.account_with_id(101, "alice").await;
-    let dir = fixture.dir();
-    let mut conn = fixture.conn().await;
+async fn the_address_book_export_never_holds_another_accounts_contact() {
+    let (fixture, account) = contacts_fixture_with_handles(&["+15555550100"]).await;
+    let other = account_with_handle(&fixture, "+15555550199").await;
+    let theirs: serde_json::Value =
+        crate::test_support::get_json(&fixture.state, "/v1/contacts", &other.token).await;
+    let (status, _, _, text) = export_address_book(
+        &fixture,
+        &account,
+        serde_json::json!({ "ids": [theirs["items"][0]["id"]] }),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(text.trim_end(), ADDRESS_BOOK_HEADER);
+}
 
-    let book = dir.join("book.vcf");
-    std::fs::write(
-        &book,
-        "BEGIN:VCARD\nVERSION:3.0\nFN:Ada Lovelace\nN:Lovelace;Ada;;;\nTEL:+15551234567\nEND:VCARD\n",
-    )
-    .unwrap();
-    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, account)
-        .await
-        .unwrap();
-    let ada: i64 = sqlx::query_scalar("SELECT id FROM contacts WHERE account_id = $1")
-        .bind(account)
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
-    crate::db::named_membership::set_membership(
-        crate::db::named_membership::group_spec(),
-        &mut conn,
-        account,
-        &[ada],
-        "Family",
-        true,
-    )
-    .await
-    .unwrap();
-
-    std::fs::write(
-        &book,
-        "BEGIN:VCARD\nVERSION:3.0\nFN:Ada Lovelace\nN:Lovelace;Ada;;;\nTEL:+15550001111\nEND:VCARD\n",
-    )
-    .unwrap();
-    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, account)
-        .await
-        .unwrap();
-
-    // Nothing ties the new card to the old row, so the old row goes with its
-    // memberships and a new one stands in its place.
-    let rows: Vec<(i64, String)> =
-        sqlx::query_as("SELECT id, preferred_name FROM contacts WHERE account_id = $1")
-            .bind(account)
-            .fetch_all(&mut *conn)
-            .await
-            .unwrap();
-    assert_eq!(rows.len(), 1);
-    assert_ne!(rows[0].0, ada);
-    assert_eq!(rows[0].1, "Ada Lovelace");
-    let members: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM contact_group_members")
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
-    assert_eq!(members, 0);
-    let stale_handles: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM handles WHERE account_id = $1 AND normalized = '+15551234567'",
-    )
-    .bind(account)
-    .fetch_one(&mut *conn)
-    .await
-    .unwrap();
-    assert_eq!(
-        stale_handles, 0,
-        "an identity nothing holds or uses goes too"
-    );
+/// The file the export route answers goes back through the load route
+/// unchanged, in both modes, with every count zero.
+#[tokio::test]
+async fn the_exported_file_loads_back_through_the_route_and_changes_nothing() {
+    let (fixture, account) = contacts_fixture_with_handles(&["+15555550100", "+15555550101"]).await;
+    let (_, _, _, file) =
+        export_address_book(&fixture, &account, serde_json::json!({}), None).await;
+    for query in ["?mode=append", "?mode=edit"] {
+        let (status, text) = load_address_book(&fixture, &account, query, file.clone()).await;
+        assert_eq!(status, StatusCode::OK, "{text}");
+        let body: serde_json::Value = serde_json::from_str(&text).unwrap();
+        for (count, value) in body.as_object().unwrap() {
+            assert_eq!(value, 0, "{query}: {count}");
+        }
+        let (_, _, _, again) =
+            export_address_book(&fixture, &account, serde_json::json!({}), None).await;
+        assert_eq!(again, file, "{query}");
+    }
 }
 
 #[tokio::test]

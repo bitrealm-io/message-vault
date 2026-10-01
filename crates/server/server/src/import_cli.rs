@@ -29,10 +29,6 @@ pub struct CliImportOptions {
     pub mode: ImportMode,
     /// Attachment handling mode: copy, none, convert, compress.
     pub media: MediaMode,
-    /// Optional address book to load: VCF or vCard CSV export.
-    pub contacts: Option<PathBuf>,
-    /// Reload contacts even when the table is non-empty.
-    pub overwrite_contacts: bool,
     /// Skip the cross-source soft-dedupe pass after import.
     pub skip_dedupe: bool,
     /// Near-time window in seconds for dedupe Pass B.
@@ -152,10 +148,6 @@ fn print_plan(opts: &CliImportOptions, opened: &OpenDb, plan: &SourcePlan) {
     }
     println!("  mode:         {}", opts.mode.as_str());
     println!("  media:        {}", opts.media.as_str());
-    match &opts.contacts {
-        Some(path) => println!("  contacts:     {}", path.display()),
-        None => println!("  contacts:     (none — use --contacts for VCF or vCard CSV)"),
-    }
 }
 
 /// Record an import session, run the import inside it, and mark the session
@@ -189,8 +181,6 @@ async fn import_under_session(
     let import_opts = ImportOptions {
         assets_dir: &assets_dir,
         asset_root: &opts.input_dir,
-        contacts: opts.contacts.as_deref(),
-        overwrite_contacts: opts.overwrite_contacts,
         mode: opts.mode,
         source: opts.source_override.as_deref().unwrap_or(""),
         account_id,
@@ -272,11 +262,10 @@ mod tests {
 
     const ALICE: i64 = 7;
 
-    /// The number the address book and the conversation share, so loading the
-    /// book links the conversation's participant to the contact.
+    /// The number the conversation is with.
     const PHONE: &str = "+14075551234";
 
-    /// One incoming text from `PHONE`, the message the contact should own.
+    /// One incoming text from `phone`.
     fn conversation_with(phone: &str) -> String {
         format!(
             r#"{{"schema_version":4,"export":{{"source":"sms-backup-restore","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null}},"conversation":{{"chat_identifier":"{phone}","conversation_type":"individual","group_title":null,"participants":[{{"handle":"{phone}","display_name":null}}],"stats":{{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}}}}
@@ -285,9 +274,9 @@ mod tests {
         )
     }
 
-    /// A database with account alice, an export folder holding one conversation
-    /// with `PHONE`, and a one-card address book naming that number.
-    async fn fixture_with_export_and_book(dir: &Path) -> (OpenDb, CliImportOptions) {
+    /// A database with account alice and an export folder holding one
+    /// conversation with `PHONE`.
+    async fn fixture_with_export(dir: &Path) -> (OpenDb, CliImportOptions) {
         let opened = OpenDb::open(fresh_config(dir)).await.unwrap();
         let mut conn = opened.conn().await.unwrap();
         account_profile::insert_account_at(&mut conn, ALICE, "alice", None, None)
@@ -298,12 +287,6 @@ mod tests {
         let input = dir.join("export");
         fs::create_dir_all(&input).unwrap();
         fs::write(input.join("chat.jsonl"), conversation_with(PHONE)).unwrap();
-        let book = dir.join("book.vcf");
-        fs::write(
-            &book,
-            format!("BEGIN:VCARD\nVERSION:3.0\nFN:Ada Lovelace\nTEL:{PHONE}\nEND:VCARD\n"),
-        )
-        .unwrap();
 
         let opts = CliImportOptions {
             account_id: ALICE,
@@ -312,8 +295,6 @@ mod tests {
             source_override: None,
             mode: ImportMode::Append,
             media: MediaMode::Clone,
-            contacts: Some(book),
-            overwrite_contacts: false,
             skip_dedupe: true,
             window_secs: 2,
         };
@@ -330,92 +311,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn an_import_with_contacts_loads_the_book_and_links_its_phone_to_the_participant() {
+    async fn an_import_makes_a_contact_for_the_conversations_participant() {
         let dir = TempDir::new().unwrap();
-        let (opened, opts) = fixture_with_export_and_book(dir.path()).await;
+        let (opened, opts) = fixture_with_export(dir.path()).await;
 
         let stats = run(&opened, &opts).await.unwrap();
 
-        assert!(!stats.import.contacts_skipped, "the book was loaded");
-        assert_eq!(stats.import.contacts, 1);
-        assert_eq!(stats.import.contact_handles, 1);
         assert_eq!(stats.import.messages, 1);
         assert_eq!(stats.import.mode, ImportMode::Append);
-
-        // The card is a contact whose linked handle is the card's number.
-        assert_eq!(
-            count(
-                &opened,
-                "SELECT COUNT(*) FROM contacts
-                 WHERE account_id = $1 AND preferred_name = 'Ada Lovelace'"
-            )
-            .await,
-            1
-        );
-        assert_eq!(
-            count(
-                &opened,
-                "SELECT COUNT(*) FROM contact_handles ch
-                 JOIN contacts c ON c.id = ch.contact_id
-                 JOIN handles h ON h.id = ch.handle_id
-                 WHERE ch.account_id = $1
-                   AND c.preferred_name = 'Ada Lovelace'
-                   AND h.normalized = '+14075551234'"
-            )
-            .await,
-            1
-        );
-        // The conversation's participant is that contact, because the book
-        // was loaded before the messages were promoted.
-        assert_eq!(
-            count(
-                &opened,
-                "SELECT COUNT(*) FROM participants p
-                 JOIN conversations cv ON cv.id = p.conversation_id
-                 JOIN contacts c ON c.id = p.contact_id
-                 WHERE cv.account_id = $1 AND c.preferred_name = 'Ada Lovelace'"
-            )
-            .await,
-            1
-        );
-        opened.close().await;
-    }
-
-    #[tokio::test]
-    async fn a_second_import_with_the_same_book_and_no_overwrite_skips_the_contacts() {
-        let dir = TempDir::new().unwrap();
-        let (opened, opts) = fixture_with_export_and_book(dir.path()).await;
-        run(&opened, &opts).await.unwrap();
-
-        let stats = run(&opened, &opts).await.unwrap();
-
-        assert!(
-            stats.import.contacts_skipped,
-            "contacts already loaded and --overwrite-contacts not given"
-        );
-        assert_eq!(stats.import.contacts, 0);
-        assert_eq!(stats.import.contact_handles, 0);
-        assert_eq!(
-            count(
-                &opened,
-                "SELECT COUNT(*) FROM contacts WHERE account_id = $1"
-            )
-            .await,
-            1,
-            "the skipped load added no contact"
-        );
-        opened.close().await;
-    }
-
-    #[tokio::test]
-    async fn an_import_without_contacts_reports_the_load_as_skipped() {
-        let dir = TempDir::new().unwrap();
-        let (opened, mut opts) = fixture_with_export_and_book(dir.path()).await;
-        opts.contacts = None;
-
-        let stats = run(&opened, &opts).await.unwrap();
-
-        assert!(stats.import.contacts_skipped, "no address book was given");
         assert_eq!(
             count(
                 &opened,

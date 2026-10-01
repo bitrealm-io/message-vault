@@ -22,7 +22,11 @@ use crate::server::AppState;
         version = env!("CARGO_PKG_VERSION")
     ),
     modifiers(&BearerAddon),
-    components(schemas(crate::search::ListKind, crate::problem::Problem)),
+    components(schemas(
+        crate::search::ListKind,
+        crate::problem::Problem,
+        crate::db::address_book::LoadMode
+    )),
     tags(
         (name = "Health", description = "Process liveness"),
         (name = "Session", description = "The logged-in credential: log in, check it, log out"),
@@ -145,6 +149,9 @@ pub fn api_openapi() -> OpenApiRouter<AppState> {
         .routes(routes!(crate::contacts_api::delete_contact))
         .routes(routes!(crate::contacts_api::find_unmatched_identities))
         .routes(routes!(crate::contacts_api::address_book::create_contacts))
+        .routes(routes!(
+            crate::contacts_api::address_book::export_address_book
+        ))
         .routes(routes!(crate::named_set_api::list_contact_groups))
         .routes(routes!(crate::named_set_api::create_contact_group))
         .routes(routes!(crate::named_set_api::update_contact_group))

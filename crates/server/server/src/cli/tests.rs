@@ -58,8 +58,6 @@ fn import_args(config: &Path, input: &Path) -> ImportArgs {
         input: input.to_path_buf(),
         db: None,
         assets_dir: None,
-        contacts: None,
-        overwrite_contacts: false,
         media: "copy".into(),
         mode: ImportMode::Replace,
         skip_dedupe: false,
@@ -316,39 +314,6 @@ fn imports_discard_prints_the_session_or_that_there_was_none() {
 }
 
 #[tokio::test]
-async fn import_contacts_loads_the_address_book_for_the_account() {
-    let dir = tempfile::tempdir().unwrap();
-    let config = server_config(dir.path());
-    with_alice(&config).await;
-    let vcf = dir.path().join("book.vcf");
-    fs::write(
-        &vcf,
-        "BEGIN:VCARD\nVERSION:3.0\nFN:Ada Lovelace\nTEL:+15551234567\nEND:VCARD\n",
-    )
-    .unwrap();
-
-    run(Cli {
-        command: Commands::ImportContacts(ImportContactsArgs {
-            config: config.clone(),
-            contacts: vcf,
-            db: None,
-            account: "alice".into(),
-        }),
-    })
-    .await
-    .unwrap();
-
-    assert_eq!(
-        count(
-            &config,
-            "SELECT COUNT(*) FROM contacts WHERE account_id = 7"
-        )
-        .await,
-        1
-    );
-}
-
-#[tokio::test]
 async fn import_refuses_a_negative_window_before_opening_anything() {
     let dir = tempfile::tempdir().unwrap();
     let config = server_config(dir.path());
@@ -429,21 +394,17 @@ async fn dump_openapi_writes_the_document_to_the_output_path() {
 }
 
 #[test]
-fn import_stats_print_the_contacts_lines_unless_they_were_skipped() {
+fn import_stats_print_one_line_for_each_count() {
     let stats = crate::imports_api::ImportStats {
         conversations: 2,
         messages: 5,
-        contacts: 1,
-        contact_handles: 3,
         mode: ImportMode::Replace,
         ..Default::default()
     };
 
     assert_eq!(
         format_import_stats(&stats),
-        "  contacts:      1\n\
-         \x20 contact handles:3\n\
-         \x20 files:         0\n\
+        "  files:         0\n\
          \x20 conversations: 2\n\
          \x20 participants:  0\n\
          \x20 messages:      5\n\
@@ -455,15 +416,13 @@ fn import_stats_print_the_contacts_lines_unless_they_were_skipped() {
          \x20 media files missing: 0 (attachment path not found on disk)\n"
     );
 
-    let skipped = crate::imports_api::ImportStats {
-        contacts_skipped: true,
+    let appended = crate::imports_api::ImportStats {
         mode: ImportMode::Append,
         messages_appended: 4,
         phones_needing_review: 1,
         ..Default::default()
     };
-    let text = format_import_stats(&skipped);
-    assert!(text.starts_with("  contacts:      (skipped"), "{text}");
+    let text = format_import_stats(&appended);
     assert!(text.contains("  messages appended: 4\n"), "{text}");
     assert!(
         text.ends_with(

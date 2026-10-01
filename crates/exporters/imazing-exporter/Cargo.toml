@@ -3,14 +3,13 @@ name = "imazing-exporter"
 version = "0.1.0"
 edition = "2024"
 license = "LicenseRef-FCL-1.0-ALv2"
-description = "Convert iMazing Messages / WhatsApp CSV (+ vCard CSV / VCF contacts) to shared per-chat CSV"
+description = "Convert iMazing Messages / WhatsApp CSV to shared per-chat CSV"
 autotests = false
 
 [dependencies]
 anyhow = { workspace = true }
 chrono = { workspace = true }
 csv = { workspace = true }
-contacts = { path = "../../libs/contacts" }
 message-csv = { path = "../../libs/csv" }
 message-crate-core = { path = "../../core/message-crate-core" }
 message-ir = { path = "../../libs/ir" }

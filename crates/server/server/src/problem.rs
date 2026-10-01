@@ -200,7 +200,7 @@ impl ProblemType {
             Self::AssetUploadInvalid => "Something about the upload does not match what the server expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived. `detail` says which. Start the upload again.".to_string(),
             Self::NotFound => "No resource at that address exists for this account. An id that belongs to another account answers this too, so an unknown id and a forbidden one look the same.".to_string(),
             Self::MethodNotAllowed => "The path exists but does not take this method. The OpenAPI document lists each route's methods.".to_string(),
-            Self::NotAcceptable => "The request's `Accept` header named nothing this route can produce. Every `/v1` route but the asset download answers `application/json`, and a failure `application/problem+json`; send `Accept: application/json`, `*/*`, or no `Accept` at all.".to_string(),
+            Self::NotAcceptable => "The request's `Accept` header named nothing this route can produce. Every `/v1` route but the asset download, its preview and the address book export answers `application/json`, and a failure `application/problem+json`; send `Accept: application/json`, `*/*`, or no `Accept` at all.".to_string(),
         }
     }
 }

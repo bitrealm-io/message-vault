@@ -172,10 +172,14 @@ The Owner has no **My Identities** section, because the Owner holds no messages 
 
 ### Address book
 
-**Choose a file** loads a `.vcf`, `.vcard`, or `.csv` address book of at most 8 MB.
-The result line reports how many contacts and phone numbers were loaded.
+The Address Book is a CSV file of contacts, written by **Export** on the Contacts screen and loaded back here after editing.
 
-Loading the same file again refreshes its own entries.
-Contact Groups, names typed by hand, and contacts found in messages stay as they are.
+**How to load it** offers **Append**, which adds and renames and removes nothing, and **Edit**, which also makes each contact in the file match its rows.
+**Choose a file** loads a `.csv` file of at most 8 MB.
+
+The section then lists what the load changed: contacts created, updated and deleted, identities added, moved and removed, and Contact Groups created.
+A file with a mistake in it is refused whole, and each row at fault is listed with its reason.
+
+Contacts the file does not mention stay as they are.
 
 Contacts themselves are covered in [Contacts](/docs/user/features/contacts/contacts/).

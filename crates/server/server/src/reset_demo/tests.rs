@@ -26,8 +26,9 @@ username = "demo"
     )
     .expect("write seed.toml");
     fs::write(
-        root.join("config/contacts.vcf"),
-        "BEGIN:VCARD\nVERSION:3.0\nFN:Test\nTEL:+15555550100\nEND:VCARD\n",
+        root.join("config/contacts.csv"),
+        "contact_id,display_name,groups,service,handle_type,identity\n\
+         test,Test,,phone,phone,+15555550100\n",
     )
     .expect("write contacts");
     let conversation = |source: &str, chat: &str, guid: &str| {
@@ -1213,6 +1214,200 @@ async fn a_generated_demo_bundle_imports_whole_and_its_overlap_dedupes() {
     );
     conn.close().await.expect("close");
     pool.close().await;
+}
+
+/// One contact of a generated bundle's address book, read back from the file.
+#[derive(Debug, Default)]
+struct BookContact {
+    name: String,
+    groups: Vec<String>,
+    /// `service/handle_type/identity`, as the rows list them.
+    identities: Vec<String>,
+}
+
+fn read_generated_address_book(bundle: &Path) -> BTreeMap<String, BookContact> {
+    let mut reader = csv::Reader::from_path(bundle.join("config/contacts.csv"))
+        .expect("open the bundle's address book");
+    assert_eq!(
+        reader.headers().expect("header").iter().collect::<Vec<_>>(),
+        address_book::COLUMNS,
+        "the generator writes the columns the server exports"
+    );
+    let mut book: BTreeMap<String, BookContact> = BTreeMap::new();
+    for record in reader.records() {
+        let record = record.expect("an address book row");
+        let contact = book.entry(record[0].to_string()).or_default();
+        contact.name = record[1].to_string();
+        contact.groups = record[2]
+            .split(';')
+            .filter(|g| !g.is_empty())
+            .map(str::to_string)
+            .collect();
+        contact
+            .identities
+            .push(format!("{}/{}/{}", &record[3], &record[4], &record[5]));
+    }
+    book
+}
+
+/// How many of the `wanted` identities, written `service/handle_type/key`,
+/// a contact with no name holds.
+async fn unknowns_holding(conn: &mut SqliteConnection, wanted: &[String]) -> usize {
+    let held: Vec<String> = sqlx::query_scalar(
+        "SELECT h.service || '/' || h.handle_type || '/' || h.normalized
+         FROM contact_handles ch
+         JOIN handles h ON h.id = ch.handle_id
+         JOIN contacts c ON c.id = ch.contact_id
+         WHERE ch.account_id = $1 AND trim(c.preferred_name) = ''",
+    )
+    .bind(DEMO_ACCOUNT_ID)
+    .fetch_all(&mut *conn)
+    .await
+    .expect("list the identities Unknowns hold");
+    held.into_iter().filter(|i| wanted.contains(i)).count()
+}
+
+/// The demo is built the way a person builds theirs: the imports bring the
+/// people in with no names, and the address book, loaded after them through
+/// the function `POST /v1/contacts` calls, names them. Each named contact
+/// takes its identities from the Unknown the import made, on every service
+/// the number was met on, and that Unknown, left with nothing, is gone.
+#[tokio::test]
+async fn the_demo_address_book_names_the_unknowns_the_imports_made() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let seed_cfg = demo_seed::testutil::small_config(temp.path());
+    demo_seed::generate(&seed_cfg).expect("generate the small bundle");
+    let bundle = Path::new(&seed_cfg.out);
+    let book = read_generated_address_book(bundle);
+    let named: Vec<&BookContact> = book.values().filter(|c| !c.name.is_empty()).collect();
+    assert!(!named.is_empty(), "the bundle names somebody");
+    assert!(
+        named
+            .iter()
+            .any(|c| c.identities.iter().any(|i| i.starts_with("whatsapp/"))),
+        "somebody is on two services, so an Unknown holds one number twice"
+    );
+
+    let db_path = temp.path().join("messagecrate.db");
+    let target = db_path.as_path();
+    let cfg = Config {
+        paths: PathsConfig {
+            db: db_path.clone(),
+            data_dir: temp.path().join("data"),
+            assets_dir: "assets".into(),
+            assets_converted_dir: "assets_converted".into(),
+        },
+        server: None,
+    };
+    let prepared = validate_prepared_bundle(bundle).expect("the generator wrote a complete bundle");
+    seed_demo_account(target, DEMO_ACCOUNT_ID, &prepared.seed)
+        .await
+        .expect("seed the demo account");
+    import_demo_sources(&cfg, &prepared, DEMO_ACCOUNT_ID, target)
+        .await
+        .expect("import every source of the generated bundle");
+
+    // After the imports and before the address book: the people are there,
+    // holding their identities, and none of them has the book's name.
+    let (pool, mut conn) = test_db(target).await;
+    let contacts_after_import = count(
+        &mut conn,
+        "SELECT COUNT(*) FROM contacts WHERE account_id = $1",
+    )
+    .await;
+    for contact in &named {
+        let holders: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM contacts WHERE account_id = $1 AND preferred_name = $2",
+        )
+        .bind(DEMO_ACCOUNT_ID)
+        .bind(&contact.name)
+        .fetch_one(&mut *conn)
+        .await
+        .expect("count contacts by name");
+        assert_eq!(holders, 0, "{} is not named by an import", contact.name);
+    }
+    let wanted: Vec<String> = named.iter().flat_map(|c| c.identities.clone()).collect();
+    assert!(
+        unknowns_holding(&mut conn, &wanted).await > 0,
+        "the imports made Unknowns for the people the book names"
+    );
+    close_test_db(pool, conn).await;
+
+    let counts = load_demo_address_book(&prepared, DEMO_ACCOUNT_ID, target)
+        .await
+        .expect("load the demo address book");
+
+    let (pool, mut conn) = test_db(target).await;
+    assert_eq!(counts.contacts_created as usize, book.len());
+    assert!(counts.identities_moved > 0, "{counts:?}");
+    assert!(counts.contacts_deleted > 0, "{counts:?}");
+    assert_eq!(counts.identities_removed, 0, "{counts:?}");
+    assert_eq!(
+        unknowns_holding(&mut conn, &wanted).await,
+        0,
+        "no Unknown still holds an identity of somebody the book names"
+    );
+    assert_eq!(
+        count(
+            &mut conn,
+            "SELECT COUNT(*) FROM contacts WHERE account_id = $1"
+        )
+        .await,
+        contacts_after_import + counts.contacts_created as i64 - counts.contacts_deleted as i64,
+    );
+    for contact in &named {
+        let mut held: Vec<String> = sqlx::query_scalar(
+            "SELECT h.service || '/' || h.handle_type || '/' || h.normalized
+             FROM contact_handles ch
+             JOIN handles h ON h.id = ch.handle_id
+             JOIN contacts c ON c.id = ch.contact_id
+             WHERE ch.account_id = $1 AND c.preferred_name = $2",
+        )
+        .bind(DEMO_ACCOUNT_ID)
+        .bind(&contact.name)
+        .fetch_all(&mut *conn)
+        .await
+        .expect("list a named contact's identities");
+        held.sort();
+        let mut listed = contact.identities.clone();
+        listed.sort();
+        assert_eq!(held, listed, "{} holds what its rows list", contact.name);
+
+        let mut groups: Vec<String> = sqlx::query_scalar(
+            "SELECT g.name FROM contact_group_members m
+             JOIN contact_groups g ON g.id = m.group_id
+             JOIN contacts c ON c.id = m.contact_id
+             WHERE c.account_id = $1 AND c.preferred_name = $2 AND g.kind = 'manual'",
+        )
+        .bind(DEMO_ACCOUNT_ID)
+        .bind(&contact.name)
+        .fetch_all(&mut *conn)
+        .await
+        .expect("list a named contact's groups");
+        groups.sort();
+        let mut listed = contact.groups.clone();
+        listed.sort();
+        assert_eq!(
+            groups, listed,
+            "{} is in the groups its rows list",
+            contact.name
+        );
+    }
+
+    // The conversations follow the identity to the named contact: a
+    // one-to-one conversation with a number the book names reads as that
+    // person.
+    let named_conversations = count(
+        &mut conn,
+        "SELECT COUNT(*) FROM conversations cv
+         JOIN contact_handles ch ON ch.handle_id = cv.chat_handle_id
+         JOIN contacts c ON c.id = ch.contact_id
+         WHERE cv.account_id = $1 AND cv.conversation_type = 'individual'
+           AND trim(c.preferred_name) <> '' AND c.origin = 'address_book'",
+    )
+    .await;
+    assert!(named_conversations > 0);
+    close_test_db(pool, conn).await;
 }
 
 /// Add a second copy of the tiny bundle's iMessage conversation to the SBR

@@ -14,7 +14,6 @@ use anyhow::{Result, bail};
 use clap::{Args, Command, CommandFactory, Parser, Subcommand};
 
 use crate::config::{Config, validate_source_id};
-use crate::db::contacts as contacts_db;
 use crate::dedupe::DedupeStats;
 use crate::open_db::OpenDb;
 use demo_seed::DemoSize;
@@ -40,9 +39,6 @@ pub enum Commands {
 
     /// Soft-hide the same SMS when it appears under more than one import source
     DedupeCrossSource(DedupeArgs),
-
-    /// Import an address book (VCF or vCard CSV) into an existing database.
-    ImportContacts(ImportContactsArgs),
 
     /// Rebuild the Demo Account: generate Demo Data, clear the account,
     /// import, and process assets. Adds the account when it is not there.
@@ -131,14 +127,6 @@ pub struct ImportArgs {
     #[arg(long)]
     pub assets_dir: Option<PathBuf>,
 
-    /// Address book to load: VCF or vCard CSV export
-    #[arg(long = "contacts", alias = "contacts-csv")]
-    pub contacts: Option<PathBuf>,
-
-    /// Reload contacts from --contacts even if the table is non-empty
-    #[arg(long)]
-    pub overwrite_contacts: bool,
-
     /// Attachment handling: copy (default), none, convert, compress
     #[arg(long, default_value = "copy")]
     pub media: String,
@@ -209,26 +197,6 @@ pub struct DedupeArgs {
     pub window_secs: i64,
 
     /// Account username or id (scopes dedupe to this account)
-    #[arg(long)]
-    pub account: String,
-}
-
-/// Options for `import-contacts`.
-#[derive(Debug, Args)]
-pub struct ImportContactsArgs {
-    /// Path to config.toml
-    #[arg(long, default_value = "config/config.toml")]
-    pub config: PathBuf,
-
-    /// Address book: VCF, or vCard CSV (First Name, Last Name, Phone columns)
-    #[arg(long = "contacts", alias = "contacts-csv")]
-    pub contacts: PathBuf,
-
-    /// Output SQLite database path (overrides config)
-    #[arg(long)]
-    pub db: Option<PathBuf>,
-
-    /// Account username or id (scopes contacts to this account)
     #[arg(long)]
     pub account: String,
 }
@@ -343,7 +311,6 @@ pub async fn run(cli: Cli) -> Result<()> {
             ImportsCommand::Discard(args) => run_imports_discard(args).await,
         },
         Commands::DedupeCrossSource(args) => run_dedupe(args).await,
-        Commands::ImportContacts(args) => run_import_contacts(args).await,
         Commands::ResetDemo(args) => run_reset_demo(args).await,
         Commands::CreateDatabase(args) => run_create_database(args).await,
         Commands::Serve(args) => run_serve(args).await,
@@ -411,8 +378,6 @@ async fn run_import(args: ImportArgs) -> Result<()> {
             source_override: args.source,
             mode: args.mode,
             media,
-            contacts: args.contacts,
-            overwrite_contacts: args.overwrite_contacts,
             skip_dedupe: args.skip_dedupe,
             window_secs: args.window_secs,
         },
@@ -474,14 +439,6 @@ fn format_discarded_import(
 /// The counts from one import stage, one line each, ready to print.
 fn format_import_stats(import: &crate::imports_api::ImportStats) -> String {
     let mut out = String::new();
-    if import.contacts_skipped {
-        out.push_str(
-            "  contacts:      (skipped — already loaded or no --contacts; use --overwrite-contacts)\n",
-        );
-    } else {
-        let _ = writeln!(out, "  contacts:      {}", import.contacts);
-        let _ = writeln!(out, "  contact handles:{}", import.contact_handles);
-    }
     let _ = writeln!(out, "  files:         {}", import.files);
     let _ = writeln!(out, "  conversations: {}", import.conversations);
     let _ = writeln!(out, "  participants:  {}", import.participants);
@@ -565,27 +522,6 @@ async fn run_dedupe(args: DedupeArgs) -> Result<()> {
     Ok(())
 }
 
-/// Load an address book into an existing database and print the counts.
-async fn run_import_contacts(args: ImportContactsArgs) -> Result<()> {
-    let cfg = Config::load(&args.config)?.with_db_override(args.db);
-    let opened = OpenDb::open(cfg).await?;
-    let account = opened.account_id(&args.account).await?;
-    let mut conn = opened.conn().await?;
-    let stats =
-        contacts_db::load_contacts_if_needed(&mut conn, Some(&args.contacts), true, account)
-            .await?;
-
-    println!("Imported contacts into {}", opened.location().display());
-    println!("  config:       {}", args.config.display());
-    println!("  account:      {account}");
-    println!("  contacts:     {}", args.contacts.display());
-    println!("  rows:         {}", stats.contacts);
-    println!("  phones:       {}", stats.phones);
-    drop(conn);
-    opened.close().await;
-    Ok(())
-}
-
 /// Rebuild the demo account from the bundle and print what landed.
 async fn run_reset_demo(args: ResetDemoArgs) -> Result<()> {
     let stats = crate::reset_demo::run_reset_demo(args.size, &args.config).await?;
@@ -603,7 +539,10 @@ async fn run_reset_demo(args: ResetDemoArgs) -> Result<()> {
         stats.import.attachments
     );
     println!("  tapbacks:             {}", stats.import.tapbacks);
-    println!("  contacts:             {}", stats.import.contacts);
+    println!(
+        "  contacts named:       {} (from the demo address book)",
+        stats.address_book.contacts_created
+    );
     println!();
     println!("Media files on disk (assets/)");
     println!(

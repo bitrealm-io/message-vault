@@ -22,8 +22,6 @@ async fn import_one_message(conn: &mut SqliteConnection, dir: &std::path::Path, 
         &super::super::ImportOptions::fixed(super::super::FixedImportArgs {
             assets_dir: &assets,
             asset_root: dir,
-            contacts: None,
-            overwrite_contacts: false,
             mode: ImportMode::Append,
             source: "sms-backup-restore",
             account_id: TEST_ACCOUNT,

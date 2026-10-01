@@ -180,6 +180,48 @@ describe("apiClient request shape", () => {
     expect(url).toBe("https://server.example.test/v1/conversations");
   });
 
+  it("posts JSON and hands back the file's text for a route that answers a file", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => "contact_id,display_name\n",
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    setToken("mc-user-abc123");
+
+    const text = await apiClient.postText("/v1/contacts/address-book", { ids: [4] });
+
+    expect(text).toBe("contact_id,display_name\n");
+    const [url, init] = lastCall(fetchSpy);
+    expect(url.endsWith("/v1/contacts/address-book")).toBe(true);
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe('{"ids":[4]}');
+    const headers = init.headers as Record<string, string>;
+    expect(headers["Content-Type"]).toBe("application/json");
+    expect(headers.Authorization).toBe("Bearer mc-user-abc123");
+  });
+
+  it("reads a failed file route's problem document like any other failure", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 422,
+        text: async () =>
+          JSON.stringify({
+            type: "https://messagecrate.app/docs/developer/reference/errors/search-query-invalid",
+            title: "Search query invalid",
+            status: 422,
+            detail: "Contacts has no word nosuchword",
+          }),
+      }),
+    );
+
+    await expect(
+      apiClient.postText("/v1/contacts/address-book", { q: "nosuchword:1" }),
+    ).rejects.toThrow("Contacts has no word nosuchword");
+  });
+
   it("strips trailing slashes off the base URL so the path is not doubled", () => {
     setBaseUrl("https://server.example.test///");
     expect(getBaseUrl()).toBe("https://server.example.test");

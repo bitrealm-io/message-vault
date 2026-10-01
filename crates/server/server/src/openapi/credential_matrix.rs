@@ -632,9 +632,11 @@ pub(super) fn body_for(op: &Operation, n: usize) -> Option<(&'static str, Vec<u8
             json(json!({ "add": [], "remove": [] }))
         }
         ("post", "/v1/contacts") => Some((
-            "text/vcard",
-            b"BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Robin\r\nTEL:+15555550199\r\nEND:VCARD\r\n".to_vec(),
+            "text/csv",
+            b"contact_id,display_name,groups,service,handle_type,identity\n,Robin,,phone,phone,+15555550199\n"
+                .to_vec(),
         )),
+        ("post", "/v1/contacts/address-book") => json(json!({})),
         ("post", "/v1/contacts/summaries") => json(json!({ "ids": [] })),
         ("post", "/v1/contacts/unmatched-identities") => json(json!({ "identifiers": [] })),
         ("patch", "/v1/contacts/{id}") => json(json!({ "name": "Samantha" })),

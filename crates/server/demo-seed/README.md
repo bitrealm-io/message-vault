@@ -35,7 +35,7 @@ Prejudice (5274 sentences) under `crates/server/demo-seed/data/corpus/`. Names c
 
 | Item | Count |
 |------|------:|
-| Contacts (VCF) | 200 |
+| Contacts (address book) | 200 |
 | Groups | 185 |
 | Conversation files | 394 |
 | Messages | 612893 |
@@ -47,7 +47,7 @@ Prejudice (5274 sentences) under `crates/server/demo-seed/data/corpus/`. Names c
 - **Platform handles** — Text message + WhatsApp rows on the same contact
 - **Transport mix** — SMS/RCS mixed into iMessage threads (~20% by default)
 - **Contacts / groups / No Messages** — group memberships and zero-message rows
-- **Unassigned** — handles with messages but no VCF row (phone + email)
+- **Unassigned** — identities with messages and no address book row (phone + email)
 - **Rate skew** — most 1:1 threads ~200–300 msgs/year (bursty days); rare whales up to ~12k/year
 - **History** — typical first contact ~3–5 years ago; longest ~14 years; newest ~1 week
 - **Group Chats** — membership mean ~5 groups/contact; size mean ~4; at least 10 groups with 8–20 participants; bursty days (several / none / a lot)

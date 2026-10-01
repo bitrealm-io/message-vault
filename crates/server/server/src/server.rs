@@ -856,14 +856,15 @@ async fn limit_request_body(
 /// is what every one of the server's own clients sends.
 ///
 /// Applied to the `/v1` routes only, through `route_layer`, so the static app,
-/// `/health` and the OpenAPI UI keep producing what they produce. The asset
-/// download and its preview stream the file's own bytes, not JSON, and are
-/// let through here by path.
+/// `/health` and the OpenAPI UI keep producing what they produce. Three
+/// routes answer bytes, not JSON, and are let through here by path: the
+/// asset download and its preview stream the file's own bytes, and the
+/// address book export answers `text/csv`.
 async fn require_json_acceptable(
     request: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> Response {
-    if is_asset_download(&request) {
+    if is_asset_download(&request) || is_address_book_export(&request) {
         return next.run(request).await;
     }
     if let Some(accept) = request
@@ -892,6 +893,12 @@ fn is_asset_download(request: &axum::extract::Request) -> bool {
                 let sha256 = rest.strip_suffix("/preview").unwrap_or(rest);
                 !sha256.is_empty() && !sha256.contains('/')
             })
+}
+
+/// `POST /v1/contacts/address-book`: the address book as `text/csv`.
+fn is_address_book_export(request: &axum::extract::Request) -> bool {
+    request.method() == axum::http::Method::POST
+        && request.uri().path() == "/v1/contacts/address-book"
 }
 
 /// Whether an `Accept` header admits a JSON answer.

@@ -6,7 +6,7 @@ description: SQLite tables in Message Crate and how chats, contacts, and message
 The Message Crate SQLite database falls into four groups:
 
 1. **Chats and texts** — threads, participants, messages, files, reactions
-2. **People and groups** — handles, address book, contact groups, accounts
+2. **People and groups** — handles, contacts, contact groups, accounts
 3. **Staging** — temporary copies used while importing
 4. **Trash markers** — soft-delete lists without removing chat data
 
@@ -91,16 +91,49 @@ number on Text message and WhatsApp is two rows. SMS / iMessage / RCS are
 E.164 only when unambiguous. Ambiguous values (e.g. a trunk-zero national
 number like `020 7946 0000` without a country code) keep their digits as
 `normalized` — never a fabricated `+0…` — and carry a human-readable reason
-in `normalized_note` so the UI can surface them for review.
+in `normalized_note` so the UI can surface them for review. Only an import
+writes a note. An address book load refuses a phone it cannot key, so a row a
+load makes never carries one.
+
+`origin` records what made the row: `import`, `user`, or `address_book` for
+an identity an address book load created. A load removes an `address_book`
+identity again when Edit takes it off its contact and no conversation,
+message, or account uses it.
 
 ### `contacts` / `contact_handles`
 
-Address book rows; display name is `preferred_name` only. `last_modified` is a
-SQLite `datetime('now')` string bumped when the contact’s address-book shape
-changes (create, rename, handle add/update/remove, group membership, merge
-survivor, import sibling platform link) — not when messages arrive.
+The people an account knows; display name is `preferred_name` only.
+`last_modified` is a SQLite `datetime('now')` string bumped when the contact's
+name, identities, or Contact Groups change (create, rename, handle
+add/update/remove, group membership, merge survivor, import sibling platform
+link, address book load) — not when messages arrive.
 `contact_handles` links a contact to its `handles` rows per account (one contact
 per handle per account).
+
+`origin` on both tables records what made the row: `import`, `user`, or
+`address_book`. An address book load writes `address_book` on a contact it
+creates and on every link it makes or moves. A contact a load only renames
+keeps its origin. Nothing reads `origin` to decide what a load may change:
+a load changes the contacts its file names, and no others.
+
+### The address book file
+
+The address book is not a table. It is a CSV the server writes from these
+tables and reads back into them, one row per `contact_handles` link:
+
+| Column | Source |
+|---|---|
+| `contact_id` | `contacts.id` |
+| `display_name` | `contacts.preferred_name`, trimmed |
+| `groups` | the names of the contact's `contact_groups`, joined with `;` |
+| `service` | `handles.service` |
+| `handle_type` | `handles.handle_type` |
+| `identity` | `handles.normalized` |
+
+`POST /v1/contacts/address-book` writes it and `POST /v1/contacts` loads it;
+`crates/server/server/src/db/address_book.rs` holds both directions. The
+rules of a load are in
+[`docs/architecture/contacts-identities-and-messages.md`](https://github.com/messagecrate/message-crate/blob/main/docs/architecture/contacts-identities-and-messages.md).
 
 ### `contact_groups` / `contact_group_members`
 
@@ -119,7 +152,7 @@ There is no `contact_id` on conversations. The link is the `handles` table:
 
 - 1:1 `conversations.chat_handle_id` and `participants.handle_id` on the chat
   side
-- `contact_handles.handle_id` on the address-book side
+- `contact_handles.handle_id` on the contact side
 - `participants.contact_id`, set when import resolves a participant's handle
   to a contact
 

@@ -15,6 +15,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import RightPane from "../components/RightPane";
 import { RightToolbarProvider } from "../components/RightToolbarContext";
+import { groupListQuery } from "../lib/contactGroups";
 import { mockedAuth, Providers } from "../test/providers";
 import ContactList from "./ContactList";
 
@@ -27,13 +28,23 @@ vi.mock("../lib/serverApi", () => ({
   updateContactGroup: vi.fn(),
   deleteContactGroup: vi.fn(),
   updateContactGroupMembers: vi.fn(),
+  exportAddressBook: vi.fn(),
 }));
 
-import { listContactGroups, listContacts, updateContactGroupMembers } from "../lib/serverApi";
+vi.mock("../lib/saveTextFile", () => ({ saveTextFile: vi.fn().mockResolvedValue(true) }));
+
+import { saveTextFile } from "../lib/saveTextFile";
+import {
+  exportAddressBook,
+  listContactGroups,
+  listContacts,
+  updateContactGroupMembers,
+} from "../lib/serverApi";
 
 const listContactsMock = vi.mocked(listContacts);
 const listContactGroupsMock = vi.mocked(listContactGroups);
 const updateMembersMock = vi.mocked(updateContactGroupMembers);
+const exportMock = vi.mocked(exportAddressBook);
 
 /** True once the server has actually dropped Alice's Family membership. */
 let familyRemoved = false;
@@ -113,6 +124,31 @@ describe("ContactList", () => {
       expect(updateMembersMock).toHaveBeenCalledWith(10, { add: [], remove: [1] }),
     );
     await waitFor(() => expect(screen.getByRole("checkbox", { name: "Family" })).not.toBeChecked());
+  });
+
+  it("exports the group the list shows, or the checked rows when there are any", async () => {
+    exportMock.mockResolvedValue("contact_id,display_name,groups,service,handle_type,identity\n");
+    render(
+      <Providers>
+        <RightToolbarProvider>
+          <RightPane>
+            <ContactList groupFilter="Family" onSelect={() => {}} />
+          </RightPane>
+        </RightToolbarProvider>
+      </Providers>,
+    );
+    const rowCheckbox = await screen.findByRole("checkbox", { name: "Select Alice" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    await waitFor(() => expect(saveTextFile).toHaveBeenCalledTimes(1));
+    // The same search the list sends the server for this group.
+    expect(exportMock).toHaveBeenLastCalledWith({ q: groupListQuery("Family", "") });
+
+    fireEvent.click(rowCheckbox);
+    await waitFor(() => expect(rowCheckbox).toBeChecked());
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
+    await waitFor(() => expect(saveTextFile).toHaveBeenCalledTimes(2));
+    expect(exportMock).toHaveBeenLastCalledWith({ ids: [1] });
   });
 
   it("checks every contact between a shift-click and the furthest checked contact", async () => {

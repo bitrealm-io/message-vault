@@ -128,8 +128,9 @@ the file takes that identity off the contact: the identity stays in its
 conversations and the person is Unknown for it again, as after a contact
 delete. A contact absent from the file is left alone in both modes, and no
 mode deletes a contact, except one left with neither a name nor an identity,
-which nothing could ever reach. A loaded name replaces one an import
-supplied, as a typed name does, because the file is the person typing. A
+which nothing could ever reach. A loaded name replaces the name the contact
+carried, an imported one and a typed one alike, because the file is the
+person typing; a blank name says nothing and leaves the name alone. A
 group name that matches no Contact Group creates one. Why: the export can be
 a subset (a search, the checked rows), so a file that spoke for the whole
 account would delete everyone it did not mention, and a file that could only
@@ -287,5 +288,6 @@ flowchart LR
 | What an import creates for a conversation and its participants | `crates/server/server/src/imports_api/staging.rs` |
 | Making, naming, and replacing a contact during import | `crates/server/server/src/imports_api/contact_name.rs` |
 | Linking identities to contacts, sibling identities | `crates/server/server/src/db/contacts.rs` |
+| Writing and loading the address book | `crates/server/server/src/db/address_book.rs` |
 | The display name rule | `crates/server/server/src/db/participant_names.rs` |
 | Which conversations involve a contact | `involves_contact_expr` in `db/contacts/read.rs`, `conversation_involves` in `search/bridge.rs` |

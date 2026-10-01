@@ -442,17 +442,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
 
 [[package]]
-name = "contacts"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "csv",
- "message-ir",
- "phone",
- "thiserror 2.0.21",
-]
-
-[[package]]
 name = "cookie"
 version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1412,7 +1401,6 @@ name = "go-sms-pro-exporter"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "contacts",
  "csv",
  "go-sms-mms",
  "hex",
@@ -1887,7 +1875,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
- "contacts",
  "csv",
  "media",
  "message-crate-core",
@@ -2783,7 +2770,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
- "contacts",
  "csv",
  "media",
  "message-crate-core",
@@ -3904,7 +3890,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
- "contacts",
  "csv",
  "hex",
  "mailparse",

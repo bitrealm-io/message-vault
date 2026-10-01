@@ -1,4 +1,5 @@
-//! Generate the demo bundle, clear the demo account's data, import, and process media.
+//! Generate the demo bundle, clear the demo account's data, import, load the
+//! demo's address book, and process media.
 //!
 //! Two callers: `reset-demo`, and `serve` on a database that does not exist
 //! yet ([`seed_new_database`]), which is how every new Message Crate starts
@@ -17,6 +18,7 @@ use sqlx::Row;
 
 use crate::config::Config;
 use crate::db::account_profile;
+use crate::db::address_book::{self, LoadCounts, LoadMode};
 use crate::db::dialect;
 use crate::db::engine;
 use crate::db::schema;
@@ -39,6 +41,8 @@ pub struct ResetDemoStats {
     pub seed: demo_seed::GenStats,
     /// Stats from importing the regenerated bundle.
     pub import: imports_api::ImportStats,
+    /// What loading the bundle's address book changed, after the imports.
+    pub address_book: LoadCounts,
     /// Dedupe content keys filled during the reset (one per message; not a duplicate count).
     pub dedupe_keys_filled: u64,
     /// Stats from the post-import media processing pass.
@@ -79,7 +83,7 @@ struct PreparedBundle {
     imessage_dir: PathBuf,
     sbr_dir: PathBuf,
     whatsapp_dir: PathBuf,
-    contacts_vcf: PathBuf,
+    contacts_csv: PathBuf,
 }
 
 /// One per-source import in a demo reset. [`import_demo_sources`] loops over
@@ -94,8 +98,6 @@ struct DemoImportSource {
     staging_dir: fn(&PreparedBundle) -> &PathBuf,
     /// The first source replaces the demo account's data; the rest append.
     mode: ImportMode,
-    /// Load the bundle's contacts VCF and overwrite existing contacts.
-    with_contacts: bool,
 }
 
 const DEMO_IMPORT_SOURCES: [DemoImportSource; 3] = [
@@ -104,21 +106,18 @@ const DEMO_IMPORT_SOURCES: [DemoImportSource; 3] = [
         source: IMESSAGE_SOURCE,
         staging_dir: |bundle| &bundle.imessage_dir,
         mode: ImportMode::Replace,
-        with_contacts: true,
     },
     DemoImportSource {
         label: "android",
         source: SBR_SOURCE,
         staging_dir: |bundle| &bundle.sbr_dir,
         mode: ImportMode::Append,
-        with_contacts: false,
     },
     DemoImportSource {
         label: "whatsapp",
         source: WHATSAPP_SOURCE,
         staging_dir: |bundle| &bundle.whatsapp_dir,
         mode: ImportMode::Append,
-        with_contacts: false,
     },
 ];
 
@@ -189,6 +188,7 @@ fn conversion_warning(errors: u64) -> Option<String> {
 
 struct ResetPreparedStats {
     import: imports_api::ImportStats,
+    address_book: LoadCounts,
     dedupe_keys_filled: u64,
     process_assets: process_assets::ProcessAssetsStats,
 }
@@ -235,6 +235,7 @@ pub async fn run_reset_demo(size: DemoSize, config_dest: &Path) -> Result<ResetD
     Ok(ResetDemoStats {
         seed: seed_stats,
         import: reset_stats.import,
+        address_book: reset_stats.address_book,
         dedupe_keys_filled: reset_stats.dedupe_keys_filled,
         process_assets: reset_stats.process_assets,
     })
@@ -505,8 +506,8 @@ async fn install_reset_state_or_keep_work(
     Err(error)
 }
 
-/// Wipe, seed, import, dedupe, convert media, and vacuum the demo account on
-/// the database file `target`. A new database and a reset both run exactly
+/// Wipe, seed, import, load the address book, dedupe, convert media, and
+/// vacuum the demo account on the database file `target`. A new database and a reset both run exactly
 /// this; what differs is what the caller does around it (a reset snapshots
 /// the database first and swaps it in after).
 async fn rebuild_demo_account(
@@ -519,10 +520,12 @@ async fn rebuild_demo_account(
     print_reset_header(account_id, prepared, &target.display());
     seed_demo_account(target, account_id, &prepared.seed).await?;
     let import = import_demo_sources(cfg, prepared, account_id, target).await?;
+    let address_book = load_demo_address_book(prepared, account_id, target).await?;
     let (dedupe_stats, process_stats) = dedupe_and_process_assets(cfg, account_id, target).await?;
     vacuum_after_demo(target).await;
     Ok(ResetPreparedStats {
         import,
+        address_book,
         dedupe_keys_filled: dedupe_stats.keys_filled,
         process_assets: process_stats,
     })
@@ -543,10 +546,6 @@ async fn import_demo_sources(
             export_dir: (source.staging_dir)(prepared),
             db: target,
             assets_dir: &assets_dir,
-            contacts: source
-                .with_contacts
-                .then_some(prepared.contacts_vcf.as_path()),
-            overwrite_contacts: source.with_contacts,
             mode: source.mode,
             source: source.source,
             account_id,
@@ -556,22 +555,51 @@ async fn import_demo_sources(
     }
     Ok(totals)
 }
+
+/// Load the bundle's address book into the demo account, in Edit mode, once
+/// its messages are in.
+///
+/// The demo is built the way a person builds theirs: the imports bring the
+/// people in as Unknowns, and the address book names them. It goes through
+/// [`address_book::load`], the function `POST /v1/contacts` calls, so the
+/// demo exercises the same rules a person's file does, the move from an
+/// Unknown holder among them.
+async fn load_demo_address_book(
+    prepared: &PreparedBundle,
+    account_id: i64,
+    target: &Path,
+) -> Result<LoadCounts> {
+    let text = fs::read_to_string(&prepared.contacts_csv)
+        .with_context(|| format!("read {}", prepared.contacts_csv.display()))?;
+    let pool = engine::open_pool_for_path(target).await?;
+    let mut conn = pool.acquire().await?;
+    let loaded = address_book::load(&mut conn, account_id, &text, LoadMode::Edit).await;
+    conn.close().await?;
+    pool.close().await;
+    let counts = loaded.map_err(|e| anyhow::anyhow!("load the demo address book: {e}"))?;
+    println!(
+        "  contacts: {} named from the address book ({} identities moved from Unknowns, {} added)",
+        counts.contacts_created, counts.identities_moved, counts.identities_added
+    );
+    Ok(counts)
+}
+
 /// Check the bundle has its seed, the three staging folders, and the contacts file, and return their paths.
 fn validate_prepared_bundle(bundle: &Path) -> Result<PreparedBundle> {
     let demo_seed = bundle.join("config/seed.toml");
     let imessage_dir = bundle.join("staging").join(IMESSAGE_SOURCE);
     let sbr_dir = bundle.join("staging").join(SBR_SOURCE);
     let whatsapp_dir = bundle.join("staging").join(WHATSAPP_SOURCE);
-    let contacts_vcf = bundle.join("config/contacts.vcf");
+    let contacts_csv = bundle.join("config/contacts.csv");
     if !demo_seed.is_file()
         || !imessage_dir.is_dir()
         || !sbr_dir.is_dir()
         || !whatsapp_dir.is_dir()
-        || !contacts_vcf.is_file()
+        || !contacts_csv.is_file()
     {
         bail!(
             "incomplete demo bundle under {} (need config/seed.toml, \
-             staging/{IMESSAGE_SOURCE}/, staging/{SBR_SOURCE}/, staging/{WHATSAPP_SOURCE}/, config/contacts.vcf)",
+             staging/{IMESSAGE_SOURCE}/, staging/{SBR_SOURCE}/, staging/{WHATSAPP_SOURCE}/, config/contacts.csv)",
             bundle.display()
         );
     }
@@ -580,7 +608,7 @@ fn validate_prepared_bundle(bundle: &Path) -> Result<PreparedBundle> {
         imessage_dir,
         sbr_dir,
         whatsapp_dir,
-        contacts_vcf,
+        contacts_csv,
     })
 }
 

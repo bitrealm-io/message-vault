@@ -146,6 +146,14 @@ async fn dedupe_and_process_assets(
         let mut conn = opened.conn().await?;
         dedupe::dedupe_cross_source(&mut conn, account_id, None, 2).await?
     };
+    // Demo Data holds only formats every browser shows as they are, so the
+    // preview pass is an improvement and not a need. Without ffmpeg it would
+    // fail once per attachment; say so once instead (#1018).
+    if !media::ffmpeg_available() {
+        opened.close().await;
+        println!("Reset demo — ffmpeg not found; demo attachments stay as written");
+        return Ok((dedupe_stats, process_assets::ProcessAssetsStats::default()));
+    }
     println!("Reset demo — processing prepared assets");
     let process_stats = process_assets::run(
         &opened,

@@ -59,11 +59,13 @@ pub const JPG_PHOTOS: &[JpgPhoto] = &[
     },
 ];
 
-/// Non-JPEG attachments so the demo includes more than photos.
+/// Non-JPEG attachments so the demo includes more than photos. Every format
+/// here is one every browser shows or plays as it is, so Demo Data looks
+/// right on a server with no ffmpeg to convert it (#1018).
 pub const OTHER_ATTACHMENTS: &[(&str, &str, bool)] = &[
     ("attachments/landscape.png", "image/png", false),
     ("attachments/sticker.gif", "image/gif", true),
-    ("attachments/voice.caf", "audio/x-caf", false),
+    ("attachments/voice.wav", "audio/wav", false),
     ("attachments/notes.pdf", "application/pdf", false),
     ("attachments/missing-file.heic", "image/heic", false),
 ];
@@ -98,9 +100,9 @@ pub fn write_attachment_blobs(dir: &Path) -> Result<HashMap<String, (String, u64
     fs::write(dir.join("sticker.gif"), MINI_GIF)?;
     record_blob(&mut digests, "attachments/sticker.gif", MINI_GIF);
 
-    let voice = mini_caf();
-    fs::write(dir.join("voice.caf"), &voice)?;
-    record_blob(&mut digests, "attachments/voice.caf", &voice);
+    let voice = mini_wav();
+    fs::write(dir.join("voice.wav"), &voice)?;
+    record_blob(&mut digests, "attachments/voice.wav", &voice);
 
     fs::write(dir.join("notes.pdf"), MINI_PDF)?;
     record_blob(&mut digests, "attachments/notes.pdf", MINI_PDF);
@@ -153,59 +155,78 @@ const MINI_GIF: &[u8] = &[
 
 const MINI_PDF: &[u8] = b"%PDF-1.1\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n";
 
-/// Silent 0.1s mono 16-bit CAF (Core Audio Format) clip.
+/// Silent 0.1s mono 16-bit WAV clip: a RIFF header and PCM samples.
 ///
-/// The old 20-byte header had no audio frames. ffmpeg refused it during
-/// `reset-demo` (`Invalid data found when processing input`). This file is a
-/// real CAF so the web converter can turn it into MP3.
-pub fn mini_caf() -> Vec<u8> {
-    const SAMPLE_RATE: f64 = 8_000.0;
-    const CHANNELS: u32 = 1;
-    const BITS: u32 = 16;
+/// WAV because every browser plays it as it is. The voice note used to be a
+/// CAF, which no browser plays until ffmpeg has converted it.
+pub fn mini_wav() -> Vec<u8> {
+    const SAMPLE_RATE: u32 = 8_000;
+    const CHANNELS: u16 = 1;
+    const BITS: u16 = 16;
     const FRAMES: u32 = 800;
-    let data_bytes = FRAMES * CHANNELS * (BITS / 8);
+    let block_align = CHANNELS * (BITS / 8);
+    let data_bytes = FRAMES * u32::from(block_align);
 
-    let mut out = Vec::with_capacity(64 + data_bytes as usize);
-    out.extend(b"caff");
-    out.extend(1u16.to_be_bytes());
-    out.extend(0u16.to_be_bytes());
+    let mut out = Vec::with_capacity(44 + data_bytes as usize);
+    out.extend(b"RIFF");
+    out.extend((36 + data_bytes).to_le_bytes());
+    out.extend(b"WAVE");
 
-    out.extend(b"desc");
-    out.extend(32i64.to_be_bytes());
-    out.extend(SAMPLE_RATE.to_be_bytes());
-    out.extend(b"lpcm");
-    out.extend(2u32.to_be_bytes());
-    out.extend((BITS / 8 * CHANNELS).to_be_bytes());
-    out.extend(1u32.to_be_bytes());
-    out.extend(CHANNELS.to_be_bytes());
-    out.extend(BITS.to_be_bytes());
+    out.extend(b"fmt ");
+    out.extend(16u32.to_le_bytes());
+    out.extend(1u16.to_le_bytes());
+    out.extend(CHANNELS.to_le_bytes());
+    out.extend(SAMPLE_RATE.to_le_bytes());
+    out.extend((SAMPLE_RATE * u32::from(block_align)).to_le_bytes());
+    out.extend(block_align.to_le_bytes());
+    out.extend(BITS.to_le_bytes());
 
     out.extend(b"data");
-    out.extend(i64::from(4 + data_bytes).to_be_bytes());
-    out.extend(0u32.to_be_bytes());
+    out.extend(data_bytes.to_le_bytes());
     out.extend(vec![0u8; data_bytes as usize]);
     out
 }
 
 #[cfg(test)]
 mod tests {
-    use super::mini_caf;
+    use super::{OTHER_ATTACHMENTS, mini_wav};
     use std::process::Command;
 
     #[test]
-    fn mini_caf_is_a_real_caf_file() {
-        let bytes = mini_caf();
-        assert!(bytes.starts_with(b"caff"), "CAF magic");
-        assert!(bytes.windows(4).any(|w| w == b"desc"), "desc chunk");
-        assert!(bytes.windows(4).any(|w| w == b"data"), "data chunk");
-        assert!(
-            bytes.len() > 64,
-            "must include PCM samples, not only a header"
-        );
+    fn mini_wav_is_a_whole_wav_file() {
+        let bytes = mini_wav();
+        assert!(bytes.starts_with(b"RIFF"), "RIFF magic");
+        assert_eq!(&bytes[8..12], b"WAVE");
+        assert_eq!(&bytes[36..40], b"data");
+        let riff_len = u32::from_le_bytes(bytes[4..8].try_into().unwrap()) as usize;
+        let data_len = u32::from_le_bytes(bytes[40..44].try_into().unwrap()) as usize;
+        assert_eq!(riff_len, bytes.len() - 8, "RIFF length covers the file");
+        assert_eq!(data_len, bytes.len() - 44, "data length covers the samples");
+        assert_eq!(data_len, 1600, "0.1 s of 16-bit mono at 8 kHz");
+    }
+
+    /// Demo Data must look right on a server with no ffmpeg, so nothing in
+    /// it may be a format a browser cannot show as it is. The HEIC is the
+    /// file left missing on purpose; it is never on disk to be shown.
+    #[test]
+    fn every_demo_attachment_that_exists_is_a_format_browsers_show() {
+        let shown = [
+            "image/png",
+            "image/gif",
+            "image/jpeg",
+            "audio/wav",
+            "application/pdf",
+        ];
+        for (path, mime, _) in OTHER_ATTACHMENTS {
+            if *path == "attachments/missing-file.heic" {
+                continue;
+            }
+            assert!(shown.contains(mime), "{path} is {mime}");
+        }
     }
 
     #[test]
-    fn mini_caf_is_readable_by_ffprobe() {
+    fn mini_wav_is_readable_by_ffprobe() {
         let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
             return;
         };
@@ -214,8 +235,8 @@ mod tests {
             .expect("the guard found ffprobe");
 
         let dir = tempfile::tempdir().expect("temp dir");
-        let path = dir.path().join("voice.caf");
-        std::fs::write(&path, mini_caf()).expect("write caf");
+        let path = dir.path().join("voice.wav");
+        std::fs::write(&path, mini_wav()).expect("write wav");
         let probed = Command::new(ffprobe)
             .args([
                 "-v",
@@ -230,7 +251,7 @@ mod tests {
             .expect("run ffprobe");
         assert!(
             probed.success(),
-            "ffprobe must accept the demo voice note so reset-demo can convert it"
+            "ffprobe must accept the demo voice note, so a server with ffmpeg can convert it"
         );
     }
 }

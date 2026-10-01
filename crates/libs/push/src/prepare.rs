@@ -614,8 +614,8 @@ struct AssetUploadStats {
 ///
 /// # Errors
 ///
-/// Returns an error when a file is missing or oversized, when HEAD/PUT fails
-/// after retries, or when a worker panics.
+/// Returns an error when a file is missing, when HEAD/PUT fails after
+/// retries, or when a worker panics.
 fn upload_assets(
     ctx: &PrepareContext<'_>,
     name: &str,
@@ -671,8 +671,8 @@ fn upload_assets(
 ///
 /// # Errors
 ///
-/// Returns an error when a claimed file is missing, unreadable, or larger
-/// than the configured asset limit. The claim is released before returning.
+/// Returns an error when a claimed file is missing or unreadable. The claim
+/// is released before returning.
 fn claim_upload_jobs(
     ctx: &PrepareContext<'_>,
     name: &str,
@@ -703,12 +703,12 @@ fn claim_upload_jobs(
     Ok(jobs)
 }
 
-/// Locate one attachment on disk and confirm it is under the size limit.
-/// Returns the path and its size in bytes.
+/// Locate one attachment on disk. Returns the path and its size in bytes.
+/// `scan_one_attachment` already left out every file over the size limit.
 ///
 /// # Errors
 ///
-/// Returns an error when the file is missing, cannot be stat'ed, or is too large.
+/// Returns an error when the file is missing or cannot be stat'ed.
 fn check_upload_file(ctx: &PrepareContext<'_>, name: &str, rel: &str) -> Result<(PathBuf, u64)> {
     let Some(path) = resolve_attachment(ctx.input, rel)? else {
         bail!("{name}: missing attachment {rel}");
@@ -716,16 +716,6 @@ fn check_upload_file(ctx: &PrepareContext<'_>, name: &str, rel: &str) -> Result<
     let file_len = std::fs::metadata(&path)
         .with_context(|| format!("stat {}", path.display()))?
         .len();
-    if file_len > ctx.cfg.asset_max_bytes {
-        bail!(
-            "{name}: attachment {rel} is {} bytes ({} MiB), over the configured \
-             asset max of {} MiB. Raise the server's [server] asset_max_bytes (and \
-             message-crate-push --asset-max-bytes) or omit the file.",
-            file_len,
-            file_len / message_ir::MIB,
-            ctx.cfg.asset_max_bytes / message_ir::MIB
-        );
-    }
     Ok((path, file_len))
 }
 
@@ -961,6 +951,16 @@ mod tests {
         let d = "A".repeat(64);
         assert_eq!(normalize_digest_sha256(&d).unwrap(), "a".repeat(64));
         assert!(normalize_digest_sha256("not-a-digest").is_err());
+    }
+
+    /// The fingerprint becomes part of a request path, so the right length
+    /// alone or hex digits alone is not enough.
+    #[test]
+    fn normalize_digest_sha256_refuses_the_wrong_length_or_a_non_hex_digit() {
+        assert!(normalize_digest_sha256(&"a".repeat(63)).is_err());
+        assert!(normalize_digest_sha256(&"a".repeat(65)).is_err());
+        assert!(normalize_digest_sha256(&"z".repeat(64)).is_err());
+        assert!(normalize_digest_sha256(&format!("../{}", "a".repeat(61))).is_err());
     }
 
     #[test]

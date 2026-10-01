@@ -109,7 +109,7 @@ The first run uses `--reset-demo`. Later sessions, start with no flags so `data/
 
 `--reset` wipes `data/` and starts empty (no sample inbox). Don't combine `--reset` and `--reset-demo`. `--sqlweb` works with any of these.
 
-`--reset` alone leaves Message Crate **unclaimed**, so the first screen is Create Owner — which is the only way to reach that screen in dev. Add `--owner` to claim it as `admin`/`admin` instead and land on the login. `--reset-demo` claims it itself, so it rejects `--owner`.
+`--reset` alone leaves Message Crate **unclaimed**, so the first screen is Create Owner — which is the only way to reach that screen in dev. Add `--owner` to claim it as `admin`/`admin` instead and land on the login. `--reset-demo` seeds the Demo Account and no owner, so it also leaves Message Crate unclaimed unless `--owner` is added.
 
 ### Start the server on Postgres (optional)
 
@@ -120,8 +120,9 @@ Same flags as the SQLite script, against the compose Postgres on
 ./scripts/run-pg-dev.sh --reset-demo
 ```
 
-Log in as username `demo` with an empty password, or as `admin` with the
-password `admin` to manage accounts. `--reset` wipes the
+Press **Explore Demo Account** on the login card to enter the Demo Account,
+which has no password. Add `--owner` to claim Message Crate as `admin` with
+the password `admin` and manage accounts. `--reset` wipes the
 Postgres volume and `data/` and starts empty. A run with no flags keeps
 the volume. Stopping the script (Ctrl+C) stops the Postgres container
 and keeps the volume. Do not run this at the same time as
@@ -135,7 +136,7 @@ Install the frontend packages once, then start the Vite UI. Vite is the local we
 cd web && npm ci && npm run dev
 ```
 
-Open **http://localhost:5173**. Log in as username `demo` with an empty password. That account holds invented messages and can do everything a real account can, so import and other writes are testable on it; `./scripts/run-dev.sh --reset-demo` puts it back. Logging in as `admin` with the password `admin` reaches the same Message Crate as its owner, which manages accounts and reads no messages.
+Open **http://localhost:5173**. Press **Explore Demo Account** on the login card. That account holds invented messages. It may export and use the Trash; it may not import or delete for good, so testing an import needs an account of its own (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`). `./scripts/run-dev.sh --reset-demo` puts it back. With `--owner`, logging in as `admin` with the password `admin` reaches the same Message Crate as its owner, which manages accounts and reads no messages.
 
 Later sessions, skip `npm ci` unless `web/package-lock.json` changed.
 

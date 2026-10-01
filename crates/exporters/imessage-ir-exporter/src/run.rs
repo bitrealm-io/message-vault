@@ -421,6 +421,33 @@ mod tests {
         assert_eq!(err.to_string(), NOT_AN_IPHONE_BACKUP);
     }
 
+    /// An iPhone backup that is not encrypted, with its manifest and the
+    /// Messages database at its hashed path, is accepted as one.
+    #[test]
+    fn an_unencrypted_backup_with_its_messages_database_is_accepted() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("Manifest.plist"),
+            br#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict><key>IsEncrypted</key><false/></dict></plist>"#,
+        )
+        .unwrap();
+        let hashed = dir.path().join(MESSAGES_DB_IN_IOS_BACKUP);
+        fs::create_dir_all(hashed.parent().unwrap()).unwrap();
+        fs::write(&hashed, b"sqlite").unwrap();
+        let options = options_from_export_config(&apple_cfg(
+            dir.path(),
+            AppleConfig {
+                platform: Some(ApplePlatform::Ios),
+                ..AppleConfig::default()
+            },
+        ))
+        .unwrap();
+        assert_eq!(options.request.source.platform, Platform::Ios);
+        assert_eq!(options.request.source.db_path, dir.path());
+    }
+
     #[test]
     fn auto_detects_a_backup_folder_by_its_hashed_database() {
         let dir = tempfile::tempdir().unwrap();

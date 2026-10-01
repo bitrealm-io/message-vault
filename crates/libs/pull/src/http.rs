@@ -188,6 +188,37 @@ pub fn download_asset(
 mod tests {
     use super::*;
 
+    /// The fingerprint becomes part of the request path, so anything that is
+    /// not exactly 64 hex digits is refused before a request is made.
+    #[test]
+    fn a_fingerprint_that_is_not_64_hex_digits_is_refused_before_any_request() {
+        let server = httpmock::MockServer::start();
+        let any_request = server.mock(|_when, then| {
+            then.status(200).body("bytes");
+        });
+        let http = HttpSession::new().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("asset.bin");
+
+        for bad in ["a".repeat(63), "z".repeat(64), "abc123".to_string()] {
+            let err = download_asset(
+                &http,
+                &server.base_url(),
+                "mc_test",
+                "sms-backup-restore",
+                &bad,
+                &dest,
+            )
+            .expect_err("a bad fingerprint is an error");
+            assert!(
+                err.to_string().contains("invalid SHA-256 digest"),
+                "{bad}: {err}"
+            );
+        }
+        assert_eq!(any_request.calls(), 0);
+        assert!(!dest.exists());
+    }
+
     #[test]
     fn the_create_body_carries_the_scope_as_given_and_the_tool() {
         let scope = ExportScope::Query {

@@ -140,26 +140,26 @@ pub(crate) fn resolve_attachment_cell(
     }
 }
 
+/// Whether the file named `disk_name` is the one a CSV row calls `csv_name`.
+///
+/// The names match when they are equal, or when the disk name ends with the
+/// CSV name and the character before it is not an ASCII letter or digit
+/// (`IMG_1234.jpg` for `1234.jpg`). Case is ignored. The separator is
+/// required so a short CSV name such as `1.jpg` does not match an unrelated
+/// file such as `photo11.jpg`.
 fn attachment_name_matches(disk_name: &str, csv_name: &str) -> bool {
     let disk = disk_name.to_ascii_lowercase();
     let csv = csv_name.to_ascii_lowercase();
-    if disk == csv {
-        return true;
+    // `strip_suffix` cuts only where the CSV name starts, which is always
+    // between two characters. Cutting at a byte count instead panics on a
+    // name with a character longer than one byte.
+    let Some(prefix) = disk.strip_suffix(csv.as_str()) else {
+        return false;
+    };
+    match prefix.chars().next_back() {
+        None => true,
+        Some(c) => !c.is_ascii_alphanumeric(),
     }
-    // Require a separator boundary before a suffix match so short CSV names
-    // like `1.jpg` do not match unrelated files such as `photo11.jpg`.
-    if disk.ends_with(&format!("_{csv}")) || disk.ends_with(&format!("-{csv}")) {
-        return true;
-    }
-    if disk.len() > csv.len() {
-        let prefix = &disk[..disk.len() - csv.len()];
-        if let Some(c) = prefix.chars().last()
-            && !c.is_ascii_alphanumeric()
-        {
-            return true;
-        }
-    }
-    false
 }
 
 fn find_attachment_on_disk(
@@ -273,6 +273,47 @@ mod tests {
         assert!(!attachment_name_matches("photo11.jpg", "1.jpg"));
         assert!(!attachment_name_matches("image10.jpg", "0.jpg"));
         assert!(!attachment_name_matches("photo11.jpg", "11.jpg"));
+    }
+
+    /// A file whose name only has a separator somewhere before the end is
+    /// not the file a row names: `a_bcd.png` is not `xyz.png`.
+    #[test]
+    fn a_disk_name_that_does_not_end_with_the_csv_name_does_not_match() {
+        assert!(!attachment_name_matches("a_bcd.png", "xyz.png"));
+        assert!(!attachment_name_matches("photo-1.png", "xyz.png"));
+        assert!(!attachment_name_matches("xyz.png.bak", "xyz.png"));
+        // A disk name shorter than the CSV name cannot end with it.
+        assert!(!attachment_name_matches("z.png", "xyz.png"));
+    }
+
+    /// The names a row may still be matched by: the same name in any case,
+    /// and the name after a separator that is not a letter or a digit.
+    #[test]
+    fn a_disk_name_that_ends_with_the_csv_name_after_a_separator_matches() {
+        assert!(attachment_name_matches("xyz.png", "xyz.png"));
+        assert!(attachment_name_matches("XYZ.PNG", "xyz.png"));
+        assert!(attachment_name_matches("xyz.png", "XYZ.png"));
+        assert!(attachment_name_matches("a_xyz.png", "xyz.png"));
+        assert!(attachment_name_matches("a-xyz.png", "xyz.png"));
+        assert!(attachment_name_matches("a.xyz.png", "xyz.png"));
+        assert!(attachment_name_matches("a xyz.png", "xyz.png"));
+        assert!(attachment_name_matches(
+            "ABC123_Image000000.JPG",
+            "image000000.jpg"
+        ));
+        assert!(!attachment_name_matches("axyz.png", "xyz.png"));
+        assert!(!attachment_name_matches("1xyz.png", "xyz.png"));
+    }
+
+    /// A name with a character longer than one byte is compared, never cut
+    /// in the middle of that character: `é.png` is two bytes longer than
+    /// `.png`, so cutting `x.png`'s five bytes off its end lands inside `é`.
+    #[test]
+    fn a_name_with_a_character_longer_than_one_byte_is_compared_without_a_panic() {
+        assert!(!attachment_name_matches("é.png", "x.png"));
+        assert!(!attachment_name_matches("日本.png", "abc.png"));
+        assert!(attachment_name_matches("写真_日本.png", "日本.png"));
+        assert!(attachment_name_matches("日本.png", "日本.png"));
     }
 
     #[test]

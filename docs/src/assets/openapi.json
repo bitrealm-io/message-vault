@@ -2115,9 +2115,7 @@
         },
         "security": [
           {
-            "session": [
-              "export"
-            ]
+            "session": []
           },
           {
             "api-token": [

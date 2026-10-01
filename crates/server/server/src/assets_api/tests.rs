@@ -467,6 +467,86 @@ async fn an_asset_put_then_get_returns_the_same_bytes() {
     assert_eq!(got.as_ref(), bytes.as_slice(), "the bytes must round-trip");
 }
 
+/// Looking at an attachment is not exporting it. A logged-in session reads
+/// its own account's attachment with the export permission off; an API token
+/// reads one only when it may export.
+#[tokio::test]
+async fn a_session_reads_an_attachment_without_export_and_a_token_needs_it() {
+    let fixture = crate::test_support::test_fixture().await;
+    let state = fixture.state.clone();
+    let owner =
+        crate::test_support::claim_as_owner(&state, "asset-read-keeper", "hunter2hunter2").await;
+    let user =
+        crate::test_support::register_via_api(&state, "asset-read-user", "hunter2hunter2").await;
+
+    let bytes: Vec<u8> = b"a photo".to_vec();
+    let sha = sha256_hex(&bytes);
+    let path = format!("/v1/assets/{sha}?source=imessage");
+    let server = crate::test_support::serve(&state).await;
+    let response = reqwest::Client::new()
+        .put(format!("{}{path}", server.base()))
+        .bearer_auth(&user.token)
+        .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+        .body(bytes.clone())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let token = |can_import: bool, can_export: bool| {
+        let state = state.clone();
+        let user_token = user.token.clone();
+        let tokens_path = format!("/v1/accounts/{}/api-tokens", user.account_id);
+        async move {
+            let (_location, created): (String, serde_json::Value) =
+                crate::test_support::post_created_json(
+                    &state,
+                    &tokens_path,
+                    &user_token,
+                    serde_json::json!({
+                        "label": "t",
+                        "can_import": can_import,
+                        "can_export": can_export
+                    }),
+                )
+                .await;
+            created["token"].as_str().unwrap().to_string()
+        }
+    };
+    let import_only = token(true, false).await;
+    let may_export = token(false, true).await;
+    assert_eq!(
+        crate::test_support::get_status(&state, &path, &import_only).await,
+        StatusCode::FORBIDDEN,
+        "a token that may not export must not fetch attachment bytes"
+    );
+    assert_eq!(
+        crate::test_support::get_status(&state, &path, &may_export).await,
+        StatusCode::OK
+    );
+
+    assert_eq!(
+        crate::test_support::patch_status(
+            &state,
+            &format!("/v1/accounts/{}", user.account_id),
+            &owner.token,
+            serde_json::json!({ "can_export": false }),
+        )
+        .await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        crate::test_support::get_status(&state, &path, &user.token).await,
+        StatusCode::OK,
+        "an account with export off still sees its own attachments"
+    );
+    assert_eq!(
+        crate::test_support::get_status(&state, "/v1/exports", &user.token).await,
+        StatusCode::FORBIDDEN,
+        "the export permission still decides Export Runs"
+    );
+}
+
 #[tokio::test]
 async fn an_asset_get_for_an_unknown_sha_is_a_json_404() {
     let (fixture, user) = crate::test_support::fixture_with_account().await;

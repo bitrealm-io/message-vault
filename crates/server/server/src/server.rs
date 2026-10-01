@@ -170,6 +170,24 @@ pub fn require_export_access(auth: &AuthIdentity) -> Result<(), ApiError> {
     ))
 }
 
+/// Allow reading an attachment's bytes: a logged-in session, or an API token
+/// that may export.
+///
+/// A person looking at a conversation is not exporting it, so a session
+/// reads its own account's attachments whatever its export permission is.
+/// An API token has no screen to show them on; fetching bytes with one is
+/// taking them out, which is what the export permission decides.
+///
+/// # Errors
+///
+/// Returns forbidden for an API token that may not export.
+pub fn require_asset_read_access(auth: &AuthIdentity) -> Result<(), ApiError> {
+    if auth.is_session() {
+        return Ok(());
+    }
+    require_export_access(auth)
+}
+
 /// Allow a credential that may import or export, for asset probes.
 ///
 /// # Errors
@@ -295,6 +313,12 @@ auth_guard!(
     /// Credential that may export; wraps [`require_export_access`].
     ExportAccess,
     require_export_access
+);
+auth_guard!(
+    /// Logged-in session, or an API token that may export; wraps
+    /// [`require_asset_read_access`].
+    AssetReadAccess,
+    require_asset_read_access
 );
 auth_guard!(
     /// Credential that may import or export, for asset probes; wraps

@@ -1414,6 +1414,92 @@ async fn an_account_deletes_itself_with_its_password_and_the_demo_account_refuse
     );
 }
 
+/// The Demo Account has no password, so its limits are fixed for everyone:
+/// neither the account nor the owner sets its password, its status, its
+/// permissions or its identities, or deletes its messages for good. Its
+/// display name is an ordinary change and goes through.
+#[tokio::test]
+async fn the_demo_account_refuses_what_would_shut_or_empty_it_from_anyone() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
+    let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let demo = fixture
+        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
+        .await;
+    let demo_token = log_in(&state, "demo", "").await["token"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let path = member(demo);
+
+    for (who, token) in [("the owner", &owner.token), ("the account", &demo_token)] {
+        assert_eq!(
+            put_status(
+                &state,
+                &format!("{path}/password"),
+                token,
+                serde_json::json!({ "password": "chosen4demo", "password_confirmation": "chosen4demo" }),
+            )
+            .await,
+            StatusCode::FORBIDDEN,
+            "{who} must not set a password"
+        );
+        assert_eq!(
+            patch_status(
+                &state,
+                &path,
+                token,
+                serde_json::json!({ "identities": [{ "address": "demo@example.com", "service": "email" }] }),
+            )
+            .await,
+            StatusCode::FORBIDDEN,
+            "{who} must not change its identities"
+        );
+        assert_eq!(
+            delete_status_with_body(
+                &state,
+                &format!("{path}/messages"),
+                token,
+                serde_json::json!({ "confirm": true }),
+            )
+            .await,
+            StatusCode::FORBIDDEN,
+            "{who} must not delete its messages for good"
+        );
+    }
+    for flags in [
+        serde_json::json!({ "disabled": true }),
+        serde_json::json!({ "can_import": true }),
+        serde_json::json!({ "can_delete": true }),
+        serde_json::json!({ "can_export": false }),
+    ] {
+        let (status, sentence) = patch_failure(&state, &path, &owner.token, flags.clone()).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{flags}");
+        assert!(
+            sentence.contains("status and permissions are fixed"),
+            "{flags}: {sentence}"
+        );
+    }
+
+    assert_eq!(
+        patch_status(
+            &state,
+            &path,
+            &demo_token,
+            serde_json::json!({ "preferred_name": "Visitor" }),
+        )
+        .await,
+        StatusCode::OK,
+        "a display name is an ordinary change"
+    );
+    // Last, because a new login replaces the session used above.
+    assert_eq!(
+        login_status(&state, "demo", "").await,
+        StatusCode::CREATED,
+        "the Demo Account still opens with no password"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Storage
 // ---------------------------------------------------------------------------

@@ -46,8 +46,7 @@ async function capture(browser) {
   // Steps 2 and 3: the demo Message Crate.
   const demo = await open(DEMO);
   await shot(demo, 'login');
-  await demo.getByLabel('Username').fill('demo');
-  await demo.getByRole('button', { name: 'Log in' }).click();
+  await demo.getByRole('button', { name: 'Explore Demo Account' }).click();
   await demo.waitForTimeout(2500);
   await shot(demo, 'demo-messages');
   await demo.getByRole('button', { name: /^Carolyn Jones/ }).first().click();

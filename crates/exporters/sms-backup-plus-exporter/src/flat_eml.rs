@@ -450,6 +450,35 @@ old message\r\n"
         ));
     }
 
+    /// SMS Backup+ titles a thread "SMS with <who>". For a saved contact
+    /// that is their name; for an unsaved one it is the number, which is an
+    /// address and never a display name.
+    #[test]
+    fn a_subject_naming_a_number_gives_no_contact_name() {
+        assert_eq!(contact_name_from_subject("SMS with +15555550101"), None);
+        assert_eq!(contact_name_from_subject("SMS with 5550101"), None);
+        assert_eq!(
+            contact_name_from_subject("SMS with Sam").as_deref(),
+            Some("Sam")
+        );
+    }
+
+    /// A mail with no `X-smssync-date` header takes its time from `Date`.
+    #[test]
+    fn a_mail_without_the_smssync_date_is_timed_by_its_date_header() {
+        let headers = MailHeaders {
+            smssync_type: "1".into(),
+            smssync_address: "4075551234".into(),
+            smssync_date: String::new(),
+            smssync_id: String::new(),
+            subject: "SMS with Alice".into(),
+            from: String::new(),
+            to: String::new(),
+            date: "Fri, 01 Jan 2021 00:00:00 +0000".into(),
+        };
+        assert_eq!(timestamp_seconds(&headers), Some(1_609_459_200.0));
+    }
+
     #[test]
     fn group_chat_id_does_not_collide_on_digit_split() {
         let (k1, _) = phone::group_chat_id("group-", &["12".to_string(), "34".to_string()]);

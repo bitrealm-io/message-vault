@@ -972,6 +972,81 @@ mod tests {
         assert_eq!(record.text, "zulu\nalpha");
     }
 
+    /// A vCard part is written as `ct="text/x-vcard" text="null"`: a text
+    /// type with no text, which must not put the word null in the message.
+    #[test]
+    fn a_text_part_whose_text_is_null_or_empty_adds_nothing_to_the_message() {
+        let record = mms_with_parts(
+            r#"<part ct="text/plain" text="see the card"/><part ct="text/x-vcard" name="sam.vcf" text="null"/><part ct="text/plain" text=""/>"#,
+        );
+        assert_eq!(record.text, "see the card");
+    }
+
+    /// An incoming MMS to a group of `count` peers, +15555550101 upwards,
+    /// listed last to first so the record has to sort them.
+    fn group_mms(count: usize) -> Record {
+        let address = (1..=count)
+            .rev()
+            .map(|i| format!("+15555550{:03}", 100 + i))
+            .collect::<Vec<_>>()
+            .join("~");
+        let xml = format!(
+            r#"<smses><mms date="1" msg_box="1" address="{address}"><parts><part ct="text/plain" text="hi"/></parts><addrs/></mms></smses>"#
+        );
+        let (mut records, _) = parse_reader(xml.as_bytes(), &HashSet::new()).unwrap();
+        records.remove(0)
+    }
+
+    #[test]
+    fn a_group_is_titled_with_its_first_four_numbers_and_a_count_of_the_rest() {
+        assert_eq!(
+            group_mms(3).group_title.as_deref(),
+            Some("Group: +15555550101, +15555550102, +15555550103")
+        );
+        assert_eq!(
+            group_mms(6).group_title.as_deref(),
+            Some("Group: +15555550101, +15555550102, +15555550103, +15555550104, and 2 others")
+        );
+    }
+
+    /// The key becomes the conversation's file name, and twenty numbers
+    /// joined are longer than a file name may be.
+    #[test]
+    fn a_group_of_twenty_is_keyed_by_a_short_hash_of_its_roster() {
+        let key = group_mms(20).chat_key;
+        let hash = key.strip_prefix("group-").expect("group- prefix");
+        assert_eq!(hash.len(), 16, "key was {key}");
+        assert!(hash.chars().all(|c| c.is_ascii_hexdigit()), "key was {key}");
+        assert_eq!(group_mms(20).chat_key, key, "one roster, one key");
+        assert_ne!(group_mms(21).chat_key, key);
+    }
+
+    #[test]
+    fn attachments_without_smil_keep_the_order_of_their_parts() {
+        let names = [
+            "zebra.jpg",
+            "apple.jpg",
+            "mango.jpg",
+            "kiwi.jpg",
+            "fig.jpg",
+            "plum.jpg",
+        ];
+        let parts: String = names
+            .iter()
+            .map(|name| {
+                let data = crate::encode_part_data(name.as_bytes());
+                format!(r#"<part ct="image/jpeg" name="{name}" data="{data}"/>"#)
+            })
+            .collect();
+        let record = mms_with_parts(&parts);
+        let order: Vec<&str> = record
+            .attachments
+            .iter()
+            .map(|a| a.original_name.as_deref().unwrap())
+            .collect();
+        assert_eq!(order, names);
+    }
+
     #[test]
     fn sms_body_is_decoded_and_normalized() {
         let xml = br#"<smses><sms protocol="0" address="+15555550101" date="1" type="1" body="Tom &amp;amp; Jerry&#13;&#10;line two&#13;three"/></smses>"#;

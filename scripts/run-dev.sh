@@ -41,8 +41,8 @@ Usage: $(basename "$0") [--reset | --reset-demo] [--owner] [--sqlweb] [--release
   --reset-demo  Wipe data/ and seed the sample inbox
   --owner       Claim the Message Crate as admin/admin. Combine with --reset
                 for an empty claimed Message Crate; without it, --reset
-                leaves it unclaimed so the Create Owner screen is reachable.
-                Rejected with --reset-demo, which claims it itself.
+                or --reset-demo leaves it unclaimed so the Create Owner
+                screen is reachable.
   --sqlweb      Start sqlite-web on http://127.0.0.1:8081 (needs sqlite_web on PATH)
   --release     Build and run the optimized binary (seed and serve)
   -h, --help
@@ -58,7 +58,7 @@ Examples:
       Claim the existing Message Crate as admin / admin (warns and carries on
       if it is already claimed)
   ./scripts/$(basename "$0") --reset-demo
-      Sample inbox, log in as demo with an empty password
+      Sample inbox, unclaimed: press Explore Demo Account on the login card
   ./scripts/$(basename "$0") --reset-demo --release --sqlweb
       Sample inbox on the optimized binary, with the SQLite browser on
       http://127.0.0.1:8081
@@ -87,11 +87,6 @@ done
 
 if [[ "${RESET}" -eq 1 && "${DEMO}" -eq 1 ]]; then
   echo "error: use either --reset or --reset-demo, not both" >&2
-  exit 1
-fi
-
-if [[ "${OWNER}" -eq 1 && "${DEMO}" -eq 1 ]]; then
-  echo "error: --reset-demo claims the Message Crate itself; drop --owner" >&2
   exit 1
 fi
 

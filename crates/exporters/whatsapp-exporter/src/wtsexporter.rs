@@ -401,8 +401,8 @@ fn write_key_file(work_dir: &Path, hex_key: &str) -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Platform, WtsexporterArgs, android_crypt_backup, resolve_forwarded_paths,
-        wtsexporter_command,
+        Platform, WtsexporterArgs, android_crypt_backup, input_search_root,
+        resolve_forwarded_paths, wtsexporter_command,
     };
     use std::fs;
     use std::path::Path;
@@ -420,6 +420,18 @@ mod tests {
             db: None,
             business: false,
         }
+    }
+
+    /// wtsexporter looks for its default files (`msgstore.db`, `wa.db`, the
+    /// key) in one folder. For a file input that is the folder holding the
+    /// file, not the folder the app happens to run in.
+    #[test]
+    fn a_file_input_is_searched_in_the_folder_that_holds_it() {
+        let dir = tempdir().unwrap();
+        let file = dir.path().join("msgstore.db");
+        fs::write(&file, b"db").unwrap();
+        assert_eq!(input_search_root(&file).unwrap(), dir.path());
+        assert_eq!(input_search_root(dir.path()).unwrap(), dir.path());
     }
 
     #[test]

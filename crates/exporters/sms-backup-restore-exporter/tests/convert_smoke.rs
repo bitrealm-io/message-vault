@@ -145,6 +145,50 @@ fn dedupes_overlapping_xml_files() {
     assert!(body.contains("same text"));
 }
 
+/// With no owner phone on the form, each file is read once to find one. A
+/// file that cannot be read then is one bad file, not the end of the export:
+/// the readable file beside it is still exported. Only when every file is
+/// unreadable is there nothing to export, and the run says so.
+#[test]
+fn one_unreadable_xml_does_not_stop_an_export_without_owner_phones() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let input_dir = tmp.path().join("in");
+    fs::create_dir_all(&input_dir).unwrap();
+    let broken = r#"<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<smses count="1">
+  <sms address="+15555550101" </oops>
+</smses>"#;
+    fs::write(input_dir.join("a-broken.xml"), broken).unwrap();
+    fs::write(
+        input_dir.join("b-readable.xml"),
+        r#"<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<smses count="1">
+  <sms address="+15555550101" date="1400773261000" type="1" body="still here" contact_name="Sam" />
+</smses>"#,
+    )
+    .unwrap();
+
+    let out = tmp.path().join("out");
+    let report = convert(&input_dir, &out, &[], OutputFormat::Csv).unwrap();
+    assert_eq!(report.conversations, 1);
+    assert_csv_row(&out.join("+15555550101.csv"), &[("text", "still here")]);
+
+    let only_broken = tmp.path().join("only-broken");
+    fs::create_dir_all(&only_broken).unwrap();
+    fs::write(only_broken.join("a-broken.xml"), broken).unwrap();
+    let err = convert(
+        &only_broken,
+        &tmp.path().join("out-2"),
+        &[],
+        OutputFormat::Csv,
+    )
+    .unwrap_err();
+    assert!(
+        err.to_string().contains("could not infer owner phones"),
+        "unexpected error: {err:#}"
+    );
+}
+
 #[test]
 fn rejects_owner_phone_without_digits() {
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sample.xml");

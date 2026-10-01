@@ -20,6 +20,8 @@ const COPY: NavEntityCopy = {
   renameTitle: "Rename group",
   namePlaceholder: "Group name",
   optionsLabel: (name) => `Group options for ${name}`,
+  deleteBody: (name) =>
+    `Removes the Contact Group ${name} and takes every contact out of it. The contacts themselves stay in your Message Crate.`,
   createError: "Could not create group",
   renameError: "Could not rename group",
   deleteError: "Could not delete group",

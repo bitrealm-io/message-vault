@@ -89,6 +89,6 @@ It opens a menu with two entries.
 The new name follows the same three rules, and every Conversation that carried the old name carries the new one.
 A Saved Search that names the tag is not updated, because a Saved Search stores the text of its search.
 
-**Delete** removes the tag at once, without asking first.
-It takes the tag off every Conversation that carried it.
+**Delete** asks for confirmation first, in a dialog that names the tag.
+Confirming with **Delete** removes the tag and takes it off every Conversation that carried it.
 The Conversations and their messages are not touched.

@@ -14,6 +14,8 @@ const COPY: NavEntityCopy = {
   renameTitle: "Rename tag",
   namePlaceholder: "Tag name",
   optionsLabel: (name) => `Tag options for ${name}`,
+  deleteBody: (name) =>
+    `Removes the Message Tag ${name} and takes it off every conversation that carries it. The conversations themselves stay in your Message Crate.`,
   createError: "Could not create tag",
   renameError: "Could not rename tag",
   deleteError: "Could not delete tag",

@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -41,13 +41,15 @@ vi.mock("../screens/import/useImportAttention", () => ({
   useImportAttention: () => importAttentionState.attention,
 }));
 
+const savedSearchActions = vi.hoisted(() => ({
+  create: vi.fn(),
+  update: vi.fn(),
+  remove: vi.fn(),
+}));
+
 vi.mock("../lib/savedSearches", () => ({
   useSavedSearches: () => ({ savedSearches: savedSearchState.savedSearches, loading: false }),
-  useSavedSearchActions: () => ({
-    create: vi.fn(),
-    update: vi.fn(),
-    remove: vi.fn(),
-  }),
+  useSavedSearchActions: () => ({ ...savedSearchActions, pending: false, error: null }),
 }));
 
 afterEach(() => {
@@ -60,6 +62,9 @@ beforeEach(() => {
   tauriState.isTauri = false;
   savedSearchState.savedSearches = [];
   importAttentionState.attention = null;
+  savedSearchActions.create.mockReset().mockResolvedValue(undefined);
+  savedSearchActions.update.mockReset().mockResolvedValue(undefined);
+  savedSearchActions.remove.mockReset().mockResolvedValue(undefined);
 });
 
 /** Where the router is now, as `pathname + search`. */
@@ -117,6 +122,73 @@ describe("LeftPanel", () => {
     expect(screen.getByRole("menuitem", { name: "Rename…" })).toBeTruthy();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("menuitem", { name: "Rename…" })).toBeNull();
+  });
+
+  it("shows why a Saved Search was not created and keeps the form open", async () => {
+    savedSearchActions.create.mockRejectedValue(
+      new Error("a saved search named 'From Alice' already exists"),
+    );
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(screen.getByRole("button", { name: "Create saved search" }));
+    await user.type(screen.getByRole("textbox", { name: "Name" }), "From Alice");
+    await user.type(screen.getByRole("textbox", { name: "Query" }), "from:alice");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "a saved search named 'From Alice' already exists",
+    );
+    expect(savedSearchActions.create).toHaveBeenCalledWith("From Alice", "from:alice");
+    expect(screen.getByRole("dialog", { name: "New saved search" })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("From Alice");
+  });
+
+  it("closes the form once a Saved Search is created", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(screen.getByRole("button", { name: "Create saved search" }));
+    await user.type(screen.getByRole("textbox", { name: "Name" }), "From Alice");
+    await user.type(screen.getByRole("textbox", { name: "Query" }), "from:alice");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("shows why a Saved Search edit was refused and keeps the form open", async () => {
+    savedSearchState.savedSearches = [
+      { id: 1, name: "From Alice", query: "from:alice", kind: "manual" },
+    ];
+    savedSearchActions.update.mockRejectedValue(
+      new Error("a saved search named 'Work' already exists"),
+    );
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(screen.getByRole("button", { name: "Saved search options for From Alice" }));
+    await user.click(screen.getByRole("menuitem", { name: "Rename…" }));
+    const name = screen.getByRole("textbox", { name: "Name" });
+    await user.clear(name);
+    await user.type(name, "Work");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "a saved search named 'Work' already exists",
+    );
+    expect(savedSearchActions.update).toHaveBeenCalledWith(1, "Work", "from:alice");
+    expect(screen.getByRole("dialog", { name: "Edit saved search" })).toBeTruthy();
+  });
+
+  it("deletes a Saved Search at once and shows a delete that failed", async () => {
+    savedSearchState.savedSearches = [
+      { id: 1, name: "From Alice", query: "from:alice", kind: "manual" },
+    ];
+    savedSearchActions.remove.mockRejectedValue(new Error("saved search not found"));
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(screen.getByRole("button", { name: "Saved search options for From Alice" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+
+    expect(savedSearchActions.remove).toHaveBeenCalledWith(1);
+    expect(await screen.findByRole("alert")).toHaveTextContent("saved search not found");
   });
 
   describe("desktop Import/Export Messages section", () => {

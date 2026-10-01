@@ -14,7 +14,7 @@ Workspace setup: [CONTRIBUTING.md](../../../CONTRIBUTING.md).
 
 ## Docs
 
-This crate is a library. Layout and headers: https://bitrealm.io/vault/developer/formats/mail-archive/
+This crate is a library. Layout and headers: https://messagecrate.app/docs/developer/formats/mail-archive/
 
 ## License
 

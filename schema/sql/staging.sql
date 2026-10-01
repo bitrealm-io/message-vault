@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS staging_conversations (
     -- Surrogate primary key for this staging conversation.
     id INTEGER PRIMARY KEY,
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Thread identity handle id (resolved into handles during staging).
     chat_handle_id INTEGER NOT NULL,
@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS staging_messages (
     id INTEGER PRIMARY KEY,
     -- Parent staging conversation (`staging_conversations.id`).
     conversation_id INTEGER NOT NULL REFERENCES staging_conversations(id) ON DELETE CASCADE,
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Backup/source family that produced this row.
     source TEXT NOT NULL,
@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS staging_messages (
     -- The instant the message was sent, RFC 3339 in UTC with a Z suffix. Shown, searched
     -- and filed by day and year in the account's time zone (accounts.time_zone).
     timestamp TEXT NOT NULL,
-    -- 1 = sent by the vault owner; 0 = received from someone else.
+    -- 1 = sent by the account holder; 0 = received from someone else.
     is_from_me INTEGER NOT NULL,
     -- Sender identity handle id; NULL when unknown.
     sender_handle_id INTEGER,
@@ -73,8 +73,8 @@ CREATE TABLE IF NOT EXISTS staging_messages (
     num_replies INTEGER NOT NULL DEFAULT 0,
     -- Stable order within the conversation when timestamps collide.
     sort_order INTEGER NOT NULL,
-    -- Import run that staged this row (`vault_imports.id`).
-    import_id INTEGER REFERENCES vault_imports(id) ON DELETE SET NULL
+    -- Import run that staged this row (`imports.id`).
+    import_id INTEGER REFERENCES imports(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS ix_staging_messages_conversation_timestamp
@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS staging_attachments (
     transcription TEXT,
     -- SHA-256 hex of the stored original bytes when present.
     sha256 TEXT,
-    -- Path under the vault assets store for the original file.
+    -- Path under the assets store for the original file.
     assets_path TEXT,
     -- Original file size in bytes when known.
     size_bytes INTEGER,
@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS staging_attachments (
     missing_reason TEXT,
     -- SHA-256 hex of a converted/compressed derivative.
     derived_sha256 TEXT,
-    -- Path under the vault assets store for the derivative file.
+    -- Path under the assets store for the derivative file.
     derived_assets_path TEXT,
     -- MIME type of the derivative file.
     derived_mime_type TEXT
@@ -131,7 +131,7 @@ CREATE TABLE IF NOT EXISTS staging_tapbacks (
     kind TEXT NOT NULL,
     -- Emoji glyph when the reaction is custom/emoji-based.
     emoji TEXT,
-    -- 1 = reaction from the vault owner; 0 = from someone else.
+    -- 1 = reaction from the account holder; 0 = from someone else.
     is_from_me INTEGER NOT NULL,
     -- Reactor identity handle id; NULL when unknown.
     sender_handle_id INTEGER

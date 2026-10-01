@@ -3,7 +3,7 @@
 //! The UI can start a long export and later press Cancel. Those are separate
 //! commands, so they share a cancel flag here.
 
-use message_vault_io_core::CancelFlag;
+use message_crate_core::CancelFlag;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 

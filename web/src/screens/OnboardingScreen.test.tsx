@@ -17,11 +17,11 @@ vi.mock("../lib/auth", () => ({
   }),
 }));
 
-vi.mock("../lib/vaultApi", () => ({
+vi.mock("../lib/serverApi", () => ({
   updateAccountProfile: (...args: unknown[]) => apiPost(...(args as [])),
 }));
 
-// What the vault says the account already holds; a test sets it to what the owner filled in.
+// What the server says the account already holds; a test sets it to what the owner filled in.
 const blankProfile = { preferred_name: null, time_zone: "UTC", phones: [], emails: [] };
 let profile: {
   preferred_name: string | null;
@@ -63,7 +63,7 @@ describe("OnboardingScreen", () => {
     expect(screen.getByText("Your Accounts")).toBeInTheDocument();
     expect(screen.queryByText(/How you show up/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Source Accounts/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Welcome to the Message Vault/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Welcome to the Message Crate/i)).not.toBeInTheDocument();
   });
 
   it("shows the name and zone the owner set, for the holder to check", () => {
@@ -96,7 +96,7 @@ describe("OnboardingScreen", () => {
     profile = { ...blankProfile, phones: ["+15555550100"] };
     render(<OnboardingScreen />);
 
-    const go = screen.getByRole("button", { name: "Continue to vault" });
+    const go = screen.getByRole("button", { name: "Continue to Message Crate" });
     expect(go).toBeDisabled();
     await setupUser().type(screen.getByRole("textbox", { name: "Display Name" }), "Bob");
     expect(go).toBeEnabled();
@@ -113,7 +113,7 @@ describe("OnboardingScreen", () => {
 
     await user.clear(rowValue(1));
     await user.paste("+1 555-555-0199");
-    await user.click(screen.getByRole("button", { name: "Continue to vault" }));
+    await user.click(screen.getByRole("button", { name: "Continue to Message Crate" }));
 
     await waitFor(() => expect(apiPost).toHaveBeenCalled());
     expect(apiPost).toHaveBeenCalledWith(
@@ -134,7 +134,7 @@ describe("OnboardingScreen", () => {
     render(<OnboardingScreen />);
 
     await user.click(screen.getByRole("button", { name: "Remove account 2" }));
-    await user.click(screen.getByRole("button", { name: "Continue to vault" }));
+    await user.click(screen.getByRole("button", { name: "Continue to Message Crate" }));
 
     await waitFor(() => expect(apiPost).toHaveBeenCalled());
     expect(apiPost).toHaveBeenCalledWith(
@@ -159,7 +159,7 @@ describe("OnboardingScreen", () => {
     expect(screen.queryByRole("textbox", { name: "Account 5 value" })).not.toBeInTheDocument();
     expect(screen.getByText("2 more are in Settings.")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Continue to vault" }));
+    await user.click(screen.getByRole("button", { name: "Continue to Message Crate" }));
     await waitFor(() => expect(apiPost).toHaveBeenCalled());
     expect(apiPost).toHaveBeenCalledWith(
       expect.objectContaining({ identities: [], remove_identities: [] }),
@@ -293,23 +293,23 @@ describe("OnboardingScreen", () => {
     expect(rowValue(1)).toHaveAttribute("aria-invalid", "true");
   });
 
-  it("holds back Continue to vault until the value is an account", async () => {
+  it("holds back Continue to Message Crate until the value is an account", async () => {
     const user = setupUser();
     render(<OnboardingScreen />);
 
     await user.type(screen.getByRole("textbox", { name: "Display Name" }), "Matt");
     await user.type(rowValue(1), "notaphone");
-    await user.click(screen.getByRole("button", { name: "Continue to vault" }));
+    await user.click(screen.getByRole("button", { name: "Continue to Message Crate" }));
 
     expect(apiPost).not.toHaveBeenCalled();
     expect(rowValue(1)).toHaveAttribute("aria-invalid", "true");
   });
 
-  it("keeps Continue to vault disabled until there is a name and an account", async () => {
+  it("keeps Continue to Message Crate disabled until there is a name and an account", async () => {
     const user = setupUser();
     render(<OnboardingScreen />);
 
-    const submit = screen.getByRole("button", { name: "Continue to vault" });
+    const submit = screen.getByRole("button", { name: "Continue to Message Crate" });
     expect(submit).toBeDisabled();
 
     await user.type(screen.getByRole("textbox", { name: "Display Name" }), "Matt");

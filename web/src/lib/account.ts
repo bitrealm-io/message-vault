@@ -1,10 +1,10 @@
-import type { components } from "./vaultApi.types";
+import type { components } from "./serverApi.types";
 
 /**
- * The logged-in account as the vault returns it from `GET /v1/accounts/{id}`:
+ * The logged-in account as the server returns it from `GET /v1/accounts/{id}`:
  * its profile, its flags, and how much it holds.
  *
- * Generated from the vault's own OpenAPI document rather than written here, so
+ * Generated from the server's own OpenAPI document rather than written here, so
  * a field renamed on the server becomes a build error instead of a screen that
  * silently shows nothing.
  */

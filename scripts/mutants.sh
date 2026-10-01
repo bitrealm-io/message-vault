@@ -67,7 +67,7 @@ export "${RUNNER_VAR}=${SCRIPT_DIR}/mutants-test-runner.sh"
 
 echo "==> cargo mutants"
 status=0
-env -u MV_TEST_POSTGRES_URL cargo mutants "${CONFIG[@]}" --output "${OUT}" "$@" || status=$?
+env -u MC_TEST_POSTGRES_URL cargo mutants "${CONFIG[@]}" --output "${OUT}" "$@" || status=$?
 # 0: every mutant caught. 2: some missed. 3: some timed out. All three are
 # results to report; anything else means the run itself went wrong.
 if [[ ${status} -ne 0 && ${status} -ne 2 && ${status} -ne 3 ]]; then

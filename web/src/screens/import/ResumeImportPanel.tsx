@@ -16,7 +16,7 @@ const COPY: Record<ResumableKind, PanelCopy> = {
     heading: () => "Finish your last import",
     body: () =>
       "Your messages are staged and ready to upload. Picking up where you left off skips the extract.",
-    primary: { label: "Upload to vault", action: "resume" },
+    primary: { label: "Upload to Message Crate", action: "resume" },
     secondary: { label: "Discard this import", action: "discard" },
   },
   restart: {
@@ -74,7 +74,7 @@ const COPY: Record<ResumableKind, PanelCopy> = {
   folder_unknown: {
     heading: () => "The staged files could not be checked",
     body: (session) =>
-      `Message Vault could not check ${session.staging_dir ?? "this import's folder"}. Open Import again to check once more, or discard this import to start a new one.`,
+      `Message Crate could not check ${session.staging_dir ?? "this import's folder"}. Open Import again to check once more, or discard this import to start a new one.`,
     primary: { label: "Discard this import", action: "discard" },
   },
   other_device: {

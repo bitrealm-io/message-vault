@@ -7,7 +7,7 @@ autotests = false
 
 [dependencies]
 anyhow = { workspace = true }
-message-vault-io-core = { path = "../../core/message-vault-io-core" }
+message-crate-core = { path = "../../core/message-crate-core" }
 message-ir = { path = "../../libs/ir" }
 message-ir-format = { path = "../../libs/ir-format" }
 message-staging = { path = "../../libs/staging" }
@@ -19,7 +19,7 @@ serde_json = { workspace = true }
 
 [dev-dependencies]
 message-ir = { path = "../../libs/ir", features = ["testutil"] }
-message-vault-io-core = { path = "../../core/message-vault-io-core", features = ["testutil"] }
+message-crate-core = { path = "../../core/message-crate-core", features = ["testutil"] }
 tempfile = { workspace = true }
 
 [lints]

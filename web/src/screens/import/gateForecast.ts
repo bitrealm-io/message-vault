@@ -41,7 +41,7 @@ export interface EstimatePile {
  * The Staging Review's estimates, before Media has run: three piles, the
  * empty ones dropped. The backend's five verdicts fold into these. A file
  * under the limit that Media may push over it (`may_grow`) sits with the
- * files expected to stay over it, because both may be left out of the vault
+ * files expected to stay over it, because both may be left out of Message Crate
  * and that is what the person is weighing. `fits_as_is` files carry no
  * forecast row at all.
  */

@@ -730,7 +730,7 @@ fn group_title(peers: &[String]) -> String {
 /// has no stable thread ID. When the roster changes (someone is added or
 /// removed), messages before and after the change land in different
 /// conversations, an inherent limitation of the source, documented at
-/// https://bitrealm.io/vault/developer/formats/sms-backup-restore/mapping/.
+/// https://messagecrate.app/docs/developer/formats/sms-backup-restore/mapping/.
 /// A very long roster is keyed by a hash so the key stays a usable file stem.
 fn group_chat_key(peers: &[String]) -> String {
     let raw_key = format!("group-{}", peers.join("_"));

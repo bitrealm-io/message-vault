@@ -50,7 +50,7 @@ export function runHeading(
 }
 
 /**
- * Name of the Contact Group the vault made for a finished run: the same
+ * Name of the Contact Group the server made for a finished run: the same
  * words `import_contact_group_name` (server) uses, so a link lands on it.
  */
 export function importGroupName(

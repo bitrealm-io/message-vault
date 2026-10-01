@@ -1,6 +1,6 @@
 # An import names the Contact
 
-When a backup knows a person's name and the Contact the vault makes for them
+When a backup knows a person's name and the Contact Message Crate makes for them
 has no name yet, the import puts that name on the Contact and marks it as
 supplied by an import. A name the person types, or loads from an address
 book, replaces an imported name. A later backup with a different spelling
@@ -10,7 +10,7 @@ nameless and kept the backup's name as residue only.
 ## Why
 
 #286 (31 August 2026) moved name resolution out of the exporters and into the
-vault, and decided that "the display name the source supplied stays on the
+server, and decided that "the display name the source supplied stays on the
 identity as residue rather than being promoted to a preferred name, because
 the same number arrives spelled differently across backups." The effect was
 that importing a phone which knew everyone's name produced a Contacts list of
@@ -22,7 +22,7 @@ one person could show two names on one screen.
 
 A phone backup is an address book the person already curated. Refusing its
 names turns every import into a naming chore and fills Unknown with people
-the vault could have named. The spelling worry is real but small: first
+an import could have named. The spelling worry is real but small: first
 import wins, and a person can correct a name once. Marking the name as
 imported keeps the address-book refresh rule from #286 intact, because a
 refresh replaces only what the address book owns and a typed name still wins.

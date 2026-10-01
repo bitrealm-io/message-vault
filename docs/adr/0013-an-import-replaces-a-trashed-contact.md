@@ -7,7 +7,7 @@ later never saw that person in Contacts again. We decided the opposite: when
 an import meets a handle that belongs to a trashed Contact, the import
 discards that Contact together with every handle it had, then makes a new
 Contact from the backup, as a first import would. A backup
-that still holds the person is the person telling the vault they still talk
+that still holds the person is the person telling Message Crate they still talk
 to them, and the surprise of a Contact that never comes back is worse than
 the surprise of one that does.
 
@@ -29,7 +29,7 @@ the surprise of one that does.
 - A backup that holds the person under two different handles makes two
   Contacts, as a first import does; the trashed Contact that joined them is
   not consulted.
-- The forecast of Contacts new to the vault, shown before an import runs,
+- The forecast of Contacts new to the account, shown before an import runs,
   counts a trashed Contact's handle as new, because that is what the person
   is about to see.
 - The old name and Contact Group memberships are gone for good.

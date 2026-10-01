@@ -1,8 +1,8 @@
 use super::*;
 use media::{CompressOptions, MediaMode};
+use message_crate_core::LogSink;
 use message_ir::{ConversationDocument, IrAttachment};
 use message_ir_format::read_conversation_jsonl;
-use message_vault_io_core::LogSink;
 use std::fs;
 use std::sync::{Arc, Mutex};
 

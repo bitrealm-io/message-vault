@@ -4,7 +4,7 @@ import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AccountProfile } from "../../lib/account";
-import { mockedAuth, renderWithVault as render } from "../../test/vaultProviders";
+import { mockedAuth, renderWithProviders as render } from "../../test/providers";
 import { IdentitiesSection } from "./IdentitiesSection";
 import { type Identity, removeBody } from "./identities";
 
@@ -14,8 +14,8 @@ vi.mock("../../lib/useSettingsAccount", () => ({
   useUpdateSettingsProfile: () => ({ mutateAsync, isPending: false }),
 }));
 vi.mock("../../lib/auth", () => ({ useAuth: () => mockedAuth }));
-vi.mock("../../lib/vaultApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../lib/vaultApi")>()),
+vi.mock("../../lib/serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../lib/serverApi")>()),
   listAccountIdentities: (...a: unknown[]) => listAccountIdentities(...a),
 }));
 
@@ -26,7 +26,7 @@ const profile = {
   emails: ["bob@example.com", "archer@example.com"],
 } as AccountProfile;
 
-/** What the vault lists for `profile`, with the messages held at each identity. */
+/** What the server lists for `profile`, with the messages held at each identity. */
 const identities: Identity[] = [
   {
     address: "+15555550100",
@@ -70,7 +70,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("IdentitiesSection", () => {
-  it("says what identities are for, then lists them with dates and counts from the vault", async () => {
+  it("says what identities are for, then lists them with dates and counts from the server", async () => {
     render(<IdentitiesSection profile={profile} />);
 
     expect(screen.getByRole("heading", { name: "My Identities" })).toBeInTheDocument();
@@ -94,7 +94,7 @@ describe("IdentitiesSection", () => {
     }
     expect(within(table).getByText("Text message")).toBeInTheDocument();
     expect(within(table).getByText("bob@example.com")).toBeInTheDocument();
-    // The counts are the vault's answer, read for this account.
+    // The counts are the server's answer, read for this account.
     expect(await within(table).findByText("30")).toBeInTheDocument();
     expect(within(table).getByText("12")).toBeInTheDocument();
     expect(within(table).getByText("2020-01-01")).toBeInTheDocument();
@@ -102,7 +102,7 @@ describe("IdentitiesSection", () => {
     expect(listAccountIdentities).toHaveBeenCalledWith(expect.anything(), undefined);
   });
 
-  it("shows the profile's identities with no numbers until the vault answers", () => {
+  it("shows the profile's identities with no numbers until the server answers", () => {
     listAccountIdentities.mockReturnValue(new Promise(() => {}));
     render(<IdentitiesSection profile={profile} />);
 
@@ -133,7 +133,7 @@ describe("IdentitiesSection", () => {
     expect(screen.getByRole("button", { name: "Add identity" })).toBeEnabled();
   });
 
-  it("adds an identity through the dialog and closes it when the vault has it", async () => {
+  it("adds an identity through the dialog and closes it when the server has it", async () => {
     const user = userEvent.setup({ delay: null });
     mutateAsync.mockResolvedValue({ ...profile, emails: [...profile.emails, "new@example.com"] });
     render(<IdentitiesSection profile={profile} />);
@@ -152,7 +152,7 @@ describe("IdentitiesSection", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
-  it("keeps the dialog open and says why when the vault did not add the identity", async () => {
+  it("keeps the dialog open and says why when the server did not add the identity", async () => {
     const user = userEvent.setup({ delay: null });
     mutateAsync.mockResolvedValue(profile);
     render(<IdentitiesSection profile={profile} />);
@@ -163,7 +163,7 @@ describe("IdentitiesSection", () => {
     await user.click(within(dialog).getByRole("button", { name: "Add" }));
 
     expect(
-      await within(dialog).findByText("The vault did not add that identity."),
+      await within(dialog).findByText("The server did not add that identity."),
     ).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Add identity" })).toBeInTheDocument();
   });

@@ -1,11 +1,10 @@
-//! `pull` command — download messages from a Message Vault server.
+//! `pull` command — download messages from a Message Crate server.
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use vault_pull::{
-    DEFAULT_ASSET_DOWNLOAD_WORKERS, DEFAULT_PAGE_LIMIT, ProgressEvent, VaultPullConfig,
-    run as run_pull,
+use message_crate_pull::{
+    DEFAULT_ASSET_DOWNLOAD_WORKERS, DEFAULT_PAGE_LIMIT, ProgressEvent, PullConfig, run as run_pull,
 };
 
 use super::events;
@@ -16,22 +15,22 @@ use crate::state::AppState;
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PullArgs {
-    /// Base URL of the vault server, for example `http://127.0.0.1:8080`.
+    /// Base URL of the server, for example `http://127.0.0.1:8080`.
     pub base_url: String,
-    /// Vault account name.
+    /// Account name.
     pub username: String,
-    /// Bearer token for the vault: an API token, or the logged-in Session's
+    /// Bearer token for the server: an API token, or the logged-in Session's
     /// token. Never a password.
     pub key: String,
     /// Folder the pulled conversation files are written into.
     pub out_dir: String,
-    /// Vault search query selecting which conversations to pull.
+    /// Search query selecting which conversations to pull.
     pub query: String,
     /// When true, skip attachments and download messages only.
     pub skip_attachments: bool,
 }
 
-/// Ask this process to download conversations from a vault server.
+/// Ask this process to download conversations from a server.
 ///
 /// Returns as soon as the background thread starts. Log lines and the final
 /// summary use the same `extract:log` / `extract:finished` / `extract:error`
@@ -51,7 +50,7 @@ pub fn pull(
 
     let app_handle = app.clone();
     spawn_job(app, move || {
-        let cfg = VaultPullConfig {
+        let cfg = PullConfig {
             out_dir: PathBuf::from(&args.out_dir),
             base_url: args.base_url,
             username: args.username,

@@ -23,9 +23,9 @@ describe("OpenPathButton", () => {
   it("opens the path when clicked", async () => {
     const user = userEvent.setup();
     openPathInExplorer.mockResolvedValue(undefined);
-    render(<OpenPathButton path="/home/sam/message-vault/staging">Open</OpenPathButton>);
+    render(<OpenPathButton path="/home/sam/message-crate/staging">Open</OpenPathButton>);
     await user.click(screen.getByRole("button", { name: "Open" }));
-    expect(openPathInExplorer).toHaveBeenCalledWith("/home/sam/message-vault/staging");
+    expect(openPathInExplorer).toHaveBeenCalledWith("/home/sam/message-crate/staging");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 

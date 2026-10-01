@@ -3,8 +3,8 @@ import { contactLabelText } from "./contactLabel";
 /** The two name fields the list can order by; each also gives the A–Z section letters. */
 export type ContactNameSort = "first" | "last";
 /**
- * How the contact list is ordered: a name field, or when the vault last heard
- * from the contact (`last_heard_at`, the vault's `sort=last_heard`).
+ * How the contact list is ordered: a name field, or when the server last heard
+ * from the contact (`last_heard_at`, the server's `sort=last_heard`).
  */
 export type ContactSort = ContactNameSort | "lastHeard";
 export type ContactSortOrder = "asc" | "desc";
@@ -108,8 +108,8 @@ export function compareContactsByName(
 }
 
 /**
- * By when the vault last heard from each contact. A contact it never heard
- * from has no date and goes last in either direction, the way the vault
+ * By when the server last heard from each contact. A contact it never heard
+ * from has no date and goes last in either direction, the way the server
  * orders `sort=last_heard`; the timestamps are RFC 3339 in UTC, so string
  * order is time order.
  */

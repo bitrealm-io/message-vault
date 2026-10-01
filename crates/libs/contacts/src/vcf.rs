@@ -1,4 +1,4 @@
-//! VCF 3.0 parser (names, phones, email, categories) for contact books and vault ingest.
+//! VCF 3.0 parser (names, phones, email, categories) for contact books and the server's import.
 
 use anyhow::{Context, Result};
 use std::fs;

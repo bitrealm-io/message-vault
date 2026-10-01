@@ -609,7 +609,7 @@ fn transcode_file_as_converts_an_extensionless_source_by_the_given_kind() {
         return;
     };
     let dir = tempfile::tempdir().unwrap();
-    // The vault stores originals under their fingerprint alone.
+    // The server stores originals under their fingerprint alone.
     let src = dir.path().join("3b1f");
     write_test_png(&src);
     assert_eq!(classify(&src), None, "no extension, so no kind to read");

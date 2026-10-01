@@ -5,12 +5,12 @@ import ReactDOM from "react-dom/client";
 import { HashRouter } from "react-router-dom";
 import App from "./App";
 import { initFfmpegToolsFromStorage } from "./lib/ffmpeg-tools";
-import { createVaultQueryClient } from "./lib/vaultQuery";
+import { createQueryClient } from "./lib/routeQuery";
 import "./theme.css";
 
 initFfmpegToolsFromStorage();
 
-const queryClient = createVaultQueryClient();
+const queryClient = createQueryClient();
 
 const rootEl = document.getElementById("root");
 if (!rootEl) {

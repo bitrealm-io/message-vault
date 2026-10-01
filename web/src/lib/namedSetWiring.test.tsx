@@ -12,7 +12,7 @@
  * ADR-0002 makes those keys the whole mechanism by which the app learns that
  * something changed, so they are the part worth pinning.
  *
- * These import `contactGroups` and `messageTags` themselves. Only the vault
+ * These import `contactGroups` and `messageTags` themselves. Only the server
  * routes are faked, at the same boundary the rest of the suite uses.
  */
 
@@ -23,19 +23,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { contactGroups } from "./contactGroups";
 import { messageTags } from "./messageTags";
 import { useNameCollectionActions } from "./nameCollection";
-import * as vaultApi from "./vaultApi";
-import { keys } from "./vaultKeys";
+import { keys } from "./queryKeys";
+import * as serverApi from "./serverApi";
 
 /** A cache key as the client sees it: the account, then the key itself. */
 function scoped(key: readonly string[]): unknown[] {
-  return ["vault", 7, ...key];
+  return ["server", 7, ...key];
 }
 
 vi.mock("./auth", () => ({
   useAuth: () => ({ accountId: 7 }),
 }));
 
-vi.mock("./vaultApi", () => ({
+vi.mock("./serverApi", () => ({
   listContactGroups: vi.fn().mockResolvedValue({ items: [] }),
   createContactGroup: vi.fn().mockResolvedValue({ id: 3, name: "Work" }),
   updateContactGroup: vi.fn().mockResolvedValue({ id: 12, name: "Fam" }),
@@ -74,7 +74,7 @@ describe("contact groups are wired to the lists that show a group name", () => {
 
     const invalidated = await keysInvalidatedBy(() => result.current.create("Work"));
 
-    expect(vi.mocked(vaultApi.createContactGroup)).toHaveBeenCalledWith({ name: "Work" });
+    expect(vi.mocked(serverApi.createContactGroup)).toHaveBeenCalledWith({ name: "Work" });
     expect(invalidated).toEqual(
       expect.arrayContaining([scoped(keys.contactGroups.all), scoped(keys.contacts.all)]),
     );
@@ -86,7 +86,7 @@ describe("contact groups are wired to the lists that show a group name", () => {
 
     const invalidated = await keysInvalidatedBy(() => result.current.rename("Family", "Fam"));
 
-    expect(vi.mocked(vaultApi.updateContactGroup)).toHaveBeenCalledWith(12, { name: "Fam" });
+    expect(vi.mocked(serverApi.updateContactGroup)).toHaveBeenCalledWith(12, { name: "Fam" });
     expect(invalidated).toEqual(
       expect.arrayContaining([scoped(keys.contactGroups.all), scoped(keys.contacts.all)]),
     );
@@ -98,7 +98,7 @@ describe("contact groups are wired to the lists that show a group name", () => {
 
     const invalidated = await keysInvalidatedBy(() => result.current.remove("Family"));
 
-    expect(vi.mocked(vaultApi.deleteContactGroup)).toHaveBeenCalledWith(12);
+    expect(vi.mocked(serverApi.deleteContactGroup)).toHaveBeenCalledWith(12);
     expect(invalidated).toEqual(
       expect.arrayContaining([scoped(keys.contactGroups.all), scoped(keys.contacts.all)]),
     );
@@ -124,7 +124,7 @@ describe("message tags are wired to the lists that show a tag name", () => {
 
     const invalidated = await keysInvalidatedBy(() => result.current.create("Receipts"));
 
-    expect(vi.mocked(vaultApi.createMessageTag)).toHaveBeenCalledWith({ name: "Receipts" });
+    expect(vi.mocked(serverApi.createMessageTag)).toHaveBeenCalledWith({ name: "Receipts" });
     expect(invalidated).toEqual(
       expect.arrayContaining([
         scoped(keys.messageTags.all),
@@ -161,7 +161,7 @@ describe("the two collections stay distinct", () => {
     expect(contactGroups.key).not.toEqual(messageTags.key);
     expect(contactGroups.label).toBe("group");
     expect(messageTags.label).toBe("tag");
-    expect(contactGroups.routes.list).toBe(vaultApi.listContactGroups);
-    expect(messageTags.routes.list).toBe(vaultApi.listMessageTags);
+    expect(contactGroups.routes.list).toBe(serverApi.listContactGroups);
+    expect(messageTags.routes.list).toBe(serverApi.listMessageTags);
   });
 });

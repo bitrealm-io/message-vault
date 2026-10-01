@@ -9,7 +9,7 @@
 web-next/
 
 # Legacy Slint desktop GUI. Product desktop app is src-tauri/ + web/.
-crates/message-vault-io-gui/
+crates/message-crate-gui/
 
 # Vendored sqlx-sqlite fork. Open only when changing that driver.
 vendor/

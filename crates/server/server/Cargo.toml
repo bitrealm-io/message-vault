@@ -1,0 +1,58 @@
+[package]
+name = "message-crate-server"
+version = "0.9.0"
+edition = "2024"
+license = "LicenseRef-FCL-1.0-ALv2"
+
+[build-dependencies]
+build-version = { path = "../../libs/build-version" }
+
+[dependencies]
+anyhow = { workspace = true }
+argon2 = "0.6.0"
+axum = "0.8.9"
+chrono = { workspace = true }
+chrono-tz = { workspace = true }
+clap = { workspace = true }
+clap-markdown = "0.1.5"
+contacts = { workspace = true }
+demo-seed = { path = "../demo-seed" }
+fs2 = "0.4.3"
+futures-util = { version = "0.3.31", default-features = false }
+libc = "0.2"
+# The bindings sqlx-sqlite already links (VENDORING.md pins the version), for
+# the Unicode lower() the server registers on every SQLite connection.
+libsqlite3-sys = { version = "0.38", default-features = false, features = ["bundled"] }
+media = { path = "../../libs/media" }
+message-ir = { workspace = true }
+phone = { workspace = true }
+rand = "0.10.2"
+rayon = "1.12.0"
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+sqlx = { version = "0.8", features = ["runtime-tokio", "any", "sqlite", "postgres", "tls-rustls"] }
+tempfile = { workspace = true }
+tokio = { version = "1.53.0", features = ["macros", "rt-multi-thread", "net", "signal", "fs", "io-util", "time", "sync"] }
+tokio-util = { version = "0.7", features = ["io"] }
+toml = "1.1.2"
+tower-http = { version = "0.7.1", features = ["limit", "cors", "fs", "trace"] }
+uuid = { version = "1.18.1", features = ["v4"] }
+message-crate-api-types = { path = "../../libs/api-types", features = ["schema"] }
+utoipa = { version = "5", features = ["axum_extras"] }
+utoipa-axum = "0.2"
+utoipa-swagger-ui = { version = "9", features = ["axum"] }
+thiserror = { workspace = true }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+
+[dev-dependencies]
+# The small seed, so a test can generate a demo bundle and import it.
+demo-seed = { path = "../demo-seed", features = ["testutil"] }
+# `media::testutil`, so a test that runs the real ffmpeg skips or fails the
+# way every other crate's does.
+media = { path = "../../libs/media", features = ["testutil"] }
+reqwest = { workspace = true }
+
+[lints]
+workspace = true

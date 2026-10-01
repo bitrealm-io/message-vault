@@ -6,11 +6,11 @@ the rules between them. It is written for anyone adding, changing, or
 reviewing a search word, precisely enough to write a word's SQL from.
 
 Someone who only wants to search should read the user guide,
-[Search](../src/content/docs/vault/user/how-to/search.mdx), instead. Why the
+[Search](../src/content/docs/docs/user/how-to/search.mdx), instead. Why the
 language is one module with one registry is
 [ADR 0004](../adr/0004-one-search-language-compiled-in-one-module.md).
 
-The code is `crates/vault/server/src/search/`: `lex.rs` turns the string into
+The code is `crates/server/server/src/search/`: `lex.rs` turns the string into
 tokens, `parse.rs` turns tokens into a tree and resolves every word against
 the registry in `fields.rs`, and `emit.rs` with `bridge.rs` writes the SQL.
 
@@ -65,7 +65,7 @@ Each rule holds on every list, and each has its reason.
 - **Every query is scoped to the logged-in account.** The compiled filter is
   `AND`-ed with the base row's account, so no row of another account can
   match. Why: an account's data is isolated from every other account in the
-  vault.
+  database.
 
 ## Grammar
 
@@ -145,7 +145,7 @@ A date names a span of days in the account's time zone:
 A message stores the instant it was sent, in UTC. Each day's edge becomes the
 instant midnight falls in the account's time zone, so the same comparison
 serves SQLite and Postgres and a message sent at 11:59 pm on New Year's Eve
-belongs to the old year wherever the vault runs. A midnight that falls in a
+belongs to the old year wherever the server runs. A midnight that falls in a
 daylight-saving gap starts the day at the first instant after the gap.
 
 Case and accents:
@@ -154,7 +154,7 @@ Case and accents:
   `lower(column)` with `lower(text)` on both engines, so `name:élodie` finds
   "Élodie" as `name:jane` finds "Jane". Postgres's `lower()` folds every
   letter. SQLite's folds only ASCII, and its `LIKE` and `NOCASE` collation
-  fold no more, so the vault replaces `lower()` on every SQLite connection
+  fold no more, so the server replaces `lower()` on every SQLite connection
   with one that folds Unicode (`db/sqlite_functions.rs`, registered through
   `sqlite3_auto_extension`). Message text, which goes through the full-text
   index, folds case on both engines.
@@ -450,6 +450,6 @@ entry here states the question it answers on each list before its SQL is
 written, and the rules above are the review: one concept, the same question on
 every list it is on, and `q` and `-q` splitting every list. The test
 `every_word_compiles_and_runs_on_every_list_it_claims` checks the split on the
-seeded vault for every word, value shape, and list, so a new word inherits it.
+seeded database for every word, value shape, and list, so a new word inherits it.
 The user guide's word table and this section must name the new word on the
 same lists, or the `docs` tests fail.

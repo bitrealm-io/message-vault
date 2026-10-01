@@ -1,6 +1,6 @@
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../lib/auth";
-import { useIsVaultOwner } from "../lib/useIsVaultOwner";
+import { useIsOwner } from "../lib/useIsOwner";
 import { useNeedsProfileSetup } from "../lib/useNeedsProfileSetup";
 
 /**
@@ -9,7 +9,7 @@ import { useNeedsProfileSetup } from "../lib/useNeedsProfileSetup";
  */
 export function AuthGuard() {
   const { isAuthenticated } = useAuth();
-  const { isOwner } = useIsVaultOwner();
+  const { isOwner } = useIsOwner();
   const { needsSetup, loading } = useNeedsProfileSetup();
 
   if (!isAuthenticated) {

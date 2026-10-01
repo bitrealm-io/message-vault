@@ -10,7 +10,7 @@ export type SearchScope = "account" | "contact" | "message" | "trash";
  * off the contacts-only component.
  */
 function storageKey(scope: SearchScope): string {
-  return `mv-${scope}-recent-searches:v1`;
+  return `mc-${scope}-recent-searches:v1`;
 }
 
 const RECENT_SEARCHES_MAX = 10;

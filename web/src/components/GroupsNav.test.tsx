@@ -4,7 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mockedAuth, VaultProviders } from "../test/vaultProviders";
+import { mockedAuth, Providers } from "../test/providers";
 import GroupsNav from "./GroupsNav";
 
 vi.mock("../lib/auth", () => ({ useAuth: () => mockedAuth }));
@@ -15,11 +15,11 @@ afterEach(() => {
 
 function renderNav(path: string) {
   return render(
-    <VaultProviders>
+    <Providers>
       <MemoryRouter initialEntries={[path]}>
         <GroupsNav groups={["College"]} />
       </MemoryRouter>
-    </VaultProviders>,
+    </Providers>,
   );
 }
 

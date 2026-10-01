@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow, bail};
 use imessage_reader_protocol::{ExportRequest, Platform, Request, Source};
-use message_vault_io_core::{
+use message_crate_core::{
     AppleConfig, ApplePlatform, CancelFlag, ExportTransforms, ExporterConfig, LogSink,
     OutputFormat, ProgressEvent, ProgressSink, RunResult, SourceConfig, emit_progress,
 };
@@ -89,7 +89,7 @@ pub(crate) struct ExportOptions {
 impl ExportOptions {
     /// Write one log line when a log sink is configured.
     pub fn emit_log(&self, line: impl AsRef<str>) {
-        message_vault_io_core::emit_log(self.log.as_ref(), line);
+        message_crate_core::emit_log(self.log.as_ref(), line);
     }
 
     /// Send one typed progress event when a progress sink is configured.
@@ -99,7 +99,7 @@ impl ExportOptions {
 
     /// The shared cancel check.
     pub fn check_cancel(&self) -> Result<()> {
-        message_vault_io_core::check_cancel(self.cancel.as_ref()).map_err(|e| anyhow!(e))
+        message_crate_core::check_cancel(self.cancel.as_ref()).map_err(|e| anyhow!(e))
     }
 }
 
@@ -140,7 +140,7 @@ fn run_with(
     drop(scratch);
     options.check_cancel()?;
 
-    message_vault_io_core::finish_run(config, &report, config.media.mode.needs_tools())
+    message_crate_core::finish_run(config, &report, config.media.mode.needs_tools())
 }
 
 /// Translate the shared exporter config into this exporter's options, rejecting non-Apple sources.
@@ -284,7 +284,7 @@ fn check_db_path(platform: Platform, db_path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use message_vault_io_core::{AppleConfig, MediaConfig, OutputFormat};
+    use message_crate_core::{AppleConfig, MediaConfig, OutputFormat};
     use std::{fs, path::Path};
 
     fn apple_cfg(input: &Path, apple: AppleConfig) -> ExporterConfig {

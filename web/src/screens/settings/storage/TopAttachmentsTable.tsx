@@ -20,7 +20,7 @@ export default function TopAttachmentsTable({
   topAttachments: TopAttachment[];
   page: number;
   onPageChange: (page: number) => void;
-  /** False for the vault owner, whom the vault does not tell which conversation a file is in. */
+  /** False for the owner, whom the server does not tell which conversation a file is in. */
   showConversation: boolean;
 }) {
   const pageCount = Math.max(1, Math.ceil(topAttachments.length / ATTACHMENT_PAGE_SIZE));

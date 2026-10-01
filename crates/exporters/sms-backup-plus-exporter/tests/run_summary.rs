@@ -2,8 +2,8 @@
 //! shows. The smoke tests call `convert_export` directly, so a `run()` that
 //! wrote nothing, or dropped its summary, passed them.
 
-use message_vault_io_core::testutil::{assert_run_wrote_jsonl, jsonl_run_config};
-use message_vault_io_core::{SmsBackupPlusConfig, SourceConfig};
+use message_crate_core::testutil::{assert_run_wrote_jsonl, jsonl_run_config};
+use message_crate_core::{SmsBackupPlusConfig, SourceConfig};
 use std::fs;
 use std::path::Path;
 

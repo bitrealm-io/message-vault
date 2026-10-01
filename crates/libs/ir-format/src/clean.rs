@@ -8,7 +8,7 @@ use std::path::Path;
 /// Sentinel file written into export directories so `clean_previous_ir_output` can
 /// distinguish a real export directory from a user directory that was pointed at
 /// by mistake.
-pub const EXPORT_SENTINEL: &str = ".message-vault-export";
+pub const EXPORT_SENTINEL: &str = ".message-crate-export";
 
 /// Write a sentinel file marking `output_dir` as an export target.
 /// Callers should run this after `create_dir_all` on a fresh export.
@@ -24,7 +24,7 @@ pub fn write_export_sentinel(output_dir: &Path) -> Result<()> {
 /// Delete previous CSV, JSON, JSON Lines, meta, `smses.xml`, temps, staged
 /// attachments, and mail archives.
 ///
-/// Only directories that contain the sentinel file `.message-vault-export`,
+/// Only directories that contain the sentinel file `.message-crate-export`,
 /// are empty, or already contain recognizable export files are cleaned. This
 /// avoids deleting unrelated user files when the output path points at a
 /// non-export directory by mistake.

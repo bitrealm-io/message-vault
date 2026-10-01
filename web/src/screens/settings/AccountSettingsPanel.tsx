@@ -9,9 +9,9 @@ import { inputClassName, sectionTitleClass } from "./profileStyles";
  * Account settings: username, password, status, permissions, API tokens,
  * danger zone.
  *
- * Given `managedAccountId`, the account is one the vault owner opened from
+ * Given `managedAccountId`, the account is one the owner opened from
  * User Accounts. API tokens are the account holder's own to mint and see, so
- * the owner is not shown them. The vault owner's own account has no tokens and
+ * the owner is not shown them. The owner's own account has no tokens and
  * cannot be deleted, so it has neither section.
  */
 export function AccountSettingsPanel({ managedAccountId }: { managedAccountId?: number }) {

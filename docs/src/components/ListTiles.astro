@@ -25,9 +25,9 @@ const label =
   applies.length === 0 ? 'Applies to no list' : `Applies to ${applies.join(', ')}`;
 ---
 
-<span class="mv-lists" role="img" aria-label={label}>
+<span class="mc-lists" role="img" aria-label={label}>
   {tiles.map((t) => (
-    <span class:list={{ 'mv-on': letters.has(t.letter) }} aria-hidden="true">
+    <span class:list={{ 'mc-on': letters.has(t.letter) }} aria-hidden="true">
       {t.letter}
     </span>
   ))}

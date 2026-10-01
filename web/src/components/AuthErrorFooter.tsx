@@ -1,4 +1,4 @@
-/** The vault's messages start lowercase; a line of UI text should not. */
+/** The server's messages start lowercase; a line of UI text should not. */
 function sentenceCase(text: string): string {
   return text ? text.charAt(0).toUpperCase() + text.slice(1) : text;
 }

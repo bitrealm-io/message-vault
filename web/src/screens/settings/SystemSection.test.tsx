@@ -11,6 +11,11 @@ const tauriState = vi.hoisted(() => ({ isTauri: true }));
 const probeFfmpegTools = vi.hoisted(() => vi.fn());
 const setFfmpegToolsDir = vi.hoisted(() => vi.fn());
 const getHomeDir = vi.hoisted(() => vi.fn());
+const openDataFolder = vi.hoisted(() => vi.fn());
+
+vi.mock("../../lib/localServer", () => ({
+  openDataFolder: () => openDataFolder(),
+}));
 
 vi.mock("../../lib/tauri-check", () => ({
   isTauri: () => tauriState.isTauri,
@@ -82,6 +87,26 @@ describe("SystemSection", () => {
     tauriState.isTauri = false;
     render(<SystemSection />);
     expect(screen.queryByText("Third-party software")).toBeNull();
+  });
+
+  it("opens the data folder of the app's own Message Crate", async () => {
+    openDataFolder.mockResolvedValue(undefined);
+    render(<SystemSection />);
+    await userEvent.click(await screen.findByRole("button", { name: "Open data folder" }));
+    expect(openDataFolder).toHaveBeenCalledTimes(1);
+  });
+
+  it("says why the data folder could not be opened", async () => {
+    openDataFolder.mockRejectedValue(new Error("Could not open /data"));
+    render(<SystemSection />);
+    await userEvent.click(await screen.findByRole("button", { name: "Open data folder" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not open /data");
+  });
+
+  it("offers no data folder in the browser", () => {
+    tauriState.isTauri = false;
+    render(<SystemSection />);
+    expect(screen.queryByRole("button", { name: "Open data folder" })).toBeNull();
   });
 
   it("shows the desktop-only stub when not in Tauri", () => {

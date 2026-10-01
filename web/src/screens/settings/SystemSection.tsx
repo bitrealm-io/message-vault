@@ -4,6 +4,7 @@ import { CheckIcon, XIcon } from "../../components/icons";
 import PathPicker from "../../components/PathPicker";
 import { APP_BUILD } from "../../lib/build";
 import { FFMPEG_TOOLS_STORAGE_KEY } from "../../lib/ffmpeg-tools";
+import { openDataFolder } from "../../lib/localServer";
 import {
   defaultStagingDir,
   getHomeDir,
@@ -111,6 +112,41 @@ function ThirdPartySoftware() {
           License
         </a>
       </p>
+    </div>
+  );
+}
+
+/**
+ * Where the Message Crate this app starts keeps everything. The folder is the
+ * whole Message Crate, so it is what a person copies to back it up; the app
+ * opens it rather than naming a path to find.
+ */
+function DataFolder() {
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div className="mt-8">
+      <h3 className={sectionHeading}>Message Crate on this computer</h3>
+      <p className="m-0 max-w-prose text-[0.875rem] text-text">
+        The Message Crate this app starts keeps its database and attachments in one folder. A copy
+        of that folder is a backup.
+      </p>
+      <button
+        type="button"
+        className="mt-2 rounded border border-border px-3 py-1.5 text-[0.875rem] text-text hover:bg-elevated"
+        onClick={() => {
+          setError(null);
+          openDataFolder().catch((caught: unknown) => {
+            setError(caught instanceof Error ? caught.message : String(caught));
+          });
+        }}
+      >
+        Open data folder
+      </button>
+      {error ? (
+        <p className="m-0 mt-1 text-[0.75rem] text-danger" role="alert">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -289,6 +325,8 @@ export function SystemSection() {
           ) : null}
         </div>
       </div>
+
+      <DataFolder />
 
       <div className="mt-8">
         <AppVersion />

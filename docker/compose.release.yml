@@ -8,6 +8,12 @@
 #
 # Staging drop: copy JSONL into ./staging (mounted at /app/staging).
 #
+# The container runs as user 1000, group 1000, the user the image is built
+# for. A host account with another id sets UID and GID in .env (see
+# .env.example) or exports them before starting, so the container can read
+# the files dropped in ./staging:
+#   export UID GID="$(id -g)"
+#
 # VPS Hub + nginx TLS: private message-crate-ops repo (compose-hub.yml).
 
 name: message-crate
@@ -23,7 +29,7 @@ services:
         BUILD_METADATA: ${BUILD_METADATA:-unknown}
     ports:
       - "0.0.0.0:8080:8080"
-    user: "${UID}:${GID}"
+    user: "${UID:-1000}:${GID:-1000}"
     volumes:
       - message-crate-data:/app/data
       - ../staging:/app/staging

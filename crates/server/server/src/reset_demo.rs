@@ -1004,15 +1004,17 @@ async fn seed_demo_account_on_conn(
 ) -> Result<()> {
     account_profile::ensure_account_row(conn, account_id).await?;
 
-    // The demo account exists so someone can try all of Message Crate without
-    // making an account of their own, so it may import, export, and delete
-    // like any other account.
+    // The Demo Account has no password, so anyone at the login card can enter
+    // it. It may export, and trash and restore; it may not import, so a
+    // person's own messages never land in Demo Data, and it may not delete
+    // for good, so one visitor cannot empty it for the next
+    // (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`).
     sqlx::query(
         r"
         INSERT INTO accounts (
             id, username, password_hash, preferred_name, can_import, can_export, can_delete
         )
-        VALUES ($1, $2, NULL, $3, 1, 1, 1)
+        VALUES ($1, $2, NULL, $3, 0, 1, 0)
         ON CONFLICT(id) DO UPDATE SET
             username = excluded.username,
             preferred_name = excluded.preferred_name,

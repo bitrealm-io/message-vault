@@ -175,10 +175,7 @@ fn ingest_chat(
         let is_from_me = msg.from_me;
         let (sender_handle, sender_display_name) =
             resolve_sender(msg, is_from_me, &chat_id, &display_fallback, group);
-        if group
-            && let Some(e164) = jid_to_e164(sender_handle.as_str())
-                .or_else(|| msg.sender.as_deref().and_then(jid_to_e164))
-        {
+        if group && let Some(e164) = msg.sender.as_deref().and_then(jid_to_e164) {
             peer_phones.insert(e164);
         }
 

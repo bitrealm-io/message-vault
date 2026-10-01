@@ -90,15 +90,6 @@ export interface AttachmentForecast {
   verdict: SizeVerdict;
 }
 
-/** How many attachments landed in each verdict. */
-export interface VerdictCounts {
-  fitsAsIs: number;
-  likelyFits: number;
-  mayGrow: number;
-  probablyTooBig: number;
-  cannotProcess: number;
-}
-
 /** How many messages one of the owner's handles sent and received. */
 export interface OwnerHandleCount {
   handle: string;
@@ -115,7 +106,6 @@ export interface StagingSummary {
   ownerHandles: OwnerHandleCount[];
   attachments: number;
   attachmentBytes: number;
-  verdictCounts: VerdictCounts;
   forecasts: AttachmentForecast[];
   /** Largest single attachment the upload accepts; what the verdicts were measured against. */
   assetMaxBytes: number;

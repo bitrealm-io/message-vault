@@ -194,13 +194,6 @@ function stagingSummary(overrides: Partial<StagingSummary> = {}): StagingSummary
     ownerHandles: [],
     attachments: 0,
     attachmentBytes: 0,
-    verdictCounts: {
-      fitsAsIs: 0,
-      likelyFits: 0,
-      mayGrow: 0,
-      probablyTooBig: 0,
-      cannotProcess: 0,
-    },
     forecasts: [],
     assetMaxBytes: 50 * 1024 * 1024,
     ...overrides,
@@ -1404,23 +1397,11 @@ describe("useImportJob resumeAtGate", () => {
   it("resumes at the Media Review showing the STORED plan for Staging and a RECOMPUTED summary for Media", async () => {
     const approved = stagingSummary({
       conversations: 3,
-      verdictCounts: {
-        fitsAsIs: 5,
-        likelyFits: 0,
-        mayGrow: 0,
-        probablyTooBig: 0,
-        cannotProcess: 0,
-      },
+      attachments: 5,
     });
     const actual = stagingSummary({
       conversations: 3,
-      verdictCounts: {
-        fitsAsIs: 2,
-        likelyFits: 0,
-        mayGrow: 0,
-        probablyTooBig: 0,
-        cannotProcess: 0,
-      },
+      attachments: 2,
     });
     invokeSummarizeStagingMock.mockResolvedValueOnce(actual);
 
@@ -1539,13 +1520,6 @@ describe("useImportJob resumeAtGate", () => {
   it("a malformed stored summary does not block a resume — it proceeds with no approved plan", async () => {
     const actual = stagingSummary({
       conversations: 4,
-      verdictCounts: {
-        fitsAsIs: 0,
-        likelyFits: 1,
-        mayGrow: 0,
-        probablyTooBig: 0,
-        cannotProcess: 0,
-      },
     });
     actual.forecasts = [
       {

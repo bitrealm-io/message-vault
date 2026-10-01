@@ -19,7 +19,7 @@
 //! same document or different ones — can legitimately share one physical
 //! file (see `transcode.rs`'s module docs for why). `attachments` counts
 //! every reference, because that is what the documents actually contain, but
-//! `attachment_bytes`, `verdict_counts`, and `forecasts` are per physical
+//! `attachment_bytes` and `forecasts` are per physical
 //! file: the first reference to a given recorded path is measured and
 //! classified, and every later reference at that same path is folded into
 //! the `attachments` count alone. Mirrors `pending_in`'s dedup in
@@ -62,35 +62,6 @@ pub struct AttachmentForecast {
     pub verdict: SizeVerdict,
 }
 
-/// How many attachments landed in each verdict.
-#[derive(Debug, Clone, Default, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VerdictCounts {
-    /// Under the limit now, and expected to stay under.
-    pub fits_as_is: usize,
-    /// Over the limit now, expected to come under after the media step.
-    pub likely_fits: usize,
-    /// Under the limit now, expected to cross it during the media step.
-    pub may_grow: usize,
-    /// Over the limit now, and expected to stay over.
-    pub probably_too_big: usize,
-    /// The media step does not handle this kind of file, so its size is fixed.
-    pub cannot_process: usize,
-}
-
-impl VerdictCounts {
-    /// Tally one more attachment's verdict.
-    fn record(&mut self, verdict: SizeVerdict) {
-        match verdict {
-            SizeVerdict::FitsAsIs => self.fits_as_is += 1,
-            SizeVerdict::LikelyFits => self.likely_fits += 1,
-            SizeVerdict::MayGrow => self.may_grow += 1,
-            SizeVerdict::ProbablyTooBig => self.probably_too_big += 1,
-            SizeVerdict::CannotProcess => self.cannot_process += 1,
-        }
-    }
-}
-
 /// How many messages one of the owner's handles sent and received.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -126,9 +97,6 @@ pub struct StagingSummary {
     /// there, counted once per physical file — see the module docs on
     /// aliasing.
     pub attachment_bytes: u64,
-    /// How many physical files landed in each size verdict — see the module
-    /// docs on aliasing.
-    pub verdict_counts: VerdictCounts,
     /// One row per physical file whose verdict is not `fits_as_is` — see the
     /// module docs on aliasing.
     pub forecasts: Vec<AttachmentForecast>,
@@ -379,7 +347,6 @@ fn classify_one(
         (verdict, estimate)
     };
 
-    summary.verdict_counts.record(verdict);
     if verdict == SizeVerdict::FitsAsIs {
         return;
     }

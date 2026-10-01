@@ -27,7 +27,6 @@ function summary(forecasts: AttachmentForecast[]): StagingSummary {
     ownerHandles: [],
     attachments: forecasts.length,
     attachmentBytes: 0,
-    verdictCounts: { fitsAsIs: 0, likelyFits: 0, mayGrow: 0, probablyTooBig: 0, cannotProcess: 0 },
     forecasts,
     assetMaxBytes: 50 * MB,
   };

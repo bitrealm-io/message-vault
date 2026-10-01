@@ -1,5 +1,6 @@
 use message_ir::{
-    ConversationDocument, ConversationHeader, IrConversationType, IrMessage, SCHEMA_VERSION,
+    ConversationDocument, ConversationHeader, IrConversationType, IrDirection, IrMessage,
+    SCHEMA_VERSION,
 };
 
 use super::*;
@@ -268,6 +269,53 @@ fn every_conversation_file_is_a_current_schema_document_and_the_counts_match_the
     assert!(
         tapbacks > 0,
         "the tapback stride puts tapbacks in the bundle"
+    );
+}
+
+/// The Demo Account has two identities, a phone number and an email address.
+/// A conversation with a correspondent known only by an email address is
+/// held at the email, and every other conversation at the phone number, so
+/// both identities have messages (#955).
+#[test]
+fn a_conversation_with_an_email_address_is_held_at_the_demo_accounts_email() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let cfg = small_config(temp.path());
+
+    generate(&cfg).expect("generate the small bundle");
+    let documents = read_bundle(Path::new(&cfg.out));
+
+    let mut email_conversations = 0;
+    let mut sent_from_email = 0;
+    for (source, doc) in &documents {
+        let chat = &doc.conversation.chat_identifier;
+        let with_email = doc.conversation.conversation_type == IrConversationType::Individual
+            && chat.contains('@');
+        let expected = if with_email {
+            email_conversations += 1;
+            crate::personas::OWNER_EMAIL
+        } else {
+            crate::personas::OWNER_PHONE
+        };
+        assert_eq!(
+            doc.export.owner_handle.as_deref(),
+            Some(expected),
+            "{source}/{chat}"
+        );
+        for message in &doc.messages {
+            // No message names an owner of its own, so the header's holds.
+            assert_eq!(message.owner_handle, None, "{source}/{chat}");
+            if with_email && message.direction == IrDirection::Outgoing {
+                sent_from_email += 1;
+            }
+        }
+    }
+    assert_eq!(
+        email_conversations, cfg.edge_cases.unassigned_emails,
+        "one conversation per email-only correspondent"
+    );
+    assert!(
+        sent_from_email > 0,
+        "the Demo Account sent messages from its email"
     );
 }
 

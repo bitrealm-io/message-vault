@@ -1244,9 +1244,36 @@ async fn a_generated_demo_bundle_imports_whole_and_its_overlap_dedupes() {
     )
     .await;
     assert_eq!(owner_handles, 1);
-    // Every demo header names that number as the owner, so every message is
-    // held at it and the identity's counts are not zero (#690). WhatsApp's
-    // are held at the same number as a WhatsApp address, which the demo
+    // The profile's emails and the identities list name the same addresses,
+    // so My Identities shows the same rows before and after the list loads,
+    // and the email identity has messages held at it (#955).
+    let profile = account_profile::load_account_profile(&mut conn, DEMO_ACCOUNT_ID)
+        .await
+        .expect("load the demo profile");
+    assert_eq!(profile.emails, ["demo.ingest@example.com"]);
+    let identities = crate::db::handles::identities(
+        &mut conn,
+        crate::db::handles::IdentitiesOf::Account(DEMO_ACCOUNT_ID),
+    )
+    .await
+    .expect("list the demo identities");
+    let email_identities: Vec<_> = identities
+        .iter()
+        .filter(|identity| identity.service == "email")
+        .collect();
+    let listed_emails: Vec<&str> = email_identities
+        .iter()
+        .map(|identity| identity.address.as_str())
+        .collect();
+    assert_eq!(listed_emails, profile.emails);
+    assert!(
+        email_identities[0].direct_messages > 0,
+        "{:?}",
+        email_identities[0]
+    );
+    // Every demo header names one of the two as the owner, so every message
+    // is held at an identity and the identities' counts are not zero (#690).
+    // WhatsApp's are held at the number as a WhatsApp address, which the demo
     // account has not added, so they count toward no identity.
     let not_held = count(
         &mut conn,
@@ -1260,7 +1287,7 @@ async fn a_generated_demo_bundle_imports_whole_and_its_overlap_dedupes() {
     .await;
     assert_eq!(
         not_held, 0,
-        "every demo message is held at the owner's number"
+        "every demo message is held at one of the owner's identities"
     );
     conn.close().await.expect("close");
     pool.close().await;

@@ -6,7 +6,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use crate::personas::{OWNER_PHONE, Roster};
+use crate::personas::{OWNER_EMAIL, OWNER_PHONE, Roster};
 
 /// Write `contacts.vcf`, one vCard (a contact card) per roster contact.
 ///
@@ -105,7 +105,9 @@ pub fn write_seed_toml(config_dir: &Path) -> Result<()> {
 display_name = "Demo User"
 # (raw handle, handle type) pairs linked into `account_handles` by reset-demo.
 handle_specs = [["{OWNER_PHONE}", "phone"]]
-emails = ["demo.ingest@example.com"]
+# Each email is an identity too: reset-demo writes it to `account_emails` and
+# links it into `account_handles`.
+emails = ["{OWNER_EMAIL}"]
 
 [account]
 username = "demo"

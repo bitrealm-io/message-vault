@@ -13,6 +13,9 @@ use crate::names::NameBank;
 use crate::phones;
 pub use crate::phones::OWNER_PHONE;
 
+/// Demo owner email address. Matches the value in `crates/server/demo-seed/config/seed.toml`.
+pub const OWNER_EMAIL: &str = "demo.ingest@example.com";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MessageScope {
     OneToOne,

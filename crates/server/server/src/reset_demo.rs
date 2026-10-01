@@ -45,13 +45,18 @@ pub struct ResetDemoStats {
     pub process_assets: process_assets::ProcessAssetsStats,
 }
 
+/// `config/seed.toml` in a demo bundle. A key it does not use is an error,
+/// never ignored (`deny_unknown_fields` here and on both sections): a misspelt
+/// key would seed the Demo Account without what the line asked for.
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct DemoSeed {
     owner: DemoOwner,
     account: DemoAccount,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct DemoOwner {
     display_name: String,
     /// `(raw handle, handle type)` pairs linked into `account_handles`.
@@ -64,6 +69,7 @@ struct DemoOwner {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct DemoAccount {
     username: String,
 }

@@ -17,6 +17,32 @@ export function canUseImportExportWithProfile(
   return canUseImportExport(isTauriApp);
 }
 
+/** The two desktop-only screens an account needs a permission for. */
+export type ImportExportFeature = "import" | "export";
+
+/**
+ * Why an account may not use Import or Export, or null when it may.
+ *
+ * The left panel shows both entries to every account in the desktop app. A
+ * hidden entry says nothing about why, so the screen stays and explains.
+ * `demo` is the Demo Account on Import: the way forward there is an account of
+ * the person's own, not a word with the Owner.
+ */
+export type ImportExportBlock = "demo" | "not-allowed";
+
+export function importExportBlock(
+  feature: ImportExportFeature,
+  profile: { can_import: boolean; can_export: boolean; is_demo: boolean },
+): ImportExportBlock | null {
+  if (feature === "export") {
+    return profile.can_export ? null : "not-allowed";
+  }
+  if (profile.can_import) {
+    return null;
+  }
+  return profile.is_demo ? "demo" : "not-allowed";
+}
+
 /**
  * Convert (Settings → Convert) rewrites a folder of exported files and never
  * reads a backup or the server, so it needs the desktop app and nothing else:

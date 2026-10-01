@@ -320,7 +320,7 @@ Three version numbers are easy to mix up:
 
 The Build asks git for the commit. Where there is no `.git`, which is the case inside `docker/Dockerfile`, set `MESSAGE_CRATE_BUILD_METADATA` to the part after the `+` (the Dockerfile takes it as the `BUILD_METADATA` build argument). Set and empty means a release, and is what the tag job passes.
 
-**Product version files** (keep these in lockstep; current value is `0.9.0`; CI's `version` job fails when they disagree, and on a `v*` tag when the tag disagrees with them):
+**Product version files** (keep these in lockstep; current value is `0.10.0`; CI's `version` job fails when they disagree, and on a `v*` tag when the tag disagrees with them):
 
 - `src-tauri/Cargo.toml` — the value the other three are compared against
 - `src-tauri/tauri.conf.json` — installer version

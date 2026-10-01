@@ -409,8 +409,10 @@ describe("OwnerHome", () => {
     expect(await screen.findByText("Bob Archer")).toBeInTheDocument();
     await user.type(screen.getByRole("combobox", { name: "Search accounts" }), "archer");
 
-    expect(screen.getByText("bob")).toBeInTheDocument();
-    expect(screen.queryByText("root")).not.toBeInTheDocument();
+    // The header names the logged-in owner, root, so the search is checked in the table alone.
+    const table = within(screen.getByRole("table"));
+    expect(table.getByText("bob")).toBeInTheDocument();
+    expect(table.queryByText("root")).not.toBeInTheDocument();
   });
 
   it("opens an account's Settings from the gear in its row, with the account's own tabs", async () => {
@@ -651,13 +653,13 @@ describe("OwnerHome", () => {
   it("states both versions under the header when the server is another release", async () => {
     getServerState.mockResolvedValue({
       state: "closed",
-      version: "0.10.0",
+      version: "99.0.0",
       schema_fingerprint: 1234567890,
     });
     renderHome();
 
     expect(await screen.findByRole("status")).toHaveTextContent(
-      `The server is 0.10.0. This app is ${productVersionOf(APP_BUILD)}.`,
+      `The server is 99.0.0. This app is ${productVersionOf(APP_BUILD)}.`,
     );
     // It blocks nothing: the screen under it still loads and works.
     expect(await screen.findByText("bob")).toBeInTheDocument();

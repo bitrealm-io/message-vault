@@ -10,9 +10,11 @@ import PopupMenu from "./PopupMenu";
 const itemRow = "flex items-center gap-2";
 
 /**
- * The circle user button at the far right of the header. Its menu names who is
- * logged in (username, then preferred name when one is set) and opens Settings
- * or logs out.
+ * The logged-in account's username and the circle user button at the far right
+ * of the header. The username is always on screen, for every account, so
+ * nobody has to open the menu to learn whose messages these are. The menu
+ * names the account too (username, then preferred name when one is set) and
+ * opens Settings or logs out.
  */
 export default function AppAccountMenu() {
   const [open, setOpen] = useState(false);
@@ -32,7 +34,17 @@ export default function AppAccountMenu() {
   const preferredName = profile?.preferred_name?.trim() ?? "";
 
   return (
-    <div className="relative">
+    <div className="relative flex items-center gap-2">
+      {username ? (
+        // A long username is cut short, and less of it shows as the window narrows, so the search bar keeps its room.
+        <span
+          className="max-w-[6rem] truncate text-[0.813rem] text-text md:max-w-[10rem] lg:max-w-[14rem]"
+          title={username}
+          data-testid="header-username"
+        >
+          {username}
+        </span>
+      ) : null}
       <button
         type="button"
         ref={triggerRef}

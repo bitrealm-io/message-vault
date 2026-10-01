@@ -151,7 +151,7 @@ sequenceDiagram
 
 On a `v*` tag, the **Docker image** job in `.github/workflows/ci.yml` runs after the Rust tests pass. It builds `docker/Dockerfile` with context `.` (the repository root) and pushes:
 
-- `bitrealm/message-crate:<version>` — for example `0.9.0`, with no `v`
+- `bitrealm/message-crate:<version>` — for example `0.10.0`, with no `v`
 - `bitrealm/message-crate:<major>.<minor>` — for example `0.8`
 - `bitrealm/message-crate:latest`
 - `bitrealm/message-crate:sha-<commit>`

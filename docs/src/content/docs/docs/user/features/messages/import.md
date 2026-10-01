@@ -14,6 +14,21 @@ Importing also needs the account's import permission, which the Owner sets.
 A first import is walked through in [Import your backup](/docs/user/get-started/import-your-backup/).
 This page describes every field and every stage.
 
+## Without the import permission
+
+**Import** stays in the sidebar for an account that may not import.
+Opening it shows a message in place of the form, and nothing is read from a backup.
+
+| Account | What the screen says |
+|---|---|
+| An account with **Import** off | The Owner has not allowed this account to import. The Owner turns it on under **Message Permissions**. |
+| The Demo Account with **Import** off | Importing needs a personal account. **Log out** goes to the login card. |
+
+An Import Run already in progress when the Owner turns **Import** off stays on screen until it ends.
+A notice above the run says the Owner has turned Import off.
+The server refuses the run's next request, so the run ends as failed.
+Leaving the run shows the message above.
+
 ## The form
 
 The form has two sections, **Import Messages** and **Processing Options (Advanced)**, and an **Import** button.

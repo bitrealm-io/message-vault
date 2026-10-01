@@ -7,7 +7,7 @@
       "name": "Fair Core License 1.0 (ALv2 future)",
       "url": "https://github.com/messagecrate/message-crate/blob/main/LICENSE.md"
     },
-    "version": "0.9.0"
+    "version": "0.10.0"
   },
   "paths": {
     "/health": {

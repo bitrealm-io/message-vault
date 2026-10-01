@@ -103,7 +103,7 @@ This project is currently under heavy development and moving towards a v1.0.0 re
 
 ## Maintainers
 
-Matt Beisser - [vault@bitrealm.io](mailto:vault@bitrealm.io)
+Matt Beisser - [hello@bitrealm.io](mailto:hello@bitrealm.io)
 
 ## Related Projects
 

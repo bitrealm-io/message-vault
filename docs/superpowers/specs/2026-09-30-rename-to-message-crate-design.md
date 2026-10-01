@@ -292,10 +292,9 @@ names in the tree.
 | not listed | compose service `server`, volume `message-crate-data`, Postgres user and database `messagecrate` | |
 | diagram files `vault_N_*_diagram` | `system_diagram`, `container_diagram`, `deployment_diagram` | |
 
-The word survives in four places on purpose: the two "avoid" lines in
-`CONTEXT.md`, the vocabulary row in `docs/agents/writing-style.md`, paths
-into `web-next/`, and the address `vault@bitrealm.io`, which has no
-replacement yet.
+The word survives in three places on purpose: the two "avoid" lines in
+`CONTEXT.md`, the vocabulary row in `docs/agents/writing-style.md`, and
+paths into `web-next/`. The contact address is `hello@bitrealm.io`.
 
 ## Out of scope
 

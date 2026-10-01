@@ -39,7 +39,7 @@ source is the folder crates/helpers/imessage-reader at that release:
 
   https://github.com/messagecrate/message-crate/tree/v{version}/crates/helpers/imessage-reader
 
-Questions: vault@bitrealm.io
+Questions: hello@bitrealm.io
 
 ----------------------------------------------------------------------
 

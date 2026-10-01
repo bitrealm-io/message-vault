@@ -701,6 +701,54 @@ mod tests {
         }
     }
 
+    fn options(output_format: OutputFormat, obfuscate: bool) -> ExportOptions {
+        ExportOptions {
+            request: imessage_reader_protocol::ExportRequest {
+                source: imessage_reader_protocol::Source {
+                    db_path: PathBuf::from("/nowhere/chat.db"),
+                    platform: imessage_reader_protocol::Platform::MacOs,
+                    backup_password: None,
+                },
+                attachment_root: None,
+                contacts_path: None,
+                use_caller_id: false,
+                scratch_dir: None,
+            },
+            export_path: PathBuf::from("/nowhere/out"),
+            attachment_embed: AttachmentEmbed::Embed,
+            transforms: message_crate_core::ExportTransforms {
+                obfuscate,
+                ..message_crate_core::ExportTransforms::none()
+            },
+            output_format,
+            log: None,
+            progress: None,
+            cancel: None,
+            resume: false,
+        }
+    }
+
+    /// Attachment files are left for the write step only when the run both
+    /// copies them and writes a format that keeps them as files. A mail
+    /// archive embeds the bytes and an obfuscated run copies none, so in
+    /// those runs a missing file must be reported when the record is read.
+    #[test]
+    fn files_are_staged_only_for_a_file_format_that_copies_attachments() {
+        assert!(stages_attachment_files(&options(
+            OutputFormat::Jsonl,
+            false
+        )));
+        assert!(!stages_attachment_files(&options(
+            OutputFormat::Jsonl,
+            true
+        )));
+        assert!(!stages_attachment_files(&options(OutputFormat::Eml, false)));
+        assert!(!stages_attachment_files(&options(
+            OutputFormat::Mbox,
+            false
+        )));
+    }
+
     #[test]
     fn disabled_embedding_marks_not_copied() {
         let (ir, load) = attachment_to_ir(

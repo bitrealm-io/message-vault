@@ -433,7 +433,8 @@ impl ProjectionHooks for WhatsappProjection {
 
     fn attachment_to_ir(&self, att: &PendingAttachment, msg: &PendingMessage) -> IrAttachment {
         IrAttachment {
-            path: (!att.rel_path.is_empty()).then(|| att.rel_path.clone()),
+            // No path yet: the writer sets it when it stages the file.
+            path: None,
             original_name: att.name_hint.clone(),
             mime_type: att.mime_type(),
             digest_sha256: att.digest_sha256.clone(),

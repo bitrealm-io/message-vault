@@ -322,9 +322,9 @@ fn collect_mime_attachments(
             continue;
         }
         let mime = part.ctype.mimetype.to_ascii_lowercase();
-        if mime == "text/plain" || mime == "text/html" {
-            continue;
-        }
+        // The message's own text and HTML body parts carry neither an
+        // attachment disposition nor a file name, so the test below leaves
+        // them out. A text file a person attached carries both.
         let disp = part.get_content_disposition();
         let is_attachment = disp.disposition == mailparse::DispositionType::Attachment
             || disp.params.get("filename").is_some_and(|s| !s.is_empty())
@@ -345,7 +345,7 @@ fn collect_mime_attachments(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{MailMessage, Participant, write_message_file};
+    use crate::{MailMessage, Participant, write_conversation_mbox, write_message_file};
 
     #[test]
     fn roundtrip_eml_headers_and_body() {
@@ -525,6 +525,115 @@ mod tests {
         assert_eq!(att.transcription.as_deref(), Some("a beach"));
         assert_eq!(att.sticker_effect.as_deref(), Some("stroke"));
         assert_eq!(att.bytes, b"\xff\xd8\xfffakejpeg".to_vec());
+    }
+
+    /// A message whose attachments are a text file, a picture, and a web page.
+    fn message_with_text_and_binary_attachments() -> MailMessage {
+        let attachment = |name: &str, mime: &str, bytes: &[u8]| MailAttachment {
+            bytes: bytes.to_vec(),
+            meta: message_ir::AttachmentMeta {
+                path: None,
+                original_name: Some(name.into()),
+                mime_type: Some(mime.into()),
+                digest_sha256: None,
+            },
+            is_sticker: false,
+            transcription: None,
+            sticker_effect: None,
+        };
+        MailMessage {
+            chat_identifier: "+15555550101".into(),
+            conversation_type: "individual".into(),
+            group_title: None,
+            participants: vec![Participant {
+                handle: "+15555550101".into(),
+                display_name: Some("Sam".into()),
+            }],
+            owner_handle: "+15555550100".into(),
+            owner_display_name: None,
+            export_source: "imessage".into(),
+            export_tool: "imessage-exporter".into(),
+            export_tool_version: "3.1.0".into(),
+            filename_suffix: None,
+            message: IrMessage {
+                guid: "11111111-2222-3333-4444-555555555555".into(),
+                timestamp_unix_ms: 1_400_773_261_000,
+                direction: IrDirection::Incoming,
+                service: IrService::IMessage,
+                message_kind: IrMessageKind::IMessage,
+                sender_handle: Some("+15555550101".into()),
+                sender_display_name: Some("Sam".into()),
+                owner_handle: None,
+                subject: None,
+                text: "the message text".into(),
+                attachments: Vec::new(),
+                imessage: None,
+                source: None,
+            },
+            attachments: vec![
+                attachment("notes.txt", "text/plain", b"the notes file\nline two\n"),
+                attachment("photo.jpg", "image/jpeg", b"\xff\xd8\xfffakejpeg"),
+                attachment("page.html", "text/html", b"<p>the page</p>"),
+            ],
+        }
+    }
+
+    /// Each attachment keeps its own bytes, and the text stays the text.
+    fn assert_text_and_binary_attachments(parsed: &MailMessage) {
+        assert_eq!(parsed.message.text, "the message text");
+        let got: Vec<(Option<&str>, Option<&str>, &[u8])> = parsed
+            .attachments
+            .iter()
+            .map(|a| {
+                (
+                    a.meta.original_name.as_deref(),
+                    a.meta.mime_type.as_deref(),
+                    a.bytes.as_slice(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            got,
+            [
+                (
+                    Some("notes.txt"),
+                    Some("text/plain"),
+                    b"the notes file\nline two\n".as_slice()
+                ),
+                (
+                    Some("photo.jpg"),
+                    Some("image/jpeg"),
+                    b"\xff\xd8\xfffakejpeg".as_slice()
+                ),
+                (
+                    Some("page.html"),
+                    Some("text/html"),
+                    b"<p>the page</p>".as_slice()
+                ),
+            ]
+        );
+    }
+
+    /// A `text/plain` or `text/html` attachment used to be skipped as if it
+    /// were the message body: it read back with no bytes, and the picture
+    /// after it was paired with the text file's name.
+    #[test]
+    fn eml_roundtrip_keeps_the_bytes_of_text_attachments() {
+        let msg = message_with_text_and_binary_attachments();
+        let tmp = tempfile::tempdir().unwrap();
+        let path = write_message_file(&tmp.path().join("chat"), 1, &msg).unwrap();
+        let parsed = mail_message_from_eml_bytes(&fs::read(&path).unwrap()).unwrap();
+        assert_text_and_binary_attachments(&parsed);
+    }
+
+    #[test]
+    fn mbox_roundtrip_keeps_the_bytes_of_text_attachments() {
+        let msg = message_with_text_and_binary_attachments();
+        let tmp = tempfile::tempdir().unwrap();
+        let path = write_conversation_mbox(tmp.path(), std::slice::from_ref(&msg)).unwrap();
+        let parsed = mail_messages_from_mbox(&path).unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_text_and_binary_attachments(&parsed[0]);
     }
 
     #[test]

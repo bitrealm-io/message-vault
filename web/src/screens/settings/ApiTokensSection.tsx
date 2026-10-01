@@ -5,7 +5,7 @@ import { ApiTokenCreateForm, ApiTokenRenameDialog } from "./ApiTokenForms";
 import ApiTokensTable from "./ApiTokensTable";
 import { useApiTokens } from "./useApiTokens";
 
-/** Named API keys for programs (import/export). Separate from the rotating GUI session token. */
+/** Named API Tokens for programs (import/export). Separate from the rotating GUI session token. */
 export function ApiTokensSection({
   accountCanImport,
   accountCanExport,
@@ -45,7 +45,7 @@ export function ApiTokensSection({
   return (
     <div className="mb-6">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="mb-0 text-[0.75rem] font-bold text-text">API keys</h3>
+        <h3 className="mb-0 text-[0.75rem] font-bold text-text">API Tokens</h3>
         {!composing && (
           <Button
             variant="secondary"
@@ -90,9 +90,8 @@ export function ApiTokensSection({
       />
 
       <p className="mt-3 text-[0.75rem] leading-relaxed text-muted">
-        API keys give secure, programmatic access so other tools can import, export, and (if
-        granted) delete message data. Treat them like passwords: keep them private and never share
-        them publicly.
+        API Tokens give secure, programmatic access so other tools can import and export message
+        data. Treat them like passwords: keep them private and never share them publicly.
       </p>
 
       <ApiTokenRevealDialog
@@ -113,13 +112,13 @@ export function ApiTokensSection({
 
       <ConfirmDialog
         open={revokeTarget !== null}
-        title="Delete API key?"
+        title="Delete API Token?"
         body={
           revokeTarget
-            ? `Delete API key “${revokeTarget.label}”? CLI tools using it will stop working.`
+            ? `Delete API Token “${revokeTarget.label}”? Programs using it will stop working.`
             : ""
         }
-        confirmLabel="Delete key"
+        confirmLabel="Delete token"
         danger
         busy={busy}
         onClose={() => setRevokeTarget(null)}

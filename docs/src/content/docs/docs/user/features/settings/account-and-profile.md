@@ -60,9 +60,9 @@ It has no **Reset password**, because the Owner must have a password.
 
 On the `demo` account the form is disabled, because that account exists to be looked at and reset rather than changed.
 
-### API keys
+### API Tokens
 
-The **API keys** section holds the account's API Tokens.
+The **API Tokens** section holds the account's API Tokens.
 An API Token is a named credential a program uses to act for the account through the server's [HTTP API](/docs/developer/reference/api/) without logging in.
 It is not a Session: it can't browse messages, and it can't make, rename, or delete tokens.
 
@@ -73,7 +73,7 @@ A token never carries the **Delete** permission, because permanent deletion need
 
 The name is required and holds at most 120 characters.
 
-**Save** creates the token and shows its secret in the **API key created** dialog, with a **Copy** button.
+**Save** creates the token and shows its secret in the **API Token created** dialog, with a **Copy** button.
 The secret is shown this once and can't be retrieved later, because the server stores only a hash of it.
 
 The table lists each token:
@@ -81,10 +81,11 @@ The table lists each token:
 | Column | Shows |
 |---|---|
 | **Name** | The name given at creation |
-| **Key** | A masked hint, such as `mc-api-Sd..mE` |
+| **Token** | A masked hint, such as `mc-api-Sd..mE` |
 | **Permissions** | `Import`, `Export`, `Import / Export`, or `None` |
 | **Created** | The date the token was made |
-| **Last Used** | The date a program last used it |
+| **Last Used** | The date a program last used it, or `Never` |
+| **Expires** | The date the token stops working, or `Never` when it has no expiry |
 
 The pencil button renames a token.
 The secret does not change.
@@ -93,9 +94,9 @@ The trash button deletes a token after a confirmation.
 A program using that token stops working at once.
 
 A token made on this screen expires 365 days after it is made.
-The table does not show the expiry date.
+The **Expires** column shows that date.
 
-The Owner has no **API keys** section, because a token reaches one account's messages and the Owner holds none.
+The Owner has no **API Tokens** section, because a token reaches one account's messages and the Owner holds none.
 
 ### Danger zone
 

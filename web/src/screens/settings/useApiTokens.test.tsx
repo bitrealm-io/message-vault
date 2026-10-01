@@ -130,4 +130,10 @@ describe("useApiTokens", () => {
     expect(rename).toHaveBeenCalledWith(1, { label: "Desktop" });
     expect(result.current.renameTarget).toBeNull();
   });
+
+  it("calls them API Tokens when the list cannot be loaded", async () => {
+    list.mockRejectedValue("offline");
+    const { result } = renderHook(() => useApiTokens(), { wrapper });
+    await waitFor(() => expect(result.current.loadError).toBe("Could not load API Tokens."));
+  });
 });

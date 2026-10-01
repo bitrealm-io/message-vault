@@ -71,9 +71,9 @@ export function ApiTokenCreateForm({
         <TextField
           value={label}
           onChange={onLabelChange}
-          placeholder="Enter API key name…"
+          placeholder="Enter API Token name…"
           isDisabled={busy}
-          aria-label="API key name"
+          aria-label="API Token name"
           className="min-w-[12rem] flex-1"
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -147,8 +147,8 @@ export function ApiTokenRenameDialog({
         if (!o) onClose();
       }}
       dismissable={!busy}
-      label="Rename API key"
-      title="Rename API key"
+      label="Rename API Token"
+      title="Rename API Token"
       onClose={onClose}
       closeDisabled={busy}
       maxWidth="24rem"

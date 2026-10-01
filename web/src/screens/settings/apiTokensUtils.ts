@@ -1,7 +1,7 @@
-/** Show a stored API-key hint as `mc-api-xx..yy`, including older starred forms. */
+/** Show a stored API Token hint as `mc-api-xx..yy`, including older starred forms. */
 import { formatUnixDate } from "../../lib/formatDate";
 
-export function displayKeyHint(hint: string | null | undefined): string {
+export function displayTokenHint(hint: string | null | undefined): string {
   const raw = (hint ?? "").trim();
   if (!raw) return "mc-api-..";
   if (/^(mc-api-|mc-app-).{2}\.\..{2}$/.test(raw)) return raw;
@@ -10,7 +10,7 @@ export function displayKeyHint(hint: string | null | undefined): string {
   return raw;
 }
 
-/** Date a token was created or last used. */
+/** Date a token was created, was last used, or expires: "Never" when there is none. */
 export function formatTokenDate(secs: string | null | undefined): string {
   return formatUnixDate(secs);
 }
@@ -33,6 +33,8 @@ export type ApiTokenItem = {
   created_at: string;
   /** Unix seconds string, or null/absent if never used. */
   last_accessed_at?: string | null;
+  /** Unix seconds string, absent when the token never expires. */
+  expires_at?: string | null;
 };
 
 export const thClass = "px-3 py-2 text-left text-[0.75rem] font-bold text-muted";

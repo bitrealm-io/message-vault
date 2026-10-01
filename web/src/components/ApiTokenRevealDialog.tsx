@@ -53,7 +53,7 @@ export default function ApiTokenRevealDialog({
       onOpenChange={(o) => {
         if (!o) onClose();
       }}
-      label="API key created"
+      label="API Token created"
       maxWidth="32rem"
     >
       <button
@@ -66,11 +66,11 @@ export default function ApiTokenRevealDialog({
       </button>
 
       <h3 className="mb-3 pr-6 text-center text-[1.125rem] font-medium text-text">
-        API key created
+        API Token created
       </h3>
       <p className="mb-4 text-center text-[0.875rem] leading-relaxed text-muted">
-        Your new API key <strong className="font-medium text-text">{label}</strong> has been
-        created. Copy this key now as it won&apos;t be shown again.
+        Your new API Token <strong className="font-medium text-text">{label}</strong> has been
+        created. Copy this token now as it won&apos;t be shown again.
       </p>
 
       <div className="mb-3 flex items-stretch gap-2">
@@ -90,8 +90,8 @@ export default function ApiTokenRevealDialog({
       </div>
 
       <p className="mb-5 text-[0.75rem] leading-relaxed text-muted">
-        For security reasons, this key is only displayed once and cannot be retrieved later. If you
-        lose it, you&apos;ll need to create a new one.
+        For security reasons, this token is only displayed once and cannot be retrieved later. If
+        you lose it, you&apos;ll need to create a new one.
       </p>
 
       <div className="flex justify-end">

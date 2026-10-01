@@ -1,0 +1,12 @@
+---
+/**
+ * Replaces Starlight's ThemeProvider. The documentation is light only, like
+ * the landing page (src/DESIGN.md defines no dark palette), so the theme is
+ * pinned instead of read from the reader's system or a stored choice.
+ */
+---
+
+{/* Inlined so the page never paints in Starlight's dark default. */}
+<script is:inline>
+  document.documentElement.dataset.theme = 'light';
+</script>

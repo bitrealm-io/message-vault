@@ -1,17 +1,25 @@
-/* Guidebook (Starlight) theme.
+/* Documentation (Starlight) theme.
 
-   A quiet cool-paper ground, a display face for headings, a text face for
-   body copy, and a mono face that makes every typed token stand out. The
-   palette is mapped onto Starlight's own --sl-* variables so the sidebar,
-   table of contents, search, tabs, and asides follow it without a rule per
-   component. Code blocks are styled through Expressive Code overrides in
-   astro.config.mjs; fonts load from the <head> entries there.
+   The same look as the landing page (landing.css), from src/DESIGN.md: a
+   monochrome palette on a light grey page, white cards separated by shadow
+   rather than borders, Cal Sans headings, Inter body text. Light only, like
+   the landing page: src/components/LightTheme.astro pins the theme and the
+   theme switch is removed in astro.config.mjs.
 
-   The marketing pages (landing.css) are separate and untouched. */
+   The palette is mapped onto Starlight's own --sl-* variables so the
+   sidebar, table of contents, search, tabs, and asides follow it without a
+   rule per component. Code blocks are styled through Expressive Code
+   overrides in astro.config.mjs; fonts load from the <head> entries there. */
 
 :root {
-  --mc-font-display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
-  --sl-font: "IBM Plex Sans", "Segoe UI", Roboto, sans-serif;
+  color-scheme: light;
+
+  --mc-font-head:
+    "Cal Sans", Poppins, ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, sans-serif;
+  --sl-font:
+    Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    sans-serif;
   --sl-font-mono: "IBM Plex Mono", SFMono-Regular, Menlo, Consolas, monospace;
 
   /* Starlight's default is 45rem. Grow with the window on wide screens so
@@ -22,119 +30,63 @@
   --sl-content-width: max(45rem, min(70rem, calc(100vw - 34rem)));
   --mc-measure: 68ch;
 
-  /* Type scale */
-  --sl-text-body: 1.0625rem; /* 17px */
+  /* Type scale, from DESIGN.md: 16px body, 20 / 24 / 48px headings. */
+  --sl-text-body: 1rem;
   --sl-text-body-sm: 0.875rem;
-  --sl-line-height: 1.6;
-  --sl-line-height-headings: 1.15;
-  --sl-text-h1: 2.75rem; /* 44px */
-  --sl-text-h2: 1.75rem; /* 28px */
-  --sl-text-h3: 1.25rem; /* 20px */
-  --sl-text-h4: 1.0625rem;
+  --sl-line-height: 1.5;
+  --sl-line-height-headings: 1.3;
+  --sl-text-h1: clamp(2.25rem, 5vw, 3rem);
+  --sl-text-h2: 1.5rem;
+  --sl-text-h3: 1.25rem;
+  --sl-text-h4: 1rem;
   --sl-text-h5: 1rem;
   --sl-text-code: 0.84375rem; /* 13.5px */
-  --sl-text-code-sm: 0.9375rem; /* inline tokens, 0.88 of body */
+  --sl-text-code-sm: 0.875rem; /* inline tokens */
 
-  /* Dark palette. Starlight keeps its dark theme on :root. */
-  --mc-ground: #151a1d;
-  --mc-surface: #1b2124;
-  --mc-ink: #e4e8ea;
-  --mc-muted: #9aa5ae;
-  --mc-accent: #63c7ce;
-  --mc-accent-ink: #8adce1;
-  --mc-token-bg: #1d2b2d;
-  --mc-rule: #2c3539;
-  --mc-rule-soft: #232b2f;
-  --mc-code-bg: #10161a;
-  --mc-warn-bg: #2e2418;
-  --mc-warn-ink: #e4b77a;
-  --mc-ok-bg: #1b2b21;
-  --mc-ok-ink: #8fd1a3;
-  --mc-tile-off: #2c3539;
-  --mc-tile-on-ink: #0f1a1c;
-  --mc-shadow: none;
+  /* DESIGN.md palette, named as in landing.css. */
+  --mc-ink: #101010;
+  --mc-white: #ffffff;
+  --mc-paper: #f4f4f4;
+  --mc-graphite: #242424;
+  --mc-slate: #6b7280;
+  --mc-stone: #898989;
+  --mc-silver: #e5e7eb;
+  --mc-shadow: rgba(36, 36, 36, 0.05) 0px 4px 8px 0px;
 
-  --sl-color-white: var(--mc-ink);
-  --sl-color-gray-1: #d2d9dd;
-  --sl-color-gray-2: #c1c9ce;
-  --sl-color-gray-3: var(--mc-muted);
-  --sl-color-gray-4: #6b7680;
-  --sl-color-gray-5: var(--mc-rule);
-  --sl-color-gray-6: var(--mc-surface);
-  --sl-color-black: var(--mc-ground);
-
-  --sl-color-accent-low: var(--mc-token-bg);
-  --sl-color-accent: var(--mc-accent);
-  --sl-color-accent-high: var(--mc-accent-ink);
-
-  --sl-color-text: var(--mc-ink);
-  --sl-color-text-accent: var(--mc-accent-ink);
-  --sl-color-text-invert: var(--mc-tile-on-ink);
-  --sl-color-bg: var(--mc-ground);
-  --sl-color-bg-nav: var(--mc-ground);
-  --sl-color-bg-sidebar: var(--mc-ground);
-  --sl-color-bg-inline-code: var(--mc-token-bg);
-  --sl-color-bg-accent: var(--mc-accent);
-  --sl-color-hairline-light: var(--mc-rule);
-  --sl-color-hairline: var(--mc-rule-soft);
-  --sl-color-hairline-shade: var(--mc-rule-soft);
-
-  --sl-color-orange-low: var(--mc-warn-bg);
-  --sl-color-orange: var(--mc-warn-ink);
-  --sl-color-orange-high: var(--mc-warn-ink);
-  --sl-color-green-low: var(--mc-ok-bg);
-  --sl-color-green: var(--mc-ok-ink);
-  --sl-color-green-high: var(--mc-ok-ink);
-
-  --sl-shadow-sm: 0 1px 0 rgb(0 0 0 / 20%);
-  --sl-shadow-md: 0 4px 12px rgb(0 0 0 / 28%);
-  --sl-shadow-lg: 0 12px 32px rgb(0 0 0 / 36%);
-}
-
-:root[data-theme='light'] {
-  --mc-ground: #f6f7f5;
-  --mc-surface: #ffffff;
-  --mc-ink: #1c2024;
-  --mc-muted: #5f6873;
-  --mc-accent: #0e6b73;
-  --mc-accent-ink: #0a5158;
-  --mc-token-bg: #e4eeee;
-  --mc-rule: #d3d8db;
-  --mc-rule-soft: #e6eaec;
-  --mc-code-bg: #eef1f0;
+  /* Outside DESIGN.md: a caution and a success tone, so a warning does not
+     look like a note. Used by asides and badges only. */
   --mc-warn-bg: #f7eee3;
   --mc-warn-ink: #7a4a12;
   --mc-ok-bg: #e7f1ea;
   --mc-ok-ink: #245a35;
-  --mc-tile-off: #dce2e4;
-  --mc-tile-on-ink: #ffffff;
-  --mc-shadow: 0 1px 0 rgb(28 32 36 / 6%);
 
+  /* Starlight's grey scale runs from text (white) to page (black). */
   --sl-color-white: var(--mc-ink);
-  --sl-color-gray-1: #2a3137;
-  --sl-color-gray-2: #3b444b;
-  --sl-color-gray-3: var(--mc-muted);
-  --sl-color-gray-4: #8c969e;
-  --sl-color-gray-5: var(--mc-rule);
-  --sl-color-gray-6: var(--mc-rule-soft);
-  --sl-color-gray-7: var(--mc-surface);
-  --sl-color-black: var(--mc-ground);
+  --sl-color-gray-1: var(--mc-graphite);
+  --sl-color-gray-2: var(--mc-graphite);
+  --sl-color-gray-3: var(--mc-slate);
+  --sl-color-gray-4: var(--mc-stone);
+  --sl-color-gray-5: var(--mc-silver);
+  --sl-color-gray-6: var(--mc-silver);
+  --sl-color-gray-7: var(--mc-white);
+  --sl-color-black: var(--mc-paper);
 
-  --sl-color-accent-low: var(--mc-token-bg);
-  --sl-color-accent: var(--mc-accent);
-  --sl-color-accent-high: var(--mc-accent-ink);
+  /* The accent is Ink: the current page in the sidebar is a black pill. */
+  --sl-color-accent-low: var(--mc-silver);
+  --sl-color-accent: var(--mc-ink);
+  --sl-color-accent-high: var(--mc-ink);
 
-  --sl-color-text: var(--mc-ink);
-  --sl-color-text-accent: var(--mc-accent-ink);
-  --sl-color-text-invert: var(--mc-tile-on-ink);
-  --sl-color-bg: var(--mc-ground);
-  --sl-color-bg-nav: var(--mc-ground);
-  --sl-color-bg-sidebar: var(--mc-ground);
-  --sl-color-bg-inline-code: var(--mc-token-bg);
-  --sl-color-bg-accent: var(--mc-accent);
-  --sl-color-hairline-light: var(--mc-rule);
-  --sl-color-hairline: var(--mc-rule-soft);
-  --sl-color-hairline-shade: var(--mc-rule-soft);
+  --sl-color-text: var(--mc-graphite);
+  --sl-color-text-accent: var(--mc-ink);
+  --sl-color-text-invert: var(--mc-white);
+  --sl-color-bg: var(--mc-paper);
+  --sl-color-bg-nav: var(--mc-paper);
+  --sl-color-bg-sidebar: var(--mc-paper);
+  --sl-color-bg-inline-code: var(--mc-silver);
+  --sl-color-bg-accent: var(--mc-ink);
+  --sl-color-hairline-light: var(--mc-silver);
+  --sl-color-hairline: var(--mc-silver);
+  --sl-color-hairline-shade: var(--mc-silver);
 
   --sl-color-orange-low: var(--mc-warn-bg);
   --sl-color-orange: var(--mc-warn-ink);
@@ -143,13 +95,26 @@
   --sl-color-green: var(--mc-ok-ink);
   --sl-color-green-high: var(--mc-ok-ink);
 
-  --sl-shadow-sm: 0 1px 0 rgb(28 32 36 / 6%);
-  --sl-shadow-md: 0 4px 12px rgb(28 32 36 / 8%);
-  --sl-shadow-lg: 0 12px 32px rgb(28 32 36 / 10%);
+  --sl-shadow-sm: var(--mc-shadow);
+  --sl-shadow-md: var(--mc-shadow);
+  --sl-shadow-lg:
+    rgba(36, 36, 36, 0.7) 0px 1px 5px -4px, rgba(36, 36, 36, 0.05) 0px 4px 8px
+    0px;
 }
 
 body {
+  letter-spacing: -0.19px;
   -webkit-font-smoothing: antialiased;
+}
+
+/* ---- Header ---------------------------------------------------------- */
+
+.site-title {
+  font-family: var(--mc-font-head);
+  font-weight: 600;
+  font-size: 1.25rem;
+  letter-spacing: 0.2px;
+  color: var(--mc-graphite);
 }
 
 /* ---- Small uppercase labels ---------------------------------------- */
@@ -162,15 +127,19 @@ body {
   font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: var(--mc-muted);
+  color: var(--mc-slate);
 }
 
 /* ---- Headings ------------------------------------------------------- */
 
+/* DESIGN.md keeps Cal Sans for headings of 20px and above, at weight 600
+   and with slight positive tracking. h4 is 16px, so it stays in Inter. */
 h1#_top,
 .hero h1,
-.sl-markdown-content :is(h1, h2, h3, h4) {
-  font-family: var(--mc-font-display);
+.sl-markdown-content :is(h1, h2, h3) {
+  font-family: var(--mc-font-head);
+  font-weight: 600;
+  color: var(--mc-graphite);
   text-wrap: balance;
 }
 
@@ -178,9 +147,8 @@ h1#_top,
 .hero h1,
 .sl-markdown-content h1 {
   font-size: var(--sl-text-h1);
-  font-weight: 700;
-  line-height: 1.05;
-  letter-spacing: -0.01em;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
 }
 
 .hero h1 {
@@ -192,8 +160,8 @@ h1#_top,
 }
 
 .sl-markdown-content h2 {
-  font-weight: 700;
-  line-height: 1.15;
+  line-height: 1.3;
+  letter-spacing: 0.24px;
 }
 
 /* A hairline rule above each section, spanning the whole column. Starlight
@@ -203,7 +171,7 @@ h1#_top,
 .sl-markdown-content > h2 {
   margin-top: 3.25rem;
   padding-top: 1.375rem;
-  border-top: 1px solid var(--mc-rule);
+  border-top: 1px solid var(--mc-silver);
 }
 
 .sl-markdown-content > .sl-heading-wrapper.level-h2:first-child,
@@ -214,18 +182,18 @@ h1#_top,
 }
 
 .sl-markdown-content h3 {
-  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.2px;
   margin-top: 2rem;
 }
 
 .sl-markdown-content h4 {
   font-weight: 600;
+  color: var(--mc-graphite);
 }
 
 /* ---- Running text --------------------------------------------------- */
 
-/* Starlight leaves page text at the browser default; the guidebook reads
-   at 17px. */
 .sl-markdown-content {
   font-size: var(--sl-text-body);
 }
@@ -244,45 +212,46 @@ h1#_top,
 }
 
 .sl-markdown-content li::marker {
-  color: var(--mc-muted);
+  color: var(--mc-slate);
 }
 
+/* Links are Ink and underlined. DESIGN.md's Action Blue is too faint on
+   Paper for a link inside a paragraph. */
 .sl-markdown-content a {
-  color: var(--mc-accent-ink);
+  color: var(--mc-ink);
   font-weight: 500;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.18em;
 }
 
 .sl-markdown-content a:hover {
-  color: var(--mc-accent-ink);
+  color: var(--mc-ink);
   text-decoration-thickness: 2px;
 }
 
 .sl-markdown-content blockquote {
-  border-inline-start: 3px solid var(--mc-rule);
-  color: var(--mc-muted);
+  border-inline-start: 3px solid var(--mc-silver);
+  color: var(--mc-slate);
 }
 
 .sl-markdown-content hr {
-  border-bottom-color: var(--mc-rule);
+  border-bottom-color: var(--mc-silver);
 }
 
 /* ---- Tokens and code ------------------------------------------------ */
 
-.sl-markdown-content :not(pre, a) > code {
-  background: var(--mc-token-bg);
-  color: var(--mc-accent-ink);
+.sl-markdown-content :not(pre, a) > code,
+.sl-markdown-content a > code {
+  background: var(--mc-silver);
+  color: var(--mc-graphite);
   padding: 0.0625rem 0.3125rem;
-  border-radius: 3px;
+  border-radius: 4px;
   margin-block: 0;
+  letter-spacing: 0;
 }
 
 .sl-markdown-content a > code {
-  background: var(--mc-token-bg);
-  padding: 0.0625rem 0.3125rem;
-  border-radius: 3px;
-  margin-block: 0;
+  color: inherit;
 }
 
 .sl-markdown-content :is(h1, h2, h3, h4) code {
@@ -291,20 +260,20 @@ h1#_top,
   padding: 0;
 }
 
-/* Expressive Code frames. Starlight's built-in theme pins these three
-   backgrounds to its grey scale at theme level, which outranks the
-   styleOverrides in astro.config.mjs, so they are set here instead. */
-:root[data-theme] .sl-markdown-content .expressive-code,
+/* Expressive Code frames: White, like every other card on the page. Set
+   here as well as in astro.config.mjs so the frame backgrounds cannot fall
+   back to Starlight's grey scale. */
 .expressive-code {
-  --ec-frm-edBg: var(--mc-code-bg);
-  --ec-frm-trmBg: var(--mc-code-bg);
-  --ec-frm-edActTabBg: var(--mc-code-bg);
+  --ec-frm-edBg: var(--mc-white);
+  --ec-frm-trmBg: var(--mc-white);
+  --ec-frm-edActTabBg: var(--mc-white);
+  letter-spacing: 0;
 }
 
 .sl-markdown-content pre:not(.mermaid) {
-  background: var(--mc-code-bg);
-  border: 1px solid var(--mc-rule-soft);
-  border-radius: 6px;
+  background: var(--mc-white);
+  border: 1px solid var(--mc-silver);
+  border-radius: 8px;
   padding: 0.875rem 1rem;
   line-height: 1.55;
   overflow-x: auto;
@@ -313,13 +282,12 @@ h1#_top,
 /* ---- Tables --------------------------------------------------------- */
 
 /* Every Markdown table is wrapped in .mc-table by a rehype plugin (see
-   src/lib/rehype-wrap-tables.mjs) so the border and the sideways scroll
+   src/lib/satteri-wrap-tables.mjs) so the card and the sideways scroll
    belong to the container, not the table. */
 .sl-markdown-content .mc-table {
   overflow-x: auto;
-  border: 1px solid var(--mc-rule);
-  border-radius: 6px;
-  background: var(--mc-surface);
+  border-radius: 12px;
+  background: var(--mc-white);
   box-shadow: var(--mc-shadow);
 }
 
@@ -328,13 +296,13 @@ h1#_top,
   width: 100%;
   margin: 0;
   border-collapse: collapse;
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   font-variant-numeric: tabular-nums;
 }
 
 .sl-markdown-content .mc-table :is(th, td) {
-  padding: 0.5625rem 0.75rem;
-  border-bottom: 1px solid var(--mc-rule-soft);
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid var(--mc-silver);
   vertical-align: top;
 }
 
@@ -343,9 +311,13 @@ h1#_top,
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--mc-muted);
-  background: var(--mc-ground);
+  color: var(--mc-slate);
   white-space: nowrap;
+}
+
+/* Starlight stripes every other row with its grey scale. */
+.sl-markdown-content .mc-table tr:nth-child(2n):not(:where(.not-content *)) {
+  background: none;
 }
 
 .sl-markdown-content .mc-table tr:last-child td {
@@ -354,26 +326,23 @@ h1#_top,
 
 /* ---- Asides --------------------------------------------------------- */
 
+/* A White card. The icon and title say which kind it is; only a caution
+   takes a colour. */
 .sl-markdown-content .starlight-aside {
-  background: var(--mc-surface);
-  border-inline-start: 3px solid var(--sl-color-asides-border);
-  border-radius: 0 6px 6px 0;
-  padding: 0.75rem 1rem;
-  color: var(--mc-ink);
+  background: var(--mc-white);
+  border: 0;
+  border-radius: 12px;
+  box-shadow: var(--mc-shadow);
+  padding: 1rem 1.25rem;
+  color: var(--mc-graphite);
 }
 
-.starlight-aside--note {
-  --sl-color-asides-border: var(--mc-accent);
-  --sl-color-asides-text-accent: var(--mc-accent-ink);
-}
-
+.starlight-aside--note,
 .starlight-aside--tip {
-  --sl-color-asides-border: var(--mc-ok-ink);
-  --sl-color-asides-text-accent: var(--mc-ok-ink);
+  --sl-color-asides-text-accent: var(--mc-ink);
 }
 
 .starlight-aside--caution {
-  --sl-color-asides-border: var(--mc-warn-ink);
   --sl-color-asides-text-accent: var(--mc-warn-ink);
 }
 
@@ -388,13 +357,53 @@ h1#_top,
   font-size: 1.15em;
 }
 
-/* ---- Cards ---------------------------------------------------------- */
+/* ---- Cards, buttons, tags -------------------------------------------
+   DESIGN.md: cards are White with a 12px radius and a shadow, never a
+   border; buttons are pills, solid Ink or a ghost outline; tags are
+   pills. */
 
-.sl-markdown-content .card {
-  background: var(--mc-surface);
-  border: 1px solid var(--mc-rule-soft);
-  border-radius: 6px;
+.sl-markdown-content .card,
+.pagination-links a {
+  background: var(--mc-white);
+  border: 0;
+  border-radius: 12px;
   box-shadow: var(--mc-shadow);
+}
+
+.pagination-links a:hover {
+  box-shadow: var(--sl-shadow-lg);
+}
+
+.sl-link-button {
+  border-radius: 9999px;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 400;
+}
+
+.sl-link-button.primary {
+  background: var(--mc-ink);
+  border-color: var(--mc-ink);
+  color: var(--mc-white);
+}
+
+.sl-link-button.secondary {
+  border-color: var(--mc-silver);
+  color: var(--mc-graphite);
+}
+
+.sl-badge {
+  border-radius: 9999px;
+  padding-inline: 0.625rem;
+  letter-spacing: 0;
+}
+
+/* The search box is an input: White, 8px radius. Below 50rem Starlight
+   shows it as a bare icon, which stays as it is. */
+@media (min-width: 50rem) {
+  site-search > button[data-open-modal] {
+    background: var(--mc-white);
+  }
 }
 
 /* ---- Ordered steps as cards ----------------------------------------
@@ -405,7 +414,7 @@ h1#_top,
   list-style: none;
   padding: 0;
   display: grid;
-  gap: 0.625rem;
+  gap: 0.75rem;
   counter-reset: mc-step;
 }
 
@@ -414,20 +423,20 @@ h1#_top,
   display: grid;
   grid-template-columns: 2.125rem 1fr;
   gap: 0.75rem;
-  padding: 0.75rem 0.875rem;
+  padding: 1rem 1.25rem;
   margin: 0;
-  background: var(--mc-surface);
-  border: 1px solid var(--mc-rule-soft);
-  border-radius: 6px;
+  background: var(--mc-white);
+  border-radius: 12px;
+  box-shadow: var(--mc-shadow);
 }
 
 .sl-markdown-content .mc-steps > li::before {
   content: counter(mc-step);
-  font-family: var(--mc-font-display);
-  font-weight: 700;
+  font-family: var(--mc-font-head);
+  font-weight: 600;
   font-size: 1.25rem;
   line-height: 1.2;
-  color: var(--mc-accent-ink);
+  color: var(--mc-ink);
 }
 
 .sl-markdown-content .mc-steps > li > b:first-child {
@@ -443,14 +452,14 @@ h1#_top,
   display: flex;
   align-items: center;
   gap: 0.625rem;
-  background: var(--mc-surface);
-  border: 1px solid var(--mc-rule);
-  border-radius: 6px;
+  background: var(--mc-white);
+  border: 1px solid var(--mc-silver);
+  border-radius: 8px;
   padding: 0.5625rem 0.75rem;
   font-family: var(--__sl-font-mono);
   font-size: 0.9375rem;
   line-height: 1.5;
-  box-shadow: var(--mc-shadow);
+  letter-spacing: 0;
   overflow-x: auto;
 }
 
@@ -460,17 +469,18 @@ h1#_top,
   width: 0.75rem;
   height: 0.75rem;
   box-sizing: border-box;
-  border: 2px solid var(--mc-muted);
+  border: 2px solid var(--mc-stone);
   border-radius: 50%;
 }
 
 .sl-markdown-content .mc-query__text {
   white-space: pre;
-  color: var(--mc-ink);
+  color: var(--mc-slate);
 }
 
 .sl-markdown-content .mc-query .mc-k {
-  color: var(--mc-accent-ink);
+  color: var(--mc-ink);
+  font-weight: 500;
 }
 
 .sl-markdown-content .mc-query__note {
@@ -478,7 +488,7 @@ h1#_top,
   padding-inline-start: 1rem;
   font-family: var(--__sl-font);
   font-size: 0.8125rem;
-  color: var(--mc-muted);
+  color: var(--mc-slate);
   white-space: nowrap;
 }
 
@@ -501,13 +511,14 @@ h1#_top,
   font-size: 0.75rem;
   font-weight: 500;
   line-height: 1;
-  background: var(--mc-tile-off);
-  color: var(--mc-muted);
+  letter-spacing: 0;
+  background: var(--mc-silver);
+  color: var(--mc-slate);
 }
 
 .mc-lists > span.mc-on {
-  background: var(--mc-accent);
-  color: var(--mc-tile-on-ink);
+  background: var(--mc-ink);
+  color: var(--mc-white);
 }
 
 @media (prefers-reduced-motion: no-preference) {

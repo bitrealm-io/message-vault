@@ -262,6 +262,69 @@ fn outgoing_uses_me_and_stable_subject() {
     );
 }
 
+fn subject_and_to(msg: &MailMessage) -> (String, String) {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = write_message_file(&tmp.path().join("chat"), 1, msg).unwrap();
+    let bytes = fs::read(&path).unwrap();
+    let mail = mailparse::parse_mail(&bytes).unwrap();
+    let headers = mail.get_headers();
+    (
+        headers.get_first_value("Subject").unwrap(),
+        headers.get_first_value("To").unwrap(),
+    )
+}
+
+/// The sender of an outgoing message is the owner, so the sender's name is
+/// not the peer's. With no name in the roster the peer is known by handle.
+#[test]
+fn outgoing_to_a_peer_with_no_name_is_titled_with_the_peer_handle() {
+    let mut msg = base_sms();
+    msg.participants[0].display_name = None;
+    msg.message.direction = IrDirection::Outgoing;
+    msg.message.sender_handle = Some("+15555550100".into());
+    msg.message.sender_display_name = Some("Me".into());
+
+    let (subject, to) = subject_and_to(&msg);
+    assert_eq!(subject, "Message with +15555550101");
+    assert!(!to.contains("Me"), "To was {to}");
+}
+
+#[test]
+fn a_roster_that_lists_the_owner_first_still_addresses_the_other_person() {
+    let mut msg = base_sms();
+    msg.participants.insert(
+        0,
+        Participant {
+            handle: "+15555550100".into(),
+            display_name: Some("Owner".into()),
+        },
+    );
+    msg.message.direction = IrDirection::Outgoing;
+    msg.message.sender_handle = Some("+15555550100".into());
+    msg.message.sender_display_name = Some("Me".into());
+
+    let (subject, to) = subject_and_to(&msg);
+    assert_eq!(subject, "Message with Sam");
+    assert!(to.contains("Sam"), "To was {to}");
+}
+
+/// With no roster and no sender on the message, the chat identifier is the
+/// only place the other person is named.
+#[test]
+fn an_empty_roster_takes_the_peer_from_the_chat_identifier() {
+    let mut msg = base_sms();
+    msg.participants.clear();
+    msg.message.sender_handle = None;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let path = write_conversation_mbox(tmp.path(), &[msg]).unwrap();
+    let text = fs::read_to_string(&path).unwrap();
+    assert_eq!(
+        text.lines().next(),
+        Some("From +15555550101@sms.local Thu May 22 15:41:01 2014")
+    );
+}
+
 #[test]
 fn caller_id_owner_display_and_imessage_extension_headers() {
     let mut msg = base_sms();

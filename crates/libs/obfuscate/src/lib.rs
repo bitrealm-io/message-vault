@@ -824,6 +824,20 @@ mod tests {
         );
     }
 
+    /// Letters outside ASCII take their filler from the digest too, and a
+    /// message can hold far more of them than the digest has bytes.
+    #[test]
+    fn a_long_message_in_cyrillic_is_filled_to_its_own_length() {
+        let raw = "привет".repeat(184); // 1,104 letters
+        let mut anon = Obfuscator::new(key(13));
+        let out = anon.obfuscate_text(&raw);
+
+        assert_eq!(out.chars().count(), raw.chars().count());
+        assert!(out.chars().all(|c| c.is_ascii_lowercase()), "{out}");
+        let distinct: std::collections::HashSet<char> = out.chars().collect();
+        assert!(distinct.len() > 1, "the filler is one letter repeated");
+    }
+
     /// Five digits is where a run of numbers starts being treated as a phone
     /// number rather than as ordinary text, and the two paths produce
     /// different results. Nothing tested the boundary, so `< 5` could become

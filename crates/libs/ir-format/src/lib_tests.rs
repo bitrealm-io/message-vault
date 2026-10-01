@@ -542,3 +542,68 @@ fn hard_texts_survive_every_format() {
     }
     assert!(failures.is_empty(), "\n{}", failures.join("\n"));
 }
+
+#[test]
+fn csv_marks_only_an_announcement_row_as_an_announcement() {
+    let mut doc = message_ir::testutil::sample_document("hello ir");
+    let mut announcement = doc.messages[0].clone();
+    announcement.guid = "ANNOUNCEMENT-GUID".into();
+    announcement.message_kind = IrMessageKind::Announcement;
+    doc.messages.push(announcement);
+    doc.finalize_stats();
+
+    let tmp = tempfile::tempdir().unwrap();
+    let csv_path = write_conversation_csv(tmp.path(), &doc).unwrap();
+    let mut rdr = csv::Reader::from_path(&csv_path).unwrap();
+    let headers = rdr.headers().unwrap().clone();
+    let guid_idx = headers.iter().position(|c| c == "guid").unwrap();
+    let idx = headers.iter().position(|c| c == "is_announcement").unwrap();
+    let cells: Vec<(String, String)> = rdr
+        .records()
+        .map(|row| {
+            let row = row.unwrap();
+            (row[guid_idx].to_string(), row[idx].to_string())
+        })
+        .collect();
+    assert_eq!(cells.len(), 2);
+    for (guid, cell) in cells {
+        let expected = if guid == "ANNOUNCEMENT-GUID" {
+            "true"
+        } else {
+            "false"
+        };
+        assert_eq!(cell, expected, "is_announcement of {guid}");
+    }
+}
+
+#[test]
+fn csv_with_no_participants_reads_back_with_an_empty_roster() {
+    let mut doc = message_ir::testutil::sample_document("hello ir");
+    doc.conversation.participants.clear();
+    let tmp = tempfile::tempdir().unwrap();
+    let csv_path = write_conversation_csv(tmp.path(), &doc).unwrap();
+
+    let back = read_conversation_csv(&csv_path).unwrap();
+    assert!(back.conversation.participants.is_empty());
+    assert_eq!(back.messages.len(), doc.messages.len());
+}
+
+#[test]
+fn a_whatsapp_file_keeps_its_name_when_read_and_written_again() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut whatsapp = message_ir::testutil::sample_document("hello ir");
+    whatsapp.packaging_stem_suffix = Some("__whatsapp".into());
+    let plain = message_ir::testutil::sample_document("hello ir");
+
+    for doc in [whatsapp, plain] {
+        let suffix = doc.packaging_stem_suffix.clone();
+        let first = tmp.path().join("first");
+        let path = write_format(&first, OutputFormat::Json, doc).unwrap();
+        let back = read_conversation_json(&path).unwrap();
+        assert_eq!(back.packaging_stem_suffix, suffix);
+
+        let second = tmp.path().join("second");
+        let again = write_format(&second, OutputFormat::Json, back).unwrap();
+        assert_eq!(again.file_name(), path.file_name());
+    }
+}

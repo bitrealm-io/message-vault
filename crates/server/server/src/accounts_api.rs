@@ -467,6 +467,11 @@ impl UpdateAccountRequest {
             || !self.remove_identities.is_empty()
     }
 
+    /// True when the body adds or removes an identity.
+    fn touches_identities(&self) -> bool {
+        !self.identities.is_empty() || !self.remove_identities.is_empty()
+    }
+
     /// True when the body names a field only the owner may set.
     fn touches_flags(&self) -> bool {
         self.disabled.is_some()
@@ -652,11 +657,26 @@ async fn apply_flags(
     Ok(())
 }
 
+/// Refuse an act the Demo Account is never open to, whoever asks.
+///
+/// The Demo Account has no password, so anyone at the login card can enter
+/// it. Its limits are therefore fixed here, by its id, and are not settings
+/// the owner can change (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`).
+fn refuse_for_demo_account(target: i64, what: &str) -> Result<(), ApiError> {
+    if account_profile::is_demo_account(target) {
+        return Err(ApiError::DemoAccountProtected(format!(
+            "the demo account's {what}; the owner can delete the account, and reset-demo restores it"
+        )));
+    }
+    Ok(())
+}
+
 /// Change an account. Its display name, time zone and identities are set by
 /// the account itself or by the owner; only the owner sets an
 /// account's disabled flag and its import, export and delete permissions. A
 /// field the caller may not set answers `403 Forbidden`, and the reloaded
-/// account is the answer.
+/// account is the answer. The Demo Account's status, permissions and
+/// identities are fixed for everyone; its display name and time zone are not.
 #[utoipa::path(
     patch,
     path = "/v1/accounts/{id}",
@@ -666,7 +686,8 @@ async fn apply_flags(
     request_body = UpdateAccountRequest,
     responses(
         (status = 200, body = Account),
-        crate::problem::openapi::NotTheOwner
+        crate::problem::openapi::NotTheOwner,
+        crate::problem::openapi::DemoAccountProtected
     )
 )]
 pub async fn update_account(
@@ -676,7 +697,16 @@ pub async fn update_account(
     Json(req): Json<UpdateAccountRequest>,
 ) -> Result<Json<Account>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    match require_account_reach(&mut conn, &auth, target, Admits::Owner).await? {
+    let reach = require_account_reach(&mut conn, &auth, target, Admits::Owner).await?;
+    if req.touches_flags() {
+        refuse_for_demo_account(target, "status and permissions are fixed")?;
+    }
+    if req.touches_identities() {
+        // They decide which messages read as sent and which as received, so a
+        // change would make every conversation in Demo Data read wrong.
+        refuse_for_demo_account(target, "identities are fixed")?;
+    }
+    match reach {
         reach @ (Reach::Own | Reach::OwnersOwn) => {
             if req.touches_flags() {
                 return Err(if reach == Reach::OwnersOwn {
@@ -841,7 +871,8 @@ pub struct ReplaceAccountPasswordResponse {
         (status = 200, description = "Own password changed; the rotated session token", body = ReplaceAccountPasswordResponse),
         (status = 204, description = "Password set by the owner"),
         crate::problem::openapi::InvalidCredentials,
-        crate::problem::openapi::NotTheOwner
+        crate::problem::openapi::NotTheOwner,
+        crate::problem::openapi::DemoAccountProtected
     )
 )]
 pub async fn replace_account_password(
@@ -852,6 +883,9 @@ pub async fn replace_account_password(
 ) -> Result<Response, ApiError> {
     let mut conn = state.db.acquire().await?;
     let reach = require_account_reach(&mut conn, &auth, target, Admits::Owner).await?;
+    // The login card's button enters the Demo Account with no password, so
+    // one set by anybody would shut it.
+    refuse_for_demo_account(target, "password cannot be set")?;
 
     // The checks run in a fixed order so the first thing a user is told is the
     // first thing they typed wrong: the current password, then the pair, then
@@ -970,6 +1004,7 @@ fn remove_account_asset_trees(
     request_body(content = Option<DeleteMessagesRequest>, description = "Sent by an account deleting its own messages; the owner sends no body"),
     responses(
         (status = 200, body = DeleteMessagesResponse),
+        crate::problem::openapi::DemoAccountProtected
     )
 )]
 pub async fn delete_account_messages(
@@ -979,10 +1014,11 @@ pub async fn delete_account_messages(
     body: Option<Json<DeleteMessagesRequest>>,
 ) -> Result<Json<DeleteMessagesResponse>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    if require_account_reach(&mut conn, &auth, target, Admits::Owner)
-        .await?
-        .is_own()
-    {
+    let reach = require_account_reach(&mut conn, &auth, target, Admits::Owner).await?;
+    // Emptied, the Demo Account would still be offered on the login card and
+    // open onto nothing. The owner removes Demo Data by deleting the account.
+    refuse_for_demo_account(target, "messages cannot be deleted for good")?;
+    if reach.is_own() {
         crate::server::require_delete_access(&auth)?;
         if !body.is_some_and(|Json(req)| req.confirm) {
             return Err(ApiError::validation("confirmation flag must be true"));

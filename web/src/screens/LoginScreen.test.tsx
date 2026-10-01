@@ -27,15 +27,22 @@ import LoginScreen from "./LoginScreen";
  * about it gets `open` — the two-tab card, which is what most of these tests
  * are about. Returns the underlying fetch mock.
  */
-function stubServer(state: "unclaimed" | "closed" | "open" = "open") {
+function stubServer(state: "unclaimed" | "closed" | "open" = "open", demoAccount = false) {
   // `/health` is read with `text()`; the API client reads `status` and
   // `json()`. Both shapes come back from the one stub so a test does not have
   // to know which of the two a given screen used.
   const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => ({
     ok: true,
     status: 200,
-    text: async () => (String(url).includes("/v1/server") ? JSON.stringify({ state }) : ""),
-    json: async () => ({ state }),
+    text: async () =>
+      String(url).includes("/v1/server")
+        ? JSON.stringify({ state, demo_account: demoAccount })
+        : "",
+    // A login answers with a session; everything else here is `/v1/server`.
+    json: async () =>
+      String(url).includes("/v1/session")
+        ? { token: "mc-user-demo", account_id: 2 }
+        : { state, demo_account: demoAccount },
   }));
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
@@ -80,6 +87,36 @@ describe("LoginScreen", () => {
 
     expect(screen.queryByRole("button", { name: "Connect" })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Server URL" })).not.toBeInTheDocument();
+  });
+
+  it("offers the Demo Account beside Create Owner on an unclaimed Message Crate", async () => {
+    const fetchMock = stubServer("unclaimed", true);
+    renderScreen();
+
+    const explore = await screen.findByRole("button", { name: "Explore Demo Account" });
+    expect(screen.getByRole("heading", { name: "Create Owner" })).toBeInTheDocument();
+
+    await setupUser().click(explore);
+
+    await waitFor(() => expect(login).toHaveBeenCalledWith("", "mc-user-demo", 2));
+    const sessionCall = fetchMock.mock.calls.find(([url]) => String(url).includes("/v1/session"));
+    expect(JSON.parse(String(sessionCall?.[1]?.body))).toEqual({ username: "demo", password: "" });
+  });
+
+  it("keeps the Demo Account button beside the login form once claimed", async () => {
+    stubServer("closed", true);
+    renderScreen();
+
+    expect(await screen.findByRole("button", { name: "Explore Demo Account" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Log in" })).toBeInTheDocument();
+  });
+
+  it("shows no Demo Account button when the server has no Demo Account", async () => {
+    stubServer("closed", false);
+    renderScreen();
+
+    await screen.findByRole("button", { name: "Log in" });
+    expect(screen.queryByRole("button", { name: "Explore Demo Account" })).not.toBeInTheDocument();
   });
 
   it("names the product and reports the connection as one word", async () => {

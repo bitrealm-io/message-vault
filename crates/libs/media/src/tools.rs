@@ -380,6 +380,24 @@ mod tests {
         assert!(probe.ffprobe_path.is_none());
     }
 
+    /// A file with the right name that cannot run is not a tool: Convert
+    /// would start and then fail on every file.
+    #[cfg(unix)]
+    #[test]
+    fn probe_folder_refuses_tools_that_cannot_run() {
+        let _guard = tools_test_lock();
+        let _restore = RestoreToolsDir::capture();
+        let dir = tempfile::tempdir().unwrap();
+        for name in ["ffmpeg", "ffprobe"] {
+            fs::write(dir.path().join(name), "not a program").unwrap();
+        }
+
+        let probe = probe_ffmpeg_tools(Some(dir.path()));
+        assert!(!probe.ok);
+        assert_eq!(probe.ffmpeg_path, None);
+        assert_eq!(probe.ffprobe_path, None);
+    }
+
     #[cfg(unix)]
     #[test]
     fn set_tools_dir_overrides_and_clears_cache() {

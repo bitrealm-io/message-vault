@@ -46,6 +46,7 @@ fn launch_at(address: SocketAddr, program: &Path, data_dir: &Path) -> Launch {
         data_dir: data_dir.to_path_buf(),
         static_dir: data_dir.join("website"),
         address,
+        cors_origins: Vec::new(),
     }
 }
 
@@ -82,7 +83,16 @@ fn the_server_is_started_on_this_computer_with_no_config_file() {
         data_dir: PathBuf::from("/data"),
         static_dir: PathBuf::from("/site"),
         address: OWN_ADDRESS.parse().unwrap(),
+        cors_origins: Vec::new(),
     };
+    assert_eq!(
+        Launch {
+            cors_origins: vec!["http://localhost:5173".into()],
+            ..launch.clone()
+        }
+        .arguments()[7..],
+        ["--cors-origin", "http://localhost:5173"]
+    );
     assert_eq!(
         launch.arguments(),
         [

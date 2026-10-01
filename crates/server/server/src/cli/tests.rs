@@ -527,11 +527,19 @@ fn serve_with_a_data_dir_needs_no_config_file() {
         "0.0.0.0:9000",
         "--static-dir",
         "/opt/site",
+        "--cors-origin",
+        "http://localhost:5173",
+        "--cors-origin",
+        "http://127.0.0.1:5173",
     ]))
     .unwrap();
     let server = cfg.require_server().unwrap();
     assert_eq!(server.bind, "0.0.0.0:9000");
     assert_eq!(server.static_dir, PathBuf::from("/opt/site"));
+    assert_eq!(
+        server.cors_origins,
+        ["http://localhost:5173", "http://127.0.0.1:5173"]
+    );
 }
 
 /// The same two flags apply over a config file, and a relative data folder

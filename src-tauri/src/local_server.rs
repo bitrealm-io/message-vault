@@ -148,12 +148,16 @@ pub struct Launch {
     pub static_dir: PathBuf,
     /// Where the server listens.
     pub address: SocketAddr,
+    /// Websites allowed to call the server besides the installed app, which
+    /// always is. `cargo tauri dev` loads the screens from the Vite dev
+    /// server, a different origin, and names it here.
+    pub cors_origins: Vec<String>,
 }
 
 impl Launch {
     /// The arguments the server is started with.
     pub fn arguments(&self) -> Vec<String> {
-        vec![
+        let mut arguments = vec![
             "serve".into(),
             "--data-dir".into(),
             self.data_dir.display().to_string(),
@@ -161,7 +165,12 @@ impl Launch {
             self.address.to_string(),
             "--static-dir".into(),
             self.static_dir.display().to_string(),
-        ]
+        ];
+        for origin in &self.cors_origins {
+            arguments.push("--cors-origin".into());
+            arguments.push(origin.clone());
+        }
+        arguments
     }
 
     /// Whether the server has no database yet.

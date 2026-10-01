@@ -80,9 +80,6 @@ pub struct PushArgs {
     /// Import mode. `append` adds to existing data (safe to re-run);
     /// `replace` deletes existing messages for this source, then imports.
     pub mode: ImportMode,
-    /// When true, ignore the journal and re-upload assets and re-import
-    /// messages.
-    pub force: bool,
     /// When true, import messages without uploading attachments.
     pub skip_attachments: bool,
     /// When true, trust export metadata: skip re-hashing attachments when
@@ -129,7 +126,9 @@ fn push_config(args: PushArgs) -> PushConfig {
         username: args.username,
         key: args.key,
         mode: args.mode,
-        force: args.force,
+        // A resumed Upload skips what the journal in the staging folder
+        // already recorded as sent.
+        force: false,
         skip_attachments: args.skip_attachments,
         trust_export: args.trust_export,
         verify_digests: false,
@@ -150,7 +149,7 @@ fn push_config(args: PushArgs) -> PushConfig {
         asset_max_bytes: ASSET_MAX_BYTES,
         report_path: None,
         log_path: None,
-        // Relies on one preflight HEAD per run instead of a persisted journal.
+        // The journal stays in the staging folder, beside the files it tracks.
         journal_path: None,
         cancel: None,
         import_id: args.import_id,
@@ -210,7 +209,104 @@ fn forward_push_event(app: &tauri::AppHandle, event: ProgressEvent) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use httpmock::prelude::*;
     use message_crate_push::{FileResult, PushReport};
+    use message_ir::{
+        ConversationMeta, ConversationStats, ExportMeta, IrConversationType, IrDirection,
+        IrMessage, IrMessageKind, IrParticipant, IrService, SCHEMA_VERSION,
+    };
+    use serde_json::json;
+
+    /// A resumed Upload runs over the staging folder the interrupted Upload
+    /// left, journal included. Sending the journaled messages again would
+    /// only make the server count each one as a Duplicate.
+    #[test]
+    fn a_resumed_upload_does_not_send_what_the_journal_recorded() {
+        let server = MockServer::start();
+        let _session = server.mock(|when, then| {
+            when.method(GET).path("/v1/session");
+            then.status(200).json_body(json!({
+                "account_id": 1,
+                "username": "alice",
+            }));
+        });
+        let batches = server.mock(|when, then| {
+            when.method(POST).path("/v1/imports/7/batches");
+            then.status(200).json_body(json!({
+                "messages": 1,
+                "messages_appended": 1,
+                "conversations": 1
+            }));
+        });
+
+        let staging = tempfile::tempdir().unwrap();
+        let header = json!({
+            "schema_version": SCHEMA_VERSION,
+            "export": ExportMeta {
+                source: "sms-backup-restore".into(),
+                tool: "SMS Backup & Restore".into(),
+                tool_version: "10.26.003".into(),
+                owner_handle: Some("+15555550100".into()),
+                owner_display_name: Some("Me".into()),
+            },
+            "conversation": ConversationMeta {
+                chat_identifier: "+15555550101".into(),
+                conversation_type: IrConversationType::Individual,
+                group_title: None,
+                participants: vec![IrParticipant {
+                    handle: Some("+15555550101".into()),
+                    display_name: Some("Sam".into()),
+                    handle_type: None,
+                }],
+                stats: ConversationStats::default(),
+            },
+        });
+        let message = json!(IrMessage {
+            guid: "guid-1".into(),
+            timestamp_unix_ms: 1_400_773_261_000,
+            direction: IrDirection::Incoming,
+            service: IrService::Sms,
+            message_kind: IrMessageKind::Sms,
+            sender_handle: Some("+15555550101".into()),
+            sender_display_name: Some("Sam".into()),
+            owner_handle: None,
+            subject: None,
+            text: "hello there".into(),
+            attachments: vec![],
+            imessage: None,
+            source: None,
+        });
+        std::fs::write(
+            staging.path().join("sam.jsonl"),
+            format!("{header}\n{message}\n"),
+        )
+        .unwrap();
+
+        // What the Import screen sends for an Upload, first time and resumed.
+        let upload = || {
+            let args: PushArgs = serde_json::from_value(json!({
+                "baseUrl": server.base_url(),
+                "username": "",
+                "key": "mc_test",
+                "inputDir": staging.path(),
+                "mode": "append",
+                "skipAttachments": false,
+                "trustExport": true,
+                "importId": 7,
+            }))
+            .unwrap();
+            run_push(&push_config(args), None).unwrap()
+        };
+
+        let first = upload();
+        assert!(first.ok, "{:?}", first.results);
+        assert_eq!(batches.calls(), 1);
+
+        let resumed = upload();
+        assert!(resumed.ok, "{:?}", resumed.results);
+        assert_eq!(resumed.messages_attempted, 0);
+        assert_eq!(batches.calls(), 1, "the resumed Upload sends no batch");
+    }
 
     #[test]
     fn finished_push_event_reports_complete_upload_and_totals() {

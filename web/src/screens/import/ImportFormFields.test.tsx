@@ -79,8 +79,6 @@ function renderForm(override: Partial<ImportFormFieldsProps> = {}) {
     onToggleFormat: vi.fn(),
     processingOpen: false,
     onToggleProcessing: vi.fn(),
-    force: false,
-    onForceChange: vi.fn(),
     obfuscate: false,
     onObfuscateChange: vi.fn(),
     timeZone: "America/New_York",

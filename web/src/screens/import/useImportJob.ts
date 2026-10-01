@@ -206,7 +206,6 @@ export type ImportJobFormValues = {
   ownerPhones: string[];
   /** Owner email addresses; only SMS Backup+ reads them. */
   ownerEmails: string[];
-  force: boolean;
   obfuscate: boolean;
   /** The IANA zone iMazing dates are read in: the account's, or the one picked
    * under Processing Options. Only the iMazing extract reads it, because its
@@ -752,7 +751,6 @@ async function deleteStagingAfterSuccess(): Promise<string | null> {
  */
 async function runPush(
   token: string | null,
-  form: ImportJobFormValues,
   sessionId: number,
   outputDir: string,
   approvedPlan?: StagingSummary,
@@ -775,7 +773,6 @@ async function runPush(
         key: token,
         input_dir: outputDir,
         mode: "append",
-        force: form.force,
         skip_attachments: false,
         // Extract (or the Media stage) just wrote these files. Matching
         // size_bytes lets message-crate-push skip a second full-file hash.
@@ -995,7 +992,7 @@ async function runImport(
             : { ...step, status: "done", detail: "Already staged" },
         ),
       });
-      await runPush(token, form, sessionId, outputDir, resume.approved);
+      await runPush(token, sessionId, outputDir, resume.approved);
       return;
     }
 
@@ -1243,7 +1240,7 @@ export function useImportJob() {
       if (phase === "staging_review" && mediaJobVerb(form.attachmentMedia) !== null) {
         await runMediaPass(form, sessionId, outputDir, approvedSummary);
       } else {
-        await runPush(token, form, sessionId, outputDir, approvedSummary);
+        await runPush(token, sessionId, outputDir, approvedSummary);
       }
     } finally {
       scratch.reviewAction = false;

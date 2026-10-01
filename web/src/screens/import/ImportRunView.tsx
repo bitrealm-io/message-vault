@@ -287,10 +287,9 @@ export default function ImportRunView({
             ) : null}
           </FactGroup>
         ) : null}
-        {form && (form.force || form.obfuscate) ? (
+        {form?.obfuscate ? (
           <FactGroup title="Options">
-            {form.force ? <FactRow label="Force reprocessing" value="On" /> : null}
-            {form.obfuscate ? <FactRow label="Obfuscate" value="On" /> : null}
+            <FactRow label="Obfuscate" value="On" />
           </FactGroup>
         ) : null}
       </FactGroups>

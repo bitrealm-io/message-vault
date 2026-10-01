@@ -43,6 +43,7 @@ message-crate-http = { path = "../crates/libs/http" }
 
 [dev-dependencies]
 tempfile = "3"
+httpmock = "0.8"
 
 # Mirrors the workspace lints in the root Cargo.toml; this crate is outside
 # the workspace and cannot inherit them.

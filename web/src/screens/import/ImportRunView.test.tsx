@@ -47,7 +47,6 @@ function form(overrides: Partial<ImportJobFormValues> = {}): ImportJobFormValues
     minSizeMb: "20",
     ownerPhones: [],
     ownerEmails: [],
-    force: false,
     obfuscate: false,
     isAndroidSms: false,
     attachmentRoot: "",
@@ -252,14 +251,13 @@ describe("ImportRunView", () => {
     expect(openPathInExplorer).toHaveBeenCalledWith(`${staging}/message-crate-push.log`);
   });
 
-  it("shows the options group only when a switch is on", () => {
+  it("shows the options group only when Obfuscate is on", () => {
     const view = renderView();
     expect(screen.queryByText("Options")).not.toBeInTheDocument();
     view.unmount();
     renderView({ form: form({ obfuscate: true }) });
     expect(screen.getByText("Options")).toBeInTheDocument();
     expect(screen.getByText("Obfuscate")).toBeInTheDocument();
-    expect(screen.queryByText("Force reprocessing")).not.toBeInTheDocument();
   });
 
   it("offers Cancel inside the running stage, disabled while a not-cancellable step runs", () => {

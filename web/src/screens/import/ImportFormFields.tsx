@@ -108,8 +108,6 @@ export type ImportFormFieldsProps = {
   onToggleFormat: () => void;
   processingOpen: boolean;
   onToggleProcessing: () => void;
-  force: boolean;
-  onForceChange: (value: boolean) => void;
   obfuscate: boolean;
   onObfuscateChange: (value: boolean) => void;
   /** The IANA zone iMazing dates are read in; shown only for that source. */
@@ -696,13 +694,6 @@ export default function ImportFormFields(props: ImportFormFieldsProps) {
         onToggle={props.onToggleProcessing}
       >
         <div className="mb-2 flex flex-col items-start gap-3">
-          <Checkbox
-            labelClassName="text-[0.875rem]"
-            checked={props.force}
-            onChange={props.onForceChange}
-          >
-            Force reprocessing
-          </Checkbox>
           {isIos || isAndroidSms ? (
             <Checkbox
               labelClassName="text-[0.875rem]"

@@ -3,13 +3,15 @@ import { landingLinks } from "../../lib/landing-links";
 ---
 
 <header class="mc-header">
-  <a class="mc-mark" href={landingLinks.home}>Message Crate</a>
-  <nav class="mc-nav" aria-label="Primary">
-    <a href={landingLinks.features}>Features</a>
-    <a href={landingLinks.download}>Download</a>
-    <a href={landingLinks.docs}>Docs</a>
-    <a class="mc-btn mc-btn-primary mc-btn-nav" href={landingLinks.docs}
-      >Get started</a
-    >
-  </nav>
+  <div class="mc-wrap mc-header-inner">
+    <a class="mc-mark" href={landingLinks.home}>Message Crate</a>
+    <nav class="mc-nav" aria-label="Primary">
+      <a href={landingLinks.howItWorks}>How it works</a>
+      <a href={landingLinks.features}>Features</a>
+      <a href={landingLinks.docs}>Docs</a>
+      <a href={landingLinks.changelog}>Changelog</a>
+      <a href={landingLinks.github}>GitHub</a>
+    </nav>
+    <a class="mc-btn-header" href={landingLinks.getStarted}>Get started</a>
+  </div>
 </header>

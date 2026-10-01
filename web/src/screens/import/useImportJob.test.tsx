@@ -224,7 +224,6 @@ const baseForm = {
   minSizeMb: "",
   ownerPhones: [],
   ownerEmails: [],
-  force: false,
   obfuscate: false,
   isAndroidSms: false,
   attachmentRoot: "",
@@ -1280,7 +1279,6 @@ const validSnapshot = {
   minSizeMb: "20",
   ownerPhones: ["+15551234567"],
   ownerEmails: [],
-  force: false,
   obfuscate: false,
   isAndroidSms: false,
   attachmentRoot: "",
@@ -1310,7 +1308,7 @@ describe("restoreFormFromSnapshot", () => {
     ["a snapshot missing most fields", { source: "imessage-ios" }],
     ["an invalid attachmentMedia", { ...validSnapshot, attachmentMedia: "not-a-real-mode" }],
     ["a non-array ownerPhones", { ...validSnapshot, ownerPhones: "+15551234567" }],
-    ["a non-boolean force", { ...validSnapshot, force: "yes" }],
+    ["a non-boolean obfuscate", { ...validSnapshot, obfuscate: "yes" }],
   ])("returns null for a malformed snapshot (%s)", (_label, raw) => {
     expect(restoreFormFromSnapshot(raw)).toBeNull();
   });

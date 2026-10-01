@@ -197,7 +197,6 @@ export default function ImportScreen() {
   const [ownerEmails, setOwnerEmails] = useState("");
   const [formatOpen, setFormatOpen] = useState(true);
   const [processingOpen, setProcessingOpen] = useState(false);
-  const [force, setForce] = useState(false);
   const [obfuscate, setObfuscate] = useState(false);
   /** The zone iMazing dates are read in. The account's zone until the person
    * picks another under Processing Options; null means "the account's". */
@@ -330,7 +329,6 @@ export default function ImportScreen() {
     setOwnerPhones(restored.ownerPhones);
     ownerEmailsSeededRef.current = true;
     setOwnerEmails(restored.ownerEmails.join(", "));
-    setForce(restored.force);
     setObfuscate(restored.obfuscate);
     setTimeZoneOverride(restored.timeZone);
   }
@@ -760,8 +758,6 @@ export default function ImportScreen() {
           onToggleFormat={() => setFormatOpen((o) => !o)}
           processingOpen={processingOpen}
           onToggleProcessing={() => setProcessingOpen((o) => !o)}
-          force={force}
-          onForceChange={setForce}
           obfuscate={obfuscate}
           onObfuscateChange={setObfuscate}
           timeZone={timeZone}
@@ -778,7 +774,6 @@ export default function ImportScreen() {
               minSizeMb,
               ownerPhones: flushedPhones ?? ownerPhones,
               ownerEmails: splitEmails(ownerEmails),
-              force,
               obfuscate,
               timeZone,
               isAndroidSms,

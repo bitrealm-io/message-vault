@@ -79,8 +79,6 @@ function renderForm(override: Partial<ImportFormFieldsProps> = {}) {
     onToggleFormat: vi.fn(),
     processingOpen: false,
     onToggleProcessing: vi.fn(),
-    force: false,
-    onForceChange: vi.fn(),
     obfuscate: false,
     onObfuscateChange: vi.fn(),
     timeZone: "America/New_York",
@@ -462,6 +460,16 @@ describe("ImportFormFields Import button", () => {
     unmount();
     renderForm({ source: "imessage-ios", processingOpen: true });
     expect(screen.queryByRole("combobox", { name: "Time zone of the messages" })).toBeNull();
+  });
+
+  // The section holds a field only for some sources. For the rest it would
+  // open on nothing.
+  it("shows Processing Options only for a source with a field in it", () => {
+    const { unmount } = renderForm({ source: "imessage-ios" });
+    expect(screen.getByText("Processing Options (Advanced)")).toBeInTheDocument();
+    unmount();
+    renderForm({ source: "whatsapp-android" });
+    expect(screen.queryByText("Processing Options (Advanced)")).toBeNull();
   });
 
   it("names each Android SMS source's own backup files in the folder placeholder", () => {

@@ -30,7 +30,7 @@ export function isStringArray(value: unknown): value is string[] {
  *
  * The snapshot omits `backupPassword` and `whatsappKey`, defaulted to ""
  * here: the resume path never re-runs extract, and the push only reads
- * `force` and `attachmentMedia`, both present in the snapshot.
+ * `attachmentMedia`, which is in the snapshot.
  *
  * The snapshot came from the database, not from this session's own state,
  * so its shape is checked field by field rather than trusted. Returns
@@ -53,7 +53,6 @@ export function restoreFormFromSnapshot(raw: unknown): ImportJobFormValues | nul
   if (!isStringArray(r.ownerPhones)) return null;
   // Snapshots written before SMS Backup+ had an email field carry none.
   const ownerEmails = isStringArray(r.ownerEmails) ? r.ownerEmails : [];
-  if (typeof r.force !== "boolean") return null;
   if (typeof r.obfuscate !== "boolean") return null;
   if (typeof r.timeZone !== "string") return null;
   if (typeof r.isAndroidSms !== "boolean") return null;
@@ -75,7 +74,6 @@ export function restoreFormFromSnapshot(raw: unknown): ImportJobFormValues | nul
     minSizeMb: r.minSizeMb,
     ownerPhones: r.ownerPhones,
     ownerEmails,
-    force: r.force,
     obfuscate: r.obfuscate,
     timeZone: r.timeZone,
     isAndroidSms: r.isAndroidSms,

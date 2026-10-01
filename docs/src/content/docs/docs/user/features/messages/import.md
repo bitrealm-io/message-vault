@@ -1,6 +1,6 @@
 ---
 title: Import
-description: Every field of the desktop app's Import form, every stage of an Import Run, and what resuming and Force reprocessing do.
+description: Every field of the desktop app's Import form, every stage of an Import Run, and what resuming does.
 ---
 
 **Import** reads a backup on the computer and stores its messages in the Message Crate.
@@ -32,6 +32,7 @@ Leaving the run shows the message above.
 ## The form
 
 The form has two sections, **Import Messages** and **Processing Options (Advanced)**, and an **Import** button.
+**Processing Options (Advanced)** is shown only for a source that has a field in it.
 
 The first list in **Import Messages** is the source.
 The fields under it depend on the source.
@@ -158,10 +159,10 @@ It starts on **Copy**.
 ### Processing Options (Advanced)
 
 The section is closed when the form opens.
+A source with none of the fields below has no such section.
 
 | Field | Shown for | What it does |
 |---|---|---|
-| **Force reprocessing** | Every source | Makes Upload ignore its record of what it already sent. See [Force reprocessing](#force-reprocessing). |
 | **Obfuscate** | iMessage with **iPhone backup**, and the three Android SMS sources | Replaces names, numbers, message text, and attachments with made-up substitutes. See [Obfuscate](/docs/user/features/messages/attachments-and-media/#obfuscate). |
 | **Time zone of the messages** | iMazing | See above. |
 | **WhatsApp phone number (Optional)** | WhatsApp with **iPhone** | See above. |
@@ -202,7 +203,7 @@ The Staging row shows:
 - **Staging directory**, a link that opens the folder.
 - **Conversations**, with the count of **Messages** under it.
 - **Attachments**: the **Action** chosen on the form, the **Count**, and the **Total size**.
-- **Options**, only when **Force reprocessing** or **Obfuscate** is on.
+- **Options**, only when **Obfuscate** is on.
 
 The Staging Directory is a new folder for each run, named `staging-` followed by the source and the date and time.
 It is made under `~/message-crate` unless **Settings → System** names another **Staging directory**.
@@ -301,16 +302,6 @@ It records each attachment, each batch of messages, and each conversation that r
 
 A resumed Upload reads the journal and skips what is recorded there.
 That is why resuming an interrupted Upload does not send everything again.
-
-### Force reprocessing
-
-**Force reprocessing** makes Upload start with an empty journal, so it sends every staged message and attachment again.
-
-It does not create duplicates and does not delete anything.
-The Message Crate recognises a message it already holds and counts it under **Duplicate**, and stores an attachment once however many times it is sent.
-
-The setting is chosen on the form and travels with the run.
-On a new run the journal is empty already, so the setting changes only what a later resume of that run's Upload does.
 
 ## After the run
 

@@ -711,7 +711,7 @@ fn profiles_attachment_upload_phases() {
     let head = server.mock(|when, then| {
         when.method("HEAD").path(format!("/v1/assets/{digest}"));
         then.status(404).json_body(json!({
-            "type": "https://bitrealm.io/vault/developer/reference/errors/not-found",
+            "type": "https://messagecrate.app/docs/developer/reference/errors/not-found",
             "title": "Not found",
             "status": 404,
             "detail": "asset not found"
@@ -1070,7 +1070,7 @@ fn multipart_upload_when_over_proxy_threshold() {
     let head = server.mock(|when, then| {
         when.method("HEAD").path(format!("/v1/assets/{digest}"));
         then.status(404).json_body(json!({
-            "type": "https://bitrealm.io/vault/developer/reference/errors/not-found",
+            "type": "https://messagecrate.app/docs/developer/reference/errors/not-found",
             "title": "Not found",
             "status": 404,
             "detail": "asset not found"
@@ -1203,7 +1203,7 @@ fn multipart_aborts_on_hash_mismatch_complete() {
         when.method(POST)
             .path(format!("/v1/assets/{digest}/uploads/up-bad/complete"));
         then.status(400).json_body(json!({
-            "type": "https://bitrealm.io/vault/developer/reference/errors/asset-upload-invalid",
+            "type": "https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid",
             "title": "Asset upload invalid",
             "status": 400,
             "detail": "sha256 mismatch: claimed abc, got def"
@@ -1356,7 +1356,7 @@ fn shared_attachment_uploaded_once_across_conversations() {
     let head = server.mock(|when, then| {
         when.method("HEAD").path(format!("/v1/assets/{digest}"));
         then.status(404).json_body(json!({
-            "type": "https://bitrealm.io/vault/developer/reference/errors/not-found",
+            "type": "https://messagecrate.app/docs/developer/reference/errors/not-found",
             "title": "Not found",
             "status": 404,
             "detail": "asset not found"

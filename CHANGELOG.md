@@ -64,6 +64,14 @@ released versions carry their date on the heading.
 
 ### Design
 
+- 2026-09-30 **The project moved.** The repository is now
+  `messagecrate/message-crate`, the documentation is at
+  <https://messagecrate.app/docs/>, the hosted product answers at
+  <https://my.messagecrate.app>, and the Docker image is
+  `bitrealm/message-crate`. Every error response's `type` URL now points at
+  the new documentation host. The product name in copy and the names inside
+  the code change in the next two pull requests.
+
 - 2026-09-22 **An account identity means ownership.** The Profile tab now
   says what the identities are for: your phone numbers and emails, which
   Import uses to determine which messages belong to you. The glossary and
@@ -711,5 +719,5 @@ The first release: command-line tools that read a phone backup and write CSV.
 ---
 
 Installable builds also appear on
-[GitHub Releases](https://github.com/bitrealm-io/message-vault/releases), and a
-summary is published at <https://bitrealm.io/changelog/>.
+[GitHub Releases](https://github.com/messagecrate/message-crate/releases), and a
+summary is published at <https://messagecrate.app/changelog/>.

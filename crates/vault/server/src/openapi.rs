@@ -17,7 +17,7 @@ use crate::server::AppState;
         description = "HTTP API for a local Message Vault. Bearer session tokens come from login. API tokens come from Settings → Account.",
         license(
             name = "Fair Core License 1.0 (ALv2 future)",
-            url = "https://github.com/bitrealm-io/message-vault/blob/main/LICENSE.md"
+            url = "https://github.com/messagecrate/message-crate/blob/main/LICENSE.md"
         ),
         version = env!("CARGO_PKG_VERSION")
     ),

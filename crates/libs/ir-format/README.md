@@ -14,7 +14,7 @@ Workspace setup: [CONTRIBUTING.md](../../../CONTRIBUTING.md).
 
 ## Docs
 
-This crate is a library. Contributor notes: [Common message](https://bitrealm.io/vault/developer/architecture/common-message/). Mail archives: https://bitrealm.io/vault/developer/formats/mail-archive/ . XML output: https://bitrealm.io/vault/developer/formats/sms-backup-restore-xml/
+This crate is a library. Contributor notes: [Common message](https://messagecrate.app/docs/developer/architecture/common-message/). Mail archives: https://messagecrate.app/docs/developer/formats/mail-archive/ . XML output: https://messagecrate.app/docs/developer/formats/sms-backup-restore-xml/
 
 ## License
 

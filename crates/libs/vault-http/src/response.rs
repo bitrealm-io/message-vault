@@ -88,7 +88,7 @@ mod tests {
         let err = ok_json::<Answer>(
             "asset upload",
             reqwest::StatusCode::BAD_REQUEST,
-            r#"{"type":"https://bitrealm.io/vault/developer/reference/errors/asset-upload-invalid","title":"Asset upload invalid","status":400,"detail":"sha256 mismatch: claimed abc, got def","request_id":"3f2b1c0e-8d4a-4b6e-9f21-5c7d8e9a0b1c"}"#,
+            r#"{"type":"https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid","title":"Asset upload invalid","status":400,"detail":"sha256 mismatch: claimed abc, got def","request_id":"3f2b1c0e-8d4a-4b6e-9f21-5c7d8e9a0b1c"}"#,
         )
         .unwrap_err();
         assert_eq!(

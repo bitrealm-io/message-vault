@@ -17,11 +17,11 @@ use crate::progress::{ProgressEvent, ProgressSink, emit_progress};
 pub enum OutputFormat {
     /// Per-conversation CSV.
     Csv,
-    /// Per-conversation folder of `.eml` files (see <https://bitrealm.io/vault/developer/formats/mail-archive/>).
+    /// Per-conversation folder of `.eml` files (see <https://messagecrate.app/docs/developer/formats/mail-archive/>).
     Eml,
     /// Per-conversation `.mbox` (mboxrd) mailbox file.
     Mbox,
-    /// Per-conversation common message JSON (default; see <https://bitrealm.io/vault/developer/architecture/common-message/>).
+    /// Per-conversation common message JSON (default; see <https://messagecrate.app/docs/developer/architecture/common-message/>).
     #[default]
     Json,
     /// Per-conversation common message as JSON Lines (header + one message per line).

@@ -11,14 +11,14 @@ cargo test -p message-vault-server
 cargo run --release -p message-vault-server -- serve
 ```
 
-Docker (release-shaped image from this checkout): `docker compose -f docker/compose.release.yml up --build`. Day-to-day from a clone: `./scripts/run-vault-dev.sh` (see [CONTRIBUTING.md](../../../CONTRIBUTING.md)). Published image: [Try the vault](https://bitrealm.io/vault/user/get-started/try-the-vault/).
+Docker (release-shaped image from this checkout): `docker compose -f docker/compose.release.yml up --build`. Day-to-day from a clone: `./scripts/run-vault-dev.sh` (see [CONTRIBUTING.md](../../../CONTRIBUTING.md)). Published image: [Try the vault](https://messagecrate.app/docs/user/get-started/try-the-vault/).
 
 ## Docs
 
-- Try the vault: https://bitrealm.io/vault/user/get-started/try-the-vault/
-- Operator Docker: https://bitrealm.io/vault/developer/docker-compose/
-- Server CLI: https://bitrealm.io/vault/developer/reference/server-cli/
-- API: https://bitrealm.io/vault/developer/reference/api/
+- Try the vault: https://messagecrate.app/docs/user/get-started/try-the-vault/
+- Operator Docker: https://messagecrate.app/docs/developer/docker-compose/
+- Server CLI: https://messagecrate.app/docs/developer/reference/server-cli/
+- API: https://messagecrate.app/docs/developer/reference/api/
 
 ## License
 

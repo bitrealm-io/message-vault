@@ -2,15 +2,15 @@
 export const landingLinks = {
   home: "/",
   features: "/#features",
-  download: "https://github.com/bitrealm-io/message-vault/releases",
-  docs: "/vault/user/",
-  developer: "/vault/developer/",
+  download: "https://github.com/messagecrate/message-crate/releases",
+  docs: "/docs/user/",
+  developer: "/docs/developer/",
   changelog: "/changelog",
   faq: "/faq",
   about: "/about",
   contact: "/contact",
-  github: "https://github.com/bitrealm-io/message-vault",
+  github: "https://github.com/messagecrate/message-crate",
   githubChangelog:
-    "https://github.com/bitrealm-io/message-vault/blob/main/CHANGELOG.md",
-  githubIssues: "https://github.com/bitrealm-io/message-vault/issues",
+    "https://github.com/messagecrate/message-crate/blob/main/CHANGELOG.md",
+  githubIssues: "https://github.com/messagecrate/message-crate/issues",
 } as const;

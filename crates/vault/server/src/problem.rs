@@ -4,14 +4,14 @@
 //! This is the one place a type is declared. [`crate::server::ApiError`] names
 //! one per variant, the OpenAPI document describes the body through
 //! [`Problem`], and `dump-error-docs` ([`crate::error_docs`]) writes one page
-//! per type under `docs/src/content/docs/vault/developer/reference/errors/`
+//! per type under `docs/src/content/docs/docs/developer/reference/errors/`
 //! from the same declarations, so nothing has to be kept in step by hand.
 
 use axum::http::StatusCode;
 pub use vault_api_types::Problem;
 
 /// Where the type pages are published; each `type` URL is this plus the slug.
-pub const ERRORS_URL: &str = "https://bitrealm.io/vault/developer/reference/errors/";
+pub const ERRORS_URL: &str = "https://messagecrate.app/docs/developer/reference/errors/";
 
 /// The `type` of a `500 Internal Server Error`: no page could say anything a
 /// reader could act on.

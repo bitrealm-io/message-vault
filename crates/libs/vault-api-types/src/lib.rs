@@ -572,7 +572,7 @@ mod problem_tests {
 
     #[test]
     fn a_problem_round_trips_and_names_its_slug() {
-        let text = r#"{"type":"https://bitrealm.io/vault/developer/reference/errors/username-taken","title":"Username taken","status":409,"detail":"The username 'alice' already belongs to an account.","request_id":"3f2b1c0e-8d4a-4b6e-9f21-5c7d8e9a0b1c"}"#;
+        let text = r#"{"type":"https://messagecrate.app/docs/developer/reference/errors/username-taken","title":"Username taken","status":409,"detail":"The username 'alice' already belongs to an account.","request_id":"3f2b1c0e-8d4a-4b6e-9f21-5c7d8e9a0b1c"}"#;
         let problem: Problem = serde_json::from_str(text).unwrap();
         assert_eq!(problem.slug(), Some("username-taken"));
         assert_eq!(
@@ -598,7 +598,8 @@ mod problem_tests {
         assert_eq!(problem.slug(), None);
         assert_eq!(problem.sentence(), "Internal server error");
         let problem = Problem {
-            kind: "https://bitrealm.io/vault/developer/reference/errors/validation-failed".into(),
+            kind: "https://messagecrate.app/docs/developer/reference/errors/validation-failed"
+                .into(),
             title: "Validation failed".into(),
             status: 422,
             errors: Some(vec![

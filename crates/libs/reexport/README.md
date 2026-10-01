@@ -14,9 +14,9 @@ Workspace setup: [CONTRIBUTING.md](../../../CONTRIBUTING.md).
 
 ## Docs
 
-How this crate fits the export pipeline: https://bitrealm.io/vault/developer/message-transfer/
+How this crate fits the export pipeline: https://messagecrate.app/docs/developer/message-transfer/
 
-How conversion works: https://bitrealm.io/vault/developer/formats/convert/
+How conversion works: https://messagecrate.app/docs/developer/formats/convert/
 
 ## License
 

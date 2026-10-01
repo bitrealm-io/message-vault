@@ -4,7 +4,7 @@
 //! metadata, participants, and messages. Backup converters parse vendor
 //! formats into this type. Writing files (JSON, CSV, EML, and so on) lives
 //! in `message-ir-format`. Converting an existing export directory lives in
-//! `message-reexport`. See the [common message](https://bitrealm.io/vault/developer/architecture/common-message/) page.
+//! `message-reexport`. See the [common message](https://messagecrate.app/docs/developer/architecture/common-message/) page.
 //!
 //! Converters stage parsed rows in [`PendingMessage`] and
 //! [`PendingConversation`] (with per-converter metadata in their `extra`
@@ -45,7 +45,7 @@ pub const CHAT_ID_IS_NAME: &str = "chat_id_is_name";
 /// One exported chat: export metadata, conversation roster and stats, and messages.
 ///
 /// This is the common-message schema every exporter writes and every reader
-/// parses. See the [common message](https://bitrealm.io/vault/developer/architecture/common-message/) page.
+/// parses. See the [common message](https://messagecrate.app/docs/developer/architecture/common-message/) page.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConversationDocument {
     /// Schema version written into this document (currently 4).

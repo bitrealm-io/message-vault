@@ -8,7 +8,7 @@ edition = "2024"
 # terms. The wire types are the only thing the two sides share.
 license = "MIT OR Apache-2.0"
 description = "Line-delimited JSON protocol between the Message Vault desktop app and the imessage-reader helper process"
-repository = "https://github.com/bitrealm-io/message-vault"
+repository = "https://github.com/messagecrate/message-crate"
 
 [dependencies]
 serde = { workspace = true }

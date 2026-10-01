@@ -6,7 +6,7 @@
 
 <br />
 <div align="center">
-  <a href="https://github.com/bitrealm-io/message-vault">
+  <a href="https://github.com/messagecrate/message-crate">
     <img src="docs/img/vault_icon.png" alt="Message Vault icon" width="250" height="250">
   </a>
 
@@ -15,13 +15,13 @@
     Your chat history, in a vault you run yourself.
     <br />
     <br />
-    <a href="https://bitrealm.io/vault/user/"><strong>Explore the docs »</strong></a>
+    <a href="https://messagecrate.app/docs/user/"><strong>Explore the docs »</strong></a>
     <br />
-    <a href="https://bitrealm.io/vault/user/get-started/try-the-vault/">Try the vault</a>
+    <a href="https://messagecrate.app/docs/user/get-started/try-the-vault/">Try the vault</a>
     &middot;
-    <a href="https://github.com/bitrealm-io/message-vault/issues/new?labels=bug&template=bug_report.md">Report Bug</a>
+    <a href="https://github.com/messagecrate/message-crate/issues/new?labels=bug&template=bug_report.md">Report Bug</a>
     &middot;
-    <a href="https://github.com/bitrealm-io/message-vault/issues/new?labels=enhancement&template=feature_request.md">Request Feature</a>
+    <a href="https://github.com/messagecrate/message-crate/issues/new?labels=enhancement&template=feature_request.md">Request Feature</a>
   </p>
 </div>
 
@@ -76,20 +76,20 @@ This project is for people who want a personal copy of their phone messages. Tha
 
 ## Getting Started
 
-Follow the [User Guide](https://bitrealm.io/vault/user/get-started/what-is-message-vault/) to run the demo and import your own data.
+Follow the [User Guide](https://messagecrate.app/docs/user/get-started/what-is-message-vault/) to run the demo and import your own data.
 
-The [Developer Guide](https://bitrealm.io/vault/developer/) covers setting up a local development environment and compiling from source.
+The [Developer Guide](https://messagecrate.app/docs/developer/) covers setting up a local development environment and compiling from source.
 
 ## Contributing
 
-Contributions are welcome. The [Contributing guide](https://bitrealm.io/vault/developer/contributing/) covers the development environment, running the code, and how pull requests work.
+Contributions are welcome. The [Contributing guide](https://messagecrate.app/docs/developer/contributing/) covers the development environment, running the code, and how pull requests work.
 
 ## Additional documentation
 
-Most documentation lives in the guidebook at [bitrealm.io](https://bitrealm.io):
+Most documentation lives in the guidebook at [messagecrate.app](https://messagecrate.app):
 
-- [User Guide](https://bitrealm.io/vault/user/)
-- [Developer Guide](https://bitrealm.io/vault/developer/) — including [Architecture](https://bitrealm.io/vault/developer/vault-design/) (Vault Design, Message Transfer, Common message)
+- [User Guide](https://messagecrate.app/docs/user/)
+- [Developer Guide](https://messagecrate.app/docs/developer/) — including [Architecture](https://messagecrate.app/docs/developer/vault-design/) (Vault Design, Message Transfer, Common message)
 
 ## License
 
@@ -120,11 +120,11 @@ Matt Beisser - [vault@bitrealm.io](mailto:vault@bitrealm.io)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-[issues-shield]: https://img.shields.io/github/issues/bitrealm-io/message-vault.svg
-[issues-url]: https://github.com/bitrealm-io/message-vault/issues
+[issues-shield]: https://img.shields.io/github/issues/messagecrate/message-crate.svg
+[issues-url]: https://github.com/messagecrate/message-crate/issues
 [license-shield]: https://img.shields.io/badge/license-FCL_1.0-blue
 [source-available-shield]: https://img.shields.io/badge/source--available-not_open_source-orange
-[license-url]: https://github.com/bitrealm-io/message-vault/blob/main/LICENSE.md
+[license-url]: https://github.com/messagecrate/message-crate/blob/main/LICENSE.md
 
 [React.js]: https://img.shields.io/badge/React-%2320232a.svg?logo=react&logoColor=%2361DAFB
 [React-url]: https://reactjs.org/

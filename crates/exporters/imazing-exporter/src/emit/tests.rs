@@ -670,3 +670,40 @@ fn a_same_named_file_in_two_chat_folders_goes_to_its_own_chat() {
         );
     }
 }
+
+/// A Messages chat named "A & B" whose rows carry no address is a group of
+/// people the source named and recorded no address for. Each is a
+/// participant with a name and no identity. The chat id is a stem of the
+/// names, which reaches nobody, so it is never a participant's handle.
+#[test]
+fn a_group_known_only_by_names_lists_each_named_person_without_a_handle() {
+    let documents = convert_rows(
+        "Alice Example & Bob Example,2020-01-01 12:00:00,iMessage,Incoming,,Alice Example,Read,,,Hi,,,\n\
+Alice Example & Bob Example,2020-01-01 12:01:00,iMessage,Outgoing,,,Sent,,,Hey,,,\n",
+    );
+    assert_eq!(documents.len(), 1);
+    let conversation = &documents[0].conversation;
+    assert_eq!(
+        conversation.conversation_type,
+        message_ir::IrConversationType::Group
+    );
+    assert_eq!(conversation.chat_identifier, "Alice_Example___Bob_Example");
+    let participants: Vec<_> = conversation
+        .participants
+        .iter()
+        .map(|p| {
+            (
+                p.handle.as_deref(),
+                p.display_name.as_deref(),
+                p.handle_type,
+            )
+        })
+        .collect();
+    assert_eq!(
+        participants,
+        vec![
+            (None, Some("Alice Example"), None),
+            (None, Some("Bob Example"), None),
+        ]
+    );
+}

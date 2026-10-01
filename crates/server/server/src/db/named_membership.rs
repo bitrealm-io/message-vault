@@ -3,8 +3,8 @@
 //! Both domains store a named set (rows in a names table) whose members are
 //! conversation or contact ids. The HTTP layer addresses a set by id through
 //! `list_sets`, `get_set`, `create_set`, `rename_set`, `delete_set`,
-//! `list_member_ids_of`, and `patch_members`. The import path still fills a
-//! group by name through `set_membership`, which creates the name on demand.
+//! `list_member_ids_of`, and `patch_members`. Only tests fill a set by name,
+//! through `set_membership`, which creates the name on demand.
 //! The operations are identical apart from table and column names, reserved
 //! names, and one post-change hook, so this module implements them once
 //! behind [`MembershipSpec`].
@@ -218,6 +218,7 @@ async fn find_id(
 }
 
 /// Id of the named set called `name`, creating it if needed.
+#[cfg(test)]
 async fn ensure_id(
     spec: &MembershipSpec,
     conn: &mut AnyConnection,
@@ -296,6 +297,11 @@ async fn member_exists(
 }
 
 /// Add or remove one name for many members. Creates the name when enabling.
+///
+/// Test builds only: tests across the server use it to put a contact in a
+/// group in one call. Routes go by id through `patch_members`, and an import
+/// makes its own group with `db::contacts::create_import_group`.
+#[cfg(test)]
 pub async fn set_membership(
     spec: &MembershipSpec,
     conn: &mut AnyConnection,

@@ -2216,6 +2216,177 @@ async fn completing_an_import_with_no_messages_creates_no_saved_search() {
     );
 }
 
+/// Create an Import Run for `source`, post `body` as its one batch, complete
+/// it, and hand back the run's id and the day it finished.
+async fn completed_run(
+    state: &crate::server::AppState,
+    token: &str,
+    source: &str,
+    body: String,
+) -> (i64, String) {
+    let path = batches_path(state, token, source).await;
+    let import_id: i64 = path
+        .trim_start_matches("/v1/imports/")
+        .trim_end_matches("/batches")
+        .parse()
+        .unwrap();
+    let (status, text) =
+        crate::test_support::post_raw(state, &path, token, "application/jsonl", body).await;
+    assert_eq!(status, axum::http::StatusCode::OK, "{text}");
+    let date = complete_run(state, token, import_id).await;
+    (import_id, date)
+}
+
+/// Each Import Run gets a Contact Group of its own. A second run from the
+/// same source on the same day takes the next free name, and neither group
+/// holds the other run's contacts (#956).
+#[tokio::test]
+async fn two_import_runs_from_one_source_on_one_day_make_two_contact_groups() {
+    let (state, _fixture, token) = importer().await;
+    let (first, first_date) = completed_run(
+        &state,
+        &token,
+        "whatsapp",
+        wipe_test_batch("whatsapp", &["g-1"]),
+    )
+    .await;
+    // A different person, so the second run has a contact of its own to record.
+    let second_body = wipe_test_batch("whatsapp", &["g-2"]).replace("+15550000002", "+15550000003");
+    let (second, second_date) = completed_run(&state, &token, "whatsapp", second_body).await;
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let first_touched = crate::db::import_contacts::contact_ids(&mut conn, first)
+        .await
+        .unwrap();
+    let second_touched = crate::db::import_contacts::contact_ids(&mut conn, second)
+        .await
+        .unwrap();
+    drop(conn);
+    assert!(!first_touched.is_empty() && !second_touched.is_empty());
+    assert!(
+        first_touched.iter().all(|id| !second_touched.contains(id)),
+        "the runs must touch different contacts: {first_touched:?} {second_touched:?}"
+    );
+
+    // The suffix appears when both runs finished on one UTC day, which is
+    // every run of this test except one that straddles midnight.
+    let second_name = if second_date == first_date {
+        format!("whatsapp import {second_date} 2")
+    } else {
+        format!("whatsapp import {second_date}")
+    };
+    let (_, groups) = shortcuts(&state, run_account(&state, first).await).await;
+    assert_eq!(
+        groups,
+        [
+            (
+                format!("whatsapp import {first_date}"),
+                "import".to_string(),
+                first_touched
+            ),
+            (second_name, "import".to_string(), second_touched),
+        ]
+    );
+}
+
+/// A Contact Group a person made is theirs, even under the name an import
+/// would use: the import leaves its kind and its members alone and takes
+/// the next free name for its own group. A name is taken whatever its
+/// case, so the hand-made ` 2` in capitals sends the import to ` 3` (#956).
+#[tokio::test]
+async fn an_import_leaves_a_hand_made_contact_group_with_its_name_alone() {
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+    let import_id: i64 = path
+        .trim_start_matches("/v1/imports/")
+        .trim_end_matches("/batches")
+        .parse()
+        .unwrap();
+    let account = run_account(&state, import_id).await;
+    let (status, text) = crate::test_support::post_raw(
+        &state,
+        &path,
+        &token,
+        "application/jsonl",
+        wipe_test_batch("whatsapp", &["g-1"]),
+    )
+    .await;
+    assert_eq!(status, axum::http::StatusCode::OK, "{text}");
+
+    // The hand-made groups are named for today and for tomorrow, so the
+    // test holds when the run finishes just past midnight UTC.
+    let spec = crate::db::named_membership::group_spec();
+    let mut conn = state.db.acquire().await.unwrap();
+    let friend = crate::db::contacts::create_contact(
+        &mut conn,
+        account,
+        "Friend",
+        crate::db::contacts::Origin::User,
+    )
+    .await
+    .unwrap();
+    let today = chrono::Utc::now().date_naive();
+    for day in [today, today.succ_opt().unwrap()] {
+        for name in [
+            format!("whatsapp import {day}"),
+            format!("WHATSAPP IMPORT {day} 2"),
+        ] {
+            let (group, _) =
+                crate::db::named_membership::create_set(spec, &mut conn, account, &name)
+                    .await
+                    .unwrap();
+            crate::db::named_membership::patch_members(
+                spec,
+                &mut conn,
+                account,
+                group,
+                &[friend],
+                &[],
+            )
+            .await
+            .unwrap();
+        }
+    }
+    drop(conn);
+
+    let date = complete_run(&state, &token, import_id).await;
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let touched = crate::db::import_contacts::contact_ids(&mut conn, import_id)
+        .await
+        .unwrap();
+    drop(conn);
+    assert!(!touched.is_empty() && !touched.contains(&friend));
+    let (_, groups) = shortcuts(&state, account).await;
+    for name in [
+        format!("whatsapp import {date}"),
+        format!("WHATSAPP IMPORT {date} 2"),
+    ] {
+        let hand_made = groups
+            .iter()
+            .find(|(group, _, _)| *group == name)
+            .expect("the hand-made group is still there");
+        assert_eq!(
+            (hand_made.1.as_str(), &hand_made.2),
+            ("manual", &vec![friend]),
+            "{groups:?}"
+        );
+    }
+    let imported: Vec<_> = groups
+        .iter()
+        .filter(|(_, kind, _)| kind == "import")
+        .collect();
+    assert_eq!(
+        imported,
+        [&(
+            format!("whatsapp import {date} 3"),
+            "import".to_string(),
+            touched
+        )],
+        "{groups:?}"
+    );
+}
+
 /// Import `path` in append mode on `conn`, as the serve path does once the
 /// schema is in place.
 async fn append_on_conn(conn: &mut AnyConnection, path: &Path, root: &Path, source: &str) {

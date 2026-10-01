@@ -82,6 +82,9 @@ The account holder is left out, because the account holder is never a participan
 
 When an Import Run completes, Message Crate creates a Contact Group for the contacts the run changed.
 The group is named for the source and the day the run finished, in UTC: `whatsapp import 2026-10-01`.
+Each run gets a group of its own.
+When a Contact Group already has that name, the new group takes the next free one: `whatsapp import 2026-10-01 2`, then `whatsapp import 2026-10-01 3`.
+An import never adds contacts to a group that already exists, whether an earlier run or a person made it.
 
 Its members are the contacts the run:
 
@@ -91,7 +94,6 @@ Its members are the contacts the run:
 - made in place of a trashed contact.
 
 A run that changed no contact creates no group.
-Two runs from the same source that finish on the same day share one group, because the name is the same.
 
 The membership is fixed when the run completes.
 It records what the run brought in, so it does not change as contacts are renamed later.

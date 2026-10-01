@@ -332,14 +332,36 @@ closed, until the person decides. The stop is named for what the person does
 there; "approve" stays the word for the decision that continues the run.
 _Avoid_: Gate, Approval (for the stop), Checkpoint, Confirmation, Deny
 
+**Message Crate Directory**:
+The one directory the desktop app keeps on a computer, made the first time
+the app starts. It holds the Data Directory of the Message Crate the app
+starts, the Staging Directory, and the Tools Directory. It exists on every
+computer the app runs on, including one whose app connects to a Message
+Crate elsewhere.
+_Avoid_: Folder, App Data, Home Directory
+
+**Data Directory**:
+The directory a Message Crate keeps everything it stores in: its database
+and each account's attachments. One Message Crate has one Data Directory,
+and a copy of it is a complete backup. The desktop app's is inside the
+Message Crate Directory; a Docker Message Crate's is the volume given to it.
+_Avoid_: Data Folder, DB Directory, Database Directory
+
 **Staging Directory**:
-The folder where Message Crate writes intermediate files that neither the
+The directory where Message Crate writes intermediate files that neither the
 person nor Message Crate keeps — a backup being prepared for import, or JSON
 Lines waiting to be converted into the format an export asked for. It is
 deleted when the job succeeds or is cancelled, the import log and resume
 journal with it; a failed import leaves it in place, since the staged files
 are what a retry reads.
 _Avoid_: Import Staging Directory, Temp Folder, Working Directory
+
+**Tools Directory**:
+The directory inside the Message Crate Directory where the desktop app keeps
+the programs it downloads for itself: ffmpeg, ffprobe and wtsexporter. The
+app owns its contents and replaces them when a release needs a newer
+version.
+_Avoid_: Tools Folder, Bin Directory, ffmpeg directory
 
 **Apple Messages Reader**:
 The separate program the desktop app runs to read Apple Messages from a Mac

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ImportRunStatus } from "../../../lib/serverApi";
 import {
   describeExportScope,
   formatBytes,
@@ -53,11 +54,11 @@ describe("importStatusLabel", () => {
     expect(importStatusLabel("completed")).toBe("Completed");
     expect(importStatusLabel("completed_with_issues")).toBe("Completed with issues");
     expect(importStatusLabel("failed")).toBe("Failed");
-    expect(importStatusLabel("canceled")).toBe("Canceled");
+    expect(importStatusLabel("cancelled")).toBe("Canceled");
   });
 
   it("falls back to the raw string for anything unrecognized", () => {
-    expect(importStatusLabel("mystery")).toBe("mystery");
+    expect(importStatusLabel("mystery" as ImportRunStatus)).toBe("mystery");
   });
 });
 
@@ -91,6 +92,12 @@ describe("toImportSummaryView", () => {
 
   it("treats unknown status as failed", () => {
     expect(toImportSummaryView(detail({ status: "exploded" })).status).toBe("failed");
+  });
+
+  it("reads a cancelled Import Run as cancelled, not failed", () => {
+    // The server spells the status with two Ls; the summary panel's own word
+    // for it has one.
+    expect(toImportSummaryView(detail({ status: "cancelled" })).status).toBe("canceled");
   });
 
   it("passes completed_with_issues through", () => {

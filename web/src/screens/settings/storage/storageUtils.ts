@@ -1,5 +1,6 @@
 import type { ImportSummaryView } from "../../../components/import/ImportSummaryPanel";
 import { formatDateTime } from "../../../lib/formatDate";
+import type { ImportRunStatus } from "../../../lib/serverApi";
 import type { components } from "../../../lib/serverApi.types";
 
 export const ATTACHMENT_PAGE_SIZE = 20;
@@ -87,14 +88,17 @@ function toNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-/** Map a server import status onto the summary panel's five statuses. */
-function toSummaryStatus(status: string): ImportSummaryView["status"] {
+/**
+ * Map a server import status onto the summary panel's five statuses. The
+ * server writes `cancelled`; the panel's own word for it is `canceled`.
+ */
+function toSummaryStatus(status: ImportRunStatus): ImportSummaryView["status"] {
   switch (status) {
     case "completed":
       return "completed";
     case "completed_with_issues":
       return "completed_with_issues";
-    case "canceled":
+    case "cancelled":
       return "canceled";
     case "running":
       return "running";
@@ -104,7 +108,7 @@ function toSummaryStatus(status: string): ImportSummaryView["status"] {
 }
 
 /** Human label for a raw server import status, for the import detail panel. */
-export function importStatusLabel(status: string): string {
+export function importStatusLabel(status: ImportRunStatus): string {
   switch (status) {
     case "running":
       return "Running";
@@ -114,7 +118,7 @@ export function importStatusLabel(status: string): string {
       return "Completed with issues";
     case "failed":
       return "Failed";
-    case "canceled":
+    case "cancelled":
       return "Canceled";
     default:
       return status;
@@ -142,7 +146,7 @@ export function toImportSummaryView(detail: ImportDetailResponse): ImportSummary
       : null);
 
   return {
-    status: toSummaryStatus(detail.status),
+    status: toSummaryStatus(detail.status as ImportRunStatus),
     filesTotal: toNumber(summary.files_total ?? summary.filesTotal),
     filesSucceeded: toNumber(summary.files_succeeded ?? summary.filesSucceeded),
     filesFailed: toNumber(summary.files_failed ?? summary.filesFailed),

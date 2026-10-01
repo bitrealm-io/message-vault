@@ -45,9 +45,7 @@ jobs:
       # ffmpeg so the transcode and media tests run; with CI set they fail
       # without it (media::testutil) rather than skip.
       - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev ffmpeg
+        run: ./scripts/ci-apt-install.sh libfontconfig1-dev libxkbcommon-dev ffmpeg
 
       # cargo-nextest runs each mutant's tests; .cargo/mutants.toml says why.
       - name: Install cargo-mutants and cargo-nextest

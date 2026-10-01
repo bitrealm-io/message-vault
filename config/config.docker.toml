@@ -9,8 +9,10 @@ assets_dir = "assets"
 assets_converted_dir = "assets_converted"
 
 # Bind all interfaces so Docker port publishing works.
-# Compose publishes 0.0.0.0:3000/8080 for LAN access; restrict with the host
-# firewall to your trusted subnet (do not port-forward on the router).
+# Compose publishes port 8080 on every interface of the host, so other
+# machines on the network can reach it. Restrict that with the host firewall
+# to a trusted subnet, and do not port-forward it on the router: the server
+# speaks plain HTTP.
 [server]
 bind = "0.0.0.0:8080"
 

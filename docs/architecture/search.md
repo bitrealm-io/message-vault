@@ -161,8 +161,8 @@ Case and accents:
 - Accents matter, except in message text on SQLite, whose full-text index
   folds them: `cafe` finds "café" there and not on Postgres.
 - `%`, `_`, and `\` are ordinary characters. The only wildcard is a trailing
-  `*`, and only in free text and on the Text words; on a Name or Person word
-  it is part of the text.
+  `*`, which makes a prefix in free text and on the Text, Name and Person
+  words, as the table of value types says.
 - A keyword is read as a keyword quoted or not: `group:"none"` is `group:none`.
   A Contact Group named "none" is reached by its `#id`.
 

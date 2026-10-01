@@ -9,7 +9,7 @@
 
 use crate::extract::{Json, Path as AxumPath, Query};
 use axum::extract::State;
-use message_crate_api_types::{ExportRun, ExportScope};
+use message_crate_api_types::{ExportQueryList, ExportRun, ExportScope};
 use serde::Deserialize;
 use sqlx::{AnyConnection, Connection};
 
@@ -74,9 +74,11 @@ pub async fn start_export_run(
 /// Compile an Export Run's scope to the filter every read of it uses.
 ///
 /// `everything` is the empty query; `query` is the search language against
-/// the Messages list; `selection` is the empty query's defaults narrowed to
-/// the picked conversation and message ids, each checked against the account
-/// first, so a run can never be created over rows the caller may not read.
+/// the list it names: the matching messages for the Messages list, and every
+/// message of the conversations shown for the Conversations list; `selection`
+/// is the empty query's defaults narrowed to the picked conversation and
+/// message ids, each checked against the account first, so a run can never be
+/// created over rows the caller may not read.
 ///
 /// # Errors
 ///
@@ -92,13 +94,28 @@ pub async fn scope_filter(
     let engine = engine_of(conn);
     match scope {
         ExportScope::Everything => message_filter(engine, account_id, "", clock),
-        ExportScope::Query { q } => {
+        ExportScope::Query { list, q } => {
             if q.trim().is_empty() {
                 return Err(ApiError::validation(
                     "scope.q is blank; export everything with {\"kind\": \"everything\"}",
                 ));
             }
-            message_filter(engine, account_id, q, clock)
+            match list {
+                ExportQueryList::Messages => message_filter(engine, account_id, q, clock),
+                ExportQueryList::Conversations => {
+                    let (zone, today) = clock;
+                    Ok(crate::search::compile_messages_of_conversations(
+                        crate::search::CompileRequest {
+                            list: crate::search::ListKind::Conversations,
+                            query: q,
+                            account_id,
+                            engine,
+                            today,
+                            zone,
+                        },
+                    )?)
+                }
+            }
         }
         ExportScope::Selection {
             conversation_ids,

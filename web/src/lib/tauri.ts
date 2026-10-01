@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { components } from "./serverApi.types";
 import { resolveStagingParent } from "./system-settings";
 import type {
   AttachmentMediaMode,
@@ -237,12 +238,22 @@ export async function invokePush(config: PushConfig): Promise<void> {
   });
 }
 
+/**
+ * The list an export's search is for: the messages it matches on the
+ * Messages list, or every message of the conversations it shows on the
+ * Conversations list. The server's own type, so the two cannot drift.
+ */
+export type ExportQueryList = components["schemas"]["ExportQueryList"];
+
 export interface PullConfig {
   base_url: string;
   username: string;
   key: string;
   out_dir: string;
+  /** Blank exports everything the account holds. */
   query: string;
+  /** The list `query` is for. Unused when `query` is blank. */
+  list: ExportQueryList;
   skip_attachments: boolean;
 }
 
@@ -255,6 +266,7 @@ export async function invokePull(config: PullConfig): Promise<void> {
       key: config.key,
       outDir: config.out_dir,
       query: config.query,
+      list: config.list,
       skipAttachments: config.skip_attachments,
     },
   });

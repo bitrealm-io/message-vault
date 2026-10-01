@@ -434,7 +434,10 @@ async fn malformed_boolean_queries_are_bad_requests_for_export() {
     let mut conn = pool.acquire().await.unwrap();
 
     for query in ["foo OR", "(foo OR bar", "foo OR bar)"] {
-        let scope = message_crate_api_types::ExportScope::Query { q: query.into() };
+        let scope = message_crate_api_types::ExportScope::Query {
+            list: message_crate_api_types::ExportQueryList::Messages,
+            q: query.into(),
+        };
         let export_error = crate::exports_api::scope_filter(
             &mut conn,
             account,

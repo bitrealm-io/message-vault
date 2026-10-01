@@ -63,11 +63,12 @@ Every export is an Export Run, and there is no unrecorded export. `POST /v1/expo
 
 ```json title="POST /v1/exports"
 { "scope": { "kind": "everything" }, "tool": "message-crate-pull" }
-{ "scope": { "kind": "query", "q": "from:me date:>2024" } }
+{ "scope": { "kind": "query", "list": "messages", "q": "from:me date:>2024" } }
+{ "scope": { "kind": "query", "list": "conversations", "q": "messages:>100" } }
 { "scope": { "kind": "selection", "conversation_ids": [12, 40], "message_ids": [913] } }
 ```
 
-`everything` is every non-trashed message the account holds. `query` is the [search language](#search-operators-q) against the Messages list. A blank `q` is refused, because that is the `everything` form. `selection` is conversations and messages picked by hand: a message is selected when its conversation is listed or it is listed itself. Either list may be empty but not both, each list holds at most 500 ids, and an id the account does not hold is refused by name. A selection hides trashed conversations and duplicates the way a browse does.
+`everything` is every non-trashed message the account holds. `query` is the [search language](#search-operators-q) against the list named in `list`, which is required. With `"list": "messages"` the run holds the messages `q` matches on the Messages list. With `"list": "conversations"` it holds every message of each conversation `q` shows on the Conversations list: a trashed conversation is left out unless `q` says `trashed:`, and duplicates are left out as they are when a conversation is opened. A blank `q` is refused, because that is the `everything` form. `selection` is conversations and messages picked by hand: a message is selected when its conversation is listed or it is listed itself. Either list may be empty but not both, each list holds at most 500 ids, and an id the account does not hold is refused by name. A selection hides trashed conversations and duplicates the way a browse does.
 
 A run is a snapshot. When it is created, the server lists the messages the scope matches, and `GET /v1/exports/{id}/messages` pages that list, oldest first (`sort=-date` for newest first), with a default page of 100 and no offset cap. An import, a trash, or a new day while the run is open changes nothing it hands over: `import:last` and relative dates keep the meaning they had at creation, and a message whose conversation is trashed afterwards is still handed over.
 
@@ -79,7 +80,7 @@ Every export route takes the `export` scope on a session or an API token. A prog
 
 ## Search operators (`q`)
 
-`q` is the same search language the website uses. [Search](/docs/user/features/messages/search/) has the full grammar: quoting, `none`/`any`, date and size ranges, `-` to exclude, `or` and parentheses, `avoc*` prefixes. An Export Run's `query` scope compiles `q` against the Messages list, with the same compiler Contacts and Conversations search use elsewhere, full-text index included for free text. `GET /v1/search-fields/contacts` and `GET /v1/search-fields/conversations` list the words those lists accept. These are the words the Messages list has:
+`q` is the same search language the website uses. [Search](/docs/user/features/messages/search/) has the full grammar: quoting, `none`/`any`, date and size ranges, `-` to exclude, `or` and parentheses, `avoc*` prefixes. An Export Run's `query` scope compiles `q` against the list it names, Messages or Conversations, with the same compiler Contacts and Conversations search use elsewhere, full-text index included for free text. `GET /v1/search-fields/contacts` and `GET /v1/search-fields/conversations` list the words those lists accept. These are the words the Messages list has:
 
 - Free text and `"quoted phrases"` match the message body, the subject, and any attachment file name.
 - `body:`, `subject:` — text, `none`, `any`, restricted to that one field.
@@ -102,6 +103,6 @@ Every export route takes the `export` scope on a session or an API token. A prog
 - `attachments:` — how many attachments are on the message, with comparisons and ranges.
 - `trashed:` — `yes`, `no`, or `any`. Trash is excluded by default; `trashed:yes` or `trashed:any` lifts that.
 
-`messages:`, `conversations:`, and `groups:` belong to the Contacts and Conversations lists, not Messages, so export refuses them.
+`messages:` belongs to the Contacts and Conversations lists, not Messages, so an Export Run takes it only in a query for the Conversations list. `conversations:` and `groups:` belong to the Contacts list alone, so export refuses them. A query for the Conversations list in turn refuses the words only Messages has: `from:`, `to:`, `in:`, and `attachments:`.
 
 Health check: <http://127.0.0.1:8080/health>

@@ -119,6 +119,37 @@ impl Filter {
     }
 }
 
+/// Compile `req.query` on the Conversations list, whatever `req.list` says,
+/// and answer the Messages filter for every message of the conversations
+/// that list shows: an Export Run's `query` scope for the Conversations list.
+///
+/// The conversations are the list's own rows, so its defaults decide them: a
+/// trashed conversation is out unless the query says `trashed:`. Of each
+/// conversation the run takes what opening it shows, which leaves out a
+/// duplicate message. The subquery's `c` is its own: a statement that joins
+/// `conversations c` to `messages m` outside it is not what it reads.
+///
+/// # Errors
+///
+/// A [`QueryError`] as [`compile`] gives for the Conversations list.
+pub fn compile_messages_of_conversations(req: CompileRequest<'_>) -> Result<Filter, QueryError> {
+    let account_id = req.account_id;
+    let conversations = compile(CompileRequest {
+        list: ListKind::Conversations,
+        ..req
+    })?;
+    let mut params = vec![SqlParam::Int(account_id)];
+    params.extend(conversations.params);
+    Ok(Filter {
+        where_sql: format!(
+            "(m.account_id = ? AND m.duplicate_of IS NULL AND m.conversation_id IN \
+             (SELECT c.id FROM conversations c WHERE {}))",
+            conversations.where_sql
+        ),
+        params,
+    })
+}
+
 /// Parse `query` and compile it for `list`. Pure: no database, no clock.
 ///
 /// # Errors

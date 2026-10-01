@@ -27,7 +27,7 @@ vi.mock("../../../lib/serverApi", async (importOriginal) => ({
 function anExport(id: number) {
   return {
     id,
-    scope: { kind: "query", q: `run-${id}` },
+    scope: { kind: "query", list: "messages", q: `run-${id}` },
     status: "completed",
     started_at: "2024-01-01T00:00:00Z",
     finished_at: "2024-01-01T00:05:00Z",
@@ -86,7 +86,7 @@ describe("Export history", () => {
       expect.anything(),
       undefined,
     );
-    expect(await section.findByText("Search: run-51")).toBeInTheDocument();
+    expect(await section.findByText("Messages found by: run-51")).toBeInTheDocument();
     expect(back()).toBeEnabled();
 
     await user.click(next());

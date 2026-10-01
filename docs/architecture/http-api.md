@@ -415,6 +415,27 @@ account holds; a query in the search language; or picked `conversation_ids`
 and `message_ids`. The record holds what was asked for and how much matched,
 never what the messages said.
 
+A `query` scope names the list its query is for, in `list`, and has no
+default: `{"kind": "query", "list": "conversations", "q": "messages:>100"}`.
+`messages` compiles `q` on the Messages list and hands over the messages it
+matches. `conversations` compiles `q` on the Conversations list and hands over
+every message of each conversation that list shows for it, as opening each
+one would: the list's own treatment of the Trash decides which conversations,
+and a duplicate message is left out.
+Why: each list has words the other does not (`messages:` on Conversations,
+`from:` on Messages), and for a word both have, the Conversations list shows
+whole conversations where the Messages list shows single messages. A person
+who exports the conversation list they are looking at expects those
+conversations, so the scope must say which list was meant.
+Why a field, when [Naming a route](#naming-a-route) makes a choice between two
+lists a path segment: that rule is about which resource a route reads. Here
+the resource is one, the Export Run, and the list is part of what the run was
+asked for, stored with it and read back.
+
+Rejected: guessing the list from the words in the query. A query made of
+words both lists have compiles on either and means something different on
+each.
+
 An Export Run is a snapshot taken when it is created. In the transaction that
 records the run, the server lists the ids of the messages the scope matches,
 each at a numbered place (oldest first), and computes the four counts

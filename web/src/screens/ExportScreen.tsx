@@ -14,6 +14,7 @@ import { resolveExportStagingDir } from "../lib/system-settings";
 import {
   EXPORT_FORMATS,
   type ExportFormat,
+  type ExportQueryList,
   invokeDeleteStaging,
   invokeFormat,
   invokePull,
@@ -33,6 +34,29 @@ const SCOPES: { id: ExportScope; label: string }[] = [
 ];
 const SCOPE_IDS = SCOPES.map((s) => s.id);
 
+/**
+ * The list a search is for, and what the export then holds, in the words the
+ * screen shows under the query box. The Conversations list takes its own
+ * search words (`messages:>100`) and the export is whole conversations; the
+ * Messages list takes its own (`from:me`, `in:#19`) and the export is the
+ * matching messages alone.
+ */
+const QUERY_LISTS: { id: ExportQueryList; label: string; holds: string }[] = [
+  {
+    id: "conversations",
+    label: "Conversations",
+    holds:
+      "The export holds every message of each conversation this search finds. messages:>100 finds the long ones.",
+  },
+  {
+    id: "messages",
+    label: "Messages",
+    holds:
+      "The export holds only the messages this search finds. in:#19,#22 names two conversations by their ids.",
+  },
+];
+const QUERY_LIST_IDS = QUERY_LISTS.map((l) => l.id);
+
 /** Label for the chosen format, for the success panel. */
 function formatLabel(id: ExportFormat): string {
   return EXPORT_FORMATS.find((f) => f.id === id)?.label ?? id;
@@ -51,9 +75,12 @@ function formatLabel(id: ExportFormat): string {
  *
  * The scope is Everything or Search. The screen opens in Search when its URL
  * carries `?q=`: LeftPanel puts the query the conversation list was browsing
- * with there when the person clicks Export, so "export what I am looking at"
- * is one click and the query box shows what that is. `in:#19,#22` names
- * chosen conversations the same way.
+ * with there when the person clicks Export, with `list=conversations` beside
+ * it, so "export what I am looking at" is one click: the query box shows
+ * the search, and the export holds every message of the conversations that
+ * list showed. A search typed here without that hand-off is for the Messages
+ * list, where `in:#19,#22` names chosen conversations. The line under the
+ * query box says which of the two the file will hold.
  *
  * Shown only when Tauri is available (see LeftPanel).
  */
@@ -63,6 +90,9 @@ export default function ExportScreen() {
   const browsedQuery = (searchParams.get("q") ?? "").trim();
   const [scope, setScope] = useState<ExportScope>(browsedQuery ? "search" : "everything");
   const [query, setQuery] = useState(browsedQuery);
+  const [list, setList] = useState<ExportQueryList>(
+    searchParams.get("list") === "conversations" ? "conversations" : "messages",
+  );
   const [savePath, setSavePath] = useState("");
   const [format, setFormat] = useState<ExportFormat>("jsonl");
   const [error, setError] = useState("");
@@ -100,6 +130,7 @@ export default function ExportScreen() {
             key: token,
             out_dir: outDir,
             query: scope === "search" ? query.trim() : "",
+            list,
             skip_attachments: false,
           }),
         { onLog: appendLog },
@@ -190,16 +221,35 @@ export default function ExportScreen() {
         </Select>
       </FormRow>
       {scope === "search" ? (
-        <FormRow label="Search">
-          <TextField
-            aria-label="Search"
-            value={query}
-            onChange={setQuery}
-            isDisabled={running || busy}
-            placeholder="from:me last year"
-            hint="Message Crate's search language. in:#19,#22 names two conversations by their ids."
-          />
-        </FormRow>
+        <>
+          <FormRow label="Search in">
+            <Select
+              selectedKey={list}
+              onSelectionChange={(key) => {
+                const next = parseSelectKey(key, QUERY_LIST_IDS);
+                if (next) setList(next);
+              }}
+              aria-label="Search in"
+              isDisabled={running || busy}
+            >
+              {QUERY_LISTS.map((option) => (
+                <ListBoxItem key={option.id} id={option.id} className={selectItemClassName}>
+                  {option.label}
+                </ListBoxItem>
+              ))}
+            </Select>
+          </FormRow>
+          <FormRow label="Search">
+            <TextField
+              aria-label="Search"
+              value={query}
+              onChange={setQuery}
+              isDisabled={running || busy}
+              placeholder={list === "conversations" ? "tag:Work last year" : "from:me last year"}
+              hint={QUERY_LISTS.find((l) => l.id === list)?.holds}
+            />
+          </FormRow>
+        </>
       ) : null}
       <FormRow label="Save to">
         <PathPicker

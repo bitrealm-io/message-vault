@@ -11064,6 +11064,14 @@
           }
         }
       },
+      "ExportQueryList": {
+        "type": "string",
+        "description": "Which list an Export Run's query is for (`docs/architecture/http-api.md`,\n\"Runs\"). The list decides which search words the query may use and what\nthe run hands over.",
+        "enum": [
+          "conversations",
+          "messages"
+        ]
+      },
       "ExportRun": {
         "type": "object",
         "description": "One Export Run: what was asked for and how much matched, never what\nthe messages said. `POST /v1/exports` creates one, every route under\n`/v1/exports/{id}` answers it.",
@@ -11156,8 +11164,9 @@
           },
           {
             "type": "object",
-            "description": "The messages a query in the search language matches.",
+            "description": "What a query in the search language finds on one of two lists.",
             "required": [
+              "list",
               "q",
               "kind"
             ],
@@ -11167,6 +11176,10 @@
                 "enum": [
                   "query"
                 ]
+              },
+              "list": {
+                "$ref": "#/components/schemas/ExportQueryList",
+                "description": "The list the query is for. `messages` hands over the messages the\nquery matches; `conversations` hands over every message of each\nconversation the query shows on the Conversations list."
               },
               "q": {
                 "type": "string",

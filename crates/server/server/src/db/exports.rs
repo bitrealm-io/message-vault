@@ -4,7 +4,7 @@
 
 use anyhow::{Context, Result};
 use chrono::Utc;
-use message_crate_api_types::{ExportRun, ExportScope};
+use message_crate_api_types::{ExportQueryList, ExportRun, ExportScope};
 use sqlx::any::AnyRow;
 use sqlx::{AnyConnection, Connection, Executor, Row};
 
@@ -62,7 +62,7 @@ pub struct StartExportArgs<'a> {
 /// Column list for `exports`, in the order [`export_from_row`] reads.
 const EXPORT_COLUMNS: &str = "id, scope_kind, scope_query, scope_conversation_ids, \
      scope_message_ids, tool, status, started_at, finished_at, message_count, \
-     conversation_count, attachment_count, total_bytes, messages_delivered";
+     conversation_count, attachment_count, total_bytes, messages_delivered, scope_list";
 
 /// Map one `exports` row by column position.
 fn export_from_row(row: &AnyRow) -> Result<ExportRun> {
@@ -70,6 +70,11 @@ fn export_from_row(row: &AnyRow) -> Result<ExportRun> {
     let scope = match kind.as_str() {
         "everything" => ExportScope::Everything,
         "query" => ExportScope::Query {
+            list: match row.try_get::<Option<String>, _>(14)?.as_deref() {
+                Some("conversations") => ExportQueryList::Conversations,
+                Some("messages") => ExportQueryList::Messages,
+                other => anyhow::bail!("exports.scope_list holds unknown value {other:?}"),
+            },
             q: row.try_get::<Option<String>, _>(2)?.unwrap_or_default(),
         },
         "selection" => ExportScope::Selection {
@@ -109,14 +114,17 @@ fn id_list(raw: Option<String>) -> Result<Vec<i64>> {
 ///
 /// Returns an error when the insert fails.
 pub async fn start_export(conn: &mut AnyConnection, args: &StartExportArgs<'_>) -> Result<i64> {
-    let (kind, query, conversation_ids, message_ids) = match args.scope {
-        ExportScope::Everything => ("everything", None, None, None),
-        ExportScope::Query { q } => ("query", Some(q.as_str()), None, None),
+    let (kind, list, query, conversation_ids, message_ids) = match args.scope {
+        ExportScope::Everything => ("everything", None, None, None, None),
+        ExportScope::Query { list, q } => {
+            ("query", Some(list.as_str()), Some(q.as_str()), None, None)
+        }
         ExportScope::Selection {
             conversation_ids,
             message_ids,
         } => (
             "selection",
+            None,
             None,
             Some(serde_json::to_string(conversation_ids)?),
             Some(serde_json::to_string(message_ids)?),
@@ -124,14 +132,15 @@ pub async fn start_export(conn: &mut AnyConnection, args: &StartExportArgs<'_>) 
     };
     let id: i64 = sqlx::query_scalar(
         "INSERT INTO exports (
-            account_id, scope_kind, scope_query, scope_conversation_ids, scope_message_ids,
-            tool, status, started_at, message_count, conversation_count, attachment_count,
-            total_bytes, messages_delivered
-         ) VALUES ($1, $2, $3, $4, $5, $6, 'running', $7, 0, 0, 0, 0, 0)
+            account_id, scope_kind, scope_list, scope_query, scope_conversation_ids,
+            scope_message_ids, tool, status, started_at, message_count, conversation_count,
+            attachment_count, total_bytes, messages_delivered
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'running', $8, 0, 0, 0, 0, 0)
          RETURNING id",
     )
     .bind(args.account_id)
     .bind(kind)
+    .bind(list)
     .bind(query)
     .bind(conversation_ids)
     .bind(message_ids)

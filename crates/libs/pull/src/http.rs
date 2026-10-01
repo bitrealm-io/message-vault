@@ -222,6 +222,7 @@ mod tests {
     #[test]
     fn the_create_body_carries_the_scope_as_given_and_the_tool() {
         let scope = ExportScope::Query {
+            list: message_crate_api_types::ExportQueryList::Conversations,
             q: "from:me".into(),
         };
         let body = serde_json::to_value(CreateExportBody {
@@ -231,7 +232,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             body,
-            serde_json::json!({ "scope": { "kind": "query", "q": "from:me" }, "tool": "message-crate-pull" })
+            serde_json::json!({ "scope": { "kind": "query", "list": "conversations", "q": "from:me" }, "tool": "message-crate-pull" })
         );
     }
 

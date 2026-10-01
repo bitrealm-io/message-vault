@@ -16,7 +16,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use httpmock::prelude::*;
-use message_crate_pull::{ProgressEvent, PullConfig, PullReport, journal, run};
+use message_crate_pull::{ExportQueryList, ProgressEvent, PullConfig, PullReport, journal, run};
 use message_ir_format::{EXPORT_SENTINEL, read_conversation_jsonl};
 use serde_json::{Value, json};
 use tempfile::tempdir;
@@ -242,6 +242,7 @@ fn config(out_dir: &Path, base_url: String) -> PullConfig {
         username: "alice".into(),
         key: "mc_test".into(),
         query: String::new(),
+        list: ExportQueryList::Messages,
         skip_attachments: false,
         page_limit: 2,
         cancel: None,
@@ -553,7 +554,10 @@ fn skipping_attachments_writes_messages_without_files_or_downloads() {
 fn a_query_becomes_the_runs_query_scope_and_progress_narrates_the_run() {
     let server = MockServer::start();
     let _auth = mock_auth(&server);
-    let create = mock_create(&server, json!({ "kind": "query", "q": "from:sam" }));
+    let create = mock_create(
+        &server,
+        json!({ "kind": "query", "list": "messages", "q": "from:sam" }),
+    );
     let complete = mock_complete(&server);
     let _pages = mock_pages(&server, "sms-backup-restore");
     let _menu = mock_asset(&server, MENU_SHA, "sms-backup-restore", MENU_BYTES);
@@ -604,6 +608,40 @@ fn a_query_becomes_the_runs_query_scope_and_progress_narrates_the_run() {
             ProgressEvent::Done(report),
         ]
     );
+}
+
+/// A query from the Conversations list must reach the server as one: sent
+/// for the Messages list it would be refused or hand over fewer messages.
+#[test]
+fn a_query_for_the_conversations_list_names_that_list_in_the_scope() {
+    let server = MockServer::start();
+    let _auth = mock_auth(&server);
+    let create = mock_create(
+        &server,
+        json!({ "kind": "query", "list": "conversations", "q": "messages:>100" }),
+    );
+    let complete = mock_complete(&server);
+    let _pages = mock_pages(&server, "sms-backup-restore");
+    let dir = tempdir().unwrap();
+    let out = dir.path().join("pulled");
+    let cfg = PullConfig {
+        query: "messages:>100".into(),
+        list: ExportQueryList::Conversations,
+        skip_attachments: true,
+        ..config(&out, server.base_url())
+    };
+
+    let mut events = Vec::new();
+    {
+        let mut progress = |event| events.push(event);
+        run(&cfg, Some(&mut progress)).unwrap();
+    }
+
+    create.assert();
+    complete.assert();
+    assert!(events.contains(&ProgressEvent::Log(
+        "Backup query: messages:>100 (every message of the conversations it finds)".into()
+    )));
 }
 
 #[test]

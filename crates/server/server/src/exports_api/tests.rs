@@ -10,6 +10,7 @@ use crate::test_support::{
     post_status, register_via_api, seed_conversation, test_fixture,
 };
 use axum::http::StatusCode;
+use message_crate_api_types::ExportQueryList;
 use serde_json::{Value, json};
 
 /// The default sort every unit test below pages with.
@@ -58,8 +59,20 @@ fn ids(page: &Page<Message>) -> Vec<i64> {
     page.items.iter().map(|m| m.id).collect()
 }
 
+/// A query for the Messages list.
 fn query(q: &str) -> ExportScope {
-    ExportScope::Query { q: q.into() }
+    ExportScope::Query {
+        list: ExportQueryList::Messages,
+        q: q.into(),
+    }
+}
+
+/// A query for the Conversations list.
+fn conversations_query(q: &str) -> ExportScope {
+    ExportScope::Query {
+        list: ExportQueryList::Conversations,
+        q: q.into(),
+    }
 }
 
 #[tokio::test]
@@ -158,6 +171,135 @@ async fn add_message(conn: &mut AnyConnection, id: i64, conversation: i64, day: 
     .execute(&mut *conn)
     .await
     .unwrap();
+}
+
+/// The bug of #959: the Conversations list handed Export a query the Messages
+/// list refuses. `messages:` is a Conversations word, and a run for that list
+/// holds whole conversations.
+#[tokio::test]
+async fn a_conversations_query_with_a_message_count_exports_those_whole_conversations() {
+    let (fixture, conv1, conv2) = seeded_export_fixture().await;
+    let mut conn = fixture.conn().await;
+    add_message(&mut conn, 3, conv2, 3, "hello three").await;
+    add_message(&mut conn, 4, conv2, 4, "goodbye").await;
+
+    // conv2 holds three messages and conv1 one.
+    let big = conversations_query("messages:>2");
+    let found = page(&mut conn, 101, &big, 100, 0).await.unwrap();
+    assert_eq!(ids(&found), vec![2, 3, 4]);
+    assert_eq!(found.total, 3);
+    let counts = counts_of(&mut conn, &big).await;
+    assert_eq!((counts.messages, counts.conversations), (3, 1));
+
+    let small = conversations_query("messages:1");
+    assert_eq!(
+        ids(&page(&mut conn, 101, &small, 100, 0).await.unwrap()),
+        vec![1]
+    );
+    let _ = conv1;
+
+    // The Messages list still refuses the word, and the Conversations list
+    // refuses a Messages word.
+    let err = page(&mut conn, 101, &query("messages:>2"), 100, 0)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, ApiError::SearchQueryInvalid { .. }),
+        "{err:?}"
+    );
+    let err = page(&mut conn, 101, &conversations_query("from:me"), 100, 0)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, ApiError::SearchQueryInvalid { .. }),
+        "{err:?}"
+    );
+
+    // A blank query is the `everything` form on either list.
+    let err = page(&mut conn, 101, &conversations_query("  "), 100, 0)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(&err, ApiError::ValidationFailed(m) if m[0].starts_with("scope.q is blank")),
+        "{err:?}"
+    );
+}
+
+/// `date:` is a word both lists have. On the Messages list it picks the
+/// messages of that day; on the Conversations list it picks the conversations
+/// with a message that day, and the run holds all of each.
+#[tokio::test]
+async fn a_conversations_query_exports_whole_conversations_not_only_the_matching_messages() {
+    let (fixture, _conv1, conv2) = seeded_export_fixture().await;
+    let mut conn = fixture.conn().await;
+    add_message(&mut conn, 3, conv2, 3, "hello three").await;
+    add_message(&mut conn, 4, conv2, 4, "goodbye").await;
+
+    let day = "date:2020-01-03";
+    assert_eq!(
+        ids(&page(&mut conn, 101, &query(day), 100, 0).await.unwrap()),
+        vec![3]
+    );
+    assert_eq!(
+        ids(&page(&mut conn, 101, &conversations_query(day), 100, 0)
+            .await
+            .unwrap()),
+        vec![2, 3, 4]
+    );
+}
+
+/// The run holds what the Conversations list shows: a trashed conversation
+/// is left out unless the query asks for the Trash, a duplicate message is
+/// never handed over, and another account's conversations are out of reach.
+#[tokio::test]
+async fn a_conversations_query_hides_what_the_conversations_list_hides() {
+    let (fixture, conv1, conv2) = seeded_export_fixture().await;
+    let bob = fixture.account_with_id(202, "bob").await;
+    let bobs = seed_conversation(
+        &fixture.state,
+        &SeedConversation {
+            account_id: bob,
+            handle: "+1777",
+            conversation_type: "individual",
+            group_title: None,
+            source_file: "backup-b.jsonl",
+            messages: &[],
+        },
+    )
+    .await;
+    let mut conn = fixture.conn().await;
+    sqlx::query(
+        "INSERT INTO messages (id, conversation_id, account_id, source, service, timestamp, is_from_me, sort_order, body)
+         VALUES (9, $1, 202, 'sms', 'sms', '2020-01-05T00:00:00Z', 0, 0, 'hello bob')",
+    )
+    .bind(bobs)
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+    add_message(&mut conn, 3, conv2, 3, "hello three").await;
+    add_message(&mut conn, 4, conv2, 4, "hello three again").await;
+    sqlx::query("UPDATE messages SET duplicate_of = 3 WHERE id = 4")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO trashed_conversations (account_id, conversation_id) VALUES (101, $1)")
+        .bind(conv1)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+
+    // Every conversation with a message: conv2 alone, without its duplicate.
+    let all = conversations_query("messages:>0");
+    assert_eq!(
+        ids(&page(&mut conn, 101, &all, 100, 0).await.unwrap()),
+        vec![2, 3]
+    );
+    // The Trash, asked for by name, is what that list would show.
+    let trashed = conversations_query("trashed:yes");
+    assert_eq!(
+        ids(&page(&mut conn, 101, &trashed, 100, 0).await.unwrap()),
+        vec![1]
+    );
 }
 
 #[tokio::test]
@@ -605,13 +747,30 @@ async fn creating_a_run_records_the_scope_the_tool_and_the_counts() {
     let by_query = create_run(
         &fixture,
         &alice.token,
-        json!({ "kind": "query", "q": "pizza" }),
+        json!({ "kind": "query", "list": "messages", "q": "pizza" }),
     )
     .await;
-    assert_eq!(by_query["scope"], json!({ "kind": "query", "q": "pizza" }));
+    assert_eq!(
+        by_query["scope"],
+        json!({ "kind": "query", "list": "messages", "q": "pizza" })
+    );
     assert_eq!(by_query["message_count"], 1);
     assert_eq!(by_query["conversation_count"], 1);
     assert_eq!(by_query["attachment_count"], 0);
+
+    // The list a query is for is stored and read back with it.
+    let by_conversation = create_run(
+        &fixture,
+        &alice.token,
+        json!({ "kind": "query", "list": "conversations", "q": "messages:>1" }),
+    )
+    .await;
+    assert_eq!(
+        by_conversation["scope"],
+        json!({ "kind": "query", "list": "conversations", "q": "messages:>1" })
+    );
+    assert_eq!(by_conversation["message_count"], 2);
+    assert_eq!(by_conversation["conversation_count"], 1);
 
     let picked = create_run(
         &fixture,
@@ -698,7 +857,7 @@ async fn a_scope_the_server_cannot_honour_is_refused_and_no_run_is_recorded() {
         "/v1/exports",
         &alice.token,
         "application/json",
-        json!({ "scope": { "kind": "query", "q": " " } }).to_string(),
+        json!({ "scope": { "kind": "query", "list": "messages", "q": " " } }).to_string(),
     )
     .await;
     expect_problem(status, &text, ProblemType::ValidationFailed);
@@ -708,7 +867,7 @@ async fn a_scope_the_server_cannot_honour_is_refused_and_no_run_is_recorded() {
         "/v1/exports",
         &alice.token,
         "application/json",
-        json!({ "scope": { "kind": "query", "q": "wibble:yes" } }).to_string(),
+        json!({ "scope": { "kind": "query", "list": "messages", "q": "wibble:yes" } }).to_string(),
     )
     .await;
     expect_problem(status, &text, ProblemType::SearchQueryInvalid);
@@ -740,7 +899,7 @@ async fn the_list_is_newest_first_filters_by_status_and_refuses_unknown_values()
     let second = create_run(
         &fixture,
         &alice.token,
-        json!({ "kind": "query", "q": "pizza" }),
+        json!({ "kind": "query", "list": "messages", "q": "pizza" }),
     )
     .await;
     let cancelled: Value = post_json(
@@ -962,7 +1121,12 @@ async fn an_export_token_reads_messages_only_through_a_run() {
     let (fixture, alice, _dinner, _menu) = fixture_with_two_conversations().await;
     let token = api_token(&fixture, &alice, true).await;
 
-    let run = create_run(&fixture, &token, json!({ "kind": "query", "q": "pizza" })).await;
+    let run = create_run(
+        &fixture,
+        &token,
+        json!({ "kind": "query", "list": "messages", "q": "pizza" }),
+    )
+    .await;
     let id = run["id"].as_i64().unwrap();
     let page: Value = get_json(
         &fixture.state,
@@ -1250,7 +1414,7 @@ async fn import_last_keeps_meaning_the_import_that_was_last_at_creation() {
     let run = create_run(
         &fixture,
         &alice.token,
-        json!({ "kind": "query", "q": "import:last" }),
+        json!({ "kind": "query", "list": "messages", "q": "import:last" }),
     )
     .await;
     let id = run["id"].as_i64().unwrap();

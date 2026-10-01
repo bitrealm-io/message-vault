@@ -33,14 +33,17 @@ export type TopAttachment = Schema["TopAttachment"];
 
 /**
  * What an Export Run asked for, in one line: "Everything", the search it
- * ran, or how many conversations and messages were picked by hand.
+ * ran and the list it ran on, or how many conversations and messages were
+ * picked by hand.
  */
 export function describeExportScope(scope: Schema["ExportScope"]): string {
   switch (scope.kind) {
     case "everything":
       return "Everything";
     case "query":
-      return `Search: ${scope.q}`;
+      return scope.list === "conversations"
+        ? `Conversations found by: ${scope.q}`
+        : `Messages found by: ${scope.q}`;
     case "selection": {
       const parts: string[] = [];
       const conversations = scope.conversation_ids?.length ?? 0;

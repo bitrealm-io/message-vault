@@ -58,6 +58,16 @@ Mutation testing lives in `mutants.yml` for the same reason. It runs
 shards because a full run takes well over a day on one machine, and a missed
 mutant never fails anything.
 
+The nightly run lives in `nightly.yml` for the same reason. It builds the
+release Dockerfile from `main` once a night, because the `docker-build` job
+above sees only pull requests that change the Dockerfile, a Cargo manifest or
+the lockfile, and a change elsewhere can still break the image. It gates
+nothing: it has no pull request trigger and is not in the ruleset's required
+list. A scheduled run does nothing when `main` is still at the commit the
+previous scheduled run saw. Its verdict arrives after the merge, so it reports
+by opening an issue labelled `bug`, or by commenting on that issue while it is
+open, rather than by a check on a pull request.
+
 The docs build on a pull request is the `docs` job in `ci.yml`, not a trigger
 on `docs.yml` — a required check that lives in a path-filtered workflow
 deadlocks every pull request that misses the filter, exactly like

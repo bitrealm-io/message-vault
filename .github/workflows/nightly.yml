@@ -1,0 +1,166 @@
+name: Nightly
+
+# Once a night, the release Dockerfile is built from main. "Docker image
+# builds" in ci.yml runs only on a pull request that changes the Dockerfile,
+# a Cargo manifest or the lockfile, so a change anywhere else that breaks
+# the image was not built until a release tag. This run builds it and never
+# publishes it: publishing stays with a v* tag in ci.yml.
+#
+# It is a report, not a gate: it has no pull_request trigger and nothing
+# here is in the ruleset's required list, so it lives outside ci.yml, whose
+# every job the ruleset on main requires. A failed night opens an issue
+# labelled bug instead. Why: docs/adr/0007-ci-is-the-only-gate.md.
+#
+# No job installs a package: the build happens inside the Dockerfile's own
+# stages.
+
+on:
+  schedule:
+    # Every day at 10:37 UTC (06:37 in New York in summer, 05:37 in winter),
+    # the quietest hours in this repository's commit history, so the run
+    # sees the whole of the previous day's merges. An off-hour minute avoids
+    # the on-the-hour spike, when GitHub delays or drops scheduled runs.
+    - cron: "37 10 * * *"
+  # Started by hand, the build runs whether or not main changed.
+  workflow_dispatch:
+
+# One run at a time. A second run waits for the first rather than cancelling
+# it, so a night's verdict is never lost to a manual run.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Did main change since the previous nightly run? ───────────────────
+  # The previous scheduled run of this workflow recorded the commit it ran
+  # on. If main is still at that commit, there is nothing new to build and
+  # every later job is skipped. Comparing commits rather than asking for
+  # "commits in the last 24 hours" stays right when GitHub starts a
+  # scheduled run late or drops one: nothing is built twice and no commit
+  # falls between two windows.
+  #
+  # A cancelled run does not count as the previous run, because it may have
+  # stopped before the build. With no previous run, or when the lookup
+  # fails, the build runs: building once too often costs minutes, and
+  # skipping wrongly hides a broken image.
+  changed:
+    name: Main changed since the last nightly run
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+    steps:
+      - name: Compare main with the previous nightly run
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT" != "schedule" ]; then
+            echo "Started by hand: building $HEAD_SHA."
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Newest first. This run is still in progress, so status=completed
+          # leaves it out.
+          if ! previous=$(gh api \
+            "repos/$REPO/actions/workflows/nightly.yml/runs?event=schedule&status=completed&per_page=30" \
+            --jq '[.workflow_runs[] | select(.conclusion == "success" or .conclusion == "failure")][0].head_sha // ""'); then
+            echo "::warning::The previous nightly run could not be read; building."
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -z "$previous" ]; then
+            echo "No previous nightly run: building $HEAD_SHA."
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          elif [ "$previous" = "$HEAD_SHA" ]; then
+            echo "main is still at $HEAD_SHA, the commit the previous nightly run saw: nothing to do."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "main moved from $previous to $HEAD_SHA: building."
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ── The release Dockerfile builds ─────────────────────────────────────
+  # The same steps as "Docker image builds" in ci.yml; keep the two alike.
+  # push: false, and no Docker Hub login: nothing is published.
+  docker-build:
+    name: Nightly Docker image build
+    needs: changed
+    if: needs.changed.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── A failed night opens an issue ─────────────────────────────────────
+  # One open issue holds every failed night: the first failure opens it and
+  # each later one adds a comment, until somebody closes it. A job that
+  # timed out ends as cancelled, so that counts as failed too; a run that a
+  # person cancelled does not.
+  report:
+    name: Report a failed night
+    needs: [changed, docker-build]
+    if: ${{ !cancelled() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open the issue, or comment on the open one
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+          EVENT: ${{ github.event_name }}
+          CHANGED_RESULT: ${{ needs.changed.result }}
+          BUILD_RESULT: ${{ needs.docker-build.result }}
+        run: |
+          title="Nightly run failed"
+
+          failed=""
+          case "$CHANGED_RESULT" in
+            failure|cancelled) failed="${failed}- \"Main changed since the last nightly run\" ($CHANGED_RESULT)"$'\n' ;;
+          esac
+          case "$BUILD_RESULT" in
+            failure|cancelled) failed="${failed}- \"Nightly Docker image build\" ($BUILD_RESULT)"$'\n' ;;
+          esac
+
+          body=$(printf '%s\n\n%s\n%s\n%s\n' \
+            "The Nightly workflow (\`.github/workflows/nightly.yml\`) failed on \`main\` at $HEAD_SHA (started by: $EVENT)." \
+            "Failed jobs:" \
+            "$failed" \
+            "Run: $RUN_URL")
+
+          # The title is fixed, so the open issue is found by it exactly.
+          number=$(gh issue list --state open --label bug --limit 500 \
+            --json number,title \
+            --jq '[.[] | select(.title == "Nightly run failed")][0].number // ""')
+
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body"
+          else
+            gh issue create --title "$title" --label bug --body "$body"
+          fi

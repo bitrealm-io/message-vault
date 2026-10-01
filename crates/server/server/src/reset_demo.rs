@@ -57,6 +57,8 @@ struct DemoOwner {
     /// `(raw handle, handle type)` pairs linked into `account_handles`.
     #[serde(default)]
     handle_specs: Vec<(String, HandleType)>,
+    /// Email identities, written to `account_emails` and linked into
+    /// `account_handles`.
     #[serde(default)]
     emails: Vec<String>,
 }
@@ -1108,7 +1110,8 @@ async fn seed_demo_account_on_conn(
     .bind(&seed.owner.display_name)
     .execute(&mut *conn)
     .await?;
-    // Extra email addresses used only to recognize "you" in messages, not for login.
+    // The profile reads the account's emails from `account_emails`. They are
+    // identities, not a login.
     sqlx::query("DELETE FROM account_emails WHERE account_id = $1")
         .bind(account_id)
         .execute(&mut *conn)
@@ -1136,6 +1139,12 @@ async fn seed_demo_account_on_conn(
         .await?;
     for (raw, handle_type) in &seed.owner.handle_specs {
         account_profile::link_account_handle(conn, account_id, raw, *handle_type).await?;
+    }
+    // An email is an identity like the phone, so it is linked here as well as
+    // written to `account_emails` above, as adding one to any account does.
+    // The profile and the identities list then name the same addresses (#955).
+    for email in &seed.owner.emails {
+        account_profile::link_account_handle(conn, account_id, email, HandleType::Email).await?;
     }
     Ok(())
 }

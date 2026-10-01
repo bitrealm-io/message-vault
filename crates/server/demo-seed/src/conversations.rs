@@ -23,8 +23,8 @@ use crate::assets::{JPG_PHOTOS, OTHER_ATTACHMENTS};
 use crate::config::SeedConfig;
 use crate::corpus::Corpus;
 use crate::personas::{
-    Contact, EMPTY_GROUP_HANDLE, EMPTY_THREAD_HANDLE, ORPHAN_SENDER, OWNER_PHONE, Roster,
-    Unassigned,
+    Contact, EMPTY_GROUP_HANDLE, EMPTY_THREAD_HANDLE, ORPHAN_SENDER, OWNER_EMAIL, OWNER_PHONE,
+    Roster, Unassigned,
 };
 
 const IMESSAGE_SOURCE: &str = "imessage";
@@ -77,13 +77,14 @@ const PHOTO_CAPTIONS: &[&str] = &[
 
 const EMOJI_ONLY: &[&str] = &["👍", "😂", "❤️", "🎉", "😊"];
 
-/// Export metadata stamped on every conversation header.
-fn export_meta(source: &str) -> ExportMeta {
+/// Export metadata stamped on a conversation header. `owner_handle` is the
+/// Demo Account's identity the conversation's messages are held at.
+fn export_meta(source: &str, owner_handle: &str) -> ExportMeta {
     ExportMeta {
         source: source.into(),
         tool: "demo-seed".into(),
         tool_version: "0.2.0".into(),
-        owner_handle: Some(OWNER_PHONE.into()),
+        owner_handle: Some(owner_handle.into()),
         owner_display_name: Some("Me".into()),
     }
 }
@@ -369,7 +370,7 @@ impl<R: Rng> Seeder<'_, R> {
             None,
             participants,
             msg_count,
-            source_id(flavor),
+            export_meta(source_id(flavor), OWNER_PHONE),
         )?;
 
         let timestamps = self.timestamps(msg_count, spec.span_years, sample_direct_day_burst);
@@ -459,7 +460,7 @@ impl<R: Rng> Seeder<'_, R> {
             None,
             individual_participants(chat_id, overlap.display_name.clone()),
             overlap.msg_count,
-            IMESSAGE_SOURCE,
+            export_meta(IMESSAGE_SOURCE, OWNER_PHONE),
         )?;
         let mut origin_guid: Option<String> = None;
         for (i, shared) in overlap.shared.iter().enumerate() {
@@ -514,7 +515,7 @@ impl<R: Rng> Seeder<'_, R> {
             None,
             individual_participants(chat_id, overlap.display_name.clone()),
             android_total,
-            SBR_SOURCE,
+            export_meta(SBR_SOURCE, OWNER_PHONE),
         )?;
         for (i, shared) in overlap.shared.iter().enumerate() {
             let msg = shared.message(
@@ -595,6 +596,13 @@ impl<R: Rng> Seeder<'_, R> {
         } else {
             sanitize_filename(chat_id) + ".jsonl"
         };
+        // A correspondent known only by an email address wrote to the Demo
+        // Account's email, so that identity has messages too.
+        let owner_handle = if ua.email_only {
+            OWNER_EMAIL
+        } else {
+            OWNER_PHONE
+        };
         let mut file = open_jsonl(&staging.join(fname))?;
         write_conversation_header(
             &mut file,
@@ -603,7 +611,7 @@ impl<R: Rng> Seeder<'_, R> {
             None,
             participants,
             msg_count,
-            IMESSAGE_SOURCE,
+            export_meta(IMESSAGE_SOURCE, owner_handle),
         )?;
 
         let timestamps = self.timestamps(msg_count, 1.5, sample_direct_day_burst);
@@ -661,7 +669,7 @@ impl<R: Rng> Seeder<'_, R> {
             group.title.clone(),
             participants,
             header_message_count,
-            IMESSAGE_SOURCE,
+            export_meta(IMESSAGE_SOURCE, OWNER_PHONE),
         )?;
 
         // The first group starts with a rename announcement so the UI has one to show.
@@ -785,7 +793,7 @@ impl<R: Rng> Seeder<'_, R> {
             None,
             vec![],
             n,
-            IMESSAGE_SOURCE,
+            export_meta(IMESSAGE_SOURCE, OWNER_PHONE),
         )?;
         let timestamps = self.timestamps(n, 2.0, sample_direct_day_burst);
         for (i, &ts) in timestamps.iter().enumerate() {
@@ -822,7 +830,15 @@ fn write_header_only(
             handle_type: None,
         });
     }
-    write_conversation_header(&mut file, chat_id, conv_type, None, participants, 0, source)?;
+    write_conversation_header(
+        &mut file,
+        chat_id,
+        conv_type,
+        None,
+        participants,
+        0,
+        export_meta(source, OWNER_PHONE),
+    )?;
     Ok(())
 }
 
@@ -922,11 +938,11 @@ fn write_conversation_header(
     group_title: Option<String>,
     participants: Vec<IrParticipant>,
     message_count: usize,
-    source: &str,
+    export: ExportMeta,
 ) -> Result<()> {
     let header = ConversationHeader {
         schema_version: SCHEMA_VERSION,
-        export: export_meta(source),
+        export,
         conversation: ConversationMeta {
             chat_identifier: chat_id.into(),
             conversation_type: conv_type,

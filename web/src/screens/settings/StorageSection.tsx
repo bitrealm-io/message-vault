@@ -21,7 +21,13 @@ export function StorageSection({ managedAccountId }: { managedAccountId?: number
   const { profile } = useSettingsAccount(managedAccountId);
   const {
     imports,
+    importTotal,
+    importPage,
+    setImportPage,
     exports,
+    exportTotal,
+    exportPage,
+    setExportPage,
     totalBytes,
     attachmentCount,
     conversationCount,
@@ -63,6 +69,9 @@ export function StorageSection({ managedAccountId }: { managedAccountId?: number
 
       <ImportHistoryTable
         imports={imports}
+        total={importTotal}
+        page={importPage}
+        onPageChange={setImportPage}
         selectedImportId={selectedImportId}
         selectedImport={selectedImport}
         selectedImportSummary={selectedImportSummary}
@@ -73,7 +82,12 @@ export function StorageSection({ managedAccountId }: { managedAccountId?: number
         onCloseDetail={closeImportDetail}
       />
 
-      <ExportHistoryTable exports={exports} />
+      <ExportHistoryTable
+        exports={exports}
+        total={exportTotal}
+        page={exportPage}
+        onPageChange={setExportPage}
+      />
 
       <TopAttachmentsTable
         topAttachments={topAttachments}

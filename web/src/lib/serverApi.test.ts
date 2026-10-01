@@ -31,6 +31,8 @@ import {
   getConversation,
   getConversationSources,
   getImport,
+  listAccountExports,
+  listAccountImports,
   listAccounts,
   listApiTokens,
   listContactGroupMembers,
@@ -272,6 +274,15 @@ describe("accounts are one collection", () => {
     expect(del).toHaveBeenCalledWith("/v1/accounts/7/messages", { confirm: true });
     await getAccountStorage();
     expect(lastPath(get)).toBe("/v1/accounts/7/storage");
+  });
+
+  it("asks for one page of an account's Import Runs and Export Runs", async () => {
+    await listAccountImports({ limit: 50, offset: 50 });
+    expect(lastPath(get)).toBe("/v1/accounts/7/imports");
+    expect(lastQuery(get)).toEqual({ limit: "50", offset: "50" });
+    await listAccountExports({ limit: 50, offset: 100 }, undefined, 12);
+    expect(lastPath(get)).toBe("/v1/accounts/12/exports");
+    expect(lastQuery(get)).toEqual({ limit: "50", offset: "100" });
   });
 
   it("addresses another account by the id the owner names", async () => {

@@ -21,7 +21,8 @@ Two lines under it give four counts: messages, attachments, conversations, and c
 **Import history** lists the account's Import Runs, newest first.
 A run is listed whether it completed, failed, or was cancelled, and a person can't delete one.
 
-The list holds the 40 newest runs.
+The list shows 50 runs to a page.
+**Back** and **Next** move between pages.
 
 | Column | Shows |
 |---|---|
@@ -78,7 +79,8 @@ How a run proceeds is covered in [Import](/docs/user/features/messages/import/).
 **Export history** lists the account's Export Runs, newest first.
 The record holds what was asked for and how much matched, never what the messages said.
 
-The list holds the 40 newest runs.
+The list shows 50 runs to a page.
+**Back** and **Next** move between pages.
 
 | Column | Shows |
 |---|---|

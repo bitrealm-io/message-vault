@@ -1,0 +1,111 @@
+---
+title: Back up an iPhone
+description: Make a backup of an iPhone or iPad on Windows, macOS, or Linux, and find the folder that Import needs.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+An iPhone's messages are read from a backup of the whole phone, stored on a computer.
+The desktop app doesn't make that backup. Apple's own tools do on Windows and macOS, and `libimobiledevice` does on Linux.
+
+This step ends with one folder: the backup folder, which contains a file named `Manifest.plist`.
+The same steps work for an iPad.
+
+An iCloud backup can't be used, because it never becomes files on a computer.
+
+## Encrypted or not
+
+Either works.
+The backup tool offers to encrypt the backup with a password.
+Import reads both kinds, and asks for the password when the backup is encrypted.
+
+A forgotten backup password can't be recovered, by Apple or by Message Crate.
+The password must be written down at the moment it is set.
+
+## Make the backup
+
+<Tabs syncKey="os">
+<TabItem label="Windows">
+
+Windows needs Apple's **Apple Devices** app from the Microsoft Store, or **iTunes** on a version of Windows that doesn't have it.
+
+1. Connect the iPhone with a cable and unlock it.
+2. On the iPhone, answer **Trust This Computer** with **Trust**, and enter the passcode.
+3. Open **Apple Devices** and select the iPhone in the sidebar. In iTunes, select the phone icon near the top left.
+4. Under **Backups**, choose **Back up all of the data on your iPhone to this computer**.
+5. Select **Back Up Now** and wait for it to finish. A first backup of a full phone can take more than an hour.
+
+The backup folder is in one of two places, depending on where the Apple app came from:
+
+| Installed from | Folder |
+|---|---|
+| Microsoft Store (Apple Devices, or iTunes) | `%USERPROFILE%\Apple\MobileSync\Backup\` |
+| iTunes installer from apple.com | `%APPDATA%\Apple Computer\MobileSync\Backup\` |
+
+Pasting either path into the address bar of File Explorer opens it.
+
+</TabItem>
+<TabItem label="macOS">
+
+:::caution[Not tested on a Mac]
+These steps follow [Apple's documentation](https://support.apple.com/en-us/108796). Nobody on the project has run them on a Mac. A wrong step is worth [an issue](https://github.com/messagecrate/message-crate/issues).
+:::
+
+1. Connect the iPhone with a cable and unlock it.
+2. On the iPhone, answer **Trust This Computer** with **Trust**, and enter the passcode.
+3. Open **Finder** and select the iPhone in the sidebar.
+4. Under **General**, choose **Back up all of the data on your iPhone to this Mac**.
+5. Select **Back Up Now** and wait for it to finish.
+
+The backup folder is in `~/Library/Application Support/MobileSync/Backup/`.
+In Finder, **Go → Go to Folder** accepts that path.
+
+macOS protects that folder.
+The desktop app can read it only after it is added under **System Settings → Privacy & Security → Full Disk Access**.
+
+</TabItem>
+<TabItem label="Linux">
+
+:::caution[Not tested yet]
+These steps follow the `libimobiledevice` documentation. A backup made this way has not yet been imported by the project. A wrong step is worth [an issue](https://github.com/messagecrate/message-crate/issues).
+:::
+
+Apple ships no backup tool for Linux.
+The open-source [`libimobiledevice`](https://libimobiledevice.org/) tools make the same kind of backup.
+
+```bash title="Install on Debian or Ubuntu"
+sudo apt install libimobiledevice-utils usbmuxd
+```
+
+1. Connect the iPhone with a cable and unlock it.
+2. `idevicepair pair` asks the phone to trust the computer. On the iPhone, answer **Trust**, enter the passcode, then run `idevicepair pair` again until it prints `SUCCESS`.
+3. Make the backup:
+
+   ```bash title="Back up to a folder"
+   mkdir -p ~/iphone-backup
+   idevicebackup2 backup --full ~/iphone-backup
+   ```
+
+The backup folder is inside `~/iphone-backup/`.
+
+`idevicebackup2 encryption on` turns on backup encryption for the phone and asks for a new password.
+The setting is stored on the phone, so it applies to every later backup on any computer.
+
+</TabItem>
+</Tabs>
+
+## Find the backup folder
+
+The `Backup` folder holds one folder per device.
+Each is named with a long string of letters and digits, such as `00008030-001C2D3E4F5A6B7C`.
+That folder is the one Import needs.
+
+How to tell which is which with several devices?
+
+The folder with the newest modified date belongs to the backup just made.
+
+## Check that it worked
+
+The device folder contains a file named `Manifest.plist`.
+
+Next: [Import the backup](/docs/user/get-started/import-your-backup/).

@@ -7,7 +7,7 @@ This page is for people who compile Message Crate. It explains how to build a Do
 
 Everyday coding should just run on the local developer machine. Those steps are on [Contributing → Build and run](/docs/developer/contributing/#build-and-run).
 
-People who only want to run Message Crate, and who are not changing the code, should pull the published image. See [Try Message Crate](/docs/user/get-started/try-message-crate/#start-the-server).
+People who only want to run Message Crate, and who are not changing the code, should pull the published image. See [Run a Message Crate with demo data](/docs/user/get-started/run-with-demo-data/#start-the-server).
 
 Build a local image when the work is about the container itself. Examples:
 
@@ -23,7 +23,7 @@ A merge to `main` does not publish an image. CI only builds and pushes `bitrealm
 
 Docker Compose reads a YAML file and starts a container from it. This repository has two of those files. They both listen on port **8080**. They do not do the same thing.
 
-`docker/compose.yml` names an image that already exists: `bitrealm/message-crate:latest`. Compose downloads that image from Docker Hub. It does not compile this local checkout. That file is the sample for [Try Message Crate](/docs/user/get-started/try-message-crate/#start-the-server). Do not use that file from a local checkout if the goal is to test local code.
+`docker/compose.yml` names an image that already exists: `bitrealm/message-crate:latest`. Compose downloads that image from Docker Hub. It does not compile this local checkout. That file is the sample for [Run a Message Crate with demo data](/docs/user/get-started/run-with-demo-data/#start-the-server). Do not use that file from a local checkout if the goal is to test local code.
 
 `docker/compose.release.yml` builds `docker/Dockerfile` from the files in this local checkout. The result is the same kind of image CI uploads to Docker Hub: a compiled server binary, the website copied into `static/`, ffmpeg, and the sample-inbox files `demo-seed` writes during the build. After a code change, rebuild. The running container does not pick up edits on the local machine on its own.
 
@@ -160,13 +160,13 @@ That job is the Hub image. `docker/compose.release.yml` is the way to compile th
 
 ## Run the published image
 
-Pull and start `bitrealm/message-crate` from Docker Hub as described in [Try Message Crate](/docs/user/get-started/try-message-crate/#start-the-server). That page covers `docker run` and `docker/compose.yml`. Upgrades that keep the existing database volume are on [Update](/docs/user/how-to/update/).
+Pull and start `bitrealm/message-crate` from Docker Hub as described in [Run a Message Crate with demo data](/docs/user/get-started/run-with-demo-data/#start-the-server). That page gives the `docker run` command; `docker/compose.yml` in the repository is the Compose form of it. Upgrades that keep the existing database volume are on [Update](/docs/user/features/owner/update/).
 
 ## Related
 
 - [Contributing](/docs/developer/contributing/#build-and-run)
 - [Release](/docs/developer/release/)
-- [Try Message Crate](/docs/user/get-started/try-message-crate/)
-- [Update](/docs/user/how-to/update/)
+- [Run a Message Crate with demo data](/docs/user/get-started/run-with-demo-data/)
+- [Update](/docs/user/features/owner/update/)
 - [HTTP API](/docs/developer/reference/api/)
 - [Config and accounts](/docs/developer/reference/config-and-accounts/)

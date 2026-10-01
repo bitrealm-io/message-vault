@@ -4,13 +4,14 @@ description: Account, profile, storage, system, convert, and appearance settings
 ---
 
 Open **Settings** in the sidebar. Settings has a tab for each area below.
-Administrators also see a **Users** tab, and the desktop app adds **System** and **Convert**.
+The desktop app adds **System** and **Convert**.
+The Owner manages accounts in [Owner Home](/docs/user/features/owner/owner-home/), not here.
 
 ## Account
 
 - **Username** — read-only account id used for login
 - **Password** — change password when local auth is enabled
-- **API tokens** — named Bearer secrets for programs that call the server's [HTTP API](/docs/developer/reference/api/). When creating one, choose **import**, **export**, or **both**. Each secret is shown once at creation; revoke when finished. Logging in to the website uses a separate session token that changes on each login and does not revoke these tokens. Desktop **Import** and **Export** do not need an API token; they use the logged-in session.
+- **API tokens** — named Bearer secrets for programs that call the server's [HTTP API](/docs/developer/reference/api/). A new token takes a name. Each secret is shown once at creation; revoke when finished. Logging in to the website uses a separate session token that changes on each login and does not revoke these tokens. Desktop **Import** and **Export** do not need an API token; they use the logged-in session.
 - **Danger zone** — delete all messages for the account, or delete the account (the demo account cannot be deleted)
 
 ## Profile
@@ -31,13 +32,13 @@ Desktop app only.
 
 - **Staging directory** — where Import and Export write their temporary files, `~/message-crate` by default
 - **Remember importer paths** — Import restores the last backup path for each import source
-- **ffmpeg directory** — a folder holding `ffmpeg` and `ffprobe` when they aren't on the system PATH. See [Media and privacy](/docs/user/how-to/media-and-privacy/)
+- **ffmpeg directory** — a folder holding `ffmpeg` and `ffprobe` when they aren't on the system PATH. See [Attachments and media](/docs/user/features/messages/attachments-and-media/)
 
 ## Convert
 
 Desktop app only.
 Convert rewrites a folder of exported files into another format, without reading a backup or the server: an input folder, a different output folder, and the output format.
-Steps and the formats it reads and writes: [Convert formats](/docs/user/how-to/convert-formats/).
+Steps and the formats it reads and writes: [Convert formats](/docs/user/features/settings/convert/).
 
 ## Appearance
 

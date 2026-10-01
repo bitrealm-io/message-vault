@@ -9,7 +9,7 @@ Three places describe the server's `/v1` interface, and this page is the smalles
 - The [HTTP interface rules](https://github.com/messagecrate/message-crate/blob/main/docs/architecture/http-api.md) state what every route must do, each rule with its reason: route shape, lists and paging, failures as problem documents, credentials and what each reaches, and runs.
 - This page walks through an Import Run and an Export Run from start to finish, and lists the words of the search language.
 
-Day-to-day import uses the desktop [Import](/docs/user/import-from-a-backup/) screen and download uses [Export](/docs/user/how-to/export-your-messages/). Both call this API with [JSONL](/docs/developer/reference/export-structure/) and attachment bytes keyed by SHA-256, through the `message-crate-push` and `message-crate-pull` libraries.
+Day-to-day import uses the desktop [Import](/docs/user/features/messages/import/) screen and download uses [Export](/docs/user/features/messages/export/). Both call this API with [JSONL](/docs/developer/reference/export-structure/) and attachment bytes keyed by SHA-256, through the `message-crate-push` and `message-crate-pull` libraries.
 
 ## Tokens
 
@@ -79,7 +79,7 @@ Every export route takes the `export` scope on a session or an API token. A prog
 
 ## Search operators (`q`)
 
-`q` is the same search language the website uses. [Search](/docs/user/how-to/search/) has the full grammar: quoting, `none`/`any`, date and size ranges, `-` to exclude, `or` and parentheses, `avoc*` prefixes. An Export Run's `query` scope compiles `q` against the Messages list, with the same compiler Contacts and Conversations search use elsewhere, full-text index included for free text. `GET /v1/search-fields/contacts` and `GET /v1/search-fields/conversations` list the words those lists accept. These are the words the Messages list has:
+`q` is the same search language the website uses. [Search](/docs/user/features/messages/search/) has the full grammar: quoting, `none`/`any`, date and size ranges, `-` to exclude, `or` and parentheses, `avoc*` prefixes. An Export Run's `query` scope compiles `q` against the Messages list, with the same compiler Contacts and Conversations search use elsewhere, full-text index included for free text. `GET /v1/search-fields/contacts` and `GET /v1/search-fields/conversations` list the words those lists accept. These are the words the Messages list has:
 
 - Free text and `"quoted phrases"` match the message body, the subject, and any attachment file name.
 - `body:`, `subject:` — text, `none`, `any`, restricted to that one field.

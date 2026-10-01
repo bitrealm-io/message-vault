@@ -11,7 +11,7 @@ description: Fix common problems with the desktop app and reaching Message Crate
 
 **macOS Gatekeeper or "cannot be opened" warning.** Go to **System Settings → Privacy & Security** and click **Open Anyway** next to the message about the app. Alternatively, right-click the app in Finder and choose **Open**.
 
-### Import or Extract fails
+### Import fails
 
 **Wrong source or method.** Choose **iMessage**, then **Platform** **iPhone backup** or **Mac Messages**. A `.db` file is not an iPhone backup folder. For WhatsApp, choose **WhatsApp**, then **Platform** **Android** or **iPhone**.
 
@@ -19,7 +19,7 @@ description: Fix common problems with the desktop app and reaching Message Crate
 
 **Wrong WhatsApp decryption key.** The key must be the full 64-character hex string, or a key file path. Re-export the key if the value is uncertain.
 
-**wtsexporter not found.** Install `wtsexporter` with the commands on [Install the desktop app](/docs/user/get-started/install-the-desktop-app/). Confirm it is on `PATH`, then retry.
+**wtsexporter not found.** Install `wtsexporter` with the command on [WhatsApp](/docs/user/import-sources/whatsapp/#install-wtsexporter). Confirm it is on `PATH`, then retry.
 
 ```bash title="Install wtsexporter"
 pipx install "whatsapp-chat-exporter[android_backup,crypt15]"
@@ -33,7 +33,7 @@ pipx install "whatsapp-chat-exporter[android_backup,crypt15]"
 
 **"Input and output must differ" (Format).** Choose a new empty output folder.
 
-**Some messages are missing from a rescue import.** Limited formats cannot preserve everything. See [Rescue imports](/docs/user/how-to/rescue-imports/).
+**Some messages are missing from an old backup.** Limited formats cannot preserve everything. See [Old backups](/docs/user/import-sources/old-backups/).
 
 ## Reaching the server
 

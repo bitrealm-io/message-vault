@@ -14,7 +14,7 @@ Workspace setup: [CONTRIBUTING.md](../../../CONTRIBUTING.md).
 
 ## Docs
 
-This crate is a library. Desktop app contacts: https://messagecrate.app/docs/user/how-to/contacts-and-labels/
+This crate is a library. Desktop app contacts: https://messagecrate.app/docs/user/features/contacts/contacts/
 
 ## License
 

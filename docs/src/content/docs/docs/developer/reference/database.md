@@ -199,4 +199,4 @@ Rust loads them from [`src/db/schema.rs`](https://github.com/messagecrate/messag
 Every column carries a `--` comment on the line above it; a server test fails
 when one is missing.
 
-Related: [Import from a backup](/docs/user/import-from-a-backup/) (desktop) and [Extract to files](/docs/user/how-to/extract-to-files/) (JSONL on disk).
+Related: [Import](/docs/user/features/messages/import/) (desktop).

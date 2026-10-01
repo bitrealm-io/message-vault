@@ -1,65 +1,68 @@
 ---
 title: Install the desktop app
-description: Download the desktop app from GitHub Releases, install FFmpeg and wtsexporter, or build from source.
+description: Download the desktop app, get past the unsigned-app warning, and log in to the Message Crate from step 4.
 ---
 
-The desktop app reads phone backups and imports them into Message Crate. Browsing can stay in the website; Import and Export need this app. Run the server with Docker first — see [Try Message Crate](/docs/user/get-started/try-message-crate/).
+The desktop app shows the same screens as the website and adds **Import** and **Export**.
+This step installs it and logs in to the Message Crate started in [step 4](/docs/user/get-started/start-your-own-message-crate/).
 
 ## Download
 
-Open the [latest release on GitHub](https://github.com/messagecrate/message-crate/releases) and install the build for the operating system.
+The installers are on the [latest release on GitHub](https://github.com/messagecrate/message-crate/releases/latest), under **Assets**.
 
-### Linux
+| Computer | File |
+|---|---|
+| Windows, 64-bit Intel or AMD | `.msi` |
+| Linux, Debian or Ubuntu | `.deb` |
+| Linux, any other distribution | `.AppImage` |
+| Mac with Apple Silicon | `.dmg` |
 
-1. Download the `.deb` (Debian/Ubuntu) or the AppImage.
-2. Install the `.deb`, or mark the AppImage executable and run it.
+There is no build for a Mac with an Intel processor.
+
+## Install
+
+The installers are not code-signed yet, so Windows and macOS warn before the first run.
+The warning says the publisher is unknown. It doesn't mean the file is damaged.
 
 ### Windows
 
-1. Download the `.msi` installer and run it.
-2. If SmartScreen shows a warning, choose the option to run it once — the app is not code-signed yet.
+1. Run the `.msi` file.
+2. If **Windows protected your PC** appears, select **More info**, then **Run anyway**.
+
+### Linux
+
+For the `.deb` file, `sudo apt install ./<file>.deb` installs the app and what it depends on.
+
+For the AppImage, `chmod +x <file>.AppImage` makes the file runnable, and running it starts the app.
 
 ### macOS
 
-1. Download the `.dmg` for Apple Silicon (M-series and later).
-2. Open the disk image and install the app.
-3. If Gatekeeper blocks the app, allow it once in the security prompt — it is not code-signed yet.
+:::caution[Not tested on a Mac]
+These steps follow Apple's documentation. Nobody on the project has run them on a Mac. A wrong step is worth [an issue](https://github.com/messagecrate/message-crate/issues).
+:::
 
-## Helpers for Convert and WhatsApp
+1. Open the `.dmg` file and drag the app to **Applications**.
+2. Open the app. macOS refuses the first time.
+3. Open **System Settings → Privacy & Security**, scroll to **Security**, and select **Open Anyway**.
 
-**Convert** / **Compress** need FFmpeg (`ffmpeg` and `ffprobe`). WhatsApp extract needs `wtsexporter`. The desktop app looks for both on `PATH`. The Docker image already includes FFmpeg for playback in the browser.
+## Log in
 
-| Tool | Windows | Linux | macOS |
-|------|---------|-------|-------|
-| FFmpeg | `winget install -e --id Gyan.FFmpeg` | `sudo apt-get install ffmpeg` | `brew install ffmpeg` |
-| wtsexporter | `pipx install "whatsapp-chat-exporter[android_backup,crypt15]"` | same command | same command |
+The app opens on a card titled **Message Crate**.
+The line under the title reads **Connected** when the app has found the server.
 
-If those commands fail, download FFmpeg from [ffmpeg.org](https://ffmpeg.org/download.html) and `wtsexporter` from [WhatsApp-Chat-Exporter releases](https://github.com/KnugiHK/WhatsApp-Chat-Exporter/releases) or [wts.knugi.dev](https://wts.knugi.dev/). Put the programs on `PATH`.
+The app looks for the server at `http://127.0.0.1:8080`, which is this computer, so a Message Crate started with the command in step 4 is found with nothing to change.
 
-Confirm the tools are visible:
+1. Enter the username and password of the account from step 4. The Owner's login also works here, but the Owner can't import.
+2. Select **Log in**.
 
-```bash title="Check helpers"
-ffmpeg -version
-ffprobe -version
-wtsexporter --help
-```
+What if the line reads **Disconnected**?
 
-## Build from source
+The server isn't answering at that address.
+`docker ps` lists the running containers, and `message-crate` must be among them.
+When the server was started on a different port, **Change server address** opens **Server Address**, where the address is entered and **Test** checks it.
 
-Compiling the app and the server from a git checkout: [Contributing](/docs/developer/contributing/#build-and-run).
+## Check that it worked
 
-## Next
+The app shows the empty **Messages** list, and the left panel now has **Import** and **Export**, which the browser doesn't show.
 
-Log in with **http://127.0.0.1:8080** and the account username and password, then [Import from a backup](/docs/user/import-from-a-backup/). The desktop app uses the IPv4 address because `localhost` can resolve to IPv6, which a server in local Docker does not listen on.
-
-If Connect fails in a release build (AppImage, `.deb`, `.msi`, or `.dmg`) but `curl http://127.0.0.1:8080/v1/session` answers, the server’s `[server] cors_origins` list is missing the packaged-app origin. Add all three of these, restart the server, and try again:
-
-```toml
-cors_origins = [
-  "tauri://localhost",
-  "http://tauri.localhost",
-  "https://tauri.localhost",
-]
-```
-
-Linux AppImage and macOS send `tauri://localhost`. Windows sends `http://tauri.localhost` by default, or `https://tauri.localhost` when the window uses the HTTPS scheme. Adding only the HTTPS origin leaves AppImage Connect failing. Dev builds that load Vite on port 5173 also need `http://localhost:5173` and `http://127.0.0.1:5173`.
+Next: back up the phone. [iPhone](/docs/user/get-started/back-up-an-iphone/) or [Android](/docs/user/get-started/back-up-an-android-phone/).

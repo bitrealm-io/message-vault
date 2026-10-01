@@ -59,7 +59,7 @@ Use these when a complete backup can still be made.
 
 ## Limited converters
 
-Some files come from tools that were not built for this project, or that drop messages and attachments. These converters can still try. Prefer a full backup from Apple, SMS Backup & Restore, or WhatsApp when that is still possible. The User Guide calls these [rescue imports](/docs/user/how-to/rescue-imports/).
+Some files come from tools that were not built for this project, or that drop messages and attachments. These converters can still try. Prefer a full backup from Apple, SMS Backup & Restore, or WhatsApp when that is still possible. The User Guide calls these [rescue imports](/docs/user/import-sources/old-backups/).
 
 | Source | Command | More detail |
 |--------|---------|-------------|

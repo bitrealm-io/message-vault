@@ -89,4 +89,4 @@ from `100` up.
 - Demo seed identity: username `demo` (`crates/server/demo-seed/config/seed.toml`), always
   no-password. Login stays username `demo` and an empty password.
 
-See [Settings](/docs/user/how-to/settings/).
+See [Settings](/docs/user/features/settings/settings/).

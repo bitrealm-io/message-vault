@@ -1,5 +1,5 @@
 # Published Message Crate image. Save this file and run: docker compose up -d
-# Docs: https://messagecrate.app/docs/user/get-started/try-message-crate/
+# Docs: https://messagecrate.app/docs/user/get-started/run-with-demo-data/
 #
 # Pin a release: change :latest to :0.8.3 (no "v").
 # Empty Message Crate: DEMO_DATA=false docker compose up -d

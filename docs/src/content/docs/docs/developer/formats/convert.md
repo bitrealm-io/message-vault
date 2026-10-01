@@ -5,7 +5,7 @@ description: "How message-reexport converts a Message Crate output folder from o
 
 The `message-reexport` package converts an existing Message Crate output
 directory to another packaging format. The desktop app calls it as the second
-step of an [Export](/docs/user/how-to/export-your-messages/) into any format
+step of an [Export](/docs/user/features/messages/export/) into any format
 other than JSON Lines.
 
 **Settings → Convert** in the desktop app rewrites a folder that already exists,

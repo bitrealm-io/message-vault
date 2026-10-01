@@ -960,10 +960,7 @@ pub(crate) async fn create_asset_upload(
     let mime = body.mime.clone();
     let bytes = body.bytes;
     let sha = sha256.clone();
-    let limits = asset_uploads::UploadLimits {
-        part_size: state.asset_part_size,
-        max_bytes: state.asset_max_bytes().await?,
-    };
+    let limits = state.upload_limits().await?;
     let result = tokio::task::spawn_blocking(move || {
         asset_uploads::start_upload(&assets_dir, &sha, bytes, mime.as_deref(), limits)
     })
@@ -1031,7 +1028,8 @@ pub(crate) async fn replace_asset_upload_part(
     if part == 0 {
         return Err(ApiError::validation("part number must be >= 1"));
     }
-    let body = read_body_limited(request.into_body(), state.asset_part_size).await?;
+    let part_size = state.upload_limits().await?.part_size;
+    let body = read_body_limited(request.into_body(), part_size).await?;
     let assets_dir = state.cfg.paths.assets_dir_for_account(account, &source_id);
     let sha = sha256.clone();
     let uid = upload_id.clone();

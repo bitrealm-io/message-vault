@@ -382,9 +382,15 @@ What each reaches:
   changes it at `/v1/server/settings`; `GET /v1/server` reports it to any
   client. Why: a program that uploads has to know the limit before it
   prepares attachments, and it holds an account's credential, never the
-  owner's. A change is `422 Unprocessable Entity` when it is zero or below
-  the part size the server hands out for a multipart upload, and an accepted
-  one holds from the next upload, because every upload reads the setting.
+  owner's. A change is `422 Unprocessable Entity` only when it is zero or
+  more than the database can hold, and an accepted one holds from the next
+  upload, because every upload reads the setting. The part size a multipart
+  upload is told is the configured one or the limit, whichever is smaller,
+  worked out when the upload starts. Why: the limit is the owner's to set,
+  and no value of it, and no edit to the config file, may leave a server
+  that refuses to start or an upload that cannot complete. Rejected:
+  refusing a limit below the configured part size, and stopping `serve`
+  when the config file's part size is above a stored limit.
 
 The credential names the account. No route takes an `account=` parameter.
 

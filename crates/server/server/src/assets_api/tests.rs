@@ -680,6 +680,102 @@ async fn an_upload_over_the_limit_the_owner_just_set_is_refused() {
     );
 }
 
+/// A limit below the part size in the config file is a working limit, not a
+/// broken server: the part size the server hands out is never larger than the
+/// limit, so a file exactly at the limit goes up as a multipart upload and is
+/// served back, and a file one byte over is refused. The part size in this
+/// state is the 64 MiB default; the limit is 40 bytes.
+#[tokio::test]
+async fn a_multipart_upload_works_under_a_limit_below_the_configured_part_size() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let state = fixture.state.clone();
+    let owner = crate::test_support::claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let _: serde_json::Value = crate::test_support::patch_json(
+        &state,
+        "/v1/server/settings",
+        &owner.token,
+        serde_json::json!({ "asset_max_bytes": 40 }),
+    )
+    .await;
+
+    let bytes: Vec<u8> = (0u8..40).collect();
+    let sha = sha256_hex(&bytes);
+    let server = crate::test_support::serve(&state).await;
+    let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}?source=imessage", server.base());
+    let client = reqwest::Client::new();
+
+    let response = client
+        .post(url("/uploads"))
+        .bearer_auth(&user.token)
+        .json(&serde_json::json!({ "bytes": bytes.len(), "mime": "image/png" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let started: serde_json::Value = response.json().await.unwrap();
+    let upload_id = started["upload_id"].as_str().unwrap().to_string();
+    let part_size = started["part_size"].as_u64().unwrap() as usize;
+    assert_eq!(part_size, 40, "a part is never larger than the limit");
+
+    for (index, chunk) in bytes.chunks(part_size).enumerate() {
+        let response = client
+            .put(url(&format!("/uploads/{upload_id}/parts/{}", index + 1)))
+            .bearer_auth(&user.token)
+            .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+            .body(chunk.to_vec())
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "part {}", index + 1);
+    }
+    let response = client
+        .post(url(&format!("/uploads/{upload_id}/complete")))
+        .bearer_auth(&user.token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let response = client
+        .get(url(""))
+        .bearer_auth(&user.token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.bytes().await.unwrap().as_ref(), bytes.as_slice());
+
+    // One byte over the limit is refused when the upload is opened.
+    let over: Vec<u8> = (0u8..41).collect();
+    let (status, text) = crate::test_support::post_raw(
+        &state,
+        &format!("/v1/assets/{}/uploads?source=imessage", sha256_hex(&over)),
+        &user.token,
+        "application/json",
+        serde_json::json!({ "bytes": over.len() }).to_string(),
+    )
+    .await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::AssetUploadInvalid,
+    );
+}
+
+/// What `serve` reads as it starts: with a stored limit below the part size
+/// in the config file it gets working limits, not an error, so neither an
+/// owner's setting nor an edit to `asset_part_size` can leave a server that
+/// will not start.
+#[tokio::test]
+async fn the_limits_serve_starts_with_never_fail_on_a_limit_below_the_part_size() {
+    let (fixture, _user) = crate::test_support::fixture_with_account().await;
+    let state = fixture.state.clone();
+    crate::test_support::store_asset_max_bytes(&state, 1024).await;
+
+    let limits = state.upload_limits().await.unwrap();
+    assert_eq!(limits.max_bytes, 1024);
+    assert_eq!(limits.part_size, 1024);
+}
+
 /// The multipart upload over HTTP, the way `message-crate-push` sends a large file:
 /// open the upload, send each part, complete it, and read the asset back.
 /// Each step is tested alone in `asset_uploads`; this proves the routes join

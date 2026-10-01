@@ -122,10 +122,10 @@ pub struct ServerConfig {
     /// Bind address (default `127.0.0.1:8080`).
     #[serde(default = "default_server_bind")]
     pub bind: String,
-    /// Multipart part size advertised to clients, in bytes. Default 64 MiB
-    /// (under Cloudflare Free/Pro ~100 MB). Must not exceed the attachment
-    /// size limit, which is a Server Setting the owner changes in the app and
-    /// has no key in this file.
+    /// Largest multipart part, in bytes. Default 64 MiB (under Cloudflare
+    /// Free/Pro ~100 MB). The part size a client is told is this or the
+    /// attachment size limit, whichever is smaller. The limit is a Server
+    /// Setting the owner changes in the app and has no key in this file.
     #[serde(default = "default_asset_part_size")]
     pub asset_part_size: usize,
     /// Cross-Origin Resource Sharing (CORS) origins allowed to call this API,

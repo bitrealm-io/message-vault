@@ -60,7 +60,7 @@ The switch saves when it is selected. There is no save button.
 **Attachment size limit** is the largest file an import can upload as an attachment, in MB.
 It is 512 on a new Message Crate.
 The Owner types a new number and selects **Save**.
-The server refuses a number below the part size it uses for large uploads, 64 MB unless the config file changes it, and says so under the field.
+Any number above zero is accepted.
 
 A new limit holds for every upload after it is saved, with no restart.
 An Import Run already under way keeps the limit it started with, so its Staging Review still describes what it will upload.

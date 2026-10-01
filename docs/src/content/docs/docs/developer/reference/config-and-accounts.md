@@ -40,7 +40,7 @@ cors_origins = [
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `asset_part_size` | `67108864` (64 MiB) | Chunk size advertised to clients for multipart uploads. Must be greater than 0 and must not exceed the attachment size limit. Keep under ~100 MiB for Cloudflare-proxied setups. |
+| `asset_part_size` | `67108864` (64 MiB) | Largest chunk of a multipart upload. Must be greater than 0. Keep under ~100 MiB for Cloudflare-proxied setups. The chunk size a client is told is this or the attachment size limit, whichever is smaller. |
 
 The server refuses a config file that carries a section or key it does not use.
 Every command that loads the file, `serve` included, stops with an error that names each unknown key and its section, for example ``[server] has a key the server does not use: `bnd` ``.
@@ -52,8 +52,10 @@ It is a Server Setting stored in the database: 512 MiB until the Owner changes i
 A change holds from the next upload, with no restart.
 `GET /v1/server` reports the limit as `asset_max_bytes` to any client, with no credential, because the desktop app reads it before Staging.
 
-The server refuses a limit of zero or one below `asset_part_size` with `422 Unprocessable Entity`.
-When `asset_part_size` is raised above a limit already stored, `serve` stops at startup and names both numbers.
+The limit is whatever the Owner set, and a part is never larger than the limit.
+A limit below `asset_part_size` is accepted, and the server then hands out parts the size of the limit.
+The part size is worked out on each upload, so neither a change to the limit nor an edit to `asset_part_size` can leave a server that does not start.
+The server refuses only a limit of zero, or one above 9223372036854775807, with `422 Unprocessable Entity`.
 
 Web env overrides (optional): `MC_DB`, `MC_DATA_DIR`.
 

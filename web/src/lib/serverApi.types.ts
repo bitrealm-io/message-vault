@@ -1178,8 +1178,8 @@ export interface paths {
         /**
          * Change the server settings.
          * @description A new attachment size limit holds from the next upload, with no restart.
-         *     A limit of zero, or one below the part size the server hands out for a
-         *     multipart upload, is refused and nothing is changed.
+         *     A limit of zero is refused and nothing is changed. The part size the
+         *     server hands out for a multipart upload is never larger than the limit.
          */
         patch: operations["update_server_settings"];
         trace?: never;
@@ -3416,9 +3416,9 @@ export interface components {
         UpdateServerSettingsRequest: {
             /**
              * Format: int64
-             * @description The new attachment size limit, in bytes. At least 1, and at least the
-             *     part size the server hands out for a multipart upload
-             *     (`[server] asset_part_size` in the config file).
+             * @description The new attachment size limit, in bytes. At least 1. A limit below
+             *     `[server] asset_part_size` is accepted: the server then hands out
+             *     parts the size of the limit.
              */
             asset_max_bytes?: number | null;
             /** @description Let anyone reaching the server create their own account, or stop them. */

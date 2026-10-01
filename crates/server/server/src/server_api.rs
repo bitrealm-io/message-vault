@@ -202,32 +202,20 @@ pub struct UpdateServerSettingsRequest {
     /// Let anyone reaching the server create their own account, or stop them.
     #[serde(default)]
     pub public_registration: Option<bool>,
-    /// The new attachment size limit, in bytes. At least 1, and at least the
-    /// part size the server hands out for a multipart upload
-    /// (`[server] asset_part_size` in the config file).
+    /// The new attachment size limit, in bytes. At least 1. A limit below
+    /// `[server] asset_part_size` is accepted: the server then hands out
+    /// parts the size of the limit.
     #[serde(default)]
     pub asset_max_bytes: Option<u64>,
 }
 
 /// Check a new attachment size limit against the rules the owner's change is
-/// held to, returning the sentence for the one it breaks.
-fn asset_max_bytes_problem(bytes: u64, part_size: usize) -> Option<String> {
+/// held to, returning the sentence for the one it breaks. Any limit the
+/// database can hold is accepted but zero: the part size follows the limit
+/// down, so no limit is too small for the config file.
+fn asset_max_bytes_problem(bytes: u64) -> Option<String> {
     if bytes == 0 {
         return Some("asset_max_bytes must be at least 1".to_string());
-    }
-    if bytes < part_size as u64 {
-        // The owner typed megabytes on the Server Settings screen, so say the
-        // floor that way too when it is a whole number of them.
-        let part_size = part_size as u64;
-        let in_mib = if part_size.is_multiple_of(message_ir::MIB) {
-            format!(" ({} MiB)", part_size / message_ir::MIB)
-        } else {
-            String::new()
-        };
-        return Some(format!(
-            "asset_max_bytes must be at least {part_size}{in_mib}, the part size this server \
-             hands out for a multipart upload"
-        ));
     }
     if i64::try_from(bytes).is_err() {
         return Some(format!("asset_max_bytes must be at most {}", i64::MAX));
@@ -256,8 +244,8 @@ pub async fn get_server_settings(
 /// Change the server settings.
 ///
 /// A new attachment size limit holds from the next upload, with no restart.
-/// A limit of zero, or one below the part size the server hands out for a
-/// multipart upload, is refused and nothing is changed.
+/// A limit of zero is refused and nothing is changed. The part size the
+/// server hands out for a multipart upload is never larger than the limit.
 #[utoipa::path(
     patch,
     path = "/v1/server/settings",
@@ -274,10 +262,7 @@ pub async fn update_server_settings(
     Json(req): Json<UpdateServerSettingsRequest>,
 ) -> Result<Json<ServerSettings>, ApiError> {
     // Checked before anything is written, so a refused request changes nothing.
-    if let Some(problem) = req
-        .asset_max_bytes
-        .and_then(|bytes| asset_max_bytes_problem(bytes, state.asset_part_size))
-    {
+    if let Some(problem) = req.asset_max_bytes.and_then(asset_max_bytes_problem) {
         return Err(ApiError::validation(problem));
     }
     let mut conn = state.db.acquire().await?;

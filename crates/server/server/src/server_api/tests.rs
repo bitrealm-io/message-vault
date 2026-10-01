@@ -416,17 +416,15 @@ async fn an_ordinary_account_cannot_change_the_attachment_size_limit() {
     assert_eq!(server["asset_max_bytes"], DEFAULT_LIMIT);
 }
 
-/// A limit of zero, or one smaller than the part size the server hands out
-/// for a multipart upload, is refused: no upload could ever complete under
-/// it. A limit equal to the part size is the smallest one accepted.
+/// A limit of zero is refused, because no attachment could be uploaded under
+/// it, and so is one the database cannot hold. Nothing is written.
 #[tokio::test]
-async fn a_limit_of_zero_or_below_the_part_size_is_refused() {
+async fn a_limit_of_zero_or_past_what_the_server_can_store_is_refused() {
     let fixture = test_fixture().await;
     let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
-    let part_size = state.asset_part_size as u64;
 
-    for refused in [0, part_size - 1] {
+    for refused in [0, i64::MAX as u64 + 1] {
         let (status, text) = crate::test_support::patch_raw(
             &state,
             "/v1/server/settings",
@@ -449,15 +447,27 @@ async fn a_limit_of_zero_or_below_the_part_size_is_refused() {
         server["asset_max_bytes"], DEFAULT_LIMIT,
         "a refused change writes nothing"
     );
+}
+
+/// The limit is whatever the owner sets. One below the part size in the
+/// config file is accepted like any other: the server sends smaller parts.
+#[tokio::test]
+async fn the_owner_sets_a_limit_below_the_configured_part_size() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
+    let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let below = state.asset_part_size as u64 - 1;
 
     let accepted: serde_json::Value = crate::test_support::patch_json(
         &state,
         "/v1/server/settings",
         &owner.token,
-        serde_json::json!({ "asset_max_bytes": part_size }),
+        serde_json::json!({ "asset_max_bytes": below }),
     )
     .await;
-    assert_eq!(accepted["asset_max_bytes"], part_size);
+    assert_eq!(accepted["asset_max_bytes"], below);
+    let server: serde_json::Value = get_json(&state, "/v1/server", "").await;
+    assert_eq!(server["asset_max_bytes"], below);
 }
 
 /// Claiming this Message Crate puts a row at the owner id and nowhere else.

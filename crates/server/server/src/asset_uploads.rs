@@ -19,9 +19,9 @@ pub const DEFAULT_PART_SIZE: usize = 64 * 1024 * 1024;
 /// Drop abandoned `.incoming` sessions older than this (24h).
 const STALE_INCOMING_SECS: u64 = 24 * 60 * 60;
 
-/// Limits for one upload: the part size from `[server]` config, and the
-/// attachment size limit from the Server Settings as it is when the upload
-/// starts.
+/// Limits for one upload: the attachment size limit from the Server Settings
+/// as it is when the upload starts, and the part size worked out from it and
+/// the `[server]` config ([`UploadLimits::within`]).
 #[derive(Debug, Clone, Copy)]
 pub struct UploadLimits {
     /// Multipart part size advertised to clients.
@@ -40,27 +40,21 @@ impl Default for UploadLimits {
 }
 
 impl UploadLimits {
-    /// The limits `serve` starts with: the configured part size and the stored
-    /// attachment size limit.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error naming both numbers when the part size is larger than
-    /// the limit, because no multipart upload could complete under it. The
-    /// limit is never raised to fit: the Server Settings screen would then
-    /// show a number the server does not use.
-    pub fn checked(part_size: usize, max_bytes: u64) -> Result<Self> {
-        if part_size as u64 > max_bytes {
-            bail!(
-                "[server] asset_part_size ({part_size} bytes) is larger than the attachment size \
-                 limit in Server Settings ({max_bytes} bytes); lower asset_part_size in the config \
-                 file to {max_bytes} or less"
-            );
-        }
-        Ok(Self {
+    /// The limits in force: the attachment size limit as the owner set it,
+    /// and a part size that is the configured one or the limit, whichever is
+    /// smaller. A part is never larger than the limit, so every limit the
+    /// owner can set is one an upload can complete under, and no pairing of
+    /// the setting and the config file is an error.
+    pub fn within(configured_part_size: usize, max_bytes: u64) -> Self {
+        let part_size = usize::try_from(max_bytes)
+            .map_or(configured_part_size, |limit| {
+                configured_part_size.min(limit)
+            })
+            .max(1);
+        Self {
             part_size,
             max_bytes,
-        })
+        }
     }
 }
 
@@ -542,7 +536,7 @@ mod tests {
         let data = b"abcdefghijklmnopqrstuvwxyz";
         let sha = hash_bytes(data);
         // Tiny parts, set on this test's own limits so no other test sees them.
-        let limits = UploadLimits::checked(10, 1024).unwrap();
+        let limits = UploadLimits::within(10, 1024);
         let (existing, start) =
             start_upload(root, &sha, data.len() as u64, Some("text/plain"), limits).unwrap();
         assert!(existing.is_none());
@@ -591,14 +585,15 @@ mod tests {
         assert!(err.to_string().contains("server limit"));
     }
 
-    /// A part size above the limit is an error that names both numbers, never
-    /// a limit quietly raised to fit.
+    /// The limit is the owner's and is never moved. A configured part size
+    /// above it is brought down to it; one below it is used as configured.
     #[test]
-    fn a_part_size_above_the_limit_is_refused_by_name() {
-        let err = UploadLimits::checked(4096, 1024).unwrap_err().to_string();
-        assert!(err.contains("asset_part_size (4096 bytes)"), "{err}");
-        assert!(err.contains("(1024 bytes)"), "{err}");
-        assert_eq!(UploadLimits::checked(1024, 1024).unwrap().max_bytes, 1024);
+    fn a_part_is_never_larger_than_the_limit() {
+        let small_limit = UploadLimits::within(4096, 1024);
+        assert_eq!((small_limit.part_size, small_limit.max_bytes), (1024, 1024));
+
+        let small_part = UploadLimits::within(10, 1024);
+        assert_eq!((small_part.part_size, small_part.max_bytes), (10, 1024));
     }
 
     #[test]

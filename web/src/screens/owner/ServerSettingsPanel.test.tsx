@@ -79,18 +79,18 @@ describe("ServerSettingsPanel attachment size limit", () => {
 
   it("shows the server's sentence when it refuses the limit, and keeps what was typed", async () => {
     updateServerSettings.mockRejectedValue(
-      new ApiError(422, "asset_max_bytes must be at least 67108864 (64 MiB)"),
+      new ApiError(422, "asset_max_bytes must be at most 9223372036854775807"),
     );
     renderPanel();
     const field = await screen.findByLabelText("Attachment size limit");
 
     await userEvent.clear(field);
-    await userEvent.type(field, "10");
+    await userEvent.type(field, "99999999999999");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "asset_max_bytes must be at least 67108864 (64 MiB)",
+      "asset_max_bytes must be at most 9223372036854775807",
     );
-    expect(field).toHaveValue(10);
+    expect(field).toHaveValue(99999999999999);
   });
 });

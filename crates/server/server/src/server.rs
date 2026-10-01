@@ -353,9 +353,10 @@ pub struct AppState {
     /// here, not in a static, so tests in one binary cannot rate-limit each
     /// other; a running server has a single state, so the limit still spans it.
     pub(crate) auth_rate_limits: crate::credentials::AuthRateLimits,
-    /// Multipart part size handed to clients, from `[server] asset_part_size`.
-    /// The attachment size limit is not held here: it is a Server Setting,
-    /// read from the database when a request needs it
+    /// The largest multipart part, from `[server] asset_part_size`. The part
+    /// size a client is told is this or the attachment size limit, whichever
+    /// is smaller ([`AppState::upload_limits`]). The limit is not held here:
+    /// it is a Server Setting, read from the database when a request needs it
     /// ([`AppState::asset_max_bytes`]).
     pub(crate) asset_part_size: usize,
     /// The Demo Account build the owner started, if one is running or the
@@ -386,6 +387,17 @@ impl AppState {
     /// The attachment size limit as the Server Settings hold it at this
     /// moment, in bytes. Read on every request that needs it, so a change the
     /// owner makes holds for the next upload with no restart.
+    /// The upload limits in force at this moment: the attachment size limit,
+    /// and the part size the server uses and tells a client, which is the
+    /// configured one or the limit, whichever is smaller. Worked out on each
+    /// call, so a changed limit moves the part size with no restart.
+    pub(crate) async fn upload_limits(&self) -> anyhow::Result<asset_uploads::UploadLimits> {
+        Ok(asset_uploads::UploadLimits::within(
+            self.asset_part_size,
+            self.asset_max_bytes().await?,
+        ))
+    }
+
     pub(crate) async fn asset_max_bytes(&self) -> anyhow::Result<u64> {
         let mut conn = self.db.acquire().await?;
         Ok(crate::db::server_settings::load(&mut conn)
@@ -1019,13 +1031,9 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
         );
     }
     let state = AppState::new(opened, server.asset_part_size);
-    // A stored limit below the configured part size can only come from a
-    // config edit made after the owner set the limit. No multipart upload
-    // could complete under it, so the server says so and does not start.
-    let upload_limits = asset_uploads::UploadLimits::checked(
-        state.asset_part_size,
-        state.asset_max_bytes().await?,
-    )?;
+    // Reported as they stand now; each upload reads them again. Any stored
+    // limit starts the server: a part is never larger than the limit.
+    let upload_limits = state.upload_limits().await?;
     eprintln!(
         "  assets: max={} MiB  part_size={} MiB",
         upload_limits.max_bytes / message_ir::MIB,

@@ -451,6 +451,56 @@ mod tests {
         }
     }
 
+    /// The header and one incoming iMessage whose `subject` and `imessage`
+    /// fields are the JSON given.
+    fn message_with(subject: &str, imessage: &str) -> MessageRecord {
+        let header = r#"{"schema_version":4,"export":{"source":"imessage","tool":"t","tool_version":"1","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550101","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550101","display_name":"Sam"}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1400773261000,"last_timestamp_unix_ms":1400773261000}}}"#.to_string();
+        let message = format!(
+            r#"{{"guid":"g1","timestamp_unix_ms":1400773261000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550101","sender_display_name":"Sam","subject":{subject},"text":"hello","attachments":[],"imessage":{imessage},"source":null}}"#
+        );
+        let mut records = parse_ir_lines([header, message]).unwrap();
+        match records.pop() {
+            Some(ExportRecord::Message(m)) => m,
+            _ => panic!("expected message"),
+        }
+    }
+
+    #[test]
+    fn a_subject_is_kept_and_an_empty_one_is_none() {
+        assert_eq!(
+            message_with(r#""Dinner on Friday""#, "null")
+                .subject
+                .as_deref(),
+            Some("Dinner on Friday")
+        );
+        assert_eq!(message_with(r#""""#, "null").subject, None);
+        assert_eq!(message_with("null", "null").subject, None);
+    }
+
+    /// An export that names a tapback only by `tapback_kind`, with no
+    /// `tapbacks` list, still imports that one tapback.
+    #[test]
+    fn a_tapback_kind_without_a_tapbacks_list_is_one_tapback() {
+        let imessage = |kind: &str| {
+            serde_json::to_string(&message_ir::IrImessage {
+                tapback_kind: Some(kind.to_string()),
+                associated_part: Some(2),
+                ..Default::default()
+            })
+            .unwrap()
+        };
+        let loved = message_with("null", &imessage("loved"));
+        assert_eq!(loved.tapbacks.len(), 1);
+        let tapback = &loved.tapbacks[0];
+        assert_eq!(tapback.kind, "loved");
+        assert_eq!(tapback.part_index, 2);
+        assert!(!tapback.is_from_me);
+        assert_eq!(tapback.sender.as_deref(), Some("+15555550101"));
+
+        let empty = message_with("null", &imessage(""));
+        assert!(empty.tapbacks.is_empty());
+    }
+
     #[test]
     fn parses_concatenated_ir_conversations() {
         let header = |chat: &str| {

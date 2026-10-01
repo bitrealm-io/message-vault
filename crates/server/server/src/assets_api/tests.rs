@@ -20,6 +20,27 @@ fn files_named_with_sha(root: &Path, sha: &str) -> Vec<std::fs::DirEntry> {
     installed
 }
 
+/// The fingerprint names a file under the assets directory, so anything that
+/// is not exactly 64 hex digits is refused: 64 characters that are not hex
+/// could be a path, and a wrong length names no file the server wrote.
+#[test]
+fn normalize_sha256_takes_only_64_hex_digits() {
+    let sha = "a".repeat(64);
+    assert_eq!(normalize_sha256(&sha), Some(sha.clone()));
+    assert_eq!(
+        normalize_sha256(&format!(" {} ", "AB".repeat(32))),
+        Some("ab".repeat(32))
+    );
+
+    let traversal = format!("../{}", "a".repeat(61));
+    assert_eq!(traversal.len(), 64);
+    assert_eq!(normalize_sha256(&traversal), None);
+    assert_eq!(normalize_sha256(&"g".repeat(64)), None);
+    assert_eq!(normalize_sha256(&"a".repeat(63)), None);
+    assert_eq!(normalize_sha256(&"a".repeat(65)), None);
+    assert_eq!(normalize_sha256(""), None);
+}
+
 #[test]
 fn store_verified_replaces_corrupt_destination() {
     let dir = tempdir().unwrap();

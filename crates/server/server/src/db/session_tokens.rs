@@ -366,6 +366,35 @@ mod tests {
         assert!(lookup_session(&mut conn, &token).await.unwrap().is_none());
     }
 
+    /// A session that ran out an hour ago is compared with the real clock.
+    /// An `expires_at` of `'1'` is before any clock reading, so it cannot
+    /// show that the clock is read at all.
+    #[tokio::test]
+    async fn lookup_rejects_a_session_that_expired_an_hour_ago() {
+        let (pool, _dir) = crate::db::engine::test_pool().await;
+        let mut conn = pool.acquire().await.unwrap();
+        schema::ensure_accounts_schema(&mut conn).await.unwrap();
+        sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'alice')")
+            .bind(7_i64)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        let token = insert_account_session_token(&mut conn, 7).await.unwrap();
+        assert!(lookup_session(&mut conn, &token).await.unwrap().is_some());
+
+        let an_hour_ago = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            - 3600;
+        sqlx::query("UPDATE account_session_tokens SET expires_at = $1")
+            .bind(an_hour_ago.to_string())
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        assert!(lookup_session(&mut conn, &token).await.unwrap().is_none());
+    }
+
     #[tokio::test]
     async fn insert_session_with_ttl_sets_expires_at() {
         let (pool, _dir) = crate::db::engine::test_pool().await;

@@ -353,4 +353,97 @@ describe("ResumeImportPanel", () => {
       ),
     ).toBeInTheDocument();
   });
+
+  it("asks for the backup password and holds Pick up until it is filled", async () => {
+    const user = userEvent.setup();
+    const onResume = vi.fn();
+    const onDiscard = vi.fn();
+    const decision: ResumeDecision = {
+      kind: "resume_write",
+      session: session({ stage: "write" }),
+    };
+    render(
+      <ResumeImportPanel
+        decision={decision}
+        secret="backupPassword"
+        onResume={onResume}
+        onDiscard={onDiscard}
+      />,
+    );
+
+    const field = screen.getByLabelText("Encryption password");
+    const resume = screen.getByRole("button", { name: "Pick up" });
+    expect(resume).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Discard this import" })).toBeEnabled();
+
+    await user.type(field, "hunter2");
+    expect(resume).toBeEnabled();
+    await user.click(resume);
+    expect(onResume).toHaveBeenCalledTimes(1);
+    expect(onResume).toHaveBeenCalledWith("hunter2");
+  });
+
+  it("asks for the backup password and holds Start over until it is filled", async () => {
+    const user = userEvent.setup();
+    const onResume = vi.fn();
+    const decision: ResumeDecision = { kind: "restart", session: session({ stage: "parse" }) };
+    render(
+      <ResumeImportPanel
+        decision={decision}
+        secret="backupPassword"
+        onResume={onResume}
+        onDiscard={vi.fn()}
+      />,
+    );
+
+    const resume = screen.getByRole("button", { name: "Start over" });
+    expect(resume).toBeDisabled();
+    // Spaces alone are not a password: the extract trims it to nothing.
+    await user.type(screen.getByLabelText("Encryption password"), "   ");
+    expect(resume).toBeDisabled();
+
+    await user.type(screen.getByLabelText("Encryption password"), "hunter2");
+    await user.click(resume);
+    expect(onResume).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["resume_write", "write", "Pick up"],
+    ["restart", "parse", "Start over"],
+  ] as const)(
+    "asks for the WhatsApp key on %s and holds the button until it is filled",
+    async (kind, stage, label) => {
+      const user = userEvent.setup();
+      const onResume = vi.fn();
+      const decision: ResumeDecision = { kind, session: session({ source: "whatsapp", stage }) };
+      render(
+        <ResumeImportPanel
+          decision={decision}
+          secret="whatsappKey"
+          onResume={onResume}
+          onDiscard={vi.fn()}
+        />,
+      );
+
+      expect(screen.queryByLabelText("Encryption password")).not.toBeInTheDocument();
+      const resume = screen.getByRole("button", { name: label });
+      expect(resume).toBeDisabled();
+
+      await user.type(screen.getByLabelText("Decryption key"), "0123abcd");
+      await user.click(resume);
+      expect(onResume).toHaveBeenCalledWith("0123abcd");
+    },
+  );
+
+  it("shows no password or key field when the Import Run had neither", () => {
+    const decision: ResumeDecision = {
+      kind: "resume_write",
+      session: session({ stage: "write" }),
+    };
+    render(<ResumeImportPanel decision={decision} onResume={vi.fn()} onDiscard={vi.fn()} />);
+
+    expect(screen.queryByLabelText("Encryption password")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Decryption key")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pick up" })).toBeEnabled();
+  });
 });

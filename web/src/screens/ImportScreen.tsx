@@ -50,7 +50,7 @@ import {
 } from "../lib/whatsappImport";
 import BackupIdentityList from "./import/BackupIdentityList";
 import BackupIdentityStopScreen from "./import/BackupIdentityStopScreen";
-import { restoreFormFromSnapshot } from "./import/formSnapshot";
+import { restoreFormFromSnapshot, snapshotSecret } from "./import/formSnapshot";
 import ImportFormFields from "./import/ImportFormFields";
 import ImportRunView from "./import/ImportRunView";
 import { isReviewPhase } from "./import/importRunStore";
@@ -60,6 +60,7 @@ import {
   type FolderCheck,
   type ResumeDecision,
   resumeDecisionFor,
+  resumeReadsBackup,
 } from "./import/resumeDecision";
 import { parseStoredStagingSummary, useImportJob } from "./import/useImportJob";
 
@@ -363,8 +364,17 @@ export default function ImportScreen() {
     }
   }
 
-  async function handleResumeAction(): Promise<void> {
+  // The password or key the stored run was started with, when this resume
+  // runs extract again. The snapshot records only that one was given, so the
+  // panel asks for it. A resume into Upload reads no backup and asks nothing.
+  const resumeSecret =
+    resume.session && resumeReadsBackup(resume.kind) ? snapshotSecret(resume.session.form) : null;
+
+  async function handleResumeAction(typedSecret: string): Promise<void> {
     if (resume.kind === "none" || !resume.session) return;
+    // The panel holds its button until the field is filled; this keeps an
+    // extract with an empty password from starting by any other route.
+    if (resumeSecret && typedSecret.trim() === "") return;
     // The panel deliberately stays mounted across the discard round trip
     // below, so without this a second click would run two discards, two
     // startImport calls (the second 409s), and two extracts racing one set
@@ -373,15 +383,20 @@ export default function ImportScreen() {
     resumingRef.current = true;
     try {
       const session = resume.session;
-      const restoredForm = restoreFormFromSnapshot(session.form);
-      if (!restoredForm) {
+      const storedForm = restoreFormFromSnapshot(session.form);
+      if (!storedForm) {
         // The staging folder is present -- the decision only reached here
         // because it is -- so folder_missing's copy would be false. This
         // kind exists solely for this screen to construct.
         setResume({ kind: "settings_unreadable", session });
         return;
       }
-      applyRestoredFormState(restoredForm);
+      applyRestoredFormState(storedForm);
+      // The typed secret goes to this one run's extract and nowhere else:
+      // not into the visible form's state, and never into a snapshot.
+      const restoredForm = resumeSecret
+        ? { ...storedForm, [resumeSecret]: typedSecret }
+        : storedForm;
 
       if (resume.kind === "resume_push") {
         if (!session.staging_dir) return; // resumeDecisionFor guarantees this; defensive only.
@@ -793,8 +808,9 @@ export default function ImportScreen() {
       {phase === "form" && resumeChecked && resume.kind !== "none" && (
         <ResumeImportPanel
           decision={resume}
+          secret={resumeSecret}
           error={resumeError}
-          onResume={() => void handleResumeAction()}
+          onResume={(typedSecret) => void handleResumeAction(typedSecret)}
           onDiscard={() => void handleDiscardResume()}
         />
       )}

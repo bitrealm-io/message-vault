@@ -85,6 +85,16 @@ export function resumeDecisionFor(args: {
   return { kind: "restart", session };
 }
 
+/**
+ * Whether acting on this decision runs extract over the backup again.
+ *
+ * A resumed Staging and both restarts do. A resume into a Review, Media, or
+ * Upload works from the staged folder, and the rest only discard.
+ */
+export function resumeReadsBackup(kind: ResumeDecision["kind"]): boolean {
+  return kind === "resume_write" || kind === "restart" || kind === "source_changed";
+}
+
 /** How a session's stored backup fingerprint compares to the backup now. */
 export type FingerprintCheck = "match" | "mismatch" | "source_missing" | "unknown";
 

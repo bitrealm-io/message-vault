@@ -145,14 +145,16 @@ vi.mock("./import/ImportRunView", () => ({
 vi.mock("./import/ResumeImportPanel", () => ({
   default: (props: {
     decision: ResumeDecision;
+    secret?: string | null;
     error?: string | null;
-    onResume: () => void;
+    onResume: (secret: string) => void;
     onDiscard: () => void;
   }) => (
     <div data-testid="resume-panel">
       <span data-testid="resume-kind">{props.decision.kind}</span>
+      <span data-testid="resume-secret">{props.secret ?? "none"}</span>
       {props.error ? <span data-testid="resume-error">{props.error}</span> : null}
-      <button type="button" onClick={props.onResume}>
+      <button type="button" onClick={() => props.onResume("typed-secret")}>
         resume-action
       </button>
       <button type="button" onClick={props.onDiscard}>
@@ -192,6 +194,33 @@ function session(overrides: Partial<ActiveImportSession> = {}): ActiveImportSess
     source_fingerprint: null,
     source_identities: null,
     summary: null,
+    ...overrides,
+  };
+}
+
+/** A stored form snapshot for an iPhone backup, as `formSnapshot` writes it. */
+function storedForm(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    source: "imessage-ios",
+    backupPath: "/backups/iphone",
+    attachmentMedia: "copy",
+    maxResolution: "720p",
+    maxFps: "30",
+    minSizeMb: "20",
+    ownerPhones: [],
+    ownerEmails: [],
+    obfuscate: false,
+    isAndroidSms: false,
+    attachmentRoot: "",
+    appleContacts: "",
+    whatsappWa: "",
+    whatsappMedia: "",
+    whatsappDb: "",
+    whatsappBusiness: false,
+    whatsappOwnerPhone: "",
+    timeZone: "America/New_York",
+    backupPasswordGiven: false,
+    whatsappKeyGiven: false,
     ...overrides,
   };
 }
@@ -385,6 +414,8 @@ describe("ImportScreen entering Import", () => {
           whatsappBusiness: false,
           whatsappOwnerPhone: "",
           timeZone: "America/New_York",
+          backupPasswordGiven: false,
+          whatsappKeyGiven: false,
         },
       }),
     );
@@ -419,6 +450,8 @@ describe("ImportScreen entering Import", () => {
     whatsappBusiness: false,
     whatsappOwnerPhone: "",
     timeZone: "America/New_York",
+    backupPasswordGiven: false,
+    whatsappKeyGiven: false,
   };
 
   it.each([
@@ -516,6 +549,8 @@ describe("ImportScreen entering Import", () => {
           whatsappBusiness: false,
           whatsappOwnerPhone: "",
           timeZone: "America/New_York",
+          backupPasswordGiven: false,
+          whatsappKeyGiven: false,
         },
       }),
     );
@@ -567,6 +602,8 @@ describe("ImportScreen entering Import", () => {
           whatsappBusiness: false,
           whatsappOwnerPhone: "",
           timeZone: "America/New_York",
+          backupPasswordGiven: false,
+          whatsappKeyGiven: false,
         },
       }),
     );
@@ -684,6 +721,8 @@ describe("ImportScreen entering Import", () => {
           whatsappBusiness: false,
           whatsappOwnerPhone: "",
           timeZone: "America/New_York",
+          backupPasswordGiven: false,
+          whatsappKeyGiven: false,
         },
       }),
     );
@@ -761,6 +800,8 @@ describe("ImportScreen entering Import", () => {
           whatsappBusiness: false,
           whatsappOwnerPhone: "",
           timeZone: "America/New_York",
+          backupPasswordGiven: false,
+          whatsappKeyGiven: false,
         },
       }),
     );
@@ -775,6 +816,121 @@ describe("ImportScreen entering Import", () => {
     const [form, resume] = startImportMock.mock.calls[0] as [unknown, unknown];
     expect(form).toMatchObject({ source: "imessage-ios", backupPath: "/backups/iphone.tar" });
     expect(resume).toBeUndefined();
+  });
+
+  it("asks for the backup password again when a resumed Staging will read an encrypted backup", async () => {
+    const user = userEvent.setup();
+    getActiveImportSessionMock.mockResolvedValue(
+      session({ stage: "write", form: storedForm({ backupPasswordGiven: true }) }),
+    );
+    renderWithProviders(<ImportScreen />);
+
+    await screen.findByTestId("resume-panel");
+    expect(screen.getByTestId("resume-kind")).toHaveTextContent("resume_write");
+    expect(screen.getByTestId("resume-secret")).toHaveTextContent("backupPassword");
+
+    await user.click(screen.getByText("resume-action"));
+
+    expect(startImportMock).toHaveBeenCalledTimes(1);
+    const [form, resume, resumeWrite] = startImportMock.mock.calls[0] as [
+      unknown,
+      unknown,
+      unknown,
+    ];
+    expect(form).toMatchObject({ backupPassword: "typed-secret", whatsappKey: "" });
+    expect(resume).toBeUndefined();
+    expect(resumeWrite).toMatchObject({ sessionId: 7 });
+  });
+
+  it("asks for the backup password again when a restart will read an encrypted backup", async () => {
+    const user = userEvent.setup();
+    getActiveImportSessionMock.mockResolvedValue(
+      session({ stage: "parse", form: storedForm({ backupPasswordGiven: true }) }),
+    );
+    renderWithProviders(<ImportScreen />);
+
+    await screen.findByTestId("resume-panel");
+    expect(screen.getByTestId("resume-kind")).toHaveTextContent("restart");
+    expect(screen.getByTestId("resume-secret")).toHaveTextContent("backupPassword");
+
+    await user.click(screen.getByText("resume-action"));
+
+    expect(discardImportSessionMock).toHaveBeenCalledWith(7);
+    expect(startImportMock).toHaveBeenCalledTimes(1);
+    const [form, resume, resumeWrite] = startImportMock.mock.calls[0] as [
+      unknown,
+      unknown,
+      unknown,
+    ];
+    expect(form).toMatchObject({ backupPassword: "typed-secret", whatsappKey: "" });
+    expect(resume).toBeUndefined();
+    expect(resumeWrite).toBeUndefined();
+  });
+
+  it.each([
+    ["a resumed Staging", "write", "resume_write"],
+    ["a restart", "parse", "restart"],
+  ] as const)(
+    "asks for the WhatsApp key again when %s will read the backup",
+    async (_label, stage, kind) => {
+      const user = userEvent.setup();
+      getActiveImportSessionMock.mockResolvedValue(
+        session({
+          source: "whatsapp",
+          stage,
+          form: storedForm({
+            source: "whatsapp-android",
+            backupPath: "/backups/whatsapp",
+            whatsappKeyGiven: true,
+          }),
+        }),
+      );
+      renderWithProviders(<ImportScreen />);
+
+      await screen.findByTestId("resume-panel");
+      expect(screen.getByTestId("resume-kind")).toHaveTextContent(kind);
+      expect(screen.getByTestId("resume-secret")).toHaveTextContent("whatsappKey");
+
+      await user.click(screen.getByText("resume-action"));
+
+      expect(startImportMock).toHaveBeenCalledTimes(1);
+      const [form] = startImportMock.mock.calls[0] as [unknown];
+      expect(form).toMatchObject({ whatsappKey: "typed-secret", backupPassword: "" });
+    },
+  );
+
+  it("asks for nothing when the stored Import Run had no password or key", async () => {
+    const user = userEvent.setup();
+    getActiveImportSessionMock.mockResolvedValue(session({ stage: "write", form: storedForm() }));
+    renderWithProviders(<ImportScreen />);
+
+    await screen.findByTestId("resume-panel");
+    expect(screen.getByTestId("resume-kind")).toHaveTextContent("resume_write");
+    expect(screen.getByTestId("resume-secret")).toHaveTextContent("none");
+
+    await user.click(screen.getByText("resume-action"));
+
+    const [form] = startImportMock.mock.calls[0] as [unknown];
+    expect(form).toMatchObject({ backupPassword: "", whatsappKey: "" });
+  });
+
+  it("asks for nothing on a resume into Upload, which reads no backup", async () => {
+    const user = userEvent.setup();
+    getActiveImportSessionMock.mockResolvedValue(
+      session({ stage: "pushing", form: storedForm({ backupPasswordGiven: true }) }),
+    );
+    renderWithProviders(<ImportScreen />);
+
+    await screen.findByTestId("resume-panel");
+    expect(screen.getByTestId("resume-kind")).toHaveTextContent("resume_push");
+    expect(screen.getByTestId("resume-secret")).toHaveTextContent("none");
+
+    await user.click(screen.getByText("resume-action"));
+
+    expect(startImportMock).toHaveBeenCalledTimes(1);
+    const [form, resume] = startImportMock.mock.calls[0] as [unknown, unknown];
+    expect(form).toMatchObject({ backupPassword: "", whatsappKey: "" });
+    expect(resume).toMatchObject({ sessionId: 7 });
   });
 });
 

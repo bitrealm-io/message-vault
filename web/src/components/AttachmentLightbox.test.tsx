@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchAssetObjectUrl } from "../lib/serverApi";
@@ -148,6 +148,57 @@ describe("AttachmentLightbox buttons", () => {
     await screen.findByRole("img", { name: "second.png" });
 
     expect(screen.getByText("2 / 2")).toBeInTheDocument();
+  });
+});
+
+/**
+ * Opening an attachment gives the original, at its full quality, even when
+ * the conversation showed a preview. Only bytes the browser cannot draw fall
+ * back to the preview, so a HEIC photo does not open as a broken image.
+ */
+describe("AttachmentLightbox and previews", () => {
+  const heic: LightboxItem = {
+    attachment: {
+      original_name: "IMG_0001.heic",
+      mime_type: "image/heic",
+      sha256: "ccc",
+      preview_mime_type: "image/jpeg",
+    },
+    source: "demo",
+  };
+
+  it("opens the original of an attachment that has a preview", async () => {
+    open(0, [heic]);
+    await screen.findByRole("img", { name: "IMG_0001.heic" });
+
+    expect(fetchAssetObjectUrl).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(fetchAssetObjectUrl).mock.calls[0][2]?.preview).toBe(false);
+  });
+
+  it("shows the preview when the browser cannot draw the original", async () => {
+    vi.mocked(fetchAssetObjectUrl).mockImplementation(async (_sha, _source, options) =>
+      options?.preview ? "blob:preview" : "blob:original",
+    );
+    open(0, [heic]);
+    const original = await screen.findByRole("img", { name: "IMG_0001.heic" });
+    expect(original).toHaveAttribute("src", "blob:original");
+
+    fireEvent.error(original);
+
+    await waitFor(() =>
+      expect(screen.getByRole("img", { name: "IMG_0001.heic" })).toHaveAttribute(
+        "src",
+        "blob:preview",
+      ),
+    );
+  });
+
+  it("asks for no preview when the attachment has none", async () => {
+    open(0);
+    fireEvent.error(await screen.findByRole("img", { name: "first.png" }));
+
+    expect(fetchAssetObjectUrl).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(fetchAssetObjectUrl).mock.calls[0][2]?.preview).toBe(false);
   });
 });
 

@@ -191,6 +191,7 @@ pub fn api_openapi() -> OpenApiRouter<AppState> {
         .routes(routes!(crate::imports_api::create_import_batch))
         .routes(routes!(crate::assets_api::head_asset))
         .routes(routes!(crate::assets_api::get_asset))
+        .routes(routes!(crate::assets_api::get_asset_preview))
         .routes(routes!(crate::assets_api::replace_asset))
         .routes(routes!(crate::assets_api::create_asset_upload))
         .routes(routes!(crate::assets_api::replace_asset_upload_part))

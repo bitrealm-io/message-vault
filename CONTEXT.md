@@ -54,6 +54,13 @@ because the file exists before the database does and its contents are its
 identity.
 _Avoid_: Attachment file, Blob, Media, Upload
 
+**Preview**:
+A copy of an Asset in a format every browser can show, made by the server and
+kept beside the original, which is never changed. A Conversation shows the
+Preview of an attachment that has one; opening the attachment gives the
+original. Not every Asset has a Preview.
+_Avoid_: Derived asset, Converted file
+
 **Import Run**:
 One attempt to bring messages from a backup into Message Crate, recorded
 permanently whether it succeeded, failed, or was cancelled. An account has at

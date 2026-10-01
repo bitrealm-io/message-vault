@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import { fetchAssetObjectUrl } from "../lib/serverApi";
 
-/** Load an attachment as a temporary blob URL. Revokes the URL on unmount or when the id changes. */
+/**
+ * Load an attachment as a temporary blob URL: the original, or with `preview`
+ * its preview. Revokes the URL on unmount or when the id changes.
+ */
 export function useAssetObjectUrl(
   sha256: string | null | undefined,
   source: string | null | undefined,
+  preview = false,
 ): { url: string | null; error: string | null; loading: boolean } {
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +31,7 @@ export function useAssetObjectUrl(
     setError(null);
     setUrl(null);
 
-    fetchAssetObjectUrl(sha, src, ac.signal)
+    fetchAssetObjectUrl(sha, src, { preview, signal: ac.signal })
       .then((next) => {
         if (cancelled) {
           URL.revokeObjectURL(next);
@@ -48,7 +52,7 @@ export function useAssetObjectUrl(
       ac.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [sha256, source]);
+  }, [sha256, source, preview]);
 
   return { url, error, loading };
 }

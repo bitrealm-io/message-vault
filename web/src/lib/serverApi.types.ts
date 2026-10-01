@@ -309,6 +309,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/assets/{sha256}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the preview of a stored asset: the JPEG, MP4 or MP3 that `process-assets` made from it for a browser to show.
+         * @description The URL is the SHA-256 fingerprint of the original, and the body streams
+         *     the preview's bytes in the preview's own media type. An asset with no
+         *     preview answers `404`; the original is at `/v1/assets/{sha256}`.
+         */
+        get: operations["get_asset_preview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/assets/{sha256}/uploads": {
         parameters: {
             query?: never;
@@ -1405,6 +1427,11 @@ export interface components {
             original_name?: string | null;
             /** @description Path inside the export. */
             path?: string | null;
+            /**
+             * @description MIME type of the attachment's preview, when it has one. The
+             *     preview's bytes are at `/v1/assets/{sha256}/preview`.
+             */
+            preview_mime_type?: string | null;
             /** @description Content fingerprint of the stored bytes. */
             sha256?: string | null;
             /** @description OCR/ASR transcription, when processed. */
@@ -4904,6 +4931,71 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Asset"];
+                };
+            };
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_asset_preview: {
+        parameters: {
+            query: {
+                source: string;
+            };
+            header?: never;
+            path: {
+                /** @description Content SHA-256 hex of the original */
+                sha256: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Raw preview bytes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": unknown;
                 };
             };
             /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */

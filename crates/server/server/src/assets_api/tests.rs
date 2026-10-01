@@ -1020,3 +1020,269 @@ async fn completing_an_upload_for_a_blob_a_put_stored_first_answers_200() {
         "the stale session must be dropped"
     );
 }
+
+/// An account's conversation with two stored photos: the first has a preview
+/// that `process-assets` would have written, the second has none.
+struct PreviewFixture {
+    conversation_id: i64,
+    /// Fingerprint of the original that has a preview.
+    with_preview: String,
+    /// Fingerprint of the original that has none.
+    without_preview: String,
+}
+
+const ORIGINAL_BYTES: &[u8] = b"a photo as the phone took it";
+const UNCONVERTED_BYTES: &[u8] = b"a photo with no preview";
+const PREVIEW_BYTES: &[u8] = b"the same photo as a jpeg";
+
+async fn seed_attachment_with_preview(state: &AppState, account_id: i64) -> PreviewFixture {
+    let conversation_id = crate::test_support::seed_conversation(
+        state,
+        &crate::test_support::SeedConversation {
+            account_id,
+            handle: "+15555550142",
+            conversation_type: "individual",
+            group_title: None,
+            source_file: "seed.jsonl",
+            messages: &[crate::test_support::SeedMessage {
+                source: "imessage",
+                timestamp: "2020-01-01T00:00:00Z",
+                is_from_me: true,
+                body: "two photos",
+            }],
+        },
+    )
+    .await;
+    let mut conn = state.db.acquire().await.unwrap();
+    let message_id: i64 = sqlx::query_scalar("SELECT id FROM messages WHERE conversation_id = $1")
+        .bind(conversation_id)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+
+    let paths = &state.cfg.paths;
+    let with_preview = sha256_hex(ORIGINAL_BYTES);
+    let without_preview = sha256_hex(UNCONVERTED_BYTES);
+    let assets_dir = paths.assets_dir_for_account(account_id, "imessage");
+    for (sha, bytes) in [
+        (&with_preview, ORIGINAL_BYTES),
+        (&without_preview, UNCONVERTED_BYTES),
+    ] {
+        let stored = assets_dir.join(shard_rel_path(sha, ""));
+        fs::create_dir_all(stored.parent().unwrap()).unwrap();
+        fs::write(stored, bytes).unwrap();
+    }
+    let preview_sha = sha256_hex(PREVIEW_BYTES);
+    let preview_path = shard_rel_path(&preview_sha, ".jpg");
+    let preview = paths
+        .assets_converted_dir_for_account(account_id, "imessage")
+        .join(&preview_path);
+    fs::create_dir_all(preview.parent().unwrap()).unwrap();
+    fs::write(preview, PREVIEW_BYTES).unwrap();
+
+    for (sha, derived) in [(&with_preview, true), (&without_preview, false)] {
+        sqlx::query(
+            "INSERT INTO attachments (
+                message_id, original_name, mime_type, sha256, assets_path,
+                derived_sha256, derived_assets_path, derived_mime_type
+             ) VALUES ($1, 'photo.heic', 'image/heic', $2, $3, $4, $5, $6)",
+        )
+        .bind(message_id)
+        .bind(sha.as_str())
+        .bind(shard_rel_path(sha, ""))
+        .bind(derived.then_some(preview_sha.as_str()))
+        .bind(derived.then_some(preview_path.as_str()))
+        .bind(derived.then_some("image/jpeg"))
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    }
+    PreviewFixture {
+        conversation_id,
+        with_preview,
+        without_preview,
+    }
+}
+
+/// GET `path` as a browser asks for an image, which admits no JSON, and
+/// return the status, the `Content-Type` and the body.
+async fn get_bytes(state: &AppState, path: &str, token: &str) -> (StatusCode, String, Vec<u8>) {
+    let server = crate::test_support::serve(state).await;
+    let response = reqwest::Client::new()
+        .get(format!("{}{path}", server.base()))
+        .bearer_auth(token)
+        .header(reqwest::header::ACCEPT, "image/*")
+        .send()
+        .await
+        .unwrap();
+    let status = response.status();
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default()
+        .to_string();
+    (
+        status,
+        content_type,
+        response.bytes().await.unwrap().to_vec(),
+    )
+}
+
+/// The web app shows a preview only when the attachment says it has one, so
+/// the conversation's messages must report it, and only for the attachment
+/// `process-assets` converted.
+#[tokio::test]
+async fn an_attachment_with_a_preview_reports_its_media_type() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let seeded = seed_attachment_with_preview(&fixture.state, user.account_id).await;
+
+    let page: serde_json::Value = crate::test_support::get_json(
+        &fixture.state,
+        &format!("/v1/conversations/{}/messages", seeded.conversation_id),
+        &user.token,
+    )
+    .await;
+    let attachments = page["items"][0]["attachments"].as_array().unwrap();
+    assert_eq!(attachments.len(), 2);
+    assert_eq!(attachments[0]["sha256"], seeded.with_preview);
+    assert_eq!(attachments[0]["mime_type"], "image/heic");
+    assert_eq!(attachments[0]["preview_mime_type"], "image/jpeg");
+    assert_eq!(attachments[1]["sha256"], seeded.without_preview);
+    assert!(
+        attachments[1].get("preview_mime_type").is_none(),
+        "an attachment with no preview must not claim one: {}",
+        attachments[1]
+    );
+}
+
+/// The preview route answers the bytes `process-assets` wrote, in their own
+/// media type, and the original route goes on answering the original.
+#[tokio::test]
+async fn the_preview_route_serves_the_preview_and_the_asset_route_the_original() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let state = &fixture.state;
+    let seeded = seed_attachment_with_preview(state, user.account_id).await;
+    let sha = &seeded.with_preview;
+
+    let (status, content_type, body) = get_bytes(
+        state,
+        &format!("/v1/assets/{sha}/preview?source=imessage"),
+        &user.token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(content_type, "image/jpeg");
+    assert_eq!(body, PREVIEW_BYTES);
+
+    let (status, _content_type, body) = get_bytes(
+        state,
+        &format!("/v1/assets/{sha}?source=imessage"),
+        &user.token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, ORIGINAL_BYTES, "the asset route serves the original");
+
+    // The preview belongs to the source it was made in.
+    let (status, text) = crate::test_support::get_raw(
+        state,
+        &format!("/v1/assets/{sha}/preview?source=whatsapp"),
+        &user.token,
+    )
+    .await;
+    crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
+
+    // An asset with no preview has nothing at the preview route; the web app
+    // shows the original for it.
+    let (status, text) = crate::test_support::get_raw(
+        state,
+        &format!(
+            "/v1/assets/{}/preview?source=imessage",
+            seeded.without_preview
+        ),
+        &user.token,
+    )
+    .await;
+    crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
+}
+
+/// A preview is the attachment's content as much as the original is, so it is
+/// read under the same rule: the account that holds it and nobody else, any
+/// session of that account, an API token only with the export scope, and
+/// never the owner (`docs/adr/0008`).
+#[tokio::test]
+async fn a_preview_is_read_under_the_same_rule_as_the_original() {
+    let fixture = crate::test_support::test_fixture().await;
+    let state = fixture.state.clone();
+    let owner =
+        crate::test_support::claim_as_owner(&state, "preview-keeper", "hunter2hunter2").await;
+    let user =
+        crate::test_support::register_via_api(&state, "preview-user", "hunter2hunter2").await;
+    let other =
+        crate::test_support::register_via_api(&state, "preview-other", "hunter2hunter2").await;
+    let seeded = seed_attachment_with_preview(&state, user.account_id).await;
+    let path = format!("/v1/assets/{}/preview?source=imessage", seeded.with_preview);
+
+    let (status, text) = crate::test_support::get_raw(&state, &path, &other.token).await;
+    crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
+    assert_eq!(
+        crate::test_support::get_status(&state, &path, &owner.token).await,
+        StatusCode::FORBIDDEN,
+        "the owner never reads an attachment's bytes, a preview included"
+    );
+
+    let tokens_path = format!("/v1/accounts/{}/api-tokens", user.account_id);
+    let mut tokens = Vec::new();
+    for (can_import, can_export) in [(true, false), (false, true)] {
+        let (_location, created): (String, serde_json::Value) =
+            crate::test_support::post_created_json(
+                &state,
+                &tokens_path,
+                &user.token,
+                serde_json::json!({
+                    "label": "t",
+                    "can_import": can_import,
+                    "can_export": can_export
+                }),
+            )
+            .await;
+        tokens.push(created["token"].as_str().unwrap().to_string());
+    }
+    assert_eq!(
+        crate::test_support::get_status(&state, &path, &tokens[0]).await,
+        StatusCode::FORBIDDEN,
+        "a token that may not export must not fetch a preview"
+    );
+    assert_eq!(
+        crate::test_support::get_status(&state, &path, &tokens[1]).await,
+        StatusCode::OK
+    );
+
+    // Export off, and the conversation in the Trash: the account still opens
+    // the conversation and still reads the original, so it reads the preview.
+    assert_eq!(
+        crate::test_support::patch_status(
+            &state,
+            &format!("/v1/accounts/{}", user.account_id),
+            &owner.token,
+            serde_json::json!({ "can_export": false }),
+        )
+        .await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        crate::test_support::post_status(
+            &state,
+            &format!("/v1/conversations/{}/trash", seeded.conversation_id),
+            &user.token,
+            serde_json::json!({}),
+        )
+        .await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        crate::test_support::get_status(&state, &path, &user.token).await,
+        StatusCode::OK
+    );
+}

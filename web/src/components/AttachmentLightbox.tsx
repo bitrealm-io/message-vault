@@ -1,6 +1,7 @@
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
 import { useAssetObjectUrl } from "../hooks/useAssetObjectUrl";
+import { hasPreview } from "../lib/attachmentPreview";
 import type { MessageAttachment } from "../lib/types";
 import { Z_MODAL } from "../lib/zLayers";
 
@@ -24,7 +25,13 @@ export default function AttachmentLightbox({
 }) {
   const item = items[currentIndex];
   const attachment = item?.attachment;
-  const { url, loading, error } = useAssetObjectUrl(attachment?.sha256, item?.source);
+  // Opening an attachment gives the original. When the browser cannot draw
+  // those bytes and the attachment has a preview, the viewer shows the preview.
+  const [undrawable, setUndrawable] = useState<string | null>(null);
+  const showPreview = Boolean(
+    attachment && hasPreview(attachment) && undrawable === attachment.sha256,
+  );
+  const { url, loading, error } = useAssetObjectUrl(attachment?.sha256, item?.source, showPreview);
 
   // React Aria's Dialog type omits keyboard events and drops them at runtime,
   // so arrow-key navigation is handled with a window listener (as in ContactDrawer).
@@ -50,6 +57,7 @@ export default function AttachmentLightbox({
       <img
         src={url}
         alt={attachment.original_name || "attachment"}
+        onError={() => setUndrawable(attachment.sha256 ?? null)}
         className="max-h-[90vh] max-w-[90vw] object-contain"
       />
     );

@@ -1,4 +1,5 @@
 import { useAssetObjectUrl } from "../hooks/useAssetObjectUrl";
+import { hasPreview, shownMimeType } from "../lib/attachmentPreview";
 import type { MessageAttachment } from "../lib/types";
 
 export default function VideoPlayer({
@@ -8,7 +9,11 @@ export default function VideoPlayer({
   attachment: MessageAttachment;
   source: string;
 }) {
-  const { url, loading, error } = useAssetObjectUrl(attachment.sha256, source);
+  const { url, loading, error } = useAssetObjectUrl(
+    attachment.sha256,
+    source,
+    hasPreview(attachment),
+  );
   if (!attachment.sha256) return null;
   if (error) {
     return <div className="mt-1.5 text-[0.75rem] text-muted">Video failed to load</div>;
@@ -29,7 +34,7 @@ export default function VideoPlayer({
         className="w-full rounded-md"
         aria-label={attachment.original_name || "Video attachment"}
       >
-        <source src={url} type={attachment.mime_type || undefined} />
+        <source src={url} type={shownMimeType(attachment) || undefined} />
         <track kind="captions" />
       </video>
     </div>

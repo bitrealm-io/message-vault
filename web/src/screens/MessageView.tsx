@@ -5,6 +5,7 @@ import {
   contactPreviewFromThreadParticipants,
 } from "../components/contactDrawer/contactDrawerTypes";
 import SourcesPanel from "../components/SourcesPanel";
+import { shownMimeType } from "../lib/attachmentPreview";
 import { useTimeZone } from "../lib/timeZone";
 import type { Conversation, MessageAttachment } from "../lib/types";
 import ConversationHeader from "./message/ConversationHeader";
@@ -60,7 +61,7 @@ export default function MessageView({
     (att: MessageAttachment, source: string) => {
       const images = messages.flatMap((m) =>
         (m.attachments || [])
-          .filter((a) => a.sha256 && a.mime_type?.startsWith("image/"))
+          .filter((a) => a.sha256 && shownMimeType(a)?.startsWith("image/"))
           .map((a) => ({ attachment: a, source: m.source })),
       );
       const idx = images.findIndex(

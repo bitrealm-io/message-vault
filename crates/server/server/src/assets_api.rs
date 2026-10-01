@@ -3,8 +3,8 @@
 //! Files are stored by SHA-256 fingerprint alone (`aa/aaaa…`, no extension)
 //! with the MIME type in a `.aaaa….mime` sidecar, and every reuse re-checks
 //! the bytes against the claimed fingerprint. The HTTP handlers for
-//! `HEAD` / `GET` / `PUT /v1/assets/{sha256}` and the multipart upload routes
-//! also live here; multipart staging itself is in `asset_uploads`.
+//! `HEAD` / `GET` / `PUT /v1/assets/{sha256}`, `GET /v1/assets/{sha256}/preview`
+//! and the multipart upload routes also live here; multipart staging itself is in `asset_uploads`.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, Read, Write};
@@ -670,9 +670,66 @@ pub(crate) async fn get_asset(
     };
 
     let assets_dir = state.cfg.paths.assets_dir_for_account(account, &source_id);
-    let path = assets_dir.join(&stored.assets_path);
+    stream_file(&assets_dir.join(&stored.assets_path), stored.mime_type).await
+}
+
+/// Download the preview of a stored asset: the JPEG, MP4 or MP3 that
+/// `process-assets` made from it for a browser to show.
+///
+/// The URL is the SHA-256 fingerprint of the original, and the body streams
+/// the preview's bytes in the preview's own media type. An asset with no
+/// preview answers `404`; the original is at `/v1/assets/{sha256}`.
+#[utoipa::path(
+    get,
+    path = "/v1/assets/{sha256}/preview",
+    tag = "Assets",
+    security(("session" = []), ("api-token" = ["export"])),
+    params(
+        ("sha256" = String, Path, description = "Content SHA-256 hex of the original"),
+        ("source" = String, Query)
+    ),
+    responses(
+        (status = 200, description = "Raw preview bytes", content_type = "application/octet-stream"),
+    )
+)]
+pub(crate) async fn get_asset_preview(
+    State(state): State<AppState>,
+    AssetReadAccess(auth): AssetReadAccess,
+    AxumPath(sha256): AxumPath<String>,
+    Query(query): Query<AssetQuery>,
+) -> Result<Response, ApiError> {
+    // The same lookup as the original: the caller's own store, so another
+    // account's fingerprint names nothing here.
+    let (account, source_id, existing) =
+        resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Read).await?;
+    let Some(stored) = existing else {
+        return Err(ApiError::NotFound("asset not found".into()));
+    };
+    let mut conn = state.db.acquire().await?;
+    let preview = crate::db::conversation_messages::attachment_preview(
+        &mut conn,
+        account,
+        &source_id,
+        &stored.sha256,
+    )
+    .await?;
+    drop(conn);
+    let Some((preview_path, mime_type)) = preview else {
+        return Err(ApiError::NotFound("asset has no preview".into()));
+    };
+
+    let converted_dir = state
+        .cfg
+        .paths
+        .assets_converted_dir_for_account(account, &source_id);
+    stream_file(&converted_dir.join(preview_path), mime_type).await
+}
+
+/// Answer the file at `path` as a streamed download in `mime_type`, or
+/// `application/octet-stream` when none is known.
+async fn stream_file(path: &Path, mime_type: Option<String>) -> Result<Response, ApiError> {
     // Reject symlinks / missing files before streaming.
-    let meta = tokio::fs::symlink_metadata(&path).await.map_err(|e| {
+    let meta = tokio::fs::symlink_metadata(path).await.map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
             ApiError::NotFound("asset file missing on disk".into())
         } else {
@@ -683,11 +740,8 @@ pub(crate) async fn get_asset(
         return Err(ApiError::NotFound("asset file missing on disk".into()));
     }
 
-    let mime = stored
-        .mime_type
-        .clone()
-        .unwrap_or_else(|| "application/octet-stream".into());
-    let file = tokio::fs::File::open(&path)
+    let mime = mime_type.unwrap_or_else(|| "application/octet-stream".into());
+    let file = tokio::fs::File::open(path)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("open {}: {e}", path.display())))?;
     let stream = tokio_util::io::ReaderStream::new(file);

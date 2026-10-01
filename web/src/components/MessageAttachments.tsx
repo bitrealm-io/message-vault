@@ -1,3 +1,4 @@
+import { shownMimeType } from "../lib/attachmentPreview";
 import type { Message, MessageAttachment } from "../lib/types";
 import AttachmentThumbnail from "./AttachmentThumbnail";
 import VideoPlayer from "./VideoPlayer";
@@ -15,7 +16,7 @@ export default function MessageAttachments({
   return (
     <div>
       {message.attachments.map((att, i) =>
-        !att.missing_reason && att.mime_type?.startsWith("video/") ? (
+        !att.missing_reason && shownMimeType(att)?.startsWith("video/") ? (
           <VideoPlayer key={att.sha256 ?? att.path ?? i} attachment={att} source={message.source} />
         ) : (
           <AttachmentThumbnail

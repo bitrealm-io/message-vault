@@ -21,7 +21,7 @@ const sectionHeading = "m-0 mb-2 text-[12px] font-semibold uppercase tracking-[0
 
 const EXAMPLE_STAGING = "staging-iphone-ios-260809-143022";
 
-/** Shared label + control grid so Vault and Media path fields share one nowrap label column. */
+/** Shared label + control grid so the path fields share one nowrap label column. */
 const settingsGrid = "grid grid-cols-[13.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1";
 const settingsLabel = "whitespace-nowrap text-[0.875rem] font-medium text-text";
 const settingsHelp = "col-start-2 pl-2 text-[0.75rem] text-muted";
@@ -33,7 +33,7 @@ function stagingHelpExample(stagingDir: string, defaultDir: string): string {
   const trimmed = stagingDir.trim().replace(/[/\\]+$/, "");
   const defaultTrimmed = defaultDir.trim().replace(/[/\\]+$/, "");
   if (!trimmed || (defaultTrimmed && trimmed === defaultTrimmed)) {
-    return `~/message-vault/${EXAMPLE_STAGING}`;
+    return `~/message-crate/${EXAMPLE_STAGING}`;
   }
   return `${trimmed}/${EXAMPLE_STAGING}`;
 }
@@ -219,7 +219,7 @@ export function SystemSection() {
 
   return (
     <div>
-      <h3 className={sectionHeading}>Vault</h3>
+      <h3 className={sectionHeading}>Staging</h3>
       <div className={settingsGrid}>
         <label htmlFor={stagingId} className={settingsLabel}>
           Staging directory
@@ -230,7 +230,7 @@ export function SystemSection() {
             value={stagingPath}
             onChange={onStagingPathChange}
             directory
-            placeholder={defaultStagingPath || "~/message-vault"}
+            placeholder={defaultStagingPath || "~/message-crate"}
           />
         </div>
         <p className={settingsHelp}>
@@ -273,7 +273,7 @@ export function SystemSection() {
           <p className={settingsHelp}>
             Folder must contain both ffmpeg and ffprobe. Leave blank to use system PATH.{" "}
             <a
-              href="https://bitrealm.io/vault/user/how-to/media-and-privacy/"
+              href="https://messagecrate.app/docs/user/how-to/media-and-privacy/"
               target="_blank"
               rel="noopener"
               className="text-accent"

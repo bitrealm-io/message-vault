@@ -5,7 +5,7 @@ import type { SortOrder } from "../components/SortMenu";
  *
  * Unlike contacts, this is not a client-side sort. The conversation list pages
  * in as you scroll, so reordering the rows already loaded would reorder a
- * fraction of the vault and read as a bug. Both values go to the server, which
+ * fraction of the list and read as a bug. Both values go to the server, which
  * orders the whole result set — see `list_conversations_sorted`.
  */
 export type ConversationSort = "date" | "messages";

@@ -18,7 +18,7 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
 use media::{CompressOptions, MaxResolution};
-use message_vault_io_core::{
+use message_crate_core::{
     ApplePlatform, AttachmentMedia, Exporter, ExporterConfig, Form, LogSink, OutputFormat,
     ProgressSink, SourceConfig, WhatsappPlatform,
 };
@@ -512,7 +512,7 @@ fn build_exporter_config(
 ///
 /// Returns an error if the exporter fails, or if the source is format
 /// conversion (that job uses the `format` command instead).
-fn run_exporter(config: &ExporterConfig) -> anyhow::Result<message_vault_io_core::RunResult> {
+fn run_exporter(config: &ExporterConfig) -> anyhow::Result<message_crate_core::RunResult> {
     match &config.source {
         SourceConfig::GoSmsPro(_) => run_go_sms_pro(config),
         SourceConfig::SmsBackupRestore(_) => run_sms_restore(config),

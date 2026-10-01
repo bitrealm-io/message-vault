@@ -131,7 +131,7 @@ function scroller(container: HTMLElement): HTMLElement {
 /**
  * The callback the whole component exists for.
  *
- * `requestMore` is how the list asks the vault for the next page, and every
+ * `requestMore` is how the list asks the server for the next page, and every
  * test in this file passed `hasMore={false}` and a no-op, so it was never
  * called. A list that had stopped asking — one showing the first forty
  * contacts and nothing more however far you scrolled — passed all of them.
@@ -159,7 +159,7 @@ describe("InfiniteOffsetList asking for more", () => {
     expect(requestMore).not.toHaveBeenCalled();
   });
 
-  it("does not ask when the vault has already sent everything", async () => {
+  it("does not ask when the server has already sent everything", async () => {
     const requestMore = vi.fn();
     const { container } = renderList(manyItems(), { hasMore: false, requestMore });
     const root = scroller(container);

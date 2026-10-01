@@ -3,17 +3,16 @@ import {
   useNameCollectionActions,
   useSetNamedSetMembers,
 } from "./nameCollection";
-
+import { keys } from "./queryKeys";
 import { forGroup } from "./searchQuery";
-import { UNKNOWN_GROUP } from "./unknownGroup";
 import {
   createContactGroup,
   deleteContactGroup,
   listContactGroups,
   updateContactGroup,
   updateContactGroupMembers,
-} from "./vaultApi";
-import { keys } from "./vaultKeys";
+} from "./serverApi";
+import { UNKNOWN_GROUP } from "./unknownGroup";
 
 /** Names that must not be created as user groups. */
 export const RESERVED_GROUP_NAMES = new Set(
@@ -145,7 +144,7 @@ export function useContactGroupActions() {
   return useNameCollectionActions(contactGroups);
 }
 
-/** Put contacts in or out of one Contact Group, drawn before the vault answers. */
+/** Put contacts in or out of one Contact Group, drawn before the server answers. */
 export function useSetContactGroupMembers() {
   return useSetNamedSetMembers(contactGroups);
 }

@@ -18,7 +18,7 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use message_vault_io_core::CancelFlag;
+use message_crate_core::CancelFlag;
 use tauri::AppHandle;
 
 use super::events;
@@ -74,7 +74,7 @@ where
         }),
         Err(payload) => Some(ExtractErrorEvent {
             detail: format!("the job panicked: {}", panic_message(payload.as_ref())),
-            user_message: Some("The job stopped because of a bug in Message Vault.".into()),
+            user_message: Some("The job stopped because of a bug in Message Crate.".into()),
         }),
     }
 }

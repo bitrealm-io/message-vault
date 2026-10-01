@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { fetchAssetObjectUrl } from "../lib/vaultApi";
+import { fetchAssetObjectUrl } from "../lib/serverApi";
 
-/** Load a vault attachment as a temporary blob URL. Revokes the URL on unmount or when the id changes. */
+/** Load an attachment as a temporary blob URL. Revokes the URL on unmount or when the id changes. */
 export function useAssetObjectUrl(
   sha256: string | null | undefined,
   source: string | null | undefined,

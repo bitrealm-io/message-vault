@@ -1,14 +1,14 @@
 import { type UseMutationResult, useMutation } from "@tanstack/react-query";
-import { getContact, updateContact } from "./vaultApi";
-import type { components } from "./vaultApi.types";
-import { keys } from "./vaultKeys";
-import { useVaultCache, useVaultQuery } from "./vaultQuery";
+import { keys } from "./queryKeys";
+import { useRouteCache, useRouteQuery } from "./routeQuery";
+import { getContact, updateContact } from "./serverApi";
+import type { components } from "./serverApi.types";
 
 /**
  * One contact in full, as the contact drawer shows it.
  *
  * `useContactDetailCache` was the last hand-built piece of it: a `Map`, its
- * own in-flight guard, and a `mv-contact-detail-changed` browser event that
+ * own in-flight guard, and a `mc-contact-detail-changed` browser event that
  * the drawer subscribed to so that group chips edited in the contact list
  * would show. All three are TanStack Query's now: the cache is keyed by
  * account and contact, and the group chips a contact-list edit writes are the
@@ -25,7 +25,7 @@ export function useContactDetail(contactId: string | null): {
   detail: ContactDetail | null;
   loading: boolean;
 } {
-  const { data, isPending } = useVaultQuery(
+  const { data, isPending } = useRouteQuery(
     keys.contacts.detail(contactId ?? ""),
     (signal) => getContact(contactId ?? "", { signal }),
     { enabled: contactId !== null },
@@ -36,7 +36,7 @@ export function useContactDetail(contactId: string | null): {
 /**
  * Change one thing about a contact.
  *
- * The vault answers with the contact as it now stands, so the answer goes
+ * The server answers with the contact as it now stands, so the answer goes
  * straight into the entry the drawer reads and nothing asks for it again. The
  * list pages are marked stale because they show the name too; the contact's
  * own entry is not, because it is already right.
@@ -46,7 +46,7 @@ export function useUpdateContact(): UseMutationResult<
   Error,
   { contactId: string; body: ContactChange }
 > {
-  const cache = useVaultCache();
+  const cache = useRouteCache();
   return useMutation<ContactDetail, Error, { contactId: string; body: ContactChange }>({
     mutationFn: ({ contactId, body }) => updateContact(contactId, body),
     onSuccess: (detail, { contactId }) => {

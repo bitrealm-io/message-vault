@@ -179,7 +179,7 @@ fn counts_exact_messages_written_to_jsonl_output() {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let root = std::env::temp_dir().join(format!("message-vault-extract-count-{unique}"));
+    let root = std::env::temp_dir().join(format!("message-crate-extract-count-{unique}"));
     fs::create_dir_all(root.join("nested")).unwrap();
     fs::write(
         root.join("one.jsonl"),

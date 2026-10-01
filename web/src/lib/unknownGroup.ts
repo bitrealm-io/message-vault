@@ -1,5 +1,5 @@
 /**
- * The permanent Contact Group holding what the vault could not identify: a
+ * The permanent Contact Group holding what the server could not identify: a
  * contact with no identity, or with identities and no preferred name. The
  * server computes its membership, so it is never stored on a contact. This is
  * the word the search language knows it by (`group:unknown`).

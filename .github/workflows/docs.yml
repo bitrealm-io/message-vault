@@ -1,6 +1,6 @@
 name: Docs
 
-# The site at bitrealm.io describes the released product, so it publishes
+# The site at messagecrate.app describes the released product, so it publishes
 # when a release ships: the same `v*` tag push that builds the image and the
 # installers in ci.yml. A merge to main does not publish; the `docs` job in
 # ci.yml already checks and builds the site on every pull request that
@@ -42,11 +42,11 @@ jobs:
 
       - name: Copy rustdoc into the docs site
         run: |
-          rm -rf docs/public/vault/developer/rustdoc
-          mkdir -p docs/public/vault/developer
-          cp -a target/doc docs/public/vault/developer/rustdoc
-          if [ ! -f docs/public/vault/developer/rustdoc/index.html ]; then
-            printf '%s\n' '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=message_vault_server/index.html"><title>Rust crate docs</title><link rel="canonical" href="message_vault_server/index.html"></head><body><p><a href="message_vault_server/index.html">message-vault-server crate docs</a></p></body></html>' > docs/public/vault/developer/rustdoc/index.html
+          rm -rf docs/public/docs/developer/rustdoc
+          mkdir -p docs/public/docs/developer
+          cp -a target/doc docs/public/docs/developer/rustdoc
+          if [ ! -f docs/public/docs/developer/rustdoc/index.html ]; then
+            printf '%s\n' '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=message_crate_server/index.html"><title>Rust crate docs</title><link rel="canonical" href="message_crate_server/index.html"></head><body><p><a href="message_crate_server/index.html">message-crate-server crate docs</a></p></body></html>' > docs/public/docs/developer/rustdoc/index.html
           fi
 
       - name: Set up Node.js

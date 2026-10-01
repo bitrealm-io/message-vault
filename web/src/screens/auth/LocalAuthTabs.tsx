@@ -1,6 +1,6 @@
 import { SelectionIndicator, Tab, TabList, TabPanel, Tabs } from "react-aria-components";
-import type { VaultState } from "../../lib/useVaultState";
-import ClaimVaultForm from "./ClaimVaultForm";
+import type { ServerState } from "../../lib/useServerState";
+import ClaimForm from "./ClaimForm";
 import CreateAccountForm from "./CreateAccountForm";
 import LoginForm from "./LoginForm";
 
@@ -11,43 +11,43 @@ function tabClassName({ isSelected }: { isSelected: boolean }) {
 }
 
 /**
- * The ways into a vault, which depend on what state the vault is in.
+ * The ways into a Message Crate, which depend on what state it is in.
  *
- * An **unclaimed** vault offers one thing: creating its owner. No login,
+ * An **unclaimed** Message Crate offers one thing: creating its owner. No login,
  * because no account exists to log into, and no Create Account, because a
- * vault decides who may join it only once it has an owner to decide.
+ * Message Crate decides who may join it only once it has an owner to decide.
  *
- * A **closed** vault offers Login alone. An **open** one adds Create Account.
+ * A **closed** Message Crate offers Login alone. An **open** one adds Create Account.
  *
- * The vault reports which of the three it is; nothing here recombines the
+ * The server reports which of the three it is; nothing here recombines the
  * facts behind that answer. See
- * `docs/adr/0008-the-vault-owner-holds-no-messages.md`.
+ * `docs/adr/0008-the-owner-holds-no-messages.md`.
  *
  * Each panel keeps its own busy and error state, so switching tabs leaves the
  * other form's message behind.
  */
 export default function LocalAuthTabs({
   serverUrl,
-  vaultState,
+  serverState,
   disabled = false,
 }: {
   serverUrl: string;
-  vaultState: VaultState;
+  serverState: ServerState;
   disabled?: boolean;
 }) {
   // One thing to do, so no tab strip to choose between things.
-  if (vaultState === "unclaimed") {
+  if (serverState === "unclaimed") {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <h2 className="mb-6 border-b border-border pb-2 text-center text-[0.875rem] font-medium text-text">
-          Create Vault Owner
+          Create Owner
         </h2>
-        <ClaimVaultForm serverUrl={serverUrl} disabled={disabled} />
+        <ClaimForm serverUrl={serverUrl} disabled={disabled} />
       </div>
     );
   }
 
-  if (vaultState === "closed") {
+  if (serverState === "closed") {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <h2 className="mb-6 border-b border-border pb-2 text-center text-[0.875rem] font-medium text-text">

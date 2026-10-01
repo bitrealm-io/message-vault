@@ -2,9 +2,9 @@
 //!
 //! The program is found the way `ffmpeg` is in `crates/libs/media`: an
 //! explicit environment variable first, then beside this executable, then
-//! `MESSAGE_VAULT_IO_BIN`, then `PATH`. The desktop bundle puts it beside the
+//! `MESSAGE_CRATE_BIN`, then `PATH`. The desktop bundle puts it beside the
 //! app (`externalBin` in `src-tauri/tauri.conf.json`), so a person never sets
-//! anything. `MESSAGE_VAULT_IMESSAGE_READER` names one file outright, for a
+//! anything. `MESSAGE_CRATE_IMESSAGE_READER` names one file outright, for a
 //! build that keeps the program somewhere else.
 //!
 //! One [`Helper`] is one process and one request. It relays the program's
@@ -23,10 +23,10 @@ use std::{
 
 use anyhow::{Context, Result, anyhow, bail};
 use imessage_reader_protocol::{Event, HELPER_NAME, PROTOCOL_VERSION, Progress, Request};
-use message_vault_io_core::{LogSink, ProgressEvent, ProgressSink, emit_log, emit_progress};
+use message_crate_core::{LogSink, ProgressEvent, ProgressSink, emit_log, emit_progress};
 
 /// Names the helper executable outright, bypassing the search.
-pub(crate) const HELPER_PATH_ENV: &str = "MESSAGE_VAULT_IMESSAGE_READER";
+pub(crate) const HELPER_PATH_ENV: &str = "MESSAGE_CRATE_IMESSAGE_READER";
 
 /// The helper's file name on this platform.
 fn executable_name() -> String {
@@ -37,10 +37,10 @@ fn executable_name() -> String {
     }
 }
 
-/// Locate `imessage-reader`: `MESSAGE_VAULT_IMESSAGE_READER`, then beside
+/// Locate `imessage-reader`: `MESSAGE_CRATE_IMESSAGE_READER`, then beside
 /// this executable, then the folder above it (an integration test runs from
 /// `target/<profile>/deps/` while the program sits in `target/<profile>/`),
-/// then `MESSAGE_VAULT_IO_BIN`, then `PATH`.
+/// then `MESSAGE_CRATE_BIN`, then `PATH`.
 ///
 /// # Errors
 ///
@@ -50,7 +50,7 @@ pub(crate) fn locate() -> Result<PathBuf> {
     locate_in(&Places {
         explicit: env::var_os(HELPER_PATH_ENV).map(PathBuf::from),
         exe_dir: current.as_deref().and_then(Path::parent),
-        io_bin: env::var_os("MESSAGE_VAULT_IO_BIN").map(PathBuf::from),
+        io_bin: env::var_os("MESSAGE_CRATE_BIN").map(PathBuf::from),
         path: env::var_os("PATH"),
     })
 }
@@ -58,11 +58,11 @@ pub(crate) fn locate() -> Result<PathBuf> {
 /// Where [`locate`] looks, read from the environment once so the search
 /// itself can be tested without changing the environment.
 struct Places<'a> {
-    /// `MESSAGE_VAULT_IMESSAGE_READER`.
+    /// `MESSAGE_CRATE_IMESSAGE_READER`.
     explicit: Option<PathBuf>,
     /// The folder of the running executable.
     exe_dir: Option<&'a Path>,
-    /// `MESSAGE_VAULT_IO_BIN`.
+    /// `MESSAGE_CRATE_BIN`.
     io_bin: Option<PathBuf>,
     /// `PATH`.
     path: Option<OsString>,

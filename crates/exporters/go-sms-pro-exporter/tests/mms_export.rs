@@ -9,8 +9,8 @@
 
 use crate::emit::{ConvertExportArgs, convert_export};
 use go_sms_mms::testutil::{BuildPart, PduBuilder};
-use message_vault_io_core::testutil::{csv_files, csv_rows};
-use message_vault_io_core::{ExportReport, ExportTransforms, OutputFormat};
+use message_crate_core::testutil::{csv_files, csv_rows};
+use message_crate_core::{ExportReport, ExportTransforms, OutputFormat};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};

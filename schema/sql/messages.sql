@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS conversations (
     -- Surrogate primary key for this conversation.
     id INTEGER PRIMARY KEY,
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Thread identity handle (`handles.id`); peer for 1:1, group chat id for groups.
     chat_handle_id INTEGER NOT NULL REFERENCES handles(id) ON DELETE CASCADE,
@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY,
     -- Parent conversation (`conversations.id`).
     conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-    -- Owning vault account (`accounts.id`) denormalized for account-scoped queries.
+    -- Owning account (`accounts.id`) denormalized for account-scoped queries.
     account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Backup/source family that produced this row (for example imessage, whatsapp).
     source TEXT NOT NULL,
@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS messages (
     -- The instant the message was sent, RFC 3339 in UTC with a Z suffix. Shown, searched
     -- and filed by day and year in the account's time zone (accounts.time_zone).
     timestamp TEXT NOT NULL,
-    -- 1 = sent by the vault owner; 0 = received from someone else.
+    -- 1 = sent by the account holder; 0 = received from someone else.
     is_from_me INTEGER NOT NULL,
     -- Sender identity (`handles.id`); NULL when unknown.
     sender_handle_id INTEGER REFERENCES handles(id) ON DELETE SET NULL,
@@ -99,8 +99,8 @@ CREATE TABLE IF NOT EXISTS messages (
     content_key TEXT,
     -- Points at the kept message when this row is a flagged duplicate.
     duplicate_of INTEGER REFERENCES messages(id) ON DELETE SET NULL,
-    -- Import run that inserted this row (`vault_imports.id`).
-    import_id INTEGER REFERENCES vault_imports(id) ON DELETE SET NULL
+    -- Import run that inserted this row (`imports.id`).
+    import_id INTEGER REFERENCES imports(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS ix_messages_conversation_timestamp
@@ -112,7 +112,7 @@ CREATE INDEX IF NOT EXISTS ix_messages_account_id ON messages (account_id);
 -- messages by time; this serves the default sort without a scan.
 CREATE INDEX IF NOT EXISTS ix_messages_account_timestamp
     ON messages (account_id, timestamp, id);
--- `GET /v1/contacts` computes when the vault last heard from each contact:
+-- `GET /v1/contacts` computes when the account last heard from each contact:
 -- the newest message any of the contact's handles sent. This answers that
 -- MAX(timestamp) per sender without a scan.
 CREATE INDEX IF NOT EXISTS ix_messages_sender_timestamp
@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS attachments (
     transcription TEXT,
     -- SHA-256 hex of the stored original bytes when present.
     sha256 TEXT,
-    -- Path under the vault assets store for the original file.
+    -- Path under the assets store for the original file.
     assets_path TEXT,
     -- Original file size in bytes when known.
     size_bytes INTEGER,
@@ -159,7 +159,7 @@ CREATE TABLE IF NOT EXISTS attachments (
     missing_reason TEXT,
     -- SHA-256 hex of a converted/compressed derivative used by the browser.
     derived_sha256 TEXT,
-    -- Path under the vault assets store for the derivative file.
+    -- Path under the assets store for the derivative file.
     derived_assets_path TEXT,
     -- MIME type of the derivative file.
     derived_mime_type TEXT
@@ -180,7 +180,7 @@ CREATE TABLE IF NOT EXISTS tapbacks (
     kind TEXT NOT NULL,
     -- Emoji glyph when the reaction is custom/emoji-based.
     emoji TEXT,
-    -- 1 = reaction from the vault owner; 0 = from someone else.
+    -- 1 = reaction from the account holder; 0 = from someone else.
     is_from_me INTEGER NOT NULL,
     -- Reactor identity (`handles.id`); NULL when unknown.
     sender_handle_id INTEGER REFERENCES handles(id) ON DELETE SET NULL
@@ -192,7 +192,7 @@ CREATE INDEX IF NOT EXISTS ix_tapbacks_message_id ON tapbacks (message_id);
 CREATE TABLE IF NOT EXISTS message_tags (
     -- Surrogate primary key for this tag.
     id INTEGER PRIMARY KEY,
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Tag text unique per account.
     name TEXT NOT NULL,
@@ -212,9 +212,9 @@ CREATE TABLE IF NOT EXISTS message_tag_members (
 -- pages read these rows rather than its scope, so an import, a trash, or a
 -- new day between pages cannot move what the run hands over. The rows are
 -- deleted when the run completes or is cancelled.
-CREATE TABLE IF NOT EXISTS vault_export_messages (
-    -- Export Run (`vault_exports.id`).
-    export_id INTEGER NOT NULL REFERENCES vault_exports(id) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS export_messages (
+    -- Export Run (`exports.id`).
+    export_id INTEGER NOT NULL REFERENCES exports(id) ON DELETE CASCADE,
     -- The message's place in the run, from 1: oldest first by timestamp,
     -- then sort_order, then id, as they stood at creation.
     row_order INTEGER NOT NULL,
@@ -224,5 +224,5 @@ CREATE TABLE IF NOT EXISTS vault_export_messages (
     PRIMARY KEY (export_id, row_order)
 );
 
-CREATE INDEX IF NOT EXISTS ix_vault_export_messages_message
-    ON vault_export_messages (message_id);
+CREATE INDEX IF NOT EXISTS ix_export_messages_message
+    ON export_messages (message_id);

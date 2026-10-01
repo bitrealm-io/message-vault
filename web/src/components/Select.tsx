@@ -97,7 +97,7 @@ export default function Select<T extends object>({
         </svg>
       </Button>
       <Popover
-        data-mv-overlay=""
+        data-mc-overlay=""
         className={`box-border w-[var(--trigger-width)] max-w-[var(--trigger-width)] rounded-md border border-border bg-popover p-1 outline-none ${Z_POPOVER} ${popupShadow} ${popoverClassName ?? ""}`}
       >
         <ListBox className="max-h-72 overflow-auto outline-none">{children}</ListBox>

@@ -140,45 +140,45 @@ describe("staging command wrappers resolve their own staging root", () => {
     invoke.mockReset();
     resolveStagingParent.mockReset();
     invoke.mockResolvedValue(undefined);
-    resolveStagingParent.mockResolvedValue("/home/sam/message-vault");
+    resolveStagingParent.mockResolvedValue("/home/sam/message-crate");
   });
 
   it("invokeSummarizeStaging resolves the root itself rather than taking one from the caller", async () => {
-    await invokeSummarizeStaging({ staging_dir: "/home/sam/message-vault/staging-run" });
+    await invokeSummarizeStaging({ staging_dir: "/home/sam/message-crate/staging-run" });
 
     expect(resolveStagingParent).toHaveBeenCalledTimes(1);
     expect(invoke).toHaveBeenCalledWith("summarize_staging", {
       args: expect.objectContaining({
-        stagingDir: "/home/sam/message-vault/staging-run",
-        stagingRoot: "/home/sam/message-vault",
+        stagingDir: "/home/sam/message-crate/staging-run",
+        stagingRoot: "/home/sam/message-crate",
       }),
     });
   });
 
   it("invokeTranscodeStaging resolves the root itself rather than taking one from the caller", async () => {
     await invokeTranscodeStaging({
-      staging_dir: "/home/sam/message-vault/staging-run",
+      staging_dir: "/home/sam/message-crate/staging-run",
       attachment_media: "convert",
     });
 
     expect(resolveStagingParent).toHaveBeenCalledTimes(1);
     expect(invoke).toHaveBeenCalledWith("transcode_staging", {
       args: expect.objectContaining({
-        stagingDir: "/home/sam/message-vault/staging-run",
-        stagingRoot: "/home/sam/message-vault",
+        stagingDir: "/home/sam/message-crate/staging-run",
+        stagingRoot: "/home/sam/message-crate",
         attachmentMedia: "convert",
       }),
     });
   });
 
   it("invokeDeleteStaging resolves the root itself rather than taking one from the caller", async () => {
-    await invokeDeleteStaging({ staging_dir: "/home/sam/message-vault/staging-run" });
+    await invokeDeleteStaging({ staging_dir: "/home/sam/message-crate/staging-run" });
 
     expect(resolveStagingParent).toHaveBeenCalledTimes(1);
     expect(invoke).toHaveBeenCalledWith("delete_staging", {
       args: {
-        stagingDir: "/home/sam/message-vault/staging-run",
-        stagingRoot: "/home/sam/message-vault",
+        stagingDir: "/home/sam/message-crate/staging-run",
+        stagingRoot: "/home/sam/message-crate",
       },
     });
   });
@@ -187,7 +187,7 @@ describe("staging command wrappers resolve their own staging root", () => {
     resolveStagingParent.mockResolvedValue("");
 
     await expect(
-      invokeSummarizeStaging({ staging_dir: "/home/sam/message-vault/staging-run" }),
+      invokeSummarizeStaging({ staging_dir: "/home/sam/message-crate/staging-run" }),
     ).rejects.toThrow(/staging directory/i);
     expect(invoke).not.toHaveBeenCalled();
   });

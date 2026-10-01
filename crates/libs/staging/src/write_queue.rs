@@ -25,11 +25,11 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 
 use anyhow::{Context, Result};
 use media::{CompressOptions, MediaMode};
-use message_ir::{ConversationDocument, IrAttachment, give_each_document_its_own_file};
-use message_vault_io_core::{
+use message_crate_core::{
     AttachmentJob, CancelFlag, LogSink, MediaConfig, OutputFormat, ProgressEvent, ProgressSink,
     attachment_size_hint, emit_log, emit_progress, run_attachment_jobs,
 };
+use message_ir::{ConversationDocument, IrAttachment, give_each_document_its_own_file};
 
 use crate::transcode::{TranscodeOptions, transcode_staged};
 use message_ir_format::{is_complete_file, write_format};
@@ -150,7 +150,7 @@ impl WriteQueueReport {
     /// Add this drain's counts to the run's report. Skipped conversations
     /// count as conversations too: they are part of the export, and
     /// `conversations_skipped` says how many this run did not have to write.
-    pub fn fold_into(&self, report: &mut message_vault_io_core::ExportReport) {
+    pub fn fold_into(&self, report: &mut message_crate_core::ExportReport) {
         report.conversations += (self.conversations_written + self.conversations_skipped) as u64;
         report.conversations_skipped += self.conversations_skipped as u64;
         report.attachments_saved += self.attachments_saved as u64;
@@ -317,7 +317,7 @@ pub fn drain_units(
     log: Option<&LogSink>,
     progress: Option<&ProgressSink>,
     cancel: Option<&CancelFlag>,
-    report: &mut message_vault_io_core::ExportReport,
+    report: &mut message_crate_core::ExportReport,
 ) -> Result<()> {
     drain_write_queue(output_dir, units, options, log, progress, cancel)?.fold_into(report);
     Ok(())
@@ -496,7 +496,7 @@ fn run_media_post_pass(
     let transcode_options = TranscodeOptions {
         mode: options.media,
         compress: options.compress.clone(),
-        // No vault limit applies to a local export, so nothing here is
+        // No server limit applies to a local export, so nothing here is
         // written off as too large. The desktop's own media pass, which does
         // enforce the real limit, never reaches this code: it stages with
         // Clone and converts on its own.

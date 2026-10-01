@@ -18,12 +18,12 @@ import {
 import { formatVisibleRange } from "../lib/listPaging";
 import { checksFromMembers } from "../lib/membershipChecks";
 import { useMessageTagActions, useSetMessageTagMembers } from "../lib/messageTags";
+import { keys } from "../lib/queryKeys";
+import { type PagedFetchPage, useRoutePagedList } from "../lib/routeQuery";
 import { hasFieldToken } from "../lib/searchFields";
+import { listConversations } from "../lib/serverApi";
 import type { Conversation } from "../lib/types";
 import { useMessageTags } from "../lib/useMessageTags";
-import { listConversations } from "../lib/vaultApi";
-import { keys } from "../lib/vaultKeys";
-import { type PagedFetchPage, useVaultPagedList } from "../lib/vaultQuery";
 
 const QUERY_DEBOUNCE_MS = 300;
 
@@ -89,7 +89,7 @@ export default function ConversationList({
     error,
     hasMore,
     loadMore,
-  } = useVaultPagedList(
+  } = useRoutePagedList(
     keys.conversations.list({ q: debouncedQ, sort: sortState.sort, order: sortState.order }),
     fetchPage,
   );
@@ -114,7 +114,7 @@ export default function ConversationList({
     (name: string, enable: boolean) => {
       const ids = targetConversations.map((c) => c.id);
       if (ids.length === 0) return Promise.resolve();
-      // The tags on the rows change in the cache before the vault answers and
+      // The tags on the rows change in the cache before the server answers and
       // go back if it refuses, so nothing here has to remember them. Marking
       // every conversation stale afterwards is what used to need the
       // `membershipRev` counter in the query key.

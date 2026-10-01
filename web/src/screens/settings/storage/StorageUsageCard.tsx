@@ -3,7 +3,7 @@ import { countOf, formatBytes, sectionHint, sectionTitle } from "./storageUtils"
 /**
  * What the account holds: attachment bytes over the message, attachment,
  * conversation and contact counts. Counts and never names, so the owner
- * reads the same card (`docs/adr/0008-the-vault-owner-holds-no-messages.md`).
+ * reads the same card (`docs/adr/0008-the-owner-holds-no-messages.md`).
  */
 export default function StorageUsageCard({
   totalBytes,

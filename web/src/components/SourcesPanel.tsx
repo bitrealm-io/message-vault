@@ -1,8 +1,8 @@
 import { useCallback } from "react";
 import { apiErrorMessage } from "../lib/apiErrorMessage";
-import { getConversationSources } from "../lib/vaultApi";
-import { keys } from "../lib/vaultKeys";
-import { useVaultQuery } from "../lib/vaultQuery";
+import { keys } from "../lib/queryKeys";
+import { useRouteQuery } from "../lib/routeQuery";
+import { getConversationSources } from "../lib/serverApi";
 import ModalShell from "./ModalShell";
 
 export default function SourcesPanel({
@@ -25,7 +25,7 @@ export default function SourcesPanel({
     data,
     isPending: loading,
     error,
-  } = useVaultQuery(keys.conversations.sources(conversationId), fetchSources, {
+  } = useRouteQuery(keys.conversations.sources(conversationId), fetchSources, {
     enabled: conversationId !== null,
   });
 

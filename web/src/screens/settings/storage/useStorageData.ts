@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiErrorMessage } from "../../../lib/apiErrorMessage";
+import { keys } from "../../../lib/queryKeys";
+import { useRouteQuery } from "../../../lib/routeQuery";
 import {
   getAccountImport,
   getAccountStorage,
   listAccountExports,
   listAccountImports,
-} from "../../../lib/vaultApi";
-import { keys } from "../../../lib/vaultKeys";
-import { useVaultQuery } from "../../../lib/vaultQuery";
+} from "../../../lib/serverApi";
 import type { ExportRow, ImportRow, TopAttachment } from "./storageUtils";
 
 type StorageOverview = {
@@ -38,7 +38,7 @@ async function fetchOverview(signal: AbortSignal, accountId?: number): Promise<S
 }
 
 /**
- * Both requests run through `useVaultQuery`, which already owns the
+ * Both requests run through `useRouteQuery`, which already owns the
  * abort-on-unmount and aborted-guard handling these effects were repeating —
  * and the overview request, written by hand, had no AbortController at all.
  */
@@ -50,7 +50,7 @@ export function useStorageData(managedAccountId?: number) {
     data: overview,
     isPending: loading,
     error,
-  } = useVaultQuery(
+  } = useRouteQuery(
     managedAccountId === undefined
       ? keys.storage.overview
       : keys.ownerAccounts.storage(managedAccountId),
@@ -74,7 +74,7 @@ export function useStorageData(managedAccountId?: number) {
     data: selectedImport,
     isPending: selectedImportLoading,
     error: selectedImportError,
-  } = useVaultQuery(
+  } = useRouteQuery(
     managedAccountId === undefined
       ? keys.storage.importDetail(selectedImportId)
       : keys.ownerAccounts.importDetail(managedAccountId, selectedImportId),

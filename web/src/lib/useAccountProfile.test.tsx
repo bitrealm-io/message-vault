@@ -4,7 +4,7 @@
  * The profile is one entry that every screen reads and two screens write.
  *
  * A write answers with the whole profile, so it belongs in that entry
- * directly: asking the vault again would show the old name for as long as the
+ * directly: asking the server again would show the old name for as long as the
  * round trip takes.
  */
 
@@ -12,13 +12,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { getAccountProfile, updateAccountProfile } from "./serverApi";
 import { useAccountProfile, useUpdateAccountProfile } from "./useAccountProfile";
-import { getAccountProfile, updateAccountProfile } from "./vaultApi";
 
 vi.mock("./auth", () => ({ useAuth: () => ({ accountId: 7 }) }));
 
-vi.mock("./vaultApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./vaultApi")>()),
+vi.mock("./serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./serverApi")>()),
   getAccountProfile: vi.fn(),
   updateAccountProfile: vi.fn(),
 }));
@@ -46,7 +46,7 @@ beforeEach(() => {
 });
 
 describe("useUpdateAccountProfile", () => {
-  it("shows the answered profile without asking the vault again", async () => {
+  it("shows the answered profile without asking the server again", async () => {
     read.mockResolvedValue(profile("Ada"));
     write.mockResolvedValue(profile("Ada Lovelace"));
 
@@ -66,7 +66,7 @@ describe("useUpdateAccountProfile", () => {
     expect(read).toHaveBeenCalledTimes(1);
   });
 
-  it("leaves the profile alone when the vault refuses", async () => {
+  it("leaves the profile alone when the server refuses", async () => {
     read.mockResolvedValue(profile("Ada"));
     write.mockRejectedValue(new Error("that address is already claimed"));
 

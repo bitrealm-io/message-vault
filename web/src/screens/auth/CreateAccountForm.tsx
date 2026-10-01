@@ -9,9 +9,9 @@ import { useAuth } from "../../lib/auth";
 import { useCreateAccountForm } from "./useCreateAccountForm";
 
 /**
- * New vault account: username plus the password twice.
+ * New account: username plus the password twice.
  *
- * The checks and the request are `useCreateAccountForm`'s, which the vault
+ * The checks and the request are `useCreateAccountForm`'s, which the
  * owner's new-account Settings use too; this is how they look on the Login
  * screen, and what follows here is a login.
  *
@@ -48,7 +48,7 @@ export default function CreateAccountForm({
       // token is absent only when the owner created it, which this form never
       // does.
       if (!created.token) {
-        throw new Error("The vault created the account but opened no session.");
+        throw new Error("The server created the account but opened no session.");
       }
       // Awaited so the empty-profile check inside `login` runs before this form
       // drops its busy state, sending the new account on to profile setup.

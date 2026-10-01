@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { getImportContacts } from "../../../lib/vaultApi";
-import type { components } from "../../../lib/vaultApi.types";
+import { getImportContacts } from "../../../lib/serverApi";
+import type { components } from "../../../lib/serverApi.types";
 
-/** What the run did to one contact, as the vault recorded it. */
+/** What the run did to one contact, as the server recorded it. */
 type ContactReason = components["schemas"]["ContactReason"];
 
 /** One contact an import run created or changed, and why it is listed. */

@@ -28,7 +28,7 @@ src-tauri/resources/
 #.idea/
 
 # Local machine export paths / owner identity
-config/export-to-vault.sh
+config/export-to-server.sh
 config/config.toml
 config/contacts.csv
 config/contacts.vcf
@@ -45,7 +45,7 @@ config/contacts.vcf
 /docs/.astro/
 /docs/dist/
 /docs/node_modules
-/docs/public/vault/developer/rustdoc/
+/docs/public/docs/developer/rustdoc/
 
 # PlantUML extension default dump (workspace export goes to docs/maintainers/architecture/puml/img)
 /out/
@@ -59,7 +59,7 @@ config/contacts.vcf
 /export-*/
 
 # Generated demo conversations and attachment copies (cargo run -p demo-seed)
-/crates/vault/demo-seed/staging/
+/crates/server/demo-seed/staging/
 
 # Frontend (web/) dependencies and build output
 /web/node_modules

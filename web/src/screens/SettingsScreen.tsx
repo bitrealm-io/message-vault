@@ -27,7 +27,7 @@ const TAB_LABELS: Record<SettingsTab, string> = {
 /** System, Convert and Appearance are this device's, not an account's. */
 const DEVICE_TABS: readonly SettingsTab[] = ["system", "convert", "appearance"];
 
-/** Tabs about messages, which the vault owner does not hold. */
+/** Tabs about messages, which the owner does not hold. */
 const OWNER_HIDDEN_TABS: readonly SettingsTab[] = ["storage", "system", "convert"];
 
 /**
@@ -35,10 +35,10 @@ const OWNER_HIDDEN_TABS: readonly SettingsTab[] = ["storage", "system", "convert
  *
  * - Convert is a desktop-only tool: it runs `message-reexport` in the desktop
  *   process, so a browser visiting the website never sees it.
- * - An account the vault owner opened from User Accounts has the tabs that
+ * - An account the owner opened from User Accounts has the tabs that
  *   are the account's. The device tabs would change the owner's own browser,
  *   so they are in the owner's own Settings only.
- * - The vault owner holds no messages, so its own Settings have no Storage,
+ * - The owner holds no messages, so its own Settings have no Storage,
  *   and none of the tools that work on messages: System and Convert.
  */
 function visibleTabs(isDesktop: boolean, managed: boolean, isOwner: boolean): SettingsTab[] {
@@ -82,7 +82,7 @@ const NEW_ACCOUNT_DISABLED_TABS: readonly SettingsTab[] = ["profile", "storage"]
 
 /**
  * Settings for the logged-in account, or, given `managedAccountId`, for an
- * account the vault owner opened from User Accounts. The same screen and the
+ * account the owner opened from User Accounts. The same screen and the
  * same tabs either way, so the owner sees an account's settings laid out as
  * the account holder does.
  *
@@ -132,7 +132,7 @@ export default function SettingsScreen({
                 ? managedHeading(profile.username, profile.preferred_name)
                 : "\u00a0"
               : backToAccounts
-                ? "Settings for Vault Owner"
+                ? "Settings for Owner"
                 : "Settings"}
         </h2>
       </header>

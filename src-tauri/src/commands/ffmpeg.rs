@@ -3,7 +3,7 @@
 //! Attachment convert and compress need those programs. The WebView cannot
 //! search the disk or set process environment variables, so this process does
 //! both. This process never *writes* environment variables: the tools-folder
-//! override lives in media-crate process state, and `MESSAGE_VAULT_IO_BIN`
+//! override lives in media-crate process state, and `MESSAGE_CRATE_BIN`
 //! stays a user-set fallback that is only ever read here (by the media and
 //! whatsapp-exporter resolution paths, which is sound because nothing in
 //! this process writes the environment).
@@ -56,7 +56,7 @@ pub fn probe_ffmpeg_tools(dir: Option<String>) -> FfmpegToolsProbeDto {
 ///
 /// An empty `dir` clears the override and goes back to the default search
 /// path. This process never writes environment variables: the override
-/// lives in media-crate process state, and `MESSAGE_VAULT_IO_BIN` stays a
+/// lives in media-crate process state, and `MESSAGE_CRATE_BIN` stays a
 /// user-set fallback that is only ever read here.
 ///
 /// # Errors

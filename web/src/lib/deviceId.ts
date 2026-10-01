@@ -1,5 +1,5 @@
 /** localStorage key for this install's stable identifier. */
-export const DEVICE_ID_KEY = "mv-device-id";
+export const DEVICE_ID_KEY = "mc-device-id";
 
 let cached: string | null = null;
 

@@ -14,7 +14,7 @@ Workspace setup: [CONTRIBUTING.md](../../../CONTRIBUTING.md).
 
 ## Docs
 
-This crate is a library. XML output: https://bitrealm.io/vault/developer/formats/sms-backup-restore-xml/ . Input format: https://bitrealm.io/vault/developer/formats/sms-backup-restore/input/
+This crate is a library. XML output: https://messagecrate.app/docs/developer/formats/sms-backup-restore-xml/ . Input format: https://messagecrate.app/docs/developer/formats/sms-backup-restore/input/
 
 ## License
 

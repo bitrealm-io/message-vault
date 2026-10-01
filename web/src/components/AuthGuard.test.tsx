@@ -38,7 +38,7 @@ function renderGuard() {
     <MemoryRouter initialEntries={["/"]}>
       <Routes>
         <Route element={<AuthGuard />}>
-          <Route path="/" element={<div>the vault</div>} />
+          <Route path="/" element={<div>the messages</div>} />
         </Route>
         <Route path="/login" element={<div>login</div>} />
         <Route path="/onboarding" element={<div>onboarding</div>} />
@@ -56,19 +56,19 @@ describe("AuthGuard", () => {
     expect(screen.getByText("onboarding")).toBeInTheDocument();
   });
 
-  it("sends the vault owner to Owner Home, not into the message shell", () => {
+  it("sends the owner to Owner Home, not into the message shell", () => {
     profileState.profile = { is_owner: true };
     renderGuard();
 
     expect(screen.getByText("owner home")).toBeInTheDocument();
-    expect(screen.queryByText("the vault")).not.toBeInTheDocument();
+    expect(screen.queryByText("the messages")).not.toBeInTheDocument();
   });
 
   it("lets an account that owes nothing through", () => {
     profileState.profile = {};
     renderGuard();
 
-    expect(screen.getByText("the vault")).toBeInTheDocument();
+    expect(screen.getByText("the messages")).toBeInTheDocument();
   });
 
   it("renders nothing while the profile is still loading", () => {
@@ -77,7 +77,7 @@ describe("AuthGuard", () => {
 
     // Not the app: showing it and redirecting after would flash a screen this
     // account has not finished earning.
-    expect(screen.queryByText("the vault")).not.toBeInTheDocument();
+    expect(screen.queryByText("the messages")).not.toBeInTheDocument();
     expect(screen.queryByText("onboarding")).not.toBeInTheDocument();
   });
 

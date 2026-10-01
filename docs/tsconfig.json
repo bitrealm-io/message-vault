@@ -1,4 +1,4 @@
 {
   "extends": "astro/tsconfigs/strict",
-  "exclude": ["dist", "public/vault/developer/rustdoc"]
+  "exclude": ["dist", "public/docs/developer/rustdoc"]
 }

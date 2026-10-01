@@ -3,7 +3,7 @@
 /**
  * One contact, read and written through one entry.
  *
- * The vault answers a change with the contact as it now stands, so the drawer
+ * The server answers a change with the contact as it now stands, so the drawer
  * should show the new name without asking again — and the list pages, which
  * show the name too, should be the only thing marked stale.
  */
@@ -13,13 +13,13 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useContactDetail, useUpdateContact } from "./contactDetail";
-import { getContact, updateContact } from "./vaultApi";
-import { keys } from "./vaultKeys";
+import { keys } from "./queryKeys";
+import { getContact, updateContact } from "./serverApi";
 
 vi.mock("./auth", () => ({ useAuth: () => ({ accountId: 7 }) }));
 
-vi.mock("./vaultApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./vaultApi")>()),
+vi.mock("./serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./serverApi")>()),
   getContact: vi.fn(),
   updateContact: vi.fn(),
 }));
@@ -80,20 +80,20 @@ describe("useUpdateContact", () => {
     const { result } = renderHook(() => useUpdateContact(), { wrapper });
     await result.current.mutateAsync({ contactId: "7", body: { name: "Ada Lovelace" } });
     expect(invalidate.mock.calls.map((call) => call[0]?.queryKey)).toEqual([
-      ["vault", 7, "contacts", "list"],
+      ["server", 7, "contacts", "list"],
     ]);
-    expect(client.getQueryData(["vault", 7, ...keys.contacts.detail("7")])).toBeDefined();
+    expect(client.getQueryData(["server", 7, ...keys.contacts.detail("7")])).toBeDefined();
   });
 
   it("reports a refusal instead of writing anything", async () => {
-    client.setQueryData(["vault", 7, "contacts", "detail", "7"], contact("Ada"));
+    client.setQueryData(["server", 7, "contacts", "detail", "7"], contact("Ada"));
     write.mockRejectedValue(new Error("handle already linked"));
     const { result } = renderHook(() => useUpdateContact(), { wrapper });
     await expect(
       result.current.mutateAsync({ contactId: "7", body: { name: "Ada Lovelace" } }),
     ).rejects.toThrow("handle already linked");
     expect(
-      client.getQueryData<{ name: string }>(["vault", 7, "contacts", "detail", "7"])?.name,
+      client.getQueryData<{ name: string }>(["server", 7, "contacts", "detail", "7"])?.name,
     ).toBe("Ada");
   });
 });

@@ -2,7 +2,7 @@
 //!
 //! `file_sha256` is behind every digest check and asset key in push, staging
 //! and transcode. `stable_guid` is every message's identity. A change to
-//! either silently re-keys everything already in a vault, so each is pinned
+//! either silently re-keys everything already in a database, so each is pinned
 //! to a value computed outside Rust (Python's `hashlib`).
 
 use crate::{file_sha256, stable_guid};

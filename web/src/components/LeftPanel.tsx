@@ -256,7 +256,7 @@ export default function LeftPanel({
 
         <GroupsNav groups={contactGroups} />
 
-        {/* Named search queries stored in the vault. Not contact membership. */}
+        {/* Named search queries stored on the server. Not contact membership. */}
         <NavCollapsibleSection
           id="saved-searches"
           title="Saved Searches"

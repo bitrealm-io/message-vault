@@ -14,9 +14,9 @@ Workspace setup: [CONTRIBUTING.md](../../../CONTRIBUTING.md).
 
 ## Docs
 
-How this crate fits the export pipeline: https://bitrealm.io/vault/developer/message-transfer/
+How this crate fits the export pipeline: https://messagecrate.app/docs/developer/message-transfer/
 
-Import mapping: https://bitrealm.io/vault/developer/formats/go-sms-pro/mapping/
+Import mapping: https://messagecrate.app/docs/developer/formats/go-sms-pro/mapping/
 
 ## License
 

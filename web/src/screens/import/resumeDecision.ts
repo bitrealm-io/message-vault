@@ -38,7 +38,7 @@ export type ResumeDecision = {
 export type FolderCheck = "present" | "missing" | "unknown";
 
 /**
- * Decide what to show when Import opens and the vault reports a session.
+ * Decide what to show when Import opens and the server reports a session.
  *
  * Pure so the table can be read and tested on its own: the caller does the
  * network and filesystem work and hands the answers in.
@@ -46,7 +46,7 @@ export type FolderCheck = "present" | "missing" | "unknown";
  * A session with no recorded device is treated as this install's. The
  * column is new, so an older session predates it, and locking someone out
  * of their own staged work over a missing field would be worse than the
- * rare case of two installs sharing a vault.
+ * rare case of two installs sharing a server.
  */
 export function resumeDecisionFor(args: {
   session: ActiveImportSession | null;

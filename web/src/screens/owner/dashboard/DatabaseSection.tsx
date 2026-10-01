@@ -1,6 +1,6 @@
 import { formatBytes } from "../../settings/storage/storageUtils";
 import { DashboardSection } from "./DashboardSection";
-import type { VaultStorage } from "./types";
+import type { ServerStorage } from "./types";
 
 /** One measured figure with its name under it. */
 function Figure({ label, bytes }: { label: string; bytes: number }) {
@@ -14,15 +14,15 @@ function Figure({ label, bytes }: { label: string; bytes: number }) {
 
 /**
  * The database on disk: its size, how much of it the messages take, and how
- * much the full-text search index adds. All three are measured by the vault,
- * on either engine. The search figure is for the whole vault, because the
+ * much the full-text search index adds. All three are measured by the server,
+ * on either engine. The search figure is for the whole database, because the
  * index is one shared structure and cannot be split by account.
  */
-export function DatabaseSection({ storage }: { storage: VaultStorage }) {
+export function DatabaseSection({ storage }: { storage: ServerStorage }) {
   return (
     <DashboardSection
       title="Database"
-      hint="The database size excludes attachment files, which are counted under Vault contents."
+      hint="The database size excludes attachment files, which are counted under Contents."
     >
       <div className="flex flex-wrap gap-6 rounded-xl border border-border bg-elevated p-4">
         <Figure label="Database size" bytes={storage.database_bytes} />

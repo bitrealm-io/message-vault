@@ -14,7 +14,7 @@ Workspace setup: [CONTRIBUTING.md](../../../CONTRIBUTING.md).
 
 ## Docs
 
-This crate is a library. User options: https://bitrealm.io/vault/user/how-to/media-and-privacy/
+This crate is a library. User options: https://messagecrate.app/docs/user/how-to/media-and-privacy/
 
 ## License
 

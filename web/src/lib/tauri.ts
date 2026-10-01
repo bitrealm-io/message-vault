@@ -233,7 +233,7 @@ export interface TauriJobResult {
   transcode?: TranscodeFinishedReport;
 }
 
-/** Upload extracted conversations to a vault server. */
+/** Upload extracted conversations to a server. */
 export async function invokePush(config: PushConfig): Promise<void> {
   return invoke("push", {
     args: {
@@ -260,7 +260,7 @@ export interface PullConfig {
   skip_attachments: boolean;
 }
 
-/** Download conversations from a vault server into a folder. */
+/** Download conversations from a server into a folder. */
 export async function invokePull(config: PullConfig): Promise<void> {
   return invoke("pull", {
     args: {

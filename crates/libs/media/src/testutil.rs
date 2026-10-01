@@ -68,7 +68,7 @@ pub fn real_ffmpeg_test_guard() -> Option<RwLockReadGuard<'static, ()>> {
     assert!(
         !running_in_ci(),
         "{test} needs ffmpeg and ffprobe, and CI is set but they were not found. \
-         Install ffmpeg in this CI job, or put both tools in MESSAGE_VAULT_IO_BIN."
+         Install ffmpeg in this CI job, or put both tools in MESSAGE_CRATE_BIN."
     );
     // Written to the stderr handle rather than through `eprintln!`, which the
     // test harness captures and throws away for a test that passes.
@@ -97,7 +97,7 @@ pub fn hide_ffmpeg() -> ToolsHidden {
     let lock = tools_test_lock();
     let previous = tools_dir();
     let nowhere = std::env::temp_dir()
-        .join(format!("message-vault-no-tools-{}", std::process::id()))
+        .join(format!("message-crate-no-tools-{}", std::process::id()))
         .join("does-not-exist");
     set_tools_dir(Some(nowhere));
     ToolsHidden {

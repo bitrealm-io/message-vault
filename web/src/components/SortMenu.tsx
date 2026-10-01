@@ -63,7 +63,7 @@ export default function SortMenu<Id extends string>({
           ref={menuRef}
           role="menu"
           aria-label={`Sort ${itemNoun}`}
-          data-mv-overlay=""
+          data-mc-overlay=""
           onKeyDown={onKeyDown}
           className={`absolute top-full right-0 mt-1 min-w-[10.5rem] rounded-xl border border-border bg-popover py-2 ${Z_POPOVER} ${popupShadow}`}
         >

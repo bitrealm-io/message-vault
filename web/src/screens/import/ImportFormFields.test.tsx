@@ -462,6 +462,16 @@ describe("ImportFormFields Import button", () => {
     expect(screen.queryByRole("combobox", { name: "Time zone of the messages" })).toBeNull();
   });
 
+  // The section holds a field only for some sources. For the rest it would
+  // open on nothing.
+  it("shows Processing Options only for a source with a field in it", () => {
+    const { unmount } = renderForm({ source: "imessage-ios" });
+    expect(screen.getByText("Processing Options (Advanced)")).toBeInTheDocument();
+    unmount();
+    renderForm({ source: "whatsapp-android" });
+    expect(screen.queryByText("Processing Options (Advanced)")).toBeNull();
+  });
+
   it("names each Android SMS source's own backup files in the folder placeholder", () => {
     const placeholders = [
       ["sms-backup-restore", "Folder containing sms-*.xml backup files"],

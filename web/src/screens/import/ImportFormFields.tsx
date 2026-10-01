@@ -244,6 +244,10 @@ export default function ImportFormFields(props: ImportFormFieldsProps) {
   const hasOwnerEmail = !wantsEmails || splitEmails(props.ownerEmails).length > 0;
   const imessageMethod = isImessageMethod(props.source) ? props.source : null;
   const whatsappMethod = isWhatsappMethod(props.source) ? props.source : null;
+  const whatsappFallbackPhone =
+    whatsappMethod !== null && !whatsappOwnerPhoneRequired(whatsappMethod);
+  // The section is left out for a source with no field in it.
+  const hasProcessingOptions = isIos || isAndroidSms || isImazing || whatsappFallbackPhone;
   const imessageGate = imessageMethod
     ? imessageCanImport({
         method: imessageMethod,
@@ -688,50 +692,52 @@ export default function ImportFormFields(props: ImportFormFieldsProps) {
         )}
       </CollapsibleSection>
 
-      <CollapsibleSection
-        title="Processing Options (Advanced)"
-        open={props.processingOpen}
-        onToggle={props.onToggleProcessing}
-      >
-        <div className="mb-2 flex flex-col items-start gap-3">
-          {isIos || isAndroidSms ? (
-            <Checkbox
-              labelClassName="text-[0.875rem]"
-              checked={props.obfuscate}
-              onChange={props.onObfuscateChange}
-            >
-              Obfuscate - All message data is anonymized.
-            </Checkbox>
-          ) : null}
-          {isImazing ? (
-            <div className="w-full max-w-[28rem]">
-              <TimeZoneField
-                label="Time zone of the messages"
-                value={props.timeZone}
-                onChange={props.onTimeZoneChange}
+      {hasProcessingOptions ? (
+        <CollapsibleSection
+          title="Processing Options (Advanced)"
+          open={props.processingOpen}
+          onToggle={props.onToggleProcessing}
+        >
+          <div className="mb-2 flex flex-col items-start gap-3">
+            {isIos || isAndroidSms ? (
+              <Checkbox
+                labelClassName="text-[0.875rem]"
+                checked={props.obfuscate}
+                onChange={props.onObfuscateChange}
+              >
+                Obfuscate - All message data is anonymized.
+              </Checkbox>
+            ) : null}
+            {isImazing ? (
+              <div className="w-full max-w-[28rem]">
+                <TimeZoneField
+                  label="Time zone of the messages"
+                  value={props.timeZone}
+                  onChange={props.onTimeZoneChange}
+                />
+                <p className={hintStyle}>
+                  Pre-filled from your profile. iMazing writes each message time without a zone, so
+                  pick the one the phone was in.
+                </p>
+              </div>
+            ) : null}
+          </div>
+          {whatsappFallbackPhone ? (
+            <StackedField label={WHATSAPP_OWNER_PHONE_LABEL} optional>
+              <input
+                type="text"
+                inputMode="tel"
+                aria-label={`${WHATSAPP_OWNER_PHONE_LABEL} (Optional)`}
+                value={props.whatsappOwnerPhone}
+                onChange={(e) => props.onWhatsappOwnerPhoneChange(e.target.value)}
+                placeholder="+1 555 555 0100"
+                className={fieldStyle}
               />
-              <p className={hintStyle}>
-                Pre-filled from your profile. iMazing writes each message time without a zone, so
-                pick the one the phone was in.
-              </p>
-            </div>
+              <p className={hintStyle}>{WHATSAPP_OWNER_PHONE_HINT_IPHONE}</p>
+            </StackedField>
           ) : null}
-        </div>
-        {whatsappMethod !== null && !whatsappOwnerPhoneRequired(whatsappMethod) ? (
-          <StackedField label={WHATSAPP_OWNER_PHONE_LABEL} optional>
-            <input
-              type="text"
-              inputMode="tel"
-              aria-label={`${WHATSAPP_OWNER_PHONE_LABEL} (Optional)`}
-              value={props.whatsappOwnerPhone}
-              onChange={(e) => props.onWhatsappOwnerPhoneChange(e.target.value)}
-              placeholder="+1 555 555 0100"
-              className={fieldStyle}
-            />
-            <p className={hintStyle}>{WHATSAPP_OWNER_PHONE_HINT_IPHONE}</p>
-          </StackedField>
-        ) : null}
-      </CollapsibleSection>
+        </CollapsibleSection>
+      ) : null}
 
       <div className="mt-2 flex gap-3">
         <Button

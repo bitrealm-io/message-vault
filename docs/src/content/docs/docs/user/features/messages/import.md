@@ -32,6 +32,7 @@ Leaving the run shows the message above.
 ## The form
 
 The form has two sections, **Import Messages** and **Processing Options (Advanced)**, and an **Import** button.
+**Processing Options (Advanced)** is shown only for a source that has a field in it.
 
 The first list in **Import Messages** is the source.
 The fields under it depend on the source.
@@ -158,6 +159,7 @@ It starts on **Copy**.
 ### Processing Options (Advanced)
 
 The section is closed when the form opens.
+A source with none of the fields below has no such section.
 
 | Field | Shown for | What it does |
 |---|---|---|

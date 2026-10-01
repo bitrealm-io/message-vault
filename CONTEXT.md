@@ -200,9 +200,9 @@ one exists and it is whoever claimed the Message Crate.
 The screen the owner lands on at login and works from, the way any
 other account lands in Messages. It has the frame every account sees: the
 product name, a search bar and the account button across the top, over a
-side panel and a content pane. The side panel lists Dashboard, Settings, User
-Accounts, Activity and Logs; Dashboard, Activity and Logs are named and hold
-nothing yet. The search bar narrows User Accounts by username or
+side panel and a content pane. The side panel lists Dashboard, Server Settings,
+User Accounts, Activity and Logs; Dashboard shows what the whole Message Crate
+holds, and Activity and Logs are named and hold nothing yet. The search bar narrows User Accounts by username or
 preferred name. User Accounts lists every account, the owner's own first,
 each by username with its preferred name, its status and its last login. There the owner adds
 accounts. An account's name opens that account's Settings, the screen its

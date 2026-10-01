@@ -92,6 +92,36 @@ async fn the_messages_route_is_a_page_across_every_conversation() {
 }
 
 #[tokio::test]
+async fn a_page_across_two_conversations_names_each_conversations_own_participants() {
+    let (fixture, alice, direct, group) = seeded().await;
+    let page: serde_json::Value = get_json(&fixture.state, "/v1/messages", &alice.token).await;
+
+    let handles: Vec<(i64, &str)> = page["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| {
+            let conversation = &item["conversation"];
+            (
+                conversation["id"].as_i64().unwrap(),
+                conversation["participants"][0]["handle"]
+                    .as_str()
+                    .unwrap_or_else(|| panic!("a participant is named: {item}")),
+            )
+        })
+        .collect();
+
+    assert_eq!(
+        handles,
+        [
+            (direct, "+15555550100"),
+            (direct, "+15555550100"),
+            (group, "chat100"),
+        ]
+    );
+}
+
+#[tokio::test]
 async fn a_query_narrows_to_matching_messages_and_never_leaks_another_account() {
     let (fixture, alice, _direct, _group) = seeded().await;
     let page: serde_json::Value =

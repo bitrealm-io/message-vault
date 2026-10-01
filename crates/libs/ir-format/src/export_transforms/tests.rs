@@ -391,3 +391,58 @@ fn obfuscated_export_keeps_no_string_from_the_source() {
         .collect();
     assert!(leaked.is_empty(), "obfuscated export kept {leaked:?}");
 }
+
+/// Tapbacks are imported, so an obfuscated export must still say what each
+/// reaction was; only who reacted is replaced.
+#[test]
+fn obfuscate_keeps_each_tapback_and_replaces_only_who_reacted() {
+    let mut doc = doc_with_a_marker_in_every_field();
+    let mut anon = Obfuscator::new([7u8; 32]);
+    obfuscate_document(&mut doc, &mut anon);
+
+    let tapbacks = doc.messages[0]
+        .imessage
+        .as_ref()
+        .unwrap()
+        .tapbacks
+        .as_ref()
+        .expect("tapbacks are kept");
+    let tapbacks = tapbacks.as_array().expect("tapbacks stay a list");
+    assert_eq!(tapbacks.len(), 1);
+    let tapback = &tapbacks[0];
+    assert_eq!(tapback["part_index"], json!(0));
+    assert_eq!(tapback["kind"], json!("emoji"));
+    assert_eq!(tapback["emoji"], json!("👍"));
+    assert_eq!(tapback["is_from_me"], json!(false));
+    for key in ["reactor_handle", "sender"] {
+        let reactor = tapback[key]
+            .as_str()
+            .unwrap_or_else(|| panic!("{key} is kept as a string"));
+        assert!(!reactor.is_empty());
+        assert!(!reactor.contains("LEAK-"), "{key} kept {reactor}");
+    }
+}
+
+#[test]
+fn media_disabled_clears_each_attachment_path_bytes_and_fingerprint() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut docs = vec![doc_with_image_attachment()];
+    let att = &mut docs[0].messages[0].attachments[0];
+    att.bytes = Some(vec![1, 2, 3]);
+    att.digest_sha256 = Some("ab".repeat(32));
+    let transforms = ExportTransforms {
+        media: MediaMode::Disabled,
+        ..ExportTransforms::none()
+    };
+    apply_transforms(&mut docs, tmp.path(), &transforms).unwrap();
+
+    let att = &docs[0].messages[0].attachments[0];
+    assert_eq!(att.path, None);
+    assert_eq!(att.bytes, None);
+    assert_eq!(att.digest_sha256, None);
+    assert_eq!(
+        att.mime_type.as_deref(),
+        Some("image/jpeg"),
+        "the metadata stays"
+    );
+}

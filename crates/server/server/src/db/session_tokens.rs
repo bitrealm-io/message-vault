@@ -395,6 +395,37 @@ mod tests {
         assert!(lookup_session(&mut conn, &token).await.unwrap().is_none());
     }
 
+    /// A login made now is good for thirty days: the row's expiry is that
+    /// far past the clock, give or take the seconds the insert took.
+    #[tokio::test]
+    async fn a_session_expires_thirty_days_after_login() {
+        const THIRTY_DAYS_SECS: u64 = 2_592_000;
+        let (pool, _dir) = crate::db::engine::test_pool().await;
+        let mut conn = pool.acquire().await.unwrap();
+        schema::ensure_accounts_schema(&mut conn).await.unwrap();
+        sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'alice')")
+            .bind(7_i64)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        let before = now_unix_secs();
+        insert_account_session_token(&mut conn, 7).await.unwrap();
+        let after = now_unix_secs();
+
+        let expires: String = sqlx::query_scalar(
+            "SELECT expires_at FROM account_session_tokens WHERE account_id = 7",
+        )
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+        let expires: u64 = expires.parse().unwrap();
+        assert!(
+            (before + THIRTY_DAYS_SECS..=after + THIRTY_DAYS_SECS).contains(&expires),
+            "expires {} seconds after login",
+            expires - before
+        );
+    }
+
     #[tokio::test]
     async fn insert_session_with_ttl_sets_expires_at() {
         let (pool, _dir) = crate::db::engine::test_pool().await;

@@ -33,6 +33,12 @@ const TONE: Record<ServerConnection, string> = {
 
 export interface ServerStatusProps {
   state: ServerConnection;
+  /**
+   * Words to show in place of the state's own. The desktop app uses it while
+   * it starts its own Message Crate: the state is still "connecting", and
+   * what the person is waiting for has a better name than that.
+   */
+  label?: string;
   className?: string;
 }
 
@@ -44,13 +50,13 @@ export interface ServerStatusProps {
  * margins and floats away from the line it belongs under; the gap below is the
  * caller's to set.
  */
-export default function ServerStatus({ state, className }: ServerStatusProps) {
+export default function ServerStatus({ state, label, className }: ServerStatusProps) {
   return (
     <p
       role="status"
       className={`m-0 text-[0.813rem] font-medium ${TONE[state]} ${className ?? ""}`}
     >
-      {WORD[state]}
+      {label ?? WORD[state]}
     </p>
   );
 }

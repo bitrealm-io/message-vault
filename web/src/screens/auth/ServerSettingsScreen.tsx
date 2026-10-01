@@ -1,7 +1,7 @@
 import Button from "../../components/Button";
 import TextField from "../../components/TextField";
 import { DEFAULT_TAURI_SERVER_URL } from "../../lib/authGuards";
-import { authLabel, authScreenTitle } from "../../lib/uiStyles";
+import { accentLink, authLabel, authScreenTitle } from "../../lib/uiStyles";
 import ServerStatus, { type ServerConnection } from "./ServerStatus";
 
 export interface ServerSettingsScreenProps {
@@ -26,6 +26,12 @@ export interface ServerSettingsScreenProps {
   onTest: () => void;
   onCancel: () => void;
   onSubmit: () => void;
+  /**
+   * Go back to the Message Crate the desktop app starts for itself. Given
+   * only in the desktop app, and only while the field holds another address:
+   * it is how a person returns from a Message Crate elsewhere.
+   */
+  onUseOwn?: () => void;
 }
 
 /**
@@ -42,6 +48,7 @@ export default function ServerSettingsScreen({
   onTest,
   onCancel,
   onSubmit,
+  onUseOwn,
 }: ServerSettingsScreenProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -74,6 +81,14 @@ export default function ServerSettingsScreen({
           Use this address
         </Button>
       </div>
+
+      {onUseOwn ? (
+        <div className="mt-4 text-center">
+          <button type="button" className={accentLink} onClick={onUseOwn}>
+            Use the Message Crate on this computer
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

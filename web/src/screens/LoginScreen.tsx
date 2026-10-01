@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import Button from "../components/Button";
 import { setBaseUrl } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { initialLoginServerUrl } from "../lib/authGuards";
-import { isOwnAddress, startLocalServer } from "../lib/localServer";
+import { DEFAULT_TAURI_SERVER_URL, initialLoginServerUrl } from "../lib/authGuards";
+import { isOwnAddress, type LocalServerStatus, openDataFolder } from "../lib/localServer";
 import { checkServerHealth, type ServerHealthStatus } from "../lib/serverHealth";
 import { isTauri } from "../lib/tauri-check";
 import { accentLink, authCard, authCardBody, authScreenTitle, pageCenter } from "../lib/uiStyles";
+import { useLocalServer } from "../lib/useLocalServer";
 import { useServerHealth } from "../lib/useServerHealth";
 import { useServerState } from "../lib/useServerState";
 import ExploreDemoAccountButton from "./auth/ExploreDemoAccountButton";
@@ -37,6 +39,62 @@ function OrRule() {
   );
 }
 
+/** What the card says while the desktop app starts its own Message Crate. */
+function startingLabel(status: LocalServerStatus | null): string | undefined {
+  if (status?.status !== "starting") return undefined;
+  return status.first_time
+    ? "Setting up Message Crate for the first time…"
+    : "Starting Message Crate…";
+}
+
+/**
+ * What the card shows in place of its forms when the desktop app could not
+ * start its own Message Crate: one sentence, the ways on, and the server's
+ * own words for a bug report. Change server address stays where it always
+ * is, under the card.
+ */
+function StartFailed({
+  status,
+  onRetry,
+}: {
+  status: Extract<LocalServerStatus, { status: "failed" }>;
+  onRetry: () => void;
+}) {
+  const [openError, setOpenError] = useState<string | null>(null);
+  return (
+    <div className="min-h-0 flex-1">
+      <p className="m-0 text-[0.875rem] text-text" role="alert">
+        {status.message}
+      </p>
+      <div className="mt-4 grid grid-cols-2 gap-2.5">
+        <Button variant="primary" onPress={onRetry}>
+          Try again
+        </Button>
+        <Button
+          variant="secondary"
+          onPress={() => {
+            setOpenError(null);
+            openDataFolder().catch((caught: unknown) => {
+              setOpenError(caught instanceof Error ? caught.message : String(caught));
+            });
+          }}
+        >
+          Open data folder
+        </Button>
+      </div>
+      {openError ? <p className="m-0 mt-1 text-[0.75rem] text-danger">{openError}</p> : null}
+      {status.details ? (
+        <details className="mt-4 text-[0.75rem] text-muted">
+          <summary className="cursor-pointer">Details</summary>
+          <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-elevated p-2 font-mono text-[0.7rem] text-text">
+            {status.details}
+          </pre>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
 /**
  * The way into a Message Crate. The card resolves an address on mount and confirms the
  * server is reachable itself, so the only question the old first screen asked —
@@ -51,7 +109,13 @@ export default function LoginScreen() {
   // Sticky once true: once the login form has been shown, keep showing it
   // (dimmed while disconnected) instead of reverting to the skeleton.
   const [hasConnectedOnce, setHasConnectedOnce] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  // The desktop app opens on this card only for its own Message Crate. An
+  // address the person entered is theirs to confirm at every start, and the
+  // connection screen is also the way back to the app's own.
+  const [settingsOpen, setSettingsOpen] = useState(() => isTauri() && !isOwnAddress(address));
+  // True until that first connection screen is left: the address it shows is
+  // already the saved one, and using it as it stands is a real choice there.
+  const [confirmingAtStart, setConfirmingAtStart] = useState(settingsOpen);
   // What Test reported for the address currently typed, or null when it has
   // not been tested since the last edit.
   const [tested, setTested] = useState<ServerConnection | null>(null);
@@ -60,6 +124,15 @@ export default function LoginScreen() {
   // heal itself the moment the server comes back. Nothing else probes: the
   // settings screen asks explicitly, with Test.
   const health = useServerHealth(state === "disconnected" ? address : null);
+
+  // The desktop app starts a Message Crate of its own at its own address and
+  // nowhere else. The browser, and any address the person entered, start
+  // nothing.
+  const { status: localServer, retry: retryLocalServer } = useLocalServer(
+    isTauri() && isOwnAddress(address),
+  );
+  const localStarting = localServer?.status === "starting";
+  const localFailed = localServer?.status === "failed" ? localServer : null;
 
   // Which forms this card offers is the server's answer, not a guess made here.
   // Asked only once the address is reachable, so an unreachable server reports
@@ -87,15 +160,6 @@ export default function LoginScreen() {
       connectAbort.current = controller;
       setState("connecting");
       setBaseUrl(trimmed);
-      // The desktop app runs a Message Crate of its own at its own address.
-      // It is asked for here and not awaited: a first start takes seconds,
-      // and the disconnected card below already keeps probing until the
-      // server answers. Any other address is never started by the app.
-      if (isTauri() && isOwnAddress(trimmed)) {
-        void startLocalServer().catch((error: unknown) => {
-          console.error("Could not start Message Crate", error);
-        });
-      }
       // GET /health answers plain text, not JSON, so this probes it directly
       // rather than through apiClient (which always parses the body as
       // JSON). The body is discarded either way — only reachability matters.
@@ -140,6 +204,16 @@ export default function LoginScreen() {
     }
   }, [health, state, address, connect, retrySavedLogin]);
 
+  // The moment the app's own server answers, connect, rather than wait for
+  // the health probe's next turn.
+  const localReady = localServer?.status === "ready";
+  const previousLocalReady = useRef(false);
+  useEffect(() => {
+    const becameReady = !previousLocalReady.current && localReady;
+    previousLocalReady.current = localReady;
+    if (becameReady && state !== "connected") void connect(address);
+  }, [localReady, state, address, connect]);
+
   // Only the newest Test may write the result: an earlier slow probe must not
   // stamp its answer over a later one, or over a screen that has since closed.
   const testRun = useRef(0);
@@ -171,12 +245,15 @@ export default function LoginScreen() {
   // card back to "connecting", re-probe the same server, and land where it
   // started. Either way there is nothing to apply, so the button is disabled
   // until the field holds a different address.
-  const canApplyDraft = trimmedDraft !== "" && trimmedDraft !== address;
+  // The one exception is the connection screen the desktop app opens on:
+  // there the saved address is the one being offered.
+  const canApplyDraft = trimmedDraft !== "" && (trimmedDraft !== address || confirmingAtStart);
 
   const closeSettings = () => {
     testRun.current += 1;
     setTested(null);
     setSettingsOpen(false);
+    setConfirmingAtStart(false);
   };
 
   return (
@@ -198,21 +275,44 @@ export default function LoginScreen() {
                 closeSettings();
               }}
               onSubmit={() => {
-                const next = draft;
+                const next = draft.trim();
                 closeSettings();
-                void connect(next);
+                // Confirming the address already connected is no change.
+                if (next !== address) void connect(next);
               }}
+              onUseOwn={
+                isTauri() && !isOwnAddress(address)
+                  ? () => {
+                      closeSettings();
+                      void connect(DEFAULT_TAURI_SERVER_URL);
+                    }
+                  : undefined
+              }
             />
           ) : (
             <>
               <h1 className={`${authScreenTitle} mb-2`}>Message Crate</h1>
-              <ServerStatus state={state} className="mb-5 text-center" />
+              {/* A failed start says so in the card itself; the word above it
+                  would only repeat "Disconnected". */}
+              {localFailed && state !== "connected" ? null : (
+                <ServerStatus
+                  state={localStarting && state !== "connected" ? "connecting" : state}
+                  label={state === "connected" ? undefined : startingLabel(localServer)}
+                  className="mb-5 text-center"
+                />
+              )}
 
               {/* The card waits for the server's own answer as well as for the
                   connection: which forms belong here is the server's to say, and
                   showing a login to an unclaimed Message Crate would offer a door that
                   opens onto nothing. */}
-              {hasConnectedOnce && serverState ? (
+              {localFailed && state !== "connected" ? (
+                <StartFailed status={localFailed} onRetry={retryLocalServer} />
+              ) : localStarting && !hasConnectedOnce ? (
+                // Nothing to log in to yet. The skeleton holds the card's
+                // shape for the seconds a start takes.
+                <FormSkeleton />
+              ) : hasConnectedOnce && serverState ? (
                 <LocalAuthTabs
                   serverUrl={address}
                   serverState={serverState}

@@ -1,12 +1,12 @@
 [package]
-name = "message-vault-io-tauri"
+name = "message-crate-desktop"
 version = "0.9.0"
 edition = "2024"
 license = "LicenseRef-FCL-1.0-ALv2"
-description = "Tauri desktop app for message-vault-io"
+description = "Tauri desktop app for message-crate"
 
 [lib]
-name = "message_vault_io_tauri_lib"
+name = "message_crate_desktop_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [workspace]
@@ -24,7 +24,7 @@ serde_json = "1"
 anyhow = "1.0"
 dirs = "7"
 open = "5"
-message-vault-io-core = { path = "../crates/core/message-vault-io-core" }
+message-crate-core = { path = "../crates/core/message-crate-core" }
 message-ir-format = { path = "../crates/libs/ir-format" }
 message-staging = { path = "../crates/libs/staging" }
 media = { path = "../crates/libs/media" }
@@ -37,9 +37,9 @@ imazing-exporter = { path = "../crates/exporters/imazing-exporter", default-feat
 whatsapp-exporter = { path = "../crates/exporters/whatsapp-exporter", default-features = false }
 imessage-ir-exporter = { path = "../crates/exporters/imessage-ir-exporter", default-features = false }
 message-reexport = { path = "../crates/libs/reexport" }
-vault-push = { path = "../crates/libs/vault-push" }
-vault-pull = { path = "../crates/libs/vault-pull" }
-vault-http = { path = "../crates/libs/vault-http" }
+message-crate-push = { path = "../crates/libs/push" }
+message-crate-pull = { path = "../crates/libs/pull" }
+message-crate-http = { path = "../crates/libs/http" }
 
 [dev-dependencies]
 tempfile = "3"

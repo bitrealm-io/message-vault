@@ -226,8 +226,8 @@ fn mime_hint(attachment_type: &str, filename: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use message_crate_core::{AttachmentJob, MediaConfig, run_attachment_jobs};
     use message_ir::IrAttachment;
-    use message_vault_io_core::{AttachmentJob, MediaConfig, run_attachment_jobs};
 
     /// The attachment-type column names the type when iMazing filled it in;
     /// when it is empty, the file name's extension does, and an extension

@@ -12,7 +12,7 @@ import { useAccountProfile } from "../../lib/useAccountProfile";
  * can be created from something other than a hand-picked selection (#322).
  *
  * The account owner is left out: a group of "the people I text with" does
- * not contain the person doing the texting. Participants the vault has no
+ * not contain the person doing the texting. Participants the server has no
  * contact for cannot be members and are left out too.
  */
 export default function ContactGroupFromConversation({

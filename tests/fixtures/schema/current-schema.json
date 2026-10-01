@@ -5,8 +5,8 @@
     "account_api_tokens",
     "account_prefs",
     "schema_meta",
-    "vault_imports",
-    "vault_import_issues",
+    "imports",
+    "import_issues",
     "conversations",
     "message_tags",
     "message_tag_members",
@@ -32,8 +32,8 @@
   ],
   "indexes": [
     "ix_account_emails_one_primary",
-    "ix_vault_imports_account_started",
-    "ix_vault_import_issues_import",
+    "ix_imports_account_started",
+    "ix_import_issues_import",
     "ix_conversations_account_id",
     "ix_messages_conversation_timestamp",
     "ix_messages_conversation_source_timestamp",
@@ -59,7 +59,7 @@
     "ix_participants_contact_id",
     "ix_participants_handle_id",
     "ix_account_api_tokens_account",
-    "ux_vault_imports_active_account"
+    "ux_imports_active_account"
   ],
   "triggers": [
     "messages_fts_ai",

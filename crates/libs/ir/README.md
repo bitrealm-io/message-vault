@@ -2,7 +2,7 @@
 
 Shared conversation types for Message Crate: `ConversationDocument`, messages, attachments, and participants. This crate has no I/O and no formatting. Attachment bytes are never serialized to JSON; paths and hashes point at sidecar files.
 
-Exporters, `message-ir-format`, `vault-push`, `vault-pull`, and the server use this crate.
+Exporters, `message-ir-format`, `message-crate-push`, `message-crate-pull`, and the server use this crate.
 
 ## Build and test
 

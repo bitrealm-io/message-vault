@@ -12,7 +12,7 @@ csv = { workspace = true }
 hex = { workspace = true }
 mailparse = "0.17.0"
 contacts = { path = "../../libs/contacts" }
-message-vault-io-core = { path = "../../core/message-vault-io-core" }
+message-crate-core = { path = "../../core/message-crate-core" }
 message-ir = { path = "../../libs/ir" }
 message-ir-format = { path = "../../libs/ir-format" }
 message-staging = { path = "../../libs/staging" }
@@ -24,7 +24,7 @@ serde_json = { workspace = true }
 sha2 = { workspace = true }
 
 [dev-dependencies]
-message-vault-io-core = { path = "../../core/message-vault-io-core", features = ["testutil"] }
+message-crate-core = { path = "../../core/message-crate-core", features = ["testutil"] }
 tempfile = { workspace = true }
 
 [lints]

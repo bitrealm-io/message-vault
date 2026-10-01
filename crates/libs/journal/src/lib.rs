@@ -150,9 +150,9 @@ mod tests {
         fs::write(
             &path,
             concat!(
-                "{\"url\":\"http://vault\",\"user\":\"alice\",\"key\":\"a\"}\n",
+                "{\"url\":\"http://server\",\"user\":\"alice\",\"key\":\"a\"}\n",
                 "{not json}\n",
-                "{\"url\":\"http://vault\",\"user\":\"alice\",\"key\":\"b\"}\n",
+                "{\"url\":\"http://server\",\"user\":\"alice\",\"key\":\"b\"}\n",
             ),
         )
         .unwrap();
@@ -180,7 +180,7 @@ mod tests {
                         "journal",
                         &path,
                         &TestEvent {
-                            url: "http://vault".into(),
+                            url: "http://server".into(),
                             user: "alice".into(),
                             key: format!("g-{i}-{j}"),
                         },
@@ -246,7 +246,7 @@ mod tests {
                         "journal",
                         &path,
                         &TestEvent {
-                            url: "http://vault".into(),
+                            url: "http://server".into(),
                             user: "alice".into(),
                             key: format!("c-{i}-{j}"),
                         },

@@ -1,11 +1,11 @@
 //! Write and read [`message_ir::ConversationDocument`] in each format Message
-//! Vault emits itself: JSON, JSON Lines (one JSON object per line), CSV, EML
+//! Crate emits itself: JSON, JSON Lines (one JSON object per line), CSV, EML
 //! and MBOX. [`FormatSink`] buffers documents, applies obfuscation and the
 //! media mode, and writes them; a merged archive owned by another crate
 //! plugs in through [`MergedArchive`].
 //!
 //! The resumable write path lives in `message-staging`, directory convert in
-//! `message-reexport`, the run model in `message-vault-io-core`, and the
+//! `message-reexport`, the run model in `message-crate-core`, and the
 //! schema types in `message-ir`.
 
 mod clean;

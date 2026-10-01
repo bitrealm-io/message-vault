@@ -2,7 +2,7 @@
 
 use crate::types::AttachmentBlob;
 use mailparse::{MailHeaderMap, ParsedMail};
-use message_vault_io_core::attachments::{attachment_date_prefix, digest_prefix};
+use message_crate_core::attachments::{attachment_date_prefix, digest_prefix};
 use regex::Regex;
 use sha2::{Digest, Sha256};
 use std::path::Path;

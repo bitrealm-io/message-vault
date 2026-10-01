@@ -8,7 +8,7 @@ license = "LicenseRef-FCL-1.0-ALv2"
 [dependencies]
 anyhow = { workspace = true }
 csv = { workspace = true }
-message-vault-io-core = { path = "../../core/message-vault-io-core" }
+message-crate-core = { path = "../../core/message-crate-core" }
 message-ir = { path = "../ir" }
 message-ir-format = { path = "../ir-format" }
 media = { path = "../media" }

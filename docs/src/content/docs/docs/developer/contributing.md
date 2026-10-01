@@ -92,7 +92,7 @@ Work from the repository root in two terminals. The first server compile takes s
 `--reset-demo` deletes `data/` and loads a sample inbox. Use it on the first run, or whenever you want a fresh sample inbox.
 
 ```bash title="Start the server"
-./scripts/run-vault-dev.sh --reset-demo
+./scripts/run-dev.sh --reset-demo
 ```
 
 Leave this terminal running. The API listens at **http://127.0.0.1:8080**.
@@ -104,7 +104,7 @@ To browse the tables while developing, add `--sqlweb` (needs `sqlite-web` from t
 The first run uses `--reset-demo`. Later sessions, start with no flags so `data/` stays:
 
 ```bash title="Start the server, keep data"
-./scripts/run-vault-dev.sh
+./scripts/run-dev.sh
 ```
 
 `--reset` wipes `data/` and starts empty (no sample inbox). Don't combine `--reset` and `--reset-demo`. `--sqlweb` works with any of these.
@@ -117,7 +117,7 @@ Same flags as the SQLite script, against the compose Postgres on
 `127.0.0.1:5432`. Needs Docker. There is no `--sqlweb`.
 
 ```bash title="Start the server on Postgres"
-./scripts/run-vault-pg-dev.sh --reset-demo
+./scripts/run-pg-dev.sh --reset-demo
 ```
 
 Log in as username `demo` with an empty password, or as `admin` with the
@@ -125,7 +125,7 @@ password `admin` to manage accounts. `--reset` wipes the
 Postgres volume and `data/` and starts empty. A run with no flags keeps
 the volume. Stopping the script (Ctrl+C) stops the Postgres container
 and keeps the volume. Do not run this at the same time as
-`./scripts/run-vault-dev.sh` — both use port 8080.
+`./scripts/run-dev.sh` — both use port 8080.
 
 ### Open the website (terminal 2)
 
@@ -135,7 +135,7 @@ Install the frontend packages once, then start the Vite UI. Vite is the local we
 cd web && npm ci && npm run dev
 ```
 
-Open **http://localhost:5173**. Log in as username `demo` with an empty password. That account holds invented messages and can do everything a real account can, so import and other writes are testable on it; `./scripts/run-vault-dev.sh --reset-demo` puts it back. Logging in as `admin` with the password `admin` reaches the same Message Crate as its owner, which manages accounts and reads no messages.
+Open **http://localhost:5173**. Log in as username `demo` with an empty password. That account holds invented messages and can do everything a real account can, so import and other writes are testable on it; `./scripts/run-dev.sh --reset-demo` puts it back. Logging in as `admin` with the password `admin` reaches the same Message Crate as its owner, which manages accounts and reads no messages.
 
 Later sessions, skip `npm ci` unless `web/package-lock.json` changed.
 
@@ -156,7 +156,7 @@ For a release-shaped desktop binary (faster on real backups, or when packaging i
 ./scripts/build-app.sh
 ```
 
-The script runs `cargo tauri build` and then renames the installers under `src-tauri/target/release/bundle/` from `Message Vault_…` to `message_vault_<version>_<arch>`, the same names a release carries. It is not for day-to-day UI work — it doesn't reload. Use `cargo tauri dev` for that.
+The script runs `cargo tauri build` and then renames the installers under `src-tauri/target/release/bundle/` from `Message Crate_…` to `message_crate_<version>_<arch>`, the same names a release carries. It is not for day-to-day UI work — it doesn't reload. Use `cargo tauri dev` for that.
 
 ### Serve the website from the server (optional)
 
@@ -172,14 +172,14 @@ That copies `web/dist` into `static/`. Don't run the host server and the [Docker
 
 Ctrl+C in terminal 1 stops the server (and the SQLite UI if it was started). Ctrl+C in terminal 2 stops the website or the desktop app.
 
-After edits under `crates/vault/server/`, restart terminal 1. After edits under `web/` or `src-tauri/`, the UI usually reloads on its own. Restart `cargo tauri dev` if it doesn't.
+After edits under `crates/server/server/`, restart terminal 1. After edits under `web/` or `src-tauri/`, the UI usually reloads on its own. Restart `cargo tauri dev` if it doesn't.
 
 ## Make code changes
 
 Rust doc comments and utoipa annotations follow the [Rust doc style](/docs/developer/rustdoc-style/) guide. If you change the server's command line, regenerate its reference page:
 
 ```bash title="regenerate the server CLI page"
-cargo run -p message-vault-server -- dump-cli-docs --output docs/src/content/docs/docs/developer/reference/server-cli.md
+cargo run -p message-crate-server -- dump-cli-docs --output docs/src/content/docs/docs/developer/reference/server-cli.md
 ```
 
 Open a GitHub issue before starting the work, so the later pull request can link to it. Use the bug report or feature request form. You don't need to wait for a reply before coding. If there's no reply after 5 business days, comment on the issue.
@@ -220,7 +220,7 @@ Add `upstream` once. For later branches: `git fetch upstream`, then `git checkou
 
 Most first PRs touch one of these:
 
-- **Server API or database** — `crates/vault/server/` and `schema/sql/`
+- **Server API or database** — `crates/server/server/` and `schema/sql/`
 - **Website or desktop screens** — `web/`
 - **Import from a phone backup** — `crates/exporters/` and, for the native file dialogs, `src-tauri/`
 - **This guidebook** — `docs/src/content/docs/`

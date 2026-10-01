@@ -21,9 +21,9 @@ docs/dist/
 docs/public/docs/developer/rustdoc/
 /static/
 
-# Local vault data and generated demo copies
+# Local server data and generated demo copies
 /data/
-crates/vault/demo-seed/staging/
+crates/server/demo-seed/staging/
 
 # Scratch, caches, packaging, and local export trees
 .tmp/
@@ -45,7 +45,7 @@ crates/vault/demo-seed/staging/
 .env.*
 !.env.example
 config/config.toml
-config/export-to-vault.sh
+config/export-to-server.sh
 config/contacts.csv
 config/contacts.vcf
 **/export.ini

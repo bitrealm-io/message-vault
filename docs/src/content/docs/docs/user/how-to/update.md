@@ -8,12 +8,12 @@ description: Upgrade the published Docker image and the desktop app without losi
 Stop the container, pull the new image, and start it again on the **same** named volume:
 
 ```bash title="Upgrade with docker run"
-docker stop message-vault
-docker rm message-vault
+docker stop message-crate
+docker rm message-crate
 docker pull bitrealm/message-crate:latest
-docker run -d --name message-vault \
+docker run -d --name message-crate \
   -p 8080:8080 \
-  -v message-vault-data:/app/data \
+  -v message-crate-data:/app/data \
   bitrealm/message-crate:latest
 ```
 
@@ -34,7 +34,7 @@ A release-shaped image from a git checkout: [Docker](/docs/developer/docker/).
 
 Download the new installer from [GitHub Releases](https://github.com/messagecrate/message-crate/releases) and install it over the current app (`.deb` / AppImage, `.msi`, or `.dmg`).
 
-If Import is in use, the `.vault-import-state.jsonl` journal in the work directory is forward-compatible.
+If Import is in use, the `.import-state.jsonl` journal in the work directory is forward-compatible.
 
 ## When the database schema changes
 

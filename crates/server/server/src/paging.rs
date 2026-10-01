@@ -1,0 +1,367 @@
+//! One shape for every paged list on the HTTP interface (`docs/architecture/http-api.md`).
+//!
+//! A list takes `?offset=&limit=` and answers `{items, total, limit, offset}`.
+//! A `limit` above the cap or a zero `limit` is a 422, never a silent clamp,
+//! so a caller learns the rule the first time it breaks it.
+
+use serde::Deserialize;
+
+use crate::server::ApiError;
+
+/// Default page size for every list, an Export Run's messages included.
+pub const DEFAULT_LIST_LIMIT: usize = 40;
+/// The largest page any list route returns. One number, one meaning.
+pub const MAX_LIST_LIMIT: usize = 500;
+/// Cap on `OFFSET` skips for the Contacts and Conversations lists. Export has
+/// no cap: it walks the whole set.
+pub const MAX_LIST_OFFSET: usize = 50_000;
+/// Most contact ids one `POST /v1/contacts/summaries` body may carry, so the
+/// `IN` list stays under SQLite's variable cap.
+pub const MAX_CONTACT_SUMMARY_IDS: usize = 500;
+
+pub use message_crate_api_types::Page;
+
+/// Cut a page out of rows already in memory.
+///
+/// A list whose whole set is small and already loaded — the account's API
+/// tokens, its Contact Groups, the search fields — pages here rather than in
+/// SQL: the total is the row count, and the page is `offset..offset + limit`.
+/// An offset past the end is an empty page, not a failure, because a caller
+/// walking a list that shrank under it has asked a legal question.
+pub fn page_of<T>(rows: Vec<T>, params: PageParams) -> Page<T> {
+    let total = rows.len() as u64;
+    let items = rows
+        .into_iter()
+        .skip(params.offset)
+        .take(params.limit)
+        .collect();
+    Page {
+        items,
+        total,
+        limit: params.limit,
+        offset: params.offset,
+    }
+}
+
+/// The whole of a body-bounded read as one page.
+///
+/// A `POST` that reads the rows its body names — contact summaries, unmatched
+/// handles — answers a page like every other list, but takes no `offset` or
+/// `limit`: the body already says which rows to read, and it may name at most
+/// `limit` of them. So `total` is the row count, `limit` is that cap, and
+/// `offset` is 0.
+pub fn whole_page<T>(items: Vec<T>, limit: usize) -> Page<T> {
+    Page {
+        total: items.len() as u64,
+        items,
+        limit,
+        offset: 0,
+    }
+}
+
+/// The `q`/`limit`/`offset` query string of a plain list route; lists with
+/// extra parameters declare their own struct and call `page_params` directly.
+#[derive(Debug, Deserialize)]
+pub struct PageQuery {
+    #[serde(default)]
+    pub q: Option<String>,
+    #[serde(default)]
+    pub limit: Option<usize>,
+    #[serde(default)]
+    pub offset: Option<usize>,
+    /// `sort=-field,field`, parsed by [`parse_sort`] against the keys the
+    /// route accepts.
+    #[serde(default)]
+    pub sort: Option<String>,
+}
+
+/// Which way a sort key runs, from the log in front of it: `-date` descends,
+/// `date` ascends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Direction {
+    Asc,
+    Desc,
+}
+
+impl Direction {
+    /// The SQL keyword.
+    #[must_use]
+    pub const fn sql(self) -> &'static str {
+        match self {
+            Self::Asc => "ASC",
+            Self::Desc => "DESC",
+        }
+    }
+}
+
+/// One key of a `sort=` parameter: the column, as the route names it, and
+/// which way it runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SortKey<K> {
+    pub key: K,
+    pub direction: Direction,
+}
+
+/// Parse `sort=-field,field` against the keys a list accepts (`docs/architecture/http-api.md`):
+/// comma-separated keys, a leading `-` for descending. Absent or blank is
+/// `default`. An unknown or repeated key is `validation-failed`, naming the
+/// key and the accepted set, the way the search language refuses an unknown
+/// word; nothing falls back silently.
+///
+/// # Errors
+///
+/// `validation-failed` for a key the route does not accept, a key named
+/// twice, or an empty member such as `sort=,`.
+pub fn parse_sort<K: Copy + PartialEq>(
+    raw: Option<&str>,
+    accepted: &[(&str, K)],
+    default: &[SortKey<K>],
+) -> Result<Vec<SortKey<K>>, ApiError> {
+    let raw = raw.map(str::trim).unwrap_or_default();
+    if raw.is_empty() {
+        return Ok(default.to_vec());
+    }
+    let names = || {
+        accepted
+            .iter()
+            .map(|(name, _)| *name)
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let mut keys: Vec<SortKey<K>> = Vec::new();
+    for member in raw.split(',') {
+        let member = member.trim();
+        let (name, direction) = match member.strip_prefix('-') {
+            Some(rest) => (rest.trim(), Direction::Desc),
+            None => (member, Direction::Asc),
+        };
+        if name.is_empty() {
+            return Err(ApiError::validation(format!(
+                "sort: empty key in '{raw}'; accepted keys are {}",
+                names()
+            )));
+        }
+        let Some((_, key)) = accepted.iter().find(|(n, _)| n.eq_ignore_ascii_case(name)) else {
+            return Err(ApiError::validation(format!(
+                "sort: unknown key '{name}'; accepted keys are {}",
+                names()
+            )));
+        };
+        if keys.iter().any(|k| k.key == *key) {
+            return Err(ApiError::validation(format!(
+                "sort: key '{name}' is named twice"
+            )));
+        }
+        keys.push(SortKey {
+            key: *key,
+            direction,
+        });
+    }
+    Ok(keys)
+}
+
+/// A validated `limit` and `offset`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PageParams {
+    pub limit: usize,
+    pub offset: usize,
+}
+
+/// Turn the raw `limit` and `offset` into a page, or a 422 that says which
+/// one is wrong. `max_offset` is `None` for a route that may walk the whole set.
+pub fn page_params(
+    limit: Option<usize>,
+    offset: Option<usize>,
+    default_limit: usize,
+    max_offset: Option<usize>,
+) -> Result<PageParams, ApiError> {
+    let limit = limit.unwrap_or(default_limit);
+    if limit == 0 {
+        return Err(ApiError::validation("limit must be at least 1"));
+    }
+    if limit > MAX_LIST_LIMIT {
+        return Err(ApiError::validation(format!(
+            "limit exceeds maximum of {MAX_LIST_LIMIT}"
+        )));
+    }
+    let offset = offset.unwrap_or(0);
+    if let Some(max) = max_offset
+        && offset > max
+    {
+        return Err(ApiError::validation(format!(
+            "offset exceeds maximum of {max}"
+        )));
+    }
+    Ok(PageParams { limit, offset })
+}
+
+/// The page and sort of a list route that reads the default page size and
+/// caps `offset` at [`MAX_LIST_OFFSET`]: [`page_params`], then [`parse_sort`]
+/// against the keys the route accepts.
+///
+/// # Errors
+///
+/// `validation-failed` for a `limit`, `offset` or `sort` the route refuses.
+pub fn sorted_page<K: Copy + PartialEq>(
+    limit: Option<usize>,
+    offset: Option<usize>,
+    sort: Option<&str>,
+    accepted: &[(&str, K)],
+    default: &[SortKey<K>],
+) -> Result<(PageParams, Vec<SortKey<K>>), ApiError> {
+    let page = page_params(limit, offset, DEFAULT_LIST_LIMIT, Some(MAX_LIST_OFFSET))?;
+    let order = parse_sort(sort, accepted, default)?;
+    Ok((page, order))
+}
+
+/// What a searchable list reads from its [`PageQuery`], validated, and the
+/// account's clock its search compiles against.
+pub struct ListRequest<K> {
+    /// The search query; empty when the caller sent none.
+    pub q: String,
+    /// The validated `limit` and `offset`.
+    pub page: PageParams,
+    /// The parsed `sort`, or the route's default.
+    pub order: Vec<SortKey<K>>,
+    /// The account's time zone and today's date in it.
+    pub clock: (chrono_tz::Tz, chrono::NaiveDate),
+}
+
+impl<K: Copy + PartialEq> ListRequest<K> {
+    /// Validate the page and sort ([`sorted_page`]) and load the account's clock.
+    ///
+    /// # Errors
+    ///
+    /// `validation-failed` for a `limit`, `offset` or `sort` the route
+    /// refuses; `Internal` when the clock cannot be read.
+    pub async fn read(
+        conn: &mut sqlx::AnyConnection,
+        account_id: i64,
+        query: PageQuery,
+        accepted: &[(&str, K)],
+        default: &[SortKey<K>],
+    ) -> Result<Self, ApiError> {
+        let (page, order) = sorted_page(
+            query.limit,
+            query.offset,
+            query.sort.as_deref(),
+            accepted,
+            default,
+        )?;
+        let clock = crate::db::account_profile::account_clock(conn, account_id).await?;
+        Ok(Self {
+            q: query.q.unwrap_or_default(),
+            page,
+            order,
+            clock,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Key {
+        Date,
+        Messages,
+    }
+    const KEYS: [(&str, Key); 2] = [("date", Key::Date), ("messages", Key::Messages)];
+    const DEFAULT: [SortKey<Key>; 1] = [SortKey {
+        key: Key::Date,
+        direction: Direction::Desc,
+    }];
+
+    #[test]
+    fn a_sort_is_keys_with_a_sign_and_blank_is_the_default() {
+        let parsed = parse_sort(Some("-messages, date"), &KEYS, &DEFAULT).unwrap();
+        assert_eq!(
+            parsed,
+            [
+                SortKey {
+                    key: Key::Messages,
+                    direction: Direction::Desc
+                },
+                SortKey {
+                    key: Key::Date,
+                    direction: Direction::Asc
+                }
+            ]
+        );
+        assert_eq!(parse_sort(None, &KEYS, &DEFAULT).unwrap(), DEFAULT);
+        assert_eq!(parse_sort(Some("  "), &KEYS, &DEFAULT).unwrap(), DEFAULT);
+        assert_eq!(
+            parse_sort(Some("DATE"), &KEYS, &DEFAULT).unwrap()[0].key,
+            Key::Date
+        );
+    }
+
+    #[test]
+    fn an_unknown_or_repeated_key_is_refused_naming_the_accepted_set() {
+        let err = parse_sort(Some("colour"), &KEYS, &DEFAULT).unwrap_err();
+        assert!(matches!(
+            err,
+            ApiError::ValidationFailed(m)
+                if m == ["sort: unknown key 'colour'; accepted keys are date, messages"]
+        ));
+        let err = parse_sort(Some("date,-date"), &KEYS, &DEFAULT).unwrap_err();
+        assert!(
+            matches!(err, ApiError::ValidationFailed(m) if m == ["sort: key 'date' is named twice"])
+        );
+        assert!(parse_sort(Some("date,"), &KEYS, &DEFAULT).is_err());
+    }
+
+    #[test]
+    fn defaults_fill_in_when_nothing_is_sent() {
+        let p = page_params(None, None, DEFAULT_LIST_LIMIT, Some(MAX_LIST_OFFSET)).unwrap();
+        assert_eq!(
+            p,
+            PageParams {
+                limit: 40,
+                offset: 0
+            }
+        );
+    }
+
+    #[test]
+    fn a_limit_above_the_cap_is_refused_not_clamped() {
+        let err = page_params(Some(501), None, 40, None).unwrap_err();
+        assert!(
+            matches!(err, ApiError::ValidationFailed(m) if m == ["limit exceeds maximum of 500"])
+        );
+        let p = page_params(Some(500), None, 40, None).unwrap();
+        assert_eq!(p.limit, 500);
+    }
+
+    #[test]
+    fn a_zero_limit_is_refused() {
+        let err = page_params(Some(0), None, 40, None).unwrap_err();
+        assert!(matches!(err, ApiError::ValidationFailed(m) if m == ["limit must be at least 1"]));
+    }
+
+    #[test]
+    fn an_offset_past_the_cap_is_refused_only_when_a_cap_is_given() {
+        let err = page_params(None, Some(50_001), 40, Some(MAX_LIST_OFFSET)).unwrap_err();
+        assert!(
+            matches!(err, ApiError::ValidationFailed(m) if m == ["offset exceeds maximum of 50000"])
+        );
+        let p = page_params(None, Some(50_001), 40, None).unwrap();
+        assert_eq!(p.offset, 50_001);
+    }
+
+    #[test]
+    fn a_page_serializes_with_the_four_agreed_keys() {
+        let page = Page {
+            items: vec![1, 2],
+            total: 9,
+            limit: 2,
+            offset: 4,
+        };
+        let json = serde_json::to_value(&page).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({"items": [1, 2], "total": 9, "limit": 2, "offset": 4})
+        );
+    }
+}

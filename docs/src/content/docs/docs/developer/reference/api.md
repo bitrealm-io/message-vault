@@ -9,7 +9,7 @@ Three places describe the server's `/v1` interface, and this page is the smalles
 - The [HTTP interface rules](https://github.com/messagecrate/message-crate/blob/main/docs/architecture/http-api.md) state what every route must do, each rule with its reason: route shape, lists and paging, failures as problem documents, credentials and what each reaches, and runs.
 - This page walks through an Import Run and an Export Run from start to finish, and lists the words of the search language.
 
-Day-to-day import uses the desktop [Import](/docs/user/import-from-a-backup/) screen and download uses [Export](/docs/user/how-to/export-your-messages/). Both call this API with [JSONL](/docs/developer/reference/export-structure/) and attachment bytes keyed by SHA-256, through the `vault-push` and `vault-pull` libraries.
+Day-to-day import uses the desktop [Import](/docs/user/import-from-a-backup/) screen and download uses [Export](/docs/user/how-to/export-your-messages/). Both call this API with [JSONL](/docs/developer/reference/export-structure/) and attachment bytes keyed by SHA-256, through the `message-crate-push` and `message-crate-pull` libraries.
 
 ## Tokens
 
@@ -55,14 +55,14 @@ A file the server cannot read answers `400 Bad Request` with a `malformed-body` 
 
 A batch holds one pooled database connection for the whole of its work: parsing the JSONL, placing attachments, and promoting messages. At most two batches run at once across the whole server, so the rest of the pool stays free for logins, browsing, and export while an import runs. Batches for the same account run one at a time. The same holds on SQLite and on Postgres.
 
-`message-vault-server import` reads a folder of JSONL without the HTTP interface. It defaults to `replace` and runs dedupe unless given `--skip-dedupe`.
+`message-crate-server import` reads a folder of JSONL without the HTTP interface. It defaults to `replace` and runs dedupe unless given `--skip-dedupe`.
 
 ## Export Run
 
 Every export is an Export Run, and there is no unrecorded export. `POST /v1/exports` creates one and answers `201 Created` with the run: what was asked for, and the four counts the server computed for it at creation — messages, conversations, distinct attachments, and their bytes. The body names a `scope` in one of three forms, stored as given, and an optional `tool`:
 
 ```json title="POST /v1/exports"
-{ "scope": { "kind": "everything" }, "tool": "vault-pull" }
+{ "scope": { "kind": "everything" }, "tool": "message-crate-pull" }
 { "scope": { "kind": "query", "q": "from:me date:>2024" } }
 { "scope": { "kind": "selection", "conversation_ids": [12, 40], "message_ids": [913] } }
 ```

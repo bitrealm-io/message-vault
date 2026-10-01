@@ -1,15 +1,15 @@
 import { APP_BUILD } from "../lib/build";
 import { productVersionOf, productVersionsDiffer } from "../lib/buildFormat";
-import { useVaultInfo } from "../lib/useVaultInfo";
+import { useServerInfo } from "../lib/useServerInfo";
 
 /**
- * Says so when this app and its vault come from different releases. It blocks
- * nothing: the vault serves every request whatever the versions are, and this
+ * Says so when this app and its server come from different releases. It blocks
+ * nothing: the server serves every request whatever the versions are, and this
  * line is how a person learns why a screen might not work. Only the Product
  * Version is compared, so a dev build from another commit shows nothing.
  */
 export default function VersionNotice() {
-  const { data } = useVaultInfo();
+  const { data } = useServerInfo();
   if (!data || !productVersionsDiffer(data.version, APP_BUILD)) return null;
 
   return (

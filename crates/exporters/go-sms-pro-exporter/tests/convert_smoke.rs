@@ -1,10 +1,10 @@
 use crate::emit::{ConvertExportArgs, convert_export};
 use anyhow::Result;
 use go_sms_mms::testutil::PduBuilder;
-use message_vault_io_core::testutil::{
+use message_crate_core::testutil::{
     assert_csv_export, assert_csv_row, assert_jsonl_resumes, csv_files,
 };
-use message_vault_io_core::{ExportReport, ExportTransforms, OutputFormat};
+use message_crate_core::{ExportReport, ExportTransforms, OutputFormat};
 use std::fs;
 use std::path::{Path, PathBuf};
 

@@ -31,20 +31,20 @@ beforeEach(() => {
 });
 
 describe("defaultStagingDir", () => {
-  it("joins message-vault under the home folder", () => {
-    expect(defaultStagingDir("/home/mbeisser")).toBe("/home/mbeisser/message-vault");
+  it("joins message-crate under the home folder", () => {
+    expect(defaultStagingDir("/home/mbeisser")).toBe("/home/mbeisser/message-crate");
   });
 
   it("strips a trailing slash on the home folder", () => {
-    expect(defaultStagingDir("/home/mbeisser/")).toBe("/home/mbeisser/message-vault");
+    expect(defaultStagingDir("/home/mbeisser/")).toBe("/home/mbeisser/message-crate");
   });
 
-  it("uses a relative message-vault path when home is empty", () => {
-    expect(defaultStagingDir("")).toBe("message-vault");
+  it("uses a relative message-crate path when home is empty", () => {
+    expect(defaultStagingDir("")).toBe("message-crate");
   });
 
-  it("joins message-vault under a Unix root home", () => {
-    expect(defaultStagingDir("/")).toBe("/message-vault");
+  it("joins message-crate under a Unix root home", () => {
+    expect(defaultStagingDir("/")).toBe("/message-crate");
   });
 });
 
@@ -59,7 +59,7 @@ describe("isUsableStagingParent", () => {
   });
 
   it("rejects a relative folder", () => {
-    expect(isUsableStagingParent("message-vault")).toBe(false);
+    expect(isUsableStagingParent("message-crate")).toBe(false);
     expect(isUsableStagingParent("")).toBe(false);
   });
 });
@@ -68,12 +68,12 @@ describe("joinStagingPath", () => {
   const now = new Date(2026, 7, 24, 18, 5, 9);
 
   it("puts the staging folder name directly under the parent", () => {
-    expect(joinStagingPath("/home/mbeisser/message-vault", "imessage-ios", now)).toBe(
-      "/home/mbeisser/message-vault/staging-iphone-ios-260824-180509",
+    expect(joinStagingPath("/home/mbeisser/message-crate", "imessage-ios", now)).toBe(
+      "/home/mbeisser/message-crate/staging-iphone-ios-260824-180509",
     );
   });
 
-  it("does not nest another message-vault under a custom parent", () => {
+  it("does not nest another message-crate under a custom parent", () => {
     expect(joinStagingPath("/data/imports", "imessage-ios", now)).toBe(
       "/data/imports/staging-iphone-ios-260824-180509",
     );
@@ -84,20 +84,20 @@ describe("joinStagingPath", () => {
   });
 
   it("keeps SMS Backup & Restore source ids in the folder name", () => {
-    expect(joinStagingPath("/Users/sam/message-vault", "sms-backup-restore", now)).toBe(
-      "/Users/sam/message-vault/staging-sms-backup-restore-260824-180509",
+    expect(joinStagingPath("/Users/sam/message-crate", "sms-backup-restore", now)).toBe(
+      "/Users/sam/message-crate/staging-sms-backup-restore-260824-180509",
     );
   });
 
   it("strips a trailing slash on the parent folder", () => {
-    expect(joinStagingPath("/home/mbeisser/message-vault/", "imessage-macos", now)).toBe(
-      "/home/mbeisser/message-vault/staging-macos-260824-180509",
+    expect(joinStagingPath("/home/mbeisser/message-crate/", "imessage-macos", now)).toBe(
+      "/home/mbeisser/message-crate/staging-macos-260824-180509",
     );
   });
 
   it("strips a trailing backslash on a Windows parent folder", () => {
-    expect(joinStagingPath("C:\\Users\\sam\\message-vault\\", "imessage-ios", now)).toBe(
-      "C:\\Users\\sam\\message-vault/staging-iphone-ios-260824-180509",
+    expect(joinStagingPath("C:\\Users\\sam\\message-crate\\", "imessage-ios", now)).toBe(
+      "C:\\Users\\sam\\message-crate/staging-iphone-ios-260824-180509",
     );
   });
 
@@ -113,22 +113,22 @@ describe("resolveImportStagingDir", () => {
     );
   });
 
-  it("joins a saved custom parent without nesting message-vault", async () => {
-    localStorage.setItem("mv-staging-dir", "/data/imports");
+  it("joins a saved custom parent without nesting message-crate", async () => {
+    localStorage.setItem("mc-staging-dir", "/data/imports");
     await expect(resolveImportStagingDir("/backup", "imessage-ios")).resolves.toMatch(
       /^\/data\/imports\/staging-iphone-ios-\d{6}-\d{6}$/,
     );
   });
 
   it("ignores a saved filesystem root and fails without a home directory", async () => {
-    localStorage.setItem("mv-staging-dir", "/");
+    localStorage.setItem("mc-staging-dir", "/");
     await expect(resolveImportStagingDir("/backup", "imessage-ios")).rejects.toThrow(
       /home directory/i,
     );
   });
 
   it("ignores a saved relative parent and fails without a home directory", async () => {
-    localStorage.setItem("mv-staging-dir", "message-vault");
+    localStorage.setItem("mc-staging-dir", "message-crate");
     await expect(resolveImportStagingDir("/backup", "imessage-ios")).rejects.toThrow(
       /home directory/i,
     );
@@ -139,8 +139,8 @@ describe("joinStagingPath jailbreak slug", () => {
   const now = new Date(2026, 7, 24, 18, 5, 9);
 
   it("uses iphone-jailbreak in the staging folder name", () => {
-    expect(joinStagingPath("/home/sam/message-vault", "imessage-jailbreak", now)).toBe(
-      "/home/sam/message-vault/staging-iphone-jailbreak-260824-180509",
+    expect(joinStagingPath("/home/sam/message-crate", "imessage-jailbreak", now)).toBe(
+      "/home/sam/message-crate/staging-iphone-jailbreak-260824-180509",
     );
   });
 });

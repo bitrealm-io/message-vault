@@ -1,5 +1,5 @@
 /**
- * The search language, as the vault describes it.
+ * The search language, as the server describes it.
  *
  * The browser keeps no list of words of its own: `GET /v1/search-fields/{list}`
  * says which words one list accepts, what kind of value each takes, and which values
@@ -7,13 +7,13 @@
  * What is left here are two rules about the *shape* of a query — whether it
  * carries a `word:` token at all, and what its plain words are — which the
  * contact and conversation lists use to decide whether they can narrow rows in
- * the browser or must ask the vault.
+ * the browser or must ask the server.
  */
 
-import { listSearchFields, type SearchFieldList } from "./vaultApi";
-import type { components } from "./vaultApi.types";
-import { keys } from "./vaultKeys";
-import { useVaultQuery } from "./vaultQuery";
+import { keys } from "./queryKeys";
+import { useRouteQuery } from "./routeQuery";
+import { listSearchFields, type SearchFieldList } from "./serverApi";
+import type { components } from "./serverApi.types";
 
 type Schema = components["schemas"];
 export type SearchField = Schema["FieldDoc"];
@@ -29,7 +29,7 @@ export type SearchList = SearchFieldList;
 const FIELD_TOKEN_RE = /(^|[\s(])-?[a-z][a-z-]*:(?!\/)/i;
 const PHRASE_RE = /"(?:[^"]|"")*"/g;
 
-/** True when the query has a `word:` token, which only the vault can apply. */
+/** True when the query has a `word:` token, which only the server can apply. */
 export function hasFieldToken(q: string): boolean {
   return FIELD_TOKEN_RE.test(q.replace(PHRASE_RE, " "));
 }
@@ -67,14 +67,14 @@ export function stripFieldTokens(q: string): string {
 }
 
 /**
- * The words one list accepts, from the vault, cached for the session. A `null`
- * list asks the vault nothing and has no words.
+ * The words one list accepts, from the server, cached for the session. A `null`
+ * list asks the server nothing and has no words.
  */
 export function useSearchFields(list: SearchList | null): {
   fields: SearchField[];
   loading: boolean;
 } {
-  const { data, isPending } = useVaultQuery(
+  const { data, isPending } = useRouteQuery(
     keys.searchFields.list(list ?? "conversations"),
     async (signal) => (await listSearchFields(list ?? "conversations", { signal })).items,
     { staleTime: Number.POSITIVE_INFINITY, enabled: list !== null },

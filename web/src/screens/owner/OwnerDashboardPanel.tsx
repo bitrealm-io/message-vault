@@ -1,15 +1,15 @@
 import { apiErrorMessage } from "../../lib/apiErrorMessage";
-import { getVaultStorage } from "../../lib/vaultApi";
-import { keys } from "../../lib/vaultKeys";
-import { useVaultQuery } from "../../lib/vaultQuery";
+import { keys } from "../../lib/queryKeys";
+import { useRouteQuery } from "../../lib/routeQuery";
+import { getServerStorage } from "../../lib/serverApi";
+import { ContentsSection } from "./dashboard/ContentsSection";
 import { DatabaseSection } from "./dashboard/DatabaseSection";
 import { MessagesByAccountSection } from "./dashboard/MessagesByAccountSection";
-import { VaultContentsSection } from "./dashboard/VaultContentsSection";
 
 /**
- * The Dashboard: a column of headed sections about the whole vault.
+ * The Dashboard: a column of headed sections about the whole Message Crate.
  *
- * The owner administers the vault, and administering it starts with knowing
+ * The owner administers the Message Crate, and administering it starts with knowing
  * how much it holds and where the disk goes. Every section reads the one
  * storage query, so the page shows one loading line and one error line. The
  * figures are counts and bytes and nothing else: no message, contact or
@@ -17,8 +17,8 @@ import { VaultContentsSection } from "./dashboard/VaultContentsSection";
  * beside numbers (`docs/adr/0008-the-owner-holds-no-messages.md`).
  */
 export function OwnerDashboardPanel() {
-  const { data, isPending, error } = useVaultQuery(keys.vaultStorage.all, (signal) =>
-    getVaultStorage({ signal }),
+  const { data, isPending, error } = useRouteQuery(keys.serverStorage.all, (signal) =>
+    getServerStorage({ signal }),
   );
 
   return (
@@ -36,7 +36,7 @@ export function OwnerDashboardPanel() {
         </p>
       ) : (
         <>
-          <VaultContentsSection storage={data} />
+          <ContentsSection storage={data} />
           <DatabaseSection storage={data} />
           <MessagesByAccountSection storage={data} />
         </>

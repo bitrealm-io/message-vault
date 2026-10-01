@@ -3,7 +3,7 @@
 The code that turns a phone backup into files on disk is four crates, and each
 one holds a single job.
 
-- **`message-vault-io-core`** is the run model: the configuration a run is given,
+- **`message-crate-core`** is the run model: the configuration a run is given,
   the report it produces, the shared run skeleton, and the one function that
   stages a conversation's attachments.
 - **`message-ir-format`** reads and writes the formats Message Crate itself
@@ -31,7 +31,7 @@ across 21 files, and only about half of them read or wrote a format:
 
 The consumers were already disjoint, which is the clearest sign the crate held
 more than one thing. `src-tauri` imported the staging engine and one unrelated
-constant. `vault-push`, `vault-pull`, `message-reexport` and the server
+constant. `message-crate-push`, `message-crate-pull`, `message-reexport` and the server
 imported no staging item at all. Nothing but the six vendor exporters needed
 both halves, and they reached the staging half only through `ExportWriter`.
 
@@ -49,12 +49,12 @@ Two things forced more than a set of file moves.
 `message-ir-format` was the constant `UNSAFE_ATTACHMENT_PATH_PREFIX`. That
 constant existed because the path-escape check was written twice — once in
 `ir-format`'s `safe_attachment_path`, once in the server's `safe_rel_path` at
-`crates/vault/server/src/config.rs:144` — with a doc comment instructing the
+`crates/server/server/src/config.rs:144` — with a doc comment instructing the
 next reader to keep the two error strings identical. A defence against directory
 traversal held in step by a shared string is a defence waiting to diverge, so
 the check itself moves into `message-ir`, both call sites use it, and the server
 drops `message-ir-format` from its manifest entirely. A third copy turned up
-while doing it — `vault-push`'s `safe_rel`, which accepted an absolute path in
+while doing it — `message-crate-push`'s `safe_rel`, which accepted an absolute path in
 one function and refused it in the one called just before — and it went the
 same way.
 

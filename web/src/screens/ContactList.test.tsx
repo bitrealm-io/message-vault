@@ -15,12 +15,12 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import RightPane from "../components/RightPane";
 import { RightToolbarProvider } from "../components/RightToolbarContext";
-import { mockedAuth, VaultProviders } from "../test/vaultProviders";
+import { mockedAuth, Providers } from "../test/providers";
 import ContactList from "./ContactList";
 
 vi.mock("../lib/auth", () => ({ useAuth: () => mockedAuth }));
 
-vi.mock("../lib/vaultApi", () => ({
+vi.mock("../lib/serverApi", () => ({
   listContacts: vi.fn(),
   listContactGroups: vi.fn(),
   createContactGroup: vi.fn(),
@@ -29,19 +29,19 @@ vi.mock("../lib/vaultApi", () => ({
   updateContactGroupMembers: vi.fn(),
 }));
 
-import { listContactGroups, listContacts, updateContactGroupMembers } from "../lib/vaultApi";
+import { listContactGroups, listContacts, updateContactGroupMembers } from "../lib/serverApi";
 
 const listContactsMock = vi.mocked(listContacts);
 const listContactGroupsMock = vi.mocked(listContactGroups);
 const updateMembersMock = vi.mocked(updateContactGroupMembers);
 
-/** True once the vault has actually dropped Alice's Family membership. */
+/** True once the server has actually dropped Alice's Family membership. */
 let familyRemoved = false;
 
 beforeEach(() => {
   vi.clearAllMocks();
   familyRemoved = false;
-  // Mirrors what the vault would answer: the write below flips this, and the
+  // Mirrors what the server would answer: the write below flips this, and the
   // invalidate the mutation issues on settling refetches this same mock, so
   // the test also proves the optimistic patch and the server truth agree —
   // not just the moment right after the click.
@@ -79,13 +79,13 @@ describe("ContactList", () => {
     });
 
     render(
-      <VaultProviders>
+      <Providers>
         <RightToolbarProvider>
           <RightPane>
             <ContactList groupFilter="Family" onSelect={() => {}} />
           </RightPane>
         </RightToolbarProvider>
-      </VaultProviders>,
+      </Providers>,
     );
 
     const rowCheckbox = await screen.findByRole("checkbox", { name: "Select Alice" });
@@ -131,13 +131,13 @@ describe("ContactList", () => {
     } as unknown as Awaited<ReturnType<typeof listContacts>>);
 
     render(
-      <VaultProviders>
+      <Providers>
         <RightToolbarProvider>
           <RightPane>
             <ContactList onSelect={() => {}} />
           </RightPane>
         </RightToolbarProvider>
-      </VaultProviders>,
+      </Providers>,
     );
 
     const box = (name: string) => screen.getByRole("checkbox", { name: `Select ${name}` });

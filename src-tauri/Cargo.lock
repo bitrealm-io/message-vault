@@ -1349,10 +1349,10 @@ dependencies = [
  "go-sms-mms",
  "hex",
  "media",
+ "message-crate-core",
  "message-ir",
  "message-ir-format",
  "message-staging",
- "message-vault-io-core",
  "phone",
  "quick-xml",
  "serde",
@@ -1737,11 +1737,11 @@ dependencies = [
  "contacts",
  "csv",
  "media",
+ "message-crate-core",
  "message-csv",
  "message-ir",
  "message-ir-format",
  "message-staging",
- "message-vault-io-core",
  "phone",
  "serde_json",
 ]
@@ -1752,10 +1752,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "imessage-reader-protocol",
+ "message-crate-core",
  "message-ir",
  "message-ir-format",
  "message-staging",
- "message-vault-io-core",
  "plist",
  "serde_json",
  "tempfile",
@@ -2113,6 +2113,110 @@ dependencies = [
 ]
 
 [[package]]
+name = "message-crate-api-types"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "message-crate-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "media",
+ "message-csv",
+ "message-ir",
+ "obfuscate",
+ "sha2 0.11.0",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "message-crate-desktop"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "build-version",
+ "dirs 7.0.0",
+ "go-sms-pro-exporter",
+ "imazing-exporter",
+ "imessage-ir-exporter",
+ "media",
+ "message-crate-core",
+ "message-crate-http",
+ "message-crate-pull",
+ "message-crate-push",
+ "message-ir",
+ "message-ir-format",
+ "message-reexport",
+ "message-staging",
+ "open",
+ "openextract-exporter",
+ "serde",
+ "serde_json",
+ "sms-backup-plus-exporter",
+ "sms-backup-restore-exporter",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-shell",
+ "tempfile",
+ "whatsapp-exporter",
+]
+
+[[package]]
+name = "message-crate-http"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "message-crate-api-types",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "message-crate-pull"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hex",
+ "journal",
+ "media",
+ "message-crate-api-types",
+ "message-crate-core",
+ "message-crate-http",
+ "message-ir",
+ "message-ir-format",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "message-crate-push"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "hex",
+ "journal",
+ "media",
+ "message-crate-api-types",
+ "message-crate-core",
+ "message-crate-http",
+ "message-ir",
+ "message-ir-format",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+]
+
+[[package]]
 name = "message-csv"
 version = "0.1.0"
 dependencies = [
@@ -2144,9 +2248,9 @@ dependencies = [
  "csv",
  "mail",
  "media",
+ "message-crate-core",
  "message-csv",
  "message-ir",
- "message-vault-io-core",
  "obfuscate",
  "serde_json",
 ]
@@ -2158,9 +2262,9 @@ dependencies = [
  "anyhow",
  "csv",
  "media",
+ "message-crate-core",
  "message-ir",
  "message-ir-format",
- "message-vault-io-core",
  "serde_json",
  "sms-backup-restore-exporter",
 ]
@@ -2172,57 +2276,10 @@ dependencies = [
  "anyhow",
  "fs2",
  "media",
+ "message-crate-core",
  "message-ir",
  "message-ir-format",
- "message-vault-io-core",
  "serde",
-]
-
-[[package]]
-name = "message-vault-io-core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "media",
- "message-csv",
- "message-ir",
- "obfuscate",
- "sha2 0.11.0",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "message-vault-io-tauri"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "build-version",
- "dirs 7.0.0",
- "go-sms-pro-exporter",
- "imazing-exporter",
- "imessage-ir-exporter",
- "media",
- "message-ir",
- "message-ir-format",
- "message-reexport",
- "message-staging",
- "message-vault-io-core",
- "open",
- "openextract-exporter",
- "serde",
- "serde_json",
- "sms-backup-plus-exporter",
- "sms-backup-restore-exporter",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-shell",
- "tempfile",
- "vault-http",
- "vault-pull",
- "vault-push",
- "whatsapp-exporter",
 ]
 
 [[package]]
@@ -2575,11 +2632,11 @@ dependencies = [
  "contacts",
  "csv",
  "media",
+ "message-crate-core",
  "message-csv",
  "message-ir",
  "message-ir-format",
  "message-staging",
- "message-vault-io-core",
  "phone",
  "serde_json",
 ]
@@ -3656,10 +3713,10 @@ dependencies = [
  "hex",
  "mailparse",
  "media",
+ "message-crate-core",
  "message-ir",
  "message-ir-format",
  "message-staging",
- "message-vault-io-core",
  "phone",
  "rayon",
  "regex",
@@ -3673,11 +3730,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "media",
+ "message-crate-core",
  "message-csv",
  "message-ir",
  "message-ir-format",
  "message-staging",
- "message-vault-io-core",
  "phone",
  "sbr",
  "serde_json",
@@ -4689,63 +4746,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "vault-api-types"
-version = "0.1.0"
-dependencies = [
- "serde",
-]
-
-[[package]]
-name = "vault-http"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "vault-api-types",
-]
-
-[[package]]
-name = "vault-pull"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "hex",
- "journal",
- "media",
- "message-ir",
- "message-ir-format",
- "message-vault-io-core",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "vault-api-types",
- "vault-http",
-]
-
-[[package]]
-name = "vault-push"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "hex",
- "journal",
- "media",
- "message-ir",
- "message-ir-format",
- "message-vault-io-core",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "vault-api-types",
- "vault-http",
-]
-
-[[package]]
 name = "version-compare"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5007,11 +5007,11 @@ dependencies = [
  "anyhow",
  "hex",
  "media",
+ "message-crate-core",
  "message-csv",
  "message-ir",
  "message-ir-format",
  "message-staging",
- "message-vault-io-core",
  "phone",
  "plist",
  "serde",

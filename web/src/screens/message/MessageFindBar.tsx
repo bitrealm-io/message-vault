@@ -1,7 +1,7 @@
 import Button from "../../components/Button";
 
 /**
- * Find in conversation. The term runs on the vault (`GET /v1/messages` with
+ * Find in conversation. The term runs on the server (`GET /v1/messages` with
  * `in:#id`), so `matchCount` is every match in the conversation, or in the
  * chosen year, and the thread below shows the matches a page at a time.
  */
@@ -16,7 +16,7 @@ export default function MessageFindBar({
 }: {
   findTerm: string;
   onFindTermChange: (value: string) => void;
-  /** Matches in the whole conversation (or year), from the vault. */
+  /** Matches in the whole conversation (or year), from the server. */
   matchCount: number;
   /** Zero-based position of the highlighted match among all matches. */
   matchPosition: number;

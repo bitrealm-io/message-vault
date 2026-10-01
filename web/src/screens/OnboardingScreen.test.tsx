@@ -17,11 +17,11 @@ vi.mock("../lib/auth", () => ({
   }),
 }));
 
-vi.mock("../lib/vaultApi", () => ({
+vi.mock("../lib/serverApi", () => ({
   updateAccountProfile: (...args: unknown[]) => apiPost(...(args as [])),
 }));
 
-// What the vault says the account already holds; a test sets it to what the owner filled in.
+// What the server says the account already holds; a test sets it to what the owner filled in.
 const blankProfile = { preferred_name: null, time_zone: "UTC", phones: [], emails: [] };
 let profile: {
   preferred_name: string | null;

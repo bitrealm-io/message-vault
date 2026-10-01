@@ -124,19 +124,19 @@ on that screen say who the account talks to, and the owner gets neither: an
 import's detail gives the owner how many contacts it created and changed and
 not who they are, and a large attachment comes to the owner as a name, a type
 and a size, without the conversation it is in. The installation-wide totals are
-`GET /v1/vault/storage`, the owner's alone, and Owner Home's Dashboard shows
+`GET /v1/server/storage`, the owner's alone, and Owner Home's Dashboard shows
 them. The per-account and installation-wide numbers come from the same queries
-(`crates/vault/server/src/db/storage.rs`), with and without an account
+(`crates/server/server/src/db/storage.rs`), with and without an account
 filter, so the Dashboard cannot disagree with the sum of the Storage tabs.
 
 ## The three states of a Message Crate
 
-`GET /v1/vault` is unauthenticated and reports one value: `unclaimed`,
+`GET /v1/server` is unauthenticated and reports one value: `unclaimed`,
 `closed`, or `open`. The logged-out screen follows from it — Create
 Owner, Login alone, or Login plus Create Account.
 
 The server reports the state rather than the two facts behind it (whether an
-owner exists, and whether `vault_settings.public_registration` is set) so that
+owner exists, and whether `server_settings.public_registration` is set) so that
 the rule joining them is stated once. A browser and a desktop app that each
 derived the screen from raw fields would be two copies of one rule, free to
 drift apart.
@@ -150,7 +150,7 @@ configuration the operator chose. An unclaimed Message Crate is also empty, so a
 race destroys nothing and announces itself immediately — the operator finds
 they cannot claim their own installation.
 
-## Considered and rejected: a separate `vault_owner` table
+## Considered and rejected: a separate `owner` table
 
 Keeping the owner outside `accounts` entirely would make it impossible for the
 twelve account-scoped data tables to reference the owner at all, rather than
@@ -195,7 +195,7 @@ product needs.)
 ## Consequences
 
 - `POST /v1/auth/register` succeeds only while
-  `vault_settings.public_registration` is set. It defaults to off, so a
+  `server_settings.public_registration` is set. It defaults to off, so a
   fresh installation admits nobody the owner has not admitted.
 - Because registration is off by default, the owner creating accounts is not a
   convenience: without it a claimed Message Crate could never gain a user.
@@ -240,9 +240,9 @@ product needs.)
   not be enough to take it over. A user account changes its own on its
   session alone.
 - A forgotten owner password cannot be reset from inside the product, because
-  no account stands above the owner. `vault reset-owner-password` resets it
+  no account stands above the owner. `message-crate-server reset-owner-password` resets it
   from a shell on the server, which is the credential the owner already holds
-  as the operator. `vault create-owner` claims an unclaimed Message Crate from the same
+  as the operator. `message-crate-server create-owner` claims an unclaimed Message Crate from the same
   shell; each command refuses the state it is not for, so setting one up
   cannot silently overwrite a live owner's password.
 - The administrator surface is renamed throughout: `/v1/owner/accounts`, the

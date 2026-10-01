@@ -19,13 +19,13 @@ function git(...args: string[]): string | null {
 
 /**
  * The part of the Build after the `+`. These are the rules of
- * `crates/libs/build-version`, which the vault server and the desktop app
- * follow: change the two together. `MESSAGE_VAULT_BUILD_METADATA` wins when it
+ * `crates/libs/build-version`, which the server and the desktop app
+ * follow: change the two together. `MESSAGE_CRATE_BUILD_METADATA` wins when it
  * is set, because the release Dockerfile has no `.git`; set and empty is a
  * release.
  */
 function buildMetadata(): string {
-  const fromEnv = process.env.MESSAGE_VAULT_BUILD_METADATA;
+  const fromEnv = process.env.MESSAGE_CRATE_BUILD_METADATA;
   if (fromEnv !== undefined) return fromEnv.trim();
   const commit = git("rev-parse", "--short=8", "HEAD");
   if (commit === null) return "unknown";
@@ -57,7 +57,7 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
-      // Same-origin /v1 in browser → vault (blank server URL on login).
+      // Same-origin /v1 in browser → server (blank server URL on login).
       "/v1": {
         target: "http://127.0.0.1:8080",
         changeOrigin: true,

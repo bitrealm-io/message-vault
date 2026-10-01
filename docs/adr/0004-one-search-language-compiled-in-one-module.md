@@ -2,7 +2,7 @@
 
 The search language a person types on the Contacts, Conversations, and
 Messages lists is one language, owned by one module in the server
-(`crates/vault/server/src/search/`). That module parses every word and
+(`crates/server/server/src/search/`). That module parses every word and
 compiles it to SQL for whichever list asked. The three list routes call it;
 none of them parses a query string or builds a filter of its own.
 
@@ -38,7 +38,7 @@ current.
   subquery. Its tests run query strings against a seeded test database and
   assert which rows come back.
 
-The word table is `crates/vault/server/src/search/fields.rs`, the registry
+The word table is `crates/server/server/src/search/fields.rs`, the registry
 every list compiles against and the source the API reference is generated
 from. The grammar and every word's meaning are in
 `docs/architecture/search.md`; the guide a person reads is

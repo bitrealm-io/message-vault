@@ -10,7 +10,7 @@ import { inputClassName, sectionTitleClass } from "./profileStyles";
 /**
  * Profile settings: display name, time zone, identities, address book.
  *
- * Given `managedAccountId`, the account is one the vault owner opened from
+ * Given `managedAccountId`, the account is one the owner opened from
  * User Accounts. The owner sets its name, zone and identities as the holder
  * does, and reads when it last logged in and which app it connects with. The
  * address book is the account's contacts, which the owner does not reach.
@@ -47,7 +47,7 @@ export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: 
     }
   };
 
-  // Picking a zone is the whole gesture: no Save button, the vault answers
+  // Picking a zone is the whole gesture: no Save button, the server answers
   // with the profile as it now stands and every date label re-renders from it.
   const handleChangeZone = async (zone: string) => {
     if (zone === profile.time_zone) return;
@@ -88,7 +88,7 @@ export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: 
       {zoneError && <div className="mb-6 text-[0.813rem] text-danger">{zoneError}</div>}
       {!zoneError && <div className="mb-6" />}
 
-      {/* The vault owner holds no messages: it has no handles to match a sender
+      {/* The owner holds no messages: it has no handles to match a sender
           against and no contacts, so neither section is its to fill in. */}
       {profile.is_owner ? null : (
         <>

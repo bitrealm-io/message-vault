@@ -3,7 +3,7 @@
 # after `reset-demo` (which otherwise installs the demo config without [server]).
 
 [paths]
-db = "data/vault.db"
+db = "data/messagecrate.db"
 data_dir = "data"
 assets_dir = "assets"
 assets_converted_dir = "assets_converted"

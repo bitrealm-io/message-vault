@@ -6,7 +6,7 @@
 //! exporter deferred (see `extract::exporter_media_mode`), and
 //! `delete_staging` removes the staging folder — when a review is closed
 //! without approving, when a resumable run is discarded, and when an import
-//! finishes successfully, since the vault then holds everything the folder
+//! finishes successfully, since the server then holds everything the folder
 //! held.
 //!
 //! `summarize_staging` and `transcode_staging` both build a
@@ -26,7 +26,7 @@
 //! does ([`paths::resolve_openable_path`]/[`paths::resolve_staging_root`]),
 //! requires the target to be a direct child of the root (never the root
 //! itself, never a grandchild), and — for the two commands that write to or
-//! remove the folder — requires the `.message-vault-export` sentinel
+//! remove the folder — requires the `.message-crate-export` sentinel
 //! `ir-format` writes into every folder it exports into. The sentinel check
 //! is the decisive half: even a hostile or buggy `staging_root` value cannot
 //! make a folder this app never exported into look deletable.
@@ -68,7 +68,7 @@ pub struct StagingArgs {
 
 /// Resolve `staging_dir` and confirm it is safe to act on: a direct child of
 /// `staging_root` — never the root itself, never a grandchild — and, when
-/// `require_sentinel`, containing the `.message-vault-export` sentinel
+/// `require_sentinel`, containing the `.message-crate-export` sentinel
 /// `ir-format` writes into every folder it exports into.
 ///
 /// Both paths are resolved through [`resolve_openable_path`]/
@@ -336,7 +336,7 @@ pub struct DeleteStagingArgs {
 
 /// Delete a staging folder: the decline path's terminal action (Decision
 /// 16), and the last step of a successful import, whose staged copy of the
-/// messages, push log, journal and report the vault has no further use for.
+/// messages, push log, journal and report the server has no further use for.
 ///
 /// Runs on the async task pool (`#[tauri::command(async)]`) rather than the
 /// main thread: `remove_dir_all` over a large staging folder would otherwise

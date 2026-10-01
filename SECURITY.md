@@ -17,7 +17,7 @@ issue, upgrade first and re-test before reporting.
 Please do not open a public issue, and please do not post details in
 discussions or chat. Report suspected vulnerabilities privately to:
 
-**[vault@bitrealm.io](mailto:vault@bitrealm.io)**
+**[hello@bitrealm.io](mailto:hello@bitrealm.io)**
 
 Include as much of the following as you can:
 

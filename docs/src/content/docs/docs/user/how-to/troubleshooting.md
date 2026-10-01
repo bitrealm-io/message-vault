@@ -41,12 +41,12 @@ pipx install "whatsapp-chat-exporter[android_backup,crypt15]"
 
 The website and API share **port 8080**. Use `http://localhost:8080`. Confirm the container is running (`docker ps`) and that nothing else has taken 8080.
 
-### SQLITE_CANTOPEN on `/app/data/vault.db`
+### SQLITE_CANTOPEN on `/app/data/messagecrate.db`
 
 The `data/` directory inside the volume may be owned by `root` while the container runs as a non-root user. On Linux:
 
 ```bash title="Fix volume ownership"
-docker run --rm -v message-vault-data:/data alpine chown -R 1000:1000 /data
+docker run --rm -v message-crate-data:/data alpine chown -R 1000:1000 /data
 ```
 
 Then restart the container. This is a one-time fix when you first create a named volume on Linux. Windows and macOS Docker Desktop volumes are not affected.
@@ -61,7 +61,7 @@ lsof -i :8080
 netstat -ano | findstr :8080
 ```
 
-Stop the other process. From a clone, `./scripts/run-vault-dev.sh` and a Compose stack both want port 8080. See [Docker](/docs/developer/docker/) if two Compose files are fighting over that port.
+Stop the other process. From a clone, `./scripts/run-dev.sh` and a Compose stack both want port 8080. See [Docker](/docs/developer/docker/) if two Compose files are fighting over that port.
 
 ## Command-line import errors
 

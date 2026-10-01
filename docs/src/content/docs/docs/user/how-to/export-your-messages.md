@@ -49,6 +49,6 @@ Folder layout: [Export structure](/docs/developer/reference/export-structure/).
 
 ## Where the temporary files go
 
-Choosing any format other than JSON Lines takes two steps: the messages are written as JSON Lines first, then converted into the format you asked for. The intermediate copy goes in your staging directory — the same folder Import uses, `~/message-vault` by default, changeable in [Settings → System](/docs/user/how-to/settings/). It is deleted when the export finishes, including when the conversion fails.
+Choosing any format other than JSON Lines takes two steps: the messages are written as JSON Lines first, then converted into the format you asked for. The intermediate copy goes in your staging directory — the same folder Import uses, `~/message-crate` by default, changeable in [Settings → System](/docs/user/how-to/settings/). It is deleted when the export finishes, including when the conversion fails.
 
 Make sure that folder has room for a second copy of your messages while an export runs.

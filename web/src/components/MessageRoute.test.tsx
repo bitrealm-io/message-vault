@@ -3,16 +3,16 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getConversation, listConversationMessages } from "../lib/serverApi";
 import type { Conversation } from "../lib/types";
-import { getConversation, listConversationMessages } from "../lib/vaultApi";
-import { mockedAuth, VaultProviders } from "../test/vaultProviders";
+import { mockedAuth, Providers } from "../test/providers";
 import MessageRoute from "./MessageRoute";
 import { RightToolbarProvider } from "./RightToolbarContext";
 
 vi.mock("../lib/auth", () => ({ useAuth: () => mockedAuth }));
 
-vi.mock("../lib/vaultApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../lib/vaultApi")>()),
+vi.mock("../lib/serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/serverApi")>()),
   // The sidebar list `MessageRoute` renders alongside the thread.
   listConversations: vi.fn().mockResolvedValue({ items: [], total: 0, limit: 40, offset: 0 }),
   listContactGroups: vi.fn().mockResolvedValue({ items: [] }),
@@ -60,7 +60,7 @@ function conv(id: number, label: string): Conversation {
 
 function renderAt(path: string, state?: unknown) {
   return render(
-    <VaultProviders>
+    <Providers>
       <MemoryRouter initialEntries={[{ pathname: path, state }]}>
         <RightToolbarProvider>
           <Routes>
@@ -69,7 +69,7 @@ function renderAt(path: string, state?: unknown) {
           </Routes>
         </RightToolbarProvider>
       </MemoryRouter>
-    </VaultProviders>,
+    </Providers>,
   );
 }
 

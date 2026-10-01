@@ -19,7 +19,7 @@ function session(overrides: Partial<ActiveImportSession> = {}): ActiveImportSess
     status: "running",
     started_at: "2026-08-30T00:00:00Z",
     stage: "pushing",
-    staging_dir: "/home/u/message-vault/staging-260830",
+    staging_dir: "/home/u/message-crate/staging-260830",
     device_id: "this-device",
     form: { source: "imessage-ios" },
     source_fingerprint: null,
@@ -138,14 +138,14 @@ describe("ResumeImportPanel", () => {
     const onDiscard = vi.fn();
     const decision: ResumeDecision = {
       kind: "folder_missing",
-      session: session({ staging_dir: "/home/u/message-vault/staging-260830" }),
+      session: session({ staging_dir: "/home/u/message-crate/staging-260830" }),
     };
     render(<ResumeImportPanel decision={decision} onResume={onResume} onDiscard={onDiscard} />);
 
     expect(screen.getByText("The staged files are gone")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "This import's folder is no longer at /home/u/message-vault/staging-260830. Discarding it lets you start a new one.",
+        "This import's folder is no longer at /home/u/message-crate/staging-260830. Discarding it lets you start a new one.",
       ),
     ).toBeInTheDocument();
     expect(
@@ -190,14 +190,14 @@ describe("ResumeImportPanel", () => {
     const onDiscard = vi.fn();
     const decision: ResumeDecision = {
       kind: "folder_unknown",
-      session: session({ staging_dir: "/home/u/message-vault/staging-260830" }),
+      session: session({ staging_dir: "/home/u/message-crate/staging-260830" }),
     };
     render(<ResumeImportPanel decision={decision} onResume={onResume} onDiscard={onDiscard} />);
 
     expect(screen.getByText("The staged files could not be checked")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Message Crate could not check /home/u/message-vault/staging-260830. Open Import again to check once more, or discard this import to start a new one.",
+        "Message Crate could not check /home/u/message-crate/staging-260830. Open Import again to check once more, or discard this import to start a new one.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/gone/)).not.toBeInTheDocument();

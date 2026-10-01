@@ -1,6 +1,6 @@
 import { formatBytes } from "../../settings/storage/storageUtils";
 import { DashboardSection } from "./DashboardSection";
-import type { VaultStorage } from "./types";
+import type { ServerStorage } from "./types";
 
 /** One measured figure with its name under it. */
 function Figure({ label, bytes }: { label: string; bytes: number }) {
@@ -14,11 +14,11 @@ function Figure({ label, bytes }: { label: string; bytes: number }) {
 
 /**
  * The database on disk: its size, how much of it the messages take, and how
- * much the full-text search index adds. All three are measured by the vault,
- * on either engine. The search figure is for the whole vault, because the
+ * much the full-text search index adds. All three are measured by the server,
+ * on either engine. The search figure is for the whole database, because the
  * index is one shared structure and cannot be split by account.
  */
-export function DatabaseSection({ storage }: { storage: VaultStorage }) {
+export function DatabaseSection({ storage }: { storage: ServerStorage }) {
   return (
     <DashboardSection
       title="Database"

@@ -94,7 +94,7 @@ Do **not** use the `X-smssync-*` header namespace. This format is not Plus-compa
 ### Message-ID
 
 - Prefer source guid when present (iMessage): `<{apple-guid}@imessage.local>`.
-- Otherwise: `<{sha256-fingerprint}@message-vault.local>` matching CSV `guid` construction where possible.
+- Otherwise: `<{sha256-fingerprint}@message-crate.local>` matching CSV `guid` construction where possible.
 - Must be stable across re-exports of the same logical message.
 
 ### From / To / Cc mapping

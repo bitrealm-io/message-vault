@@ -13,7 +13,7 @@ import { useAuth } from "../lib/auth";
 import { parseSelectKey } from "../lib/selectKey";
 import { OwnerAccountsPanel } from "./owner/OwnerAccountsPanel";
 import { OwnerDashboardPanel } from "./owner/OwnerDashboardPanel";
-import { VaultSettingsPanel } from "./owner/VaultSettingsPanel";
+import { ServerSettingsPanel } from "./owner/ServerSettingsPanel";
 import SettingsScreen from "./SettingsScreen";
 
 /** What the side panel lists, in its order. */
@@ -38,7 +38,7 @@ function sectionLinkClass(active: boolean): string {
 }
 
 /**
- * Owner Home: where the vault owner lands at login and works from, the way
+ * Owner Home: where the owner lands at login and works from, the way
  * any other account lands in Messages.
  *
  * The frame is the one every account sees: the header with the product name,
@@ -46,7 +46,7 @@ function sectionLinkClass(active: boolean): string {
  * What fills it is the owner's own. The owner has no conversations, no
  * contacts, no import, no export and no trash, so the side panel lists
  * Dashboard, Settings, User Accounts, Activity and Logs, and the search bar
- * filters the accounts table. Dashboard shows what the whole vault holds.
+ * filters the accounts table. Dashboard shows what the whole database holds.
  * Activity and Logs show only their name: nothing is built behind them yet.
  *
  * `/owner/accounts/{id}` is one account's Settings, the screen its holder
@@ -145,7 +145,7 @@ export default function OwnerHome() {
                 <h3 className="m-0 text-text">{SECTION_LABELS[section]}</h3>
               )}
               {section === "dashboard" && <OwnerDashboardPanel />}
-              {section === "settings" && <VaultSettingsPanel />}
+              {section === "settings" && <ServerSettingsPanel />}
               {section === "accounts" && <OwnerAccountsPanel filter={accountSearch} />}
             </div>
           )}

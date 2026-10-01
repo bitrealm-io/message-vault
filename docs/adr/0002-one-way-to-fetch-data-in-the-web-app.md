@@ -1,7 +1,7 @@
 # One way to fetch data in the web app
 
 The web app fetches server data through one mechanism: TanStack Query, calling
-route functions that live in `web/src/lib/vaultApi.ts`. Those functions do
+route functions that live in `web/src/lib/serverApi.ts`. Those functions do
 nothing but talk to the server — no caching, no cross-component notification, no
 React hooks inside them. Their response types are generated from
 `docs/src/assets/openapi.json` rather than written by hand. Every cache entry is
@@ -56,7 +56,7 @@ different reason. Before this decision, 52 call sites across 25 files each wrote
 a URL as a template literal and declared the response shape inline, so a field
 renamed on the server compiled cleanly on both sides and failed when a person
 opened the screen. The server already publishes an accurate description of all
-46 routes: the test at `crates/vault/server/src/openapi.rs:337` compares the
+46 routes: the test at `crates/server/server/src/openapi.rs:337` compares the
 committed `docs/src/assets/openapi.json` against the document the live code
 produces and fails when they differ. Generating the web app's response types
 from that file turns a server-side rename into a web-side compile error.
@@ -107,7 +107,7 @@ Running the real route functions against a fake HTTP server, such as MSW, would
 have caught that. It was rejected because the fake server is a second
 description of the API to keep in step with the server. Tests fake the named
 route functions instead, and the URLs those functions build are asserted in
-`vaultApi.test.ts` — one file to keep honest rather than eleven.
+`serverApi.test.ts` — one file to keep honest rather than eleven.
 
 Two tests keep naming URLs on purpose. `api.test.ts` and `assetUrl.test.ts`
 have the URL as their subject. `AdminUsersPanel.test.tsx` stubs `fetch` and
@@ -117,14 +117,14 @@ nothing — the opposite of the pattern this decision removes.
 
 ## Consequences
 
-- `web/src/lib/vaultApi.ts` holds one function per server route. Its generated
-  companion, `web/src/lib/vaultApi.types.ts`, is checked in. `scripts/check-pr.sh`
+- `web/src/lib/serverApi.ts` holds one function per server route. Its generated
+  companion, `web/src/lib/serverApi.types.ts`, is checked in. `scripts/check-pr.sh`
   regenerates the types and fails on any diff, mirroring what
-  `crates/vault/server/src/openapi.rs:337` already does for the JSON document.
+  `crates/server/server/src/openapi.rs:337` already does for the JSON document.
   Regenerate the JSON with
-  `cargo run -p message-vault-server -- dump-openapi --output docs/src/assets/openapi.json`.
+  `cargo run -p message-crate-server -- dump-openapi --output docs/src/assets/openapi.json`.
 - `web/src/lib/api.ts` keeps `apiClient`, the base URL, and the Bearer header.
-  It is the transport that `vaultApi.ts` uses and is not called from screens.
+  It is the transport that `serverApi.ts` uses and is not called from screens.
 - Response shapes are deleted from `web/src/lib/types.ts` and come from the
   generated file. Shapes that describe the interface rather than a server
   response stay.

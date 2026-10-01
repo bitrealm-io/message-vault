@@ -1,5 +1,5 @@
 {
-  "name": "message-vault-io-web",
+  "name": "message-crate-web",
   "private": true,
   "version": "0.9.0",
   "license": "SEE LICENSE IN ../LICENSE.md",
@@ -14,7 +14,7 @@
     "format:check": "biome check --linter-enabled=false .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "gen:api": "npx --yes openapi-typescript@7.13.0 ../docs/src/assets/openapi.json -o src/lib/vaultApi.types.ts"
+    "gen:api": "npx --yes openapi-typescript@7.13.0 ../docs/src/assets/openapi.json -o src/lib/serverApi.types.ts"
   },
   "dependencies": {
     "@internationalized/date": "^3.12.4",

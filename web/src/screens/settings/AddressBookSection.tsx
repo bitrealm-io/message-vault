@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import Button from "../../components/Button";
 import { useContactGroupActions } from "../../lib/contactGroups";
-import { addressBookContentType, loadAddressBook } from "../../lib/vaultApi";
+import { addressBookContentType, loadAddressBook } from "../../lib/serverApi";
 import { sectionTitleClass } from "./profileStyles";
 
 /** Largest file the server accepts, mirrored here so the refusal is immediate. */
@@ -12,9 +12,9 @@ function plural(n: number, one: string, many: string): string {
 }
 
 /**
- * Load a VCF or vCard CSV address book into the vault.
+ * Load a VCF or vCard CSV address book into Message Crate.
  *
- * This is its own act, not part of an import run: contacts are vault state, and
+ * This is its own act, not part of an import run: contacts belong to the account, and
  * a person may load them before or after bringing messages in. Loading again
  * refreshes the file's own entries and leaves Contact Groups, names typed by
  * hand, and contacts discovered from messages alone.

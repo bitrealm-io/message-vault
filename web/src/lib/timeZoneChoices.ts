@@ -3,7 +3,7 @@ import { getTimeZones } from "@vvo/tzdb";
 /**
  * The rows of the time zone picker.
  *
- * An IANA name ("America/Indiana/Knox") is what the vault stores and not what
+ * An IANA name ("America/Indiana/Knox") is what the server stores and not what
  * a person looks for. A row is read as "(UTC−05:00) Central Time — Chicago,
  * Houston" and found by typing any of it, a city, a country, an abbreviation
  * or the IANA name itself. The zones, their cities and their countries are
@@ -11,7 +11,7 @@ import { getTimeZones } from "@vvo/tzdb";
  * saving.
  */
 export interface TimeZoneChoice {
-  /** The IANA name sent to the vault. */
+  /** The IANA name sent to the server. */
   id: string;
   label: string;
   /** Minutes east of UTC now; the rows are ordered by it. */

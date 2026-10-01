@@ -296,7 +296,7 @@ pub fn classify(path: &Path) -> Option<Kind> {
 /// the file's own extension first, then the declared MIME type, then the
 /// names the export supplied for it.
 ///
-/// A vault stores blobs as `<folder>/<sha256>` with no extension, so a row
+/// The server stores blobs as `<folder>/<sha256>` with no extension, so a row
 /// whose MIME type is missing would otherwise have no kind and never be
 /// converted. `name_hints` (the attachment's original name and its path
 /// inside the export) are read only when the path and the declared MIME say
@@ -529,7 +529,7 @@ pub fn transcode_file(
 }
 
 /// [`transcode_file`] for a source whose kind the caller already knows,
-/// because the file carries no extension to read it from: the vault stores
+/// because the file carries no extension to read it from: the server stores
 /// originals under their SHA-256 alone, and knows the kind from the MIME type
 /// the import declared. Use [`kind_for_mime`](crate::kind_for_mime) for that.
 ///
@@ -577,7 +577,7 @@ fn changed(output_dir: &Path, old_rel: &str, new_path: &Path) -> Result<Outcome>
     // Always report Changed — even when the relative path is unchanged (e.g. JPG
     // recompressed in place). Callers must invalidate digest_sha256 for remapped
     // paths; treating same-path rewrites as Skipped left stale fingerprints in
-    // JSON Lines files and caused vault-push sha256 mismatches after upload.
+    // JSON Lines files and caused message-crate-push sha256 mismatches after upload.
     Ok(Outcome::Changed {
         old_rel: old_rel.to_string(),
         new_rel,
@@ -834,7 +834,7 @@ fn remux_mp4(path: &Path, tmp: &Path) -> Result<()> {
 }
 
 /// Leave an MP4 as it is; remux anything else into one, so every video the
-/// vault keeps shares a container.
+/// server keeps shares a container.
 fn keep_or_remux(path: &Path, commit: Commit<'_>) -> Result<Option<PathBuf>> {
     let ext = path
         .extension()

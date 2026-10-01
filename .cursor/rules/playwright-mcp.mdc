@@ -11,7 +11,7 @@ Namespace: `plugin-playwright-playwright`. Discover schemas with `GetDynamicTool
 
 After changing `web/` screens, components, or copy that users see in the browser (or the Vite shell under Tauri):
 
-1. Ensure the server is up (`./scripts/run-vault-dev.sh`) and UI is reachable — either `cd web && npm run dev` on **http://127.0.0.1:5173**, or the Vite URL that `cargo tauri dev` started.
+1. Ensure the server is up (`./scripts/run-dev.sh`) and UI is reachable — either `cd web && npm run dev` on **http://127.0.0.1:5173**, or the Vite URL that `cargo tauri dev` started.
 2. Prefer **127.0.0.1**, not `localhost` (IPv6 mismatch with the server).
 3. Typical flow: `browser_navigate` → `browser_snapshot` (or `browser_find`) → click/type → snapshot again. Prefer snapshots over screenshots for actions.
 4. Do not claim a UI fix works until Playwright (or an explicit manual desktop check) confirms the relevant text or control.

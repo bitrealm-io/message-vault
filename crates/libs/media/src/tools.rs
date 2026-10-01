@@ -88,7 +88,7 @@ pub(crate) fn require_ffmpeg() -> Result<()> {
         bail!(
             "ffmpeg and ffprobe are required for --media-mode convert/compress. \
              Keep the release-bundled tools in lib/ next to this program (or ../lib/ from cli/), \
-             install ffmpeg on PATH, or set MESSAGE_VAULT_IO_BIN to a directory that contains both."
+             install ffmpeg on PATH, or set MESSAGE_CRATE_BIN to a directory that contains both."
         )
     }
 }
@@ -107,7 +107,7 @@ fn command_runs(bin: &Path, args: &[&str]) -> bool {
 /// Resolve `ffmpeg` / `ffprobe`: tools-dir override, then beside the running
 /// executable, `lib/` under its directory, `lib/` under its parent directory,
 /// the parent directory itself (legacy flat-root archives),
-/// `MESSAGE_VAULT_IO_BIN`, then PATH.
+/// `MESSAGE_CRATE_BIN`, then PATH.
 fn resolve_tool(name: &str) -> Option<PathBuf> {
     if !matches!(name, "ffmpeg" | "ffprobe") {
         let override_dir = tools_state()
@@ -151,7 +151,7 @@ fn find_tool_in_dir(dir: &Path, name: &str) -> Option<PathBuf> {
 }
 
 /// Probe both tools in an explicit directory, or fall back to the default
-/// resolution path (tools-dir override, beside the executable, `MESSAGE_VAULT_IO_BIN`, PATH).
+/// resolution path (tools-dir override, beside the executable, `MESSAGE_CRATE_BIN`, PATH).
 pub fn probe_ffmpeg_tools(dir: Option<&Path>) -> FfmpegToolsProbe {
     let (ffmpeg, ffprobe) = match dir {
         Some(d) => (
@@ -186,7 +186,7 @@ pub fn probe_ffmpeg_tools(dir: Option<&Path>) -> FfmpegToolsProbe {
 }
 
 /// Locate a tool: in the override folder when set, else beside the program, in `lib/`,
-/// in `MESSAGE_VAULT_IO_BIN`, or on PATH.
+/// in `MESSAGE_CRATE_BIN`, or on PATH.
 fn find_tool_with_override(name: &str, override_dir: Option<&Path>) -> Option<PathBuf> {
     if let Some(dir) = override_dir {
         return find_tool_in_dir(dir, name);
@@ -218,7 +218,7 @@ fn find_tool_with_override(name: &str, override_dir: Option<&Path>) -> Option<Pa
         }
     }
 
-    if let Some(extra) = std::env::var_os("MESSAGE_VAULT_IO_BIN") {
+    if let Some(extra) = std::env::var_os("MESSAGE_CRATE_BIN") {
         let candidate = PathBuf::from(extra).join(&executable);
         if candidate.is_file() && command_runs(&candidate, &["-version"]) {
             return Some(candidate);
@@ -256,7 +256,7 @@ fn executable_name(name: &str) -> String {
 pub(crate) fn run_ffmpeg(args: &[String]) -> Result<()> {
     let ffmpeg = resolve_tool("ffmpeg").ok_or_else(|| {
         anyhow::anyhow!(
-            "ffmpeg not found in lib/ (or beside this program), in MESSAGE_VAULT_IO_BIN, or on PATH"
+            "ffmpeg not found in lib/ (or beside this program), in MESSAGE_CRATE_BIN, or on PATH"
         )
     })?;
     let status = Command::new(ffmpeg)
@@ -296,7 +296,7 @@ pub(crate) struct Probe {
 pub(crate) fn ffprobe_command() -> Result<Command> {
     let ffprobe = resolve_tool("ffprobe").ok_or_else(|| {
         anyhow::anyhow!(
-            "ffprobe not found in lib/ (or beside this program), in MESSAGE_VAULT_IO_BIN, or on PATH"
+            "ffprobe not found in lib/ (or beside this program), in MESSAGE_CRATE_BIN, or on PATH"
         )
     })?;
     let mut cmd = Command::new(ffprobe);
@@ -438,7 +438,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn find_tool_prefers_message_vault_io_bin() {
+    fn find_tool_prefers_message_crate_bin() {
         let _guard = tools_test_lock();
         let _restore = RestoreToolsDir::capture();
         set_tools_dir(None);
@@ -447,14 +447,14 @@ mod tests {
 
         // SAFETY: test-only env mutation; this test holds tools_test_lock so no
         // concurrent resolve_tool calls run. In production, set_tools_dir override
-        // is checked before MESSAGE_VAULT_IO_BIN; job threads share the same override.
+        // is checked before MESSAGE_CRATE_BIN; job threads share the same override.
         unsafe {
-            std::env::set_var("MESSAGE_VAULT_IO_BIN", dir.path());
+            std::env::set_var("MESSAGE_CRATE_BIN", dir.path());
         }
-        let found = resolve_tool("ffmpeg").expect("ffmpeg from MESSAGE_VAULT_IO_BIN");
+        let found = resolve_tool("ffmpeg").expect("ffmpeg from MESSAGE_CRATE_BIN");
         assert_eq!(found, dir.path().join("ffmpeg"));
         unsafe {
-            std::env::remove_var("MESSAGE_VAULT_IO_BIN");
+            std::env::remove_var("MESSAGE_CRATE_BIN");
         }
     }
 }

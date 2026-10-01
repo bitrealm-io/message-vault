@@ -1,4 +1,4 @@
-/** Shared URLs for the Message Vault marketing chrome. */
+/** Shared URLs for the Message Crate marketing chrome. */
 export const landingLinks = {
   home: "/",
   features: "/#features",

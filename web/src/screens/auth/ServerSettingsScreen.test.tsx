@@ -1,0 +1,93 @@
+/** @vitest-environment jsdom */
+
+import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import ServerSettingsScreen from "./ServerSettingsScreen";
+import type { ServerConnection } from "./ServerStatus";
+
+function renderScreen(overrides: Partial<Parameters<typeof ServerSettingsScreen>[0]> = {}) {
+  const props = {
+    draft: "http://127.0.0.1:8080",
+    status: "connected" as ServerConnection,
+    canSubmit: true,
+    onDraftChange: vi.fn(),
+    onTest: vi.fn(),
+    onCancel: vi.fn(),
+    onSubmit: vi.fn(),
+    ...overrides,
+  };
+  render(<ServerSettingsScreen {...props} />);
+  return props;
+}
+
+describe("ServerSettingsScreen", () => {
+  afterEach(cleanup);
+
+  it("names itself Server Address and the field Address", () => {
+    renderScreen();
+
+    expect(screen.getByRole("heading", { name: "Server Address" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Address" })).toHaveValue("http://127.0.0.1:8080");
+    expect(screen.getByText("Connection Status")).toBeInTheDocument();
+  });
+
+  it("suggests the local server's address in an empty field", () => {
+    // A server on this machine is where nearly everyone starts, so the example
+    // is the address that works there rather than a made-up hostname.
+    renderScreen({ draft: "" });
+
+    expect(screen.getByRole("textbox", { name: "Address" })).toHaveAttribute(
+      "placeholder",
+      "http://127.0.0.1:8080",
+    );
+  });
+
+  it("reports the status it is handed", () => {
+    renderScreen({ status: "disconnected" });
+    expect(screen.getByText("Disconnected")).toBeInTheDocument();
+  });
+
+  it("tests the typed address on the button and on Enter", async () => {
+    const user = userEvent.setup();
+    const props = renderScreen();
+
+    await user.click(screen.getByRole("button", { name: "Test" }));
+    expect(props.onTest).toHaveBeenCalledTimes(1);
+
+    await user.type(screen.getByRole("textbox", { name: "Address" }), "{Enter}");
+    expect(props.onTest).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps applying the address available without testing first", async () => {
+    const user = userEvent.setup();
+    const props = renderScreen();
+
+    const apply = screen.getByRole("button", { name: "Use this address" });
+    expect(apply).toBeEnabled();
+    await user.click(apply);
+    expect(props.onSubmit).toHaveBeenCalledOnce();
+  });
+
+  it("does not offer a change the caller says is not a change", async () => {
+    const user = userEvent.setup();
+    const props = renderScreen({ canSubmit: false });
+
+    const apply = screen.getByRole("button", { name: "Use this address" });
+    expect(apply).toBeDisabled();
+    await user.click(apply);
+    expect(props.onSubmit).not.toHaveBeenCalled();
+
+    // Re-probing the address in the field is still a real question to ask.
+    expect(screen.getByRole("button", { name: "Test" })).toBeEnabled();
+  });
+
+  it("offers a way out that changes nothing", async () => {
+    const user = userEvent.setup();
+    const props = renderScreen();
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(props.onCancel).toHaveBeenCalledOnce();
+    expect(props.onSubmit).not.toHaveBeenCalled();
+  });
+});

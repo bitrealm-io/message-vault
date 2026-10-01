@@ -3,7 +3,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { VaultProviders } from "../../test/vaultProviders";
+import { Providers } from "../../test/providers";
 import LocalAuthTabs from "./LocalAuthTabs";
 
 vi.mock("../../lib/auth", () => ({
@@ -12,34 +12,34 @@ vi.mock("../../lib/auth", () => ({
 
 afterEach(cleanup);
 
-function renderTabs(vaultState: "unclaimed" | "closed" | "open") {
+function renderTabs(serverState: "unclaimed" | "closed" | "open") {
   render(
-    <VaultProviders>
+    <Providers>
       <MemoryRouter>
-        <LocalAuthTabs serverUrl="http://127.0.0.1:8080" vaultState={vaultState} />
+        <LocalAuthTabs serverUrl="http://127.0.0.1:8080" serverState={serverState} />
       </MemoryRouter>
-    </VaultProviders>,
+    </Providers>,
   );
 }
 
 /**
- * The card offers what the vault says is on offer. These three cases are the
- * whole of the entry screen's behaviour, and the reason the vault reports one
+ * The card offers what the server says is on offer. These three cases are the
+ * whole of the entry screen's behaviour, and the reason the server reports one
  * value rather than the facts behind it: the mapping lives in one place.
  */
 describe("LocalAuthTabs", () => {
-  it("offers only Create Owner on an unclaimed vault", () => {
+  it("offers only Create Owner on an unclaimed Message Crate", () => {
     renderTabs("unclaimed");
 
     expect(screen.getByRole("button", { name: "Create Owner" })).toBeInTheDocument();
     // No login: there is no account to log into yet.
     expect(screen.queryByRole("button", { name: "Log in" })).not.toBeInTheDocument();
-    // And no way to join a vault that has nobody to decide who may join it.
+    // And no way to join a Message Crate that has nobody to decide who may join it.
     expect(screen.queryByRole("tab", { name: "Create Account" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Login" })).not.toBeInTheDocument();
   });
 
-  it("offers only Login on a closed vault", () => {
+  it("offers only Login on a closed Message Crate", () => {
     renderTabs("closed");
 
     expect(screen.getByRole("button", { name: "Log in" })).toBeInTheDocument();
@@ -47,7 +47,7 @@ describe("LocalAuthTabs", () => {
     expect(screen.queryByRole("button", { name: "Create Owner" })).not.toBeInTheDocument();
   });
 
-  it("offers Login and Create Account on an open vault, Login first", () => {
+  it("offers Login and Create Account on an open Message Crate, Login first", () => {
     renderTabs("open");
 
     const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
@@ -56,7 +56,7 @@ describe("LocalAuthTabs", () => {
     expect(screen.queryByRole("button", { name: "Create Owner" })).not.toBeInTheDocument();
   });
 
-  it("asks the vault owner for a username and the password twice", () => {
+  it("asks the owner for a username and the password twice", () => {
     renderTabs("unclaimed");
 
     expect(screen.getByRole("textbox", { name: "Username" })).toBeInTheDocument();

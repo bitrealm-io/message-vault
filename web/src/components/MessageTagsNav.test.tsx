@@ -4,7 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mockedAuth, VaultProviders } from "../test/vaultProviders";
+import { mockedAuth, Providers } from "../test/providers";
 import MessageTagsNav from "./MessageTagsNav";
 
 vi.mock("../lib/auth", () => ({ useAuth: () => mockedAuth }));
@@ -15,11 +15,11 @@ afterEach(() => {
 
 function renderNav(path: string) {
   return render(
-    <VaultProviders>
+    <Providers>
       <MemoryRouter initialEntries={[path]}>
         <MessageTagsNav tags={["Work"]} />
       </MemoryRouter>
-    </VaultProviders>,
+    </Providers>,
   );
 }
 

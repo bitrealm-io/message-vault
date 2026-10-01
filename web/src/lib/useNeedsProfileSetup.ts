@@ -4,7 +4,7 @@ import { useAccountProfile } from "./useAccountProfile";
  * Whether this account still owes profile setup.
  *
  * A server fact, read from the profile, not inferred here from a profile that
- * looks empty and then cached in `localStorage`. The vault decides once and
+ * looks empty and then cached in `localStorage`. The server decides once and
  * every client gets the same answer, so clearing site data or logging in from
  * a second browser cannot change what the product believes about an account.
  *

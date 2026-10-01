@@ -5,8 +5,11 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import ContactLabel from "../components/ContactLabel";
 import { apiErrorMessage } from "../lib/apiErrorMessage";
 import { contactLabelText } from "../lib/contactLabel";
+import { keys } from "../lib/queryKeys";
+import { useRouteQuery } from "../lib/routeQuery";
 import { unsupportedFieldWords, useSearchFields } from "../lib/searchFields";
 import { trashed } from "../lib/searchQuery";
+import { getConversation, listContacts, listConversations } from "../lib/serverApi";
 import {
   useDeleteContact,
   useDeleteConversation,
@@ -15,9 +18,6 @@ import {
   useRestoreConversation,
 } from "../lib/trash";
 import { useAccountProfile } from "../lib/useAccountProfile";
-import { getConversation, listContacts, listConversations } from "../lib/vaultApi";
-import { keys } from "../lib/vaultKeys";
-import { useVaultQuery } from "../lib/vaultQuery";
 
 /**
  * Trash holds two kinds of thing, and this pane is where both come back — or
@@ -42,7 +42,7 @@ import { useVaultQuery } from "../lib/vaultQuery";
  * kinds at once. A word only one list accepts (`participants:` is a
  * conversations word, `conversations:` a contacts word) is not sent to the
  * list that would refuse it; that pane says which list the word applies to
- * instead of showing the vault's 422.
+ * instead of showing the server's 422.
  */
 
 /** How many trashed contacts this pane lists before it stops. */
@@ -91,7 +91,7 @@ export default function TrashScreen() {
 
   // Which typed words each list refuses. The registry is fetched once per
   // session; until it arrives neither pane asks, so a refused word never
-  // reaches the vault as a 422.
+  // reaches the server as a 422.
   const conversationFields = useSearchFields("conversations");
   const contactFields = useSearchFields("contacts");
   const fieldsLoading = conversationFields.loading || contactFields.loading;
@@ -116,13 +116,13 @@ export default function TrashScreen() {
     data,
     isPending: loading,
     error,
-  } = useVaultQuery(keys.trash.count(query), fetchCount, { enabled: askConversations });
+  } = useRouteQuery(keys.trash.count(query), fetchCount, { enabled: askConversations });
 
   const {
     data: contactPage,
     isPending: contactsLoading,
     error: contactsError,
-  } = useVaultQuery(
+  } = useRouteQuery(
     keys.contacts.trashed(query),
     (signal) => listContacts({ q: query, limit: CONTACT_LIMIT, offset: 0 }, { signal }),
     { enabled: askContacts },
@@ -135,7 +135,7 @@ export default function TrashScreen() {
     data: selected,
     isPending: selectedLoading,
     error: selectedError,
-  } = useVaultQuery(
+  } = useRouteQuery(
     selectedId === null ? keys.trash.noSelection : keys.conversations.detail(selectedId),
     (signal) => getConversation(selectedId ?? 0, { signal }),
     { enabled: selectedId !== null },
@@ -147,9 +147,9 @@ export default function TrashScreen() {
   const deleteContact = useDeleteContact();
   const emptyTrash = useEmptyTrash();
 
-  // The vault refuses a delete from an account without the delete grant (the
+  // The server refuses a delete from an account without the delete grant (the
   // demo account, for one) with a 403; the buttons say so up front instead.
-  // Until the profile has loaded the buttons stay live — the vault is the
+  // Until the profile has loaded the buttons stay live — the server is the
   // gate, this is only the explanation.
   const { profile } = useAccountProfile();
   const canDelete = profile?.can_delete ?? true;

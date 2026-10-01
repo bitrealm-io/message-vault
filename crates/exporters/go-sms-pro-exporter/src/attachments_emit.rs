@@ -1,8 +1,8 @@
 //! Attachment helpers for the emitter.
 
 use go_sms_mms::ParsedPdu;
+use message_crate_core::digest_prefix;
 use message_ir::PendingAttachment;
-use message_vault_io_core::digest_prefix;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 

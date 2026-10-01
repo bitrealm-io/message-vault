@@ -42,11 +42,11 @@ instead of dropping them.
 
 ## Message Crate Repository
 
-This repository is **messagecrate/message-crate**. Cargo package names still say `message-vault` (`message-vault-server`, `message-vault-io-core`): the packages keep the old name until the identifier rename lands. Public docs live at messagecrate.app.
+This repository is **messagecrate/message-crate**. The Cargo packages carry the same name (`message-crate-server`, `message-crate-core`). Public docs live at messagecrate.app.
 
 The product has two pieces:
 
-- **The server** — `message-vault-server`. Stores messages in SQLite (`data/vault.db`), serves `/v1/*`, and can host the website from `static/`. Run it with `./scripts/run-vault-dev.sh` (http://127.0.0.1:8080) or Docker. Login is a local account, not a cloud account.
+- **The server** — `message-crate-server`. Stores messages in SQLite (`data/messagecrate.db`), serves `/v1/*`, and can host the website from `static/`. Run it with `./scripts/run-dev.sh` (http://127.0.0.1:8080) or Docker. Login is a local account, not a cloud account.
 - **The desktop app** — Tauri v2 around the Vite SPA in `web/`. Reads phone backups, writes JSONL, and imports into a running server. Browse and search also work in the browser against the server; importing a backup needs the desktop app.
 
 ### Technology stack
@@ -55,7 +55,7 @@ The product has two pieces:
 |------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
 | Language (Rust crates) | Rust, edition 2024. `rust-toolchain.toml` pins the version (`1.98.1`) for every checkout, CI, and the release image.              |
 | Server                 | Tokio + Axum 0.8 HTTP API. sqlx Any: SQLite (bundled) by default, Postgres via `[database] url`. TOML config. Argon2 passwords, opaque hashed session tokens. |
-| Database               | SQLite file at `data/vault.db`. Table SQL lives in `schema/sql/`. The server fingerprints those files at compile time (`SCHEMA_FINGERPRINT` in `db/schema.rs`) and rebuilds a database stamped with any other fingerprint empty, so a schema change is only a change to the SQL: nothing to bump. The rebuilt database needs a fresh import. |
+| Database               | SQLite file at `data/messagecrate.db`. Table SQL lives in `schema/sql/`. The server fingerprints those files at compile time (`SCHEMA_FINGERPRINT` in `db/schema.rs`) and rebuilds a database stamped with any other fingerprint empty, so a schema change is only a change to the SQL: nothing to bump. The rebuilt database needs a fresh import. |
 | Desktop app            | Tauri 2 native window. Vite 8 + React 19 + TypeScript SPA in `web/`. React Router 7, React Aria, Tailwind CSS 4. Vitest + Biome.  |
 | Website                | Same `web/` SPA. Dev server on port 5173. Production copy in `static/`, served by the server on port 8080.                        |
 | Node                   | Node.js 22+ for `web/`, `docs/`, and Docker frontend builds.                                                                      |
@@ -74,8 +74,8 @@ message-crate
 │   ├── exporters/          # backup parsers (iMessage, WhatsApp, SMS, experimental)
 │   ├── helpers/            # imessage-reader (GPL helper process the app spawns) and its protocol
 │   ├── libs/               # shared libraries (ir, ir-format, reexport, contacts, media,
-│   │                       #   vault-push, vault-pull, …)
-│   └── vault/              # message-vault-server (HTTP API + SQLite) and demo-seed
+│   │                       #   message-crate-push, message-crate-pull, …)
+│   └── server/             # message-crate-server (HTTP API + SQLite) and demo-seed
 ├── docker/                 # Dockerfile and Compose for a release-shaped server image
 ├── docs/                   # Astro Starlight site (messagecrate.app)
 │   ├── img/                # images used in README / docs
@@ -84,7 +84,7 @@ message-crate
 │       └── assets/architecture/  # C4 PlantUML sources and exported SVGs
 ├── schema/                 # SQLite schema for the database
 │   └── sql/                # CREATE TABLE sources embedded by the server
-├── scripts/                # host helpers (run-vault-dev, build-static, schema sync)
+├── scripts/                # host helpers (run-dev, build-static, schema sync)
 │   └── deprecated/         # retired helper scripts
 ├── src-tauri/              # Tauri v2 native shell (not a workspace member)
 │   ├── capabilities/       # Tauri permission manifests
@@ -102,7 +102,7 @@ message-crate
 
 ```text
 # ❌ BAD — web-next IS NOT the product; it exists to evaluate what is worth porting into web/
-# ✅ GOOD — product UI is web/ + src-tauri/; the server API is crates/vault/server/
+# ✅ GOOD — product UI is web/ + src-tauri/; the server API is crates/server/server/
 ```
 
 ### First time setup
@@ -165,7 +165,7 @@ cd message-crate
 cd web && npm ci && cd ..
 ```
 
-First `cargo build --workspace` and first `cargo tauri dev` each take several minutes. `config/config.toml` is created from `config/config.toml.example` on the first `./scripts/run-vault-dev.sh` if it is missing.
+First `cargo build --workspace` and first `cargo tauri dev` each take several minutes. `config/config.toml` is created from `config/config.toml.example` on the first `./scripts/run-dev.sh` if it is missing.
 
 ### Run the server (development)
 
@@ -174,28 +174,28 @@ Work from the repository root. The server process must be running before the web
 **Terminal 1 — server API** (leave this running)
 
 ```bash
-./scripts/run-vault-dev.sh                 # keep data/ if present; empty database if none
-./scripts/run-vault-dev.sh --reset-demo    # wipe data/, seed the sample inbox (needs ffmpeg)
-./scripts/run-vault-dev.sh --reset         # wipe data/, start empty and unclaimed (UI opens on Create Owner)
-./scripts/run-vault-dev.sh --reset --owner # wipe data/, claim it as admin / admin
-./scripts/run-vault-dev.sh --sqlweb        # also SQLite browser at http://127.0.0.1:8081
-./scripts/run-vault-dev.sh --release       # optimized build; combines with any flag above
+./scripts/run-dev.sh                 # keep data/ if present; empty database if none
+./scripts/run-dev.sh --reset-demo    # wipe data/, seed the sample inbox (needs ffmpeg)
+./scripts/run-dev.sh --reset         # wipe data/, start empty and unclaimed (UI opens on Create Owner)
+./scripts/run-dev.sh --reset --owner # wipe data/, claim it as admin / admin
+./scripts/run-dev.sh --sqlweb        # also SQLite browser at http://127.0.0.1:8081
+./scripts/run-dev.sh --release       # optimized build; combines with any flag above
 ```
 
 `--reset` and `--reset-demo` cannot be combined, and `--owner` is rejected with `--reset-demo`, which claims it itself. `--help` on either dev script lists every flag with examples. `--reset-demo` also rewrites `config/config.toml` from the example (CORS for Vite `:5173` enabled). Later sessions omit `--reset-demo` so the existing database stays.
 
 API: **http://127.0.0.1:8080**. After `--reset-demo`, log in as username `demo` with an empty password. After `--owner`, log in as `admin` / `admin`. Otherwise create the owner in the UI.
 
-Restart terminal 1 after edits under `crates/vault/server/` (debug `cargo run`; no hot reload).
+Restart terminal 1 after edits under `crates/server/server/` (debug `cargo run`; no hot reload).
 
-**Run on Postgres (optional)** — `./scripts/run-vault-pg-dev.sh` starts
+**Run on Postgres (optional)** — `./scripts/run-pg-dev.sh` starts
 compose Postgres, runs this checkout's server with `--db-url
-postgres://vault:vault@127.0.0.1:5432/vault`, and stops the container
-on exit. `--reset` / `--reset-demo` wipe the `vault_pg_data` volume and
+postgres://messagecrate:messagecrate@127.0.0.1:5432/messagecrate`, and stops the container
+on exit. `--reset` / `--reset-demo` wipe the `messagecrate_pg_data` volume and
 host `data/`. After `--reset-demo`, log in as `demo` with an empty
 password. Pass `--release` to seed and serve with the optimized binary
 (first compile can take several minutes). Do not run this and
-`./scripts/run-vault-dev.sh` at once (both serve on 127.0.0.1:8080).
+`./scripts/run-dev.sh` at once (both serve on 127.0.0.1:8080).
 
 **Terminal 2 — UI** (pick one)
 
@@ -246,7 +246,7 @@ cargo build --manifest-path src-tauri/Cargo.toml
 # this is the run that proves new SQL works on both engines. About 3.5
 # minutes against the compose service; without the variable it is SQLite.
 docker compose -f docker-compose.pg.yml up -d
-MV_TEST_POSTGRES_URL=postgres://vault:vault@127.0.0.1:5432/vault cargo test -p message-vault-server
+MC_TEST_POSTGRES_URL=postgres://messagecrate:messagecrate@127.0.0.1:5432/messagecrate cargo test -p message-crate-server
 
 # Test coverage for the workspace (cargo-llvm-cov). Ends with the count of
 # functions no test calls and the files with the most; every one is named
@@ -318,14 +318,14 @@ Three version numbers are easy to mix up:
 | Build           | `0.9.0+343fe0d8`    | The product version plus the commit, which is what a screen shows as "Version". `.dirty` follows the commit when tracked files held uncommitted changes; a build from a `v*` tag is `0.9.0` alone; `0.9.0+unknown` when nothing is known. Nobody writes it: `crates/libs/build-version` works it out for the server and the desktop app, and `web/vite.config.ts` for the SPA, under the same rules. |
 | Schema fingerprint | `345080516`      | Derived from `schema/sql/*.sql` and stamped into the database. Shown in Owner Home → Server Settings. Never bumped by hand. |
 
-The Build asks git for the commit. Where there is no `.git`, which is the case inside `docker/Dockerfile`, set `MESSAGE_VAULT_BUILD_METADATA` to the part after the `+` (the Dockerfile takes it as the `BUILD_METADATA` build argument). Set and empty means a release, and is what the tag job passes.
+The Build asks git for the commit. Where there is no `.git`, which is the case inside `docker/Dockerfile`, set `MESSAGE_CRATE_BUILD_METADATA` to the part after the `+` (the Dockerfile takes it as the `BUILD_METADATA` build argument). Set and empty means a release, and is what the tag job passes.
 
 **Product version files** (keep these in lockstep; current value is `0.9.0`; CI's `version` job fails when they disagree, and on a `v*` tag when the tag disagrees with them):
 
 - `src-tauri/Cargo.toml` — the value the other three are compared against
 - `src-tauri/tauri.conf.json` — installer version
 - `web/package.json` — Vite SPA
-- `crates/vault/server/Cargo.toml` — server crate
+- `crates/server/server/Cargo.toml` — server crate
 
 Leave most other `Cargo.toml` files at `0.1.0`. Do not bump `web-next/` (`0.3.0`) for a product release.
 
@@ -348,7 +348,7 @@ gh api --method POST repos/messagecrate/message-crate/environments/github-pages/
 **Build a release-shaped binary locally (does not publish)**
 
 ```bash
-./scripts/build-app.sh                 # desktop installers, renamed to message_vault_<version>_<arch>, under src-tauri/target/release/bundle/
+./scripts/build-app.sh                 # desktop installers, renamed to message_crate_<version>_<arch>, under src-tauri/target/release/bundle/
 docker compose -f docker/compose.release.yml up --build   # server image from this checkout
 cargo build --workspace --release          # workspace crates only; not the Tauri installer
 ```

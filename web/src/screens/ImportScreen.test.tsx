@@ -1,8 +1,8 @@
 /** @vitest-environment jsdom */
 
-// Entering Import must ask the vault whether a session is already live
+// Entering Import must ask the server whether a session is already live
 // before showing anything: neither the blank form nor the resume panel
-// may flash on screen while that check is in flight, and a vault that
+// may flash on screen while that check is in flight, and a server that
 // can't answer falls through to the form rather than blocking it.
 
 import { act, cleanup, screen } from "@testing-library/react";
@@ -10,7 +10,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActiveImportSession } from "../lib/importSession";
 import type { StagingSummary } from "../lib/tauri";
-import { mockedAuth, renderWithVault } from "../test/vaultProviders";
+import { mockedAuth, renderWithProviders } from "../test/providers";
 import type { ResumeDecision } from "./import/resumeDecision";
 
 const hookState = vi.hoisted(() => ({
@@ -90,10 +90,10 @@ vi.mock("../lib/deviceId", () => ({
   getDeviceId: () => "this-device",
 }));
 
-// The three vault calls this screen makes, faked by name. The rest of
-// vaultApi stays real, since other modules in this graph import from it.
-vi.mock("../lib/vaultApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../lib/vaultApi")>()),
+// The three server calls this screen makes, faked by name. The rest of
+// serverApi stays real, since other modules in this graph import from it.
+vi.mock("../lib/serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/serverApi")>()),
   unmatchedIdentities: (...args: unknown[]) => apiPostMock(...args),
   updateAccountProfile: (...args: unknown[]) => apiPostMock(...args),
   getAccountProfile: (...args: unknown[]) => apiGetMock(...args),
@@ -193,7 +193,7 @@ function session(overrides: Partial<ActiveImportSession> = {}): ActiveImportSess
     status: "running",
     started_at: "2026-08-30T00:00:00Z",
     stage: "pushing",
-    staging_dir: "/home/u/message-vault/staging-260830",
+    staging_dir: "/home/u/message-crate/staging-260830",
     device_id: "this-device",
     form: { source: "imessage-ios" },
     source_fingerprint: null,
@@ -260,7 +260,7 @@ describe("ImportScreen entering Import", () => {
     const pending = deferred<ActiveImportSession | null>();
     getActiveImportSessionMock.mockReturnValue(pending.promise);
 
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     expect(screen.queryByTestId("import-form")).not.toBeInTheDocument();
     expect(screen.queryByTestId("resume-panel")).not.toBeInTheDocument();
@@ -275,15 +275,15 @@ describe("ImportScreen entering Import", () => {
 
   it("shows the form when there is no active session", async () => {
     getActiveImportSessionMock.mockResolvedValue(null);
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     expect(await screen.findByTestId("import-form")).toBeInTheDocument();
     expect(screen.queryByTestId("resume-panel")).not.toBeInTheDocument();
   });
 
-  it("falls through to the form when the vault cannot answer", async () => {
+  it("falls through to the form when the server cannot answer", async () => {
     getActiveImportSessionMock.mockRejectedValue(new Error("network down"));
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     expect(await screen.findByTestId("import-form")).toBeInTheDocument();
     expect(screen.queryByTestId("resume-panel")).not.toBeInTheDocument();
@@ -291,7 +291,7 @@ describe("ImportScreen entering Import", () => {
 
   it("shows the resume panel instead of the form for a resumable session", async () => {
     getActiveImportSessionMock.mockResolvedValue(session({ stage: "pushing" }));
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     expect(await screen.findByTestId("resume-panel")).toBeInTheDocument();
     expect(screen.getByTestId("resume-kind")).toHaveTextContent("resume_push");
@@ -301,7 +301,7 @@ describe("ImportScreen entering Import", () => {
   it("says the staging folder could not be checked, not that it is gone, when the stat fails", async () => {
     getActiveImportSessionMock.mockResolvedValue(session({ stage: "pushing" }));
     invokePathStatMock.mockRejectedValue(new Error("ipc down"));
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     expect(await screen.findByTestId("resume-panel")).toBeInTheDocument();
     expect(screen.getByTestId("resume-kind")).toHaveTextContent("folder_unknown");
@@ -310,7 +310,7 @@ describe("ImportScreen entering Import", () => {
   it("discards the session and drops through to the form", async () => {
     const user = userEvent.setup();
     getActiveImportSessionMock.mockResolvedValue(session({ stage: "pushing" }));
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     await screen.findByTestId("resume-panel");
     await user.click(screen.getByText("discard-action"));
@@ -329,17 +329,17 @@ describe("ImportScreen entering Import", () => {
       session({
         stage: "pushing",
         device_id: "this-device",
-        staging_dir: "/home/u/message-vault/staging-260830",
+        staging_dir: "/home/u/message-crate/staging-260830",
       }),
     );
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     await screen.findByTestId("resume-panel");
     await user.click(screen.getByText("discard-action"));
 
     expect(discardImportSessionMock).toHaveBeenCalledWith(7);
     expect(invokeDeleteStagingMock).toHaveBeenCalledWith({
-      staging_dir: "/home/u/message-vault/staging-260830",
+      staging_dir: "/home/u/message-crate/staging-260830",
     });
     expect(await screen.findByTestId("import-form")).toBeInTheDocument();
   });
@@ -353,10 +353,10 @@ describe("ImportScreen entering Import", () => {
       session({
         stage: "pushing",
         device_id: "another-device",
-        staging_dir: "/home/u/message-vault/staging-260830",
+        staging_dir: "/home/u/message-crate/staging-260830",
       }),
     );
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     await screen.findByTestId("resume-panel");
     expect(screen.getByTestId("resume-kind")).toHaveTextContent("other_device");
@@ -372,7 +372,7 @@ describe("ImportScreen entering Import", () => {
     getActiveImportSessionMock.mockResolvedValue(
       session({
         stage: "pushing",
-        staging_dir: "/home/u/message-vault/staging-260830",
+        staging_dir: "/home/u/message-crate/staging-260830",
         form: {
           source: "imessage-ios",
           backupPath: "/backups/iphone.tar",
@@ -396,7 +396,7 @@ describe("ImportScreen entering Import", () => {
         },
       }),
     );
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     await screen.findByTestId("resume-panel");
     await user.click(screen.getByText("resume-action"));
@@ -404,7 +404,7 @@ describe("ImportScreen entering Import", () => {
     expect(startImportMock).toHaveBeenCalledTimes(1);
     const [form, resume] = startImportMock.mock.calls[0] as [unknown, unknown];
     expect(form).toMatchObject({ source: "imessage-ios", backupPath: "/backups/iphone.tar" });
-    expect(resume).toEqual({ sessionId: 7, stagingDir: "/home/u/message-vault/staging-260830" });
+    expect(resume).toEqual({ sessionId: 7, stagingDir: "/home/u/message-crate/staging-260830" });
     expect(discardImportSessionMock).not.toHaveBeenCalled();
   });
 
@@ -441,11 +441,11 @@ describe("ImportScreen entering Import", () => {
       getActiveImportSessionMock.mockResolvedValue(
         session({
           stage,
-          staging_dir: "/home/u/message-vault/staging-260830",
+          staging_dir: "/home/u/message-crate/staging-260830",
           form: restorableForm,
         }),
       );
-      renderWithVault(<ImportScreen />);
+      renderWithProviders(<ImportScreen />);
 
       await screen.findByTestId("resume-panel");
       expect(screen.getByTestId("resume-kind")).toHaveTextContent(kind);
@@ -476,7 +476,7 @@ describe("ImportScreen entering Import", () => {
     getActiveImportSessionMock.mockResolvedValue(
       session({ stage: "awaiting_gate_1", form: restorableForm }),
     );
-    const { rerender } = renderWithVault(<ImportScreen />);
+    const { rerender } = renderWithProviders(<ImportScreen />);
 
     await screen.findByTestId("resume-panel");
     expect(screen.getByTestId("resume-kind")).toHaveTextContent("resume_gate");
@@ -529,7 +529,7 @@ describe("ImportScreen entering Import", () => {
         },
       }),
     );
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     await screen.findByTestId("resume-panel");
     expect(screen.getByTestId("resume-kind")).toHaveTextContent("restart");
@@ -539,7 +539,7 @@ describe("ImportScreen entering Import", () => {
     // The old folder goes with the session: a restart writes into a new one,
     // and nothing will ever reach this one again.
     expect(invokeDeleteStagingMock).toHaveBeenCalledWith({
-      staging_dir: "/home/u/message-vault/staging-260830",
+      staging_dir: "/home/u/message-crate/staging-260830",
     });
     expect(startImportMock).toHaveBeenCalledTimes(1);
     const [form, resume] = startImportMock.mock.calls[0] as [unknown, unknown];
@@ -592,7 +592,7 @@ describe("ImportScreen entering Import", () => {
         sizeBytes: 1000,
         modifiedUnixMs: 1_700_000_000_000,
       });
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     expect(await screen.findByTestId("resume-panel")).toBeInTheDocument();
     expect(screen.getByTestId("resume-kind")).toHaveTextContent("resume_write");
@@ -606,7 +606,7 @@ describe("ImportScreen entering Import", () => {
     expect(resume).toBeUndefined();
     expect(resumeWrite).toEqual({
       sessionId: 7,
-      stagingDir: "/home/u/message-vault/staging-260830",
+      stagingDir: "/home/u/message-crate/staging-260830",
       identities: null,
     });
   });
@@ -632,7 +632,7 @@ describe("ImportScreen entering Import", () => {
         sizeBytes: 999_999,
         modifiedUnixMs: 1_700_000_000_000,
       });
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     expect(await screen.findByTestId("resume-panel")).toBeInTheDocument();
     expect(screen.getByTestId("resume-kind")).toHaveTextContent("source_changed");
@@ -643,7 +643,7 @@ describe("ImportScreen entering Import", () => {
     // leaves a session open server-side that the screen has forgotten. If
     // Back never re-checks, the user gets a form whose Import button 409s.
     getActiveImportSessionMock.mockResolvedValue(null);
-    const { rerender } = renderWithVault(<ImportScreen />);
+    const { rerender } = renderWithProviders(<ImportScreen />);
 
     expect(await screen.findByTestId("import-form")).toBeInTheDocument();
     expect(getActiveImportSessionMock).toHaveBeenCalledTimes(1);
@@ -703,7 +703,7 @@ describe("ImportScreen entering Import", () => {
     // second click lands on a live button.
     const pendingDiscard = deferred<void>();
     discardImportSessionMock.mockReturnValue(pendingDiscard.promise);
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     await screen.findByTestId("resume-panel");
     await user.click(screen.getByText("resume-action"));
@@ -726,7 +726,7 @@ describe("ImportScreen entering Import", () => {
     getActiveImportSessionMock.mockResolvedValue(
       session({ stage: "pushing", form: { nonsense: true } }),
     );
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     await screen.findByTestId("resume-panel");
     expect(screen.getByTestId("resume-kind")).toHaveTextContent("resume_push");
@@ -740,7 +740,7 @@ describe("ImportScreen entering Import", () => {
     const user = userEvent.setup();
     getActiveImportSessionMock.mockResolvedValue(session({ stage: "pushing" }));
     discardImportSessionMock.mockRejectedValue(new Error("network down"));
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     await screen.findByTestId("resume-panel");
     await user.click(screen.getByText("discard-action"));
@@ -778,7 +778,7 @@ describe("ImportScreen entering Import", () => {
       }),
     );
     discardImportSessionMock.mockRejectedValue(new Error("network down"));
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     await screen.findByTestId("resume-panel");
     await user.click(screen.getByText("resume-action"));
@@ -835,7 +835,7 @@ describe("ImportScreen gates", () => {
     hookState.stagingSummary = stagingSummary({ contactIdentifiers: ["+15551234567"] });
     hookState.sourceIdentities = ["+15550001111"];
     const user = userEvent.setup();
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     expect(await screen.findByTestId("import-run")).toBeInTheDocument();
     expect(screen.queryByTestId("import-form")).not.toBeInTheDocument();
@@ -855,7 +855,7 @@ describe("ImportScreen gates", () => {
     hookState.mediaSummary = stagingSummary();
     hookState.sourceIdentities = ["+15550001111"];
     const user = userEvent.setup();
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     expect(await screen.findByTestId("import-run")).toBeInTheDocument();
     expect(screen.getByTestId("run-review-waiting")).toHaveTextContent("media");
@@ -871,7 +871,7 @@ describe("ImportScreen gates", () => {
   it("returns to the form when the person goes back from a finished run", async () => {
     hookState.phase = "done";
     const user = userEvent.setup();
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     await user.click(await screen.findByText("run-back"));
     expect(returnToFormMock).toHaveBeenCalledTimes(1);
@@ -881,7 +881,7 @@ describe("ImportScreen gates", () => {
     hookState.phase = "staging_review";
     hookState.stagingSummary = stagingSummary({ contactIdentifiers: ["a", "b", "c"] });
     apiPostMock.mockResolvedValue({ items: ["a", "c"], total: 2, limit: 500, offset: 0 });
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     await screen.findByTestId("import-run");
     await act(async () => {
@@ -909,7 +909,7 @@ describe("ImportScreen gates", () => {
       limit: 500,
       offset: 0,
     });
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     await screen.findByTestId("import-run");
     await act(async () => {
@@ -928,7 +928,7 @@ describe("ImportScreen gates", () => {
     hookState.phase = "staging_review";
     hookState.stagingSummary = stagingSummary({ contactIdentifiers: ["a"] });
     apiPostMock.mockRejectedValue(new Error("network down"));
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     await screen.findByTestId("import-run");
     await act(async () => {
@@ -941,7 +941,7 @@ describe("ImportScreen gates", () => {
   it("shows the identity stop screen for the identity_stop phase", async () => {
     hookState.phase = "identity_stop";
     hookState.sourceIdentities = ["+15550001111"];
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     expect(
       await screen.findByText("None of the addresses this backup sent from are on your profile."),
@@ -953,7 +953,7 @@ describe("ImportScreen gates", () => {
     hookState.sourceIdentities = ["+15550001111"];
     apiPostMock.mockRejectedValue(new Error("network down"));
     const user = userEvent.setup();
-    renderWithVault(<ImportScreen />);
+    renderWithProviders(<ImportScreen />);
 
     await user.click(await screen.findByText("Add to profile"));
 

@@ -15,8 +15,8 @@ members = [
     "crates/libs/go-sms-mms",
     "crates/libs/journal",
     "crates/libs/build-version",
-    "crates/libs/vault-http",
-    "crates/libs/vault-api-types",
+    "crates/libs/http",
+    "crates/libs/api-types",
     "crates/exporters/go-sms-pro-exporter",
     "crates/exporters/sms-backup-restore-exporter",
     "crates/exporters/sms-backup-plus-exporter",
@@ -27,11 +27,11 @@ members = [
     "crates/helpers/imessage-reader-protocol",
     "crates/helpers/chat-db-fixture",
     "crates/helpers/imessage-reader",
-    "crates/core/message-vault-io-core",
-    "crates/libs/vault-push",
-    "crates/libs/vault-pull",
-    "crates/vault/demo-seed",
-    "crates/vault/server",
+    "crates/core/message-crate-core",
+    "crates/libs/push",
+    "crates/libs/pull",
+    "crates/server/demo-seed",
+    "crates/server/server",
 ]
 exclude = ["src-tauri"]
 
@@ -70,7 +70,7 @@ redundant_pub_crate = "allow"
 
 # Release binaries (the Docker image and the desktop bundles) are built rarely
 # and run for a long time, so spend the build time on whole-program
-# optimisation. `panic` stays `unwind`: vault-push, the journal and the
+# optimisation. `panic` stays `unwind`: message-crate-push, the journal and the
 # iMessage helper catch a worker thread's panic through `join`.
 [profile.release]
 lto = "fat"

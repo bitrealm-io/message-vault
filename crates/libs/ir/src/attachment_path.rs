@@ -4,7 +4,7 @@
 //! carries a path relative to the export folder. That path is input: a
 //! crafted CSV or JSON Lines file can name `/etc/passwd` or `../secrets`, and
 //! whichever code joins it onto a folder — the format writers embedding bytes
-//! into an EML, the transcode pass, the vault's import — would read outside
+//! into an EML, the transcode pass, the server's import — would read outside
 //! the folder. The check lives here, once, so every caller refuses the same
 //! shapes with the same message.
 
@@ -74,7 +74,7 @@ mod tests {
     /// breaks nothing else in the suite.
     #[test]
     fn refuses_every_escape() {
-        let base = Path::new("/vault/staging");
+        let base = Path::new("/data/staging");
         for rel in [
             "/etc/passwd",
             "../secrets.txt",
@@ -101,24 +101,24 @@ mod tests {
     /// resolve, and resolve under the base directory rather than beside it.
     #[test]
     fn joins_an_ordinary_relative_path() {
-        let base = Path::new("/vault/staging");
+        let base = Path::new("/data/staging");
         assert_eq!(
             safe_attachment_path(base, "media/IMG_0001.jpg").unwrap(),
-            Path::new("/vault/staging/media/IMG_0001.jpg")
+            Path::new("/data/staging/media/IMG_0001.jpg")
         );
         assert_eq!(
             safe_attachment_path(base, " attachments/a.jpg ").unwrap(),
-            Path::new("/vault/staging/attachments/a.jpg")
+            Path::new("/data/staging/attachments/a.jpg")
         );
         assert_eq!(
             safe_attachment_path(base, "./media/a.png").unwrap(),
-            Path::new("/vault/staging/media/a.png")
+            Path::new("/data/staging/media/a.png")
         );
         // A leading `..` in the *file name* is not a parent-directory
         // component and must not be mistaken for one.
         assert_eq!(
             safe_attachment_path(base, "..hidden.jpg").unwrap(),
-            Path::new("/vault/staging/..hidden.jpg")
+            Path::new("/data/staging/..hidden.jpg")
         );
     }
 }

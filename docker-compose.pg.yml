@@ -1,16 +1,16 @@
-# Dev-only Postgres for the vault server's Postgres engine path and the
-# MV_TEST_POSTGRES_URL-gated test suite.
+# Dev-only Postgres for the server's Postgres engine path and the
+# MC_TEST_POSTGRES_URL-gated test suite.
 #
 #   docker compose -f docker-compose.pg.yml up -d
-#   MV_TEST_POSTGRES_URL=postgres://vault:vault@127.0.0.1:5432/vault \
-#     cargo test -p message-vault-server
+#   MC_TEST_POSTGRES_URL=postgres://messagecrate:messagecrate@127.0.0.1:5432/messagecrate \
+#     cargo test -p message-crate-server
 #
-# Data lives in the named volume vault_pg_data. `down -v` deletes it.
+# Data lives in the named volume messagecrate_pg_data. `down -v` deletes it.
 #
 # Own project name so this file does not share containers or the
-# message-vault_default network with docker/compose.yml (also named
-# message-vault) or leftover services from deleted compose files.
-name: message-vault-pg
+# message-crate_default network with docker/compose.yml (also named
+# message-crate) or leftover services from deleted compose files.
+name: message-crate-pg
 
 services:
   postgres:
@@ -19,18 +19,18 @@ services:
     # needs ~64mb per worker (up to ~192mb). 512mb leaves a little extra.
     shm_size: 512mb
     environment:
-      POSTGRES_USER: vault
-      POSTGRES_PASSWORD: vault
-      POSTGRES_DB: vault
+      POSTGRES_USER: messagecrate
+      POSTGRES_PASSWORD: messagecrate
+      POSTGRES_DB: messagecrate
     ports: ["5432:5432"]
     volumes:
-      - vault_pg_data:/var/lib/postgresql/data
+      - messagecrate_pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U vault"]
+      test: ["CMD-SHELL", "pg_isready -U messagecrate"]
       interval: 2s
       timeout: 2s
       retries: 10
 
 volumes:
-  vault_pg_data:
-    name: vault_pg_data
+  messagecrate_pg_data:
+    name: messagecrate_pg_data

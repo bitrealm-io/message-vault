@@ -105,14 +105,14 @@ describe("SystemSection", () => {
     const user = userEvent.setup();
     render(<SystemSection />);
     await waitFor(() => {
-      expect(screen.getByDisplayValue("/home/demo/message-vault")).toBeTruthy();
+      expect(screen.getByDisplayValue("/home/demo/message-crate")).toBeTruthy();
     });
 
-    const stagingInput = screen.getByDisplayValue("/home/demo/message-vault");
+    const stagingInput = screen.getByDisplayValue("/home/demo/message-crate");
     await user.clear(stagingInput);
     await user.type(stagingInput, "/tmp/my-staging");
 
-    expect(localStorage.getItem("mv-staging-dir")).toBe("/tmp/my-staging");
+    expect(localStorage.getItem("mc-staging-dir")).toBe("/tmp/my-staging");
   });
 
   it("shows Found lines when both tools are present", async () => {
@@ -161,13 +161,13 @@ describe("SystemSection", () => {
     await waitFor(() => {
       expect(probeFfmpegTools).toHaveBeenCalledWith("/opt/no-ffmpeg");
     });
-    expect(localStorage.getItem("mv-ffmpeg-path")).toBeNull();
+    expect(localStorage.getItem("mc-ffmpeg-path")).toBeNull();
     expect(setFfmpegToolsDir).not.toHaveBeenCalledWith("/opt/no-ffmpeg");
   });
 
   it("keeps a previous ffmpeg directory when a later probe fails", async () => {
     const user = userEvent.setup();
-    localStorage.setItem("mv-ffmpeg-path", "/usr/bin");
+    localStorage.setItem("mc-ffmpeg-path", "/usr/bin");
     render(<SystemSection />);
     await waitFor(() => {
       expect(screen.getByDisplayValue("/usr/bin")).toBeTruthy();
@@ -190,6 +190,6 @@ describe("SystemSection", () => {
     await waitFor(() => {
       expect(probeFfmpegTools).toHaveBeenCalledWith("/usr/binx");
     });
-    expect(localStorage.getItem("mv-ffmpeg-path")).toBe("/usr/bin");
+    expect(localStorage.getItem("mc-ffmpeg-path")).toBe("/usr/bin");
   });
 });

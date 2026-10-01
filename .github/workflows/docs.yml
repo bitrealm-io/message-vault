@@ -46,7 +46,7 @@ jobs:
           mkdir -p docs/public/docs/developer
           cp -a target/doc docs/public/docs/developer/rustdoc
           if [ ! -f docs/public/docs/developer/rustdoc/index.html ]; then
-            printf '%s\n' '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=message_vault_server/index.html"><title>Rust crate docs</title><link rel="canonical" href="message_vault_server/index.html"></head><body><p><a href="message_vault_server/index.html">message-vault-server crate docs</a></p></body></html>' > docs/public/docs/developer/rustdoc/index.html
+            printf '%s\n' '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=message_crate_server/index.html"><title>Rust crate docs</title><link rel="canonical" href="message_crate_server/index.html"></head><body><p><a href="message_crate_server/index.html">message-crate-server crate docs</a></p></body></html>' > docs/public/docs/developer/rustdoc/index.html
           fi
 
       - name: Set up Node.js

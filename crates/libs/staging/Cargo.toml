@@ -11,7 +11,7 @@ fs2 = "0.4.3"
 media = { path = "../media" }
 message-ir = { path = "../ir" }
 message-ir-format = { path = "../ir-format" }
-message-vault-io-core = { path = "../../core/message-vault-io-core" }
+message-crate-core = { path = "../../core/message-crate-core" }
 serde = { workspace = true }
 
 [dev-dependencies]

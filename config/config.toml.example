@@ -13,10 +13,10 @@
 #
 # Address books load into SQLite via CLI `import-contacts --contacts`
 # (VCF or vCard CSV).
-# Older contact_phones / preferred_phone DBs are not upgraded — wipe vault.db and re-import.
+# Older contact_phones / preferred_phone DBs are not upgraded — wipe messagecrate.db and re-import.
 
 [paths]
-db = "data/vault.db"
+db = "data/messagecrate.db"
 data_dir = "data"
 assets_dir = "assets"
 assets_converted_dir = "assets_converted"
@@ -37,7 +37,7 @@ bind = "127.0.0.1:8080"
 # Add an origin when some other UI calls this API on a different host/port:
 # - Vite / `cargo tauri dev`: http://localhost:5173 and http://127.0.0.1:5173
 # Use ["*"] only for local debugging.
-# Keep this array on one line: scripts/run-vault-dev.sh uncomments only this line.
+# Keep this array on one line: scripts/run-dev.sh uncomments only this line.
 # cors_origins = ["http://localhost:5173", "http://127.0.0.1:5173", "https://tauri.localhost", "http://tauri.localhost", "tauri://localhost"]
 
 # Serve an interactive OpenAPI explorer at /docs (and /openapi.json).

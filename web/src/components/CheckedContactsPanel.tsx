@@ -10,9 +10,9 @@ import {
 } from "react-aria-components";
 import type { ContactDetail } from "../lib/contactDetail";
 import { contactLabelText } from "../lib/contactLabel";
-import { getContactSummaries } from "../lib/vaultApi";
-import { keys } from "../lib/vaultKeys";
-import { useVaultCache } from "../lib/vaultQuery";
+import { keys } from "../lib/queryKeys";
+import { useRouteCache } from "../lib/routeQuery";
+import { getContactSummaries } from "../lib/serverApi";
 import Button from "./Button";
 import ContactLabel from "./ContactLabel";
 import { type ContactPreview, sumHandleTotals } from "./contactDrawer/contactDrawerTypes";
@@ -108,7 +108,7 @@ export default function CheckedContactsPanel({
   contacts: ContactPreview[];
   onClear: () => void;
 }) {
-  const cache = useVaultCache();
+  const cache = useRouteCache();
   const heading =
     contacts.length === 1 ? "1 contact selected" : `${contacts.length} contacts selected`;
   const [metrics, setMetrics] = useState<Record<string, RowMetrics>>({});

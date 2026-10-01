@@ -7,7 +7,7 @@ import {
   NAV_SECTION_GRID_CLASS,
 } from "./navSectionLayout";
 
-const STORAGE_PREFIX = "mv-left-nav-open:";
+const STORAGE_PREFIX = "mc-left-nav-open:";
 
 function readOpen(id: string): boolean {
   try {

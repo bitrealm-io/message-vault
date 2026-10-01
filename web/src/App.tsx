@@ -10,7 +10,7 @@ import { ThemeProvider } from "./lib/ThemeProvider";
 import { TimeZoneProvider } from "./lib/TimeZoneProvider";
 import { isTauri } from "./lib/tauri-check";
 import { useAccountProfile } from "./lib/useAccountProfile";
-import { useIsVaultOwner } from "./lib/useIsVaultOwner";
+import { useIsOwner } from "./lib/useIsOwner";
 import { useNeedsProfileSetup } from "./lib/useNeedsProfileSetup";
 import LoginScreen from "./screens/LoginScreen";
 import OnboardingScreen from "./screens/OnboardingScreen";
@@ -47,7 +47,7 @@ function ImportExportRoute({ children }: { children: ReactNode }) {
 
 function AppRoutes() {
   const { isAuthenticated } = useAuth();
-  const { isOwner } = useIsVaultOwner();
+  const { isOwner } = useIsOwner();
   const { needsSetup: needsOnboarding } = useNeedsProfileSetup();
   useMouseHistoryNavigation();
 

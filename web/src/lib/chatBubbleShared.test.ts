@@ -38,7 +38,7 @@ describe("formatMessageTime", () => {
   });
 
   it("reads the clock in the account's zone", () => {
-    // The vault stores the instant; the zone decides what the clock said.
+    // The server stores the instant; the zone decides what the clock said.
     const instant = "2026-08-11T15:04:00Z";
     expect(formatMessageTime(instant, "America/New_York")).toMatch(/11:04/);
     expect(formatMessageTime(instant, "Europe/Paris")).toMatch(/17:04|5:04/);

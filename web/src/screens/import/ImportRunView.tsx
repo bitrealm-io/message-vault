@@ -7,10 +7,10 @@ import OpenPathButton from "../../components/OpenPathButton";
 import StepProgress, { type Step } from "../../components/StepProgress";
 import { formatBytes } from "../../lib/attachmentProgressCopy";
 import { groupSlug } from "../../lib/contactGroups";
+import { useRouteQuery } from "../../lib/routeQuery";
+import { getImport } from "../../lib/serverApi";
 import type { AttachmentForecast, StagingSummary } from "../../lib/tauri";
 import type { AttachmentMediaMode } from "../../lib/types";
-import { getImport } from "../../lib/vaultApi";
-import { useVaultQuery } from "../../lib/vaultQuery";
 import ImportContactsPanel from "../settings/storage/ImportContactsPanel";
 import { estimatePiles, estimatesHeading, filesOverLimit } from "./gateForecast";
 import {
@@ -110,9 +110,9 @@ function WaitingBody({ children }: { children: ReactNode }) {
   return <div className="mt-2 flex flex-col gap-3 border-l-2 border-accent pl-3">{children}</div>;
 }
 
-/** What Upload did to the vault's contacts, with the list opened in place. */
+/** What Upload did to the account's contacts, with the list opened in place. */
 function UploadContacts({ importId }: { importId: number }) {
-  const detail = useVaultQuery(["imports", importId], (signal) => getImport(importId, { signal }));
+  const detail = useRouteQuery(["imports", importId], (signal) => getImport(importId, { signal }));
   const run = detail.data;
   if (!run) return null;
   const touched = run.contacts_new + run.contacts_changed;
@@ -136,7 +136,7 @@ function UploadContacts({ importId }: { importId: number }) {
 /** Where the finished run's messages and contacts went. */
 function FinishedExits({ importId }: { importId: number }) {
   const navigate = useNavigate();
-  const detail = useVaultQuery(["imports", importId], (signal) => getImport(importId, { signal }));
+  const detail = useRouteQuery(["imports", importId], (signal) => getImport(importId, { signal }));
   const run = detail.data;
   const touched = run ? run.contacts_new + run.contacts_changed : 0;
   return (

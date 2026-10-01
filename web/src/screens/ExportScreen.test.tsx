@@ -57,7 +57,7 @@ afterEach(() => {
 
 beforeEach(() => {
   resolveExportStagingDir.mockResolvedValue(
-    "/home/demo/message-vault/staging-export-260831-120000",
+    "/home/demo/message-crate/staging-export-260831-120000",
   );
   // The hook's `run` goes through awaitTauriJob: call the invoke and resolve.
   awaitTauriJob.mockImplementation(async (invokeFn: () => Promise<void>) => {
@@ -102,7 +102,7 @@ describe("ExportScreen", () => {
 
     await waitFor(() => expect(invokePull).toHaveBeenCalledTimes(1));
     // Everything is the scope the screen opens in without a query, and it
-    // sends a blank query, which vault-pull reads as the whole account.
+    // sends a blank query, which message-crate-pull reads as the whole account.
     expect(invokePull.mock.calls[0][0]).toMatchObject({ out_dir: "/home/demo/out", query: "" });
     // JSONL is what pull already writes, so there is nothing to convert and
     // no staging folder to make or remove.
@@ -112,7 +112,7 @@ describe("ExportScreen", () => {
   });
 
   it("pulls into staging and converts into the chosen folder for CSV", async () => {
-    const staging = "/home/demo/message-vault/staging-export-260831-120000";
+    const staging = "/home/demo/message-crate/staging-export-260831-120000";
     await exportAs("/home/demo/out", "CSV (.csv)");
 
     await waitFor(() => expect(invokeFormat).toHaveBeenCalledTimes(1));
@@ -125,16 +125,16 @@ describe("ExportScreen", () => {
   });
 
   it("removes the staging folder once the conversion finishes", async () => {
-    const staging = "/home/demo/message-vault/staging-export-260831-120000";
+    const staging = "/home/demo/message-crate/staging-export-260831-120000";
     await exportAs("/home/demo/out", "CSV (.csv)");
 
     await waitFor(() => expect(invokeDeleteStaging).toHaveBeenCalledWith({ staging_dir: staging }));
   });
 
   it("removes the staging folder even when the conversion fails", async () => {
-    // Otherwise a failed export silently leaves a whole copy of the vault on
+    // Otherwise a failed export silently leaves a whole copy of the conversations on
     // disk, in a folder the person never chose and will not think to look in.
-    const staging = "/home/demo/message-vault/staging-export-260831-120000";
+    const staging = "/home/demo/message-crate/staging-export-260831-120000";
     awaitTauriJob.mockImplementationOnce(async (invokeFn: () => Promise<void>) => {
       await invokeFn();
       return { summary: "pulled" };
@@ -159,7 +159,7 @@ describe("ExportScreen", () => {
     });
     resolveExportStagingDir.mockImplementation(async () => {
       await pullStarted;
-      return "/home/demo/message-vault/staging-export-260831-120000";
+      return "/home/demo/message-crate/staging-export-260831-120000";
     });
 
     const user = userEvent.setup();
@@ -219,7 +219,7 @@ describe("ExportScreen", () => {
   });
 
   it("will not export a Search scope with a blank query", async () => {
-    // vault-pull reads a blank query as the whole account, which is not what
+    // message-crate-pull reads a blank query as the whole account, which is not what
     // someone who chose Search and left the box empty asked for.
     const user = userEvent.setup();
     renderScreen("from:me");

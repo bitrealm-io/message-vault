@@ -24,12 +24,12 @@ The JSONL schema version 4 is independent of the product version. Version 3 is r
    - `src-tauri/Cargo.toml`
    - `src-tauri/tauri.conf.json`
    - `web/package.json`
-   - `crates/vault/server/Cargo.toml`
+   - `crates/server/server/Cargo.toml`
 4. Commit and push that bump on `main`.
 5. Tag that commit `v0.8.0` and push the tag.
 
 ## After tagging
 
-GitHub Actions builds the image and the installers, opens a GitHub Release named `Message Vault v0.8.0`, and publishes the documentation site. The installers are not code-signed, so users may see SmartScreen or Gatekeeper warnings.
+GitHub Actions builds the image and the installers, opens a GitHub Release named `Message Crate v0.8.0`, and publishes the documentation site. The installers are not code-signed, so users may see SmartScreen or Gatekeeper warnings.
 
 Don't create or push a tag unless a release should ship.

@@ -18,7 +18,7 @@ const PERMISSIONS = [
 /**
  * An account's status and what it may do with messages.
  *
- * The vault owner sets all four, so they change only with `managedAccountId`,
+ * The owner sets all four, so they change only with `managedAccountId`,
  * on an account the owner opened from User Accounts. The account holder reads
  * the same section with nothing in it to change.
  */
@@ -31,7 +31,7 @@ export function AccountPermissionsSection({
 }) {
   const updateAccount = useUpdateAccount();
   const managed = managedAccountId !== undefined;
-  // Not locked while a change is sent: the vault answers in a moment, and
+  // Not locked while a change is sent: the server answers in a moment, and
   // greying all four controls for that moment reads as a flash.
   const locked = !managed;
 

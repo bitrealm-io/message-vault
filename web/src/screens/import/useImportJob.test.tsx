@@ -85,10 +85,10 @@ vi.mock("../../lib/api", () => ({
   getBaseUrl: () => "http://127.0.0.1:8080",
 }));
 
-// The two vault calls this hook makes. Everything else in vaultApi stays real,
+// The two server calls this hook makes. Everything else in serverApi stays real,
 // since other modules in this graph import from it.
-vi.mock("../../lib/vaultApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../lib/vaultApi")>()),
+vi.mock("../../lib/serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../lib/serverApi")>()),
   createImport: (...args: unknown[]) => createImportMock(...args),
   completeImport: (...args: unknown[]) => completeImportMock(...args),
 }));
@@ -263,7 +263,7 @@ describe("useImportJob wiring", () => {
     completeImportMock.mockReset();
     completeImportMock.mockResolvedValue({});
     resolveImportStagingDirMock.mockReset();
-    resolveImportStagingDirMock.mockResolvedValue("/home/sam/message-vault/staging-iphone");
+    resolveImportStagingDirMock.mockResolvedValue("/home/sam/message-crate/staging-iphone");
     invokePathStatMock.mockReset();
     invokePathStatMock.mockResolvedValue(null);
     invokeExtractMock.mockReset();
@@ -537,7 +537,7 @@ describe("useImportJob wiring", () => {
     // discard-then-delete (each awaited without independent handling) would
     // let a rejected delete propagate out of cancelRun and skip
     // returnToForm — leaving the screen stuck on Gate 1 with a session the
-    // vault already considers discarded.
+    // server already considers discarded.
     invokeDeleteStagingMock.mockRejectedValueOnce(new Error("disk full"));
     const { result } = renderHook(() => useImportJob());
     await act(() => result.current.startImport(form({ attachmentMedia: "convert" })));
@@ -563,7 +563,7 @@ describe("useImportJob wiring", () => {
     expect(result.current.phase).toBe("form");
   });
 
-  it("a successful import deletes its staging directory once the vault has recorded it", async () => {
+  it("a successful import deletes its staging directory once the server has recorded it", async () => {
     resolveImportStagingDirMock.mockResolvedValue("/staging/run-3");
     runMock.mockImplementationOnce(runResult({ summary: "Push finished.", report: okReport() }));
     const { result } = renderHook(() => useImportJob());
@@ -573,7 +573,7 @@ describe("useImportJob wiring", () => {
     expect(result.current.phase).toBe("done");
     expect(result.current.summaryView?.status).toBe("completed");
     expect(invokeDeleteStagingMock).toHaveBeenCalledWith({ staging_dir: "/staging/run-3" });
-    // The vault's record is written first; the folder goes after it.
+    // The server's record is written first; the folder goes after it.
     expect(completeImportMock.mock.invocationCallOrder[0]).toBeLessThan(
       invokeDeleteStagingMock.mock.invocationCallOrder[0] ?? 0,
     );
@@ -899,7 +899,7 @@ describe("useImportJob wiring", () => {
   });
 
   it("records the staging folder and device on the session it creates", async () => {
-    resolveImportStagingDirMock.mockResolvedValue("/home/u/message-vault/staging-260830");
+    resolveImportStagingDirMock.mockResolvedValue("/home/u/message-crate/staging-260830");
     invokePathStatMock.mockResolvedValue({
       exists: true,
       isFile: false,
@@ -916,7 +916,7 @@ describe("useImportJob wiring", () => {
     const body = createCall?.[0] as Record<string, unknown>;
     expect(body.stage).toBe("parse");
     expect(body.device_id).toEqual(expect.any(String));
-    expect(body.staging_dir).toBe("/home/u/message-vault/staging-260830");
+    expect(body.staging_dir).toBe("/home/u/message-crate/staging-260830");
     expect(body.form).toMatchObject({ source: "imessage-ios" });
   });
 
@@ -1096,7 +1096,7 @@ describe("useImportJob wiring", () => {
       await act(async () => {
         await result.current.startImport(imessageForm(), undefined, {
           sessionId: 42,
-          stagingDir: "/home/u/message-vault/staging-260830",
+          stagingDir: "/home/u/message-crate/staging-260830",
           identities: ["+15550001111"],
         });
       });
@@ -1146,7 +1146,7 @@ describe("useImportJob resume path", () => {
     await act(async () => {
       await result.current.startImport(baseForm, {
         sessionId: 99,
-        stagingDir: "/home/u/message-vault/staging-260830",
+        stagingDir: "/home/u/message-crate/staging-260830",
       });
     });
 
@@ -1154,7 +1154,7 @@ describe("useImportJob resume path", () => {
     expect(invokePushMock).toHaveBeenCalledWith(
       expect.objectContaining({
         import_id: 99,
-        input_dir: "/home/u/message-vault/staging-260830",
+        input_dir: "/home/u/message-crate/staging-260830",
       }),
     );
   });
@@ -1165,7 +1165,7 @@ describe("useImportJob resume path", () => {
     await act(async () => {
       await result.current.startImport(baseForm, {
         sessionId: 99,
-        stagingDir: "/home/u/message-vault/staging-260830",
+        stagingDir: "/home/u/message-crate/staging-260830",
       });
     });
 
@@ -1173,7 +1173,7 @@ describe("useImportJob resume path", () => {
     expect(invokePathStatMock).not.toHaveBeenCalled();
     expect(createImportMock.mock.calls.length > 0).toBe(false);
     expect(runMock).toHaveBeenCalledTimes(1); // push only, no extract
-    expect(result.current.stagingDir).toBe("/home/u/message-vault/staging-260830");
+    expect(result.current.stagingDir).toBe("/home/u/message-crate/staging-260830");
     expect(result.current.importSessionId).toBe(99);
   });
 
@@ -1189,7 +1189,7 @@ describe("useImportJob resume path", () => {
     await act(async () => {
       await result.current.startImport(baseForm, {
         sessionId: 99,
-        stagingDir: "/home/u/message-vault/staging-260830",
+        stagingDir: "/home/u/message-crate/staging-260830",
       });
     });
 
@@ -1232,7 +1232,7 @@ describe("useImportJob resume path", () => {
     await act(async () => {
       await result.current.startImport(baseForm, {
         sessionId: 99,
-        stagingDir: "/home/u/message-vault/staging-260830",
+        stagingDir: "/home/u/message-crate/staging-260830",
         approved,
       });
     });
@@ -1255,7 +1255,7 @@ describe("useImportJob resume path", () => {
     await act(async () => {
       await result.current.startImport(baseForm, {
         sessionId: 99,
-        stagingDir: "/home/u/message-vault/staging-260830",
+        stagingDir: "/home/u/message-crate/staging-260830",
       });
     });
 
@@ -1268,7 +1268,7 @@ describe("useImportJob resume path", () => {
     await act(async () => {
       await result.current.startImport(baseForm, {
         sessionId: 99,
-        stagingDir: "/home/u/message-vault/staging-260830",
+        stagingDir: "/home/u/message-crate/staging-260830",
       });
     });
 
@@ -1331,7 +1331,7 @@ function activeSession(overrides: Partial<ActiveImportSession> = {}): ActiveImpo
     status: "running",
     started_at: "2026-08-30T00:00:00Z",
     stage: "awaiting_gate_1",
-    staging_dir: "/home/u/message-vault/staging-260830",
+    staging_dir: "/home/u/message-crate/staging-260830",
     device_id: "this-device",
     form: validSnapshot,
     source_fingerprint: null,

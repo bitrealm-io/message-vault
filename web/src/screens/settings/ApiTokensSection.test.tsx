@@ -3,14 +3,14 @@
 import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mockedAuth, renderWithVault as render } from "../../test/vaultProviders";
+import { mockedAuth, renderWithProviders as render } from "../../test/providers";
 import { ApiTokensSection } from "./ApiTokensSection";
 
 const apiGet = vi.hoisted(() => vi.fn());
 const apiPost = vi.hoisted(() => vi.fn());
 
-vi.mock("../../lib/vaultApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../lib/vaultApi")>()),
+vi.mock("../../lib/serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../lib/serverApi")>()),
   listApiTokens: (...args: unknown[]) => apiGet(...args),
   createApiToken: (...args: unknown[]) => apiPost(...args),
   renameApiToken: vi.fn(),
@@ -47,8 +47,8 @@ describe("ApiTokensSection create form", () => {
       can_import: true,
       can_export: true,
       created_at: "1700000000",
-      token: "mv-api-secret",
-      token_hint: "mv-api-se..et",
+      token: "mc-api-secret",
+      token_hint: "mc-api-se..et",
     });
 
     const user = await openComposeForm();
@@ -104,8 +104,8 @@ describe("ApiTokensSection create form", () => {
       can_import: false,
       can_export: true,
       created_at: "1700000000",
-      token: "mv-api-secret3",
-      token_hint: "mv-api-se..t3",
+      token: "mc-api-secret3",
+      token_hint: "mc-api-se..t3",
     });
     await user.type(screen.getByLabelText("API key name"), "No import");
     await user.click(screen.getByRole("button", { name: "Save" }));

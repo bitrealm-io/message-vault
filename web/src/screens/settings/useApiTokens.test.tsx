@@ -12,14 +12,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createApiToken, deleteApiToken, listApiTokens, renameApiToken } from "../../lib/vaultApi";
+import { createApiToken, deleteApiToken, listApiTokens, renameApiToken } from "../../lib/serverApi";
 import type { ApiTokenItem } from "./apiTokensUtils";
 import { useApiTokens } from "./useApiTokens";
 
 vi.mock("../../lib/auth", () => ({ useAuth: () => ({ accountId: 7 }) }));
 
-vi.mock("../../lib/vaultApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../lib/vaultApi")>()),
+vi.mock("../../lib/serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../lib/serverApi")>()),
   listApiTokens: vi.fn(),
   createApiToken: vi.fn(),
   renameApiToken: vi.fn(),
@@ -43,7 +43,7 @@ const token: ApiTokenItem = {
   can_import: true,
   can_export: true,
   created_at: "1700000000",
-  token_hint: "mv-api-la..op",
+  token_hint: "mc-api-la..op",
 };
 
 beforeEach(() => {
@@ -58,7 +58,7 @@ beforeEach(() => {
 
 describe("useApiTokens", () => {
   it("asks for the list again after a token is created", async () => {
-    create.mockResolvedValue({ ...token, token: "mv-api-secret" } as unknown as Awaited<
+    create.mockResolvedValue({ ...token, token: "mc-api-secret" } as unknown as Awaited<
       ReturnType<typeof createApiToken>
     >);
     const { result } = renderHook(() => useApiTokens(), { wrapper });
@@ -80,7 +80,7 @@ describe("useApiTokens", () => {
       }),
     );
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(result.current.reveal?.token).toBe("mv-api-secret"));
+    await waitFor(() => expect(result.current.reveal?.token).toBe("mc-api-secret"));
   });
 
   it("asks for the list again after a token is revoked, and closes the dialog either way", async () => {

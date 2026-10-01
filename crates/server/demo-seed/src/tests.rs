@@ -158,7 +158,7 @@ fn generate_writes_three_backups_the_config_files_and_a_readme() {
     for relative in [
         "config/config.toml",
         "config/seed.toml",
-        "config/contacts.vcf",
+        "config/contacts.csv",
         "README.md",
         "staging/imessage/attachments/sunset.jpg",
         "staging/sms-backup-restore/attachments/sunset.jpg",
@@ -166,11 +166,22 @@ fn generate_writes_three_backups_the_config_files_and_a_readme() {
     ] {
         assert!(out.join(relative).is_file(), "{relative} is a file");
     }
-    let vcf = fs::read_to_string(out.join("config/contacts.vcf")).expect("read contacts.vcf");
-    assert_eq!(vcf.matches("BEGIN:VCARD").count(), 12);
+    let book = fs::read_to_string(out.join("config/contacts.csv")).expect("read contacts.csv");
+    let mut lines = book.lines();
+    assert_eq!(
+        lines.next(),
+        Some("contact_id,display_name,groups,service,handle_type,identity")
+    );
+    let keys: std::collections::BTreeSet<&str> = lines
+        .map(|line| line.split(',').next().expect("contact_id"))
+        .collect();
+    assert_eq!(keys.len(), 12, "one key for each contact: {book}");
     let readme = fs::read_to_string(out.join("README.md")).expect("read README.md");
     assert!(readme.contains("## Contents (seed 7)"), "{readme}");
-    assert!(readme.contains("| Contacts (VCF) | 12 |"), "{readme}");
+    assert!(
+        readme.contains("| Contacts (address book) | 12 |"),
+        "{readme}"
+    );
     let leftovers: Vec<String> = fs::read_dir(temp.path())
         .expect("list test directory")
         .map(|entry| {
@@ -612,7 +623,7 @@ fn the_validator_refuses_a_bundle_with_a_config_file_missing() {
     for relative in [
         "config/config.toml",
         "config/seed.toml",
-        "config/contacts.vcf",
+        "config/contacts.csv",
         "README.md",
     ] {
         let path = out.join(relative);
@@ -675,7 +686,7 @@ fn the_validator_refuses_a_conversation_file_that_is_not_json() {
     validate_generated_bundle(&out).expect("the restored bundle is valid again");
 }
 
-/// Only `.jsonl` files are parsed. A README or a `.vcf` full of text that is
+/// Only `.jsonl` files are parsed. A README or a `.csv` full of text that is
 /// not JSON must not be refused, or no bundle would ever validate.
 #[test]
 fn the_validator_reads_only_json_lines_files() {
@@ -684,7 +695,7 @@ fn the_validator_reads_only_json_lines_files() {
     let out = PathBuf::from(&cfg.out);
     generate(&cfg).expect("generate the small bundle");
 
-    // The bundle already contains a README and a VCF, neither of which is
+    // The bundle already contains a README and a CSV, neither of which is
     // JSON, and it validates.
     validate_generated_bundle(&out).expect("a generated bundle is valid");
 

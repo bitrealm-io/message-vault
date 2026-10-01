@@ -140,7 +140,7 @@ fn generate_into(cfg: &SeedConfig, out: &Path) -> Result<GenStats> {
     copy_dir_files(&imessage_attachments, &whatsapp_attachments)?;
 
     let roster = personas::build_roster(cfg, &names, &mut rng)?;
-    contacts::write_vcf(&config_dir, &roster)?;
+    contacts::write_address_book(&config_dir, &roster)?;
     contacts::write_config_toml(&config_dir)?;
     contacts::write_seed_toml(&config_dir)?;
 
@@ -198,7 +198,7 @@ fn validate_generated_bundle(root: &Path) -> Result<()> {
     for relative in [
         Path::new("config/config.toml"),
         Path::new("config/seed.toml"),
-        Path::new("config/contacts.vcf"),
+        Path::new("config/contacts.csv"),
         Path::new("README.md"),
     ] {
         let path = root.join(relative);
@@ -600,7 +600,7 @@ Prejudice ({corpus_sentences} sentences) under `crates/server/demo-seed/data/cor
 
 | Item | Count |
 |------|------:|
-| Contacts (VCF) | {contact_count} |
+| Contacts (address book) | {contact_count} |
 | Groups | {group_count} |
 | Conversation files | {conversation_count} |
 | Messages | {message_count} |
@@ -612,7 +612,7 @@ Prejudice ({corpus_sentences} sentences) under `crates/server/demo-seed/data/cor
 - **Platform handles** — Text message + WhatsApp rows on the same contact
 - **Transport mix** — SMS/RCS mixed into iMessage threads (~20% by default)
 - **Contacts / groups / No Messages** — group memberships and zero-message rows
-- **Unassigned** — handles with messages but no VCF row (phone + email)
+- **Unassigned** — identities with messages and no address book row (phone + email)
 - **Rate skew** — most 1:1 threads ~200–300 msgs/year (bursty days); rare whales up to ~12k/year
 - **History** — typical first contact ~3–5 years ago; longest ~14 years; newest ~1 week
 - **Group Chats** — membership mean ~5 groups/contact; size mean ~4; at least 10 groups with 8–20 participants; bursty days (several / none / a lot)

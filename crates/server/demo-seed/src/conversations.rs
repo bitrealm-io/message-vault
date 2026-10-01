@@ -251,7 +251,6 @@ fn is_json_conversation_file(path: &Path) -> bool {
 /// and for which backup source.
 struct Individual<'a> {
     chat_id: &'a str,
-    display: String,
     span_years: f64,
     msg_count: usize,
     flavor: SourceFlavor,
@@ -272,7 +271,6 @@ impl<'a> Individual<'a> {
         };
         Self {
             chat_id: contact.primary_phone(),
-            display: contact.display_hint(),
             span_years,
             msg_count,
             flavor,
@@ -359,8 +357,9 @@ impl<R: Rng> Seeder<'_, R> {
         let chat_id = spec.chat_id;
         let msg_count = spec.msg_count;
         let flavor = spec.flavor;
-        let participants =
-            individual_participants(chat_id, optional_display_name(spec.display.clone()));
+        // A roster contact's backups carry no name for them: each arrives as
+        // an Unknown, and the demo's address book names them afterwards.
+        let participants = individual_participants(chat_id, None);
         let path = staging.join(sanitize_filename(chat_id) + ".jsonl");
         let mut file = open_jsonl(&path)?;
         write_conversation_header(
@@ -434,7 +433,7 @@ impl<R: Rng> Seeder<'_, R> {
         self.stats.shared_messages += shared.len();
         let overlap = Overlap {
             chat_id,
-            display_name: optional_display_name(contact.display_hint()),
+            display_name: None,
             msg_count,
             timestamps: &timestamps,
             shared: &shared,
@@ -543,15 +542,6 @@ impl<R: Rng> Seeder<'_, R> {
         }
         self.stats.conversation_files += 1;
         Ok(())
-    }
-}
-
-/// `None` when the display name is empty, otherwise `Some`.
-fn optional_display_name(display: String) -> Option<String> {
-    if display.is_empty() {
-        None
-    } else {
-        Some(display)
     }
 }
 
@@ -738,7 +728,7 @@ impl<R: Rng> Seeder<'_, R> {
     }
 }
 
-/// Participants for a group: named contacts, or phone numbers with no names.
+/// Participants for a group: roster contacts, or phone numbers no contact holds.
 fn group_participants(roster: &Roster, group: &crate::personas::GroupSpec) -> Vec<IrParticipant> {
     if group.phone_only {
         return phone_only_participants(&group.phone_only_handles);
@@ -759,18 +749,17 @@ fn phone_only_participants(handles: &[String]) -> Vec<IrParticipant> {
     participants
 }
 
-/// Group members looked up from the roster by index.
+/// Group members looked up from the roster by index. The backup carries no
+/// names for them; the demo's address book supplies those after the import.
 fn named_group_participants(roster: &Roster, member_idxs: &[usize]) -> Vec<IrParticipant> {
     let mut participants = Vec::new();
     for &index in member_idxs {
         let Some(contact) = roster.contacts.get(index) else {
             continue;
         };
-        let hint = contact.display_hint();
-        let display_name = optional_display_name(hint);
         participants.push(IrParticipant {
             handle: Some(contact.primary_phone().into()),
-            display_name,
+            display_name: None,
             handle_type: None,
         });
     }

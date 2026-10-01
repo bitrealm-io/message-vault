@@ -42,7 +42,11 @@ cors_origins = [
 |-----|---------|-------------|
 | `asset_part_size` | `67108864` (64 MiB) | Chunk size advertised to clients for multipart uploads. Must be greater than 0 and must not exceed the attachment size limit. Keep under ~100 MiB for Cloudflare-proxied setups. |
 
-The attachment size limit is not a config key.
+The server refuses a config file that carries a section or key it does not use.
+Every command that loads the file, `serve` included, stops with an error that names each unknown key and its section, for example ``[server] has a key the server does not use: `bnd` ``.
+Why: a misspelt key would otherwise load as its default, and a removed key would sit in the file looking as though it still held.
+
+The attachment size limit is not a config key, and a file that still sets `[server] asset_max_bytes` is refused with a message saying where the limit is set now.
 It is the largest attachment the server accepts, as a single `PUT /v1/assets/{sha256}` body or as the total declared bytes of a multipart upload, and it is also the cap on every other request body.
 It is a Server Setting stored in the database: 512 MiB until the Owner changes it under **Server Settings**, or a program with the Owner's Session sends `PATCH /v1/server/settings` with `asset_max_bytes` in bytes.
 A change holds from the next upload, with no restart.

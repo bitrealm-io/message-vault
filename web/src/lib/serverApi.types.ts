@@ -3063,6 +3063,12 @@ export interface components {
         /** @description The state of this Message Crate, for the screen a logged-out person sees. */
         ServerInfo: {
             /**
+             * @description Whether the Demo Account exists. While it does, the screen offers a
+             *     way into it beside whatever `state` shows: it has no password, so
+             *     there is nothing to type.
+             */
+            demo_account: boolean;
+            /**
              * Format: int64
              * @description The Schema Fingerprint, the number this server stamps into its database.
              */

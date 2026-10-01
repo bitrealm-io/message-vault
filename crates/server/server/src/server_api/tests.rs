@@ -38,6 +38,37 @@ async fn public_registration_does_not_make_an_unowned_server_open() {
     );
 }
 
+/// The Demo Account is reported for as long as it exists, whatever the state
+/// is: before anyone claims the Message Crate, after, and no longer once the
+/// owner has deleted it.
+#[tokio::test]
+async fn the_server_reports_the_demo_account_while_it_exists() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
+
+    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
+    assert!(!body.demo_account, "no Demo Account has been seeded");
+
+    let demo = fixture
+        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
+        .await;
+    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
+    assert_eq!(body.state, ServerState::Unclaimed);
+    assert!(body.demo_account);
+
+    let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
+    assert!(body.demo_account, "claiming changes nothing about it");
+
+    assert_eq!(
+        crate::test_support::delete_status(&state, &format!("/v1/accounts/{demo}"), &owner.token)
+            .await,
+        StatusCode::NO_CONTENT
+    );
+    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
+    assert!(!body.demo_account);
+}
+
 #[tokio::test]
 async fn a_claimed_server_is_closed_until_registration_is_opened() {
     let fixture = test_fixture().await;

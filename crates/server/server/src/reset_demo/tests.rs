@@ -1464,7 +1464,7 @@ async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
             !account_profile::is_claimed(&mut conn)
                 .await
                 .expect("read claim state"),
-            "this Message Crate starts unclaimed, so the claim below is the reset's doing"
+            "this Message Crate starts unclaimed"
         );
         close_test_db(pool, conn).await;
     }
@@ -1492,10 +1492,10 @@ async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
 
     let (pool, mut conn) = test_db(&db).await;
     assert!(
-        account_profile::is_claimed(&mut conn)
+        !account_profile::is_claimed(&mut conn)
             .await
             .expect("read claim state"),
-        "the reset claims this Message Crate"
+        "a reset writes no owner, so the Message Crate is still there to be claimed"
     );
     let previous_messages: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE guid = 'previous-demo-message'")
@@ -1550,8 +1550,11 @@ async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
         axum::http::StatusCode::UNAUTHORIZED,
         "demo has no password, so only the empty password logs in"
     );
-    let owner = crate::test_support::log_in(&state, DEMO_OWNER_USERNAME, DEMO_OWNER_PASSWORD).await;
-    assert_eq!(owner["account_id"], account_profile::OWNER_ACCOUNT_ID);
+    // A reset writes the Demo Account and no owner: the Message Crate is
+    // still there to be claimed, and says the Demo Account is in it.
+    let server: serde_json::Value = crate::test_support::get_json(&state, "/v1/server", "").await;
+    assert_eq!(server["state"], "unclaimed");
+    assert_eq!(server["demo_account"], true);
 }
 
 #[test]

@@ -13172,10 +13172,15 @@
         "description": "The state of this Message Crate, for the screen a logged-out person sees.",
         "required": [
           "state",
+          "demo_account",
           "version",
           "schema_fingerprint"
         ],
         "properties": {
+          "demo_account": {
+            "type": "boolean",
+            "description": "Whether the Demo Account exists. While it does, the screen offers a\nway into it beside whatever `state` shows: it has no password, so\nthere is nothing to type."
+          },
           "schema_fingerprint": {
             "type": "integer",
             "format": "int64",

@@ -1252,7 +1252,7 @@ fn read_generated_address_book(bundle: &Path) -> BTreeMap<String, BookContact> {
 
 /// How many of the `wanted` identities, written `service/handle_type/key`,
 /// a contact with no name holds.
-async fn unknowns_holding(conn: &mut AnyConnection, wanted: &[String]) -> usize {
+async fn unknowns_holding(conn: &mut SqliteConnection, wanted: &[String]) -> usize {
     let held: Vec<String> = sqlx::query_scalar(
         "SELECT h.service || '/' || h.handle_type || '/' || h.normalized
          FROM contact_handles ch

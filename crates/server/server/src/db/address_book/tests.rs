@@ -33,7 +33,11 @@ fn file(rows: &[&str]) -> String {
 
 /// A contact as an import leaves it, holding the identities given as
 /// `(service, handle_type, raw)`.
-async fn imported(conn: &mut SqliteConnection, name: &str, identities: &[(&str, &str, &str)]) -> i64 {
+async fn imported(
+    conn: &mut SqliteConnection,
+    name: &str,
+    identities: &[(&str, &str, &str)],
+) -> i64 {
     let id = contacts::create_contact(conn, ACCOUNT, name, Origin::Import)
         .await
         .unwrap();

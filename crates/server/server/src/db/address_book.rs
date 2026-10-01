@@ -17,7 +17,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use anyhow::{Context, Result};
 use message_ir::{HandleService, HandleType};
 use serde::{Deserialize, Serialize};
-use sqlx::{SqliteConnection, Connection};
+use sqlx::{Connection, SqliteConnection};
 
 use crate::db::contacts::{self, Origin};
 use crate::db::named_membership;

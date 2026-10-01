@@ -11,7 +11,7 @@ use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 
 use crate::db::address_book::{self, LoadCounts, LoadError, LoadMode};
-use crate::db::sql::{bind_args, renumber_placeholders};
+use crate::db::sql::bind_args;
 use crate::extract::{Json, Query};
 use crate::server::{ApiError, AppState, FullAccess, content_type_base, read_body_limited};
 
@@ -162,10 +162,7 @@ pub(crate) async fn export_address_book(
             today,
             zone,
         })?;
-        let sql = renumber_placeholders(&format!(
-            "SELECT ct.id FROM contacts ct WHERE {}",
-            filter.where_sql()
-        ));
+        let sql = format!("SELECT ct.id FROM contacts ct WHERE {}", filter.where_sql());
         let matched: Vec<i64> = sqlx::query_scalar_with(&sql, bind_args(filter.params()))
             .fetch_all(&mut *conn)
             .await?;

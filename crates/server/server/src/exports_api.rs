@@ -9,7 +9,7 @@
 
 use crate::extract::{Json, Path as AxumPath, Query};
 use axum::extract::State;
-use message_crate_api_types::{ExportQueryList, ExportRun, ExportScope};
+use message_crate_api_types::{ExportQueryList, ExportRun, ExportScope, ExportStatus};
 use serde::Deserialize;
 use sqlx::{Connection, SqliteConnection};
 
@@ -18,8 +18,7 @@ use crate::db::conversation_messages::{
 };
 use crate::db::dialect::BEGIN_IMMEDIATE_SQL;
 use crate::db::exports::{
-    self, DEFAULT_EXPORT_SORT, EXPORT_SORT_KEYS, EXPORT_STATUSES, ExportPageOpts, StartExportArgs,
-    export_messages,
+    self, DEFAULT_EXPORT_SORT, EXPORT_SORT_KEYS, ExportPageOpts, StartExportArgs, export_messages,
 };
 use crate::db::ownership::{OwnedTable, missing_ids};
 use crate::messages_api::message_filter;
@@ -224,7 +223,7 @@ async fn running_export(
     export_id: i64,
 ) -> Result<ExportRun, ApiError> {
     let run = owned_export(conn, account_id, export_id).await?;
-    if run.status != "running" {
+    if run.status != ExportStatus::Running {
         return Err(ApiError::StateConflict(format!(
             "export {export_id} is not running (status={})",
             run.status
@@ -238,7 +237,7 @@ async fn close_export(
     state: &AppState,
     account_id: i64,
     export_id: i64,
-    status: &str,
+    status: ExportStatus,
 ) -> Result<Json<ExportRun>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let run = running_export(&mut conn, account_id, export_id).await?;
@@ -295,7 +294,7 @@ pub(crate) async fn create_export(
     tag = "Export",
     security(("session" = ["export"]), ("api-token" = ["export"])),
     params(
-        ("status" = Option<String>, Query, description = "One of running, completed, failed, cancelled"),
+        ("status" = Option<ExportStatus>, Query, description = "Only the runs with this status"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, at most 500"),
         ("offset" = Option<usize>, Query, description = "Rows to skip, at most 50000"),
         ("sort" = Option<String>, Query, description = "`started_at` or `-started_at`. Default `-started_at`, newest first.")
@@ -337,11 +336,11 @@ pub(crate) async fn exports_page(
         .map(str::trim)
         .filter(|s| !s.is_empty());
     if let Some(status) = status
-        && !EXPORT_STATUSES.contains(&status)
+        && ExportStatus::parse(status).is_none()
     {
         return Err(ApiError::validation(format!(
             "status: unknown value '{status}'; accepted values are {}",
-            EXPORT_STATUSES.join(", ")
+            ExportStatus::ALL.map(ExportStatus::as_str).join(", ")
         )));
     }
 
@@ -461,7 +460,7 @@ pub(crate) async fn complete_export(
     ExportAccess(auth): ExportAccess,
     AxumPath(export_id): AxumPath<i64>,
 ) -> Result<Json<ExportRun>, ApiError> {
-    close_export(&state, auth.account_id, export_id, "completed").await
+    close_export(&state, auth.account_id, export_id, ExportStatus::Completed).await
 }
 
 /// Record that the client gave the run up.
@@ -481,7 +480,7 @@ pub(crate) async fn cancel_export(
     ExportAccess(auth): ExportAccess,
     AxumPath(export_id): AxumPath<i64>,
 ) -> Result<Json<ExportRun>, ApiError> {
-    close_export(&state, auth.account_id, export_id, "cancelled").await
+    close_export(&state, auth.account_id, export_id, ExportStatus::Cancelled).await
 }
 
 #[cfg(test)]

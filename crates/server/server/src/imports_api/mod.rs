@@ -778,7 +778,7 @@ fn optional_json_string(
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct CompleteImportResponse {
     id: i64,
-    pub(crate) status: String,
+    pub(crate) status: crate::db::imports::ImportStatus,
     pub(crate) message_count: i64,
     pub(crate) attachment_count: i64,
     pub(crate) bytes_uploaded: i64,
@@ -815,7 +815,7 @@ pub(crate) struct ImportRun {
     source: String,
     tool: Option<String>,
     mode: String,
-    status: String,
+    status: crate::db::imports::ImportStatus,
     started_at: String,
     finished_at: Option<String>,
     message_count: i64,
@@ -842,7 +842,7 @@ pub(crate) struct ImportRun {
     tag = "Import",
     security(("session" = ["import"]), ("api-token" = ["import"])),
     params(
-        ("status" = Option<String>, Query, description = "One of running, completed, completed_with_issues, failed, cancelled"),
+        ("status" = Option<crate::db::imports::ImportStatus>, Query, description = "Only the runs with this status"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, at most 500"),
         ("offset" = Option<usize>, Query, description = "Rows to skip, at most 50000"),
         ("sort" = Option<String>, Query, description = "`started_at` or `-started_at`. Default `-started_at`, newest first.")
@@ -884,11 +884,13 @@ pub(crate) async fn imports_page(
         .map(str::trim)
         .filter(|s| !s.is_empty());
     if let Some(status) = status
-        && !crate::db::imports::IMPORT_STATUSES.contains(&status)
+        && crate::db::imports::ImportStatus::parse(status).is_none()
     {
         return Err(ApiError::validation(format!(
             "status: unknown value '{status}'; accepted values are {}",
-            crate::db::imports::IMPORT_STATUSES.join(", ")
+            crate::db::imports::ImportStatus::ALL
+                .map(crate::db::imports::ImportStatus::as_str)
+                .join(", ")
         )));
     }
 
@@ -1364,7 +1366,7 @@ pub(crate) async fn update_import(
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct DiscardImportResponse {
     pub(crate) id: i64,
-    pub(crate) status: String,
+    pub(crate) status: crate::db::imports::ImportStatus,
 }
 
 /// Discard a running Import Run, freeing the account's single slot.
@@ -1389,7 +1391,7 @@ pub(crate) async fn discard_import(
     crate::db::imports::discard_import(&mut conn, account, import_id).await?;
     Ok(Json(DiscardImportResponse {
         id: import_id,
-        status: "cancelled".into(),
+        status: crate::db::imports::ImportStatus::Cancelled,
     }))
 }
 

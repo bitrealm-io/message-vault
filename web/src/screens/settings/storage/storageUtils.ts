@@ -1,6 +1,5 @@
 import type { ImportSummaryView } from "../../../components/import/ImportSummaryPanel";
 import { formatDateTime } from "../../../lib/formatDate";
-import type { ImportRunStatus } from "../../../lib/serverApi";
 import type { components } from "../../../lib/serverApi.types";
 
 export const ATTACHMENT_PAGE_SIZE = 20;
@@ -95,26 +94,33 @@ function toNumber(value: unknown): number | undefined {
 }
 
 /**
- * Map a server import status onto the summary panel's five statuses. The
- * server writes `cancelled`; the panel's own word for it is `canceled`.
+ * Map a server import status onto the summary panel's five statuses. Every
+ * status is named: one the server adds fails the type-check at `satisfies
+ * never` until it has a case here.
  */
-function toSummaryStatus(status: ImportRunStatus): ImportSummaryView["status"] {
+function toSummaryStatus(status: Schema["ImportStatus"]): ImportSummaryView["status"] {
   switch (status) {
     case "completed":
       return "completed";
     case "completed_with_issues":
       return "completed_with_issues";
     case "cancelled":
-      return "canceled";
+      return "cancelled";
     case "running":
       return "running";
+    case "failed":
+      return "failed";
     default:
+      status satisfies never;
       return "failed";
   }
 }
 
-/** Human label for a raw server import status, for the import detail panel. */
-export function importStatusLabel(status: ImportRunStatus): string {
+/**
+ * The word the import detail panel shows for a run's status. Every status is
+ * named, as in `toSummaryStatus`.
+ */
+export function importStatusLabel(status: Schema["ImportStatus"]): string {
   switch (status) {
     case "running":
       return "Running";
@@ -125,8 +131,9 @@ export function importStatusLabel(status: ImportRunStatus): string {
     case "failed":
       return "Failed";
     case "cancelled":
-      return "Canceled";
+      return "Cancelled";
     default:
+      status satisfies never;
       return status;
   }
 }
@@ -152,7 +159,7 @@ export function toImportSummaryView(detail: ImportDetailResponse): ImportSummary
       : null);
 
   return {
-    status: toSummaryStatus(detail.status as ImportRunStatus),
+    status: toSummaryStatus(detail.status),
     filesTotal: toNumber(summary.files_total ?? summary.filesTotal),
     filesSucceeded: toNumber(summary.files_succeeded ?? summary.filesSucceeded),
     filesFailed: toNumber(summary.files_failed ?? summary.filesFailed),

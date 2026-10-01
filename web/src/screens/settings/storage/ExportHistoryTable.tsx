@@ -13,8 +13,11 @@ import {
   thStyle,
 } from "./storageUtils";
 
-/** The word the table shows for a run's status. */
-function statusLabel(status: string): string {
+/**
+ * The word the table shows for a run's status. Every status is named: one the
+ * server adds fails the type-check at `satisfies never` until it has a case.
+ */
+function statusLabel(status: ExportRow["status"]): string {
   switch (status) {
     case "running":
       return "Running";
@@ -25,6 +28,7 @@ function statusLabel(status: string): string {
     case "cancelled":
       return "Cancelled";
     default:
+      status satisfies never;
       return status;
   }
 }

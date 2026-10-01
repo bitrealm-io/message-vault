@@ -745,7 +745,7 @@ async fn promote_stamps_messages_with_import_id() {
     )
     .await
     .unwrap();
-    assert_eq!(row.status, "completed");
+    assert_eq!(row.status.as_str(), "completed");
     assert_eq!(row.message_count, 1);
 
     let (listed, total) = crate::db::imports::list_imports_page(

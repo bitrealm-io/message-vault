@@ -195,6 +195,10 @@ released versions carry their date on the heading.
   `+44 7700 900123` as your own number, is now matched as that number. Before,
   some were read as a US number with the same digits and named the wrong
   person, and some matched nobody.
+- **Cancelled is spelt one way.** An import you cancelled read "Import
+  canceled" on the Import screen and "Canceled" in Settings → Storage, while
+  a cancelled export read "Cancelled". Every screen and the user guide now
+  say "Cancelled" and "Import cancelled".
 
 - **The Import form marks every field it needs.** With **SMS Backup+**,
   **Backup Device Email Addresses** had no asterisk, and with **iMazing** and

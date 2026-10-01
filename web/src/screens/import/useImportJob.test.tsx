@@ -780,7 +780,7 @@ describe("useImportJob wiring", () => {
     // failure, so run() rejects here exactly as it would for a real error.
     runMock.mockImplementationOnce(async (fn: () => Promise<unknown>) => {
       await fn();
-      throw new Error("canceled");
+      throw new Error("cancelled");
     });
     const { result } = renderHook(() => useImportJob());
     await act(() => result.current.startImport(form({ attachmentMedia: "convert" })));
@@ -788,7 +788,7 @@ describe("useImportJob wiring", () => {
 
     expect(invokePushMock).not.toHaveBeenCalled();
     expect(result.current.phase).toBe("done");
-    expect(result.current.summaryView?.status).toBe("canceled");
+    expect(result.current.summaryView?.status).toBe("cancelled");
     // The session stays wherever the run actually got to — "transcode" —
     // never advanced to a stage the cancelled run never reached.
     expect(setImportStageMock).not.toHaveBeenCalledWith(1, "awaiting_gate_2", expect.anything());
@@ -801,16 +801,16 @@ describe("useImportJob wiring", () => {
     // ends a waiting session. Posting /complete would free the one-active-
     // session slot and drop the session out of GET /v1/imports?status=running,
     // stranding the staged folder with no session left to resume it
-    // through — even though the "canceled" outcome is still shown locally.
+    // through — even though the "cancelled" outcome is still shown locally.
     runMock.mockImplementationOnce(async (fn: () => Promise<unknown>) => {
       await fn();
-      throw new Error("canceled");
+      throw new Error("cancelled");
     });
     const { result } = renderHook(() => useImportJob());
     await act(() => result.current.startImport(form({ attachmentMedia: "convert" })));
     await act(() => result.current.approve());
 
-    expect(result.current.summaryView?.status).toBe("canceled");
+    expect(result.current.summaryView?.status).toBe("cancelled");
     expect(completeImportMock.mock.calls.some(([id]) => id === 1)).toBe(false);
   });
 
@@ -843,7 +843,7 @@ describe("useImportJob wiring", () => {
     const { result } = renderHook(() => useImportJob());
     await act(() => result.current.startImport(form({ attachmentMedia: "convert" })));
 
-    expect(result.current.summaryView?.status).toBe("canceled");
+    expect(result.current.summaryView?.status).toBe("cancelled");
     expect(completeImportMock.mock.calls.some(([id]) => id === 1)).toBe(false);
   });
 

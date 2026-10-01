@@ -1496,7 +1496,7 @@ export interface components {
             id: number;
             /** Format: int64 */
             message_count: number;
-            status: string;
+            status: components["schemas"]["ImportStatus"];
         };
         /** @description Full contact view: every identity with stats, plus totals across them. */
         Contact: {
@@ -1902,7 +1902,7 @@ export interface components {
         DiscardImportResponse: {
             /** Format: int64 */
             id: number;
-            status: string;
+            status: components["schemas"]["ImportStatus"];
         };
         /**
          * @description Which list an Export Run's query is for (`docs/architecture/http-api.md`,
@@ -1951,8 +1951,8 @@ export interface components {
             scope: components["schemas"]["ExportScope"];
             /** @description UTC time the run started. */
             started_at: string;
-            /** @description Lifecycle status: `running`, `completed`, `failed`, or `cancelled`. */
-            status: string;
+            /** @description Lifecycle status. */
+            status: components["schemas"]["ExportStatus"];
             /** @description Exporting tool, e.g. `message-crate-pull`, when the client named one. */
             tool?: string | null;
             /**
@@ -1991,6 +1991,12 @@ export interface components {
             /** @description Message ids exported on their own. */
             message_ids?: number[];
         };
+        /**
+         * @description How an Export Run stands: the values `exports.status` holds, the values
+         *     `GET /v1/exports?status=` accepts, and the word every Export Run carries.
+         * @enum {string}
+         */
+        ExportStatus: "running" | "completed" | "failed" | "cancelled";
         /** @description One word as the web and the docs see it. */
         FieldDoc: {
             /** @description One example, ready to type. */
@@ -2116,7 +2122,7 @@ export interface components {
             prepare_ms?: number | null;
             source: string;
             started_at: string;
-            status: string;
+            status: components["schemas"]["ImportStatus"];
             summary: unknown;
             tool?: string | null;
             /** Format: int64 */
@@ -2205,6 +2211,12 @@ export interface components {
             tapbacks: number;
         };
         /**
+         * @description How an Import Run stands: the values `imports.status` holds, the values
+         *     `GET /v1/imports?status=` accepts, and the words every response carries.
+         * @enum {string}
+         */
+        ImportStatus: "running" | "completed" | "completed_with_issues" | "failed" | "cancelled";
+        /**
          * @description One Import Run as `GET /v1/imports` lists it: the counts Settings shows,
          *     and everything the desktop app needs to resume a running one.
          */
@@ -2256,11 +2268,8 @@ export interface components {
             staging_dir?: string | null;
             /** @description UTC time the run started. */
             started_at: string;
-            /**
-             * @description Lifecycle status (`running`, `completed`, `completed_with_issues`,
-             *     `failed`, or `cancelled`).
-             */
-            status: string;
+            /** @description Lifecycle status. */
+            status: components["schemas"]["ImportStatus"];
             /**
              * @description What the user approved at the last gate they passed, or null. The
              *     column `PATCH /v1/imports/{id}` writes with its `summary`.
@@ -2682,8 +2691,8 @@ export interface components {
                 scope: components["schemas"]["ExportScope"];
                 /** @description UTC time the run started. */
                 started_at: string;
-                /** @description Lifecycle status: `running`, `completed`, `failed`, or `cancelled`. */
-                status: string;
+                /** @description Lifecycle status. */
+                status: components["schemas"]["ExportStatus"];
                 /** @description Exporting tool, e.g. `message-crate-pull`, when the client named one. */
                 tool?: string | null;
                 /**
@@ -2857,11 +2866,8 @@ export interface components {
                 staging_dir?: string | null;
                 /** @description UTC time the run started. */
                 started_at: string;
-                /**
-                 * @description Lifecycle status (`running`, `completed`, `completed_with_issues`,
-                 *     `failed`, or `cancelled`).
-                 */
-                status: string;
+                /** @description Lifecycle status. */
+                status: components["schemas"]["ImportStatus"];
                 /**
                  * @description What the user approved at the last gate they passed, or null. The
                  *     column `PATCH /v1/imports/{id}` writes with its `summary`.
@@ -4221,8 +4227,8 @@ export interface operations {
     list_account_exports: {
         parameters: {
             query?: {
-                /** @description One of running, completed, failed, cancelled */
-                status?: string;
+                /** @description Only the runs with this status */
+                status?: components["schemas"]["ExportStatus"];
                 /** @description Page size, default 40, at most 500 */
                 limit?: number;
                 /** @description Rows to skip, at most 50000 */
@@ -4365,8 +4371,8 @@ export interface operations {
     list_account_imports: {
         parameters: {
             query?: {
-                /** @description One of running, completed, completed_with_issues, failed, cancelled */
-                status?: string;
+                /** @description Only the runs with this status */
+                status?: components["schemas"]["ImportStatus"];
                 /** @description Page size, default 40, at most 500 */
                 limit?: number;
                 /** @description Rows to skip, at most 50000 */
@@ -7042,8 +7048,8 @@ export interface operations {
     list_exports: {
         parameters: {
             query?: {
-                /** @description One of running, completed, failed, cancelled */
-                status?: string;
+                /** @description Only the runs with this status */
+                status?: components["schemas"]["ExportStatus"];
                 /** @description Page size, default 40, at most 500 */
                 limit?: number;
                 /** @description Rows to skip, at most 50000 */
@@ -7476,8 +7482,8 @@ export interface operations {
     list_imports: {
         parameters: {
             query?: {
-                /** @description One of running, completed, completed_with_issues, failed, cancelled */
-                status?: string;
+                /** @description Only the runs with this status */
+                status?: components["schemas"]["ImportStatus"];
                 /** @description Page size, default 40, at most 500 */
                 limit?: number;
                 /** @description Rows to skip, at most 50000 */

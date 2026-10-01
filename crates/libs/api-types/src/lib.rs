@@ -241,6 +241,55 @@ pub struct Page<T> {
     pub offset: usize,
 }
 
+/// How an Export Run stands: the values `exports.status` holds, the values
+/// `GET /v1/exports?status=` accepts, and the word every Export Run carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum ExportStatus {
+    /// Still open: its messages can be read.
+    Running,
+    /// Closed by the client once it had everything.
+    Completed,
+    /// Ended without finishing.
+    Failed,
+    /// Closed by the person before it finished.
+    Cancelled,
+}
+
+impl ExportStatus {
+    /// Every status, in the order the documentation lists them.
+    pub const ALL: [Self; 4] = [
+        Self::Running,
+        Self::Completed,
+        Self::Failed,
+        Self::Cancelled,
+    ];
+
+    /// The value as the wire and the database spell it.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Running => "running",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+        }
+    }
+
+    /// The status `value` spells, or `None` for any other word.
+    #[must_use]
+    pub fn parse(value: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|s| s.as_str() == value)
+    }
+}
+
+impl std::fmt::Display for ExportStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 api_shape! {
     /// One Export Run: what was asked for and how much matched, never what
     /// the messages said. `POST /v1/exports` creates one, every route under
@@ -252,8 +301,8 @@ api_shape! {
         pub scope: ExportScope,
         /// Exporting tool, e.g. `message-crate-pull`, when the client named one.
         pub tool: Option<String>,
-        /// Lifecycle status: `running`, `completed`, `failed`, or `cancelled`.
-        pub status: String,
+        /// Lifecycle status.
+        pub status: ExportStatus,
         /// UTC time the run started.
         pub started_at: String,
         /// UTC time the run finished, when it has.
@@ -414,6 +463,21 @@ api_shape! {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The database column and the wire carry one spelling of each status:
+    /// the server writes the row with `as_str` and the response with serde.
+    #[test]
+    fn every_export_status_serializes_as_the_word_the_database_holds() {
+        for status in ExportStatus::ALL {
+            assert_eq!(
+                serde_json::to_value(status).unwrap(),
+                serde_json::Value::String(status.as_str().to_string())
+            );
+            assert_eq!(ExportStatus::parse(status.as_str()), Some(status));
+        }
+        assert_eq!(ExportStatus::Cancelled.as_str(), "cancelled");
+        assert_eq!(ExportStatus::parse("canceled"), None);
+    }
 
     /// The pairing rule this module states, checked rather than trusted: a
     /// field the server may leave out has to read back without it. Serializing

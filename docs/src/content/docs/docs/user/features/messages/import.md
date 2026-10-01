@@ -319,7 +319,7 @@ The heading of a finished run says how it ended.
 | `Imported 1,234 messages` | The run succeeded. The number is the count of new messages. |
 | `Imported 1,234 messages, with errors` | The run succeeded and some messages or files failed. The **Errors** table lists them. |
 | `Import failed` | Nothing was imported, or a Stage failed. |
-| `Import canceled` | A Stage was cancelled. |
+| `Import cancelled` | A Stage was cancelled. |
 
 A run that succeeds deletes its Staging Directory, and the import log and the journal with it.
 The Message Crate now holds the messages, and the staged copy is no longer needed.

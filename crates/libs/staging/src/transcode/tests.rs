@@ -318,8 +318,8 @@ fn cancelling_stops_the_pass_without_corrupting_the_folder() {
     let err = err.expect_err("a cancel requested before the call must surface as Err");
     assert_eq!(
         err.to_string(),
-        "canceled",
-        "spelled to match run_attachment_jobs; the web hook's isCancellation string-matches it"
+        "cancelled",
+        "the same word every other cancelled step returns; the import screen matches it"
     );
     let doc = read_conversation_jsonl(&jsonl).unwrap();
     assert_eq!(

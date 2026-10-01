@@ -9,7 +9,7 @@ export type ImportIssue = {
 };
 
 export type ImportSummaryView = {
-  status: "completed" | "completed_with_issues" | "failed" | "canceled" | "running";
+  status: "completed" | "completed_with_issues" | "failed" | "cancelled" | "running";
   filesTotal?: number;
   filesSucceeded?: number;
   filesFailed?: number;
@@ -58,7 +58,7 @@ export function completionTextFor(
   if (status === "completed") return "Import complete";
   if (status === "completed_with_issues") return "Import completed with issues";
   if (status === "failed") return "Import failed";
-  if (status === "canceled") return "Import canceled";
+  if (status === "cancelled") return "Import cancelled";
   return undefined;
 }
 

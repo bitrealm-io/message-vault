@@ -98,16 +98,11 @@ function mediaDoneDetail(mode: AttachmentMediaMode): string {
 }
 
 /**
- * True for the "canceled"/"cancelled" text a cancelled Tauri job's
- * `extract:error` carries. The media pass's own cancellation is spelled
- * "canceled" (one L, `transcode.rs`'s `check_cancel_now`); other layers of
- * the Rust side spell it "cancelled" (two L, `message-crate-core`'s
- * `check_cancel`) — matched case- and spelling-insensitively so this reads
- * either.
+ * The text a cancelled desktop job's `extract:error` carries: the one word
+ * every stage of the Rust side returns for a cancel (`message-crate-core`'s
+ * `check_cancel`).
  */
-function isCancellation(message: string): boolean {
-  return /^cancell?ed$/i.test(message.trim());
-}
+const CANCELLED_MESSAGE = "cancelled";
 
 /**
  * Extract stages originals regardless of the chosen media mode (ffmpeg is
@@ -632,7 +627,7 @@ function waitAtReview(phase: "staging_review" | "media_review"): void {
  * before either review, a failed Media stage, or an Upload that ran to
  * completion or failed all complete normally.
  *
- * `canceled` overrides `importOutcome`'s verdict outright: the person asked
+ * `cancelled` overrides `importOutcome`'s verdict outright: the person asked
  * for this, so it is never read as a failure.
  *
  * `skipComplete` is that one exception. A cancellation mid Media is routed
@@ -649,7 +644,7 @@ function waitAtReview(phase: "staging_review" | "media_review"): void {
 async function finishImport(args: {
   sessionId: number | null;
   threw: boolean;
-  canceled?: boolean;
+  cancelled?: boolean;
   pushReport: PushFinishedReport | null;
   uploadMs: number | null;
   skipComplete?: boolean;
@@ -662,11 +657,11 @@ async function finishImport(args: {
    */
   approved?: StagingSummary;
 }): Promise<void> {
-  const { sessionId, threw, canceled, pushReport, uploadMs, skipComplete, approved } = args;
+  const { sessionId, threw, cancelled, pushReport, uploadMs, skipComplete, approved } = args;
   const { parseMs, attachmentsMs, prepareMs } = scratch.durations;
   const durationMs = performance.now() - scratch.importStartedAt;
-  const outcome: ImportSummaryView["status"] = canceled
-    ? "canceled"
+  const outcome: ImportSummaryView["status"] = cancelled
+    ? "cancelled"
     : importOutcome({
         report: pushReport ?? undefined,
         threw,
@@ -709,7 +704,7 @@ async function finishImport(args: {
       return { ...step, durationMs: duration };
     }),
   );
-  const ok = outcome !== "failed" && outcome !== "canceled";
+  const ok = outcome !== "failed" && outcome !== "cancelled";
   if (sessionId && !skipComplete) {
     try {
       await completeImport(sessionId, {
@@ -861,7 +856,7 @@ async function runMediaPass(
   const mediaStartedAt = performance.now();
   let transcodeReport: TranscodeFinishedReport | undefined;
   let threw = false;
-  let canceled = false;
+  let cancelled = false;
   try {
     const result = await runJob(() =>
       invokeTranscodeStaging({
@@ -872,9 +867,9 @@ async function runMediaPass(
     transcodeReport = result.transcode;
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    if (isCancellation(msg)) {
+    if (msg === CANCELLED_MESSAGE) {
       // The person asked for this: not an error, so no issue row for it.
-      canceled = true;
+      cancelled = true;
     } else {
       threw = true;
       recordError(scratch.activeStep, msg);
@@ -882,7 +877,7 @@ async function runMediaPass(
   }
   const mediaMs = performance.now() - mediaStartedAt;
 
-  if (threw || canceled) {
+  if (threw || cancelled) {
     failActiveStep();
     // Neither path writes another stage: the run stays at `transcode`,
     // which is exactly where it got to. A cancellation also skips
@@ -894,10 +889,10 @@ async function runMediaPass(
     await finishImport({
       sessionId,
       threw,
-      canceled,
+      cancelled,
       pushReport: null,
       uploadMs: null,
-      skipComplete: canceled,
+      skipComplete: cancelled,
     });
     return;
   }
@@ -1140,17 +1135,17 @@ async function runImport(
     // run at `write` is what lets the next Import visit offer that. A
     // genuine failure still completes: a broken backup must not lock the
     // account out of importing.
-    const canceled = isCancellation(msg);
-    if (!canceled) recordError(scratch.activeStep, msg);
+    const cancelled = msg === CANCELLED_MESSAGE;
+    if (!cancelled) recordError(scratch.activeStep, msg);
     failActiveStep();
     store.set({ computingSummary: false });
     await finishImport({
       sessionId,
-      threw: !canceled,
-      canceled,
+      threw: !cancelled,
+      cancelled,
       pushReport: null,
       uploadMs: null,
-      skipComplete: canceled,
+      skipComplete: cancelled,
     });
   }
 }

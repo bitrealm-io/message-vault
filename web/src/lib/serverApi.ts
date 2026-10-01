@@ -693,20 +693,9 @@ export function listSearchFields(
 
 // ── Import Runs ─────────────────────────────────────────────────────────────
 
-/**
- * Every status the server gives an Import Run. The generated types carry it as
- * a plain string, so the words are written here once, in the server's spelling.
- */
-export type ImportRunStatus =
-  | "running"
-  | "completed"
-  | "completed_with_issues"
-  | "failed"
-  | "cancelled";
-
 /** The account's Import Runs, newest first, narrowed to one status when given. */
 export type ImportListParams = {
-  status?: ImportRunStatus;
+  status?: Schema["ImportStatus"];
   limit?: number;
   offset?: number;
 };

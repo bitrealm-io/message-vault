@@ -218,7 +218,7 @@ fn read_error_marks_file_missing_and_continues() {
 }
 
 #[test]
-fn canceled_error_from_the_loader_still_aborts() {
+fn cancelled_error_from_the_loader_still_aborts() {
     let dir = tempfile::tempdir().unwrap();
     let att_dir = dir.path().join("attachments");
     std::fs::create_dir_all(&att_dir).unwrap();
@@ -233,14 +233,14 @@ fn canceled_error_from_the_loader_still_aborts() {
             &mut jobs,
             &att_dir,
             &media_cfg(MediaMode::Clone),
-            |_| Err("canceled".into()),
+            |_| Err("cancelled".into()),
             |_| {},
             None,
             None,
         )
         .unwrap_err()
     };
-    assert_eq!(err, "canceled");
+    assert_eq!(err, "cancelled");
 }
 
 #[test]
@@ -280,7 +280,7 @@ fn cancel_stops_before_next_job() {
         )
         .unwrap_err()
     };
-    assert_eq!(err, "canceled");
+    assert_eq!(err, "cancelled");
     assert!(a.path.is_some());
     assert!(b.path.is_none());
 }

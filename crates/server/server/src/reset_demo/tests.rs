@@ -237,7 +237,7 @@ fn an_incomplete_bundle_without_a_seed_file_cannot_be_reset() {
 }
 
 #[tokio::test]
-async fn the_demo_account_may_import_export_and_delete() {
+async fn the_demo_account_may_export_and_not_import_or_delete() {
     let temp = tempfile::tempdir().expect("create test directory");
     let db = temp.path().join("messagecrate.db");
     let (pool, mut conn) = test_db(&db).await;
@@ -264,8 +264,8 @@ async fn the_demo_account_may_import_export_and_delete() {
             .expect("read the demo account");
     assert_eq!(
         (import, export, delete),
-        (1, 1, 1),
-        "the demo account is there to try all of Message Crate, so it may import, export, and delete"
+        (0, 1, 0),
+        "anyone can enter the Demo Account, so it may export and may not import or delete for good"
     );
 
     close_test_db(pool, conn).await;

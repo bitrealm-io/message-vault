@@ -6,12 +6,12 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::Result as AnyResult;
 use serde::Serialize;
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 
 use crate::db::contacts::UNKNOWN_CONTACT_SQL;
 use crate::db::dialect::{group_concat_unit_separator, name_ci_expr};
 use crate::db::handles::{infer_handle_type_from_shape, normalize_handle};
-use crate::db::sql::{SqlParam, bind_args, in_placeholders, renumber_placeholders};
+use crate::db::sql::{SqlParam, bind_args, in_placeholders};
 use crate::paging::{Direction, MAX_CONTACT_SUMMARY_IDS, Page, SortKey};
 use crate::search::bridge::{TrashScope, contact_sent_messages};
 use crate::search::emit::{NOT_TRASHED_CONTACT, NOT_TRASHED_CONVERSATION};
@@ -160,7 +160,7 @@ fn contact_order_by(keys: &[SortKey<ContactSort>]) -> String {
 /// `BadRequest` for a query the language refuses; `Internal` when a
 /// statement fails.
 pub async fn list_contacts_sorted(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     q: &str,
     order: &[SortKey<ContactSort>],
@@ -178,9 +178,7 @@ pub async fn list_contacts_sorted(
     })?;
     let where_sql = filter.where_sql();
 
-    let count_sql = renumber_placeholders(&format!(
-        "SELECT COUNT(*) FROM contacts ct WHERE {where_sql}"
-    ));
+    let count_sql = format!("SELECT COUNT(*) FROM contacts ct WHERE {where_sql}");
     let total: i64 = sqlx::query_scalar_with(&count_sql, bind_args(filter.params()))
         .fetch_one(&mut *conn)
         .await?;
@@ -191,7 +189,7 @@ pub async fn list_contacts_sorted(
     // definition `last-message:` on Contacts uses, so the column and the word
     // cannot drift. It leaves the trash out whatever `q` says: the column is
     // not asked for the trash (#725).
-    let sql = renumber_placeholders(&format!(
+    let sql = format!(
         "SELECT * FROM (SELECT ct.id,
                 trim(ct.preferred_name) AS name,
                 CASE WHEN {unknown} THEN 1 ELSE 0 END AS is_unknown,
@@ -226,7 +224,7 @@ pub async fn list_contacts_sorted(
         addresses_agg = group_concat_unit_separator("val"),
         sent = contact_sent_messages(TrashScope::LeftOut),
         groups_agg = group_concat_unit_separator("cl.name"),
-    ));
+    );
     let mut params = filter.params().to_vec();
     params.push(SqlParam::Int(limit as i64));
     params.push(SqlParam::Int(offset as i64));
@@ -303,7 +301,7 @@ type ContactRow = (
 ///
 /// Returns an error when the statement fails.
 pub async fn contact_name_and_modified(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     contact_id: i64,
 ) -> Result<Option<(String, bool, String)>, sqlx::Error> {
@@ -342,7 +340,7 @@ pub struct ContactTotals {
 ///
 /// Returns an error when the statement fails.
 pub async fn contact_totals(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     contact_id: i64,
 ) -> Result<ContactTotals, sqlx::Error> {
@@ -387,7 +385,7 @@ pub async fn contact_totals(
 ///
 /// Returns an internal error when a database statement fails.
 pub async fn get_contact_summaries(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     ids: &[i64],
 ) -> Result<Vec<ContactSelectionSummary>, ApiError> {
@@ -508,7 +506,7 @@ type ContactSelectionRow = (
 ///
 /// Returns an error when a database statement fails.
 pub async fn unknown_contact_identifiers(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     identifiers: &[String],
 ) -> AnyResult<Vec<String>> {

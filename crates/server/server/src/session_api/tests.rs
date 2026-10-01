@@ -447,7 +447,7 @@ async fn an_owner_password_reset_leaves_the_session_browsing() {
 }
 
 /// How many session rows `account` holds.
-async fn session_rows(conn: &mut sqlx::AnyConnection, account: i64) -> i64 {
+async fn session_rows(conn: &mut sqlx::SqliteConnection, account: i64) -> i64 {
     sqlx::query_scalar("SELECT COUNT(*) FROM account_session_tokens WHERE account_id = $1")
         .bind(account)
         .fetch_one(conn)

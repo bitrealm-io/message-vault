@@ -7,9 +7,9 @@
 //! account's id — indistinguishable from outside, which is what makes them
 //! both a 404 rather than one a 404 and the other a 403.
 
-use sqlx::{AnyConnection, Executor, Row};
+use sqlx::{Executor, Row, SqliteConnection};
 
-use crate::db::sql::{SqlParam, bind_all, renumber_placeholders};
+use crate::db::sql::{SqlParam, bind_all};
 
 /// True when `account_id` owns a `conversations` row with this id.
 ///
@@ -17,7 +17,7 @@ use crate::db::sql::{SqlParam, bind_all, renumber_placeholders};
 ///
 /// Returns a database error when the query fails.
 pub async fn owns_conversation(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     conversation_id: i64,
 ) -> Result<bool, sqlx::Error> {
@@ -30,7 +30,7 @@ pub async fn owns_conversation(
 ///
 /// Returns a database error when the query fails.
 pub async fn owns_contact(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     contact_id: i64,
 ) -> Result<bool, sqlx::Error> {
@@ -43,7 +43,7 @@ pub async fn owns_contact(
 /// answer is a yes or no; `id` is the primary key of both tables, so there is
 /// never a second row to stop at.
 async fn owns_row(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     table: &'static str,
     account_id: i64,
     id: i64,
@@ -83,7 +83,7 @@ impl OwnedTable {
 ///
 /// Returns a database error when the query fails.
 pub async fn missing_ids(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     table: OwnedTable,
     account_id: i64,
     ids: &[i64],
@@ -98,9 +98,7 @@ pub async fn missing_ids(
     );
     let mut params = vec![SqlParam::Int(account_id)];
     params.extend(ids.iter().map(|id| SqlParam::Int(*id)));
-    let rows = (&mut *conn)
-        .fetch_all(bind_all(&renumber_placeholders(&sql), &params))
-        .await?;
+    let rows = (&mut *conn).fetch_all(bind_all(&sql, &params)).await?;
     let found = rows
         .iter()
         .map(|row| row.try_get::<i64, _>(0))
@@ -122,7 +120,7 @@ mod tests {
     const ACCOUNT_A: i64 = 7;
     const ACCOUNT_B: i64 = 8;
 
-    async fn setup() -> (sqlx::AnyPool, tempfile::TempDir) {
+    async fn setup() -> (sqlx::SqlitePool, tempfile::TempDir) {
         let (pool, dir) = crate::db::engine::test_pool().await;
         let mut conn = pool.acquire().await.unwrap();
         schema::ensure_schema(&mut conn).await.unwrap();
@@ -136,7 +134,7 @@ mod tests {
         (pool, dir)
     }
 
-    async fn insert_contact(conn: &mut AnyConnection, account_id: i64) -> i64 {
+    async fn insert_contact(conn: &mut SqliteConnection, account_id: i64) -> i64 {
         sqlx::query_scalar(
             "INSERT INTO contacts (account_id, preferred_name, origin)
              VALUES ($1, 'Ada', 'user') RETURNING id",

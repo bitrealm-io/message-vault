@@ -19,7 +19,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use message_ir::HandleType;
 use serde::{Deserialize, Serialize};
-use sqlx::{AnyConnection, Connection};
+use sqlx::{Connection, SqliteConnection};
 
 use crate::credentials::{
     change_password_on_conn, check_auth_rate_limit, hash_owner_password, hash_user_password,
@@ -94,7 +94,7 @@ pub struct Account {
 
 /// Load one account's row. `None` when the account does not exist.
 async fn load_account(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<Option<Account>, ApiError> {
     let Some(username) = account_profile::username_for_account(conn, account_id).await? else {
@@ -144,7 +144,10 @@ fn has_password(password_hash: Option<&str>) -> bool {
 }
 
 /// Load one account's row, or `404 Not Found`.
-async fn require_account(conn: &mut AnyConnection, account_id: i64) -> Result<Account, ApiError> {
+async fn require_account(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+) -> Result<Account, ApiError> {
     load_account(conn, account_id)
         .await?
         .ok_or_else(|| ApiError::NotFound(format!("account {account_id} not found")))
@@ -189,7 +192,7 @@ pub(crate) enum Admits {
 /// the row exists, so the refusal says nothing about the server's accounts.
 /// The owner alone learns that an id is absent.
 pub(crate) async fn require_account_reach(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     auth: &AuthIdentity,
     target: i64,
     admits: Admits,
@@ -541,7 +544,7 @@ fn parse_profile_service(
 
 /// Apply name, zone and identity changes on an open connection.
 async fn apply_profile_update(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     preferred_name: Option<&str>,
     time_zone: Option<&str>,
@@ -620,7 +623,7 @@ async fn apply_profile_update(
 
 /// Apply a profile update in one transaction.
 async fn update_profile_on_conn(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     req: &UpdateAccountRequest,
     completes_setup: bool,
@@ -653,7 +656,7 @@ async fn update_profile_on_conn(
 /// with its account's on every request. The owner restrains the account and
 /// the tokens follow, without ever seeing one.
 async fn apply_flags(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     req: &UpdateAccountRequest,
 ) -> Result<(), ApiError> {

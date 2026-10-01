@@ -235,7 +235,7 @@ impl<K: Copy + PartialEq> ListRequest<K> {
     /// `validation-failed` for a `limit`, `offset` or `sort` the route
     /// refuses; `Internal` when the clock cannot be read.
     pub async fn read(
-        conn: &mut sqlx::AnyConnection,
+        conn: &mut sqlx::SqliteConnection,
         account_id: i64,
         query: PageQuery,
         accepted: &[(&str, K)],

@@ -131,7 +131,7 @@ async fn who_may_name_a_contact() {
         .await
         .unwrap();
 
-    let name_of = async |conn: &mut AnyConnection, id: i64| -> String {
+    let name_of = async |conn: &mut SqliteConnection, id: i64| -> String {
         sqlx::query_scalar("SELECT preferred_name FROM contacts WHERE id = $1")
             .bind(id)
             .fetch_one(&mut *conn)

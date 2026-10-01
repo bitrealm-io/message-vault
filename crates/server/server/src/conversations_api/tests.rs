@@ -2,7 +2,7 @@ use super::*;
 use crate::db::conversations::{ConversationSort, display_service_label};
 use crate::db::participant_names::Participant;
 use message_ir::HandleType;
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 
 use crate::db::{account_profile, imports};
 use crate::test_support::{
@@ -13,7 +13,7 @@ use crate::test_support::{
 /// A newest-first page — the default ordering, which is what most of these
 /// tests care about. Ordering itself is covered by its own tests below.
 async fn list_conversations(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     q: &str,
     limit: usize,
@@ -75,7 +75,7 @@ async fn conversation_list_takes_the_search_language() {
 /// `participants` row (`name_alias`) that query also reads has no
 /// counterpart in the seeder at all. So this stays as explicit SQL
 /// rather than using the shared seeder.
-async fn conversations_setup() -> (sqlx::AnyPool, TestFixture, i64) {
+async fn conversations_setup() -> (sqlx::SqlitePool, TestFixture, i64) {
     let fixture = test_fixture().await;
     let account = fixture.account_with_id(101, "alice").await;
     let mut conn = fixture.conn().await;
@@ -266,7 +266,7 @@ async fn list_conversations_sorts_by_date_or_message_count() {
     .unwrap();
 
     async fn ids_for(
-        pool: &sqlx::AnyPool,
+        pool: &sqlx::SqlitePool,
         account: i64,
         key: ConversationSort,
         direction: crate::paging::Direction,
@@ -585,7 +585,7 @@ async fn list_conversations_filters_by_contact_and_type() {
 /// A newest-first page for `conversations_setup()`'s account, with the default query and
 /// paging — what each of the three participant-naming tests below needs.
 async fn list_conversations_page(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Page<ConversationSummary> {
     list_conversations(conn, account_id, "", DEFAULT_LIST_LIMIT, 0)
@@ -1047,7 +1047,7 @@ async fn duplicate_only_threads_sort_last_in_either_date_direction() {
     .unwrap();
 
     async fn ids_for(
-        pool: &sqlx::AnyPool,
+        pool: &sqlx::SqlitePool,
         account: i64,
         q: &str,
         direction: crate::paging::Direction,
@@ -1447,7 +1447,11 @@ async fn conversation_detail_reads_a_trashed_conversation() {
     assert_eq!(status, axum::http::StatusCode::OK);
 }
 
-async fn trashed_conversation_row_count(conn: &mut AnyConnection, account_id: i64, id: i64) -> i64 {
+async fn trashed_conversation_row_count(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    id: i64,
+) -> i64 {
     sqlx::query_scalar(
         "SELECT COUNT(*) FROM trashed_conversations
          WHERE account_id = $1 AND conversation_id = $2",
@@ -1692,7 +1696,7 @@ async fn trashed_conversation_fixture() -> (TestFixture, RegisteredAccount, i64)
     (fixture, user, id)
 }
 
-async fn conversation_row_count(conn: &mut AnyConnection, id: i64) -> i64 {
+async fn conversation_row_count(conn: &mut SqliteConnection, id: i64) -> i64 {
     sqlx::query_scalar("SELECT COUNT(*) FROM conversations WHERE id = $1")
         .bind(id)
         .fetch_one(&mut *conn)
@@ -1889,7 +1893,7 @@ async fn conversation_messages_fixture() -> (TestFixture, RegisteredAccount, i64
 /// Insert one message row with an explicit `timestamp` and `sort_order`,
 /// the control the JSON-import path does not give.
 async fn insert_message(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     conversation_id: i64,
     account_id: i64,
     timestamp: &str,

@@ -1,7 +1,6 @@
 use super::*;
 use crate::db::conversation_messages::{MessageSort, messages_from_sql};
 use crate::db::exports::ExportCounts;
-use crate::db::sql::renumber_placeholders;
 use crate::paging::SortKey;
 use crate::problem::ProblemType;
 use crate::test_support::{
@@ -21,7 +20,7 @@ fn oldest_first() -> Vec<SortKey<MessageSort>> {
 /// Start a run over `scope` for `account` and read one page of it, oldest
 /// first, through the same functions the routes call.
 async fn page(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account: i64,
     scope: &ExportScope,
     limit: usize,
@@ -42,7 +41,7 @@ async fn page(
 }
 
 /// The four counts a run over `scope` records.
-async fn counts_of(conn: &mut AnyConnection, scope: &ExportScope) -> ExportCounts {
+async fn counts_of(conn: &mut SqliteConnection, scope: &ExportScope) -> ExportCounts {
     let run = start_export_run(conn, 101, scope, None, crate::search::tests::clock())
         .await
         .unwrap();
@@ -157,7 +156,7 @@ async fn seeded_export_fixture() -> (TestFixture, i64, i64) {
 
 /// Add message `id` to `conversation` for account 101, dated on `day` of
 /// January 2020.
-async fn add_message(conn: &mut AnyConnection, id: i64, conversation: i64, day: u8, body: &str) {
+async fn add_message(conn: &mut SqliteConnection, id: i64, conversation: i64, day: u8, body: &str) {
     sqlx::query(
         "INSERT INTO messages (
             id, conversation_id, account_id, source, service, timestamp,
@@ -595,9 +594,8 @@ async fn export_pages_by_offset_and_reports_the_total() {
     assert_eq!(past.total, 3);
 }
 
-/// End-to-end placeholder discipline: the assembled query's `$N`
-/// placeholders must be exactly `1..=params.len()` in bind order, with the
-/// selection's own `?` list renumbered after the query's.
+/// End-to-end placeholder discipline: the assembled query binds with `?`
+/// alone, one for each parameter, the selection's own list included.
 #[tokio::test]
 async fn export_sql_placeholders_match_params_order() {
     let (fixture, conv1, conv2) = seeded_export_fixture().await;
@@ -614,18 +612,11 @@ async fn export_sql_placeholders_match_params_order() {
         messages_from_sql = messages_from_sql(),
         where_sql = filter.where_sql(),
     );
-    let renumbered = renumber_placeholders(&sql);
     assert!(
-        !renumbered.contains('?'),
-        "no `?` may survive: {renumbered}"
+        !sql.contains('$'),
+        "a numbered placeholder among `?` ones: {sql}"
     );
-    assert_eq!(renumbered.matches('$').count(), filter.params().len());
-    for n in 1..=filter.params().len() {
-        assert!(
-            renumbered.contains(&format!("${n}")),
-            "missing ${n}: {renumbered}"
-        );
-    }
+    assert_eq!(sql.matches('?').count(), filter.params().len());
 }
 
 // ── The routes ───────────────────────────────────────────────────────────────

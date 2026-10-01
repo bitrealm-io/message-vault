@@ -5,7 +5,7 @@ use crate::test_support::{SeedConversation, TestFixture, seed_conversation, test
 const A1: i64 = 7;
 const A2: i64 = 8;
 
-async fn insert_message(conn: &mut AnyConnection, id: i64, guid: &str, body: &str) {
+async fn insert_message(conn: &mut SqliteConnection, id: i64, guid: &str, body: &str) {
     sqlx::query(
         r"
         INSERT INTO messages (
@@ -23,7 +23,7 @@ async fn insert_message(conn: &mut AnyConnection, id: i64, guid: &str, body: &st
     .unwrap();
 }
 
-async fn conversation_id(conn: &mut AnyConnection, account: i64) -> i64 {
+async fn conversation_id(conn: &mut SqliteConnection, account: i64) -> i64 {
     sqlx::query_scalar::<_, i64>("SELECT id FROM conversations WHERE account_id = $1")
         .bind(account)
         .fetch_one(&mut *conn)
@@ -32,11 +32,11 @@ async fn conversation_id(conn: &mut AnyConnection, account: i64) -> i64 {
 }
 
 /// Column names of `table`, for contract assertions.
-async fn column_names(conn: &mut AnyConnection, table: &str) -> Vec<String> {
+async fn column_names(conn: &mut SqliteConnection, table: &str) -> Vec<String> {
     table_columns(conn, table).await.unwrap()
 }
 
-async fn fts_hits(conn: &mut AnyConnection, term: &str) -> i64 {
+async fn fts_hits(conn: &mut SqliteConnection, term: &str) -> i64 {
     sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM messages_fts WHERE messages_fts MATCH $1")
         .bind(term)
         .fetch_one(&mut *conn)
@@ -47,7 +47,7 @@ async fn fts_hits(conn: &mut AnyConnection, term: &str) -> i64 {
 /// A fixture with schema applied, and two accounts (`A1`/alice, `A2`/bob)
 /// each holding one individual conversation on `+15555550100` from
 /// `t.json`, with no messages.
-async fn seeded_schema_fixture() -> (sqlx::AnyPool, TestFixture) {
+async fn seeded_schema_fixture() -> (sqlx::SqlitePool, TestFixture) {
     let fixture = test_fixture().await;
     for (id, user) in [(A1, "alice"), (A2, "bob")] {
         fixture.account_with_id(id, user).await;
@@ -140,7 +140,7 @@ async fn fresh_database_has_complete_current_schema() {
 
 /// Assert every table, index, trigger, metadata marker, and column the
 /// current schema contract lists is present.
-async fn assert_current_schema_contract(conn: &mut AnyConnection) {
+async fn assert_current_schema_contract(conn: &mut SqliteConnection) {
     let contract: serde_json::Value = serde_json::from_str(include_str!(
         "../../../../../../tests/fixtures/schema/current-schema.json"
     ))
@@ -504,7 +504,7 @@ async fn messages_fts_stays_in_sync() {
 /// How many index entries `term` has, read from the index itself. `MATCH`
 /// only answers for rows the index still counts as present, so it cannot
 /// show a term left behind under a deleted row.
-async fn fts_term_entries(conn: &mut AnyConnection, term: &str) -> i64 {
+async fn fts_term_entries(conn: &mut SqliteConnection, term: &str) -> i64 {
     sqlx::query("CREATE VIRTUAL TABLE IF NOT EXISTS temp.fts_vocab USING fts5vocab(main, messages_fts, row)")
         .execute(&mut *conn)
         .await

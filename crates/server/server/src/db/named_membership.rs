@@ -13,7 +13,7 @@ use std::future::Future;
 use std::pin::Pin;
 
 use anyhow::Result as AnyResult;
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 
 use crate::db::dialect::{name_eq_ci, order_by_name_ci};
 
@@ -48,7 +48,7 @@ impl From<MembershipError> for crate::server::ApiError {
 
 /// Extra work after a membership change, async over the connection borrow.
 type ChangeHook = for<'a> fn(
-    &'a mut AnyConnection,
+    &'a mut SqliteConnection,
     i64,
     i64,
 ) -> Pin<Box<dyn Future<Output = AnyResult<()>> + Send + 'a>>;
@@ -188,7 +188,7 @@ pub fn group_spec() -> &'static MembershipSpec {
 
 /// Bump the member contact's updated-at, boxed so the spec table can hold it as a plain function pointer.
 fn touch_member_owner<'a>(
-    conn: &'a mut AnyConnection,
+    conn: &'a mut SqliteConnection,
     account_id: i64,
     member_id: i64,
 ) -> Pin<Box<dyn Future<Output = AnyResult<()>> + Send + 'a>> {
@@ -200,7 +200,7 @@ fn touch_member_owner<'a>(
 /// Id of the named set called `name`, if it exists.
 async fn find_id(
     spec: &MembershipSpec,
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     name: &str,
 ) -> Result<Option<i64>, MembershipError> {
@@ -221,7 +221,7 @@ async fn find_id(
 #[cfg(test)]
 async fn ensure_id(
     spec: &MembershipSpec,
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     name: &str,
 ) -> Result<i64, MembershipError> {
@@ -280,7 +280,7 @@ fn normalize_name(spec: &MembershipSpec, name: &str) -> Result<String, Membershi
 /// True when the member row belongs to this account.
 async fn member_exists(
     spec: &MembershipSpec,
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     member_id: i64,
 ) -> Result<bool, MembershipError> {
@@ -304,7 +304,7 @@ async fn member_exists(
 #[cfg(test)]
 pub async fn set_membership(
     spec: &MembershipSpec,
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     member_ids: &[i64],
     name: &str,
@@ -393,7 +393,7 @@ fn clean_ids(ids: &[i64]) -> Vec<i64> {
 /// Sets for this account with their ids, A–Z, excluding reserved leftovers.
 pub async fn list_sets(
     spec: &MembershipSpec,
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<Vec<(i64, String)>, MembershipError> {
     let order = order_by_name_ci("name");
@@ -414,7 +414,7 @@ pub async fn list_sets(
 /// One set by id, or `NotFound` when it is not this account's.
 pub async fn get_set(
     spec: &MembershipSpec,
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     id: i64,
 ) -> Result<(i64, String), MembershipError> {
@@ -444,7 +444,7 @@ pub async fn get_set(
 /// taken (ignoring case) or reserved.
 pub async fn create_set(
     spec: &MembershipSpec,
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     name: &str,
 ) -> Result<(i64, String), MembershipError> {
@@ -471,7 +471,7 @@ pub async fn create_set(
 /// set's name (ignoring case) is a conflict.
 pub async fn rename_set(
     spec: &MembershipSpec,
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     id: i64,
     name: &str,
@@ -505,7 +505,7 @@ pub async fn rename_set(
 /// Delete a set by id, and its memberships.
 pub async fn delete_set(
     spec: &MembershipSpec,
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     id: i64,
 ) -> Result<(), MembershipError> {
@@ -534,7 +534,7 @@ pub async fn delete_set(
 /// Member ids of one set, ascending.
 pub async fn list_member_ids_of(
     spec: &MembershipSpec,
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     id: i64,
 ) -> Result<Vec<i64>, MembershipError> {
@@ -563,7 +563,7 @@ pub async fn list_member_ids_of(
 /// for it rather than twice.
 pub async fn patch_members(
     spec: &MembershipSpec,
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     id: i64,
     add: &[i64],
@@ -642,7 +642,7 @@ pub async fn patch_members(
 /// Names attached to one member, A–Z.
 pub async fn names_for_item(
     spec: &MembershipSpec,
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     item_id: i64,
 ) -> AnyResult<Vec<String>> {
@@ -669,7 +669,7 @@ pub async fn names_for_item(
 /// Names attached to each member id, A–Z within each list.
 pub async fn names_for_items(
     spec: &'static MembershipSpec,
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     item_ids: &[i64],
 ) -> AnyResult<std::collections::HashMap<i64, Vec<String>>> {

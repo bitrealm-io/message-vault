@@ -168,7 +168,7 @@ fn print_plan(opts: &CliImportOptions, opened: &OpenDb, plan: &SourcePlan) {
 async fn import_under_session(
     cfg: &crate::config::Config,
     opts: &CliImportOptions,
-    conn: &mut sqlx::pool::PoolConnection<sqlx::Any>,
+    conn: &mut sqlx::pool::PoolConnection<sqlx::Sqlite>,
     paths: &[PathBuf],
     plan: &SourcePlan,
 ) -> Result<ImportStats> {
@@ -331,7 +331,6 @@ mod tests {
 
     #[tokio::test]
     async fn an_import_with_contacts_loads_the_book_and_links_its_phone_to_the_participant() {
-        sqlx::any::install_default_drivers();
         let dir = TempDir::new().unwrap();
         let (opened, opts) = fixture_with_export_and_book(dir.path()).await;
 
@@ -384,7 +383,6 @@ mod tests {
 
     #[tokio::test]
     async fn a_second_import_with_the_same_book_and_no_overwrite_skips_the_contacts() {
-        sqlx::any::install_default_drivers();
         let dir = TempDir::new().unwrap();
         let (opened, opts) = fixture_with_export_and_book(dir.path()).await;
         run(&opened, &opts).await.unwrap();
@@ -411,7 +409,6 @@ mod tests {
 
     #[tokio::test]
     async fn an_import_without_contacts_reports_the_load_as_skipped() {
-        sqlx::any::install_default_drivers();
         let dir = TempDir::new().unwrap();
         let (opened, mut opts) = fixture_with_export_and_book(dir.path()).await;
         opts.contacts = None;

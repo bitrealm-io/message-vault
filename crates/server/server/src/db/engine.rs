@@ -1,17 +1,15 @@
 //! Pool construction for the SQLite database file.
 
 use std::path::Path;
-use std::str::FromStr;
 
 use anyhow::{Context, Result};
-use sqlx::any::{AnyConnectOptions, AnyPoolOptions};
-use sqlx::sqlite::SqliteConnectOptions;
-use sqlx::{AnyPool, ConnectOptions};
+use sqlx::SqlitePool;
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
 /// The server's historical pragma set, applied to each new connection:
 /// busy timeout first (overlapping auth and UI writes wait), foreign keys on,
 /// synchronous NORMAL, `temp_store` MEMORY, `cache_size` -200000.
-fn with_pragmas(pool: AnyPoolOptions) -> AnyPoolOptions {
+fn with_pragmas(pool: SqlitePoolOptions) -> SqlitePoolOptions {
     pool.after_connect(|conn, _meta| {
         Box::pin(async move {
             sqlx::query("PRAGMA busy_timeout = 15000")
@@ -34,28 +32,26 @@ fn with_pragmas(pool: AnyPoolOptions) -> AnyPoolOptions {
     })
 }
 
-/// `sqlite://` URL for a file path, with create-if-missing set.
-fn sqlite_url_from_path(path: &Path) -> String {
+/// Connect options for a database file, created when missing.
+fn connect_options(path: &Path) -> SqliteConnectOptions {
     SqliteConnectOptions::new()
         .filename(path)
         .create_if_missing(true)
-        .to_url_lossy()
-        .to_string()
 }
 
 /// Pool options for SQLite: four connections plus the pragmas. Every
 /// SQLite pool comes through here, so this is also where the server's SQL
 /// functions are registered for the connections the pool will open
 /// ([`crate::db::sqlite_functions`]).
-fn sqlite_pool_options() -> AnyPoolOptions {
+fn sqlite_pool_options() -> SqlitePoolOptions {
     crate::db::sqlite_functions::register();
-    with_pragmas(AnyPoolOptions::new().max_connections(4))
+    with_pragmas(SqlitePoolOptions::new().max_connections(4))
 }
 
 /// Best-effort WAL enablement: a hot rollback journal or another process
 /// holding the database can make it fail, and callers still get a usable
 /// pool.
-async fn try_enable_wal(pool: &AnyPool) {
+async fn try_enable_wal(pool: &SqlitePool) {
     match sqlx::query("PRAGMA journal_mode = WAL").execute(pool).await {
         Ok(_) => {}
         Err(err) => {
@@ -67,16 +63,12 @@ async fn try_enable_wal(pool: &AnyPool) {
 /// Open the configured pool for a SQLite file, naming the file in the error
 /// context. The file is created when missing.
 ///
-/// The sqlx Any drivers are installed here, the one place a pool is opened,
-/// so no entry point has to remember to.
-///
 /// # Errors
 ///
 /// Returns an error when the file cannot be opened or created.
-pub async fn open_pool_for_path(path: &Path) -> Result<AnyPool> {
-    sqlx::any::install_default_drivers();
+pub async fn open_pool_for_path(path: &Path) -> Result<SqlitePool> {
     let pool = sqlite_pool_options()
-        .connect_with(AnyConnectOptions::from_str(&sqlite_url_from_path(path))?)
+        .connect_with(connect_options(path))
         .await
         .with_context(|| format!("failed to open database {}", path.display()))?;
     try_enable_wal(&pool).await;
@@ -86,12 +78,11 @@ pub async fn open_pool_for_path(path: &Path) -> Result<AnyPool> {
 /// Shared test pool: file-backed SQLite in a fresh temp dir, returned with
 /// the pool so the test's files live there too.
 #[cfg(test)]
-pub(crate) async fn test_pool() -> (AnyPool, tempfile::TempDir) {
-    sqlx::any::install_default_drivers();
+pub(crate) async fn test_pool() -> (SqlitePool, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("messagecrate.db");
     let pool = sqlite_pool_options()
-        .connect_with(AnyConnectOptions::from_str(&sqlite_url_from_path(&path)).unwrap())
+        .connect_with(connect_options(&path))
         .await
         .unwrap();
     (pool, dir)

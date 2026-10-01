@@ -7,7 +7,7 @@
 use axum::extract::State;
 use axum::http::HeaderMap;
 use serde::{Deserialize, Serialize};
-use sqlx::{AnyConnection, AnyPool};
+use sqlx::{SqliteConnection, SqlitePool};
 
 use crate::credentials::{
     MAX_PASSWORD_BYTES, check_auth_rate_limit, dummy_password_hash, normalize_username,
@@ -43,7 +43,7 @@ impl CreateSessionResponse {
     /// Issue (or reuse) the session token for an existing account. Uses the
     /// account id when the row has no username.
     async fn for_existing_account(
-        conn: &mut AnyConnection,
+        conn: &mut SqliteConnection,
         account_id: i64,
     ) -> anyhow::Result<CreateSessionResponse> {
         let token = session_tokens::get_or_create_session_token(conn, account_id).await?;
@@ -96,14 +96,14 @@ pub(crate) async fn get_session(
 }
 
 /// Source ids this account has imported, oldest first.
-async fn list_account_sources(pool: &AnyPool, account_id: i64) -> Result<Vec<String>, ApiError> {
+async fn list_account_sources(pool: &SqlitePool, account_id: i64) -> Result<Vec<String>, ApiError> {
     // Read-only: do not run ensure_schema (avoids write locks on auth).
     let mut conn = pool.acquire().await?;
     Ok(dedupe::source_priority_from_db(&mut conn, account_id).await?)
 }
 
 /// Username for an account id, when the account has one.
-async fn load_username(pool: &AnyPool, account_id: i64) -> Result<Option<String>, ApiError> {
+async fn load_username(pool: &SqlitePool, account_id: i64) -> Result<Option<String>, ApiError> {
     let mut conn = pool.acquire().await?;
     Ok(account_profile::username_for_account(&mut conn, account_id).await?)
 }
@@ -175,7 +175,7 @@ pub async fn create_session(
 }
 
 /// Revoke the session token. Returns whether it named a Session.
-async fn logout_on_conn(conn: &mut AnyConnection, token: &str) -> anyhow::Result<bool> {
+async fn logout_on_conn(conn: &mut SqliteConnection, token: &str) -> anyhow::Result<bool> {
     session_tokens::revoke_session_token(conn, token).await
 }
 

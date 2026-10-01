@@ -9,7 +9,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use sqlx::AnyPool;
+use sqlx::SqlitePool;
 use sqlx::pool::PoolConnection;
 
 use crate::config::Config;
@@ -21,7 +21,7 @@ pub struct OpenDb {
     /// The config the database was opened from, with every override applied.
     pub cfg: Config,
     /// Connection pool for the database `cfg` names.
-    pub db: AnyPool,
+    pub db: SqlitePool,
 }
 
 impl OpenDb {
@@ -59,7 +59,7 @@ impl OpenDb {
     /// # Errors
     ///
     /// Returns an error when the pool cannot hand one out.
-    pub async fn conn(&self) -> Result<PoolConnection<sqlx::Any>> {
+    pub async fn conn(&self) -> Result<PoolConnection<sqlx::Sqlite>> {
         Ok(self.db.acquire().await?)
     }
 

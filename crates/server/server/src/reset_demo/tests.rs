@@ -1,6 +1,6 @@
 use super::*;
 use crate::config::PathsConfig;
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 
 pub(crate) fn write_tiny_reset_bundle(root: &Path) {
     fs::create_dir_all(root.join("config")).expect("create bundle config");
@@ -55,7 +55,7 @@ username = "demo"
 }
 
 /// Open `db` with the schema applied and one connection checked out.
-async fn test_db_conn(db: &Path) -> sqlx::pool::PoolConnection<sqlx::Any> {
+async fn test_db_conn(db: &Path) -> sqlx::pool::PoolConnection<sqlx::Sqlite> {
     let (_pool, conn) = test_db(db).await;
     conn
 }
@@ -63,7 +63,7 @@ async fn test_db_conn(db: &Path) -> sqlx::pool::PoolConnection<sqlx::Any> {
 /// Open `db` with the schema applied; returns the pool alongside the
 /// connection so the caller can close the pool deterministically before
 /// copying or replacing the database file.
-async fn test_db(db: &Path) -> (sqlx::AnyPool, sqlx::pool::PoolConnection<sqlx::Any>) {
+async fn test_db(db: &Path) -> (sqlx::SqlitePool, sqlx::pool::PoolConnection<sqlx::Sqlite>) {
     let pool = engine::open_pool_for_path(db)
         .await
         .expect("open test database");
@@ -75,7 +75,7 @@ async fn test_db(db: &Path) -> (sqlx::AnyPool, sqlx::pool::PoolConnection<sqlx::
 }
 
 /// Close the pool so no connection stays attached to the database file.
-async fn close_test_db(pool: sqlx::AnyPool, conn: sqlx::pool::PoolConnection<sqlx::Any>) {
+async fn close_test_db(pool: sqlx::SqlitePool, conn: sqlx::pool::PoolConnection<sqlx::Sqlite>) {
     // Await the real close: `pool.close()` alone only waits for the
     // connection to be returned, and the sqlx worker thread closes it
     // later — racing the checkpoint/copy that follows can SIGBUS.
@@ -623,7 +623,7 @@ async fn make_prepared_reset_database_observably_different(path: &Path) {
     close_test_db(pool, conn).await;
 }
 
-async fn seed_reset_test_account(conn: &mut AnyConnection, account_id: i64, guid: &str) {
+async fn seed_reset_test_account(conn: &mut SqliteConnection, account_id: i64, guid: &str) {
     account_profile::ensure_account_row(conn, account_id)
         .await
         .expect("seed reset test account");
@@ -998,7 +998,7 @@ fn read_generated_bundle(bundle: &Path) -> BundleContents {
     contents
 }
 
-async fn count(conn: &mut AnyConnection, sql: &str) -> i64 {
+async fn count(conn: &mut SqliteConnection, sql: &str) -> i64 {
     sqlx::query_scalar(sql)
         .bind(DEMO_ACCOUNT_ID)
         .fetch_one(&mut *conn)

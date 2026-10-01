@@ -5,7 +5,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use chrono::Utc;
 use contacts::{ContactsFormat, detect_contacts_format, parse_vcf, read_vcard_csv_rows};
-use sqlx::{AnyConnection, Connection};
+use sqlx::{Connection, SqliteConnection};
 
 use crate::search::emit::NOT_TRASHED_CONTACT;
 
@@ -13,7 +13,7 @@ pub mod read;
 
 /// Bump `contacts.last_modified` after an address-book shape change.
 pub async fn touch_contact(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     contact_id: i64,
 ) -> Result<()> {
@@ -81,7 +81,7 @@ impl Origin {
 ///
 /// Returns an error when a statement fails.
 pub async fn propose_name(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     contact_id: i64,
     name: &str,
@@ -129,7 +129,7 @@ pub async fn propose_name(
 ///
 /// Returns an error when the insert fails.
 pub async fn create_contact(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     preferred_name: &str,
     origin: Origin,
@@ -153,7 +153,7 @@ pub async fn create_contact(
 ///
 /// Returns an error when the insert fails.
 pub async fn link_handle_to_contact(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     handle_id: i64,
     contact_id: i64,
@@ -188,7 +188,7 @@ pub async fn link_handle_to_contact(
 ///
 /// Returns an error when the insert fails.
 pub async fn link_sibling_handles_to_contact(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     handle_id: i64,
     contact_id: i64,
@@ -229,7 +229,7 @@ pub async fn link_sibling_handles_to_contact(
 ///
 /// Returns an error when the query fails.
 pub async fn contact_id_of_sibling_handle(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     handle_id: i64,
 ) -> Result<Option<i64>> {
@@ -263,7 +263,7 @@ pub async fn contact_id_of_sibling_handle(
 ///
 /// Returns an error when the query fails.
 pub async fn contact_id_by_preferred_name(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     name: &str,
 ) -> Result<Option<i64>> {
@@ -303,7 +303,7 @@ pub async fn contact_id_by_preferred_name(
 ///
 /// Returns an error when an insert fails, or when 998 names are all taken.
 pub async fn create_import_group(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     base: &str,
 ) -> Result<(i64, String)> {
@@ -351,7 +351,7 @@ pub const UNKNOWN_CONTACT_SQL: &str = "(
 
 /// Contact linked to a handle via `contact_handles`, if any.
 pub async fn contact_id_for_handle(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     handle_id: i64,
 ) -> Result<Option<i64>> {
@@ -371,7 +371,7 @@ pub async fn contact_id_for_handle(
 ///
 /// Returns an error when the statement fails.
 pub async fn live_contact_exists(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     contact_id: i64,
 ) -> Result<bool> {
@@ -396,7 +396,7 @@ pub async fn live_contact_exists(
 ///
 /// Returns an error when the statement fails.
 pub async fn linked_handle_id(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     contact_id: i64,
     raw: &str,
@@ -444,7 +444,7 @@ pub async fn linked_handle_id(
 ///
 /// Returns an error when the statement fails.
 pub async fn relink_handle(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     contact_id: i64,
     old_handle_id: i64,
@@ -470,7 +470,7 @@ pub async fn relink_handle(
 ///
 /// Returns an error when the statement fails.
 pub async fn unlink_handle(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     contact_id: i64,
     handle_id: i64,
@@ -559,7 +559,7 @@ fn phone_handles_only(handles: &[String]) -> Vec<(String, Option<String>)> {
 /// matches one keeps that row, and only the contacts the file dropped go. A
 /// file that does not exist counts as an empty book.
 pub async fn load_contacts_if_needed(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     contacts_path: Option<&Path>,
     overwrite: bool,
     account_id: i64,
@@ -626,7 +626,7 @@ pub fn read_address_book(path: &Path) -> Result<AddressBook> {
 ///
 /// Returns an error when a statement fails.
 pub async fn replace_address_book(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     book: AddressBook,
 ) -> Result<ContactLoadStats> {
@@ -741,7 +741,7 @@ fn collapse_inner_whitespace(s: &str) -> String {
 /// messages are what proved the person exists, and a later book that drops the
 /// card must not take them with it.
 async fn contact_for_draft(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     phones: &[(String, Option<String>)],
     origins: &[Origin],
@@ -790,7 +790,7 @@ async fn contact_for_draft(
 /// the book's own identities stay when a conversation, a message, or the
 /// account's profile uses them; only a stale identity nothing uses goes.
 async fn apply_address_book(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     drafts: Vec<ContactDraft>,
 ) -> Result<ContactLoadStats> {
@@ -930,7 +930,7 @@ async fn apply_address_book(
 /// Drop the book's links from `contact_id` to phones the card no longer
 /// lists. Returns whether anything changed.
 async fn unlink_phones_the_card_dropped(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     contact_id: i64,
     phones: &[(String, Option<String>)],
@@ -965,7 +965,7 @@ async fn unlink_phones_the_card_dropped(
 /// profile uses stays even when the book dropped it, the same way deleting a
 /// contact keeps its conversations: the messages are what proved the identity
 /// exists. Deleting it would take the conversation with it.
-async fn remove_unused_book_handles(conn: &mut AnyConnection, account_id: i64) -> Result<()> {
+async fn remove_unused_book_handles(conn: &mut SqliteConnection, account_id: i64) -> Result<()> {
     sqlx::query(
         "DELETE FROM handles
          WHERE account_id = $1 AND origin = 'address_book'

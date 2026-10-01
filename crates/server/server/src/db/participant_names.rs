@@ -32,8 +32,8 @@
 
 use std::collections::HashMap;
 
-use sqlx::any::AnyRow;
-use sqlx::{AnyConnection, Row};
+use sqlx::sqlite::SqliteRow;
+use sqlx::{Row, SqliteConnection};
 
 pub use message_crate_api_types::Participant;
 
@@ -46,7 +46,7 @@ use crate::db::sql::group_rows_by_id;
 ///
 /// Returns a database error when the query fails.
 pub async fn load_for_conversations(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     conversation_ids: &[i64],
 ) -> Result<HashMap<i64, Vec<Participant>>, sqlx::Error> {
     let mut loaded = load_participant_rows(conn, conversation_ids).await?;
@@ -67,7 +67,7 @@ pub async fn load_for_conversations(
 /// caller wants the fallback, and one that did not would be a second naming
 /// path.
 async fn load_participant_rows(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     conversation_ids: &[i64],
 ) -> Result<HashMap<i64, Vec<Participant>>, sqlx::Error> {
     group_rows_by_id(
@@ -117,7 +117,7 @@ async fn load_participant_rows(
 ///
 /// A conversation with no chat handle row is simply absent from the result.
 async fn load_from_chat_handle(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     conversation_ids: &[i64],
 ) -> Result<HashMap<i64, Vec<Participant>>, sqlx::Error> {
     // `conv.chat_handle_id` is `NOT NULL`, so this join always matches and
@@ -150,7 +150,7 @@ async fn load_from_chat_handle(
 
 /// One row of either query above: the conversation id, then the participant
 /// as (name, handle, service, contact id).
-fn participant_row(row: &AnyRow) -> Result<(i64, Participant), sqlx::Error> {
+fn participant_row(row: &SqliteRow) -> Result<(i64, Participant), sqlx::Error> {
     Ok((
         row.try_get::<i64, _>(0)?,
         Participant {

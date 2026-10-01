@@ -285,7 +285,7 @@ fn orphaned(message: &str) -> String {
 }
 
 /// Run one import of `files` (name, body) through the real entry point.
-async fn import_files(conn: &mut sqlx::AnyConnection, files: &[(&str, String)]) {
+async fn import_files(conn: &mut sqlx::SqliteConnection, files: &[(&str, String)]) {
     let tmp = tempfile::TempDir::new().unwrap();
     let paths: Vec<std::path::PathBuf> = files
         .iter()
@@ -321,7 +321,7 @@ async fn import_files(conn: &mut sqlx::AnyConnection, files: &[(&str, String)]) 
 /// handle a message was sent from, a participant takes part as, or a
 /// one-to-one conversation is with belongs to a contact that is not in the
 /// Trash. `contact_handles` is keyed on the handle, so "a contact" is "one".
-async fn assert_every_met_handle_has_a_live_contact(conn: &mut sqlx::AnyConnection) {
+async fn assert_every_met_handle_has_a_live_contact(conn: &mut sqlx::SqliteConnection) {
     let orphans: Vec<String> = sqlx::query_scalar(
         "SELECT h.raw FROM handles h
          WHERE h.account_id = $1
@@ -493,7 +493,7 @@ async fn a_one_to_one_chat_first_met_as_a_sender_gets_a_contact() {
     assert_every_met_handle_has_a_live_contact(&mut conn).await;
 }
 
-async fn insert_handle(conn: &mut sqlx::AnyConnection, raw: &str, service: &str) -> i64 {
+async fn insert_handle(conn: &mut sqlx::SqliteConnection, raw: &str, service: &str) -> i64 {
     sqlx::query_scalar(
         "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
          VALUES ($1, $2, $2, 'phone', $3) RETURNING id",
@@ -507,7 +507,7 @@ async fn insert_handle(conn: &mut sqlx::AnyConnection, raw: &str, service: &str)
 }
 
 /// `sql` is a `SELECT COUNT(*)` with one `$1` bind, `id`.
-async fn count(conn: &mut sqlx::AnyConnection, sql: &str, id: i64) -> i64 {
+async fn count(conn: &mut sqlx::SqliteConnection, sql: &str, id: i64) -> i64 {
     sqlx::query_scalar(sql)
         .bind(id)
         .fetch_one(&mut *conn)

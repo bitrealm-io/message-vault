@@ -6,7 +6,7 @@ const ACCOUNT_B: i64 = 8;
 /// call creates its own chat handle so repeat calls for the same
 /// account don't collide on `conversations`' `(account_id,
 /// chat_handle_id)` uniqueness.
-async fn insert_conversation(conn: &mut AnyConnection, account_id: i64) -> i64 {
+async fn insert_conversation(conn: &mut SqliteConnection, account_id: i64) -> i64 {
     sqlx::query(
         "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
          VALUES ($1, '+15555550100', '+15555550100', 'phone', 'phone')",
@@ -39,7 +39,7 @@ async fn insert_conversation(conn: &mut AnyConnection, account_id: i64) -> i64 {
 }
 
 /// Insert a contact owned by `account_id`, returning its id.
-async fn insert_contact(conn: &mut AnyConnection, account_id: i64) -> i64 {
+async fn insert_contact(conn: &mut SqliteConnection, account_id: i64) -> i64 {
     sqlx::query("INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Pat')")
         .bind(account_id)
         .execute(&mut *conn)
@@ -52,7 +52,7 @@ async fn insert_contact(conn: &mut AnyConnection, account_id: i64) -> i64 {
         .unwrap()
 }
 
-async fn trashed_conversation_count(conn: &mut AnyConnection, account_id: i64) -> i64 {
+async fn trashed_conversation_count(conn: &mut SqliteConnection, account_id: i64) -> i64 {
     sqlx::query_scalar("SELECT COUNT(*) FROM trashed_conversations WHERE account_id = $1")
         .bind(account_id)
         .fetch_one(&mut *conn)
@@ -60,7 +60,7 @@ async fn trashed_conversation_count(conn: &mut AnyConnection, account_id: i64) -
         .unwrap()
 }
 
-async fn trashed_contact_count(conn: &mut AnyConnection, account_id: i64) -> i64 {
+async fn trashed_contact_count(conn: &mut SqliteConnection, account_id: i64) -> i64 {
     sqlx::query_scalar("SELECT COUNT(*) FROM trashed_contacts WHERE account_id = $1")
         .bind(account_id)
         .fetch_one(&mut *conn)
@@ -314,7 +314,7 @@ async fn purge_account_clears_only_that_accounts_trash() {
 /// Insert a conversation owned by `account_id` on its own handle `raw`,
 /// returning its id. Unlike [`insert_conversation`], the handle is the
 /// caller's, so a test can put two conversations on two different people.
-async fn insert_conversation_on(conn: &mut AnyConnection, account_id: i64, raw: &str) -> i64 {
+async fn insert_conversation_on(conn: &mut SqliteConnection, account_id: i64, raw: &str) -> i64 {
     let handle_id: i64 = sqlx::query_scalar(
         "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
          VALUES ($1, $2, $2, 'phone', 'phone') RETURNING id",
@@ -338,7 +338,7 @@ async fn insert_conversation_on(conn: &mut AnyConnection, account_id: i64, raw: 
 
 /// Insert one `imessage` message into `conversation_id`, returning its id.
 async fn insert_message(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     conversation_id: i64,
     sort_order: i64,
@@ -359,7 +359,7 @@ async fn insert_message(
 /// Attach a stored file to `message_id`: the original under `sha`, and a
 /// derivative under `derived` when given.
 async fn insert_attachment(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     message_id: i64,
     sha: &str,
     derived: Option<&str>,
@@ -379,7 +379,7 @@ async fn insert_attachment(
     .unwrap();
 }
 
-async fn count(conn: &mut AnyConnection, sql: &str, id: i64) -> i64 {
+async fn count(conn: &mut SqliteConnection, sql: &str, id: i64) -> i64 {
     sqlx::query_scalar(sql)
         .bind(id)
         .fetch_one(&mut *conn)
@@ -577,7 +577,7 @@ async fn delete_reports_only_the_files_no_remaining_message_uses() {
 /// A contact named by the person, in a Contact Group, with one conversation
 /// on its handle; returns `(contact_id, conversation_id)`.
 async fn insert_named_contact_in_a_conversation(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     raw: &str,
 ) -> (i64, i64) {
@@ -624,7 +624,7 @@ async fn insert_named_contact_in_a_conversation(
     (contact_id, conversation_id)
 }
 
-async fn contact_row(conn: &mut AnyConnection, contact_id: i64) -> Option<(String, String)> {
+async fn contact_row(conn: &mut SqliteConnection, contact_id: i64) -> Option<(String, String)> {
     sqlx::query_as("SELECT preferred_name, origin FROM contacts WHERE id = $1")
         .bind(contact_id)
         .fetch_optional(&mut *conn)
@@ -801,7 +801,7 @@ async fn empty_trash_on_an_empty_trash_is_a_noop() {
 
 // ── The row asked for, and only that row ────────────────────────────────────
 
-async fn trashed_conversation_ids(conn: &mut AnyConnection, account_id: i64) -> Vec<i64> {
+async fn trashed_conversation_ids(conn: &mut SqliteConnection, account_id: i64) -> Vec<i64> {
     sqlx::query_scalar(
         "SELECT conversation_id FROM trashed_conversations WHERE account_id = $1 ORDER BY 1",
     )
@@ -811,7 +811,7 @@ async fn trashed_conversation_ids(conn: &mut AnyConnection, account_id: i64) -> 
     .unwrap()
 }
 
-async fn trashed_contact_ids(conn: &mut AnyConnection, account_id: i64) -> Vec<i64> {
+async fn trashed_contact_ids(conn: &mut SqliteConnection, account_id: i64) -> Vec<i64> {
     sqlx::query_scalar("SELECT contact_id FROM trashed_contacts WHERE account_id = $1 ORDER BY 1")
         .bind(account_id)
         .fetch_all(&mut *conn)

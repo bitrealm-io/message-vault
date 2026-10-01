@@ -8,8 +8,8 @@ use std::time::Instant;
 use anyhow::{Context, Result};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
-use sqlx::AnyConnection;
 use sqlx::Connection;
+use sqlx::SqliteConnection;
 
 use crate::db::schema;
 use crate::db::sql::SQLITE_IN_CHUNK;
@@ -171,7 +171,7 @@ pub struct DedupeStats {
 
 /// Source preference for survivors: first imported source (min message id), then name.
 pub async fn source_priority_from_db(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<Vec<String>> {
     let rows: Vec<(String,)> = sqlx::query_as(
@@ -198,7 +198,7 @@ pub async fn source_priority_from_db(
 /// Survivor preference: source imported first (min message id), then source name.
 /// Optional `source_priority` overrides (tests); `None` loads order from the DB.
 pub async fn dedupe_cross_source(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     source_priority: Option<&[String]>,
     near_window_secs: i64,
@@ -276,7 +276,10 @@ pub async fn dedupe_cross_source(
 }
 
 /// Compute `content_key` for production rows that still lack one (after attachments exist).
-pub async fn fill_missing_content_keys(conn: &mut AnyConnection, account_id: i64) -> Result<u64> {
+pub async fn fill_missing_content_keys(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+) -> Result<u64> {
     recompute_content_keys(conn, true, account_id).await
 }
 
@@ -287,12 +290,15 @@ pub async fn fill_missing_content_keys(conn: &mut AnyConnection, account_id: i64
 /// attachments to a message the database already holds, or participants to a
 /// group, and both are part of the key. A key left as it was stops matching
 /// the same message from another source.
-async fn refresh_content_keys(conn: &mut AnyConnection, account_id: i64) -> Result<u64> {
+async fn refresh_content_keys(conn: &mut SqliteConnection, account_id: i64) -> Result<u64> {
     recompute_content_keys(conn, false, account_id).await
 }
 
 /// Bulk-insert fingerprints into the `_content_keys` temp table in chunks that fit the bind limit.
-async fn insert_content_key_rows(conn: &mut AnyConnection, keys: &[(i64, String)]) -> Result<()> {
+async fn insert_content_key_rows(
+    conn: &mut SqliteConnection,
+    keys: &[(i64, String)],
+) -> Result<()> {
     let total = keys.len();
     let mut written = 0usize;
     for chunk in keys.chunks(SQLITE_IN_CHUNK) {
@@ -328,7 +334,7 @@ async fn insert_content_key_rows(conn: &mut AnyConnection, keys: &[(i64, String)
 ///
 /// Returns an error when a query fails or the hashing task panics.
 async fn recompute_content_keys(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     missing_only: bool,
     account_id: i64,
 ) -> Result<u64> {
@@ -384,7 +390,7 @@ struct ContentKeyInputs {
 impl ContentKeyInputs {
     /// `None` when no message needs a key.
     async fn load(
-        conn: &mut AnyConnection,
+        conn: &mut SqliteConnection,
         account_id: i64,
         missing_only: bool,
     ) -> Result<Option<Self>> {
@@ -476,7 +482,7 @@ impl ContentKeyInputs {
 
 /// Write the keys onto `messages` through the `_content_keys` temp table,
 /// which is dropped again afterwards.
-async fn apply_content_keys(conn: &mut AnyConnection, keys: &[(i64, String)]) -> Result<()> {
+async fn apply_content_keys(conn: &mut SqliteConnection, keys: &[(i64, String)]) -> Result<()> {
     for stmt in schema::split_ddl(
         r"
         CREATE TEMP TABLE IF NOT EXISTS _content_keys (
@@ -514,7 +520,7 @@ struct Cand {
 
 /// Hide every message that shares a fingerprint with a preferred-source twin. Returns (groups, hidden).
 async fn flag_exact_content_key_dupes(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     prio: &HashMap<&str, usize>,
 ) -> Result<(u64, u64)> {
@@ -644,7 +650,7 @@ impl NearRow {
 /// Flag messages that match another within `window_secs` on chat, direction, and body but
 /// not on the exact second. Returns how many were flagged.
 async fn flag_near_time_dupes(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     prio: &HashMap<&str, usize>,
     window_secs: i64,
@@ -662,7 +668,7 @@ async fn flag_near_time_dupes(
 /// grouped by conversation. Two queries and the grouping happen here so the
 /// clustering does no per-message lookups.
 async fn load_near_rows(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<HashMap<i64, Vec<NearRow>>> {
     type NearDedupeRow = (i64, i64, String, i64, String, Option<String>, String);
@@ -773,7 +779,7 @@ fn cluster_near_dupes(
 
 /// Apply (message id, duplicate-of id) pairs through a temp table so one UPDATE covers them all.
 async fn apply_duplicate_flags(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     table: &str,
     flags: &[(i64, i64)],
 ) -> Result<()> {

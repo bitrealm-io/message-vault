@@ -11,8 +11,8 @@
 //! The replacement is registered through `sqlite3_auto_extension`, which
 //! SQLite runs for every connection the process opens from then on. That is
 //! the one hook that reaches the raw `sqlite3*` of a pool connection: the
-//! pool is an sqlx `AnyPool`, whose `after_connect` hands out an
-//! `AnyConnection` with no way to the SQLite handle behind it, and whose
+//! pool is an sqlx `SqlitePool`, whose `after_connect` hands out an
+//! `SqliteConnection` with no way to the SQLite handle behind it, and whose
 //! connect options come from a URL that carries no function or collation
 //! list. The vendored sqlx-sqlite source stays unedited (VENDORING.md).
 //!
@@ -107,7 +107,7 @@ unsafe extern "C" fn unicode_lower(
 mod tests {
     use crate::db::engine::test_pool;
 
-    async fn lower_of(pool: &sqlx::AnyPool, text: &str) -> Option<String> {
+    async fn lower_of(pool: &sqlx::SqlitePool, text: &str) -> Option<String> {
         sqlx::query_scalar("SELECT lower($1)")
             .bind(text)
             .fetch_one(pool)

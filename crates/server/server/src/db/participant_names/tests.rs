@@ -6,7 +6,7 @@ const TEST_ACCOUNT: i64 = 7;
 /// Insert an account, one conversation, and one participant on `handle`
 /// whose backup name is `name_alias`. Returns (conversation_id, handle_id).
 async fn seed(
-    conn: &mut sqlx::AnyConnection,
+    conn: &mut sqlx::SqliteConnection,
     handle: &str,
     name_alias: Option<&str>,
 ) -> (i64, i64) {
@@ -46,7 +46,7 @@ async fn seed(
     (conversation_id, handle_id)
 }
 
-async fn link(conn: &mut sqlx::AnyConnection, handle_id: i64, preferred_name: &str) -> i64 {
+async fn link(conn: &mut sqlx::SqliteConnection, handle_id: i64, preferred_name: &str) -> i64 {
     let contact_id: i64 = sqlx::query_scalar(
         "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, $2) RETURNING id",
     )
@@ -74,7 +74,7 @@ async fn link(conn: &mut sqlx::AnyConnection, handle_id: i64, preferred_name: &s
 /// lives on `participants.contact_id` directly, since there is no handle
 /// for `contact_handles` to key on. Returns the contact id.
 async fn seed_address_less(
-    conn: &mut sqlx::AnyConnection,
+    conn: &mut sqlx::SqliteConnection,
     conversation_id: i64,
     name_alias: &str,
 ) -> i64 {

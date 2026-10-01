@@ -3,8 +3,8 @@
 use anyhow::{Result, bail};
 use chrono::Utc;
 use serde::Serialize;
-use sqlx::any::AnyRow;
-use sqlx::{AnyConnection, Connection, Row};
+use sqlx::sqlite::SqliteRow;
+use sqlx::{Connection, Row, SqliteConnection};
 
 use crate::db::dialect;
 use crate::paging::{Direction, SortKey};
@@ -304,7 +304,7 @@ pub enum StartImportError {
 /// [`StartImportError::AlreadyActive`] when a live session already exists
 /// for this account; [`StartImportError::Db`] for any other failure.
 pub async fn start_import(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     args: &StartImportArgs<'_>,
 ) -> std::result::Result<i64, StartImportError> {
     let started_at = Utc::now().to_rfc3339();
@@ -357,7 +357,7 @@ const IMPORT_COLUMNS: &str = "id, account_id, source, tool, mode, status, starte
      form_json, source_fingerprint, source_identities, dedupe";
 
 /// Map one `imports` row by column position.
-fn import_from_row(row: &AnyRow) -> Result<ImportRow, sqlx::Error> {
+fn import_from_row(row: &SqliteRow) -> Result<ImportRow, sqlx::Error> {
     Ok(ImportRow {
         id: row.try_get(0)?,
         account_id: row.try_get(1)?,
@@ -388,7 +388,7 @@ fn import_from_row(row: &AnyRow) -> Result<ImportRow, sqlx::Error> {
 
 /// Load an import row owned by `account_id`, or error.
 pub async fn get_owned_import(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     import_id: i64,
 ) -> std::result::Result<ImportRow, ImportLookupError> {
@@ -414,7 +414,7 @@ pub async fn get_owned_import(
 /// [`ImportLookupError::NotFound`] when the account owns no such import,
 /// [`ImportLookupError::InvalidSession`] when it is no longer running.
 pub async fn require_running_import(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     import_id: i64,
 ) -> std::result::Result<ImportRow, ImportLookupError> {
@@ -443,7 +443,7 @@ pub async fn require_running_import(
 /// [`ImportLookupError::NotFound`] when the account owns no such import,
 /// [`ImportLookupError::InvalidSession`] when it is no longer running.
 pub async fn set_import_stage(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     import_id: i64,
     stage: ImportStage,
@@ -486,7 +486,7 @@ pub async fn set_import_stage(
 /// [`ImportLookupError::NotFound`] when the account owns no such import,
 /// [`ImportLookupError::InvalidSession`] when it is no longer running.
 pub async fn discard_import(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     import_id: i64,
 ) -> std::result::Result<(), ImportLookupError> {
@@ -518,7 +518,7 @@ pub async fn discard_import(
 ///
 /// Returns the database error.
 pub async fn discard_running_import(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<Option<ImportRow>> {
     let row = sqlx::query(&format!(
@@ -545,7 +545,7 @@ pub async fn discard_running_import(
 /// [`ImportLookupError::InvalidSession`] (`409`), checked first and again by
 /// the update itself, so two completions racing cannot both land.
 pub async fn complete_import(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     import_id: i64,
     args: &CompleteImportArgs,
@@ -638,7 +638,7 @@ pub async fn complete_import(
 
 /// Append issue rows for an import.
 async fn insert_issues(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     import_id: i64,
     issues: &[ImportIssueInput],
 ) -> Result<()> {
@@ -672,7 +672,7 @@ fn validate_issue_kind(kind: &str) -> Result<()> {
 
 /// Load one import row and its issue list.
 pub async fn get_import_detail(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     import_id: i64,
 ) -> std::result::Result<ImportDetail, ImportLookupError> {
@@ -818,7 +818,7 @@ pub const DEFAULT_IMPORT_SORT: [SortKey<ImportSort>; 1] = [SortKey {
 /// One page of an account's Import Runs, in the order `order` asks for,
 /// narrowed to one `status` when given, with the total the page is cut from.
 pub async fn list_imports_page(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     status: Option<&str>,
     order: &[SortKey<ImportSort>],
@@ -869,7 +869,7 @@ pub async fn list_imports_page(
 
 /// Whether the run has stamped any message yet: the first batch of a
 /// `replace` run wipes the source, and every batch after it appends.
-pub async fn has_messages(conn: &mut AnyConnection, import_id: i64) -> Result<bool> {
+pub async fn has_messages(conn: &mut SqliteConnection, import_id: i64) -> Result<bool> {
     let row = sqlx::query("SELECT 1 FROM messages WHERE import_id = $1 LIMIT 1")
         .bind(import_id)
         .fetch_optional(&mut *conn)
@@ -924,7 +924,7 @@ type TopAttachmentRow = (
 
 /// Largest attachments for an account.
 pub async fn top_attachments_by_size(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     limit: i64,
 ) -> Result<Vec<TopAttachment>> {

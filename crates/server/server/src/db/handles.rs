@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use message_ir::{HandleService, HandleType};
 use serde::Serialize;
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 
 use crate::search::bridge::{TrashScope, contact_sent_messages_from};
 
@@ -46,7 +46,7 @@ pub fn infer_handle_type_from_shape(handle: &str) -> HandleType {
 /// Insert or reuse a `handles` row. Returns the id and whether this call newly
 /// inserted a flagged (review-note) row.
 pub async fn upsert_handle_row(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     raw: &str,
     handle_type: HandleType,
@@ -86,7 +86,7 @@ pub async fn upsert_handle_row(
 /// import already resolved the same identity. Third value is `true` on a
 /// cache hit so callers can skip leftover per-row work (sibling contact link).
 pub async fn upsert_handle_row_cached(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     cache: &mut HandleIdCache,
     account_id: i64,
     raw: &str,
@@ -161,7 +161,7 @@ type IdentityRow = (
 
 /// The identities of an account or of a contact, each with its messages,
 /// phones before emails and each in order.
-pub async fn identities(conn: &mut AnyConnection, of: IdentitiesOf) -> Result<Vec<Identity>> {
+pub async fn identities(conn: &mut SqliteConnection, of: IdentitiesOf) -> Result<Vec<Identity>> {
     let not_trashed = crate::search::emit::NOT_TRASHED_CONVERSATION;
     // `messages` is a `FROM … WHERE …` over identity `l`'s messages. It ends
     // in its WHERE clause, so a column can narrow it by conversation type.

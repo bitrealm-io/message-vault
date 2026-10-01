@@ -18,7 +18,7 @@ use axum::response::{IntoResponse, Response};
 use axum::{Json, Router};
 use futures_util::StreamExt;
 use serde::Serialize;
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 use tokio::io::AsyncWriteExt;
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
 use tower_http::limit::RequestBodyLimitLayer;
@@ -339,7 +339,7 @@ pub struct AppState {
     pub cfg: Arc<Config>,
     /// Connection pool for the database file. Handlers acquire
     /// short-lived connections from here.
-    pub db: sqlx::AnyPool,
+    pub db: sqlx::SqlitePool,
     /// Per-account import mutex: same-account imports stay serialized so staging
     /// rows (the temporary import area) for that tenant are not wiped mid-run.
     /// Different accounts may overlap at the lock layer; SQLite write-ahead
@@ -1137,7 +1137,7 @@ enum Credential {
 /// Unauthorized when the token matches nothing; forbidden when the account is
 /// disabled.
 pub async fn resolve_auth_on_conn(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     token: &str,
     app: Option<&session_tokens::ConnectingApp>,
 ) -> Result<AuthIdentity, ApiError> {
@@ -1301,7 +1301,7 @@ pub(crate) async fn stream_body_to_file(
 /// build; `pub(crate)` so `test_support` and the other test modules in this
 /// crate can reach it.
 #[cfg(test)]
-pub(crate) fn test_app_state(pool: sqlx::AnyPool, data_dir: &Path) -> AppState {
+pub(crate) fn test_app_state(pool: sqlx::SqlitePool, data_dir: &Path) -> AppState {
     let cfg = crate::config::Config {
         paths: crate::config::PathsConfig {
             db: data_dir.join("messagecrate.db"),

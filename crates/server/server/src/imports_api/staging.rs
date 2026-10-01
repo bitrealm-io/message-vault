@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use message_ir::{HandleService, HandleType, nonempty, trimmed};
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 
 use crate::assets_api::{self, AssetStats, StoredAsset};
 use crate::config::validate_source_id;
@@ -253,7 +253,7 @@ fn is_orphaned_export(path: &Path) -> bool {
 /// Returns an error when the file cannot be read or a conversation cannot
 /// be staged.
 pub(super) async fn import_file_to_staging(
-    tx: &mut AnyConnection,
+    tx: &mut SqliteConnection,
     stmts: &mut StagingInserts,
     opts: &ImportOptions<'_>,
     path: &Path,
@@ -337,7 +337,7 @@ impl StagedConversation {
 /// the options, the counters its conversations add to, and the file's name
 /// for the conversation rows.
 struct FileStaging<'a> {
-    tx: &'a mut AnyConnection,
+    tx: &'a mut SqliteConnection,
     stmts: &'a mut StagingInserts,
     opts: &'a ImportOptions<'a>,
     source_file: String,
@@ -508,7 +508,7 @@ fn prepare_message_attachments(
 ///
 /// Returns an error when a handle or contact row cannot be written.
 async fn insert_participant(
-    tx: &mut AnyConnection,
+    tx: &mut SqliteConnection,
     stmts: &mut StagingInserts,
     conversation_id: i64,
     (handle, name_alias, handle_type): StagedParticipant,
@@ -589,7 +589,7 @@ async fn insert_participant(
 ///
 /// Returns an error when a sender handle cannot be written.
 async fn resolve_message_rows(
-    tx: &mut AnyConnection,
+    tx: &mut SqliteConnection,
     stmts: &mut StagingInserts,
     prepared: Vec<(MessageRecord, Vec<PreparedAttachment>)>,
     platform: HandleService,
@@ -644,7 +644,7 @@ async fn resolve_message_rows(
 ///
 /// Returns an error when the handle cannot be written.
 async fn resolve_owner_handle(
-    tx: &mut AnyConnection,
+    tx: &mut SqliteConnection,
     stmts: &mut StagingInserts,
     address: Option<&str>,
     platform: &str,
@@ -680,7 +680,7 @@ struct PendingStagingMessage {
 
 /// Bulk-insert one chunk of message rows, then their attachments and tapbacks keyed by the ids returned.
 async fn flush_staging_message_chunk(
-    tx: &mut AnyConnection,
+    tx: &mut SqliteConnection,
     stmts: &mut StagingInserts,
     stats: &mut ImportStats,
     conversation_id: i64,
@@ -721,7 +721,7 @@ async fn flush_staging_message_chunk(
 /// Insert the chunk's message rows in one statement. Returns the new ids by
 /// sort order; a row the insert skipped (duplicate guid) has no entry.
 async fn insert_message_rows(
-    tx: &mut AnyConnection,
+    tx: &mut SqliteConnection,
     stmts: &StagingInserts,
     conversation_id: i64,
     source: &str,
@@ -794,7 +794,7 @@ fn attachment_row(
 /// The row for one tapback on a staged message, its sender resolved to a
 /// handle the way an incoming message's sender is.
 async fn tapback_row(
-    tx: &mut AnyConnection,
+    tx: &mut SqliteConnection,
     stmts: &mut StagingInserts,
     stats: &mut ImportStats,
     message_id: i64,

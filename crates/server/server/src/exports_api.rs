@@ -11,7 +11,7 @@ use crate::extract::{Json, Path as AxumPath, Query};
 use axum::extract::State;
 use message_crate_api_types::{ExportQueryList, ExportRun, ExportScope};
 use serde::Deserialize;
-use sqlx::{AnyConnection, Connection};
+use sqlx::{Connection, SqliteConnection};
 
 use crate::db::conversation_messages::{
     DEFAULT_MESSAGE_SORT, MESSAGE_SORT_KEYS, Message, selection_where,
@@ -41,7 +41,7 @@ pub const MAX_SELECTION_IDS: usize = 500;
 /// The scope's own failures ([`scope_filter`]), or an internal error when a
 /// database statement fails. On any error nothing is recorded.
 pub async fn start_export_run(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     scope: &ExportScope,
     tool: Option<&str>,
@@ -85,7 +85,7 @@ pub async fn start_export_run(
 /// `validation-failed` for a blank query, an empty selection, a selection
 /// over [`MAX_SELECTION_IDS`], or an id the account does not hold.
 pub async fn scope_filter(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     scope: &ExportScope,
     clock: (chrono_tz::Tz, chrono::NaiveDate),
@@ -207,7 +207,7 @@ pub(crate) struct ListExportMessagesQuery {
 
 /// The account's run with this id, or `not-found`.
 async fn owned_export(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     export_id: i64,
 ) -> Result<ExportRun, ApiError> {
@@ -219,7 +219,7 @@ async fn owned_export(
 /// The account's run with this id while it is still running, or the
 /// `state-conflict` that says how it ended.
 async fn running_export(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     export_id: i64,
 ) -> Result<ExportRun, ApiError> {

@@ -770,7 +770,7 @@ async fn get_contact_summaries_counts_two_contacts_in_one_query() {
 
 /// A conversation of `kind` with `participants`, in the trash when `trashed`.
 async fn insert_conversation(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account: i64,
     id: i64,
     kind: &str,
@@ -817,7 +817,7 @@ async fn insert_conversation(
 /// account's `owner` identity: sent by the account holder when `sender` is
 /// `None`, else received from `sender`.
 async fn insert_held_message(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account: i64,
     conversation: i64,
     day: &str,
@@ -1137,7 +1137,7 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
 
 /// Add `raw` to `contact_id` with `service`, through the contact edit.
 async fn add_identity(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account: i64,
     contact_id: i64,
     raw: &str,
@@ -1165,7 +1165,7 @@ async fn add_identity(
 
 /// The stored `(handle_type, service)` of the handle added as `raw`.
 async fn handle_type_and_service(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account: i64,
     raw: &str,
 ) -> (String, Option<String>) {
@@ -1291,7 +1291,11 @@ async fn mutate_contact_rejects_trashed_contact() {
     assert_eq!(name, "Trashed");
 }
 
-async fn contact_last_modified(conn: &mut AnyConnection, account: i64, contact_id: i64) -> String {
+async fn contact_last_modified(
+    conn: &mut SqliteConnection,
+    account: i64,
+    contact_id: i64,
+) -> String {
     sqlx::query_scalar("SELECT last_modified FROM contacts WHERE id = $1 AND account_id = $2")
         .bind(contact_id)
         .bind(account)
@@ -1301,7 +1305,7 @@ async fn contact_last_modified(conn: &mut AnyConnection, account: i64, contact_i
 }
 
 async fn set_contact_last_modified(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account: i64,
     contact_id: i64,
     value: &str,
@@ -1439,7 +1443,7 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
 }
 
 async fn insert_contact_with_handle(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account: i64,
     name: &str,
     phone: &str,
@@ -1470,7 +1474,7 @@ async fn insert_contact_with_handle(
 }
 
 async fn insert_direct_conversation(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account: i64,
     conversation_id: i64,
     phone: &str,
@@ -1579,7 +1583,7 @@ async fn list_contacts_filters_has_messages_and_never_messaged() {
 
 /// One received message in `conversation_id`, sent from `phone`'s handle at `ts`.
 async fn insert_message_from(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account: i64,
     conversation_id: i64,
     phone: &str,
@@ -1734,7 +1738,7 @@ async fn list_contacts_sorts_by_last_heard_with_silent_contacts_last() {
 
 /// The whole contact list under `sort`, as (name, last_heard_at) pairs.
 async fn names_and_last_heard(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account: i64,
     sort: &str,
 ) -> Vec<(String, Option<String>)> {
@@ -2760,7 +2764,7 @@ async fn the_contact_list_is_a_page_and_summaries_are_items() {
     assert!(summaries.get("contacts").is_none());
 }
 
-async fn trashed_contact_row_count(conn: &mut AnyConnection, account_id: i64, id: i64) -> i64 {
+async fn trashed_contact_row_count(conn: &mut SqliteConnection, account_id: i64, id: i64) -> i64 {
     sqlx::query_scalar(
         "SELECT COUNT(*) FROM trashed_contacts WHERE account_id = $1 AND contact_id = $2",
     )
@@ -2802,7 +2806,7 @@ async fn trashed_contact_fixture() -> (TestFixture, RegisteredAccount, i64) {
     (fixture, account, id)
 }
 
-async fn contact_name_and_origin(conn: &mut AnyConnection, id: i64) -> (String, String) {
+async fn contact_name_and_origin(conn: &mut SqliteConnection, id: i64) -> (String, String) {
     sqlx::query_as("SELECT preferred_name, origin FROM contacts WHERE id = $1")
         .bind(id)
         .fetch_one(&mut *conn)

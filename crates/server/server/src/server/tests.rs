@@ -46,7 +46,7 @@ const TEST_ACCOUNT: i64 = 7;
 /// Test database with the schema applied. The temp dir is returned
 /// too: dropping it deletes the database file out from under the checked-out
 /// connection, after which SQLite rejects writes with SQLITE_READONLY.
-async fn test_conn() -> (TempDir, sqlx::pool::PoolConnection<sqlx::Any>) {
+async fn test_conn() -> (TempDir, sqlx::pool::PoolConnection<sqlx::Sqlite>) {
     let (pool, dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
     schema::ensure_schema(&mut conn).await.unwrap();

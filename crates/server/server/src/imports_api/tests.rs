@@ -127,7 +127,7 @@ async fn a_stage_change_without_a_summary_does_not_erase_the_stored_one() {
 }
 
 /// Open a verify connection to an on-disk test database.
-async fn open_verify(db: &Path) -> (sqlx::AnyPool, sqlx::pool::PoolConnection<sqlx::Any>) {
+async fn open_verify(db: &Path) -> (sqlx::SqlitePool, sqlx::pool::PoolConnection<sqlx::Sqlite>) {
     let pool = engine::open_pool_for_path(db).await.unwrap();
     let conn = pool.acquire().await.unwrap();
     (pool, conn)
@@ -597,7 +597,7 @@ async fn repeated_append_keeps_one_fts_posting_per_message() {
         .execute(&mut *conn)
         .await
         .unwrap();
-    let term_entries = async |conn: &mut AnyConnection| {
+    let term_entries = async |conn: &mut SqliteConnection| {
         let (docs, cnts): (i64, i64) = sqlx::query_as(
             "SELECT COALESCE(SUM(doc), 0), COALESCE(SUM(cnt), 0)
              FROM fts_vocab WHERE term = 'zzuniqueterm'",
@@ -1030,7 +1030,6 @@ fn media_convert_stores_the_converted_file_not_the_original() {
 
 #[tokio::test]
 async fn name_only_participant_becomes_a_contact_with_no_identity() {
-    sqlx::any::install_default_drivers();
     let tmp = TempDir::new().unwrap();
     let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
@@ -1100,7 +1099,6 @@ async fn name_only_participant_becomes_a_contact_with_no_identity() {
 /// the people in the group become contacts.
 #[tokio::test]
 async fn a_group_chat_identifier_never_becomes_a_contact() {
-    sqlx::any::install_default_drivers();
     let tmp = TempDir::new().unwrap();
     let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
@@ -1157,7 +1155,6 @@ async fn a_group_chat_identifier_never_becomes_a_contact() {
 /// fallback assumes never exists.
 #[tokio::test]
 async fn a_participant_with_no_address_and_no_name_is_never_created() {
-    sqlx::any::install_default_drivers();
     let tmp = TempDir::new().unwrap();
     let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
@@ -1506,7 +1503,7 @@ fn one_message_conversation(guid: &str, handle: &str) -> String {
 
 /// Make every later INSERT INTO messages fail, so an import gets through
 /// staging and fails inside promote.
-async fn fail_every_message_insert(conn: &mut AnyConnection) {
+async fn fail_every_message_insert(conn: &mut SqliteConnection) {
     sqlx::raw_sql(
         "CREATE TRIGGER fail_promote BEFORE INSERT ON messages
          BEGIN SELECT RAISE(ABORT, 'promote fails on purpose'); END",
@@ -2383,7 +2380,7 @@ async fn an_import_leaves_a_hand_made_contact_group_with_its_name_alone() {
 
 /// Import `path` in append mode on `conn`, as the serve path does once the
 /// schema is in place.
-async fn append_on_conn(conn: &mut AnyConnection, path: &Path, root: &Path, source: &str) {
+async fn append_on_conn(conn: &mut SqliteConnection, path: &Path, root: &Path, source: &str) {
     let assets = root.join("assets");
     import_jsonl_files_on_conn(
         conn,
@@ -2407,7 +2404,7 @@ async fn append_on_conn(conn: &mut AnyConnection, path: &Path, root: &Path, sour
 
 /// Each conversation of `TEST_ACCOUNT` with its number of participant rows,
 /// and the account's number of contacts.
-async fn participant_and_contact_counts(conn: &mut AnyConnection) -> (Vec<(i64, i64)>, i64) {
+async fn participant_and_contact_counts(conn: &mut SqliteConnection) -> (Vec<(i64, i64)>, i64) {
     let rows: Vec<(i64, i64)> = sqlx::query_as(
         "SELECT c.id, COUNT(p.id) FROM conversations c
          LEFT JOIN participants p ON p.conversation_id = c.id

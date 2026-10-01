@@ -152,7 +152,7 @@ fn sorted_keys(v: &serde_json::Value) -> Vec<&str> {
 }
 
 /// Every field an account row carries, on the list and on the member alike.
-const ACCOUNT_FIELDS: [&str; 18] = [
+const ACCOUNT_FIELDS: [&str; 19] = [
     "account_id",
     "app",
     "app_version",
@@ -161,6 +161,7 @@ const ACCOUNT_FIELDS: [&str; 18] = [
     "can_import",
     "disabled",
     "emails",
+    "has_password",
     "is_demo",
     "is_owner",
     "last_login_at",
@@ -1126,6 +1127,49 @@ async fn a_user_password_can_be_cleared_by_the_account_or_the_owner() {
         login_status(&state, "bob", "b").await,
         StatusCode::UNAUTHORIZED
     );
+}
+
+/// The account row says whether a password is set, so a screen asks for the
+/// current password only from an account that has one. The owner and the
+/// account read the same answer.
+#[tokio::test]
+async fn the_account_says_whether_it_has_a_password() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
+    let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let status = post_status(
+        &state,
+        "/v1/accounts",
+        &owner.token,
+        serde_json::json!({ "username": "carol" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let login = log_in(&state, "carol", "").await;
+    let carol = login["account_id"].as_i64().unwrap();
+    let path = format!("{}/password", member(carol));
+
+    let own: serde_json::Value =
+        get_json(&state, &member(carol), login["token"].as_str().unwrap()).await;
+    assert_eq!(own["has_password"], false, "created with no password");
+    let seen: serde_json::Value = get_json(&state, &member(carol), &owner.token).await;
+    assert_eq!(seen["has_password"], false);
+
+    for (password, expected) in [("a", true), ("", false)] {
+        let status = put_status(
+            &state,
+            &path,
+            &owner.token,
+            serde_json::json!({ "password": password, "password_confirmation": password }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let seen: serde_json::Value = get_json(&state, &member(carol), &owner.token).await;
+        assert_eq!(seen["has_password"], expected, "after setting {password:?}");
+    }
+
+    let keeper: serde_json::Value = get_json(&state, &member(owner.account_id), &owner.token).await;
+    assert_eq!(keeper["has_password"], true);
 }
 
 // ---------------------------------------------------------------------------

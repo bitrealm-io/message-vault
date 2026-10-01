@@ -2,18 +2,25 @@ import { useEffect, useState } from "react";
 import Button from "./Button";
 import ModalShell from "./ModalShell";
 
+/**
+ * Confirms an account deleting itself. `hasPassword` is the account's
+ * `has_password`: the server checks the current password only when one is
+ * set, so the dialog asks for it only then and confirms with none otherwise.
+ */
 export default function DeleteAccountDialog({
   open,
   username,
+  hasPassword,
   deleting = false,
   onClose,
   onConfirm,
 }: {
   open: boolean;
   username: string;
+  hasPassword: boolean;
   deleting?: boolean;
   onClose: () => void;
-  onConfirm: (currentPassword: string) => void;
+  onConfirm: (currentPassword?: string) => void;
 }) {
   const [typedUsername, setTypedUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -26,7 +33,8 @@ export default function DeleteAccountDialog({
   }, [open]);
 
   const expected = username.trim();
-  const matches = expected.length > 0 && typedUsername === expected && password.length > 0;
+  const matches =
+    expected.length > 0 && typedUsername === expected && (!hasPassword || password.length > 0);
 
   return (
     <ModalShell
@@ -56,7 +64,7 @@ export default function DeleteAccountDialog({
 
       <label className="mt-5 block">
         <span className="text-[0.875rem] text-text">
-          Type your user ID {expected ? <strong>{expected}</strong> : null} to confirm.
+          Type your username {expected ? <strong>{expected}</strong> : null} to confirm.
         </span>
         <input
           type="text"
@@ -69,23 +77,25 @@ export default function DeleteAccountDialog({
         />
       </label>
 
-      <label className="mt-4 block">
-        <span className="text-[0.875rem] text-text">Current password</span>
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          disabled={deleting}
-          autoComplete="current-password"
-          className="mt-2 box-border w-full rounded border border-border bg-elevated px-3 py-2 text-[0.875rem] text-text"
-        />
-      </label>
+      {hasPassword ? (
+        <label className="mt-4 block">
+          <span className="text-[0.875rem] text-text">Current password</span>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={deleting}
+            autoComplete="current-password"
+            className="mt-2 box-border w-full rounded border border-border bg-elevated px-3 py-2 text-[0.875rem] text-text"
+          />
+        </label>
+      ) : null}
 
       <div className="mt-5 flex justify-end">
         <Button
           variant="danger"
           disabled={deleting || !matches}
-          onClick={() => onConfirm(password)}
+          onClick={() => onConfirm(hasPassword ? password : undefined)}
           className="!px-4 !py-2 !text-[0.813rem]"
         >
           {deleting ? "Deleting…" : "Permanently delete my account"}

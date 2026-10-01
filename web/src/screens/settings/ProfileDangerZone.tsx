@@ -13,8 +13,8 @@ const dangerButton = `${dangerButtonClass} !box-border !w-auto !min-w-[10.5rem] 
 /**
  * Delete an account's messages, or the account.
  *
- * For the logged-in account, deleting the account asks for its password and
- * logs out. Given `managedAccountId`, the owner is deleting someone
+ * For the logged-in account, deleting the account asks for its password when
+ * it has one (`hasPassword`) and logs out. Given `managedAccountId`, the owner is deleting someone
  * else's: no password is asked, because the owner does not know it, and the
  * owner lands back on User Accounts. The owner deletes on the strength of the
  * count and the account holder's word, so the confirmation states the count.
@@ -22,11 +22,13 @@ const dangerButton = `${dangerButtonClass} !box-border !w-auto !min-w-[10.5rem] 
 export function ProfileDangerZone({
   isDemo,
   username,
+  hasPassword,
   managedAccountId,
   messageCount = 0,
 }: {
   isDemo: boolean;
   username: string;
+  hasPassword: boolean;
   managedAccountId?: number;
   messageCount?: number;
 }) {
@@ -64,7 +66,7 @@ export function ProfileDangerZone({
     }
   };
 
-  const performDeleteAccount = async (currentPassword: string) => {
+  const performDeleteAccount = async (currentPassword?: string) => {
     if (demoLocked) return;
     setDeleting(true);
     setDangerError("");
@@ -179,12 +181,13 @@ export function ProfileDangerZone({
           onClose={() => {
             if (!deleting) setDeleteDialogOpen(false);
           }}
-          onConfirm={() => void performDeleteAccount("")}
+          onConfirm={() => void performDeleteAccount()}
         />
       ) : (
         <DeleteAccountDialog
           open={deleteDialogOpen}
           username={username}
+          hasPassword={hasPassword}
           deleting={deleting}
           onClose={() => {
             if (!deleting) setDeleteDialogOpen(false);

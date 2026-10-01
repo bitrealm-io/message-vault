@@ -108,7 +108,8 @@ The account, its contacts, and its settings remain.
 The server refuses the action when the account lacks the **Delete** permission.
 
 **Delete account** permanently deletes the account with its messages, contacts, and attachments.
-The dialog asks for the username, typed exactly, and the current password.
+The dialog asks for the username, typed exactly.
+It asks for **Current password** as well when the account has a password.
 Deleting the account ends the Session and returns to the login screen.
 
 Neither action can be undone.

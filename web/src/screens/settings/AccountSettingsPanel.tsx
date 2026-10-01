@@ -73,6 +73,7 @@ export function AccountSettingsPanel({ managedAccountId }: { managedAccountId?: 
         <ProfileDangerZone
           isDemo={profile.is_demo === true}
           username={profile.username}
+          hasPassword={profile.has_password}
           managedAccountId={managedAccountId}
           messageCount={profile.message_count}
         />

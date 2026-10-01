@@ -43,6 +43,7 @@ const PROFILE = {
   is_owner: false,
   disabled: false,
   must_set_up_profile: false,
+  has_password: true,
   is_demo: false,
   can_import: true,
   can_export: true,

@@ -66,6 +66,9 @@ pub struct Account {
     /// client: the same answer reaches every app, and it survives cleared site
     /// data and a second browser.
     pub must_set_up_profile: bool,
+    /// The account has a password. False for one that logs in with none,
+    /// which deletes itself without `current_password`.
+    pub has_password: bool,
     /// When the account last logged in (RFC 3339, UTC), or `null` if it never
     /// has. Logging in, claiming Message Crate and registering all count; a
     /// password change does not.
@@ -109,6 +112,7 @@ async fn load_account(
     let message_count = storage::message_count(conn, Scope::Account(account_id)).await?;
     let storage_bytes = storage::attachment_bytes(conn, Scope::Account(account_id)).await?;
     let last_login_at = account_profile::load_last_login(conn, account_id).await?;
+    let password_hash = account_profile::load_password_hash(conn, account_id).await?;
     let app = crate::db::session_tokens::connecting_app_for_account(conn, account_id).await?;
     Ok(Some(Account {
         account_id,
@@ -121,6 +125,7 @@ async fn load_account(
         is_owner: account_profile::is_server_owner(account_id),
         disabled: auth.disabled,
         must_set_up_profile: auth.must_set_up_profile,
+        has_password: has_password(password_hash.as_deref()),
         last_login_at,
         app: app.as_ref().map(|app| app.kind),
         app_version: app.map(|app| app.build),
@@ -130,6 +135,12 @@ async fn load_account(
         message_count,
         storage_bytes,
     }))
+}
+
+/// True when the stored hash is a password. An account with none stores NULL
+/// or an empty string.
+fn has_password(password_hash: Option<&str>) -> bool {
+    password_hash.is_some_and(|hash| !hash.is_empty())
 }
 
 /// Load one account's row, or `404 Not Found`.
@@ -740,7 +751,7 @@ pub async fn update_account(
 pub struct DeleteAccountRequest {
     /// Must be `true`; anything else is rejected.
     pub confirm: bool,
-    /// Required when the account has a local password.
+    /// Required when the account's `has_password` is true.
     #[serde(default)]
     pub current_password: Option<String>,
 }
@@ -804,8 +815,7 @@ pub async fn delete_account(
             return Err(ApiError::validation("confirmation flag must be true"));
         }
         let password_hash = account_profile::load_password_hash(&mut conn, target).await?;
-        let has_local_password = matches!(password_hash.as_deref(), Some(hash) if !hash.is_empty());
-        if has_local_password {
+        if has_password(password_hash.as_deref()) {
             let Some(pw) = req.current_password.as_deref() else {
                 return Err(ApiError::validation(
                     "Current password is required to delete this account.",

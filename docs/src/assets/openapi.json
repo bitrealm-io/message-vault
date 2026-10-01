@@ -9611,6 +9611,7 @@
           "is_owner",
           "disabled",
           "must_set_up_profile",
+          "has_password",
           "can_import",
           "can_export",
           "can_delete",
@@ -9663,6 +9664,10 @@
               "type": "string"
             },
             "description": "Email addresses linked to the account."
+          },
+          "has_password": {
+            "type": "boolean",
+            "description": "The account has a password. False for one that logs in with none,\nwhich deletes itself without `current_password`."
           },
           "is_demo": {
             "type": "boolean",
@@ -10847,7 +10852,7 @@
               "string",
               "null"
             ],
-            "description": "Required when the account has a local password."
+            "description": "Required when the account's `has_password` is true."
           }
         }
       },
@@ -11834,6 +11839,7 @@
                 "is_owner",
                 "disabled",
                 "must_set_up_profile",
+                "has_password",
                 "can_import",
                 "can_export",
                 "can_delete",
@@ -11886,6 +11892,10 @@
                     "type": "string"
                   },
                   "description": "Email addresses linked to the account."
+                },
+                "has_password": {
+                  "type": "boolean",
+                  "description": "The account has a password. False for one that logs in with none,\nwhich deletes itself without `current_password`."
                 },
                 "is_demo": {
                   "type": "boolean",

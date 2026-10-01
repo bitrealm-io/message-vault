@@ -30,6 +30,7 @@ The **+** beside **Contact Groups**, **Saved Searches**, and **Message Tags** cr
 The right edge of the left panel drags to make the panel wider or narrower.
 
 **Settings** and **Log out** are in the account menu, the round button at the top right.
+The username of the logged-in account is always shown beside that button, on every screen and for every account.
 
 ## The conversation list
 

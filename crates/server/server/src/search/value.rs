@@ -355,6 +355,35 @@ mod tests {
         assert!(parse_date_span("11y", TODAY()).is_none());
     }
 
+    /// Each unit is measured against the ten-year limit in its own days: a
+    /// span of 30 days, 12 weeks or 18 months is well inside it.
+    #[test]
+    fn spans_of_many_days_weeks_or_months_are_inside_the_ten_year_limit() {
+        assert_eq!(
+            parse_date_span("30d", TODAY()).unwrap().start,
+            d(2026, 8, 3)
+        );
+        assert_eq!(
+            parse_date_span("12w", TODAY()).unwrap().start,
+            d(2026, 6, 10)
+        );
+        assert_eq!(
+            parse_date_span("18m", TODAY()).unwrap().start,
+            d(2025, 3, 2)
+        );
+    }
+
+    #[test]
+    fn december_ends_on_the_first_of_january() {
+        assert_eq!(
+            parse_date_span("2024-12", TODAY()).unwrap(),
+            DateSpan {
+                start: d(2024, 12, 1),
+                end: d(2025, 1, 1)
+            }
+        );
+    }
+
     #[test]
     fn comparisons_resolve_against_the_span_edges() {
         assert_eq!(
@@ -396,6 +425,11 @@ mod tests {
         assert_eq!(parse_size_bytes("12345").unwrap(), 12_345);
         assert_eq!(parse_size_bytes("1.5M").unwrap(), 1_572_864);
         assert!(parse_size_bytes("big").is_none());
+    }
+
+    #[test]
+    fn a_size_of_zero_is_zero_bytes() {
+        assert_eq!(parse_size_bytes("0").unwrap(), 0);
     }
 
     #[test]

@@ -385,7 +385,9 @@ fn handle_type_for(handle: &str) -> HandleType {
     }
 }
 
-/// Peer handles for a chat: the comma-separated list for groups, else the chat id itself.
+/// Peer handles for a group: its chat id is its members' addresses joined by
+/// commas. A one-to-one chat has none here; its one peer is added by the
+/// caller.
 fn imazing_peers(is_group: bool, chat_id: &str) -> Vec<String> {
     if is_group {
         chat_id
@@ -396,6 +398,29 @@ fn imazing_peers(is_group: bool, chat_id: &str) -> Vec<String> {
     } else {
         Vec::new()
     }
+}
+
+/// The people a Messages group session names, for a group whose rows carry
+/// no address: `Alice Example & Bob Example` names two.
+///
+/// Each is a participant with the name and no handle, because the source
+/// named the person and recorded no address for them. The group's chat id is
+/// a stem of the session name. It reaches nobody, so it is no one's handle.
+fn named_group_members(session: &str) -> Vec<IrParticipant> {
+    let mut names: Vec<&str> = Vec::new();
+    for name in session.split(" & ").map(str::trim) {
+        if !name.is_empty() && !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    names
+        .into_iter()
+        .map(|name| IrParticipant {
+            handle: None,
+            display_name: Some(name.to_string()),
+            handle_type: None,
+        })
+        .collect()
 }
 
 /// `__whatsapp` for WhatsApp chats so their files do not collide with Messages files for the same peer.
@@ -444,6 +469,10 @@ impl ProjectionHooks for ImazingProjection {
     }
 
     fn participants(&self, chat_id: &str, convo: &PendingConversation) -> Vec<IrParticipant> {
+        if convo.is_group && convo.extra.contains_key(message_ir::CHAT_ID_IS_NAME) {
+            // A group's display name is its session string (`ingest_session`).
+            return named_group_members(convo.display_name.as_deref().unwrap_or(""));
+        }
         let peers = imazing_peers(convo.is_group, chat_id);
         let mut participants: Vec<IrParticipant> = peers
             .iter()

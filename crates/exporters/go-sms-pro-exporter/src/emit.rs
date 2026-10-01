@@ -712,6 +712,24 @@ mod tests {
         assert!(b.contains("3:123"));
     }
 
+    /// A group MMS lists the owner's own number among its addresses. The
+    /// group is the other people, so the owner's number changes neither the
+    /// chat id nor the title.
+    #[test]
+    fn the_owners_number_is_not_part_of_a_group_chat_id() {
+        let owners = OwnerHandleSet::from_phones(&["+15555550100".into()]).unwrap();
+        let others = ["15555550122".to_string(), "15555550133".to_string()];
+        let with_owner = [
+            "15555550100".to_string(),
+            "15555550122".to_string(),
+            "15555550133".to_string(),
+        ];
+        assert_eq!(
+            chat_id_group(&with_owner, &owners),
+            chat_id_group(&others, &owners)
+        );
+    }
+
     #[test]
     fn a_sent_pdu_to_two_people_is_a_group() {
         let owners = OwnerHandleSet::from_phones(&["+15555550100".into()]).unwrap();

@@ -776,7 +776,6 @@ async function runPush(
         input_dir: outputDir,
         mode: "append",
         force: form.force,
-        continue_on_error: true,
         skip_attachments: false,
         // Extract (or the Media stage) just wrote these files. Matching
         // size_bytes lets message-crate-push skip a second full-file hash.

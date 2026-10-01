@@ -68,6 +68,58 @@ fn a_vcard_name_is_built_from_n_or_is_a_one_word_nickname() {
 /// One table for the naming rule ADR-0006 sets, read at the seam that
 /// enforces it rather than through the three callers that used to carry
 /// their own copy of it.
+fn draft(name: &str, phones: &[&str]) -> ContactDraft {
+    ContactDraft {
+        preferred_name: Some(name.to_string()),
+        phones: phones.iter().map(|p| (p.to_string(), None)).collect(),
+    }
+}
+
+fn names_and_phones(drafts: &[ContactDraft]) -> Vec<(&str, Vec<&str>)> {
+    drafts
+        .iter()
+        .map(|d| {
+            (
+                d.preferred_name.as_deref().unwrap_or(""),
+                d.phones.iter().map(|(phone, _)| phone.as_str()).collect(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn two_cards_sharing_a_number_become_one_card_with_every_number() {
+    let merged = merge_duplicate_phone_drafts(vec![
+        draft("Ada", &["+15550000001"]),
+        draft("Ada Work", &["+15550000001", "+15550000002"]),
+    ]);
+
+    assert_eq!(
+        names_and_phones(&merged),
+        [("Ada", vec!["+15550000001", "+15550000002"])]
+    );
+}
+
+/// The third card shares a number with each of the two before it, so all
+/// three are one person, and the card before them is left alone.
+#[test]
+fn a_card_sharing_numbers_with_two_earlier_cards_folds_all_three_into_the_first() {
+    let merged = merge_duplicate_phone_drafts(vec![
+        draft("Grace", &["+15550000009"]),
+        draft("Ada", &["+15550000001"]),
+        draft("Ada Mobile", &["+15550000002"]),
+        draft("Ada Both", &["+15550000001", "+15550000002"]),
+    ]);
+
+    assert_eq!(
+        names_and_phones(&merged),
+        [
+            ("Grace", vec!["+15550000009"]),
+            ("Ada", vec!["+15550000001", "+15550000002"]),
+        ]
+    );
+}
+
 #[tokio::test]
 async fn who_may_name_a_contact() {
     let (pool, _dir) = crate::db::engine::test_pool().await;

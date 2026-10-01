@@ -337,6 +337,56 @@ mod tests {
         assert!(validate_source_id("has space").is_err());
     }
 
+    #[test]
+    fn relative_paths_resolve_against_the_folder_above_the_config_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_dir = dir.path().join("config");
+        fs::create_dir_all(&config_dir).unwrap();
+        let path = config_dir.join("server.toml");
+        fs::write(
+            &path,
+            "[paths]\ndb = \"data/messagecrate.db\"\ndata_dir = \"data\"\n",
+        )
+        .unwrap();
+
+        let cfg = Config::load(&path).unwrap();
+
+        assert_eq!(cfg.paths.db, dir.path().join("data/messagecrate.db"));
+        assert_eq!(cfg.paths.data_dir, dir.path().join("data"));
+    }
+
+    /// The defaults `docs/developer/reference/config-and-accounts.md` states.
+    #[test]
+    fn a_config_with_no_settings_loads_the_documented_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_dir = dir.path().join("config");
+        fs::create_dir_all(&config_dir).unwrap();
+        let path = config_dir.join("config.toml");
+        fs::write(
+            &path,
+            "[paths]\ndb = \"data/messagecrate.db\"\n\n[server]\n",
+        )
+        .unwrap();
+
+        let cfg = Config::load(&path).unwrap();
+
+        assert_eq!(cfg.paths.data_dir, dir.path().join("data"));
+        assert_eq!(
+            cfg.paths.assets_dir_for_account(7, "imessage"),
+            dir.path().join("data/7/imessage/assets")
+        );
+        assert_eq!(
+            cfg.paths.assets_converted_dir_for_account(7, "imessage"),
+            dir.path().join("data/7/imessage/assets_converted")
+        );
+        let server = cfg.require_server().unwrap();
+        assert_eq!(server.bind, "127.0.0.1:8080");
+        assert_eq!(server.asset_max_bytes, 536_870_912);
+        assert_eq!(server.asset_part_size, 67_108_864);
+        assert!(!server.openapi_ui);
+        assert!(server.cors_origins.is_empty());
+    }
+
     const PACKAGED_ORIGINS: &[&str] = &[
         "https://tauri.localhost",
         "http://tauri.localhost",

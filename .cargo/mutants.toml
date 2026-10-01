@@ -31,6 +31,23 @@ exclude_globs = [
 exclude_re = [
     "impl .*Display for",
     "impl .*Debug for",
+    # Functions that only build a log, progress, or error-hint line.
+    "in Verbose<'_>::(progress|errors)$",
+    "value_hint",
+    "announce_finish",
+    "ProgressBatcher::flush_remainder",
+    # Arithmetic in a top-level constant (`30 * 24 * 60 * 60`): the mutant only
+    # changes the number, and a test that pins a constant to its own value
+    # catches nothing. A mutant inside a function ends in ` in <function>`, so
+    # this matches constants only. The constants a person would notice are
+    # tested by what they do: a session's lifetime, the default upload limit.
+    "replace [-+*/%] with [-+*/%]$",
+    # Retry jitter read from the clock; no test can pin its value.
+    "rand_factor",
+    # Checks that only run on Postgres. The mutation run is SQLite only, and
+    # the Postgres CI job runs them.
+    "pg_test_schema_pid",
+    "pg_schema_ready",
 ]
 
 # Run each mutant's tests with cargo-nextest, which stops at the first

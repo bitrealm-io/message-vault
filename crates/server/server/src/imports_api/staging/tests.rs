@@ -114,6 +114,49 @@ fn a_reused_blob_takes_the_export_mime_type_when_the_record_has_one() {
     assert_eq!(stats.missing, 0);
 }
 
+/// The export says the attachment's bytes hash to one value and the file on
+/// disk hashes to another. That is a damaged or swapped file, so the import
+/// stops: it neither stores the file under either fingerprint nor records the
+/// attachment as missing.
+#[tokio::test]
+async fn a_file_that_does_not_match_its_claimed_sha256_fails_the_import_and_is_not_stored() {
+    let (pool, _dir) = crate::db::engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    let tmp = TempDir::new().unwrap();
+    let assets = tmp.path().join("assets");
+    std::fs::write(tmp.path().join("photo.bin"), b"the bytes on disk").unwrap();
+    let claimed_sha = assets_api::sha256_hex(b"the bytes the export saw");
+    let header = ORPHANED_HEADER.replace("orphaned", "+15555550701");
+    let message = format!(
+        r#"{{"guid":"g-mismatch","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550701","sender_display_name":null,"subject":null,"text":"hi","attachments":[{{"path":"photo.bin","original_name":"photo.bin","mime_type":"application/octet-stream","digest_sha256":"{claimed_sha}","is_sticker":false,"transcription":null,"sticker_effect":null}}],"imessage":null,"source":null}}"#
+    );
+    let path = tmp.path().join("mismatch.jsonl");
+    std::fs::write(&path, format!("{header}{message}\n")).unwrap();
+    let opts = ImportOptions::fixed(FixedImportArgs {
+        assets_dir: &assets,
+        asset_root: tmp.path(),
+        contacts: None,
+        overwrite_contacts: false,
+        mode: ImportMode::Append,
+        source: "imessage",
+        account_id: TEST_ACCOUNT,
+        fill_content_keys: false,
+        import_id: None,
+    });
+
+    let err = import_jsonl_files_on_conn(&mut conn, &[path], &opts, ImportSchemaMode::Ensure)
+        .await
+        .expect_err("a mismatched file fails the import");
+
+    assert!(
+        format!("{err:#}").contains("sha256 mismatch"),
+        "the refusal says why: {err:#}"
+    );
+    for sha in [claimed_sha, assets_api::sha256_hex(b"the bytes on disk")] {
+        assert!(assets_api::lookup_by_sha256(&assets, &sha).is_none());
+    }
+}
+
 #[test]
 fn only_a_file_named_orphaned_is_the_orphaned_export() {
     assert!(is_orphaned_export(Path::new("out/orphaned.jsonl")));

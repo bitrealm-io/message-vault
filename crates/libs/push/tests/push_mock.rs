@@ -109,7 +109,6 @@ fn text_only_config(dir: &Path, base_url: String) -> PushConfig {
         username: "alice".into(),
         key: "mc_test".into(),
         mode: ImportMode::Append,
-        continue_on_error: true,
         force: false,
         skip_attachments: false,
         verify_digests: false,
@@ -311,10 +310,10 @@ fn a_push_completes_its_import_run_with_the_counts_it_sent() {
     assert_eq!(complete.calls(), 1, "the Import Run is completed once");
 }
 
-/// A push that stops at a failed batch still completes its Import Run, as
-/// failed, so the server does not show it as running.
+/// A push whose only batch fails still completes its Import Run, as failed,
+/// so the server does not show it as running.
 #[test]
-fn an_aborted_push_completes_its_import_run_as_failed() {
+fn a_push_where_nothing_lands_completes_its_import_run_as_failed() {
     let server = MockServer::start();
     let _auth = mock_session(&server);
     let _run = mock_import_run(&server, 42);
@@ -336,12 +335,7 @@ fn an_aborted_push_completes_its_import_run_as_failed() {
 
     let dir = tempdir().unwrap();
     write_jsonl(dir.path(), &sample_doc());
-    let cfg = PushConfig {
-        continue_on_error: false,
-        ..text_only_config(dir.path(), server.base_url())
-    };
-
-    let report = run(&cfg, None).unwrap();
+    let report = run(&text_only_config(dir.path(), server.base_url()), None).unwrap();
 
     assert!(!report.ok);
     assert_eq!(complete.calls(), 1, "the Import Run is completed as failed");
@@ -523,60 +517,10 @@ fn folder_with_a_bad_middle_file(dir: &Path) {
     write_jsonl(dir, &sample_doc_for("+15555550103", "guid-3"));
 }
 
-/// Without `continue_on_error`, a push stops at the first file that fails to
-/// prepare. The batch already packed still lands, so the journal matches the
-/// server, and nothing after the failure is sent.
+/// A file that fails to prepare is reported and the push goes on: the good
+/// files around it still share one request.
 #[test]
-fn a_push_without_continue_on_error_stops_at_the_first_bad_file() {
-    let server = MockServer::start();
-    let _auth = mock_session(&server);
-    let _run = mock_import_run(&server, 7);
-    let first = server.mock(|when, then| {
-        when.method(POST)
-            .path("/v1/imports/7/batches")
-            .body_includes("guid-1");
-        then.status(200).json_body(json!({
-            "messages": 1,
-            "messages_appended": 1,
-            "conversations": 1
-        }));
-    });
-    let after = server.mock(|when, then| {
-        when.method(POST)
-            .path("/v1/imports/7/batches")
-            .body_excludes("guid-1");
-        then.status(200).json_body(json!({
-            "messages": 1,
-            "messages_appended": 1,
-            "conversations": 1
-        }));
-    });
-
-    let dir = tempdir().unwrap();
-    folder_with_a_bad_middle_file(dir.path());
-    let cfg = PushConfig {
-        continue_on_error: false,
-        ..text_only_config(dir.path(), server.base_url())
-    };
-
-    let report = run(&cfg, None).unwrap();
-
-    assert!(!report.ok);
-    assert_eq!(
-        first.calls(),
-        1,
-        "the conversation before the failure lands"
-    );
-    assert_eq!(after.calls(), 0, "nothing after the failure is sent");
-    assert_eq!(report.conversations_ok, 1);
-    assert_eq!(report.conversations_failed, 1);
-    assert_eq!(journaled_guids(dir.path()), vec!["guid-1".to_string()]);
-}
-
-/// With `continue_on_error`, a file that fails to prepare is reported and
-/// the push goes on: the good files around it still share one request.
-#[test]
-fn a_push_with_continue_on_error_imports_the_files_after_a_bad_one() {
+fn a_push_imports_the_files_after_a_bad_one() {
     let server = MockServer::start();
     let _auth = mock_session(&server);
     let _run = mock_import_run(&server, 7);
@@ -758,7 +702,6 @@ fn profiles_attachment_upload_phases() {
         username: "alice".into(),
         key: "mc_test".into(),
         mode: ImportMode::Append,
-        continue_on_error: false,
         force: false,
         skip_attachments: false,
         verify_digests: false,
@@ -1244,7 +1187,6 @@ fn multipart_aborts_on_hash_mismatch_complete() {
 
     let mut cfg = text_only_config(dir.path(), server.base_url());
     cfg.force = true;
-    cfg.continue_on_error = true;
     cfg.asset_multipart_threshold = 8;
     let report = run(&cfg, None).unwrap();
     assert!(!report.ok);
@@ -1339,7 +1281,6 @@ fn verify_digests_fails_on_mismatch() {
 
     let mut cfg = text_only_config(dir.path(), server.base_url());
     cfg.verify_digests = true;
-    cfg.continue_on_error = false;
     let report = run(&cfg, None).unwrap();
     assert!(!report.ok);
     assert_eq!(report.conversations_failed, 1);

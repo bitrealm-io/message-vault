@@ -38,6 +38,37 @@ async fn public_registration_does_not_make_an_unowned_server_open() {
     );
 }
 
+/// The Demo Account is reported for as long as it exists, whatever the state
+/// is: before anyone claims the Message Crate, after, and no longer once the
+/// owner has deleted it.
+#[tokio::test]
+async fn the_server_reports_the_demo_account_while_it_exists() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
+
+    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
+    assert!(!body.demo_account, "no Demo Account has been seeded");
+
+    let demo = fixture
+        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
+        .await;
+    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
+    assert_eq!(body.state, ServerState::Unclaimed);
+    assert!(body.demo_account);
+
+    let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
+    assert!(body.demo_account, "claiming changes nothing about it");
+
+    assert_eq!(
+        crate::test_support::delete_status(&state, &format!("/v1/accounts/{demo}"), &owner.token)
+            .await,
+        StatusCode::NO_CONTENT
+    );
+    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
+    assert!(!body.demo_account);
+}
+
 #[tokio::test]
 async fn a_claimed_server_is_closed_until_registration_is_opened() {
     let fixture = test_fixture().await;
@@ -351,9 +382,9 @@ async fn the_owner_owes_no_profile_setup() {
 
 /// The server's totals sum every account, and the answer is counts and byte
 /// totals and nothing that names a person or a conversation. The database
-/// figures are measured, so they are only checked for sign; the split of
-/// message storage across accounts is checked exactly, because it is arithmetic
-/// over the measured total.
+/// figures are measured, so they are only checked against the size of a
+/// page; the split of message storage across accounts is checked exactly,
+/// because it is arithmetic over the measured total.
 #[tokio::test]
 async fn the_owner_reads_the_server_totals_summed_over_every_account() {
     let fixture = test_fixture().await;
@@ -475,12 +506,14 @@ async fn the_owner_reads_the_server_totals_summed_over_every_account() {
         "database_bytes {}",
         totals.database_bytes
     );
+    // A table that holds a row takes at least one page, and so does the
+    // search index over it. 4096 bytes is the smaller engine's page.
     assert!(
-        totals.messages_bytes > 0,
+        totals.messages_bytes >= 4096,
         "messages_bytes {}",
         totals.messages_bytes
     );
-    assert!(totals.fts_bytes > 0, "fts_bytes {}", totals.fts_bytes);
+    assert!(totals.fts_bytes >= 4096, "fts_bytes {}", totals.fts_bytes);
     assert!(
         totals.database_bytes >= totals.messages_bytes,
         "messages {} cannot exceed the database {}",

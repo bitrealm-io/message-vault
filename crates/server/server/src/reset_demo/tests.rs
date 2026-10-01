@@ -237,7 +237,7 @@ fn an_incomplete_bundle_without_a_seed_file_cannot_be_reset() {
 }
 
 #[tokio::test]
-async fn the_demo_account_may_import_export_and_delete() {
+async fn the_demo_account_may_export_and_not_import_or_delete() {
     let temp = tempfile::tempdir().expect("create test directory");
     let db = temp.path().join("messagecrate.db");
     let (pool, mut conn) = test_db(&db).await;
@@ -264,8 +264,8 @@ async fn the_demo_account_may_import_export_and_delete() {
             .expect("read the demo account");
     assert_eq!(
         (import, export, delete),
-        (1, 1, 1),
-        "the demo account is there to try all of Message Crate, so it may import, export, and delete"
+        (0, 1, 0),
+        "anyone can enter the Demo Account, so it may export and may not import or delete for good"
     );
 
     close_test_db(pool, conn).await;
@@ -386,6 +386,35 @@ async fn failed_preparation_preserves_active_config() {
         fs::read(&config_dest).expect("read active config"),
         original
     );
+}
+
+/// A complete bundle and no database URL: the reset runs, the bundle's
+/// config becomes the active one, and the database it names holds the demo.
+#[tokio::test]
+async fn a_complete_bundle_resets_and_its_config_becomes_the_active_one() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let bundle = temp.path().join("bundle");
+    write_tiny_reset_bundle(&bundle);
+    let config_dest = temp.path().join("config/config.toml");
+
+    let stats = prepare_config_and_reset(&bundle, &config_dest, DEMO_ACCOUNT_ID, None)
+        .await
+        .expect("a complete bundle resets");
+
+    assert_eq!(stats.import.messages, 3, "one message from each source");
+    assert_eq!(
+        fs::read(&config_dest).expect("read active config"),
+        fs::read(bundle.join("config/config.toml")).expect("read bundle config")
+    );
+    // The bundle's config names the database relative to the folder above
+    // the active config's.
+    let mut conn = test_db_conn(&temp.path().join("data/messagecrate.db")).await;
+    let demo_messages = count(
+        &mut conn,
+        &format!("SELECT COUNT(*) FROM messages WHERE account_id = {DEMO_ACCOUNT_ID}"),
+    )
+    .await;
+    assert_eq!(demo_messages, 3);
 }
 
 #[tokio::test]
@@ -1464,7 +1493,7 @@ async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
             !account_profile::is_claimed(&mut conn)
                 .await
                 .expect("read claim state"),
-            "this Message Crate starts unclaimed, so the claim below is the reset's doing"
+            "this Message Crate starts unclaimed"
         );
         close_test_db(pool, conn).await;
     }
@@ -1492,10 +1521,10 @@ async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
 
     let (pool, mut conn) = test_db(&db).await;
     assert!(
-        account_profile::is_claimed(&mut conn)
+        !account_profile::is_claimed(&mut conn)
             .await
             .expect("read claim state"),
-        "the reset claims this Message Crate"
+        "a reset writes no owner, so the Message Crate is still there to be claimed"
     );
     let previous_messages: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE guid = 'previous-demo-message'")
@@ -1550,8 +1579,11 @@ async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
         axum::http::StatusCode::UNAUTHORIZED,
         "demo has no password, so only the empty password logs in"
     );
-    let owner = crate::test_support::log_in(&state, DEMO_OWNER_USERNAME, DEMO_OWNER_PASSWORD).await;
-    assert_eq!(owner["account_id"], account_profile::OWNER_ACCOUNT_ID);
+    // A reset writes the Demo Account and no owner: the Message Crate is
+    // still there to be claimed, and says the Demo Account is in it.
+    let server: serde_json::Value = crate::test_support::get_json(&state, "/v1/server", "").await;
+    assert_eq!(server["state"], "unclaimed");
+    assert_eq!(server["demo_account"], true);
 }
 
 #[test]

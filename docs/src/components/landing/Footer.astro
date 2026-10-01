@@ -3,40 +3,28 @@ import { landingLinks } from "../../lib/landing-links";
 ---
 
 <footer class="mc-footer">
-  <div class="mc-footer-inner">
+  <div class="mc-wrap mc-footer-inner">
     <div class="mc-footer-brand">
       <a class="mc-mark" href={landingLinks.home}>Message Crate</a>
-      <p>
-        Extract messages from phone backups onto a server you run. Browse, search,
-        and export on your terms.
-      </p>
+      <p>Your conversations, on a server you run.</p>
+      <p>Made by Bitrealm.</p>
     </div>
-    <div class="mc-footer-cols">
-      <div>
-        <h2>Product</h2>
-        <ul>
-          <li><a href={landingLinks.features}>Features</a></li>
-          <li><a href={landingLinks.download}>Download</a></li>
-          <li><a href={landingLinks.changelog}>Changelog</a></li>
-        </ul>
-      </div>
-      <div>
-        <h2>Resources</h2>
-        <ul>
-          <li><a href={landingLinks.docs}>Getting started</a></li>
-          <li>
-            <a href={landingLinks.developer}>Developer documentation</a>
-          </li>
-          <li><a href={landingLinks.faq}>FAQ</a></li>
-        </ul>
-      </div>
-      <div>
-        <h2>Company</h2>
-        <ul>
-          <li><a href={landingLinks.about}>About</a></li>
-          <li><a href={landingLinks.contact}>Contact</a></li>
-        </ul>
-      </div>
+    <div class="mc-footer-col">
+      <h2>Product</h2>
+      <a href={landingLinks.getStarted}>Get started</a>
+      <a href={landingLinks.features}>Features</a>
+      <a href={landingLinks.releases}>Releases</a>
+      <a href={landingLinks.changelog}>Changelog</a>
+    </div>
+    <div class="mc-footer-col">
+      <h2>Docs</h2>
+      <a href={landingLinks.docs}>User guide</a>
+      <a href={landingLinks.developer}>Developer documentation</a>
+    </div>
+    <div class="mc-footer-col">
+      <h2>Project</h2>
+      <a href={landingLinks.github}>GitHub</a>
+      <a href={landingLinks.issues}>Report a problem</a>
     </div>
   </div>
 </footer>

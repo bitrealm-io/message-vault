@@ -2,129 +2,190 @@
 import LandingLayout from "../layouts/LandingLayout.astro";
 import { landingLinks } from "../lib/landing-links";
 
-const features = [
-  {
-    title: "Multiple import sources",
-    body: "Bring in SMS, iMessage, WhatsApp, and other supported phone backups from one desktop workflow.",
-  },
-  {
-    title: "Advanced search",
-    body: "Find a conversation, keyword, date range, or attachment without scrolling forever.",
-  },
-  {
-    title: "Native-style viewing",
-    body: "Read threads in a familiar chat layout so old messages still feel like messages.",
-  },
-  {
-    title: "Local and private",
-    body: "Your archive lives where you run it—on your machine or a server you control. Not a stranger’s cloud account.",
-  },
-  {
-    title: "Export anytime",
-    body: "Take clean copies in open formats whenever you want. Nothing is locked in.",
-  },
-  {
-    title: "Self-hosted control",
-    body: "Run from source, with Docker, or via the desktop app. You choose uptime, storage, and access.",
-  },
-] as const;
-
 const steps = [
   {
     num: "01",
-    title: "Run Message Crate",
-    body: "Install the desktop app, run from source, or start the published Docker image—no cloud account required.",
+    title: "Start the server",
+    body: "Run the Docker image on your own machine or home server. Your messages are stored there and nowhere else.",
   },
   {
     num: "02",
-    title: "Import your history",
-    body: "Point Message Crate at phone backups you already have and bring conversations into one local library.",
+    title: "Import a backup",
+    body: "Open the desktop app, point it at a phone backup you already have, and import the conversations into your server.",
   },
   {
     num: "03",
-    title: "Search and export",
-    body: "Find any message quickly, browse threads, and export when you need a portable copy.",
+    title: "Search and read",
+    body: "Open Message Crate in any browser to find a message by word, person or date and read the conversation around it.",
+  },
+] as const;
+
+// Each row has a slot for a product screenshot. Until the picture exists the
+// slot shows `shot`, a description of the screen that belongs there.
+const featureRows = [
+  {
+    title: "Import from the apps you used",
+    body: "Apple Messages, WhatsApp and SMS backups all land in the same archive, with attachments.",
+    link: { label: "Supported backups", href: landingLinks.backups },
+    shot: "The desktop app's import screen with a backup selected",
+  },
+  {
+    title: "Search everything at once",
+    body: "Search across every conversation by word, contact or date range, and save the searches you run often.",
+    link: { label: "How search works", href: landingLinks.search },
+    shot: "Search results across several conversations",
+  },
+  {
+    title: "Read it in the style of the app it came from",
+    body: "Each conversation looks the way it did on your phone: iMessage, Android or WhatsApp bubbles and colours, with photos and videos in place.",
+    link: { label: "Browse your messages", href: landingLinks.browse },
+    shot: "The same screen showing an iMessage, an Android and a WhatsApp conversation style",
+  },
+  {
+    title: "Export whenever you want",
+    body: "Take your conversations back out as JSON, CSV, EML or MBOX. Nothing is locked in.",
+    link: { label: "Export formats", href: landingLinks.exportGuide },
+    shot: "The export screen with a format chosen",
+  },
+] as const;
+
+const features = [
+  {
+    title: "One contact, many numbers",
+    body: "A person's phone numbers and email addresses are grouped into one contact across every app.",
+  },
+  {
+    title: "Message Tags",
+    body: "Mark the messages you want to find again and list them together.",
+  },
+  {
+    title: "Contact Groups",
+    body: "Put family, friends or a project team into a group and browse their conversations together.",
+  },
+  {
+    title: "Accounts for your household",
+    body: "Each person logs in to their own account and sees only their own messages.",
+  },
+  {
+    title: "No database to set up",
+    body: "Everything is stored in one SQLite file, so a backup of your server is a copy of that file.",
+  },
+  {
+    title: "Photos and videos that still open",
+    body: "Images and videos are converted to JPG and MP4, so they play in any browser.",
   },
 ] as const;
 ---
 
 <LandingLayout
   title="Message Crate"
-  description="Extract messages from phone backups onto a server you control. Browse, search, and export on your terms."
+  description="Message Crate pulls your conversations out of iMessage, WhatsApp and SMS backups and puts them on a server you run, where you can search and read them."
   canonicalPath="/"
 >
-  <main>
+  <main class="mc-wrap mc-main">
     <section class="mc-hero">
-      <div class="mc-hero-inner">
-        <div>
-          <span class="mc-eyebrow">Self-hosted and private</span>
-          <h1>Every message you’ve ever sent, preserved forever.</h1>
-          <p class="mc-lede">
-            Message Crate turns phone-backup chat history into one searchable
-            library you run yourself—SMS, iMessage, WhatsApp, and more.
-          </p>
-          <div class="mc-hero-actions">
-            <a
-              class="mc-btn mc-btn-primary mc-btn-lg"
-              href={landingLinks.download}>Download</a
-            >
-            <a class="mc-btn mc-btn-ghost mc-btn-lg" href={landingLinks.features}
-              >See features</a
-            >
-          </div>
+      <div class="mc-hero-text">
+        <span class="mc-tag">Free and self-hosted</span>
+        <h1>Your messages, out of the apps and into your Message Crate.</h1>
+        <p class="mc-lede">
+          Message Crate pulls your conversations out of iMessage, WhatsApp and
+          SMS backups and puts them on a server you run, where you can search
+          and read them. Free to self-host.
+        </p>
+        <div class="mc-actions">
+          <a class="mc-btn mc-btn-primary" href={landingLinks.getStarted}
+            >Get started</a
+          >
+          <a class="mc-btn mc-btn-ghost" href={landingLinks.github}
+            >View on GitHub</a
+          >
         </div>
-        <figure class="mc-hero-visual">
-          <img
-            src="/landing/hero-messages.avif"
-            alt="Message conversation preview"
-            width="960"
-            height="720"
-            loading="eager"
-          />
-        </figure>
+        <p class="mc-note">
+          One Docker image for the server. Desktop app for macOS, Windows and
+          Linux.
+        </p>
       </div>
-    </section>
-
-    <section class="mc-section mc-section-alt" id="features">
-      <div class="mc-section-inner">
-        <div class="mc-section-head">
-          <span class="mc-kicker">Why Message Crate</span>
-          <h2>The archive you’ll actually want to keep</h2>
-          <p>
-            Stop losing years of conversations. Turn scattered chat history into
-            one searchable, private library.
-          </p>
-        </div>
-        <div class="mc-feature-grid">
-          {
-            features.map((feature) => (
-              <article class="mc-feature">
-                <h3>{feature.title}</h3>
-                <p>{feature.body}</p>
-              </article>
-            ))
-          }
+      <div class="mc-shot">
+        <div class="mc-shot-inner">
+          <strong>Screenshot</strong>
+          A conversation open in the browser, with the conversation list beside
+          it
         </div>
       </div>
     </section>
 
-    <section class="mc-section">
-      <div class="mc-section-inner">
-        <div class="mc-section-head">
-          <span class="mc-kicker">How it works</span>
-          <h2>Up and running in three steps</h2>
-        </div>
-        <div class="mc-steps">
-          {
-            steps.map((step) => (
-              <article class="mc-step">
-                <span class="mc-step-num">{step.num}</span>
-                <h3>{step.title}</h3>
-                <p>{step.body}</p>
-              </article>
-            ))
-          }
-        </div>
+    <section id="how-it-works">
+      <div class="mc-section-head">
+        <span class="mc-tag">How it works</span>
+        <h2>Three steps from a phone backup to a searchable archive</h2>
+      </div>
+      <div class="mc-grid">
+        {
+          steps.map((step) => (
+            <article class="mc-card">
+              <span class="mc-tag">{step.num}</span>
+              <h3>{step.title}</h3>
+              <p>{step.body}</p>
+            </article>
+          ))
+        }
+      </div>
+    </section>
+
+    <section id="features">
+      <div class="mc-section-head">
+        <span class="mc-tag">Features</span>
+        <h2>Built for years of conversations</h2>
+      </div>
+      <div class="mc-rows">
+        {
+          featureRows.map((row) => (
+            <div class="mc-row">
+              <div class="mc-row-text">
+                <h3>{row.title}</h3>
+                <p>{row.body}</p>
+                <a href={row.link.href}>{row.link.label} →</a>
+              </div>
+              <div class="mc-shot">
+                <div class="mc-shot-inner">
+                  <strong>Screenshot</strong>
+                  {row.shot}
+                </div>
+              </div>
+            </div>
+          ))
+        }
+      </div>
+    </section>
+
+    <section>
+      <div class="mc-section-head">
+        <h2>And the rest</h2>
+      </div>
+      <div class="mc-grid">
+        {
+          features.map((feature) => (
+            <article class="mc-card">
+              <h3>{feature.title}</h3>
+              <p>{feature.body}</p>
+            </article>
+          ))
+        }
+      </div>
+    </section>
+
+    <section class="mc-closing">
+      <h2>Run your own Message Crate</h2>
+      <p>
+        Free to self-host. The guide takes you from the Docker image to your
+        first imported conversation.
+      </p>
+      <div class="mc-actions">
+        <a class="mc-btn mc-btn-primary" href={landingLinks.getStarted}
+          >Get started</a
+        >
+        <a class="mc-btn mc-btn-ghost" href={landingLinks.docs}>Read the docs</a
+        >
       </div>
     </section>
   </main>

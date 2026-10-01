@@ -1,16 +1,18 @@
-/** Shared URLs for the Message Crate marketing chrome. */
+/** Shared URLs for the Message Crate landing page. */
 export const landingLinks = {
   home: "/",
+  howItWorks: "/#how-it-works",
   features: "/#features",
-  download: "https://github.com/messagecrate/message-crate/releases",
+  getStarted: "/docs/user/get-started/try-message-crate/",
   docs: "/docs/user/",
   developer: "/docs/developer/",
-  changelog: "/changelog",
-  faq: "/faq",
-  about: "/about",
-  contact: "/contact",
+  backups: "/docs/user/prepare-a-backup/",
+  search: "/docs/user/how-to/search/",
+  browse: "/docs/user/browse-your-messages/",
+  exportGuide: "/docs/user/how-to/export-your-messages/",
   github: "https://github.com/messagecrate/message-crate",
-  githubChangelog:
+  releases: "https://github.com/messagecrate/message-crate/releases",
+  changelog:
     "https://github.com/messagecrate/message-crate/blob/main/CHANGELOG.md",
-  githubIssues: "https://github.com/messagecrate/message-crate/issues",
+  issues: "https://github.com/messagecrate/message-crate/issues",
 } as const;

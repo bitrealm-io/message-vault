@@ -90,15 +90,6 @@ export interface AttachmentForecast {
   verdict: SizeVerdict;
 }
 
-/** How many attachments landed in each verdict. */
-export interface VerdictCounts {
-  fitsAsIs: number;
-  likelyFits: number;
-  mayGrow: number;
-  probablyTooBig: number;
-  cannotProcess: number;
-}
-
 /** How many messages one of the owner's handles sent and received. */
 export interface OwnerHandleCount {
   handle: string;
@@ -115,7 +106,6 @@ export interface StagingSummary {
   ownerHandles: OwnerHandleCount[];
   attachments: number;
   attachmentBytes: number;
-  verdictCounts: VerdictCounts;
   forecasts: AttachmentForecast[];
   /** Largest single attachment the upload accepts; what the verdicts were measured against. */
   assetMaxBytes: number;
@@ -176,7 +166,6 @@ export interface PushConfig {
   input_dir: string;
   mode: string;
   force: boolean;
-  continue_on_error: boolean;
   skip_attachments: boolean;
   trust_export: boolean;
   import_id?: number;
@@ -243,7 +232,6 @@ export async function invokePush(config: PushConfig): Promise<void> {
       inputDir: config.input_dir,
       mode: config.mode,
       force: config.force,
-      continueOnError: config.continue_on_error,
       skipAttachments: config.skip_attachments,
       trustExport: config.trust_export,
       importId: config.import_id ?? null,

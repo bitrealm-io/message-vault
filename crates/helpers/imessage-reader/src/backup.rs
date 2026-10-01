@@ -320,6 +320,37 @@ mod tests {
         );
     }
 
+    /// A backup whose manifest says it is not encrypted needs no password
+    /// and nothing decrypted: its files are read as they are.
+    #[test]
+    fn an_unencrypted_ios_backup_needs_no_password() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("Manifest.plist"),
+            br#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>IsEncrypted</key><false/>
+<key>Lockdown</key><dict>
+<key>BuildVersion</key><string>21A000</string>
+<key>DeviceName</key><string>Test iPhone</string>
+<key>ProductType</key><string>iPhone0,0</string>
+<key>ProductVersion</key><string>17.0</string>
+<key>SerialNumber</key><string>TESTSERIAL</string>
+<key>UniqueDeviceID</key><string>TESTDEVICEID</string>
+</dict>
+<key>Applications</key><dict/>
+</dict></plist>"#,
+        )
+        .unwrap();
+        let ios = ReaderOptions::from_source(Source {
+            db_path: dir.path().to_path_buf(),
+            platform: Platform::Ios,
+            backup_password: None,
+        });
+        assert!(decrypt_backup(&ios).unwrap().is_none());
+    }
+
     #[test]
     fn missing_password_does_not_prompt() {
         let err = password_for_encrypted_backup(None).unwrap_err();

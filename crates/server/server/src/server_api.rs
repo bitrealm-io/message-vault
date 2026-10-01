@@ -38,6 +38,10 @@ pub struct ServerInfo {
     /// `unclaimed` shows Create Owner alone; `closed` shows Login alone;
     /// `open` shows Login and Create Account.
     pub state: ServerState,
+    /// Whether the Demo Account exists. While it does, the screen offers a
+    /// way into it beside whatever `state` shows: it has no password, so
+    /// there is nothing to type.
+    pub demo_account: bool,
     /// The server's Build: its Product Version, plus the commit it was built
     /// from unless it is a release. An app compares the Product Version with
     /// its own and says so when they differ; the server serves it either way.
@@ -79,6 +83,12 @@ pub async fn get_server(State(state): State<AppState>) -> Result<Json<ServerInfo
     let mut conn = state.db.acquire().await?;
     Ok(Json(ServerInfo {
         state: state_on_conn(&mut conn).await?,
+        demo_account: account_profile::username_for_account(
+            &mut conn,
+            account_profile::DEMO_ACCOUNT_ID,
+        )
+        .await?
+        .is_some(),
         version: crate::BUILD.to_string(),
         schema_fingerprint: crate::db::schema::SCHEMA_FINGERPRINT,
     }))

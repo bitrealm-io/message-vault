@@ -21,9 +21,7 @@ mod transcode;
 mod write_queue;
 
 pub use export_writer::{ExportWriter, ExportWriterParts};
-pub use staging_summary::{
-    AttachmentForecast, StagingSummary, SummaryProgress, VerdictCounts, summarize_staging,
-};
+pub use staging_summary::{AttachmentForecast, StagingSummary, SummaryProgress, summarize_staging};
 pub use transcode::{TranscodeOptions, TranscodeProgress, TranscodeReport, transcode_staged};
 pub use write_queue::{
     AttachmentSource, ConversationUnit, UnitAttachment, WriteQueueOptions, WriteQueueReport,

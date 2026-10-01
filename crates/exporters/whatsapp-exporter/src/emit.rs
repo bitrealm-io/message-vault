@@ -25,15 +25,6 @@ const EXPORT_TOOL: &str = "WhatsApp Chat Exporter";
 /// Pinned documented upstream version (JSON convert path; shell-out may differ).
 pub(crate) const EXPORT_TOOL_VERSION: &str = "0.13.0";
 
-/// File extension without the leading dot, e.g. `"jpg"` for `"photo.jpg"`.
-fn ext_of(name: &str) -> String {
-    Path::new(name)
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_string()
-}
-
 /// One conversion of a wtsexporter `result.json`: what to read, where to
 /// write it, and how.
 pub(crate) struct ConvertRequest<'a> {
@@ -175,10 +166,7 @@ fn ingest_chat(
         let is_from_me = msg.from_me;
         let (sender_handle, sender_display_name) =
             resolve_sender(msg, is_from_me, &chat_id, &display_fallback, group);
-        if group
-            && let Some(e164) = jid_to_e164(sender_handle.as_str())
-                .or_else(|| msg.sender.as_deref().and_then(jid_to_e164))
-        {
+        if group && let Some(e164) = msg.sender.as_deref().and_then(jid_to_e164) {
             peer_phones.insert(e164);
         }
 
@@ -278,7 +266,6 @@ fn queue_media(
     let pending = PendingAttachment {
         rel_path: String::new(),
         content_type: msg.mime.clone().unwrap_or_default(),
-        extension: name.as_deref().map(ext_of).unwrap_or_default(),
         digest_sha256: None,
         name_hint: name,
     };
@@ -436,7 +423,8 @@ impl ProjectionHooks for WhatsappProjection {
 
     fn attachment_to_ir(&self, att: &PendingAttachment, msg: &PendingMessage) -> IrAttachment {
         IrAttachment {
-            path: (!att.rel_path.is_empty()).then(|| att.rel_path.clone()),
+            // No path yet: the writer sets it when it stages the file.
+            path: None,
             original_name: att.name_hint.clone(),
             mime_type: att.mime_type(),
             digest_sha256: att.digest_sha256.clone(),

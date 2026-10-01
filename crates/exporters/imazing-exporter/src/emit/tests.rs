@@ -29,7 +29,6 @@ fn pending_att(rel_path: &str, digest: Option<&str>) -> PendingAttachment {
     PendingAttachment {
         rel_path: rel_path.into(),
         content_type: String::new(),
-        extension: "jpg".into(),
         digest_sha256: digest.map(str::to_string),
         name_hint: None,
     }
@@ -510,6 +509,200 @@ Bob Mail,2020-01-01 12:01:00,iMessage,Incoming,,,Read,,,Still me,,,\n",
             ("Anyone there", Some("+13212462167"), Some("Bob McRoy")),
             ("Hi", Some("bob2024@gmail.com"), Some("Bob")),
             ("Still me", None, Some("Bob Mail")),
+        ]
+    );
+}
+
+/// The handles on a document's roster, in the order the document lists them.
+fn roster(doc: &message_ir::ConversationDocument) -> Vec<Option<&str>> {
+    doc.conversation
+        .participants
+        .iter()
+        .map(|p| p.handle.as_deref())
+        .collect()
+}
+
+/// A group's chat id is its members' addresses joined by commas. That id is
+/// a key, not a member, so it never joins the roster as a handle of its own.
+#[test]
+fn a_groups_participants_are_its_members_and_not_its_chat_id() {
+    let documents = convert_rows(
+        "Group Chat,2020-01-01 12:00:00,iMessage,Incoming,+15555550111,Alice,Read,,,Hi,,,\n\
+Group Chat,2020-01-01 12:01:00,iMessage,Incoming,+15555550122,Bob,Read,,,Hey,,,\n",
+    );
+    assert_eq!(documents.len(), 1);
+    assert_eq!(
+        roster(&documents[0]),
+        vec![Some("+15555550111"), Some("+15555550122")]
+    );
+}
+
+/// iMazing names a chat with an unsaved contact by the number alone. The
+/// number is the chat, whether it is the whole name or the end of it.
+#[test]
+fn a_chat_named_by_a_bare_number_is_that_numbers_chat() {
+    for session in ["+13212462167", "Bob +13212462167"] {
+        let documents = convert_rows(&format!(
+            "{session},2020-01-01 12:00:00,SMS,Outgoing,,,Sent,,,Hi,,,\n"
+        ));
+        assert_eq!(documents.len(), 1, "{session}");
+        assert_eq!(
+            documents[0].conversation.chat_identifier, "+13212462167",
+            "{session}"
+        );
+        assert_eq!(
+            roster(&documents[0]),
+            vec![Some("+13212462167")],
+            "{session}"
+        );
+    }
+}
+
+/// A Messages chat named "A & B" is a group even when only one member ever
+/// sent a message, and so is a chat whose rows carry two addresses under a
+/// name with no " & " in it.
+#[test]
+fn a_roster_name_or_two_addresses_make_a_group() {
+    for rows in [
+        "Alice Example & Bob Example,2020-01-01 12:00:00,iMessage,Incoming,+15555550111,Alice Example,Read,,,Hi,,,\n",
+        "Book Club,2020-01-01 12:00:00,iMessage,Incoming,+15555550111,Alice,Read,,,Hi,,,\n\
+Book Club,2020-01-01 12:01:00,iMessage,Incoming,+15555550122,Bob,Read,,,Hey,,,\n",
+    ] {
+        let documents = convert_rows(rows);
+        assert_eq!(documents.len(), 1, "{rows}");
+        assert_eq!(
+            documents[0].conversation.conversation_type,
+            message_ir::IrConversationType::Group,
+            "{rows}"
+        );
+    }
+}
+
+/// A short code has too few digits for a "+" form, and it is still the
+/// chat's address: a received row that names no sender is from it.
+#[test]
+fn an_incoming_row_without_a_sender_in_a_short_code_chat_is_from_the_short_code() {
+    let documents = convert_rows("262966,2020-01-01 12:00:00,SMS,Incoming,,,Read,,,Your code,,,\n");
+    assert_eq!(documents[0].conversation.chat_identifier, "262966");
+    assert_eq!(
+        documents[0].messages[0].sender_handle.as_deref(),
+        Some("262966")
+    );
+}
+
+/// The "Attachment type" column says what a file is when its name does not:
+/// a sticker is flagged as one, and an image with no extension is an image.
+#[test]
+fn the_attachment_type_column_reaches_the_attachment() {
+    let documents = convert_rows(
+        "Bob,2020-01-01 12:00:00,iMessage,Incoming,+13212462167,Bob,Read,,,,,sticker_0001,Sticker\n\
+Bob,2020-01-01 12:01:00,iMessage,Incoming,+13212462167,Bob,Read,,,,,IMG_0001,Image\n",
+    );
+    let attachments: Vec<_> = documents[0]
+        .messages
+        .iter()
+        .map(|m| {
+            let attachment = &m.attachments[0];
+            (
+                attachment.original_name.as_deref(),
+                attachment.is_sticker,
+                attachment.mime_type.as_deref(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        attachments,
+        vec![
+            (Some("sticker_0001"), true, Some("image/webp")),
+            (Some("IMG_0001"), false, Some("image/jpeg")),
+        ]
+    );
+}
+
+/// Two chat folders can each hold a file of the same name. A chat's
+/// attachment is the file beside its own CSV, not the first one of that
+/// name anywhere in the export.
+#[test]
+fn a_same_named_file_in_two_chat_folders_goes_to_its_own_chat() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("in");
+    for (folder, number, bytes) in [
+        ("alice", "+15555550111", "alice-photo"),
+        ("bob", "+15555550122", "bob-photo"),
+    ] {
+        let chat = input.join(folder);
+        fs::create_dir_all(&chat).unwrap();
+        fs::write(
+            chat.join("Messages.csv"),
+            format!(
+                "{MESSAGES_HEADER}{folder},2020-01-01 12:00:00,iMessage,Incoming,{number},{folder},Read,,,,,IMG_0001.jpg,Image\n"
+            ),
+        )
+        .unwrap();
+        fs::write(chat.join("IMG_0001.jpg"), bytes).unwrap();
+    }
+    let out = dir.path().join("out");
+    convert_export(ConvertExportArgs {
+        input: &input,
+        output: &out,
+        timezone: Some("UTC"),
+        transforms: ExportTransforms::none(),
+        output_format: OutputFormat::Json,
+        cancel: None,
+        resume: false,
+    })
+    .unwrap();
+    for (number, bytes) in [
+        ("+15555550111", "alice-photo"),
+        ("+15555550122", "bob-photo"),
+    ] {
+        let doc =
+            message_ir_format::read_conversation_json(&out.join(format!("{number}.json"))).unwrap();
+        let path = doc.messages[0].attachments[0]
+            .path
+            .as_deref()
+            .expect("the attachment was copied");
+        assert_eq!(
+            fs::read_to_string(out.join(path)).unwrap(),
+            bytes,
+            "{number}"
+        );
+    }
+}
+
+/// A Messages chat named "A & B" whose rows carry no address is a group of
+/// people the source named and recorded no address for. Each is a
+/// participant with a name and no identity. The chat id is a stem of the
+/// names, which reaches nobody, so it is never a participant's handle.
+#[test]
+fn a_group_known_only_by_names_lists_each_named_person_without_a_handle() {
+    let documents = convert_rows(
+        "Alice Example & Bob Example,2020-01-01 12:00:00,iMessage,Incoming,,Alice Example,Read,,,Hi,,,\n\
+Alice Example & Bob Example,2020-01-01 12:01:00,iMessage,Outgoing,,,Sent,,,Hey,,,\n",
+    );
+    assert_eq!(documents.len(), 1);
+    let conversation = &documents[0].conversation;
+    assert_eq!(
+        conversation.conversation_type,
+        message_ir::IrConversationType::Group
+    );
+    assert_eq!(conversation.chat_identifier, "Alice_Example___Bob_Example");
+    let participants: Vec<_> = conversation
+        .participants
+        .iter()
+        .map(|p| {
+            (
+                p.handle.as_deref(),
+                p.display_name.as_deref(),
+                p.handle_type,
+            )
+        })
+        .collect();
+    assert_eq!(
+        participants,
+        vec![
+            (None, Some("Alice Example"), None),
+            (None, Some("Bob Example"), None),
         ]
     );
 }

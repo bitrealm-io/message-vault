@@ -134,14 +134,9 @@ pub fn mail_message_from_eml_bytes(bytes: &[u8]) -> Result<MailMessage> {
     })
 }
 
-/// Parse a JSON header cell, treating blank and `null` as `None`.
+/// Parse a JSON header, or `None` when the header is missing.
 fn header_json(headers: &[MailHeader<'_>], name: &str) -> Option<serde_json::Value> {
-    let s = optional_header(headers, name)?;
-    let t = s.trim();
-    if t.is_empty() || t == "null" {
-        return None;
-    }
-    serde_json::from_str(t).ok()
+    serde_json::from_str(&optional_header(headers, name)?).ok()
 }
 
 /// Read an mboxrd file and parse each record into [`MailMessage`].
@@ -228,9 +223,9 @@ fn header_or(headers: &[MailHeader<'_>], name: &str, default: &str) -> String {
     optional_header(headers, name).unwrap_or_else(|| default.to_string())
 }
 
-/// True when the header is `true` or `1`.
+/// True when the header is `true`, the only value the writer gives it.
 fn header_bool(headers: &[MailHeader<'_>], name: &str) -> bool {
-    optional_header(headers, name).is_some_and(|s| s.eq_ignore_ascii_case("true") || s == "1")
+    optional_header(headers, name).as_deref() == Some("true")
 }
 
 /// A header value parsed as a number.
@@ -322,9 +317,9 @@ fn collect_mime_attachments(
             continue;
         }
         let mime = part.ctype.mimetype.to_ascii_lowercase();
-        if mime == "text/plain" || mime == "text/html" {
-            continue;
-        }
+        // The message's own text and HTML body parts carry neither an
+        // attachment disposition nor a file name, so the test below leaves
+        // them out. A text file a person attached carries both.
         let disp = part.get_content_disposition();
         let is_attachment = disp.disposition == mailparse::DispositionType::Attachment
             || disp.params.get("filename").is_some_and(|s| !s.is_empty())
@@ -345,7 +340,7 @@ fn collect_mime_attachments(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{MailMessage, Participant, write_message_file};
+    use crate::{MailMessage, Participant, write_conversation_mbox, write_message_file};
 
     #[test]
     fn roundtrip_eml_headers_and_body() {
@@ -495,6 +490,10 @@ mod tests {
         assert_eq!(parsed.participants[1].display_name, None);
         assert_eq!(parsed.message.sender_display_name.as_deref(), Some("Sam"));
         assert_eq!(parsed.message.subject.as_deref(), Some("MMS subject"));
+        assert_eq!(
+            parsed.message.text, "full bag",
+            "the text is the text/plain part beside the attachment"
+        );
         assert_eq!(parsed.export_source, "imessage");
         assert_eq!(parsed.export_tool, "imessage-exporter");
         assert_eq!(parsed.export_tool_version, "3.1.0");
@@ -523,6 +522,115 @@ mod tests {
         assert_eq!(att.bytes, b"\xff\xd8\xfffakejpeg".to_vec());
     }
 
+    /// A message whose attachments are a text file, a picture, and a web page.
+    fn message_with_text_and_binary_attachments() -> MailMessage {
+        let attachment = |name: &str, mime: &str, bytes: &[u8]| MailAttachment {
+            bytes: bytes.to_vec(),
+            meta: message_ir::AttachmentMeta {
+                path: None,
+                original_name: Some(name.into()),
+                mime_type: Some(mime.into()),
+                digest_sha256: None,
+            },
+            is_sticker: false,
+            transcription: None,
+            sticker_effect: None,
+        };
+        MailMessage {
+            chat_identifier: "+15555550101".into(),
+            conversation_type: "individual".into(),
+            group_title: None,
+            participants: vec![Participant {
+                handle: "+15555550101".into(),
+                display_name: Some("Sam".into()),
+            }],
+            owner_handle: "+15555550100".into(),
+            owner_display_name: None,
+            export_source: "imessage".into(),
+            export_tool: "imessage-exporter".into(),
+            export_tool_version: "3.1.0".into(),
+            filename_suffix: None,
+            message: IrMessage {
+                guid: "11111111-2222-3333-4444-555555555555".into(),
+                timestamp_unix_ms: 1_400_773_261_000,
+                direction: IrDirection::Incoming,
+                service: IrService::IMessage,
+                message_kind: IrMessageKind::IMessage,
+                sender_handle: Some("+15555550101".into()),
+                sender_display_name: Some("Sam".into()),
+                owner_handle: None,
+                subject: None,
+                text: "the message text".into(),
+                attachments: Vec::new(),
+                imessage: None,
+                source: None,
+            },
+            attachments: vec![
+                attachment("notes.txt", "text/plain", b"the notes file\nline two\n"),
+                attachment("photo.jpg", "image/jpeg", b"\xff\xd8\xfffakejpeg"),
+                attachment("page.html", "text/html", b"<p>the page</p>"),
+            ],
+        }
+    }
+
+    /// Each attachment keeps its own bytes, and the text stays the text.
+    fn assert_text_and_binary_attachments(parsed: &MailMessage) {
+        assert_eq!(parsed.message.text, "the message text");
+        let got: Vec<(Option<&str>, Option<&str>, &[u8])> = parsed
+            .attachments
+            .iter()
+            .map(|a| {
+                (
+                    a.meta.original_name.as_deref(),
+                    a.meta.mime_type.as_deref(),
+                    a.bytes.as_slice(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            got,
+            [
+                (
+                    Some("notes.txt"),
+                    Some("text/plain"),
+                    b"the notes file\nline two\n".as_slice()
+                ),
+                (
+                    Some("photo.jpg"),
+                    Some("image/jpeg"),
+                    b"\xff\xd8\xfffakejpeg".as_slice()
+                ),
+                (
+                    Some("page.html"),
+                    Some("text/html"),
+                    b"<p>the page</p>".as_slice()
+                ),
+            ]
+        );
+    }
+
+    /// A `text/plain` or `text/html` attachment used to be skipped as if it
+    /// were the message body: it read back with no bytes, and the picture
+    /// after it was paired with the text file's name.
+    #[test]
+    fn eml_roundtrip_keeps_the_bytes_of_text_attachments() {
+        let msg = message_with_text_and_binary_attachments();
+        let tmp = tempfile::tempdir().unwrap();
+        let path = write_message_file(&tmp.path().join("chat"), 1, &msg).unwrap();
+        let parsed = mail_message_from_eml_bytes(&fs::read(&path).unwrap()).unwrap();
+        assert_text_and_binary_attachments(&parsed);
+    }
+
+    #[test]
+    fn mbox_roundtrip_keeps_the_bytes_of_text_attachments() {
+        let msg = message_with_text_and_binary_attachments();
+        let tmp = tempfile::tempdir().unwrap();
+        let path = write_conversation_mbox(tmp.path(), std::slice::from_ref(&msg)).unwrap();
+        let parsed = mail_messages_from_mbox(&path).unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_text_and_binary_attachments(&parsed[0]);
+    }
+
     #[test]
     fn split_mboxrd_unescapes_from() {
         let text = "From me@x Tue May 20 00:00:00 2014\nX-ME-Guid: a\n\n>From spoofed\nbody\n\nFrom me@x Tue May 20 00:01:00 2014\nX-ME-Guid: b\n\nsecond\n\n";
@@ -531,5 +639,26 @@ mod tests {
         let a = String::from_utf8_lossy(&records[0]);
         assert!(a.contains("From spoofed"));
         assert!(!a.contains(">From spoofed"));
+    }
+
+    /// Only a `From ` line is escaped on write, so only that loses a `>` on
+    /// read. A line a person wrote as a quote starts with `>` too.
+    #[test]
+    fn split_mboxrd_leaves_a_quoted_line_as_it_is() {
+        let text = "From me@x Tue May 20 00:00:00 2014\nX-ME-Guid: a\n\n> quoted\n>> twice\n>From spoofed\n>>From escaped twice\n\n";
+        let records = split_mboxrd(text);
+        assert_eq!(records.len(), 1);
+        let lines: Vec<&str> = std::str::from_utf8(&records[0]).unwrap().lines().collect();
+        assert_eq!(
+            lines,
+            [
+                "X-ME-Guid: a",
+                "",
+                "> quoted",
+                ">> twice",
+                "From spoofed",
+                ">From escaped twice",
+            ]
+        );
     }
 }

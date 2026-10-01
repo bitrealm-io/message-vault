@@ -83,8 +83,6 @@ pub struct PushArgs {
     /// When true, ignore the journal and re-upload assets and re-import
     /// messages.
     pub force: bool,
-    /// When true, continue after a failed conversation.
-    pub continue_on_error: bool,
     /// When true, import messages without uploading attachments.
     pub skip_attachments: bool,
     /// When true, trust export metadata: skip re-hashing attachments when
@@ -131,7 +129,6 @@ fn push_config(args: PushArgs) -> PushConfig {
         username: args.username,
         key: args.key,
         mode: args.mode,
-        continue_on_error: args.continue_on_error,
         force: args.force,
         skip_attachments: args.skip_attachments,
         trust_export: args.trust_export,

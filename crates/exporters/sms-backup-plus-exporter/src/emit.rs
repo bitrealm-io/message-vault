@@ -25,21 +25,26 @@ const EXPORT_TOOL: &str = "SMS Backup+";
 const EXPORT_TOOL_VERSION: &str = "1.5.11";
 
 /// The EML's path relative to the input root it was found under, for the vendor `source` bag.
+///
+/// An EML given as an input itself is recorded under its file name: its path
+/// relative to itself is empty, and an empty path names no file.
 fn relative_eml_path(
     eml_path: &Path,
     inputs: &[PathBuf],
     file_inputs: &HashSet<PathBuf>,
 ) -> String {
     for root in inputs {
-        if let Ok(rel) = eml_path.strip_prefix(root) {
-            return rel.display().to_string();
-        }
         if file_inputs.contains(root) && eml_path == root {
             return root
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or_else(|| eml_path.to_str().unwrap_or(""))
                 .to_string();
+        }
+        if let Ok(rel) = eml_path.strip_prefix(root)
+            && !rel.as_os_str().is_empty()
+        {
+            return rel.display().to_string();
         }
     }
     eml_path.display().to_string()
@@ -557,12 +562,32 @@ mod tests {
         IrMessage, IrMessageKind, SCHEMA_VERSION,
     };
 
+    /// An EML given as an input is recorded under its own file name. An EML
+    /// found in a folder input is recorded under its path inside that folder.
+    #[test]
+    fn an_eml_given_as_a_file_input_is_recorded_under_its_file_name() {
+        let file = PathBuf::from("/backups/single/one.eml");
+        let folder = PathBuf::from("/backups/tree");
+        let inputs = vec![file.clone(), folder.clone()];
+        let file_inputs: HashSet<PathBuf> = [file.clone()].into_iter().collect();
+
+        assert_eq!(relative_eml_path(&file, &inputs, &file_inputs), "one.eml");
+        assert_eq!(
+            relative_eml_path(&folder.join("SMS").join("two.eml"), &inputs, &file_inputs),
+            Path::new("SMS").join("two.eml").display().to_string()
+        );
+        // An EML under none of the inputs keeps its whole path.
+        assert_eq!(
+            relative_eml_path(Path::new("/elsewhere/three.eml"), &inputs, &file_inputs),
+            Path::new("/elsewhere/three.eml").display().to_string()
+        );
+    }
+
     #[test]
     fn merge_attachments_unions_by_digest() {
         let mut into = vec![PendingAttachment {
             rel_path: "attachments/a.jpg".into(),
             content_type: "image/jpeg".into(),
-            extension: "jpg".into(),
             digest_sha256: Some("aaa".into()),
             name_hint: Some("a.jpg".into()),
         }];
@@ -570,14 +595,12 @@ mod tests {
             PendingAttachment {
                 rel_path: "attachments/a.jpg".into(),
                 content_type: "image/jpeg".into(),
-                extension: "jpg".into(),
                 digest_sha256: Some("aaa".into()),
                 name_hint: Some("a.jpg".into()),
             },
             PendingAttachment {
                 rel_path: "attachments/b.jpg".into(),
                 content_type: "image/jpeg".into(),
-                extension: "jpg".into(),
                 digest_sha256: Some("bbb".into()),
                 name_hint: Some("b.jpg".into()),
             },

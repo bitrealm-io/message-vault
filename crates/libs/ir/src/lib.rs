@@ -964,8 +964,6 @@ pub struct PendingAttachment {
     pub rel_path: String,
     /// MIME content type.
     pub content_type: String,
-    /// File extension.
-    pub extension: String,
     /// SHA-256 of the file contents; `None` when unknown.
     pub digest_sha256: Option<String>,
     /// Optional SMIL/content-location name.
@@ -1069,6 +1067,15 @@ mod conversation_stem_tests {
         assert_eq!(
             conversation_stem("group", "chat-x", Some("Family Chat"), &[], None),
             "Family_Chat"
+        );
+    }
+
+    #[test]
+    fn group_with_a_one_word_title_uses_it_and_not_the_phones() {
+        let peers = vec!["+15555550100".into()];
+        assert_eq!(
+            conversation_stem("group", "chat-x", Some("Family"), &peers, None),
+            "Family"
         );
     }
 
@@ -1230,6 +1237,48 @@ mod storage_id_round_trip_tests {
         for v in [IrDirection::Incoming, IrDirection::Outgoing] {
             assert_matches_serde(v, v.as_str());
         }
+    }
+}
+
+#[cfg(test)]
+mod valid_filename_tests {
+    use super::valid_filename;
+
+    #[test]
+    fn a_blank_name_or_the_word_null_or_none_is_no_file_name() {
+        for missing in ["", "   ", "null", "NULL", "none"] {
+            assert_eq!(valid_filename(missing), None, "{missing:?}");
+        }
+    }
+
+    #[test]
+    fn a_real_name_comes_back_trimmed() {
+        assert_eq!(valid_filename(" a.jpg ").as_deref(), Some("a.jpg"));
+    }
+}
+
+#[cfg(test)]
+mod pending_message_tests {
+    use super::PendingMessage;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn an_extra_flag_is_set_only_by_the_value_true() {
+        let msg = PendingMessage {
+            sort_key: 0,
+            is_from_me: false,
+            sender_handle: String::new(),
+            sender_display_name: None,
+            text: String::new(),
+            attachments: Vec::new(),
+            extra: BTreeMap::from([
+                ("is_sticker".to_string(), "true".to_string()),
+                ("is_deleted".to_string(), "false".to_string()),
+            ]),
+        };
+        assert!(msg.extra_flag("is_sticker"));
+        assert!(!msg.extra_flag("is_deleted"));
+        assert!(!msg.extra_flag("never_set"));
     }
 }
 

@@ -587,8 +587,7 @@ fn sqlite_sidecar(db: &Path, suffix: &str) -> PathBuf {
 }
 
 /// Refuse to install the prepared database if any non-demo account's row counts differ from
-/// the active one: a reset must only ever touch the demo account and the
-/// owner row it claims this Message Crate with.
+/// the active one: a reset must only ever touch the demo account.
 async fn verify_non_demo_state_preserved(
     active: &Path,
     prepared: &Path,
@@ -607,11 +606,9 @@ async fn verify_non_demo_state_preserved(
     Ok(())
 }
 
-/// Message counts per account for every account except the demo one and
-/// the owner, used to prove a reset changed nothing else. The owner is left
-/// out because the reset writes its row too ([`seed_demo_owner_on_conn`]),
-/// and an unclaimed Message Crate would otherwise gain an account the active state
-/// never had; the owner holds no messages (ADR 0008), so nothing is lost.
+/// Message counts per account for every account except the demo one, used
+/// to prove a reset changed nothing else. The owner is among them: a reset
+/// writes no owner, so one that exists must still be there afterwards.
 async fn non_demo_state(db: &Path, demo_id: i64) -> Result<BTreeMap<i64, i64>> {
     let pool = engine::open_pool_for_path(db)
         .await
@@ -635,12 +632,11 @@ async fn non_demo_state(db: &Path, demo_id: i64) -> Result<BTreeMap<i64, i64>> {
         "SELECT a.id, COUNT(m.id)
          FROM accounts a
          LEFT JOIN messages m ON m.account_id = a.id
-         WHERE a.id != $1 AND a.id != $2
+         WHERE a.id != $1
          GROUP BY a.id
          ORDER BY a.id",
     )
     .bind(demo_id)
-    .bind(account_profile::OWNER_ACCOUNT_ID)
     .fetch_all(&mut *conn)
     .await?;
     let mut state = BTreeMap::new();
@@ -958,44 +954,10 @@ async fn seed_demo_account(target: DbTarget<'_>, account_id: i64, seed: &DemoSee
     let mut conn = pool.acquire().await?;
     schema::ensure_schema(&mut conn).await?;
     seed_demo_account_on_conn(&mut conn, account_id, seed).await?;
-    seed_demo_owner_on_conn(&mut conn).await?;
     conn.close().await?;
     pool.close().await;
     Ok(())
 }
-/// Credentials the demo Message Crate's owner logs in with. A demo Message Crate is
-/// throwaway, so these are the obvious pair rather than a secret; they exist
-/// only here, because the claim route and `create-owner` both run the
-/// password policy and `admin` is five characters.
-pub const DEMO_OWNER_USERNAME: &str = "admin";
-const DEMO_OWNER_PASSWORD: &str = "admin";
-
-/// Claim the demo Message Crate.
-///
-/// Without an owner, a seeded Message Crate would be unclaimed and the entry screen
-/// would offer Create Owner and no login at all — so the documented
-/// "log in as `demo`" would reach a screen with nowhere to type it. The row
-/// is written directly, the way the demo account's own row is, which is what
-/// lets the password be shorter than the policy allows.
-async fn seed_demo_owner_on_conn(conn: &mut sqlx::AnyConnection) -> Result<()> {
-    let hash = crate::credentials::hash_password(DEMO_OWNER_PASSWORD)?;
-    sqlx::query(
-        r"
-        INSERT INTO accounts (id, username, password_hash)
-        VALUES ($1, $2, $3)
-        ON CONFLICT(id) DO UPDATE SET
-            username = excluded.username,
-            password_hash = excluded.password_hash
-        ",
-    )
-    .bind(account_profile::OWNER_ACCOUNT_ID)
-    .bind(DEMO_OWNER_USERNAME)
-    .bind(&hash)
-    .execute(&mut *conn)
-    .await?;
-    Ok(())
-}
-
 /// Create the demo account row and the profile fields the seed names, so the demo logs in without setup.
 async fn seed_demo_account_on_conn(
     conn: &mut sqlx::AnyConnection,
@@ -1004,15 +966,17 @@ async fn seed_demo_account_on_conn(
 ) -> Result<()> {
     account_profile::ensure_account_row(conn, account_id).await?;
 
-    // The demo account exists so someone can try all of Message Crate without
-    // making an account of their own, so it may import, export, and delete
-    // like any other account.
+    // The Demo Account has no password, so anyone at the login card can enter
+    // it. It may export, and trash and restore; it may not import, so a
+    // person's own messages never land in Demo Data, and it may not delete
+    // for good, so one visitor cannot empty it for the next
+    // (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`).
     sqlx::query(
         r"
         INSERT INTO accounts (
             id, username, password_hash, preferred_name, can_import, can_export, can_delete
         )
-        VALUES ($1, $2, NULL, $3, 1, 1, 1)
+        VALUES ($1, $2, NULL, $3, 0, 1, 0)
         ON CONFLICT(id) DO UPDATE SET
             username = excluded.username,
             preferred_name = excluded.preferred_name,

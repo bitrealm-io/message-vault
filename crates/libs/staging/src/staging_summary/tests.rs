@@ -271,28 +271,18 @@ fn an_attachment_that_is_already_missing_is_counted_but_not_forecast() {
         summary.forecasts.is_empty(),
         "nothing to forecast about a file that is not there"
     );
-    assert_eq!(
-        summary.verdict_counts.fits_as_is
-            + summary.verdict_counts.likely_fits
-            + summary.verdict_counts.may_grow
-            + summary.verdict_counts.probably_too_big
-            + summary.verdict_counts.cannot_process,
-        0,
-        "a settled attachment is never classified at all"
-    );
 }
 
 #[test]
 fn only_files_worth_reporting_get_a_forecast_row() {
     // Every attachment is classified; a row is returned only where the
     // verdict is something other than "fits as-is", because that is the
-    // whole content of the report. The counts cover the rest.
+    // whole content of the report.
     let dir = staged_fixture_with_sizes(&[("small.png", 1024), ("huge.png", 900 * 1024 * 1024)]);
     let summary = summarize_staging(dir.path(), &summary_options(), &mut |_| {}).unwrap();
-    assert_eq!(summary.verdict_counts.fits_as_is, 1);
-    assert_eq!(summary.verdict_counts.probably_too_big, 1);
     assert_eq!(summary.forecasts.len(), 1);
     assert_eq!(summary.forecasts[0].name, "huge.png");
+    assert_eq!(summary.forecasts[0].verdict, SizeVerdict::ProbablyTooBig);
 }
 
 #[test]
@@ -303,7 +293,8 @@ fn copy_and_skip_modes_forecast_nothing_because_nothing_will_change() {
     let mut options = summary_options();
     options.mode = MediaMode::Clone;
     let summary = summarize_staging(dir.path(), &options, &mut |_| {}).unwrap();
-    assert_eq!(summary.verdict_counts.probably_too_big, 1);
+    assert_eq!(summary.forecasts.len(), 1);
+    assert_eq!(summary.forecasts[0].verdict, SizeVerdict::ProbablyTooBig);
     assert_eq!(
         summary.forecasts[0].estimate_bytes,
         summary.forecasts[0].size_bytes
@@ -338,7 +329,6 @@ fn a_committed_derivative_is_judged_on_its_own_size_not_a_mode_factor() {
         let mut options = summary_options();
         options.mode = mode;
         let summary = summarize_staging(dir.path(), &options, &mut |_| {}).unwrap();
-        assert_eq!(summary.verdict_counts.fits_as_is, 1, "mode {mode:?}");
         assert!(
             summary.forecasts.is_empty(),
             "a committed derivative under the limit gets no forecast row (mode {mode:?})"

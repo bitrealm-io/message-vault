@@ -6,8 +6,8 @@ use anyhow::{Context, Result, bail};
 use message_csv::{AttachmentCell, ParticipantCell};
 use message_ir::{
     ConversationDocument, ConversationHeader, ConversationMeta, ConversationStats, ExportMeta,
-    HandleType, IrAttachment, IrConversationType, IrDirection, IrImessage, IrMessage,
-    IrMessageKind, IrParticipant, IrService, SCHEMA_VERSION, nonempty, parse_android_type,
+    IrAttachment, IrConversationType, IrDirection, IrImessage, IrMessage, IrMessageKind,
+    IrParticipant, IrService, SCHEMA_VERSION, nonempty, parse_android_type,
 };
 use serde_json::Value;
 use std::collections::HashMap;
@@ -67,17 +67,7 @@ pub fn read_conversation_csv(path: &Path) -> Result<ConversationDocument> {
 /// Rebuild the conversation header from the first CSV row's conversation columns.
 fn header_from_row(cols: &HashMap<&str, usize>, row: &csv::StringRecord) -> ConversationHeader {
     let get = |name: &str| cell(cols, row, name).unwrap_or("");
-    let mut participants = parse_participants(get("participants_json"));
-    // Legacy files predate handle_type in the participants cell. For
-    // single-participant conversations, fall back to the per-row
-    // `handle_type` column (the sender's inferred type) so the peer keeps
-    // a type. Group chats have no single type, so they are left untouched.
-    if participants.len() == 1
-        && participants[0].handle_type.is_none()
-        && let Some(t) = parse_handle_type_cell(get("handle_type"))
-    {
-        participants[0].handle_type = Some(t);
-    }
+    let participants = parse_participants(get("participants_json"));
     let group_title = {
         let t = get("group_title");
         if t.is_empty() {
@@ -200,13 +190,10 @@ fn cell<'a>(
     row.get(*cols.get(name)?)
 }
 
-/// Parse a JSON cell, treating blank and `null` as absent.
+/// Parse a JSON cell. The writer leaves the cell blank when there is no
+/// value, and a blank cell is not JSON, so it reads as absent.
 fn parse_json_cell(s: &str) -> Option<Value> {
-    let t = s.trim();
-    if t.is_empty() || t == "null" {
-        return None;
-    }
-    serde_json::from_str(t).ok()
+    serde_json::from_str(s).ok()
 }
 
 /// Participants from the `participants_json` cell; malformed JSON yields none.
@@ -233,21 +220,8 @@ fn parse_participants(raw: &str) -> Vec<IrParticipant> {
         .collect()
 }
 
-/// Parse the dedicated `handle_type` column cell (empty → `None`).
-fn parse_handle_type_cell(raw: &str) -> Option<HandleType> {
-    let t = raw.trim();
-    if t.is_empty() {
-        None
-    } else {
-        Some(HandleType::parse(t))
-    }
-}
-
 /// Attachments from the `attachments_json` cell.
 fn parse_attachments(raw: &str) -> Result<Vec<IrAttachment>> {
-    if raw.trim().is_empty() || raw.trim() == "null" {
-        return Ok(Vec::new());
-    }
     let cells: Vec<AttachmentCell> =
         serde_json::from_str(raw).with_context(|| format!("parse attachments_json: {raw}"))?;
     Ok(cells.into_iter().map(Into::into).collect())

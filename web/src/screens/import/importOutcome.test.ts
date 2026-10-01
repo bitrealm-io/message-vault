@@ -57,13 +57,6 @@ function approvedPlan(counts: { tooLarge?: number } = {}): StagingSummary {
     ownerHandles: [],
     attachments: forecasts.length,
     attachmentBytes: 0,
-    verdictCounts: {
-      fitsAsIs: 0,
-      likelyFits: 0,
-      mayGrow: 0,
-      probablyTooBig: tooLarge,
-      cannotProcess: 0,
-    },
     forecasts,
     assetMaxBytes: 50 * 1024 * 1024,
   };

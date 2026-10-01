@@ -109,7 +109,6 @@ fn text_only_config(dir: &Path, base_url: String) -> PushConfig {
         username: "alice".into(),
         key: "mc_test".into(),
         mode: ImportMode::Append,
-        continue_on_error: true,
         force: false,
         skip_attachments: false,
         verify_digests: false,
@@ -311,10 +310,10 @@ fn a_push_completes_its_import_run_with_the_counts_it_sent() {
     assert_eq!(complete.calls(), 1, "the Import Run is completed once");
 }
 
-/// A push that stops at a failed batch still completes its Import Run, as
-/// failed, so the server does not show it as running.
+/// A push whose only batch fails still completes its Import Run, as failed,
+/// so the server does not show it as running.
 #[test]
-fn an_aborted_push_completes_its_import_run_as_failed() {
+fn a_push_where_nothing_lands_completes_its_import_run_as_failed() {
     let server = MockServer::start();
     let _auth = mock_session(&server);
     let _run = mock_import_run(&server, 42);
@@ -336,12 +335,7 @@ fn an_aborted_push_completes_its_import_run_as_failed() {
 
     let dir = tempdir().unwrap();
     write_jsonl(dir.path(), &sample_doc());
-    let cfg = PushConfig {
-        continue_on_error: false,
-        ..text_only_config(dir.path(), server.base_url())
-    };
-
-    let report = run(&cfg, None).unwrap();
+    let report = run(&text_only_config(dir.path(), server.base_url()), None).unwrap();
 
     assert!(!report.ok);
     assert_eq!(complete.calls(), 1, "the Import Run is completed as failed");
@@ -523,60 +517,10 @@ fn folder_with_a_bad_middle_file(dir: &Path) {
     write_jsonl(dir, &sample_doc_for("+15555550103", "guid-3"));
 }
 
-/// Without `continue_on_error`, a push stops at the first file that fails to
-/// prepare. The batch already packed still lands, so the journal matches the
-/// server, and nothing after the failure is sent.
+/// A file that fails to prepare is reported and the push goes on: the good
+/// files around it still share one request.
 #[test]
-fn a_push_without_continue_on_error_stops_at_the_first_bad_file() {
-    let server = MockServer::start();
-    let _auth = mock_session(&server);
-    let _run = mock_import_run(&server, 7);
-    let first = server.mock(|when, then| {
-        when.method(POST)
-            .path("/v1/imports/7/batches")
-            .body_includes("guid-1");
-        then.status(200).json_body(json!({
-            "messages": 1,
-            "messages_appended": 1,
-            "conversations": 1
-        }));
-    });
-    let after = server.mock(|when, then| {
-        when.method(POST)
-            .path("/v1/imports/7/batches")
-            .body_excludes("guid-1");
-        then.status(200).json_body(json!({
-            "messages": 1,
-            "messages_appended": 1,
-            "conversations": 1
-        }));
-    });
-
-    let dir = tempdir().unwrap();
-    folder_with_a_bad_middle_file(dir.path());
-    let cfg = PushConfig {
-        continue_on_error: false,
-        ..text_only_config(dir.path(), server.base_url())
-    };
-
-    let report = run(&cfg, None).unwrap();
-
-    assert!(!report.ok);
-    assert_eq!(
-        first.calls(),
-        1,
-        "the conversation before the failure lands"
-    );
-    assert_eq!(after.calls(), 0, "nothing after the failure is sent");
-    assert_eq!(report.conversations_ok, 1);
-    assert_eq!(report.conversations_failed, 1);
-    assert_eq!(journaled_guids(dir.path()), vec!["guid-1".to_string()]);
-}
-
-/// With `continue_on_error`, a file that fails to prepare is reported and
-/// the push goes on: the good files around it still share one request.
-#[test]
-fn a_push_with_continue_on_error_imports_the_files_after_a_bad_one() {
+fn a_push_imports_the_files_after_a_bad_one() {
     let server = MockServer::start();
     let _auth = mock_session(&server);
     let _run = mock_import_run(&server, 7);
@@ -758,7 +702,6 @@ fn profiles_attachment_upload_phases() {
         username: "alice".into(),
         key: "mc_test".into(),
         mode: ImportMode::Append,
-        continue_on_error: false,
         force: false,
         skip_attachments: false,
         verify_digests: false,
@@ -877,12 +820,18 @@ fn puts_two_new_assets_without_head() {
         then.status(404);
     });
     let put_a = server.mock(|when, then| {
-        when.method(PUT).path(format!("/v1/assets/{digest_a}"));
+        // The server records the media type the upload names, so each PUT
+        // must carry the attachment's own type.
+        when.method(PUT)
+            .path(format!("/v1/assets/{digest_a}"))
+            .header("Content-Type", "text/plain");
         then.status(200)
             .json_body(json!({ "already_present": false }));
     });
     let put_b = server.mock(|when, then| {
-        when.method(PUT).path(format!("/v1/assets/{digest_b}"));
+        when.method(PUT)
+            .path(format!("/v1/assets/{digest_b}"))
+            .header("Content-Type", "text/plain");
         then.status(200)
             .json_body(json!({ "already_present": false }));
     });
@@ -1077,8 +1026,10 @@ fn multipart_upload_when_over_proxy_threshold() {
         }));
     });
     let start = server.mock(|when, then| {
+        // The start request is the only one that names the media type.
         when.method(POST)
-            .path(format!("/v1/assets/{digest}/uploads"));
+            .path(format!("/v1/assets/{digest}/uploads"))
+            .json_body(json!({ "bytes": 40, "mime": "video/mp4" }));
         then.status(200).json_body(json!({
             "upload_id": "up-1",
             "part_size": 16
@@ -1132,7 +1083,7 @@ fn multipart_upload_when_over_proxy_threshold() {
     doc.messages[0].attachments.push(IrAttachment {
         path: Some("attachments/large.bin".into()),
         original_name: Some("large.bin".into()),
-        mime_type: Some("application/octet-stream".into()),
+        mime_type: Some("video/mp4".into()),
         digest_sha256: Some(digest.clone()),
         is_sticker: false,
         transcription: None,
@@ -1236,7 +1187,6 @@ fn multipart_aborts_on_hash_mismatch_complete() {
 
     let mut cfg = text_only_config(dir.path(), server.base_url());
     cfg.force = true;
-    cfg.continue_on_error = true;
     cfg.asset_multipart_threshold = 8;
     let report = run(&cfg, None).unwrap();
     assert!(!report.ok);
@@ -1331,7 +1281,6 @@ fn verify_digests_fails_on_mismatch() {
 
     let mut cfg = text_only_config(dir.path(), server.base_url());
     cfg.verify_digests = true;
-    cfg.continue_on_error = false;
     let report = run(&cfg, None).unwrap();
     assert!(!report.ok);
     assert_eq!(report.conversations_failed, 1);
@@ -2299,4 +2248,123 @@ fn a_chunk_that_overflows_the_pending_batch_is_sent_in_the_next_one() {
     let mut guids = journaled_guids(dir.path());
     guids.sort();
     assert_eq!(guids, vec!["guid-a1", "guid-b1", "guid-b2"]);
+}
+
+/// The desktop app sets no journal path, so the journal a second push reads
+/// is the one the first push wrote inside the export folder.
+#[test]
+fn a_push_with_no_journal_path_keeps_its_journal_in_the_export_folder() {
+    let server = MockServer::start();
+    let _auth = mock_session(&server);
+    let _run = mock_import_run(&server, 7);
+    let import = server.mock(|when, then| {
+        when.method(POST).path("/v1/imports/7/batches");
+        then.status(200).json_body(json!({
+            "messages": 1,
+            "messages_appended": 1,
+            "conversations": 1
+        }));
+    });
+
+    let dir = tempdir().unwrap();
+    write_jsonl(dir.path(), &sample_doc());
+    let mut cfg = text_only_config(dir.path(), server.base_url());
+    cfg.journal_path = None;
+
+    assert!(run(&cfg, None).unwrap().ok);
+    assert!(dir.path().join(".import-state.jsonl").is_file());
+
+    let second = run(&cfg, None).unwrap();
+    assert!(second.ok);
+    assert_eq!(second.conversations_skipped, 1);
+    assert_eq!(import.calls(), 1, "the second push sends nothing");
+}
+
+/// A batch of 100 messages or more is sent while later conversations are
+/// still being prepared. That early send succeeding must not end the push.
+#[test]
+fn a_push_goes_on_after_sending_a_large_batch_early() {
+    let server = MockServer::start();
+    let _auth = mock_session(&server);
+    let _run = mock_import_run(&server, 7);
+    let import = server.mock(|when, then| {
+        when.method(POST).path("/v1/imports/7/batches");
+        then.status(200).json_body(json!({
+            "messages": 1,
+            "messages_appended": 1,
+            "conversations": 1
+        }));
+    });
+
+    let dir = tempdir().unwrap();
+    // The first file in name order holds 120 messages. One conversation is
+    // prepared at a time, so the loop comes round with that batch pending
+    // while two conversations are still to come.
+    let mut large = sample_doc();
+    let first = large.messages[0].clone();
+    large.messages = (0..120)
+        .map(|i| {
+            let mut msg = first.clone();
+            msg.guid = format!("large-{i}");
+            msg.timestamp_unix_ms += i;
+            msg
+        })
+        .collect();
+    write_jsonl(dir.path(), &large);
+    write_jsonl(dir.path(), &sample_doc_for("+15555550102", "guid-2"));
+    write_jsonl(dir.path(), &sample_doc_for("+15555550103", "guid-3"));
+    let mut cfg = text_only_config(dir.path(), server.base_url());
+    cfg.batch_size = message_crate_push::DEFAULT_BATCH_SIZE;
+    cfg.prepare_ahead = 1;
+
+    let report = run(&cfg, None).unwrap();
+
+    assert!(report.ok, "{:?}", report.results);
+    assert_eq!(report.conversations_ok, 3);
+    assert_eq!(report.messages_attempted, 122);
+    assert_eq!(import.calls(), 2, "the large batch, then the rest");
+}
+
+/// The default size limit is for files no server would take. A photo of a
+/// few MiB is far under it and must be uploaded, not skipped as too large.
+#[test]
+fn a_push_with_the_default_size_limit_uploads_a_photo_of_two_mebibytes() {
+    let photo = vec![0x5a_u8; 2 * 1024 * 1024];
+    let digest = hex::encode(Sha256::digest(&photo));
+
+    let server = MockServer::start();
+    let _auth = mock_session(&server);
+    let _run = mock_import_run(&server, 7);
+    let _head = server.mock(|when, then| {
+        when.method("HEAD").path(format!("/v1/assets/{digest}"));
+        then.status(404);
+    });
+    let put = server.mock(|when, then| {
+        when.method(PUT).path(format!("/v1/assets/{digest}"));
+        then.status(200)
+            .json_body(json!({ "already_present": false }));
+    });
+    let _import = server.mock(|when, then| {
+        when.method(POST).path("/v1/imports/7/batches");
+        then.status(200).json_body(json!({
+            "messages": 1,
+            "messages_appended": 1
+        }));
+    });
+
+    let dir = tempdir().unwrap();
+    let attachment_dir = dir.path().join("attachments");
+    fs::create_dir(&attachment_dir).unwrap();
+    fs::write(attachment_dir.join("photo.jpg"), &photo).unwrap();
+    let mut doc = sample_doc();
+    doc.messages[0].attachments = vec![ir_attachment("attachments/photo.jpg", digest)];
+    write_jsonl(dir.path(), &doc);
+
+    let mut cfg = text_only_config(dir.path(), server.base_url());
+    cfg.asset_max_bytes = message_crate_push::DEFAULT_ASSET_MAX_BYTES;
+    let report = run(&cfg, None).unwrap();
+
+    assert!(report.ok, "{:?}", report.results);
+    assert_eq!(put.calls(), 1);
+    assert_eq!(report.assets_uploaded, 1);
 }

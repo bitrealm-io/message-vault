@@ -485,6 +485,45 @@ mod tests {
         );
     }
 
+    /// GO SMS Pro and SMS Backup+ put the contact's name on every message of
+    /// a one-to-one conversation, including the ones the owner sent. When the
+    /// peer sent nothing, that is the only place the name is.
+    #[test]
+    fn a_contact_name_on_a_sent_message_names_the_peer_of_a_one_to_one_conversation() {
+        let named = |name: &str| {
+            let mut m = msg(1_609_459_200, true, "hi");
+            m.extra.insert("contact_name".into(), name.into());
+            m
+        };
+        let same = |raw: &str| raw.to_string();
+        let peer = "+15555550122".to_string();
+
+        let mut convo = PendingConversation::new(&peer, false, None, vec![peer.clone()]);
+        convo.messages = vec![named(" Bob ")];
+        assert_eq!(
+            display_names_for_handles(&convo, &same),
+            HashMap::from([(peer.clone(), "Bob".to_string())])
+        );
+
+        convo.messages = vec![named("  ")];
+        assert!(
+            display_names_for_handles(&convo, &same).is_empty(),
+            "a blank name names nobody"
+        );
+
+        let mut group = PendingConversation::new(
+            "group-1",
+            true,
+            None,
+            vec![peer, "+15555550133".to_string()],
+        );
+        group.messages = vec![named("Bob")];
+        assert!(
+            display_names_for_handles(&group, &same).is_empty(),
+            "one name cannot belong to every member of a group"
+        );
+    }
+
     #[test]
     fn prepare_conversation_sorts_prunes_and_counts() {
         let mut convo = PendingConversation::new("x", false, None, Vec::new());
@@ -553,7 +592,6 @@ mod tests {
             m.attachments = vec![PendingAttachment {
                 rel_path: format!("attachments/{digest}.jpg"),
                 content_type: "image/jpeg".into(),
-                extension: "jpg".into(),
                 digest_sha256: Some(digest.to_string()),
                 name_hint: None,
             }];

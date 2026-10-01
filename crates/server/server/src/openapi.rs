@@ -199,6 +199,10 @@ pub fn api_openapi() -> OpenApiRouter<AppState> {
         .routes(routes!(crate::server_api::get_server_settings))
         .routes(routes!(crate::server_api::update_server_settings))
         .routes(routes!(crate::server_api::get_server_storage))
+        .routes(routes!(
+            crate::server_api::get_demo_account,
+            crate::server_api::replace_demo_account
+        ))
 }
 
 /// Finish the assembled document with the parts no handler writes: the

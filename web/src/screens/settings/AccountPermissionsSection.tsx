@@ -30,7 +30,9 @@ export function AccountPermissionsSection({
   managedAccountId?: number;
 }) {
   const updateAccount = useUpdateAccount();
-  const managed = managedAccountId !== undefined;
+  // The Demo Account's status and permissions are fixed, for the owner too.
+  const fixed = profile.is_demo === true;
+  const managed = managedAccountId !== undefined && !fixed;
   // Not locked while a change is sent: the server answers in a moment, and
   // greying all four controls for that moment reads as a flash.
   const locked = !managed;
@@ -83,7 +85,9 @@ export function AccountPermissionsSection({
         ))}
         {managed ? null : (
           <p className="m-0 text-[0.813rem] text-muted">
-            The owner sets your status and permissions.
+            {fixed
+              ? "The Demo Account's status and permissions are fixed."
+              : "The owner sets your status and permissions."}
           </p>
         )}
         {updateAccount.error ? (

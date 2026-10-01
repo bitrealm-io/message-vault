@@ -45,7 +45,7 @@ The Owner's row reads zero, because the Owner holds no messages.
 
 ## Server Settings
 
-**Server Settings** holds one switch and two facts about the server.
+**Server Settings** holds one switch, the Demo Account, and two facts about the server.
 
 The switch is **Let anyone who can reach this server create their own account**.
 
@@ -55,7 +55,23 @@ The switch is **Let anyone who can reach this server create their own account**.
 It is off on a new Message Crate.
 The switch saves when it is selected. There is no save button.
 
-Below the switch:
+### Demo Account
+
+The Demo Account holds made-up conversations.
+Anyone who reaches the server opens it with **Explore Demo Account** on the login screen, and it has no password.
+Every new Message Crate starts with it.
+
+- **Add Demo Account** shows when there is none. It builds the account with the size chosen beside it.
+- **Reset Demo Account** shows when there is one. It removes the account, with everything visitors changed in it, and builds it again. It asks first. No other account is touched.
+
+The sizes are **Medium**, about 54,000 messages, and **Large**, about 613,000 messages.
+Medium takes a few seconds. Large takes about a minute.
+The card shows **Building the Demo Account** until the build ends, and the server keeps working meanwhile.
+
+The Demo Account is removed under **User Accounts**, as any account is.
+Its page there shows its status, permissions, and identities, and none of them can be changed.
+
+Below the Demo Account:
 
 - **Version** is the version of the server that is running.
 - **Schema fingerprint** is a number the server derives from its database layout. [Update Message Crate](/docs/user/features/owner/update/#when-the-database-layout-changes) says what a changed number means.

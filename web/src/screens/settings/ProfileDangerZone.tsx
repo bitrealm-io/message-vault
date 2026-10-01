@@ -45,10 +45,12 @@ export function ProfileDangerZone({
   const busy = deleting || deletingMessages;
   // The demo lock is the account's own; the owner may delete the demo account.
   const demoLocked = isDemo && !managed;
+  // Nobody empties the Demo Account: the owner deletes it or resets it.
+  const messagesLocked = isDemo;
   const count = messageCount.toLocaleString();
 
   const deleteAllMessages = async () => {
-    if (demoLocked) return;
+    if (messagesLocked) return;
     setDeletingMessages(true);
     setDangerError("");
     try {
@@ -125,10 +127,10 @@ export function ProfileDangerZone({
               <div className="justify-self-end p-px">
                 <Button
                   variant="danger"
-                  disabled={busy || demoLocked}
+                  disabled={busy || messagesLocked}
                   onClick={() => setConfirmDeleteMessagesOpen(true)}
                   className={dangerButton}
-                  title={demoLocked ? "Unavailable on the demo account" : undefined}
+                  title={messagesLocked ? "Unavailable on the demo account" : undefined}
                 >
                   {deletingMessages ? "Deleting…" : "Delete all messages"}
                 </Button>

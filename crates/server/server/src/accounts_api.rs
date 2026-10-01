@@ -766,7 +766,8 @@ pub struct DeleteAccountRequest {
         (status = 204, description = "Account deleted"),
         crate::problem::openapi::InvalidCredentials,
         crate::problem::openapi::DemoAccountProtected,
-        crate::problem::openapi::NotTheOwner
+        crate::problem::openapi::NotTheOwner,
+        crate::problem::openapi::StateConflict
     )
 )]
 pub async fn delete_account(
@@ -776,6 +777,14 @@ pub async fn delete_account(
     body: Option<Json<DeleteAccountRequest>>,
 ) -> Result<StatusCode, ApiError> {
     let mut conn = state.db.acquire().await?;
+    // Checked before the account is looked up: a build removes the account
+    // row and writes it again, and a delete must not slip in between.
+    if account_profile::is_demo_account(target) && auth.is_owner() && state.demo_build.is_building()
+    {
+        return Err(ApiError::StateConflict(
+            "the Demo Account is being built; delete it when the build ends".into(),
+        ));
+    }
     let reach = require_account_reach(&mut conn, &auth, target, Admits::Owner).await?;
     if account_profile::is_server_owner(target) {
         return Err(ApiError::validation("the owner cannot be deleted"));

@@ -108,7 +108,8 @@ export default function IdentityTable({
   totals?: boolean;
   emptyText?: string;
   ariaLabel?: string;
-  onRemove: (row: IdentityRow) => void;
+  /** With none, the rows cannot be removed and show no Remove button. */
+  onRemove?: (row: IdentityRow) => void;
   /** Where a conversation count leads; with none, counts are plain numbers. */
   onBrowse?: (row: IdentityRow) => void;
 }) {
@@ -206,16 +207,18 @@ export default function IdentityTable({
             </Cell>
             {renderCounts(row, onBrowse ? () => onBrowse(row) : undefined)}
             <Cell className="px-1 py-0.5 text-right align-middle">
-              <Button
-                variant="ghostDanger"
-                size="icon"
-                isDisabled={busy || loading}
-                aria-label={`Remove ${row.address} (${formatHandleServiceLabel(row.address, row.service)})`}
-                title="Remove identity"
-                onPress={() => onRemove(row)}
-              >
-                <TrashIcon />
-              </Button>
+              {onRemove ? (
+                <Button
+                  variant="ghostDanger"
+                  size="icon"
+                  isDisabled={busy || loading}
+                  aria-label={`Remove ${row.address} (${formatHandleServiceLabel(row.address, row.service)})`}
+                  title="Remove identity"
+                  onPress={() => onRemove(row)}
+                >
+                  <TrashIcon />
+                </Button>
+              ) : null}
             </Cell>
           </Row>
         ))}

@@ -53,6 +53,9 @@ export function IdentitiesSection({
   managedAccountId?: number;
 }) {
   const managed = managedAccountId !== undefined;
+  // The Demo Account's identities decide which of its messages read as sent,
+  // so nobody changes them.
+  const fixed = profile.is_demo === true;
   const updateProfile = useUpdateSettingsProfile(managedAccountId);
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState("");
@@ -132,21 +135,25 @@ export function IdentitiesSection({
           loading={listed === undefined}
           busy={busy}
           emptyText="No identities yet."
-          onRemove={requestRemove}
+          onRemove={fixed ? undefined : requestRemove}
         />
       </div>
       <div className="mt-3 mb-6">
-        <Button
-          variant="primary"
-          size="sm"
-          isDisabled={busy}
-          onPress={() => {
-            setAddError("");
-            setAdding(true);
-          }}
-        >
-          Add identity
-        </Button>
+        {fixed ? (
+          <p className="m-0 text-[0.813rem] text-muted">The Demo Account's identities are fixed.</p>
+        ) : (
+          <Button
+            variant="primary"
+            size="sm"
+            isDisabled={busy}
+            onPress={() => {
+              setAddError("");
+              setAdding(true);
+            }}
+          >
+            Add identity
+          </Button>
+        )}
       </div>
 
       <AddIdentityDialog

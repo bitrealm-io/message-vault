@@ -29,10 +29,39 @@ export function isOwnAddress(url: string): boolean {
 /**
  * Make sure the app's own Message Crate is running. Safe to call on every
  * launch: a Message Crate already answering is used as it is, and a start
- * under way is left alone. Calling it again after a failure tries again.
+ * under way is left alone. Calling it again after a failure tries again, and
+ * calling it after the network setting changed restarts the app's own server.
  */
 export async function startLocalServer(): Promise<LocalServerStatus> {
-  return invoke<LocalServerStatus>("start_local_server");
+  return invoke<LocalServerStatus>("start_local_server", { openToNetwork: getOpenToNetwork() });
+}
+
+const OPEN_TO_NETWORK_KEY = "mc-local-server-open-to-network";
+
+/**
+ * Whether the app's own Message Crate accepts connections from other devices
+ * on the network. Off unless the person switched it on: the connection is
+ * plain HTTP.
+ */
+export function getOpenToNetwork(): boolean {
+  try {
+    return localStorage.getItem(OPEN_TO_NETWORK_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Save the setting. It takes effect at the next `startLocalServer`, which
+ * restarts the app's own server when it was started the other way.
+ */
+export function setOpenToNetwork(on: boolean): void {
+  try {
+    if (on) localStorage.setItem(OPEN_TO_NETWORK_KEY, "1");
+    else localStorage.removeItem(OPEN_TO_NETWORK_KEY);
+  } catch {
+    // Private browsing and full storage can throw.
+  }
 }
 
 /** Read the state of the app's own Message Crate without starting it. */

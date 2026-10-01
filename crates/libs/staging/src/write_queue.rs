@@ -216,7 +216,7 @@ pub type AttachmentLoader<'a> =
 /// # Errors
 ///
 /// Returns the first unit error, which stops the drain. A cancel surfaces as
-/// `"canceled"`.
+/// `"cancelled"`.
 pub fn drain_write_queue_with_loader(
     output_dir: &Path,
     mut units: Vec<ConversationUnit>,
@@ -332,7 +332,7 @@ pub fn drain_units(
 /// # Errors
 ///
 /// Returns the first unit error, or the headroom error when the staging disk
-/// cannot hold what the backup needs. A cancel surfaces as `"canceled"`.
+/// cannot hold what the backup needs. A cancel surfaces as `"cancelled"`.
 pub fn drain_write_queue(
     output_dir: &Path,
     mut units: Vec<ConversationUnit>,
@@ -661,7 +661,7 @@ fn write_one_unit(
     cancel: Option<&CancelFlag>,
 ) -> Result<UnitOutcome> {
     if cancel.is_some_and(|f| f.load(Ordering::Relaxed)) {
-        anyhow::bail!("canceled");
+        anyhow::bail!("cancelled");
     }
 
     let ConversationUnit {

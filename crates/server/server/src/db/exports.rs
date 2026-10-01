@@ -4,7 +4,7 @@
 
 use anyhow::{Context, Result};
 use chrono::Utc;
-use message_crate_api_types::{ExportQueryList, ExportRun, ExportScope};
+use message_crate_api_types::{ExportQueryList, ExportRun, ExportScope, ExportStatus};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Connection, Executor, Row, SqliteConnection};
 
@@ -14,10 +14,6 @@ use crate::db::conversation_messages::{
 use crate::db::sql::{SqlParam, bind_all};
 use crate::paging::{Direction, Page, SortKey};
 use crate::server::ApiError;
-
-/// The values `exports.status` holds, and so the values
-/// `GET /v1/exports?status=` accepts.
-pub const EXPORT_STATUSES: [&str; 4] = ["running", "completed", "failed", "cancelled"];
 
 /// The one key `GET /v1/exports` accepts in `sort=`: `started_at`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,7 +83,11 @@ fn export_from_row(row: &SqliteRow) -> Result<ExportRun> {
         id: row.try_get(0)?,
         scope,
         tool: row.try_get(5)?,
-        status: row.try_get(6)?,
+        status: {
+            let raw: String = row.try_get(6)?;
+            ExportStatus::parse(&raw)
+                .ok_or_else(|| anyhow::anyhow!("exports.status holds unknown value '{raw}'"))?
+        },
         started_at: row.try_get(7)?,
         finished_at: row.try_get(8)?,
         message_count: row.try_get(9)?,
@@ -212,14 +212,14 @@ pub async fn finish_export(
     conn: &mut SqliteConnection,
     account_id: i64,
     export_id: i64,
-    status: &str,
+    status: ExportStatus,
 ) -> Result<bool> {
     let mut tx = conn.begin().await?;
     let done = sqlx::query(
         "UPDATE exports SET status = $1, finished_at = $2
          WHERE id = $3 AND account_id = $4 AND status = 'running'",
     )
-    .bind(status)
+    .bind(status.as_str())
     .bind(Utc::now().to_rfc3339())
     .bind(export_id)
     .bind(account_id)

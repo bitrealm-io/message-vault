@@ -375,7 +375,7 @@ async fn imports_complete_and_detail_surface_timings_and_issues() {
     )
     .await
     .unwrap();
-    assert_eq!(response.0.status, "completed");
+    assert_eq!(response.0.status.as_str(), "completed");
     assert_eq!(response.0.message_count, 10);
     assert_eq!(response.0.attachment_count, 2);
     assert_eq!(response.0.bytes_uploaded, 100);
@@ -426,7 +426,7 @@ async fn imports_complete_stores_completed_with_issues_status() {
     )
     .await
     .unwrap();
-    assert_eq!(response.0.status, "completed_with_issues");
+    assert_eq!(response.0.status.as_str(), "completed_with_issues");
 }
 
 #[tokio::test]

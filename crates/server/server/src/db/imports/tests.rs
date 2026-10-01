@@ -282,7 +282,7 @@ async fn a_failed_import_is_recorded_as_failed() {
     let row = get_owned_import(&mut conn, ACCOUNT_ID, import_id)
         .await
         .unwrap();
-    assert_eq!(row.status, "failed");
+    assert_eq!(row.status.as_str(), "failed");
 }
 
 #[tokio::test]
@@ -387,7 +387,7 @@ async fn stage_advances_and_discard_frees_the_slot() {
         "a discarded run is no longer running"
     );
     let row = get_owned_import(&mut conn, account, id).await.unwrap();
-    assert_eq!(row.status, "cancelled");
+    assert_eq!(row.status.as_str(), "cancelled");
     assert!(row.finished_at.is_some(), "a discard closes the run");
 
     // The slot is genuinely free.
@@ -427,19 +427,25 @@ async fn discard_running_import_finds_the_session_by_account_and_skips_finished_
         .unwrap()
         .expect("the running session is the one discarded");
     assert_eq!(discarded.id, stranded);
-    assert_eq!(discarded.status, "running", "the row as it was before");
+    assert_eq!(
+        discarded.status.as_str(),
+        "running",
+        "the row as it was before"
+    );
     assert_eq!(
         get_owned_import(&mut conn, account, stranded)
             .await
             .unwrap()
-            .status,
+            .status
+            .as_str(),
         "cancelled"
     );
     assert_eq!(
         get_owned_import(&mut conn, account, finished)
             .await
             .unwrap()
-            .status,
+            .status
+            .as_str(),
         "completed",
         "a finished session is left alone"
     );
@@ -526,7 +532,7 @@ async fn complete_import_refuses_a_run_that_has_finished() {
     let row = get_owned_import(&mut conn, ACCOUNT_ID, discarded)
         .await
         .unwrap();
-    assert_eq!(row.status, "cancelled");
+    assert_eq!(row.status.as_str(), "cancelled");
     assert_eq!(issue_count(&mut conn, discarded).await, 0);
 
     let completed = start_import(&mut conn, &default_start_args(ACCOUNT_ID))
@@ -550,6 +556,21 @@ async fn complete_import_refuses_a_run_that_has_finished() {
     let row = get_owned_import(&mut conn, ACCOUNT_ID, completed)
         .await
         .unwrap();
-    assert_eq!(row.status, "completed_with_issues");
+    assert_eq!(row.status.as_str(), "completed_with_issues");
     assert_eq!(issue_count(&mut conn, completed).await, 1);
+}
+
+/// The database column and the wire carry one spelling of each status: the
+/// row is written with `as_str` and the response with serde.
+#[test]
+fn every_import_status_serializes_as_the_word_the_database_holds() {
+    for status in ImportStatus::ALL {
+        assert_eq!(
+            serde_json::to_value(status).unwrap(),
+            serde_json::Value::String(status.as_str().to_string())
+        );
+        assert_eq!(ImportStatus::parse(status.as_str()), Some(status));
+    }
+    assert_eq!(ImportStatus::Cancelled.as_str(), "cancelled");
+    assert_eq!(ImportStatus::parse("canceled"), None);
 }

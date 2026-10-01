@@ -1188,10 +1188,10 @@
           {
             "name": "status",
             "in": "query",
-            "description": "One of running, completed, failed, cancelled",
+            "description": "Only the runs with this status",
             "required": false,
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/ExportStatus"
             }
           },
           {
@@ -1432,10 +1432,10 @@
           {
             "name": "status",
             "in": "query",
-            "description": "One of running, completed, completed_with_issues, failed, cancelled",
+            "description": "Only the runs with this status",
             "required": false,
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/ImportStatus"
             }
           },
           {
@@ -5466,10 +5466,10 @@
           {
             "name": "status",
             "in": "query",
-            "description": "One of running, completed, failed, cancelled",
+            "description": "Only the runs with this status",
             "required": false,
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/ExportStatus"
             }
           },
           {
@@ -6171,10 +6171,10 @@
           {
             "name": "status",
             "in": "query",
-            "description": "One of running, completed, completed_with_issues, failed, cancelled",
+            "description": "Only the runs with this status",
             "required": false,
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/ImportStatus"
             }
           },
           {
@@ -10227,7 +10227,7 @@
             "format": "int64"
           },
           "status": {
-            "type": "string"
+            "$ref": "#/components/schemas/ImportStatus"
           }
         }
       },
@@ -11062,7 +11062,7 @@
             "format": "int64"
           },
           "status": {
-            "type": "string"
+            "$ref": "#/components/schemas/ImportStatus"
           }
         }
       },
@@ -11130,8 +11130,8 @@
             "description": "UTC time the run started."
           },
           "status": {
-            "type": "string",
-            "description": "Lifecycle status: `running`, `completed`, `failed`, or `cancelled`."
+            "$ref": "#/components/schemas/ExportStatus",
+            "description": "Lifecycle status."
           },
           "tool": {
             "type": [
@@ -11222,6 +11222,16 @@
           }
         ],
         "description": "What an Export Run asked for, stored as given (`docs/architecture/http-api.md`,\n\"Runs\"). One of three forms: everything the account holds, a query in the\nsearch language, or conversations and messages picked by hand."
+      },
+      "ExportStatus": {
+        "type": "string",
+        "description": "How an Export Run stands: the values `exports.status` holds, the values\n`GET /v1/exports?status=` accepts, and the word every Export Run carries.",
+        "enum": [
+          "running",
+          "completed",
+          "failed",
+          "cancelled"
+        ]
       },
       "FieldDoc": {
         "type": "object",
@@ -11480,7 +11490,7 @@
             "type": "string"
           },
           "status": {
-            "type": "string"
+            "$ref": "#/components/schemas/ImportStatus"
           },
           "summary": {},
           "tool": {
@@ -11621,6 +11631,17 @@
           }
         }
       },
+      "ImportStatus": {
+        "type": "string",
+        "description": "How an Import Run stands: the values `imports.status` holds, the values\n`GET /v1/imports?status=` accepts, and the words every response carries.",
+        "enum": [
+          "running",
+          "completed",
+          "completed_with_issues",
+          "failed",
+          "cancelled"
+        ]
+      },
       "ImportSummary": {
         "type": "object",
         "description": "One Import Run as `GET /v1/imports` lists it: the counts Settings shows,\nand everything the desktop app needs to resume a running one.",
@@ -11722,8 +11743,8 @@
             "description": "UTC time the run started."
           },
           "status": {
-            "type": "string",
-            "description": "Lifecycle status (`running`, `completed`, `completed_with_issues`,\n`failed`, or `cancelled`)."
+            "$ref": "#/components/schemas/ImportStatus",
+            "description": "Lifecycle status."
           },
           "summary": {
             "description": "What the user approved at the last gate they passed, or null. The\ncolumn `PATCH /v1/imports/{id}` writes with its `summary`."
@@ -12602,8 +12623,8 @@
                   "description": "UTC time the run started."
                 },
                 "status": {
-                  "type": "string",
-                  "description": "Lifecycle status: `running`, `completed`, `failed`, or `cancelled`."
+                  "$ref": "#/components/schemas/ExportStatus",
+                  "description": "Lifecycle status."
                 },
                 "tool": {
                   "type": [
@@ -12961,8 +12982,8 @@
                   "description": "UTC time the run started."
                 },
                 "status": {
-                  "type": "string",
-                  "description": "Lifecycle status (`running`, `completed`, `completed_with_issues`,\n`failed`, or `cancelled`)."
+                  "$ref": "#/components/schemas/ImportStatus",
+                  "description": "Lifecycle status."
                 },
                 "summary": {
                   "description": "What the user approved at the last gate they passed, or null. The\ncolumn `PATCH /v1/imports/{id}` writes with its `summary`."

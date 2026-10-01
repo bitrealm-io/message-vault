@@ -41,15 +41,15 @@ pub struct AttachmentJob<'a> {
 /// Load, write, and optionally convert each attachment.
 ///
 /// `load(i)` returns `Ok(None)` when the source is missing. `Ok(Some(bytes))`
-/// is the file to stage. An `Err` from `load(i)` other than `"canceled"` is
+/// is the file to stage. An `Err` from `load(i)` other than `"cancelled"` is
 /// caught here and treated the same as a missing source: the attachment gets
 /// `missing_reason = "file_missing"` and the run continues rather than
 /// aborting. Cancel is checked before each job.
 ///
 /// # Errors
 ///
-/// Returns `"canceled"` when the flag is set before a job starts, or when
-/// `load(i)` itself returns `"canceled"`. Returns an I/O or convert error
+/// Returns `"cancelled"` when the flag is set before a job starts, or when
+/// `load(i)` itself returns `"cancelled"`. Returns an I/O or convert error
 /// string when the staging directory cannot be used.
 pub fn run_attachment_jobs(
     jobs: &mut [AttachmentJob<'_>],
@@ -91,13 +91,13 @@ pub fn run_attachment_jobs(
 
     for (i, job) in jobs.iter_mut().enumerate() {
         if cancel.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
-            return Err("canceled".into());
+            return Err("cancelled".into());
         }
 
         let loaded = match load(i) {
             Ok(loaded) => loaded,
             // A cancel raised inside the loader still stops the run.
-            Err(err) if err == "canceled" => return Err(err),
+            Err(err) if err == "cancelled" => return Err(err),
             // One unreadable source is that attachment's problem, not the
             // run's. Fall through to the missing-file handling below.
             Err(_) => None,
@@ -133,7 +133,7 @@ pub fn run_attachment_jobs(
 
     if matches!(media.mode, MediaMode::Convert | MediaMode::Compress) {
         if cancel.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
-            return Err("canceled".into());
+            return Err("cancelled".into());
         }
         apply_convert_or_compress(jobs, attachments_dir, media, log)?;
         on_progress(AttachmentProgress {
@@ -168,7 +168,7 @@ pub fn run_attachment_jobs(
 ///
 /// # Errors
 ///
-/// Returns `"canceled"` when the user cancels, or an I/O / convert error
+/// Returns `"cancelled"` when the user cancels, or an I/O / convert error
 /// string when the staging directory cannot be used.
 pub fn stage_conversation_attachments<'a>(
     messages: impl IntoIterator<Item = &'a mut IrMessage>,

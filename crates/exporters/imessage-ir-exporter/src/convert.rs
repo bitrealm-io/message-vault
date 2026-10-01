@@ -655,7 +655,7 @@ fn stage_attachments(
             Some(AttachmentLoad::Path { path, .. }) => {
                 let bytes = read_attachment(&mut helper.borrow_mut(), options, encrypted, path)
                     .map_err(|e| {
-                        // The shared step turns any Err other than "canceled" into a
+                        // The shared step turns any Err other than "cancelled" into a
                         // file_missing attachment and moves on. Log the real reason here
                         // first, or a systemic failure (a revoked Full Disk Access, a
                         // failing disk) degrades into a run's worth of unexplained chips.

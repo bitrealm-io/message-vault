@@ -156,7 +156,7 @@ pub fn transcode_staged(
     }
     // A cancel already requested short-circuits before we even ask whether
     // the tools are there.
-    check_cancel_now(cancel)?;
+    check_cancel(cancel)?;
     // Parity with `process_attachments_dir`: fail the whole pass up front
     // when the tools are missing, rather than branding every attachment
     // `convert_failed: ffmpeg not found`.
@@ -177,11 +177,11 @@ pub fn transcode_staged(
     let mut report = TranscodeReport::default();
     let mut done = 0usize;
     for jsonl in &files {
-        check_cancel_now(cancel)?;
+        check_cancel(cancel)?;
         let mut doc = read_conversation_jsonl(jsonl)?;
         let work = pending_in(staging_dir, &doc, options.mode)?;
         for item in work {
-            check_cancel_now(cancel)?;
+            check_cancel(cancel)?;
             match item {
                 PendingWork::Transcode { recorded_rel, src } => {
                     apply_transcode(
@@ -222,13 +222,6 @@ pub fn transcode_staged(
         }
     }
     Ok(report)
-}
-
-/// `check_cancel`, spelled the way `run_attachment_jobs` spells it —
-/// `"canceled"`, one L — since the web hook's `isCancellation` string-matches
-/// on that convention.
-fn check_cancel_now(cancel: Option<&CancelFlag>) -> Result<()> {
-    check_cancel(cancel).map_err(|_| anyhow::anyhow!("canceled"))
 }
 
 /// `*.jsonl` files directly under `staging_dir`, sorted, non-recursive — the

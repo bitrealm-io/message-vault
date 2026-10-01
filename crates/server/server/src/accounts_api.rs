@@ -1174,7 +1174,7 @@ pub(crate) async fn list_account_identities(
     security(("session" = [])),
     params(
         ("id" = i64, Path, description = "Account id"),
-        ("status" = Option<String>, Query, description = "One of running, completed, completed_with_issues, failed, cancelled"),
+        ("status" = Option<imports::ImportStatus>, Query, description = "Only the runs with this status"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, at most 500"),
         ("offset" = Option<usize>, Query, description = "Rows to skip, at most 50000"),
         ("sort" = Option<String>, Query, description = "`started_at` or `-started_at`. Default `-started_at`, newest first.")
@@ -1228,7 +1228,7 @@ pub(crate) async fn get_account_import(
     security(("session" = [])),
     params(
         ("id" = i64, Path, description = "Account id"),
-        ("status" = Option<String>, Query, description = "One of running, completed, failed, cancelled"),
+        ("status" = Option<message_crate_api_types::ExportStatus>, Query, description = "Only the runs with this status"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, at most 500"),
         ("offset" = Option<usize>, Query, description = "Rows to skip, at most 50000"),
         ("sort" = Option<String>, Query, description = "`started_at` or `-started_at`. Default `-started_at`, newest first.")

@@ -2,7 +2,7 @@
 
 use anyhow::{Result, bail};
 use chrono::Utc;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Connection, Row, SqliteConnection};
 
@@ -61,6 +61,58 @@ impl ImportStage {
     }
 }
 
+/// How an Import Run stands: the values `imports.status` holds, the values
+/// `GET /v1/imports?status=` accepts, and the words every response carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ImportStatus {
+    /// Still going: the one run an account may have open.
+    Running,
+    /// Finished with nothing to report.
+    Completed,
+    /// Finished, and some items were skipped or failed.
+    CompletedWithIssues,
+    /// Ended without finishing.
+    Failed,
+    /// Discarded by the person, or by the server on their behalf.
+    Cancelled,
+}
+
+impl ImportStatus {
+    /// Every status, in the order the documentation lists them.
+    pub const ALL: [Self; 5] = [
+        Self::Running,
+        Self::Completed,
+        Self::CompletedWithIssues,
+        Self::Failed,
+        Self::Cancelled,
+    ];
+
+    /// The value as the wire and the database spell it.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Running => "running",
+            Self::Completed => "completed",
+            Self::CompletedWithIssues => "completed_with_issues",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+        }
+    }
+
+    /// The status `value` spells, or `None` for any other word.
+    #[must_use]
+    pub fn parse(value: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|s| s.as_str() == value)
+    }
+}
+
+impl std::fmt::Display for ImportStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 /// One row of `imports`: a per-account import session record.
 pub struct ImportRow {
@@ -76,9 +128,8 @@ pub struct ImportRow {
     pub mode: String,
     /// Whether cross-source dedupe runs after each batch.
     pub dedupe: bool,
-    /// Lifecycle status (`running`, `completed`, `completed_with_issues`,
-    /// `failed`, or `cancelled`).
-    pub status: String,
+    /// Lifecycle status.
+    pub status: ImportStatus,
     /// UTC time the run started.
     pub started_at: String,
     /// UTC time the run finished, when it has.
@@ -364,7 +415,12 @@ fn import_from_row(row: &SqliteRow) -> Result<ImportRow, sqlx::Error> {
         source: row.try_get(2)?,
         tool: row.try_get(3)?,
         mode: row.try_get(4)?,
-        status: row.try_get(5)?,
+        status: {
+            let raw: String = row.try_get(5)?;
+            ImportStatus::parse(&raw).ok_or_else(|| {
+                sqlx::Error::Decode(format!("imports.status holds unknown value '{raw}'").into())
+            })?
+        },
         started_at: row.try_get(6)?,
         finished_at: row.try_get(7)?,
         message_count: row.try_get(8)?,
@@ -419,7 +475,7 @@ pub async fn require_running_import(
     import_id: i64,
 ) -> std::result::Result<ImportRow, ImportLookupError> {
     let existing = get_owned_import(&mut *conn, account_id, import_id).await?;
-    if existing.status != "running" {
+    if existing.status != ImportStatus::Running {
         return Err(ImportLookupError::InvalidSession {
             message: format!(
                 "import {import_id} is not running (status={})",
@@ -719,9 +775,8 @@ pub struct ImportSummary {
     pub mode: String,
     /// Whether cross-source dedupe runs after each batch.
     pub dedupe: bool,
-    /// Lifecycle status (`running`, `completed`, `completed_with_issues`,
-    /// `failed`, or `cancelled`).
-    pub status: String,
+    /// Lifecycle status.
+    pub status: ImportStatus,
     /// UTC time the run started.
     pub started_at: String,
     /// UTC time the run finished, when it has.
@@ -786,16 +841,6 @@ impl From<ImportRow> for ImportSummary {
         }
     }
 }
-
-/// The values `imports.status` holds, and so the values
-/// `GET /v1/imports?status=` accepts.
-pub const IMPORT_STATUSES: [&str; 5] = [
-    "running",
-    "completed",
-    "completed_with_issues",
-    "failed",
-    "cancelled",
-];
 
 /// The one key `GET /v1/imports` accepts in `sort=`: `started_at`, the same
 /// key and default `GET /v1/exports` takes, because the two lists sit beside

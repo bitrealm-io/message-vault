@@ -11,7 +11,7 @@ describe("StepProgress completion badge", () => {
     cleanup();
   });
 
-  it("gives completed-with-issues its own badge, not the canceled/muted one", () => {
+  it("gives completed-with-issues its own badge, not the cancelled/muted one", () => {
     render(<StepProgress steps={doneSteps} completionText="Import completed with issues" />);
     const text = screen.getByText("Import completed with issues");
     const badge = text.previousElementSibling;
@@ -20,9 +20,9 @@ describe("StepProgress completion badge", () => {
     expect(badge?.className).not.toContain("bg-border");
   });
 
-  it("still gives a canceled/other completion the muted badge", () => {
-    render(<StepProgress steps={doneSteps} completionText="Import canceled" />);
-    const text = screen.getByText("Import canceled");
+  it("still gives a cancelled/other completion the muted badge", () => {
+    render(<StepProgress steps={doneSteps} completionText="Import cancelled" />);
+    const text = screen.getByText("Import cancelled");
     const badge = text.previousElementSibling;
     expect(badge?.className).toContain("bg-border");
   });

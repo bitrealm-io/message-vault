@@ -14,6 +14,11 @@
 //! exist yet is created with the Demo Account before the server listens,
 //! which is why a first start takes a few seconds longer.
 //!
+//! The server listens on this computer only, unless the person switched on
+//! the setting that opens it to the network; it then listens on every
+//! address of this computer, on the same port. Changing the setting restarts
+//! the server the app started.
+//!
 //! The app stops the server it started when it closes, and never one it only
 //! found. The process is killed, not asked: the server's database survives
 //! that, and the only work a kill can interrupt is an import this app was
@@ -146,8 +151,13 @@ pub struct Launch {
     pub data_dir: PathBuf,
     /// The folder holding the built website.
     pub static_dir: PathBuf,
-    /// Where the server listens.
+    /// The server's address on this computer: where the app asks what is
+    /// running, and where the server listens unless it is open to the
+    /// network.
     pub address: SocketAddr,
+    /// Whether other devices on the network may connect. The server then
+    /// listens on every address of this computer, same port, over plain HTTP.
+    pub open_to_network: bool,
     /// Websites allowed to call the server besides the installed app, which
     /// always is. `cargo tauri dev` loads the screens from the Vite dev
     /// server, a different origin, and names it here.
@@ -155,6 +165,15 @@ pub struct Launch {
 }
 
 impl Launch {
+    /// The address the server is told to listen on.
+    pub fn bind(&self) -> SocketAddr {
+        if self.open_to_network {
+            SocketAddr::from(([0, 0, 0, 0], self.address.port()))
+        } else {
+            self.address
+        }
+    }
+
     /// The arguments the server is started with.
     pub fn arguments(&self) -> Vec<String> {
         let mut arguments = vec![
@@ -162,7 +181,7 @@ impl Launch {
             "--data-dir".into(),
             self.data_dir.display().to_string(),
             "--bind".into(),
-            self.address.to_string(),
+            self.bind().to_string(),
             "--static-dir".into(),
             self.static_dir.display().to_string(),
         ];
@@ -215,6 +234,8 @@ struct Inner {
     child: Option<Child>,
     /// That server's last output lines.
     output: Output,
+    /// Whether that server was started open to the network.
+    open_to_network: bool,
 }
 
 /// The app's own Message Crate: its state, and the process when the app
@@ -231,6 +252,7 @@ impl Default for LocalServer {
                 status: Status::Idle,
                 child: None,
                 output: Output::default(),
+                open_to_network: false,
             })),
         }
     }
@@ -275,12 +297,15 @@ impl LocalServer {
     /// server when nothing does. Returns at once; [`Self::status`] reports
     /// how it went. Does nothing while a start is under way or a Message
     /// Crate is ready, so it is safe to call on every launch and is also how
-    /// a failed start is tried again.
+    /// a failed start is tried again. The one ready server it does not leave
+    /// alone is the app's own when `launch.open_to_network` differs from how
+    /// it was started: that one is stopped and started again.
     pub fn ensure_started(&self, launch: Launch) {
-        if matches!(
-            self.status(),
-            Status::Starting { .. } | Status::Ready { .. }
-        ) {
+        let status = self.status();
+        let running_open = self.lock().open_to_network;
+        if must_restart(&status, running_open, launch.open_to_network) {
+            self.stop();
+        } else if matches!(status, Status::Starting { .. } | Status::Ready { .. }) {
             return;
         }
         self.lock().status = Status::Starting {
@@ -330,6 +355,7 @@ impl LocalServer {
             let mut inner = self.lock();
             inner.child = Some(child);
             inner.output = Arc::clone(&output);
+            inner.open_to_network = launch.open_to_network;
         }
 
         let deadline = Instant::now() + START_TIMEOUT;
@@ -373,6 +399,18 @@ impl LocalServer {
             let _ = child.wait();
         }
     }
+}
+
+/// Whether a change to the network setting means restarting the server. Only
+/// a ready server the app started is restarted: one it found is not the
+/// app's to restart, and a start under way is left to finish.
+fn must_restart(status: &Status, running_open: bool, wanted_open: bool) -> bool {
+    matches!(
+        status,
+        Status::Ready {
+            started_by_app: true
+        }
+    ) && running_open != wanted_open
 }
 
 /// Start the server program with its output kept for a failure report.

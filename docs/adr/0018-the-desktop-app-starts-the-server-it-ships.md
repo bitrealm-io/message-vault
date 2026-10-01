@@ -29,6 +29,12 @@ The data is in the operating system's app-data folder, under `data`, and the
 app has a button that opens it. A folder under Documents is often synced by
 OneDrive or iCloud, which can corrupt a database that is in use.
 
+The server listens on this computer only. A setting in the app opens it to
+the network, for a person who wants to read from a phone while the app is
+open; it is off by default and says, where it is switched on, that the
+connection is plain HTTP. The app still asks `127.0.0.1:8080` what is
+running, whichever way the setting is.
+
 ## Considered and rejected
 
 **Running the server inside the app's process.** No second program to ship

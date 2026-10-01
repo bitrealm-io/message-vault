@@ -46,6 +46,7 @@ fn launch_at(address: SocketAddr, program: &Path, data_dir: &Path) -> Launch {
         data_dir: data_dir.to_path_buf(),
         static_dir: data_dir.join("website"),
         address,
+        open_to_network: false,
         cors_origins: Vec::new(),
     }
 }
@@ -83,6 +84,7 @@ fn the_server_is_started_on_this_computer_with_no_config_file() {
         data_dir: PathBuf::from("/data"),
         static_dir: PathBuf::from("/site"),
         address: OWN_ADDRESS.parse().unwrap(),
+        open_to_network: false,
         cors_origins: Vec::new(),
     };
     assert_eq!(
@@ -105,6 +107,41 @@ fn the_server_is_started_on_this_computer_with_no_config_file() {
             "/site"
         ]
     );
+}
+
+#[test]
+fn open_to_the_network_listens_on_every_address_at_the_same_port() {
+    let launch = Launch {
+        open_to_network: true,
+        ..launch_at(
+            OWN_ADDRESS.parse().unwrap(),
+            Path::new("unused"),
+            Path::new("/data"),
+        )
+    };
+    assert_eq!(launch.arguments()[3..5], ["--bind", "0.0.0.0:8080"]);
+    // The app still asks this computer's own address what is running.
+    assert_eq!(launch.address.to_string(), OWN_ADDRESS);
+}
+
+#[test]
+fn only_the_apps_own_ready_server_restarts_when_the_network_setting_changes() {
+    let own = Status::Ready {
+        started_by_app: true,
+    };
+    let found = Status::Ready {
+        started_by_app: false,
+    };
+    assert!(must_restart(&own, false, true));
+    assert!(must_restart(&own, true, false));
+    assert!(!must_restart(&own, true, true));
+    assert!(!must_restart(&found, false, true));
+    assert!(!must_restart(
+        &Status::Starting { first_time: false },
+        false,
+        true
+    ));
+    assert!(!must_restart(&Status::Idle, false, true));
 }
 
 #[test]

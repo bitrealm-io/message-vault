@@ -34,7 +34,7 @@ fn dev_origins(app: &AppHandle) -> Vec<String> {
 }
 
 /// Everything the server is started with.
-fn launch(app: &AppHandle) -> Result<Launch, String> {
+fn launch(app: &AppHandle, open_to_network: bool) -> Result<Launch, String> {
     let static_dir = app
         .path()
         .resource_dir()
@@ -47,6 +47,7 @@ fn launch(app: &AppHandle) -> Result<Launch, String> {
         address: local_server::OWN_ADDRESS
             .parse()
             .map_err(|e| format!("{}: {e}", local_server::OWN_ADDRESS))?,
+        open_to_network,
         cors_origins: dev_origins(app),
     })
 }
@@ -54,6 +55,8 @@ fn launch(app: &AppHandle) -> Result<Launch, String> {
 /// Make sure the app's own Message Crate is running, and report its state.
 /// The screens call this when the server address is the app's own; a start
 /// already under way, or a Message Crate already answering, is left alone.
+/// `open_to_network` is the person's setting; the app's own server is
+/// restarted when it was started the other way.
 ///
 /// # Errors
 ///
@@ -63,8 +66,9 @@ fn launch(app: &AppHandle) -> Result<Launch, String> {
 pub fn start_local_server(
     app: AppHandle,
     server: State<'_, LocalServer>,
+    open_to_network: bool,
 ) -> Result<Status, String> {
-    server.ensure_started(launch(&app)?);
+    server.ensure_started(launch(&app, open_to_network)?);
     Ok(server.status())
 }
 

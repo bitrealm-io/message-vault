@@ -119,7 +119,8 @@ export default function LeftPanel({
   const navigate = useNavigate();
   const { profile } = useAccountProfile();
   const canImport = canUseImportExportWithProfile(isTauri(), profile);
-  const importAttention = useImportAttention(canImport);
+  // An account without the import permission has no Import Run to ask the server about.
+  const importAttention = useImportAttention(canImport && profile?.can_import === true);
   const onDraggingChange = useReportColumnResizing();
   const { width, dragging, handleHover, handleProps } = useColumnResize({
     storageKey: LEFT_PANEL_STORAGE_KEY,

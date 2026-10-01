@@ -9,6 +9,10 @@ It reads the Message Crate, never a phone backup.
 Export is in the desktop app's sidebar, under **Messages**.
 The browser doesn't show it, because writing a folder of files needs the desktop app.
 
+Exporting needs the account's export permission, which the Owner sets under **Message Permissions**.
+**Export** stays in the sidebar for an account without it.
+Opening it shows a message in place of the form: the Owner has not allowed this account to export.
+
 Every export is recorded as an Export Run.
 [**Settings → Storage**](/docs/user/features/settings/storage/) lists them under **Export history**.
 Each row has the date, the scope, the status, the count of messages that matched, the count delivered, the count of attachments, and their size.

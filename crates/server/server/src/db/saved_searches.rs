@@ -301,7 +301,7 @@ pub async fn create_for_import(
         conn,
         account_id,
         &name,
-        &format!("import:{import_id}"),
+        &format!("import:#{import_id}"),
         SavedSearchKind::Import,
     )
     .await

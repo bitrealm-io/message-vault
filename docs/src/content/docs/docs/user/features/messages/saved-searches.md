@@ -60,6 +60,7 @@ It shows an empty list until its search is edited.
 ## The Saved Search an import adds
 
 An Import Run that brings in at least one message adds a Saved Search of its own.
+It shows the messages that Import Run added.
 Its name is the word Import, the kind of backup, and the day, such as **Import whatsapp 2026-10-01**.
 A second import of the same kind on the same day gets the same name with a 2 after it.
 

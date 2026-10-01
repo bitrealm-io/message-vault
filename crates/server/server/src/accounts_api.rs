@@ -55,7 +55,7 @@ pub struct Account {
     pub phones: Vec<String>,
     /// Email addresses linked to the account.
     pub emails: Vec<String>,
-    /// True for the seeded demo account (cannot be deleted).
+    /// True for the seeded demo account (only the owner can delete it).
     pub is_demo: bool,
     /// True for the owner: manages accounts, holds no messages.
     pub is_owner: bool,

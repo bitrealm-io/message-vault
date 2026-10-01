@@ -9666,7 +9666,7 @@
           },
           "is_demo": {
             "type": "boolean",
-            "description": "True for the seeded demo account (cannot be deleted)."
+            "description": "True for the seeded demo account (only the owner can delete it)."
           },
           "is_owner": {
             "type": "boolean",
@@ -11889,7 +11889,7 @@
                 },
                 "is_demo": {
                   "type": "boolean",
-                  "description": "True for the seeded demo account (cannot be deleted)."
+                  "description": "True for the seeded demo account (only the owner can delete it)."
                 },
                 "is_owner": {
                   "type": "boolean",

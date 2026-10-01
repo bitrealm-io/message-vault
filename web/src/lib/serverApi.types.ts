@@ -1251,7 +1251,7 @@ export interface components {
             disabled: boolean;
             /** @description Email addresses linked to the account. */
             emails: string[];
-            /** @description True for the seeded demo account (cannot be deleted). */
+            /** @description True for the seeded demo account (only the owner can delete it). */
             is_demo: boolean;
             /** @description True for the owner: manages accounts, holds no messages. */
             is_owner: boolean;
@@ -2331,7 +2331,7 @@ export interface components {
                 disabled: boolean;
                 /** @description Email addresses linked to the account. */
                 emails: string[];
-                /** @description True for the seeded demo account (cannot be deleted). */
+                /** @description True for the seeded demo account (only the owner can delete it). */
                 is_demo: boolean;
                 /** @description True for the owner: manages accounts, holds no messages. */
                 is_owner: boolean;

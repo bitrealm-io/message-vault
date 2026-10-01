@@ -221,7 +221,7 @@ pub fn require_delete_access(auth: &AuthIdentity) -> Result<(), ApiError> {
 /// permanent deletion out of the trash. Both halves matter. Trash is a GUI
 /// affair, so an API token is refused the way every trash route refuses it,
 /// and the account's own `can_delete` grant is what keeps the demo account
-/// from deleting anything while it keeps every other privilege.
+/// from deleting anything for good while it still exports and uses the trash.
 ///
 /// # Errors
 ///

@@ -7,6 +7,7 @@ import { isTauri } from "../lib/tauri-check";
 import { accentLink, authCard, authCardBody, authScreenTitle, pageCenter } from "../lib/uiStyles";
 import { useServerHealth } from "../lib/useServerHealth";
 import { useServerState } from "../lib/useServerState";
+import ExploreDemoAccountButton from "./auth/ExploreDemoAccountButton";
 import LocalAuthTabs from "./auth/LocalAuthTabs";
 import ServerSettingsScreen from "./auth/ServerSettingsScreen";
 import ServerStatus, { type ServerConnection } from "./auth/ServerStatus";
@@ -62,7 +63,9 @@ export default function LoginScreen() {
   // Which forms this card offers is the server's answer, not a guess made here.
   // Asked only once the address is reachable, so an unreachable server reports
   // "disconnected" rather than a failed state query.
-  const { state: serverState } = useServerState(state === "connected" ? address : null);
+  const { state: serverState, demoAccount } = useServerState(
+    state === "connected" ? address : null,
+  );
 
   // Two connects can be in flight at once — the background self-heal for the
   // address already saved, and the explicit reconnect for one just typed — so
@@ -217,6 +220,11 @@ export default function LoginScreen() {
               )}
 
               <OrRule />
+              {/* Beside whatever the forms above offer, for as long as the
+                  server says the Demo Account exists. */}
+              {hasConnectedOnce && demoAccount ? (
+                <ExploreDemoAccountButton serverUrl={address} disabled={state !== "connected"} />
+              ) : null}
               <div className="mt-4 text-center">
                 <button
                   type="button"

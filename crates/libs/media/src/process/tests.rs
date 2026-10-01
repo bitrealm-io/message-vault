@@ -363,8 +363,25 @@ fn is_efficient_accepts_only_hevc_within_the_resolution_and_bitrate_caps() {
     assert!(!is_efficient("hevc", 1281, 720, 1_000_000, &p720));
 }
 
-/// Write a one-second 320x240 test pattern with the given video codec.
+#[test]
+fn frame_rate_cap_applies_the_maximum_when_the_source_rate_is_unknown() {
+    assert_eq!(frame_rate_cap(None, 30.0), Some(30.0));
+    assert_eq!(frame_rate_cap(Some(60.0), 30.0), Some(30.0));
+    assert_eq!(frame_rate_cap(Some(30.0), 30.0), None);
+    assert_eq!(frame_rate_cap(Some(24.0), 30.0), None);
+    // Zero means no maximum was given, and stands for 30.
+    assert_eq!(frame_rate_cap(Some(60.0), 0.0), Some(30.0));
+    assert_eq!(frame_rate_cap(None, 0.0), Some(30.0));
+}
+
+/// Write a one-second 320x240 test pattern at 10 fps with the given video codec.
 fn write_test_video(path: &Path, codec: &[&str]) {
+    write_test_video_at(path, codec, 10);
+}
+
+/// Write a one-second 320x240 test pattern at `rate` frames per second.
+fn write_test_video_at(path: &Path, codec: &[&str], rate: u32) {
+    let source = format!("testsrc=size=320x240:rate={rate}:duration=1");
     let mut args: Vec<String> = [
         "-y",
         "-loglevel",
@@ -372,7 +389,7 @@ fn write_test_video(path: &Path, codec: &[&str]) {
         "-f",
         "lavfi",
         "-i",
-        "testsrc=size=320x240:rate=10:duration=1",
+        &source,
         "-pix_fmt",
         "yuv420p",
     ]
@@ -498,7 +515,8 @@ fn compress_re_encodes_a_large_video_and_skips_an_efficient_one() {
     assert_eq!(fs::read(&hevc).unwrap(), before);
 
     // With the skip turned off, the same file is re-encoded. A max fps of
-    // zero means no cap was given, and the pass uses 30.
+    // zero means no cap was given, and the pass uses 30, which this 10 fps
+    // video is already under.
     let opts = CompressOptions {
         skip_efficient: false,
         max_fps: 0.0,
@@ -509,7 +527,39 @@ fn compress_re_encodes_a_large_video_and_skips_an_efficient_one() {
         Some("attachments/hevc.mp4")
     );
     assert_ne!(fs::read(&hevc).unwrap(), before);
-    assert_eq!(crate::probe_media(&hevc).unwrap().fps, Some(30.0));
+    assert_eq!(crate::probe_media(&hevc).unwrap().fps, Some(10.0));
+}
+
+/// Max FPS is a ceiling: it never adds frames to a slower video (#965).
+#[test]
+fn compress_keeps_a_frame_rate_under_the_maximum_and_lowers_one_over_it() {
+    let Some(_tools) = crate::testutil::real_ffmpeg_test_guard() else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let attachments = dir.path().join("attachments");
+    fs::create_dir_all(&attachments).unwrap();
+    let opts = CompressOptions {
+        min_size_bytes: 0,
+        max_fps: 30.0,
+        ..CompressOptions::default()
+    };
+
+    let slow = attachments.join("slow.mp4");
+    write_test_video_at(&slow, &["-c:v", "libx264"], 24);
+    let new_rel = process_single(dir.path(), &slow, MediaMode::Compress, &opts);
+    assert_eq!(new_rel.as_deref(), Some("attachments/slow.mp4"));
+    let probe = crate::probe_media(&slow).unwrap();
+    assert_eq!(probe.codec, "hevc", "the video was re-encoded");
+    assert_eq!(probe.fps, Some(24.0), "a 24 fps video stays at 24");
+
+    let fast = attachments.join("fast.mp4");
+    write_test_video_at(&fast, &["-c:v", "libx264"], 60);
+    let new_rel = process_single(dir.path(), &fast, MediaMode::Compress, &opts);
+    assert_eq!(new_rel.as_deref(), Some("attachments/fast.mp4"));
+    let probe = crate::probe_media(&fast).unwrap();
+    assert_eq!(probe.codec, "hevc", "the video was re-encoded");
+    assert_eq!(probe.fps, Some(30.0), "a 60 fps video comes down to 30");
 }
 
 #[test]

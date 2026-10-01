@@ -51,7 +51,7 @@ They apply to video only.
 | Setting | Options | Default | What it does |
 |---|---|---|---|
 | **Target resolution** | `720`, `1080`, `4k` | `720` | Caps the longer side of the picture at 1280, 1920, or 3840 pixels. A smaller video is not enlarged. |
-| **Max FPS** | A number | `30` | The frame rate of the re-encoded video. |
+| **Max FPS** | A number | `30` | Caps the frame rate of the re-encoded video. A video at or below it keeps its frame rate. |
 | **Minimum Video File Size (Megabytes)** | A number | `20` | A video smaller than this is not re-encoded. |
 
 A video is re-encoded to H.265.

@@ -43,3 +43,15 @@ export function backupFolderHint(source: string): string {
       return "Point at a folder of SMS Backup & Restore XML files (not a single ZIP). Unlock encrypted backups before selecting the folder.";
   }
 }
+
+/** The backup files each source writes, for the backup folder's placeholder. */
+export function backupFolderPlaceholder(source: string): string {
+  switch (source) {
+    case SMS_BACKUP_PLUS_SOURCE:
+      return "Folder containing .eml files";
+    case GO_SMS_PRO_SOURCE:
+      return "Folder containing gosms_sys*.xml backup files";
+    default:
+      return "Folder containing sms-*.xml backup files";
+  }
+}

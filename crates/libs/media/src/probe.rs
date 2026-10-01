@@ -89,7 +89,7 @@ fn parse_probe_line(line: &str) -> Result<MediaProbe> {
 }
 
 /// ffprobe writes frame rates as a rational: `30000/1001`, or `0/0` for a still.
-fn parse_frame_rate(raw: &str) -> Option<f32> {
+pub(crate) fn parse_frame_rate(raw: &str) -> Option<f32> {
     let (num, den) = raw.split_once('/')?;
     let num: f32 = num.trim().parse().ok()?;
     let den: f32 = den.trim().parse().ok()?;

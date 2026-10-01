@@ -125,9 +125,9 @@ The three Android SMS sources share one form.
 | **Backup Device Phone Numbers** | Every phone number the backup's phone had. Filled in from the account's profile. A number from another SIM can be added. |
 | **Backup Device Email Addresses** | **SMS Backup+** only. The Gmail or IMAP account SMS Backup+ synced to, filled in from the profile. Commas separate several addresses. |
 
-These fields carry no asterisk, and all of them are needed.
+**Backup Directory** and **Backup Device Phone Numbers** carry an asterisk.
 The **Import** button stays disabled until the folder is chosen and at least one phone number is entered.
-SMS Backup+ also needs at least one email address.
+SMS Backup+ also needs at least one email address, and that field carries no asterisk.
 
 The phone numbers are how Import tells sent messages from received ones, because these backups don't record whose phone they came from.
 SMS Backup+ needs the email addresses for the same reason: its archive is a mail account, and the sender of a sent message is that account.

@@ -126,9 +126,9 @@ The three Android SMS sources share one form.
 | **Backup Device Phone Numbers** | Every phone number the backup's phone had. Filled in from the account's profile. A number from another SIM can be added. |
 | **Backup Device Email Addresses** | **SMS Backup+** only. The Gmail or IMAP account SMS Backup+ synced to, filled in from the profile. Commas separate several addresses. |
 
-**Backup Directory** and **Backup Device Phone Numbers** carry an asterisk.
+Every field here except **Attachments** carries an asterisk.
 The **Import** button stays disabled until the folder is chosen and at least one phone number is entered.
-SMS Backup+ also needs at least one email address, and that field carries no asterisk.
+SMS Backup+ also needs at least one email address.
 
 The phone numbers are how Import tells sent messages from received ones, because these backups don't record whose phone they came from.
 SMS Backup+ needs the email addresses for the same reason: its archive is a mail account, and the sender of a sent message is that account.
@@ -141,6 +141,7 @@ The notice says what ticking it accepts: the imported messages will not be linke
 ### iMazing and OpenExtract fields
 
 Both sources have one field in **Import Messages**, **Backup path**, which takes the folder that holds the export.
+It carries an asterisk, and the **Import** button stays disabled until the folder is chosen.
 Neither has an **Attachments** setting.
 
 **iMazing** adds **Time zone of the messages** under **Processing Options (Advanced)**.

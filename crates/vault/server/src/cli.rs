@@ -63,23 +63,23 @@ pub enum Commands {
     /// Convert media under assets/ into browser previews under `assets_converted/`
     ProcessAssets(ProcessAssetsArgs),
 
-    /// Claim an unclaimed vault by creating its owner. Refuses a vault that
-    /// already has one.
+    /// Claim an unclaimed Message Crate by creating its owner. Refuses one
+    /// that already has an owner.
     CreateOwner(CreateOwnerArgs),
 
-    /// Set a new password for the vault owner, ending their sessions. Refuses
-    /// a vault that has no owner yet.
+    /// Set a new password for the owner, ending their sessions. Refuses a
+    /// Message Crate that has no owner yet.
     ResetOwnerPassword(ResetOwnerPasswordArgs),
 }
 
 /// Options for `create-owner`.
 #[derive(Debug, Args)]
 pub struct CreateOwnerArgs {
-    /// Login username for the vault owner
+    /// Login username for the owner
     #[arg(long)]
     pub username: String,
 
-    /// Password for the vault owner; must satisfy the vault's password policy
+    /// Password for the owner; must satisfy the server's password policy
     #[arg(long)]
     pub password: String,
 
@@ -95,7 +95,7 @@ pub struct CreateOwnerArgs {
 /// Options for `reset-owner-password`.
 #[derive(Debug, Args)]
 pub struct ResetOwnerPasswordArgs {
-    /// New password for the vault owner; must satisfy the password policy
+    /// New password for the owner; must satisfy the password policy
     #[arg(long)]
     pub password: String,
 
@@ -159,7 +159,7 @@ pub struct ImportArgs {
     #[arg(long, default_value_t = 2)]
     pub window_secs: i64,
 
-    /// Account username or id (scopes import to this vault tenant)
+    /// Account username or id (scopes import to this account)
     #[arg(long)]
     pub account: String,
 }
@@ -220,7 +220,7 @@ pub struct DedupeArgs {
     #[arg(long, default_value_t = 2)]
     pub window_secs: i64,
 
-    /// Account username or id (scopes dedupe to this vault tenant)
+    /// Account username or id (scopes dedupe to this account)
     #[arg(long)]
     pub account: String,
 }
@@ -244,7 +244,7 @@ pub struct ImportContactsArgs {
     #[arg(long)]
     pub db_url: Option<String>,
 
-    /// Account username or id (scopes contacts to this vault tenant)
+    /// Account username or id (scopes contacts to this account)
     #[arg(long)]
     pub account: String,
 }
@@ -360,7 +360,7 @@ async fn run_create_owner(args: CreateOwnerArgs) -> Result<()> {
     let vault = OpenVault::open(cfg).await?;
     let username = crate::owner_cli::create_owner(&vault, &args.username, &args.password).await?;
     vault.close().await;
-    println!("Vault claimed. Log in as {username}.");
+    println!("Message Crate claimed. Log in as {username}.");
     Ok(())
 }
 
@@ -510,7 +510,7 @@ fn format_import_stats(import: &crate::imports_api::ImportStats) -> String {
     if import.phones_needing_review > 0 {
         let _ = writeln!(
             out,
-            "  phones needing review: {} (ambiguous numbers — fix them in the vault)",
+            "  phones needing review: {} (ambiguous numbers — fix them in Message Crate)",
             import.phones_needing_review
         );
     }
@@ -593,7 +593,7 @@ async fn run_reset_demo(args: ResetDemoArgs) -> Result<()> {
         println!("  generated messages: {}", stats.seed.messages);
     }
     println!();
-    println!("Imported into vault");
+    println!("Imported into the database");
     println!("  conversations:        {}", stats.import.conversations);
     println!("  messages:             {}", stats.import.messages);
     println!(

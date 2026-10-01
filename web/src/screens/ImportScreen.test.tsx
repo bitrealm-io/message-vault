@@ -957,6 +957,6 @@ describe("ImportScreen gates", () => {
 
     await user.click(await screen.findByText("Add to profile"));
 
-    expect(await screen.findByText("The vault didn't add that address.")).toBeInTheDocument();
+    expect(await screen.findByText("The server didn't add that address.")).toBeInTheDocument();
   });
 });

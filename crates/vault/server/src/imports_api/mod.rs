@@ -1388,7 +1388,7 @@ pub(crate) async fn discard_import(
     }))
 }
 
-/// Import one message-ir JSONL body into the vault.
+/// Import one message-ir JSONL body.
 #[utoipa::path(
     post,
     path = "/v1/imports/{id}/batches",
@@ -1497,7 +1497,7 @@ async fn run_import_path(
     let _import_permit = import_semaphore()
         .acquire()
         .await
-        .map_err(|_| ApiError::Internal(anyhow::anyhow!("vault is shutting down")))?;
+        .map_err(|_| ApiError::Internal(anyhow::anyhow!("server is shutting down")))?;
     let cfg = Arc::clone(&state.cfg);
     let BatchContext {
         account,

@@ -11,4 +11,4 @@ editUrl: false
 | Status | `409 Conflict` |
 | Type | `https://messagecrate.app/docs/developer/reference/errors/state-conflict` |
 
-The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. `detail` says which. Read the resource's current state and choose the operation it allows.
+The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed. `detail` says which. Read the resource's current state and choose the operation it allows.

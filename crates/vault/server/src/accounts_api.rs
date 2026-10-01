@@ -11,7 +11,7 @@
 //! nothing here reads `messages.body`, `attachments.transcription`, or any
 //! other content column: a row carries who an account is, what it may do and
 //! how much it holds, never what it says.
-//! See `docs/adr/0008-the-vault-owner-holds-no-messages.md`.
+//! See `docs/adr/0008-the-owner-holds-no-messages.md`.
 
 use anyhow::Context;
 use axum::extract::State;
@@ -57,17 +57,17 @@ pub struct Account {
     pub emails: Vec<String>,
     /// True for the seeded demo account (cannot be deleted).
     pub is_demo: bool,
-    /// True for the vault owner: manages accounts, holds no messages.
+    /// True for the owner: manages accounts, holds no messages.
     pub is_owner: bool,
     /// May not log in.
     pub disabled: bool,
     /// The account holder has not set up their profile yet, so profile setup
-    /// is owed before the account can be used. The vault decides this, not the
+    /// is owed before the account can be used. The server decides this, not the
     /// client: the same answer reaches every app, and it survives cleared site
     /// data and a second browser.
     pub must_set_up_profile: bool,
     /// When the account last logged in (RFC 3339, UTC), or `null` if it never
-    /// has. Logging in, claiming the vault and registering all count; a
+    /// has. Logging in, claiming Message Crate and registering all count; a
     /// password change does not.
     pub last_login_at: Option<String>,
     /// Which app last used the account's session, the desktop app or the
@@ -193,7 +193,7 @@ pub(crate) async fn require_account_reach(
     match admits {
         Admits::NobodyElse(refusal) => Err(ApiError::InsufficientScope(refusal.into())),
         Admits::Owner if !auth.is_owner() => Err(ApiError::NotTheOwner(format!(
-            "account {target} is not yours, and only the vault owner reaches other accounts"
+            "account {target} is not yours, and only the owner reaches other accounts"
         ))),
         Admits::Owner => {
             if account_profile::username_for_account(conn, target)
@@ -211,9 +211,9 @@ pub(crate) async fn require_account_reach(
 // The collection
 // ---------------------------------------------------------------------------
 
-/// List the accounts this vault holds, with their flags, message count, and
+/// List the accounts this Message Crate holds, with their flags, message count, and
 /// storage use. The owner's own account comes first, then the rest by
-/// username: the owner is an account of this vault too, and reaches its own
+/// username: the owner is an account too, and reaches its own
 /// settings from the same list as everyone else's.
 #[utoipa::path(
     get,
@@ -252,7 +252,7 @@ pub async fn list_accounts(
     }))
 }
 
-/// Body for creating an account, by the vault owner or by a stranger.
+/// Body for creating an account, by the owner or by a stranger.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct CreateAccountRequest {
     /// Login username.
@@ -261,7 +261,7 @@ pub struct CreateAccountRequest {
     /// no password.
     #[serde(default)]
     pub password: Option<String>,
-    /// Display name shown in the vault.
+    /// Display name shown in Message Crate.
     #[serde(default)]
     pub preferred_name: Option<String>,
     /// Phone number linked to the account.
@@ -284,13 +284,13 @@ pub struct CreateAccountResponse {
 
 /// Create an account.
 ///
-/// The vault owner may always: the owner picks the first password and the
+/// The owner may always: the owner picks the first password and the
 /// account holder replaces it at first login, so the owner's choice survives
-/// one session and no longer. A stranger with no credential may while the
-/// vault is open, and is logged in on creation. Registering is the vault's
+/// one session and no longer. A stranger with no credential may while
+/// registration is open, and is logged in on creation. Registering is the
 /// only self-service door, shut unless the owner has opened it; an unclaimed
-/// vault is shut too, because its first act is being claimed, not being
-/// joined.
+/// Message Crate is shut too, because its first act is being claimed, not
+/// being joined.
 #[utoipa::path(
     post,
     path = "/v1/accounts",
@@ -318,7 +318,7 @@ pub async fn create_account(
         Some(auth) if auth.is_owner() => true,
         Some(_) => {
             return Err(ApiError::NotTheOwner(
-                "only the vault owner creates accounts for others; a stranger creates their own with no credential while the vault is open".into(),
+                "only the owner creates accounts for others; a stranger creates their own with no credential while registration is open".into(),
             ));
         }
         None => {
@@ -336,7 +336,7 @@ pub async fn create_account(
     let mut conn = state.db.acquire().await?;
     if !by_owner && !vault_settings::load(&mut conn).await?.public_registration {
         return Err(ApiError::RegistrationClosed(
-            "this vault does not accept new accounts; ask its owner for one".into(),
+            "this Message Crate does not accept new accounts; ask its owner for one".into(),
         ));
     }
 
@@ -427,8 +427,8 @@ pub struct AccountIdentityRequest {
 }
 
 /// Body for changing an account. Omitted fields are left alone. The name,
-/// zone and identities are set by the account or by the vault owner; the
-/// disabled flag and the three permissions are the vault owner's alone.
+/// zone and identities are set by the account or by the owner; the
+/// disabled flag and the three permissions are the owner's alone.
 #[derive(Debug, Default, Deserialize, utoipa::ToSchema)]
 pub struct UpdateAccountRequest {
     /// Display name to set; `None` (or empty) leaves the current name unchanged.
@@ -653,7 +653,7 @@ async fn apply_flags(
 }
 
 /// Change an account. Its display name, time zone and identities are set by
-/// the account itself or by the vault owner; only the vault owner sets an
+/// the account itself or by the owner; only the owner sets an
 /// account's disabled flag and its import, export and delete permissions. A
 /// field the caller may not set answers `403 Forbidden`, and the reloaded
 /// account is the answer.
@@ -682,10 +682,10 @@ pub async fn update_account(
                 return Err(if reach == Reach::OwnersOwn {
                     // The owner holds no messages, so its permissions mean
                     // nothing, and it cannot lock itself out.
-                    ApiError::validation("the vault owner cannot be disabled or given permissions")
+                    ApiError::validation("the owner cannot be disabled or given permissions")
                 } else {
                     ApiError::InsufficientScope(
-                        "only the vault owner sets disabled, can_import, can_export and can_delete"
+                        "only the owner sets disabled, can_import, can_export and can_delete"
                             .into(),
                     )
                 });
@@ -718,10 +718,10 @@ pub struct DeleteAccountRequest {
 /// Permanently delete an account: login, profile, contacts, and every
 /// message it owns, with its data directory.
 ///
-/// The vault owner deletes any account outright, the demo account included,
-/// which is how a demo vault is cleared into a real one. An account deletes
+/// The owner deletes any account outright, the demo account included,
+/// which is how a demo Message Crate is cleared into a real one. An account deletes
 /// itself with a body carrying the confirmation and its current password: a
-/// credential belongs in a body, not in a URL or a header of the vault's own
+/// credential belongs in a body, not in a URL or a header of the server's own
 /// invention, and a DELETE body has no defined meaning in RFC 9110 but is not
 /// forbidden. The demo account refuses its own deletion, and nobody deletes
 /// the owner.
@@ -748,7 +748,7 @@ pub async fn delete_account(
     let mut conn = state.db.acquire().await?;
     let reach = require_account_reach(&mut conn, &auth, target, Admits::Owner).await?;
     if account_profile::is_vault_owner(target) {
-        return Err(ApiError::validation("the vault owner cannot be deleted"));
+        return Err(ApiError::validation("the owner cannot be deleted"));
     }
     if reach.is_own() {
         if account_profile::is_demo_account(target) {
@@ -799,15 +799,15 @@ pub async fn delete_account(
 /// The new password.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct ReplaceAccountPasswordRequest {
-    /// The new password. Empty clears a user account's password; the vault
+    /// The new password. Empty clears a user account's password; the
     /// owner's must be one character or more.
     pub password: String,
-    /// The new password typed a second time. The vault, not the screen,
+    /// The new password typed a second time. The server, not the screen,
     /// refuses a pair that differs, so the checks run in one fixed order:
     /// current password, then the pair, then that the new one differs from the
     /// current one.
     pub password_confirmation: String,
-    /// The password being replaced. Required when the vault owner changes its
+    /// The password being replaced. Required when the owner changes its
     /// own; nobody else sends it.
     #[serde(default)]
     pub current_password: Option<String>,
@@ -823,11 +823,11 @@ pub struct ReplaceAccountPasswordResponse {
 /// Set an account's password.
 ///
 /// For a user account the session is the credential, and the current
-/// password is not asked for. The vault owner changing its own must send
+/// password is not asked for. The owner changing its own must send
 /// `current_password`: that account reaches every other, so a session left
 /// open on a shared machine must not be enough to take it over.
 /// An account changing its own has its API tokens revoked and gets
-/// `200` with a rotated session token. The vault owner setting another
+/// `200` with a rotated session token. The owner setting another
 /// account's answers `204`. That is the whole of it: the account's sessions carry on,
 /// and its holder keeps the new password until they change it themselves.
 #[utoipa::path(
@@ -839,7 +839,7 @@ pub struct ReplaceAccountPasswordResponse {
     request_body = ReplaceAccountPasswordRequest,
     responses(
         (status = 200, description = "Own password changed; the rotated session token", body = ReplaceAccountPasswordResponse),
-        (status = 204, description = "Password set by the vault owner"),
+        (status = 204, description = "Password set by the owner"),
         crate::problem::openapi::InvalidCredentials,
         crate::problem::openapi::NotTheOwner
     )
@@ -859,7 +859,7 @@ pub async fn replace_account_password(
     if reach == Reach::OwnersOwn {
         let Some(current) = req.current_password.as_deref() else {
             return Err(ApiError::validation(
-                "Current password is required to change the vault owner's password.",
+                "Current password is required to change the owner's password.",
             ));
         };
         let password_hash = account_profile::load_password_hash(&mut conn, target).await?;
@@ -954,7 +954,7 @@ fn remove_account_asset_trees(
 /// Destroy one account's conversations, messages, and attachments. The
 /// account itself, its contacts, and its login survive.
 ///
-/// The vault owner may, on any account. The account itself may with a
+/// The owner may, on any account. The account itself may with a
 /// session that carries the `delete` permission, and confirms in the body.
 /// An API token is refused whatever its scopes: permanent deletion is a
 /// person's act (`docs/architecture/http-api.md`, "Credentials and reach").
@@ -1011,7 +1011,7 @@ pub(crate) struct AccountStorage {
     /// Attachment rows.
     pub attachment_count: i64,
     /// Conversations. A count and never a title: how many an account has is
-    /// a measure of the vault, and who they are with is the holder's.
+    /// a measure of the database, and who they are with is the holder's.
     pub conversation_count: i64,
     /// Contacts, on the same terms as `conversation_count`.
     pub contact_count: i64,
@@ -1022,7 +1022,7 @@ pub(crate) struct AccountStorage {
 /// contact counts, and the 100 largest files. The owner reads any account's;
 /// an account reads its own. The owner is told each file's name, type and
 /// size and not the conversation it is in, which says who the account talks
-/// to (`docs/adr/0008-the-vault-owner-holds-no-messages.md`).
+/// to (`docs/adr/0008-the-owner-holds-no-messages.md`).
 #[utoipa::path(
     get,
     path = "/v1/accounts/{id}/storage",
@@ -1102,7 +1102,7 @@ pub(crate) async fn list_account_identities(
 // ---------------------------------------------------------------------------
 //
 // An account's history is metadata about it, so the owner reads it as well as
-// the account (`docs/adr/0008-the-vault-owner-holds-no-messages.md`, "What the
+// the account (`docs/adr/0008-the-owner-holds-no-messages.md`, "What the
 // owner may see"). `/v1/imports` and `/v1/exports` are the import and export
 // pipelines' own routes and ask for a permission the owner's session never
 // carries; these ask only who is calling. Which contacts a run created is the

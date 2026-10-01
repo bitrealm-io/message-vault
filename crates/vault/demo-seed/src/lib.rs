@@ -551,7 +551,7 @@ fn write_readme(
 ) -> Result<()> {
     let path = out.join("README.md");
     let body = format!(
-        r"# Message Vault demo dataset
+        r"# Message Crate demo dataset
 
 Generated message-ir JSONL bundle for local browsing without a real phone backup.
 `staging/` is written by `demo-seed` / `reset-demo` and is not stored in git.

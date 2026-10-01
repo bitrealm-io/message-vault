@@ -84,7 +84,7 @@ export function IdentitiesSection({
     try {
       const updated = await updateProfile.mutateAsync({ identities: [{ address, service }] });
       if (!profileIncludes(updated, address, service)) {
-        throw new Error("The vault did not add that identity.");
+        throw new Error("The server did not add that identity.");
       }
       setAdding(false);
     } catch (e) {
@@ -101,7 +101,7 @@ export function IdentitiesSection({
         remove_identities: [{ address, service }],
       });
       if (profileIncludes(updated, address, service)) {
-        throw new Error("The vault did not remove that identity.");
+        throw new Error("The server did not remove that identity.");
       }
       setRemoveTarget(null);
     } catch (e) {

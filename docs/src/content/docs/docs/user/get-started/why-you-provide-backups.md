@@ -1,9 +1,9 @@
 ---
 title: Why you provide backups
-description: Why backups are manual — a platform limitation, not a Message Vault one.
+description: Why backups are manual — a platform limitation, not a Message Crate one.
 ---
 
-To put your messages in Message Vault, you make a backup of the phone and point the desktop app at it. That step is manual because Apple, Google, and WhatsApp do not offer another path.
+To put your messages in Message Crate, you make a backup of the phone and point the desktop app at it. That step is manual because Apple, Google, and WhatsApp do not offer another path.
 
 ## No official download API
 
@@ -23,4 +23,4 @@ Every tool that works with message history works this way today. If a supported 
 
 ## Where to start
 
-[Try the vault](/docs/user/get-started/try-the-vault/) first if you have not seen the product yet. When you are ready for your own data, [prepare a backup](/docs/user/prepare-a-backup/).
+[Try Message Crate](/docs/user/get-started/try-message-crate/) first if you have not seen the product yet. When you are ready for your own data, [prepare a backup](/docs/user/prepare-a-backup/).

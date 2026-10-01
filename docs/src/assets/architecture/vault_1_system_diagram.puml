@@ -5,12 +5,12 @@
 LAYOUT_LANDSCAPE()
 LAYOUT_WITH_LEGEND()
 
-title System Context: Message Vault Server
+title System Context: Message Crate Server
 
 Person(user, "User", "A person who wants to store messages from a device or platform.")
 
 System(ui, "User Interface", "Allows users to view, search, upload, export, and maintain messages.")
-System(server, "Message Vault Backend", "Handles core messaging operations including storage and retrieval.")
+System(server, "Message Crate Backend", "Handles core messaging operations including storage and retrieval.")
 
 Rel(user, ui, "Imports and views messages")
 Rel(ui, server, "Stores and retrieves messages")

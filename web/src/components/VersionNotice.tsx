@@ -17,7 +17,7 @@ export default function VersionNotice() {
       role="status"
       className="m-0 shrink-0 border-b border-border bg-elevated px-3 py-1.5 text-center text-[0.75rem] text-muted"
     >
-      This vault is {productVersionOf(data.version)}. This app is {productVersionOf(APP_BUILD)}.
+      The server is {productVersionOf(data.version)}. This app is {productVersionOf(APP_BUILD)}.
     </p>
   );
 }

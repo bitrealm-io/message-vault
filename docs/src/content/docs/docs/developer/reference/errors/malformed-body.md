@@ -11,4 +11,4 @@ editUrl: false
 | Status | `400 Bad Request` |
 | Type | `https://messagecrate.app/docs/developer/reference/errors/malformed-body` |
 
-The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. Nothing was parsed, so nothing is reported field by field; `detail` says where reading stopped.
+The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. Nothing was parsed, so nothing is reported field by field; `detail` says where reading stopped.

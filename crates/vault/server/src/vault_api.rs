@@ -11,7 +11,7 @@
 //! a stranger's `POST /v1/accounts`, and the first read routes that do not
 //! require a session: the entry screen cannot have one yet, which is the
 //! whole of the exception. See
-//! `docs/adr/0008-the-vault-owner-holds-no-messages.md`.
+//! `docs/adr/0008-the-owner-holds-no-messages.md`.
 
 use axum::extract::State;
 use serde::{Deserialize, Serialize};
@@ -20,38 +20,38 @@ use crate::db::{account_profile, storage, vault_settings};
 use crate::extract::Json;
 use crate::server::{ApiError, AppState, Created, Owner};
 
-/// What state a vault is in, from outside.
+/// What state a Message Crate is in, from outside.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum VaultState {
-    /// Nobody owns this vault yet. The only thing to do is claim it.
+    /// Nobody owns this Message Crate yet. The only thing to do is claim it.
     Unclaimed,
-    /// Owned, and only the vault owner creates accounts.
+    /// Owned, and only the owner creates accounts.
     Closed,
-    /// Owned, and anyone reaching the vault may create their own account.
+    /// Owned, and anyone reaching the server may create their own account.
     Open,
 }
 
-/// The vault's state, for the screen a logged-out person sees.
+/// The state of this Message Crate, for the screen a logged-out person sees.
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct Vault {
-    /// `unclaimed` shows Create Vault Owner alone; `closed` shows Login alone;
+    /// `unclaimed` shows Create Owner alone; `closed` shows Login alone;
     /// `open` shows Login and Create Account.
     pub state: VaultState,
-    /// This vault's Build: its Product Version, plus the commit it was built
+    /// The server's Build: its Product Version, plus the commit it was built
     /// from unless it is a release. An app compares the Product Version with
-    /// its own and says so when they differ; the vault serves it either way.
+    /// its own and says so when they differ; the server serves it either way.
     pub version: String,
-    /// The Schema Fingerprint, the number this vault stamps into its database.
+    /// The Schema Fingerprint, the number this server stamps into its database.
     pub schema_fingerprint: i64,
 }
 
-/// Body for claiming a vault.
+/// Body for claiming a Message Crate.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct ClaimVaultRequest {
-    /// Login username for the vault owner.
+    /// Login username for the owner.
     pub username: String,
-    /// Password for the vault owner. Must satisfy the vault's password policy.
+    /// Password for the owner. Must satisfy the server's password policy.
     pub password: String,
 }
 
@@ -68,11 +68,11 @@ async fn state_on_conn(conn: &mut sqlx::AnyConnection) -> Result<VaultState, Api
     })
 }
 
-/// Report whether this vault is unclaimed, closed, or open.
+/// Report whether this Message Crate is unclaimed, closed, or open.
 #[utoipa::path(
     get,
     path = "/v1/vault",
-    tag = "Vault",
+    tag = "Server",
     responses((status = 200, body = Vault))
 )]
 pub async fn get_vault(State(state): State<AppState>) -> Result<Json<Vault>, ApiError> {
@@ -84,23 +84,23 @@ pub async fn get_vault(State(state): State<AppState>) -> Result<Json<Vault>, Api
     }))
 }
 
-/// Claim an unclaimed vault by creating its owner.
+/// Claim an unclaimed Message Crate by creating its owner.
 ///
-/// Unauthenticated, because a vault with no owner has no credential that
-/// could authorize this. Whoever reaches an unclaimed vault first may claim
-/// it: the vault is self-hosted, so its operator installs the software,
-/// claims the vault, and publishes the port, in that order and at times of
-/// their choosing. An unclaimed vault is also empty, so a lost race destroys
-/// nothing and announces itself at once.
+/// Unauthenticated, because a Message Crate with no owner has no credential
+/// that could authorize this. Whoever reaches an unclaimed one first may
+/// claim it: Message Crate is self-hosted, so its operator installs the
+/// software, claims it, and publishes the port, in that order and at times
+/// of their choosing. An unclaimed one is also empty, so a lost race
+/// destroys nothing and announces itself at once.
 #[utoipa::path(
     post,
     path = "/v1/vault/claim",
-    tag = "Vault",
+    tag = "Server",
     request_body = ClaimVaultRequest,
     responses(
         (
             status = 201,
-            description = "Vault claimed; the owner's Session is made",
+            description = "Claimed; the owner's Session is made",
             body = crate::session_api::CreateSessionResponse,
             headers(("Location" = String, description = "`/v1/session`, the Session the claim made"))
         ),
@@ -122,7 +122,7 @@ pub async fn claim_vault(
     let mut tx = sqlx::Connection::begin(&mut *conn).await?;
     if account_profile::vault_is_claimed(&mut tx).await? {
         return Err(ApiError::StateConflict(
-            "this vault already has an owner".into(),
+            "this Message Crate already has an owner".into(),
         ));
     }
     crate::credentials::require_username_free(&mut tx, &username).await?;
@@ -155,26 +155,26 @@ pub async fn claim_vault(
     })
 }
 
-/// The vault settings the owner controls.
+/// The server settings the owner controls.
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct VaultSettings {
-    /// Anyone reaching the vault may create their own account.
+    /// Anyone reaching the server may create their own account.
     pub public_registration: bool,
 }
 
-/// Body for changing the vault's settings. Omitted fields are left alone.
+/// Body for changing the server settings. Omitted fields are left alone.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct UpdateVaultSettingsRequest {
-    /// Let anyone reaching the vault create their own account, or stop them.
+    /// Let anyone reaching the server create their own account, or stop them.
     #[serde(default)]
     pub public_registration: Option<bool>,
 }
 
-/// Read the vault's settings.
+/// Read the server settings.
 #[utoipa::path(
     get,
     path = "/v1/vault/settings",
-    tag = "Vault",
+    tag = "Server",
     security(("session" = ["owner"])),
     responses(
         (status = 200, body = VaultSettings),
@@ -191,11 +191,11 @@ pub async fn get_vault_settings(
     }))
 }
 
-/// Change the vault's settings.
+/// Change the server settings.
 #[utoipa::path(
     patch,
     path = "/v1/vault/settings",
-    tag = "Vault",
+    tag = "Server",
     security(("session" = ["owner"])),
     request_body = UpdateVaultSettingsRequest,
     responses(
@@ -217,7 +217,7 @@ pub async fn update_vault_settings(
     }))
 }
 
-/// What the whole vault holds, summed over every account.
+/// What the whole database holds, summed over every account.
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct VaultStorage {
     /// Messages across every account.
@@ -237,7 +237,7 @@ pub struct VaultStorage {
     /// full-text search index.
     pub messages_bytes: i64,
     /// Bytes the full-text search index takes, measured, for the whole
-    /// vault. It is one shared structure, so there is no per-account figure.
+    /// database. It is one shared structure, so there is no per-account figure.
     pub fts_bytes: i64,
     /// Every account, including ones with no messages: the owner first, then
     /// by username, as the User Accounts table lists them.
@@ -258,17 +258,17 @@ pub struct AccountMessages {
     pub estimated_message_bytes: i64,
 }
 
-/// Read what the vault holds. The counts and the attachment bytes are summed
+/// Read what the database holds. The counts and the attachment bytes are summed
 /// over every account. The database, messages and full-text search sizes
 /// are measured on disk. Each account's share of message storage is an
 /// estimate from its share of text. Counts and totals only, never a name or
-/// a line of text (`docs/adr/0008-the-vault-owner-holds-no-messages.md`,
-/// "What the owner may see"). The owner's, because the owner administers the
-/// vault and nobody else holds more than their own account.
+/// a line of text (`docs/adr/0008-the-owner-holds-no-messages.md`,
+/// "What the owner may see"). The owner's, because the owner administers this
+/// Message Crate and nobody else holds more than their own account.
 #[utoipa::path(
     get,
     path = "/v1/vault/storage",
-    tag = "Vault",
+    tag = "Server",
     security(("session" = ["owner"])),
     responses(
         (status = 200, body = VaultStorage),

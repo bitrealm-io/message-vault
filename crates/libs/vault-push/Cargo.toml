@@ -2,7 +2,7 @@
 name = "vault-push"
 version = "0.1.0"
 edition = "2024"
-description = "Push message-ir JSONL exports into a Message Vault import API"
+description = "Push message-ir JSONL exports into a Message Crate import API"
 license = "LicenseRef-FCL-1.0-ALv2"
 
 [dependencies]

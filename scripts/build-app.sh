@@ -4,7 +4,7 @@
 #   ./scripts/build-app.sh [cargo tauri build arguments]
 #
 # Tauri names each installer after productName, so a plain build writes
-# "Message Vault_0.9.0_amd64.AppImage". productName is also the name the app
+# "Message Crate_0.9.0_amd64.AppImage". productName is also the name the app
 # shows in menus, so it stays as it is and the files are renamed afterwards:
 # message_vault_0.9.0_amd64.AppImage. The release job in ci.yml runs this
 # script too, so a local build and a release carry the same names.

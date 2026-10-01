@@ -13,7 +13,7 @@ export type VaultState = "unclaimed" | "closed" | "open";
  * rule joining "does an owner exist" to "is registration open" is stated once,
  * on the server. Deriving it again in the browser, and a third time in the
  * desktop app, would be three copies free to drift apart. See
- * `docs/adr/0008-the-vault-owner-holds-no-messages.md`.
+ * `docs/adr/0008-the-owner-holds-no-messages.md`.
  *
  * This is the one query that runs before anyone logs in, so it is a plain
  * `useQuery` rather than `useVaultQuery`: there is no account to name the

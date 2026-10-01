@@ -3,7 +3,7 @@ title: "Converter capabilities"
 description: "What each backup converter writes, where it falls short, and links to input-format and mapping pages."
 ---
 
-These pages are Developer docs (the converter libraries and their field mapping; none has a command line, see [ADR 0001](https://github.com/messagecrate/message-crate/blob/main/docs/adr/0001-no-command-line-except-the-vault-server.md)). Day-to-day Import from a phone backup is in the [User Guide](/docs/user/import-from-a-backup/).
+These pages are Developer docs (the converter libraries and their field mapping; none has a command line, see [ADR 0001](https://github.com/messagecrate/message-crate/blob/main/docs/adr/0001-no-command-line-except-the-server.md)). Day-to-day Import from a phone backup is in the [User Guide](/docs/user/import-from-a-backup/).
 
 What each converter writes (and where it falls short). Marks: **yes** / **partial** / **no**.
 
@@ -76,4 +76,4 @@ Discord, Signal, Telegram, and Slack are recognized services in the shared model
 
 **Common message:** end-user [export structure](/docs/developer/reference/export-structure/); schema [message-ir architecture](/docs/developer/architecture/common-message/). All exporters parse to `ConversationDocument` then project via `message_ir_format::FormatSink` (per-chat JSON/JSONL/CSV/EML/MBOX, or one SyncTech `smses.xml` as the XML format). Output formats: [mail archives](/docs/developer/formats/mail-archive/) and [SMS Backup & Restore XML](/docs/developer/formats/sms-backup-restore-xml/). Attachment modes (none / copy / convert / compress) and obfuscate apply through `FormatSink` for every format.
 
-**Convert:** [`message-reexport`](/docs/developer/formats/convert/) converts an existing Message Vault output directory to another format, detecting the input format from the folder. Export uses it for any format other than JSON Lines. Not a vendor backup source.
+**Convert:** [`message-reexport`](/docs/developer/formats/convert/) converts an existing Message Crate output directory to another format, detecting the input format from the folder. Export uses it for any format other than JSON Lines. Not a vendor backup source.

@@ -14,7 +14,7 @@
 //! # Why it is built this way (upload performance)
 //!
 //! - **Attachments first, then messages.** Messages point at attachments by a
-//!   content fingerprint (sha256). The vault must already have that file, or
+//!   content fingerprint (sha256). The server must already have that file, or
 //!   the import would fail. Media is uploaded before message text is sent.
 //! - **Fingerprint = sha256.** Same bytes always produce the same hex string.
 //!   The vault stores one copy per fingerprint, so the same photo shared in
@@ -366,7 +366,7 @@ fn start_import_run(
     }
     let id = session
         .start_import(&source, cfg.mode, Some("vault-push"))
-        .context("start the Import Run on the vault")?;
+        .context("start the Import Run on the server")?;
     out.show_as(
         &format!("Import Run id={id} source={source}"),
         format!("Recording Import Run {id} ({source})"),
@@ -589,9 +589,9 @@ fn complete_import_session(
         },
     );
     match completed {
-        Ok(()) => out.log(&format!("vault import session {import_id} completed")),
+        Ok(()) => out.log(&format!("import session {import_id} completed")),
         Err(error) => out.log(&format!(
-            "warning: could not complete vault import session {import_id}: {error}"
+            "warning: could not complete import session {import_id}: {error}"
         )),
     }
 }

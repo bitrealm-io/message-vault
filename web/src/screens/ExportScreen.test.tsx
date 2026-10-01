@@ -234,12 +234,12 @@ describe("ExportScreen", () => {
 
   it("reports the failure rather than claiming the export finished", async () => {
     awaitTauriJob.mockImplementation(async () => {
-      throw new Error("vault key is required");
+      throw new Error("API key is required");
     });
 
     await exportTo("/home/demo/out");
 
-    expect(await screen.findByText("vault key is required")).toBeTruthy();
+    expect(await screen.findByText("API key is required")).toBeTruthy();
     expect(screen.queryByText(/Export complete/)).toBeNull();
   });
 });

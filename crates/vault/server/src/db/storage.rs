@@ -2,7 +2,7 @@
 //! attachments take, and what the database itself takes on disk. Every
 //! number here describes message data without being it, which is what lets
 //! the vault owner read them
-//! (`docs/adr/0008-the-vault-owner-holds-no-messages.md`, "What the owner
+//! (`docs/adr/0008-the-owner-holds-no-messages.md`, "What the owner
 //! may see"). The per-account and vault-wide figures come from the same
 //! queries with and without an account filter, so the total on Owner Home
 //! cannot drift from the numbers on an account's Storage tab.

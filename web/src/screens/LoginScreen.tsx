@@ -191,7 +191,7 @@ export default function LoginScreen() {
             />
           ) : (
             <>
-              <h1 className={`${authScreenTitle} mb-2`}>Message Vault</h1>
+              <h1 className={`${authScreenTitle} mb-2`}>Message Crate</h1>
               <VaultStatus state={state} className="mb-5 text-center" />
 
               {/* The card waits for the vault's own answer as well as for the
@@ -226,7 +226,7 @@ export default function LoginScreen() {
                     setSettingsOpen(true);
                   }}
                 >
-                  Change vault settings
+                  Change server address
                 </button>
               </div>
             </>

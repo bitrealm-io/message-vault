@@ -36,8 +36,8 @@ pub const APP_HEADER: &str = "x-message-vault-app";
 /// Request header carrying that app's Build, such as `0.9.0+343fe0d8`.
 pub const APP_VERSION_HEADER: &str = "x-message-vault-version";
 
-/// Which app a session's requests come from. The vault records it beside the
-/// app's Build and shows both to the vault owner; it never refuses a request
+/// Which app a session's requests come from. The server records it beside the
+/// app's Build and shows both to the owner; it never refuses a request
 /// on account of either.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(utoipa::ToSchema))]
@@ -45,7 +45,7 @@ pub const APP_VERSION_HEADER: &str = "x-message-vault-version";
 pub enum AppKind {
     /// The desktop app, from its SPA or from its import and export code.
     Desktop,
-    /// The SPA the vault serves to a browser.
+    /// The SPA the server serves to a browser.
     Website,
 }
 
@@ -251,7 +251,7 @@ api_shape! {
     /// the Contact's name, else what that backup called them in that
     /// conversation, else the handle.
     pub struct Participant {
-        /// What to show for this person. Never empty — the vault falls back to
+        /// What to show for this person. Never empty — the server falls back to
         /// the handle when nothing else names them, and to the name alone for
         /// someone a backup named without recording any address.
         pub name: String,
@@ -261,8 +261,8 @@ api_shape! {
         /// Platform service, e.g. `imessage`. `None` for the same reason as
         /// `handle`: with no address there is nothing to carry a service on.
         pub service: Option<String>,
-        /// Linked vault contact id: when the handle is on a Contact, or — for a
-        /// participant with no handle — the contact the vault bound the name to
+        /// Linked contact id: when the handle is on a Contact, or — for a
+        /// participant with no handle — the contact the server bound the name to
         /// directly, since that is the only place the link is recorded for
         /// them. Matches the `id` every other contact shape uses, so a caller
         /// can compare the two without converting either.
@@ -286,7 +286,7 @@ api_shape! {
         pub guid: Option<String>,
         /// The instant the message was sent: RFC 3339 in UTC with a `Z`
         /// suffix. A caller shows it in the account's time zone
-        /// (`AccountProfileResponse.time_zone`); the vault stores nothing
+        /// (`AccountProfileResponse.time_zone`); the database stores nothing
         /// about where the phone was.
         pub timestamp: String,
         /// Ordering key within the conversation.
@@ -487,7 +487,7 @@ mod export_scope_tests {
     }
 }
 
-/// An RFC 7807 problem document: the body of every failure the vault answers,
+/// An RFC 7807 problem document: the body of every failure the server answers,
 /// served as `application/problem+json` (`docs/architecture/http-api.md`).
 ///
 /// `type` is the URL of the page describing this kind of failure, one page per

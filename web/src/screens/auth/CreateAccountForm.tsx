@@ -48,7 +48,7 @@ export default function CreateAccountForm({
       // token is absent only when the owner created it, which this form never
       // does.
       if (!created.token) {
-        throw new Error("The vault created the account but opened no session.");
+        throw new Error("The server created the account but opened no session.");
       }
       // Awaited so the empty-profile check inside `login` runs before this form
       // drops its busy state, sending the new account on to profile setup.

@@ -141,7 +141,7 @@ pub fn download_asset(
     }
     let base = trim_base_url(base_url);
     let mut url = reqwest::Url::parse(&format!("{base}/v1/assets/{sha_clean}"))
-        .with_context(|| format!("invalid vault URL {base}"))?;
+        .with_context(|| format!("invalid server address {base}"))?;
     // The key names the account; the route takes no `account=`, and refuses
     // a parameter it does not declare.
     url.query_pairs_mut().append_pair("source", source);

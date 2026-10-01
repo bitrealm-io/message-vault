@@ -1,19 +1,19 @@
 ---
 title: HTTP API
-description: Import Runs, Export Runs, and the search language, for people writing tools against the vault.
+description: Import Runs, Export Runs, and the search language, for people writing tools against the server.
 ---
 
-Three places describe the vault's `/v1` interface, and this page is the smallest of them:
+Three places describe the server's `/v1` interface, and this page is the smallest of them:
 
 - The generated [HTTP API reference](/docs/developer/rustdoc/http/) states what each route takes and answers today: paths, JSON fields, status codes, and which credential and scope each route accepts.
 - The [HTTP interface rules](https://github.com/messagecrate/message-crate/blob/main/docs/architecture/http-api.md) state what every route must do, each rule with its reason: route shape, lists and paging, failures as problem documents, credentials and what each reaches, and runs.
 - This page walks through an Import Run and an Export Run from start to finish, and lists the words of the search language.
 
-Day-to-day import uses the desktop [Import](/docs/user/import-from-a-backup/) screen and download uses [Export](/docs/user/how-to/export-from-the-vault/). Both call this API with [JSONL](/docs/developer/reference/export-structure/) and attachment bytes keyed by SHA-256, through the `vault-push` and `vault-pull` libraries.
+Day-to-day import uses the desktop [Import](/docs/user/import-from-a-backup/) screen and download uses [Export](/docs/user/how-to/export-your-messages/). Both call this API with [JSONL](/docs/developer/reference/export-structure/) and attachment bytes keyed by SHA-256, through the `vault-push` and `vault-pull` libraries.
 
 ## Tokens
 
-A program of its own calls the vault with a named **API token**, created under **Settings → Account** and shown once. A website login uses a **session** token that changes on each login, and the desktop app uses that session rather than an API token. A session token pasted into a program stops working at the next login, so a program should hold an API token.
+A program of its own calls the server with a named **API token**, created under **Settings → Account** and shown once. A website login uses a **session** token that changes on each login, and the desktop app uses that session rather than an API token. A session token pasted into a program stops working at the next login, so a program should hold an API token.
 
 Either token travels as a Bearer header:
 
@@ -30,14 +30,14 @@ curl -sS "http://127.0.0.1:8080/v1/session" \
   -H "Authorization: Bearer <api-token-from-settings>"
 ```
 
-Setting `[server] openapi_ui = true` in `config/config.toml` turns on a local explorer at `/docs` on that vault. It is off by default. "Try it" still sends the Bearer header.
+Setting `[server] openapi_ui = true` in `config/config.toml` turns on a local explorer at `/docs` on that server. It is off by default. "Try it" still sends the Bearer header.
 
 ## Import Run
 
 Every import is an Import Run, and there is no import without one. A run takes four steps.
 
 1. `POST /v1/imports` creates the run and answers `201 Created` with its id. The body names the `source`, the `mode` (`replace` or `append`, default `append`), and whether to `dedupe` across sources after each batch (default false). These settings belong to the run and are stated once, so no batch repeats them. An account has at most one running Import Run, so a second `POST` answers `409 Conflict` while the first is live. `GET /v1/imports?status=running` finds the live run.
-2. Each attachment goes up first, by its SHA-256, through `/v1/assets`. A message points at its attachment by that fingerprint, so the vault must already hold the file when the message arrives.
+2. Each attachment goes up first, by its SHA-256, through `/v1/assets`. A message points at its attachment by that fingerprint, so the server must already hold the file when the message arrives.
 3. Each `POST /v1/imports/{id}/batches` adds one JSONL body to the run. The run's row says how the batch is imported, so the request carries nothing but the body. A `replace` run wipes the source once, on its first batch, and appends every batch after that.
 4. `POST /v1/imports/{id}/complete` records how the run ended: `completed`, `completed_with_issues`, or `failed`, with its counts and issues. `POST /v1/imports/{id}/discard` gives a live run up instead and records it as `cancelled`. A run that has finished answers `409 Conflict` to a batch, a second close, or a change of stage, because its record is the history the person reads and is never rewritten.
 
@@ -49,17 +49,17 @@ Between those steps, `PATCH /v1/imports/{id}` moves a live run to another stage,
 
 A batch body is `Content-Type: application/jsonl` or `application/x-ndjson`. Any other media type answers `415 Unsupported Media Type`, because attachments never travel in a batch. A body larger than `[server] asset_max_bytes` (default 512 MiB) answers `413 Payload Too Large`.
 
-A file the vault cannot read answers `400 Bad Request` with a `malformed-body` problem document. Its `detail` names the line where reading stopped. For a file of the wrong schema version, `detail` names the version the file has and the version the vault reads: nothing is upgraded, so the file must be exported again with current tools. Every other failure is a problem document too, described under "Failures" in the HTTP interface rules.
+A file the server cannot read answers `400 Bad Request` with a `malformed-body` problem document. Its `detail` names the line where reading stopped. For a file of the wrong schema version, `detail` names the version the file has and the version the server reads: nothing is upgraded, so the file must be exported again with current tools. Every other failure is a problem document too, described under "Failures" in the HTTP interface rules.
 
 ### Batches and the database
 
-A batch holds one pooled database connection for the whole of its work: parsing the JSONL, placing attachments, and promoting messages. At most two batches run at once across the vault, so the rest of the pool stays free for logins, browsing, and export while an import runs. Batches for the same account run one at a time. The same holds on SQLite and on Postgres.
+A batch holds one pooled database connection for the whole of its work: parsing the JSONL, placing attachments, and promoting messages. At most two batches run at once across the whole server, so the rest of the pool stays free for logins, browsing, and export while an import runs. Batches for the same account run one at a time. The same holds on SQLite and on Postgres.
 
 `message-vault-server import` reads a folder of JSONL without the HTTP interface. It defaults to `replace` and runs dedupe unless given `--skip-dedupe`.
 
 ## Export Run
 
-Every export is an Export Run, and there is no unrecorded export. `POST /v1/exports` creates one and answers `201 Created` with the run: what was asked for, and the four counts the vault computed for it at creation — messages, conversations, distinct attachments, and their bytes. The body names a `scope` in one of three forms, stored as given, and an optional `tool`:
+Every export is an Export Run, and there is no unrecorded export. `POST /v1/exports` creates one and answers `201 Created` with the run: what was asked for, and the four counts the server computed for it at creation — messages, conversations, distinct attachments, and their bytes. The body names a `scope` in one of three forms, stored as given, and an optional `tool`:
 
 ```json title="POST /v1/exports"
 { "scope": { "kind": "everything" }, "tool": "vault-pull" }
@@ -69,7 +69,7 @@ Every export is an Export Run, and there is no unrecorded export. `POST /v1/expo
 
 `everything` is every non-trashed message the account holds. `query` is the [search language](#search-operators-q) against the Messages list. A blank `q` is refused, because that is the `everything` form. `selection` is conversations and messages picked by hand: a message is selected when its conversation is listed or it is listed itself. Either list may be empty but not both, each list holds at most 500 ids, and an id the account does not hold is refused by name. A selection hides trashed conversations and duplicates the way a browse does.
 
-A run is a snapshot. When it is created, the vault lists the messages the scope matches, and `GET /v1/exports/{id}/messages` pages that list, oldest first (`sort=-date` for newest first), with a default page of 100 and no offset cap. An import, a trash, or a new day while the run is open changes nothing it hands over: `import:last` and relative dates keep the meaning they had at creation, and a message whose conversation is trashed afterwards is still handed over.
+A run is a snapshot. When it is created, the server lists the messages the scope matches, and `GET /v1/exports/{id}/messages` pages that list, oldest first (`sort=-date` for newest first), with a default page of 100 and no offset cap. An import, a trash, or a new day while the run is open changes nothing it hands over: `import:last` and relative dates keep the meaning they had at creation, and a message whose conversation is trashed afterwards is still handed over.
 
 A page's `total` is always the run's `message_count`. A message deleted permanently afterwards leaves its place empty, so its page holds fewer than `limit` items. A client steps `offset` by `limit` until it reaches `total`, and doesn't stop on a short or empty page. Each page read raises the run's `messages_delivered` to how far into the list the pages have read, so an abandoned run shows how far it got. A run that is no longer `running` answers `409 Conflict`.
 
@@ -79,7 +79,7 @@ Every export route takes the `export` scope on a session or an API token. A prog
 
 ## Search operators (`q`)
 
-`q` is the same search language the website uses. [Search](/docs/user/how-to/search/) has the full grammar: quoting, `none`/`any`, date and size ranges, `-` to exclude, `or` and parentheses, `avoc*` prefixes. An Export Run's `query` scope compiles `q` against the Messages list, with the same compiler Contacts and Conversations search use elsewhere in the vault, full-text index included for free text. `GET /v1/search-fields/contacts` and `GET /v1/search-fields/conversations` list the words those lists accept. These are the words the Messages list has:
+`q` is the same search language the website uses. [Search](/docs/user/how-to/search/) has the full grammar: quoting, `none`/`any`, date and size ranges, `-` to exclude, `or` and parentheses, `avoc*` prefixes. An Export Run's `query` scope compiles `q` against the Messages list, with the same compiler Contacts and Conversations search use elsewhere, full-text index included for free text. `GET /v1/search-fields/contacts` and `GET /v1/search-fields/conversations` list the words those lists accept. These are the words the Messages list has:
 
 - Free text and `"quoted phrases"` match the message body, the subject, and any attachment file name.
 - `body:`, `subject:` — text, `none`, `any`, restricted to that one field.

@@ -60,14 +60,14 @@ pub fn index_page() -> String {
         ));
     }
     format!(
-        "---\ntitle: HTTP problem types\ndescription: Every failure the vault answers, one page per type.\neditUrl: false\nsidebar:\n  order: 0\n---\n\n\
+        "---\ntitle: HTTP problem types\ndescription: Every failure the server answers, one page per type.\neditUrl: false\nsidebar:\n  order: 0\n---\n\n\
          {MARKER}\n\n\
-         Every failure on the vault's `/v1` interface answers an [RFC 7807](https://www.rfc-editor.org/rfc/rfc7807) problem document, served as `application/problem+json`:\n\n\
+         Every failure on the server's `/v1` interface answers an [RFC 7807](https://www.rfc-editor.org/rfc/rfc7807) problem document, served as `application/problem+json`:\n\n\
          ```json\n\
          {{\n  \"type\": \"{ERRORS_URL}username-taken\",\n  \"title\": \"Username taken\",\n  \"status\": 409,\n  \"detail\": \"username already taken: alice\",\n  \"request_id\": \"3f2b1c0e-8d4a-4b6e-9f21-5c7d8e9a0b1c\"\n}}\n\
          ```\n\n\
-         `type` is the address of one of the pages below, and a client that needs to know what went wrong compares its last segment. `title` is fixed per type; `detail` is one sentence about this occurrence. A `validation-failed` problem lists `errors`, every rule the request broke, in place of `detail`. `request_id` repeats the response's `x-request-id` header, which the vault's log carries on every line the request produced.\n\n\
-         A `500 Internal Server Error` has no page: its `type` is `about:blank`, and its detail is a fixed sentence, because the cause is in the vault's log and not something a client can act on.\n\n\
+         `type` is the address of one of the pages below, and a client that needs to know what went wrong compares its last segment. `title` is fixed per type; `detail` is one sentence about this occurrence. A `validation-failed` problem lists `errors`, every rule the request broke, in place of `detail`. `request_id` repeats the response's `x-request-id` header, which the server's log carries on every line the request produced.\n\n\
+         A `500 Internal Server Error` has no page: its `type` is `about:blank`, and its detail is a fixed sentence, because the cause is in the server's log and not something a client can act on.\n\n\
          | Type | Status | Title |\n|---|---|---|\n{rows}",
     )
 }

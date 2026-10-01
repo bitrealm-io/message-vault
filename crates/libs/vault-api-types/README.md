@@ -1,6 +1,6 @@
 # vault-api-types
 
-The response shapes the vault's HTTP API sends, defined once for the server
+The response shapes the server's HTTP API sends, defined once for the server
 that writes them and the client crates that read them: `Message`,
 `MessageConversation`, `Participant`, `Attachment`, and `Tapback`.
 
@@ -15,7 +15,7 @@ field the server always sends stays required in the OpenAPI document rather
 than turning optional in every generated client.
 
 The `schema` feature adds `utoipa::ToSchema` so the same structs describe
-themselves in the OpenAPI document. The vault server turns it on; client crates
+themselves in the OpenAPI document. The server turns it on; client crates
 leave it off and never build utoipa.
 
 ## Build and test
@@ -28,7 +28,7 @@ Workspace setup: [CONTRIBUTING.md](../../../CONTRIBUTING.md).
 
 ## Docs
 
-This crate is a library shared by the vault server and `vault-pull`. It builds
+This crate is a library shared by the server and `vault-pull`. It builds
 no binary.
 
 ## License

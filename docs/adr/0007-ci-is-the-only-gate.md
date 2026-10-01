@@ -283,7 +283,7 @@ builds, and `cargo doc` failures are compile failures that the `test` job
 already catches. It skips the HTTP API catalog copy for the same reason:
 `docs/scripts/copy-http-api-reference.sh` writes into `public/`, which
 `astro check` never reads, and `astro.config.mjs` excludes
-`/vault/developer/rustdoc/**` from link checking, so the step changed nothing
+`/docs/developer/rustdoc/**` from link checking, so the step changed nothing
 the job verified. `docs.yml` still runs both before the build it deploys.
 
 Every sentence in `AGENTS.md` and `CLAUDE.md` describing the old arrangement is

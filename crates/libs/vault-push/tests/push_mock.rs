@@ -1254,7 +1254,7 @@ fn authenticate_maps_http_failures_to_typed_errors() {
     let err = authenticate(&server.base_url(), "bad").unwrap_err();
     assert_eq!(err.kind(), "invalid_key");
     assert!(!err.user_message().contains("unauthorized"));
-    assert!(err.detail().contains("invalid vault key"));
+    assert!(err.detail().contains("invalid API key"));
 }
 
 #[test]
@@ -1274,12 +1274,12 @@ fn authenticate_maps_html_and_status_failures() {
     let server = MockServer::start();
     let _forbidden = server.mock(|when, then| {
         when.method(GET).path("/v1/session");
-        then.status(403).body("username does not match vault key");
+        then.status(403).body("username does not match API key");
     });
     let err = authenticate(&server.base_url(), "mv_test").unwrap_err();
     assert_eq!(err.kind(), "forbidden");
     assert!(!err.user_message().contains("username does not match"));
-    assert!(err.detail().contains("username does not match vault key"));
+    assert!(err.detail().contains("username does not match API key"));
 }
 
 #[test]
@@ -2232,7 +2232,7 @@ fn an_unreadable_2xx_answer_is_not_retried() {
     assert_eq!(report.conversations_failed, 1);
     let error = report.results[0].error.as_deref().unwrap_or_default();
     assert!(
-        error.contains("could not read the vault's answer to import batch"),
+        error.contains("could not read the server's answer to import batch"),
         "{error}"
     );
     assert!(journal_events(dir.path(), "file_ok").is_empty());

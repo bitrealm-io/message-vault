@@ -258,7 +258,7 @@ pub fn is_demo_account(account_id: i64) -> bool {
 /// Stable id for the vault owner. A vault has one owner or none, and this id
 /// is what makes "one" structural: there is no flag to set, no second owner to
 /// create, and nothing to promote. A vault holding no row at this id is
-/// unclaimed. See `docs/adr/0008-the-vault-owner-holds-no-messages.md`.
+/// unclaimed. See `docs/adr/0008-the-owner-holds-no-messages.md`.
 pub const OWNER_ACCOUNT_ID: i64 = 1;
 
 /// True when `account_id` is the vault owner.

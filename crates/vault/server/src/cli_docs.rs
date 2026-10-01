@@ -14,7 +14,7 @@ use std::io::Write;
 use std::path::Path;
 
 /// Starlight frontmatter title for the generated page.
-const TITLE: &str = "Vault server CLI";
+const TITLE: &str = "Server CLI";
 /// Starlight frontmatter description for the generated page.
 const DESCRIPTION: &str = "Cargo subcommands for import, dedupe, contacts, demo reset, and serve.";
 

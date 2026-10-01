@@ -9,7 +9,7 @@ use demo_seed::SeedConfig;
 #[derive(Parser)]
 #[command(name = "demo-seed")]
 #[command(
-    about = "Generate the demo message dataset (iMessage, SMS Backup & Restore, WhatsApp) for Message Vault"
+    about = "Generate the demo message dataset (iMessage, SMS Backup & Restore, WhatsApp) for Message Crate"
 )]
 struct Cli {
     /// Path to the `demo_seed.toml` settings file

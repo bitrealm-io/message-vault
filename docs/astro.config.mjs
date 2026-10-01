@@ -26,9 +26,9 @@ const userGuideItems = [
   {
     label: 'Get started',
     items: [
-      'docs/user/get-started/what-is-message-vault',
+      'docs/user/get-started/what-is-message-crate',
       'docs/user/get-started/why-you-provide-backups',
-      'docs/user/get-started/try-the-vault',
+      'docs/user/get-started/try-message-crate',
       'docs/user/get-started/your-own-messages',
       'docs/user/get-started/install-the-desktop-app',
     ],
@@ -54,7 +54,7 @@ const userGuideItems = [
       'docs/user/how-to/trash',
       'docs/user/how-to/settings',
       'docs/user/how-to/owner-home',
-      'docs/user/how-to/export-from-the-vault',
+      'docs/user/how-to/export-your-messages',
       'docs/user/how-to/convert-formats',
       'docs/user/how-to/media-and-privacy',
       { slug: 'docs/user/how-to/rescue-imports', badge: limitedBadge },
@@ -73,7 +73,7 @@ const developerItems = [
   {
     label: 'Architecture',
     items: [
-      'docs/developer/vault-design',
+      'docs/developer/design',
       'docs/developer/message-transfer',
       'docs/developer/architecture/common-message',
     ],
@@ -157,9 +157,9 @@ export default defineConfig({
       enableLog: false,
     }),
     starlight({
-      title: 'Message Vault',
+      title: 'Message Crate',
       description:
-        'Extract messages from phone backups, import them into a local vault, and browse them in a website you control.',
+        'Extract messages from phone backups, import them into a server you run, and browse them in a website you control.',
       editLink: {
         baseUrl:
           'https://github.com/messagecrate/message-crate/edit/main/docs/',

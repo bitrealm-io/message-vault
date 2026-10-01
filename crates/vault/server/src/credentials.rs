@@ -139,7 +139,7 @@ pub(crate) fn verify_login_password(password_hash: Option<&str>, password: &str)
 /// password is refused; one character is enough.
 pub(crate) fn hash_owner_password(password: &str) -> Result<String, ApiError> {
     if password.is_empty() {
-        return Err(ApiError::validation("the vault owner must have a password"));
+        return Err(ApiError::validation("the owner must have a password"));
     }
     require_hashable(password)?;
     Ok(hash_password(password)?)

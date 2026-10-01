@@ -21,7 +21,7 @@ function tabClassName({ isSelected }: { isSelected: boolean }) {
  *
  * The vault reports which of the three it is; nothing here recombines the
  * facts behind that answer. See
- * `docs/adr/0008-the-vault-owner-holds-no-messages.md`.
+ * `docs/adr/0008-the-owner-holds-no-messages.md`.
  *
  * Each panel keeps its own busy and error state, so switching tabs leaves the
  * other form's message behind.
@@ -40,7 +40,7 @@ export default function LocalAuthTabs({
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <h2 className="mb-6 border-b border-border pb-2 text-center text-[0.875rem] font-medium text-text">
-          Create Vault Owner
+          Create Owner
         </h2>
         <ClaimVaultForm serverUrl={serverUrl} disabled={disabled} />
       </div>

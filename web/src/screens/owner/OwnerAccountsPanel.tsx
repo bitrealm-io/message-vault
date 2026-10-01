@@ -13,7 +13,7 @@ const COLUMN_COUNT = 4;
 
 /** What the Status column reads for one account. */
 function statusLabel(account: ManagedAccount): string {
-  if (account.is_owner) return "Vault owner";
+  if (account.is_owner) return "Owner";
   return account.disabled ? "Disabled" : "Active";
 }
 

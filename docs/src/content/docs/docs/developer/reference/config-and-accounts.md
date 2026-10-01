@@ -28,7 +28,7 @@ cors_origins = [
 
 - Paths resolve relative to the repo root (parent of `config/`).
 - `[server]` is required for `serve`. The demo config comments it out.
-- `cors_origins` lists origins allowed on top of the three the packaged desktop app runs from (`tauri://localhost`, `http://tauri.localhost`, `https://tauri.localhost`), which the server allows whether or not you name them. The website the vault serves is same-origin and needs no entry either, so an empty list is the right setting for most installs. Add the Vite origins (`http://localhost:5173`, `http://127.0.0.1:5173`) when running the dev UI against this vault.
+- `cors_origins` lists origins allowed on top of the three the packaged desktop app runs from (`tauri://localhost`, `http://tauri.localhost`, `https://tauri.localhost`), which the server allows whether or not you name them. The website the server serves is same-origin and needs no entry either, so an empty list is the right setting for most installs. Add the Vite origins (`http://localhost:5173`, `http://127.0.0.1:5173`) when running the dev UI against this server.
 - Source names are **not** listed in TOML — each import registers its own
   source slug for that account under `data/<account_id>/<source_id>/`.
 
@@ -56,7 +56,7 @@ Created on first use if missing:
 
 ## Accounts
 
-Rows are scoped by `account_id` in a shared `vault.db`. The vault owner is
+Rows are scoped by `account_id` in a shared `vault.db`. The owner is
 always account `1` and the demo account `2`; every other account takes an id
 from `100` up.
 
@@ -64,8 +64,8 @@ from `100` up.
   An account may have no password (`password_hash` NULL); an empty password is
   accepted only for those accounts.
 - Logging in is rate-limited to 20 attempts per username per 60 seconds.
-  Creating an account and claiming the vault are each limited to 20 attempts
-  per 60 seconds across the whole vault, whatever the username.
+  Creating an account and claiming Message Crate are each limited to 20 attempts
+  per 60 seconds across the whole server, whatever the username.
 - Each account can create named **API tokens** for programs that call the HTTP API
   (stored hashed; shown once when created). GUI sessions use a separate rotating
   token.
@@ -78,7 +78,7 @@ from `100` up.
     respectively. New accounts default to all three. A named API token
     carries import and export only, never delete: permanent deletion is a
     person's act, so it always needs a logged-in session.
-  The vault owner sets another account's flags from Owner Home
+  The owner sets another account's flags from Owner Home
   (`PATCH /v1/accounts/{id}`), resets a password
   (`PUT /v1/accounts/{id}/password`), deletes an account's messages
   (`DELETE /v1/accounts/{id}/messages`) or the account

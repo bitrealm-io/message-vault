@@ -173,7 +173,7 @@ pub(crate) struct FindUnmatchedIdentitiesRequest {
     identifiers: Vec<String>,
 }
 
-/// Report which identifiers this account has no vault contact for.
+/// Report which identifiers this account has no contact for.
 #[utoipa::path(
     post,
     path = "/v1/contacts/unmatched-identities",
@@ -210,7 +210,7 @@ pub(crate) async fn find_unmatched_identities(
         ("q" = Option<String>, Query, description = "Contact search; empty lists all"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
         ("offset" = Option<usize>, Query, description = "Page offset, max 50000"),
-        ("sort" = Option<String>, Query, description = "Comma-separated keys from `name` and `last_heard`, a leading `-` for descending. `last_heard` is when the vault last heard from the contact; contacts it never heard from sort last either way. Default `name`.")
+        ("sort" = Option<String>, Query, description = "Comma-separated keys from `name` and `last_heard`, a leading `-` for descending. `last_heard` is when the account last heard from the contact; contacts it never heard from sort last either way. Default `name`.")
     ),
     responses(
         (status = 200, body = Page<ContactSummary>),

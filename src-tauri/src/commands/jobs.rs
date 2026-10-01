@@ -74,7 +74,7 @@ where
         }),
         Err(payload) => Some(ExtractErrorEvent {
             detail: format!("the job panicked: {}", panic_message(payload.as_ref())),
-            user_message: Some("The job stopped because of a bug in Message Vault.".into()),
+            user_message: Some("The job stopped because of a bug in Message Crate.".into()),
         }),
     }
 }

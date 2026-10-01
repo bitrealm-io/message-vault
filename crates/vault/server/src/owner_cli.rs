@@ -8,7 +8,7 @@
 //!
 //! A shell on the server is the right credential for both. Nothing inside the
 //! product can reset the owner's password, because no account stands above
-//! the owner. See `docs/adr/0008-the-vault-owner-holds-no-messages.md`.
+//! the owner. See `docs/adr/0008-the-owner-holds-no-messages.md`.
 
 use anyhow::{Result, bail};
 
@@ -35,7 +35,7 @@ pub async fn create_owner(vault: &OpenVault, username: &str, password: &str) -> 
 
     if account_profile::vault_is_claimed(&mut conn).await? {
         bail!(
-            "this vault already has an owner; use `reset-owner-password` to set a new password for it"
+            "this Message Crate already has an owner; use `reset-owner-password` to set a new password for it"
         );
     }
     if let Err(e) = crate::credentials::require_username_free(&mut conn, &username).await {
@@ -70,7 +70,7 @@ pub async fn reset_owner_password(vault: &OpenVault, password: &str) -> Result<S
         Err(e) => bail!("{e}"),
     };
     if !account_profile::vault_is_claimed(&mut conn).await? {
-        bail!("this vault has no owner yet; use `create-owner` to claim it");
+        bail!("this Message Crate has no owner yet; use `create-owner` to claim it");
     }
 
     account_profile::update_password_hash(

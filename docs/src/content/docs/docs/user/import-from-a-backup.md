@@ -1,21 +1,21 @@
 ---
 title: Import from a backup
-description: Use the desktop app Import screen to read a phone backup and store it in the vault.
+description: Use the desktop app Import screen to read a phone backup and store its messages in Message Crate.
 ---
 
-**Import** is in the desktop app sidebar after you log in. It is not shown in the browser-only UI. Pick a backup source, point at the file or folder, and start the run. The app extracts from that backup and pushes into the vault in one flow.
+**Import** is in the desktop app sidebar after you log in. It is not shown in the browser-only UI. Pick a backup source, point at the file or folder, and start the run. The app extracts from that backup and imports into Message Crate in one flow.
 
 JSONL (JSON Lines) folders on disk are a command-line task: [Extract to files](/docs/user/how-to/extract-to-files/).
 
 ## Before you start
 
-- A vault that is running — [Try the vault](/docs/user/get-started/try-the-vault/)
+- A running Message Crate server — [Try Message Crate](/docs/user/get-started/try-message-crate/)
 - The desktop app logged in as **your** account (not `demo`), server URL such as `http://localhost:8080`
 - A prepared backup — [Prepare a backup](/docs/user/prepare-a-backup/)
 
 ## Run Import
 
-1. Log in to the vault in the desktop app
+1. Log in to Message Crate in the desktop app
 2. Open **Import** in the sidebar
 3. Choose a **source** that matches the backup:
 
@@ -47,7 +47,7 @@ After you pick **iMessage**, **Platform** chooses Mac Messages or iPhone backup.
 - **Attachment folder (Optional)** — leave empty when `Attachments` and `StickerCache` sit next to `chat.db` (the usual Mac layout under `~/Library/Messages`). Set this only when those folders live somewhere else, for example after copying `chat.db` on its own.
 - **Apple Contacts file (Optional)** — leave empty to use the local AddressBook on a live Mac. Point at `AddressBook-v22.abcddb` or `AddressBook.sqlitedb` only if that file is not in the usual Contacts location. People do not normally move that file.
 
-**Attachments** and **Contacts** apply to both platforms. Attachments is Copy / Convert / Compress / Skip. Contacts fills names from vault contacts after import; that is separate from the Apple Contacts file above.
+**Attachments** and **Contacts** apply to both platforms. Attachments is Copy / Convert / Compress / Skip. Contacts fills names from the contacts already in Message Crate after import; that is separate from the Apple Contacts file above.
 
 ### WhatsApp fields
 
@@ -69,17 +69,17 @@ After you pick **WhatsApp**, **Platform** chooses Android or iPhone. Default Pla
 - **WhatsApp Business** — optional checkbox, unmarked by default. Turn it on only for a WhatsApp Business backup. The app does not remember this choice.
 - **WhatsApp phone number (Optional)**, under **Processing Options (Advanced)** — a fallback, pre-filled from the profile's phone. An iPhone backup carries the number in WhatsApp's own preferences, and Import reads it from there; the field is used only when the backup has no such entry. Import stops with a message when the backup has none and the field is empty.
 
-**Attachments** and **Contacts** apply to both platforms. Attachments is Copy / Convert / Compress / Skip. Contacts fills names from vault contacts after import; that is separate from the WhatsApp contacts database above.
+**Attachments** and **Contacts** apply to both platforms. Attachments is Copy / Convert / Compress / Skip. Contacts fills names from the contacts already in Message Crate after import; that is separate from the WhatsApp contacts database above.
 
 ## Stages and approvals
 
-An import is one **Import Run**, and your account has at most one running at a time. It moves through three stages, and it stops to ask you before spending more time or touching the vault:
+An import is one **Import Run**, and your account has at most one running at a time. It moves through three stages, and it stops to ask you before spending more time or writing anything to Message Crate:
 
-1. **Staging** reads the backup and copies its messages and original attachments into a staging folder on this computer. Nothing reaches the vault yet.
-2. **Staging Review.** The run stops, reads **Awaiting approval**, and shows what it needs you to weigh, read from the staged files rather than estimated: the contacts in the backup, split into **Existing** and **New** to your vault; the **Size limit per file** and the **Files over the limit**, marked **Skip vault upload**, which opens to each file and its size; and an **Identities** table of the addresses the backup's device used, with how many messages each one **Sent** and **Received**, whether it is on your profile, and **Add to profile** for one that is not. When you chose Convert or Compress, a **Conversion estimates** or **Compression estimates** group sorts the large files into **Likely within limit**, **May exceed limit** and **Not audio or video**, and each opens to its files with the staged size and the expected one. These are estimates, because Media has not run yet. The button continues the run, **Upload to vault**, **Convert media** or **Compress media**; **Cancel this import** ends the run and deletes what was staged.
+1. **Staging** reads the backup and copies its messages and original attachments into a staging folder on this computer. Nothing reaches the server yet.
+2. **Staging Review.** The run stops, reads **Awaiting approval**, and shows what it needs you to weigh, read from the staged files rather than estimated: the contacts in the backup, split into **Existing** and **New** to Message Crate; the **Size limit per file** and the **Files over the limit**, marked **Skip upload**, which opens to each file and its size; and an **Identities** table of the addresses the backup's device used, with how many messages each one **Sent** and **Received**, whether it is on your profile, and **Add to profile** for one that is not. When you chose Convert or Compress, a **Conversion estimates** or **Compression estimates** group sorts the large files into **Likely within limit**, **May exceed limit** and **Not audio or video**, and each opens to its files with the staged size and the expected one. These are estimates, because Media has not run yet. The button continues the run, **Upload to Message Crate**, **Convert media** or **Compress media**; **Cancel this import** ends the run and deletes what was staged.
 3. **Media** converts or compresses the staged attachments. This stage exists only when you chose **Convert** or **Compress & Convert**; under **Copy** and **Skip** the run goes straight from the Staging Review to Upload.
-4. **Media Review.** Media's row shows the new total size and how many files could not be converted or compressed. The approval shows what is true now: the size limit per file and the files still over it, by name and size. A file over the limit stays out of the vault; its message keeps its text and a placeholder. **Upload to vault** continues, or cancel.
-5. **Upload** writes the staged messages and attachments into the vault. Its row then shows what it did: messages that were new, duplicates already in the vault and failures; attachments uploaded; and the contacts the run created and modified, with a **Contact list** that opens to every contact the run created, named, or gave an identity to, the reason beside each. The **Import log** link appears in this row once Upload starts, because that is when the file is first written, and goes away with the staging directory when the run succeeds.
+4. **Media Review.** Media's row shows the new total size and how many files could not be converted or compressed. The approval shows what is true now: the size limit per file and the files still over it, by name and size. A file over the limit is not uploaded; its message keeps its text and a placeholder. **Upload to Message Crate** continues, or cancel.
+5. **Upload** writes the staged messages and attachments into Message Crate. Its row then shows what it did: messages that were new, duplicates already stored and failures; attachments uploaded; and the contacts the run created and modified, with a **Contact list** that opens to every contact the run created, named, or gave an identity to, the reason beside each. The **Import log** link appears in this row once Upload starts, because that is when the file is first written, and goes away with the staging directory when the run succeeds.
 
 The whole run is one screen: a list of its stages, in order, with each approval as a row in the list where the run stops. Each stage's row fills in with what that stage made. Staging's row holds the staging directory while it exists, the conversations and messages it read, and the attachments: the operation you chose, how many, and their total size. An **Options** group appears there when **Force reprocessing** or **Obfuscate** is on. An approval that has been decided folds to one line, **Approved**.
 
@@ -89,16 +89,16 @@ You do not have to sit and wait. A run keeps working while you read messages or 
 
 ## Resume and force reprocessing
 
-Import writes a journal file (`.vault-import-state.jsonl`) next to the work it does. On a later run with the same vault and folder, the journal skips work that already finished.
+Import writes a journal file (`.vault-import-state.jsonl`) next to the work it does. On a later run with the same Message Crate and folder, the journal skips work that already finished.
 
 Leave **force reprocessing** off when continuing an interrupted upload.
 
-Turn force reprocessing on when a previous run left messages without attachments, you fixed missing files, or the local journal is wrong. The vault still deduplicates on its end — messages and attachments already stored are skipped rather than duplicated. Force reprocessing does not wipe the database.
+Turn force reprocessing on when a previous run left messages without attachments, you fixed missing files, or the local journal is wrong. The server still deduplicates on its end — messages and attachments already stored are skipped rather than duplicated. Force reprocessing does not wipe the database.
 
 ## After the run
 
-A run that succeeds deletes its staging directory, the import log with it: the vault now holds the messages, and its record of the run under **Settings → Storage → Import history** holds the counts, timings and errors. A run that fails leaves the staging directory in place.
+A run that succeeds deletes its staging directory, the import log with it: Message Crate now holds the messages, and its record of the run under **Settings → Storage → Import history** holds the counts, timings and errors. A run that fails leaves the staging directory in place.
 
-The finished run leads with where to go next: **View imported conversations** opens the conversation list narrowed to the run (`import:#` followed by the run's number), and **View modified contacts** opens the Contact Group the vault made for the run. **Back**, at the top, returns to the Import form. The run's record, with the same contact list, stays under **Settings → Storage → Import history**. See [Browse your messages](/docs/user/browse-your-messages/).
+The finished run leads with where to go next: **View imported conversations** opens the conversation list narrowed to the run (`import:#` followed by the run's number), and **View modified contacts** opens the Contact Group the server made for the run. **Back**, at the top, returns to the Import form. The run's record, with the same contact list, stays under **Settings → Storage → Import history**. See [Browse your messages](/docs/user/browse-your-messages/).
 
-API tokens under **Settings → Account** are for programs that call the vault's [HTTP API](/docs/developer/reference/api/), not for this screen. Desktop Import uses the logged-in session.
+API tokens under **Settings → Account** are for programs that call the server's [HTTP API](/docs/developer/reference/api/), not for this screen. Desktop Import uses the logged-in session.

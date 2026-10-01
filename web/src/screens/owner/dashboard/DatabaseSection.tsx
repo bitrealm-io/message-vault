@@ -22,7 +22,7 @@ export function DatabaseSection({ storage }: { storage: VaultStorage }) {
   return (
     <DashboardSection
       title="Database"
-      hint="The database size excludes attachment files, which are counted under Vault contents."
+      hint="The database size excludes attachment files, which are counted under Contents."
     >
       <div className="flex flex-wrap gap-6 rounded-xl border border-border bg-elevated p-4">
         <Figure label="Database size" bytes={storage.database_bytes} />

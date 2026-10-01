@@ -7,17 +7,17 @@
 <br />
 <div align="center">
   <a href="https://github.com/messagecrate/message-crate">
-    <img src="docs/img/vault_icon.png" alt="Message Vault icon" width="250" height="250">
+    <img src="docs/img/vault_icon.png" alt="Message Crate icon" width="250" height="250">
   </a>
 
-<h1 align="center">Message Vault</h1>
+<h1 align="center">Message Crate</h1>
   <p align="center">
-    Your chat history, in a vault you run yourself.
+    Your chat history, on a server you run yourself.
     <br />
     <br />
     <a href="https://messagecrate.app/docs/user/"><strong>Explore the docs »</strong></a>
     <br />
-    <a href="https://messagecrate.app/docs/user/get-started/try-the-vault/">Try the vault</a>
+    <a href="https://messagecrate.app/docs/user/get-started/try-message-crate/">Try Message Crate</a>
     &middot;
     <a href="https://github.com/messagecrate/message-crate/issues/new?labels=bug&template=bug_report.md">Report Bug</a>
     &middot;
@@ -45,14 +45,14 @@
 
 [![Docker][Docker]][Docker-url] [![React][React.js]][React-url] [![Rust][Rust-dev]][Rust-url] [![SQLite][SQLite]][SQLite-url] [![Tauri][Tauri]][Tauri-url] [![Vite][Vite]][Vite-url]
 
-Message Vault copies your conversations out of chat apps and phone backups — iMessage, WhatsApp, Android SMS — and stores them in a self-hosted, searchable archive that you control. Read old threads in a browser, search years of messages, and export them as ordinary files whenever you like.
+Message Crate copies your conversations out of chat apps and phone backups — iMessage, WhatsApp, Android SMS — and stores them in a self-hosted, searchable archive that you control. Read old threads in a browser, search years of messages, and export them as ordinary files whenever you like.
 
 ### Project Details
 
-The Message Vault software has three parts:
+The Message Crate software has three parts:
 
 - **Backend** - The core system that runs on your computer. It keeps you logged in, stores your messages, and powers the search feature.
-- **Desktop App** - A program that imports your messages into the vault from phone backups and app exports. You can also view, organize, and export your messages from here.
+- **Desktop App** - A program that imports your messages into Message Crate from phone backups and app exports. You can also view, organize, and export your messages from here.
 - **Website** - A read-only version of the desktop app running in a web browser.
 
 You can bring in:
@@ -63,7 +63,7 @@ You can bring in:
 
 A few older export formats still work if that is all you have left.
 
-Once messages are in the vault you can:
+Once messages are imported you can:
 
 - Read threads the way you would in an app or on a phone, including group chats. Photos, videos, and other attachments are included.
 - Search across years of conversations
@@ -76,7 +76,7 @@ This project is for people who want a personal copy of their phone messages. Tha
 
 ## Getting Started
 
-Follow the [User Guide](https://messagecrate.app/docs/user/get-started/what-is-message-vault/) to run the demo and import your own data.
+Follow the [User Guide](https://messagecrate.app/docs/user/get-started/what-is-message-crate/) to run the demo and import your own data.
 
 The [Developer Guide](https://messagecrate.app/docs/developer/) covers setting up a local development environment and compiling from source.
 
@@ -89,11 +89,11 @@ Contributions are welcome. The [Contributing guide](https://messagecrate.app/doc
 Most documentation lives in the guidebook at [messagecrate.app](https://messagecrate.app):
 
 - [User Guide](https://messagecrate.app/docs/user/)
-- [Developer Guide](https://messagecrate.app/docs/developer/) — including [Architecture](https://messagecrate.app/docs/developer/vault-design/) (Vault Design, Message Transfer, Common message)
+- [Developer Guide](https://messagecrate.app/docs/developer/) — including [Architecture](https://messagecrate.app/docs/developer/design/) (System Design, Message Transfer, Common message)
 
 ## License
 
-Message Vault is **source-available, not open source**. It is distributed under the [Fair Core License 1.0](LICENSE.md) (`FCL-1.0-ALv2`): you can read the code, change it, build it, and run it for yourself, but you may not offer it as a product that competes with Message Vault. Two years after each version is released, that version becomes available under the Apache License 2.0.
+Message Crate is **source-available, not open source**. It is distributed under the [Fair Core License 1.0](LICENSE.md) (`FCL-1.0-ALv2`): you can read the code, change it, build it, and run it for yourself, but you may not offer it as a product that competes with Message Crate. Two years after each version is released, that version becomes available under the Apache License 2.0.
 
 See [LICENSE.md](LICENSE.md) for the full terms.
 

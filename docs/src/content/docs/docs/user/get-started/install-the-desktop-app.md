@@ -3,7 +3,7 @@ title: Install the desktop app
 description: Download the desktop app from GitHub Releases, install FFmpeg and wtsexporter, or build from source.
 ---
 
-The desktop app reads phone backups and imports them into the vault. Browsing can stay in the website; Import and Export need this app. Run the vault with Docker first — see [Try the vault](/docs/user/get-started/try-the-vault/).
+The desktop app reads phone backups and imports them into Message Crate. Browsing can stay in the website; Import and Export need this app. Run the server with Docker first — see [Try Message Crate](/docs/user/get-started/try-message-crate/).
 
 ## Download
 
@@ -27,7 +27,7 @@ Open the [latest release on GitHub](https://github.com/messagecrate/message-crat
 
 ## Helpers for Convert and WhatsApp
 
-**Convert** / **Compress** need FFmpeg (`ffmpeg` and `ffprobe`). WhatsApp extract needs `wtsexporter`. The desktop app looks for both on `PATH`. The Docker vault already includes FFmpeg for playback in the browser.
+**Convert** / **Compress** need FFmpeg (`ffmpeg` and `ffprobe`). WhatsApp extract needs `wtsexporter`. The desktop app looks for both on `PATH`. The Docker image already includes FFmpeg for playback in the browser.
 
 | Tool | Windows | Linux | macOS |
 |------|---------|-------|-------|
@@ -46,13 +46,13 @@ wtsexporter --help
 
 ## Build from source
 
-Compiling the app and the vault from a git checkout: [Contributing](/docs/developer/contributing/#build-and-run).
+Compiling the app and the server from a git checkout: [Contributing](/docs/developer/contributing/#build-and-run).
 
 ## Next
 
-Log in with **http://127.0.0.1:8080** and the vault username and password, then [Import from a backup](/docs/user/import-from-a-backup/). The desktop app uses the IPv4 address because `localhost` can resolve to IPv6, which a local Docker vault does not listen on.
+Log in with **http://127.0.0.1:8080** and the account username and password, then [Import from a backup](/docs/user/import-from-a-backup/). The desktop app uses the IPv4 address because `localhost` can resolve to IPv6, which a server in local Docker does not listen on.
 
-If Connect fails in a release build (AppImage, `.deb`, `.msi`, or `.dmg`) but `curl http://127.0.0.1:8080/v1/session` answers, the vault’s `[server] cors_origins` list is missing the packaged-app origin. Add all three of these, restart the vault, and try again:
+If Connect fails in a release build (AppImage, `.deb`, `.msi`, or `.dmg`) but `curl http://127.0.0.1:8080/v1/session` answers, the server’s `[server] cors_origins` list is missing the packaged-app origin. Add all three of these, restart the server, and try again:
 
 ```toml
 cors_origins = [

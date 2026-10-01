@@ -59,7 +59,7 @@ mod tests {
         };
         assert_eq!(
             f.to_string(),
-            "This file is schema version 3; the vault reads version 4 (line 1)."
+            "This file is schema version 3; Message Crate reads version 4 (line 1)."
         );
     }
 

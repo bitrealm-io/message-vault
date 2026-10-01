@@ -132,7 +132,7 @@ export default function SettingsScreen({
                 ? managedHeading(profile.username, profile.preferred_name)
                 : "\u00a0"
               : backToAccounts
-                ? "Settings for Vault Owner"
+                ? "Settings for Owner"
                 : "Settings"}
         </h2>
       </header>

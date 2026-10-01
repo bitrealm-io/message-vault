@@ -37,7 +37,7 @@ impl SavedSearchKind {
 /// One row of `saved_searches`.
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct SavedSearch {
-    /// Saved search id, unique across the vault.
+    /// Saved search id, unique across the database.
     pub id: i64,
     /// Display name, unique per account.
     pub name: String,

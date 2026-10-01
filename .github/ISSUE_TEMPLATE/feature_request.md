@@ -34,7 +34,7 @@ assignees: ""
 
 ## Who this helps
 
-{Identify who would use the change and in what situation. Examples: a person importing an iPhone backup, a person converting JSONL to MBOX, a person running the vault in Docker.}
+{Identify who would use the change and in what situation. Examples: a person importing an iPhone backup, a person converting JSONL to MBOX, a person running the server in Docker.}
 
 ## Additional context (optional)
 

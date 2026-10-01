@@ -777,7 +777,7 @@ async function runPush(
 ): Promise<void> {
   store.set({ running: true, phase: "running" });
   scratch.activeStep = "upload";
-  setRowByLabel(UPLOAD_LABEL, { status: "active", detail: "Uploading to vault…" });
+  setRowByLabel(UPLOAD_LABEL, { status: "active", detail: "Uploading to Message Crate…" });
   await moveStage(sessionId, "pushing", approvedPlan);
 
   const uploadStartedAt = performance.now();
@@ -1010,7 +1010,7 @@ async function runImport(
         importSessionId: sessionId,
         steps: stepsFor(form.attachmentMedia).map((step) =>
           step.label === UPLOAD_LABEL
-            ? { ...step, status: "active", detail: "Uploading to vault…" }
+            ? { ...step, status: "active", detail: "Uploading to Message Crate…" }
             : { ...step, status: "done", detail: "Already staged" },
         ),
       });

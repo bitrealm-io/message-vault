@@ -92,7 +92,7 @@ async fn create_owner_claims_the_vault_once_and_reset_password_needs_the_claim()
     .unwrap_err();
     assert_eq!(
         unclaimed.to_string(),
-        "this vault has no owner yet; use `create-owner` to claim it"
+        "this Message Crate has no owner yet; use `create-owner` to claim it"
     );
 
     run(Cli {
@@ -118,7 +118,7 @@ async fn create_owner_claims_the_vault_once_and_reset_password_needs_the_claim()
     .unwrap_err();
     assert_eq!(
         twice.to_string(),
-        "this vault already has an owner; use `reset-owner-password` to set a new password for it"
+        "this Message Crate already has an owner; use `reset-owner-password` to set a new password for it"
     );
 
     run(Cli {
@@ -507,7 +507,9 @@ fn import_stats_print_the_contacts_lines_unless_they_were_skipped() {
     assert!(text.starts_with("  contacts:      (skipped"), "{text}");
     assert!(text.contains("  messages appended: 4\n"), "{text}");
     assert!(
-        text.ends_with("  phones needing review: 1 (ambiguous numbers — fix them in the vault)\n"),
+        text.ends_with(
+            "  phones needing review: 1 (ambiguous numbers — fix them in Message Crate)\n"
+        ),
         "{text}"
     );
 }

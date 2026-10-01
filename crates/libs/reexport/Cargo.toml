@@ -2,7 +2,7 @@
 name = "message-reexport"
 version = "0.1.0"
 edition = "2024"
-description = "Convert a Message Vault output directory to another format"
+description = "Convert a Message Crate output directory to another format"
 license = "LicenseRef-FCL-1.0-ALv2"
 
 [dependencies]

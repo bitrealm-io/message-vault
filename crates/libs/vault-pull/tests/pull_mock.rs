@@ -690,7 +690,7 @@ fn a_blank_key_or_output_folder_is_refused_before_login() {
 
     assert_eq!(
         run(&blank_key, None).unwrap_err().to_string(),
-        "vault key is required"
+        "API key is required"
     );
     assert_eq!(
         run(&blank_out_dir, None).unwrap_err().to_string(),

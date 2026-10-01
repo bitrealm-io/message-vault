@@ -49,7 +49,7 @@ pub enum AuthCapability {
     },
     /// Logged-in vault owner. Carries no permissions at all, so every guard
     /// that asks for one refuses it and the owner cannot reach message data.
-    /// See `docs/adr/0008-the-vault-owner-holds-no-messages.md`.
+    /// See `docs/adr/0008-the-owner-holds-no-messages.md`.
     Owner,
     /// Named API token. Already intersected with its owner's permissions.
     ApiToken(Permissions),
@@ -120,7 +120,7 @@ pub fn require_owner(auth: &AuthIdentity) -> Result<(), ApiError> {
         return Ok(());
     }
     Err(ApiError::NotTheOwner(
-        "this endpoint requires the vault owner's session".into(),
+        "this endpoint requires the owner's session".into(),
     ))
 }
 

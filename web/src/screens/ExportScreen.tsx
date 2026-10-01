@@ -160,8 +160,8 @@ export default function ExportScreen() {
       error={error}
       intro={
         <p className="mb-6 text-[0.875rem] text-muted">
-          Export the whole vault, or only the conversations a search finds, into a folder in the
-          format you choose. Attachments come with the messages.
+          Export every conversation, or only the ones a search finds, into a folder in the format
+          you choose. Attachments come with the messages.
         </p>
       }
       success={
@@ -197,7 +197,7 @@ export default function ExportScreen() {
             onChange={setQuery}
             isDisabled={running || busy}
             placeholder="from:me last year"
-            hint="The vault's search language. in:#19,#22 names two conversations by their ids."
+            hint="Message Crate's search language. in:#19,#22 names two conversations by their ids."
           />
         </FormRow>
       ) : null}

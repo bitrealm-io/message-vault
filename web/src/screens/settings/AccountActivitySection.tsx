@@ -36,7 +36,7 @@ export function AccountActivitySection({ profile }: { profile: AccountProfile })
             <span className="font-mono text-[0.75rem]">{profile.app_version}</span>
             {appDiffers ? (
               <span className="block text-[0.75rem] text-muted">
-                This vault is {productVersionOf(vaultVersion)}
+                The server is {productVersionOf(vaultVersion)}
               </span>
             ) : null}
           </>

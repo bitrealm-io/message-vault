@@ -1,6 +1,6 @@
 # How to Contribute
 
-Thank you for your interest in contributing to the Message Vault!
+Thank you for your interest in contributing to the Message Crate!
 
 Get started by reviewing our contribution guidelines in one of these ways:
 

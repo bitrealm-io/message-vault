@@ -33,9 +33,7 @@ describe("AccountPermissionsSection", () => {
     expect(screen.getByRole("checkbox", { name: "Import" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Delete" })).not.toBeChecked();
     for (const box of screen.getAllByRole("checkbox")) expect(box).toBeDisabled();
-    expect(
-      screen.getByText("The vault owner sets your status and permissions."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("The owner sets your status and permissions.")).toBeInTheDocument();
   });
 
   it("lets the vault owner change them on an account it opened", () => {
@@ -44,7 +42,7 @@ describe("AccountPermissionsSection", () => {
     expect(screen.getByRole("button", { name: /Status/ })).toBeEnabled();
     for (const box of screen.getAllByRole("checkbox")) expect(box).toBeEnabled();
     expect(
-      screen.queryByText("The vault owner sets your status and permissions."),
+      screen.queryByText("The owner sets your status and permissions."),
     ).not.toBeInTheDocument();
   });
 });

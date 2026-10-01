@@ -1,11 +1,11 @@
 # vault-http
 
 Blocking HTTP client helpers and typed retry classification for the crates that
-talk to a Message Vault server. Calls block so they can run on worker threads
+talk to a Message Crate server. Calls block so they can run on worker threads
 without an async runtime.
 
 One `HttpSession` carries the connection pool; `auth_check` performs the login
-probe; `ok_json` reads every vault answer, turning a failure into the vault's
+probe; `ok_json` reads every server answer, turning a failure into the server's
 own `{error}` sentence rather than a status code; and `classify_retry` decides
 which failures are worth trying again.
 

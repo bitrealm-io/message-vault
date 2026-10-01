@@ -60,9 +60,9 @@ fn acquire(db: &Path) -> Result<VaultOperationLock> {
         .read(true)
         .write(true)
         .open(&lock_path)
-        .with_context(|| format!("open vault operation lock {}", lock_path.display()))?;
+        .with_context(|| format!("open operation lock {}", lock_path.display()))?;
     file.try_lock_exclusive()
-        .with_context(|| format!("acquire vault operation lock {}", lock_path.display()))?;
+        .with_context(|| format!("acquire operation lock {}", lock_path.display()))?;
     Ok(VaultOperationLock { _file: file })
 }
 

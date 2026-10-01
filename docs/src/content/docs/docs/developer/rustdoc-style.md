@@ -45,7 +45,7 @@ Never write self-contradictory filler, invented terms, or unexplained jargon in 
 Write each HTTP handler's doc comment as plain prose. The summary says what the route does; the description says when and why. Never echo the route path: it adds nothing over the OpenAPI path itself.
 
 - `crates/vault/server/src/api_tokens_api.rs`, `fn list_api_tokens` — "List the account's named API tokens with their permissions and masked secrets." — Good: the summary says what comes back, and the path appears only once, in the OpenAPI path.
-- `crates/vault/server/src/accounts_api.rs`, `fn update_account` — "Change an account. Its display name, time zone and handles are set by the account itself or by the vault owner; only the vault owner sets an account's disabled flag and its import, export and delete permissions." — Good: the summary names the operation, and the description says who may change what.
+- `crates/vault/server/src/accounts_api.rs`, `fn update_account` — "Change an account. Its display name, time zone and handles are set by the account itself or by the owner; only the owner sets an account's disabled flag and its import, export and delete permissions." — Good: the summary names the operation, and the description says who may change what.
 
 ## No `# Errors` sections in OpenAPI descriptions
 
@@ -76,12 +76,12 @@ Document the reason behind non-obvious choices — ordering, omitted files, perf
 
 - `crates/vault/demo-seed/src/assets.rs`, `fn write_attachment_blobs` — "One path, `attachments/missing-file.heic`, is left out on purpose so import can show a missing-file warning." — Good: a deliberate-looking omission stated explicitly.
 - `crates/vault/server/src/assets_api.rs`, `fn lookup_by_sha256_unverified` — "Used only when streaming an authenticated download. … Hashing the whole file first would read every download twice." — Good: the performance tradeoff is explained instead of just describing the lookup.
-- `crates/libs/vault-push/src/run.rs`, the module intro — "Attachments first, then messages. Messages point at attachments by a content fingerprint (sha256). The vault must already have that file, or the import would fail." — Good: explains the invariant that drove the upload ordering.
+- `crates/libs/vault-push/src/run.rs`, the module intro — "Attachments first, then messages. Messages point at attachments by a content fingerprint (sha256). The server must already have that file, or the import would fail." — Good: explains the invariant that drove the upload ordering.
 
 ## Link to real documentation
 
 Point doc links at existing documentation and use [`Item`] rustdoc references. Never use stale relative paths or plain-text mentions.
 
 - `crates/libs/ir/src/lib.rs`, the module intro — "See the [common message](https://messagecrate.app/docs/developer/architecture/common-message/) page." — Good: an absolute link to the published page. It replaced a relative path into `docs/maintainers/`, which had moved, so rustdoc warned on it and readers landed nowhere.
-- `crates/core/message-vault-io-core/src/exporters.rs`, `AttachmentMedia::media_mode` — "The [`MediaMode`] this export-form choice maps to." — Good: a rustdoc link to the type. It replaced "The `media::MediaMode` this GUI choice maps to (the same mode the `--media-mode` CLI flag selects)", which named a command-line flag that does not exist (no crate but the vault server has a command line) and left the type as plain text.
+- `crates/core/message-vault-io-core/src/exporters.rs`, `AttachmentMedia::media_mode` — "The [`MediaMode`] this export-form choice maps to." — Good: a rustdoc link to the type. It replaced "The `media::MediaMode` this GUI choice maps to (the same mode the `--media-mode` CLI flag selects)", which named a command-line flag that does not exist (no crate but the server has a command line) and left the type as plain text.
 - `crates/core/message-vault-io-core/src/config.rs`, `OutputFormat::Eml` — "Per-conversation folder of `.eml` files (see https://messagecrate.app/docs/developer/formats/mail-archive/)." — Good: points at real documentation instead of restating the variant name.

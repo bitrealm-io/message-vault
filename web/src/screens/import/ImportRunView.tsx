@@ -38,8 +38,8 @@ const MEDIA_REVIEW_LABEL = "Media Review";
 const APPROVE_LABEL: Record<AttachmentMediaMode, string> = {
   convert: "Convert media",
   compress: "Compress media",
-  copy: "Upload to vault",
-  skip: "Upload to vault",
+  copy: "Upload to Message Crate",
+  skip: "Upload to Message Crate",
 };
 
 const PATH_LINK =
@@ -58,7 +58,7 @@ function AttachmentLimitGroup({ summary }: { summary: StagingSummary }) {
       {over.length > 0 ? (
         <ExpandableFactRow
           label="Files over the limit"
-          caption="Skip vault upload"
+          caption="Skip upload"
           value={over.length.toLocaleString()}
         >
           <FactList
@@ -386,7 +386,7 @@ export default function ImportRunView({
           <AttachmentLimitGroup summary={summary} />
         </FactGroups>
         <ReviewActions
-          approveLabel="Upload to vault"
+          approveLabel="Upload to Message Crate"
           onApprove={onApprove}
           onCancelRun={onCancelRun}
           busy={reviewBusy}

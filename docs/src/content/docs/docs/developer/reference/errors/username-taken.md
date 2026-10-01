@@ -11,4 +11,4 @@ editUrl: false
 | Status | `409 Conflict` |
 | Type | `https://messagecrate.app/docs/developer/reference/errors/username-taken` |
 
-The username already belongs to an account on this vault. Usernames are compared ignoring case. Pick another.
+The username already belongs to an account on this server. Usernames are compared ignoring case. Pick another.

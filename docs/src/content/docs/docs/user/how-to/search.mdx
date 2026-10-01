@@ -31,14 +31,14 @@ One language works on all three lists: **Contacts**, **Conversations**, and **Me
 - Case never matters.
 - `#12` means the thing with that id: `group:#7`, `with:#42`, `in:#19`. An id that names nothing matches nothing, so a Saved Search that names a deleted Contact Group still runs.
 - `none` means empty and `any` means not empty, on the words whose row below lists them: `name:none`, `tag:none`, `attachment:any`.
-- Dates name a span: `2024` is the year, `2024-05` the month, `2024-05-01` the day, `7d` or `2w` or `3m` or `1y` the last that long, plus `today` and `yesterday`. Add `>=` for from its start, `<` for before its start, `>` for after its end, `<=` for up to its end, or `a..b` for a range: `date:2019`, `date:>=2019`, `date:<1m`, `date:2019..2021`. Days start and end in the account's time zone (Settings → Profile), so a text sent at 11:59 pm on New Year's Eve belongs to the old year wherever the vault runs.
+- Dates name a span: `2024` is the year, `2024-05` the month, `2024-05-01` the day, `7d` or `2w` or `3m` or `1y` the last that long, plus `today` and `yesterday`. Add `>=` for from its start, `<` for before its start, `>` for after its end, `<=` for up to its end, or `a..b` for a range: `date:2019`, `date:>=2019`, `date:<1m`, `date:2019..2021`. Days start and end in the account's time zone (Settings → Profile), so a text sent at 11:59 pm on New Year's Eve belongs to the old year wherever the server runs.
 - Sizes are `500k`, `1M`, `2G`, or plain bytes. Counts are plain numbers. Both take the same `>`, `>=`, `<`, `<=`, and `a..b`.
 - A comma inside a value means either: `service:imessage,sms`. Repeating a word means both: `tag:Work tag:Urgent`.
 - `-` in front of anything means not: `-tag:Work`, `-avocado`, `-(toast or guacamole)`. It includes the rows that have no value for the word, so `-last-message:2019` on Contacts includes contacts who never sent a message. `not` does the same as a word of its own: `not tag:Work`.
 - A space between two terms means both, and so does `and`. `or` means either, and binds looser than both: `a b or c` is `(a b) or c`. Parentheses group: `(toast or guacamole) avocado`.
 - `avoc*` matches words starting with avoc, and `tag:Hol*` a Message Tag whose name starts with Hol; `"exact phrase"` matches the phrase.
 - In message text, punctuation inside a word splits it into words that must come next to each other in that order: `o'brien` finds "O'Brien" and "o brien", and `a&b` finds "a & b" but not "b and a". A word that is only punctuation or emoji finds no message text.
-- On a vault that runs on SQLite, `cafe` also finds "café" in message text. On Postgres, accents count.
+- On a server that runs on SQLite, `cafe` also finds "café" in message text. On Postgres, accents count.
 - A trailing `*` is the only wildcard. `%`, `_`, and `\` are ordinary characters, so `filename:IMG_0001` finds IMG_0001.jpg and not IMGX0001.jpg.
 
 A word the list does not have is refused with a message that says so, and offers the nearest word when there is one.

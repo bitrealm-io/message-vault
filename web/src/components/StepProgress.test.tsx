@@ -4,7 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import StepProgress, { type Step } from "./StepProgress";
 
-const doneSteps: Step[] = [{ label: "Upload to vault", status: "done" }];
+const doneSteps: Step[] = [{ label: "Upload to Message Crate", status: "done" }];
 
 describe("StepProgress completion badge", () => {
   afterEach(() => {

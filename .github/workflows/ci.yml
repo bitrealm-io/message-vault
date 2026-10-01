@@ -580,12 +580,12 @@ jobs:
           ls -la dist/
 
           gh release create "$TAG" "${assets[@]}" \
-            --title "Message Vault ${TAG}" \
+            --title "Message Crate ${TAG}" \
             --notes "## Highlights
 
           - Tauri v2 desktop app with all exporters included
-          - Vault push/pull, format conversion, contacts preview
-          - Vault server Docker image: \`bitrealm/message-crate:${TAG}\`
+          - Push and pull against a server, format conversion, contacts preview
+          - Server Docker image: \`bitrealm/message-crate:${TAG}\`
           - User Guide and developer docs: https://messagecrate.app/docs/user/ and https://messagecrate.app/docs/developer/
 
           ## Installers

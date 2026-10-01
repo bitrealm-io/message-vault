@@ -1525,7 +1525,7 @@ async fn http_import_of_a_schema_3_file_is_a_400_naming_both_versions() {
     let err: serde_json::Value = serde_json::from_str(&text).unwrap();
     assert_eq!(
         err["detail"],
-        "This file is schema version 3; the vault reads version 4 (line 1)."
+        "This file is schema version 3; Message Crate reads version 4 (line 1)."
     );
 }
 

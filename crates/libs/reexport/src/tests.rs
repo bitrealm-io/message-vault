@@ -557,7 +557,7 @@ fn a_json_that_is_not_an_ir_export_is_refused() {
 
     let err = detect_ir_export(dir.path()).unwrap_err();
     assert!(
-        err.to_string().contains("no Message Vault IR export found"),
+        err.to_string().contains("no Message Crate IR export found"),
         "unexpected error: {err}"
     );
 }
@@ -576,7 +576,7 @@ fn a_jsonl_whose_first_line_is_not_a_conversation_is_refused() {
 
     let err = detect_ir_export(dir.path()).unwrap_err();
     assert!(
-        err.to_string().contains("no Message Vault IR export found"),
+        err.to_string().contains("no Message Crate IR export found"),
         "unexpected error: {err}"
     );
 }
@@ -602,7 +602,7 @@ fn a_csv_without_every_ir_column_is_refused() {
 
     let err = detect_ir_export(dir.path()).unwrap_err();
     assert!(
-        err.to_string().contains("no Message Vault IR export found"),
+        err.to_string().contains("no Message Crate IR export found"),
         "unexpected error: {err}"
     );
 
@@ -634,7 +634,7 @@ fn an_xml_that_is_not_an_smses_export_is_refused() {
 
     let err = detect_ir_export(dir.path()).unwrap_err();
     assert!(
-        err.to_string().contains("no Message Vault IR export found"),
+        err.to_string().contains("no Message Crate IR export found"),
         "unexpected error: {err}"
     );
 
@@ -667,7 +667,7 @@ fn every_kind_of_sidecar_is_skipped() {
 
     let err = detect_ir_export(dir.path()).unwrap_err();
     assert!(
-        err.to_string().contains("no Message Vault IR export found"),
+        err.to_string().contains("no Message Crate IR export found"),
         "sidecars must not count as an export: {err}"
     );
 }

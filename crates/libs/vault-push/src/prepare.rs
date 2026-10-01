@@ -719,7 +719,7 @@ fn check_upload_file(ctx: &PrepareContext<'_>, name: &str, rel: &str) -> Result<
     if file_len > ctx.cfg.asset_max_bytes {
         bail!(
             "{name}: attachment {rel} is {} bytes ({} MiB), over the configured \
-             asset max of {} MiB. Raise vault [server] asset_max_bytes (and \
+             asset max of {} MiB. Raise the server's [server] asset_max_bytes (and \
              vault-push --asset-max-bytes) or omit the file.",
             file_len,
             file_len / message_ir::MIB,

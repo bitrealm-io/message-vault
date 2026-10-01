@@ -116,7 +116,7 @@ pub async fn upsert_handle_row_cached(
 /// row.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct Identity {
-    /// The identity as the vault stores it: E.164 for a number, lower case
+    /// The identity as the database stores it: E.164 for a number, lower case
     /// for an address.
     pub address: String,
     /// `phone`, `email`, or `whatsapp`.

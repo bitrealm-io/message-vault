@@ -8,10 +8,38 @@
 import type { AttachmentMediaMode } from "../../lib/types";
 import type { ImportJobFormValues } from "./useImportJob";
 
-/** Form snapshot for the session record, without the secrets. */
+/** The one secret an Import Run can be started with: neither is ever stored. */
+export type SnapshotSecret = "backupPassword" | "whatsappKey";
+
+/**
+ * Form snapshot for the session record, without the secrets.
+ *
+ * It records that a backup password or WhatsApp key was given, never the
+ * secret itself, so a resume that reads the backup again knows to ask for
+ * it. Each is recorded only for the source whose extract reads it: the
+ * iPhone backup password and the Android WhatsApp key.
+ */
 export function formSnapshot(form: ImportJobFormValues): Record<string, unknown> {
-  const { backupPassword: _backupPassword, whatsappKey: _whatsappKey, ...rest } = form;
-  return rest;
+  const { backupPassword, whatsappKey, ...rest } = form;
+  return {
+    ...rest,
+    backupPasswordGiven: form.source === "imessage-ios" && backupPassword.trim() !== "",
+    whatsappKeyGiven: form.source === "whatsapp-android" && whatsappKey.trim() !== "",
+  };
+}
+
+/**
+ * Which secret the stored Import Run was started with, or null for none.
+ *
+ * Read from the raw snapshot, because the rebuilt form values carry only
+ * the secrets themselves, and those come back empty.
+ */
+export function snapshotSecret(raw: unknown): SnapshotSecret | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  if (r.backupPasswordGiven === true) return "backupPassword";
+  if (r.whatsappKeyGiven === true) return "whatsappKey";
+  return null;
 }
 
 const ATTACHMENT_MEDIA_MODES: readonly AttachmentMediaMode[] = [
@@ -28,9 +56,11 @@ export function isStringArray(value: unknown): value is string[] {
 /**
  * Rebuild form values from a session's stored snapshot.
  *
- * The snapshot omits `backupPassword` and `whatsappKey`, defaulted to ""
- * here: the resume path never re-runs extract, and the push only reads
- * `attachmentMedia`, which is in the snapshot.
+ * The snapshot omits `backupPassword` and `whatsappKey`, so both come back
+ * as "". A resume into Upload, a Review, or Media reads no backup and needs
+ * neither. A resume during Staging and a restart run extract again: when
+ * `snapshotSecret` says the run had one, the Resume Import panel asks for
+ * it and the screen fills it in before the import starts.
  *
  * The snapshot came from the database, not from this session's own state,
  * so its shape is checked field by field rather than trusted. Returns
@@ -63,6 +93,8 @@ export function restoreFormFromSnapshot(raw: unknown): ImportJobFormValues | nul
   if (typeof r.whatsappDb !== "string") return null;
   if (typeof r.whatsappBusiness !== "boolean") return null;
   if (typeof r.whatsappOwnerPhone !== "string") return null;
+  if (typeof r.backupPasswordGiven !== "boolean") return null;
+  if (typeof r.whatsappKeyGiven !== "boolean") return null;
 
   return {
     source: r.source,

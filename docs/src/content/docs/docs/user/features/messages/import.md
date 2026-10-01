@@ -295,6 +295,12 @@ Three cases offer only **Discard this import**, because there is nothing on this
 A resumed run uses the settings it was started with.
 The form is not shown, so no setting can be changed.
 
+The one exception is a secret.
+Message Crate does not store the **Encryption password** of an iPhone backup or the WhatsApp **Decryption key** with the run.
+When the run was started with one and the resume reads the backup again, the screen asks for it, and the button stays disabled until the field is filled.
+That applies to the first three rows of the table, where the run stopped before or during Staging.
+A resume at a Review, during Media, or during Upload reads the staged files and asks for nothing.
+
 ### The upload journal
 
 Upload keeps a journal named `.import-state.jsonl` in the Staging Directory.

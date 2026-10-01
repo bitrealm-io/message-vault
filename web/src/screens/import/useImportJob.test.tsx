@@ -23,7 +23,7 @@ import type {
   TauriJobResult,
 } from "../../lib/tauri";
 import type { AttachmentMediaMode, ImportIssueEvent, ImportProgressEvent } from "../../lib/types";
-import { restoreFormFromSnapshot } from "./formSnapshot";
+import { restoreFormFromSnapshot, snapshotSecret } from "./formSnapshot";
 
 const createImportMock = vi.fn();
 const completeImportMock = vi.fn();
@@ -919,6 +919,36 @@ describe("useImportJob wiring", () => {
 
     const body = createImportMock.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(JSON.stringify(body.form)).not.toContain("hunter2");
+    expect(body.form).not.toHaveProperty("backupPassword");
+    // The resume has to know to ask for it again (#966).
+    expect(body.form).toMatchObject({ backupPasswordGiven: true, whatsappKeyGiven: false });
+  });
+
+  it("keeps the WhatsApp key out of the stored form snapshot", async () => {
+    resolveImportStagingDirMock.mockResolvedValue("/tmp/staging");
+    const { result } = renderHook(() => useImportJob());
+    await act(() =>
+      result.current.startImport({
+        ...baseForm,
+        source: "whatsapp-android",
+        whatsappKey: "0123abcd4567",
+        whatsappOwnerPhone: "+15551234567",
+      }),
+    );
+
+    const body = createImportMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(JSON.stringify(body.form)).not.toContain("0123abcd4567");
+    expect(body.form).not.toHaveProperty("whatsappKey");
+    expect(body.form).toMatchObject({ backupPasswordGiven: false, whatsappKeyGiven: true });
+  });
+
+  it("records that no password or key was given when the form had none", async () => {
+    resolveImportStagingDirMock.mockResolvedValue("/tmp/staging");
+    const { result } = renderHook(() => useImportJob());
+    await act(() => result.current.startImport(baseForm));
+
+    const body = createImportMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(body.form).toMatchObject({ backupPasswordGiven: false, whatsappKeyGiven: false });
   });
 
   it("moves the session to pushing before the upload starts", async () => {
@@ -1095,6 +1125,25 @@ describe("useImportJob wiring", () => {
       expect(invokeImessageBackupIdentitiesMock).not.toHaveBeenCalled();
       expect(result.current.phase).toBe("staging_review");
       expect(result.current.sourceIdentities).toEqual(["+15550001111"]);
+    });
+
+    it("resume_write reads the backup with the password the form carries", async () => {
+      // The Resume Import panel puts what was typed into the form (#966).
+      const { result } = renderHook(() => useImportJob());
+      await act(async () => {
+        await result.current.startImport(
+          { ...imessageForm(), backupPassword: "hunter2" },
+          undefined,
+          {
+            sessionId: 42,
+            stagingDir: "/home/u/message-crate/staging-260830",
+            identities: null,
+          },
+        );
+      });
+      expect(invokeExtractMock).toHaveBeenCalledWith(
+        expect.objectContaining({ resume: true, backup_password: "hunter2" }),
+      );
     });
 
     it("guards a double-click during the probe: probes once and creates at most one session", async () => {
@@ -1289,15 +1338,30 @@ const validSnapshot = {
   whatsappBusiness: false,
   whatsappOwnerPhone: "",
   timeZone: "America/New_York",
+  backupPasswordGiven: false,
+  whatsappKeyGiven: false,
 };
 
 describe("restoreFormFromSnapshot", () => {
-  it("rebuilds form values from a stored snapshot, defaulting the omitted secrets", () => {
+  it("rebuilds form values from a stored snapshot, with the secrets left empty", () => {
+    const { backupPasswordGiven: _password, whatsappKeyGiven: _key, ...settings } = validSnapshot;
     expect(restoreFormFromSnapshot(validSnapshot)).toEqual({
-      ...validSnapshot,
+      ...settings,
       backupPassword: "",
       whatsappKey: "",
     });
+  });
+
+  it.each([
+    ["a backup password", { backupPasswordGiven: true }, "backupPassword"],
+    ["a WhatsApp key", { whatsappKeyGiven: true }, "whatsappKey"],
+    ["neither", {}, null],
+  ])("says which secret the stored Import Run was started with (%s)", (_label, given, secret) => {
+    expect(snapshotSecret({ ...validSnapshot, ...given })).toBe(secret);
+  });
+
+  it("says no secret for a snapshot that is not an object", () => {
+    expect(snapshotSecret(null)).toBeNull();
   });
 
   it.each([
@@ -1309,6 +1373,8 @@ describe("restoreFormFromSnapshot", () => {
     ["an invalid attachmentMedia", { ...validSnapshot, attachmentMedia: "not-a-real-mode" }],
     ["a non-array ownerPhones", { ...validSnapshot, ownerPhones: "+15551234567" }],
     ["a non-boolean obfuscate", { ...validSnapshot, obfuscate: "yes" }],
+    ["a non-boolean backupPasswordGiven", { ...validSnapshot, backupPasswordGiven: "yes" }],
+    ["a snapshot with no whatsappKeyGiven", { ...validSnapshot, whatsappKeyGiven: undefined }],
   ])("returns null for a malformed snapshot (%s)", (_label, raw) => {
     expect(restoreFormFromSnapshot(raw)).toBeNull();
   });

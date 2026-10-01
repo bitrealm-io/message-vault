@@ -1,5 +1,9 @@
+import { useState } from "react";
 import Button from "../../components/Button";
+import PasswordField from "../../components/PasswordField";
 import type { ActiveImportSession } from "../../lib/importSession";
+import type { SnapshotSecret } from "./formSnapshot";
+import { hintStyle, StackedField } from "./ImportFormUi";
 import type { ResumeDecision } from "./resumeDecision";
 
 type ResumableKind = Exclude<ResumeDecision["kind"], "none">;
@@ -91,14 +95,35 @@ const COPY: Record<ResumableKind, PanelCopy> = {
   },
 };
 
+// The labels are the Import form's own, so the field reads as the one the
+// person filled in when the run started.
+const SECRET_COPY: Record<SnapshotSecret, { label: string; hint: string }> = {
+  backupPassword: {
+    label: "Encryption password",
+    hint: "Message Crate does not keep the backup's password. Enter it again to read the backup.",
+  },
+  whatsappKey: {
+    label: "Decryption key",
+    hint: "Message Crate does not keep the decryption key. Enter it again to read the backup.",
+  },
+};
+
 /** Renders one resume decision and calls back on the user's choice. */
 export default function ResumeImportPanel({
   decision,
+  secret,
   error,
   onResume,
   onDiscard,
 }: {
   decision: ResumeDecision;
+  /**
+   * The password or key the stored run was started with, when acting on
+   * this decision reads the backup again. The snapshot never holds the
+   * secret itself, so the panel asks for it and holds the resume button
+   * until it is filled. Null or absent when there is nothing to ask for.
+   */
+  secret?: SnapshotSecret | null;
   /**
    * Set when the last attempt to act on this decision failed partway
    * through — today, only a gate/media resume whose recompute of the
@@ -107,12 +132,17 @@ export default function ResumeImportPanel({
    * Null the rest of the time.
    */
   error?: string | null;
-  onResume: () => void;
+  /** Called with what was typed into the secret field, or "" when none was asked for. */
+  onResume: (secret: string) => void;
   onDiscard: () => void;
 }) {
+  const [secretValue, setSecretValue] = useState("");
+  const [showSecret, setShowSecret] = useState(false);
   if (decision.kind === "none" || !decision.session) return null;
   const copy = COPY[decision.kind];
   const session = decision.session;
+  const resumes = copy.primary.action === "resume";
+  const secretCopy = resumes && secret ? SECRET_COPY[secret] : null;
 
   return (
     <>
@@ -123,11 +153,27 @@ export default function ResumeImportPanel({
           That didn't go through: {error}. You can try again.
         </p>
       ) : null}
+      {secretCopy ? (
+        <div className="mb-5">
+          <StackedField label={secretCopy.label} required>
+            <PasswordField
+              aria-label={secretCopy.label}
+              value={secretValue}
+              onChange={setSecretValue}
+              autoComplete="new-password"
+              showPassword={showSecret}
+              onToggle={() => setShowSecret((shown) => !shown)}
+            />
+            <p className={hintStyle}>{secretCopy.hint}</p>
+          </StackedField>
+        </div>
+      ) : null}
       <div className="flex items-center gap-3">
         <Button
           variant="primary"
           size="wide"
-          onClick={copy.primary.action === "resume" ? onResume : onDiscard}
+          disabled={secretCopy !== null && secretValue.trim() === ""}
+          onClick={resumes ? () => onResume(secretCopy ? secretValue : "") : onDiscard}
         >
           {copy.primary.label}
         </Button>

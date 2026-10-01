@@ -262,6 +262,61 @@ async fn list_imports_includes_duration_ms() {
     assert_eq!((running.len(), total), (0, 0));
 }
 
+#[tokio::test]
+async fn a_failed_import_is_recorded_as_failed() {
+    let (pool, _dir) = setup_accounts_only().await;
+    let mut conn = pool.acquire().await.unwrap();
+    let import_id = start_import(&mut conn, &default_start_args(ACCOUNT_ID))
+        .await
+        .unwrap();
+
+    complete_import(
+        &mut conn,
+        ACCOUNT_ID,
+        import_id,
+        &CompleteImportArgs::failed(),
+    )
+    .await
+    .unwrap();
+
+    let row = get_owned_import(&mut conn, ACCOUNT_ID, import_id)
+        .await
+        .unwrap();
+    assert_eq!(row.status, "failed");
+}
+
+#[tokio::test]
+async fn the_list_sorted_by_start_ascending_puts_the_oldest_run_first() {
+    let (pool, _dir) = setup_accounts_only().await;
+    let mut conn = pool.acquire().await.unwrap();
+    let mut started = Vec::new();
+    for _ in 0..2 {
+        let import_id = start_import(&mut conn, &default_start_args(ACCOUNT_ID))
+            .await
+            .unwrap();
+        complete_import(
+            &mut conn,
+            ACCOUNT_ID,
+            import_id,
+            &CompleteImportArgs::succeeded(1, 0),
+        )
+        .await
+        .unwrap();
+        started.push(import_id);
+    }
+    let oldest_first = [SortKey {
+        key: ImportSort::StartedAt,
+        direction: Direction::Asc,
+    }];
+
+    let (imports, _) = list_imports_page(&mut conn, ACCOUNT_ID, None, &oldest_first, 40, 0)
+        .await
+        .unwrap();
+
+    let listed: Vec<i64> = imports.iter().map(|run| run.id).collect();
+    assert_eq!(listed, started);
+}
+
 /// The account's running Import Run through the list, as the desktop app
 /// finds it: `status=running`, and at most one.
 async fn running_import(conn: &mut AnyConnection, account: i64) -> Option<ImportSummary> {

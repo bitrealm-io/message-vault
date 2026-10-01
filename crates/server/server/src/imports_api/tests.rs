@@ -194,6 +194,10 @@ async fn append_skips_existing_guids_and_keeps_id_map() {
     .unwrap();
     assert_eq!(second_stats.messages_appended, 2);
     assert_eq!(second_stats.messages_deduped, 1);
+    assert_eq!(
+        second_stats.messages, 2,
+        "an append reports the messages it added, not the three it read"
+    );
 
     let (_pool, mut conn) = open_verify(&db).await;
     let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages")
@@ -941,6 +945,89 @@ async fn media_none_skips_attachment_copy() {
     assert_eq!(stats.assets_copied, 0);
 }
 
+/// A one-pixel PNG, the smallest image ffmpeg will convert.
+#[rustfmt::skip]
+const PNG_1X1_RGB: &[u8] = &[
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+    0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0xf8, 0xcf, 0xc0, 0x00,
+    0x00, 0x03, 0x01, 0x01, 0x00, 0xc9, 0xfe, 0x92, 0xef, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
+    0x44, 0xae, 0x42, 0x60, 0x82,
+];
+
+/// `import --media convert` stores the converted file in place of the
+/// original: a PNG goes in and the attachment the database holds is a JPEG.
+/// Runs the real ffmpeg, so the guard is taken outside the async block, as
+/// Clippy's `await_holding_lock` asks.
+#[test]
+fn media_convert_stores_the_converted_file_not_the_original() {
+    use crate::config::PathsConfig;
+    use media::MediaMode;
+
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
+        return;
+    };
+    let test = async {
+        let tmp = TempDir::new().unwrap();
+        let db = tmp.path().join("messagecrate.db");
+        let paths = PathsConfig {
+            db: db.clone(),
+            data_dir: tmp.path().join("data"),
+            assets_dir: "assets".into(),
+            assets_converted_dir: "assets_converted".into(),
+        };
+        let placeholder = tmp.path().join("unused-assets");
+        fs::create_dir_all(tmp.path().join("attachments")).unwrap();
+        fs::write(tmp.path().join("attachments/photo.png"), PNG_1X1_RGB).unwrap();
+        let path = write_jsonl(
+            tmp.path(),
+            "convert.jsonl",
+            &conversation_with_attachments(&["attachments/photo.png"])
+                .replace("application/octet-stream", "image/png"),
+        );
+
+        import_jsonl_files(
+            &db,
+            &[path],
+            &ImportOptions {
+                assets_dir: &placeholder,
+                asset_root: tmp.path(),
+                contacts: None,
+                overwrite_contacts: false,
+                mode: ImportMode::Replace,
+                source: "",
+                account_id: TEST_ACCOUNT,
+                fill_content_keys: false,
+                import_id: None,
+                source_from_jsonl: true,
+                paths: Some(&paths),
+                media: MediaMode::Convert,
+                wipe_sources: Some(vec!["imessage".into()]),
+            },
+        )
+        .await
+        .unwrap();
+
+        let (_pool, mut conn) = open_verify(&db).await;
+        let (mime_type, assets_path): (Option<String>, Option<String>) =
+            sqlx::query_as("SELECT mime_type, assets_path FROM attachments")
+                .fetch_one(&mut *conn)
+                .await
+                .unwrap();
+        assert_eq!(mime_type.as_deref(), Some("image/jpeg"));
+        let stored = paths
+            .assets_dir_for_account(TEST_ACCOUNT, "imessage")
+            .join(assets_path.expect("the attachment is stored"));
+        let bytes = fs::read(&stored).unwrap();
+        assert_eq!(&bytes[..2], [0xff, 0xd8], "a JPEG starts with SOI");
+    };
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(test);
+}
+
 #[tokio::test]
 async fn name_only_participant_becomes_a_contact_with_no_identity() {
     sqlx::any::install_default_drivers();
@@ -1162,6 +1249,87 @@ async fn persists_missing_reason_with_null_sha256() {
     assert_eq!(missing_reason.as_deref(), Some("too_large"));
     assert_eq!(size_bytes, Some(999));
     assert_eq!(original_name.as_deref(), Some("gone.bin"));
+}
+
+/// One incoming message from `+15555550123` in its own conversation file,
+/// carrying an attachment for each path in `paths`. The records give no
+/// sha256 and no size, as an iMessage or WhatsApp export does.
+fn conversation_with_attachments(paths: &[&str]) -> String {
+    let attachments: Vec<String> = paths
+        .iter()
+        .map(|path| {
+            format!(
+                r#"{{"path":"{path}","original_name":null,"mime_type":"application/octet-stream","digest_sha256":null,"is_sticker":false,"transcription":null,"sticker_effect":null}}"#
+            )
+        })
+        .collect();
+    format!(
+        "{}\n{}\n",
+        r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550123","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550123","display_name":null}],"stats":{"message_count":1,"attachment_count":1,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}"#,
+        format_args!(
+            r#"{{"guid":"g-att","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550123","sender_display_name":null,"subject":null,"text":"see attached","attachments":[{}],"imessage":null,"source":null}}"#,
+            attachments.join(",")
+        )
+    )
+}
+
+#[tokio::test]
+async fn an_attachment_with_no_size_in_the_export_is_stored_with_the_size_of_its_file() {
+    let tmp = TempDir::new().unwrap();
+    let db = tmp.path().join("messagecrate.db");
+    let assets = tmp.path().join("assets");
+    fs::create_dir_all(tmp.path().join("attachments")).unwrap();
+    fs::write(tmp.path().join("attachments/photo.bin"), b"twelve bytes").unwrap();
+    let path = write_jsonl(
+        tmp.path(),
+        "sized.jsonl",
+        &conversation_with_attachments(&["attachments/photo.bin"]),
+    );
+
+    import_jsonl_files(&db, &[path], &replace_opts(&assets, tmp.path(), "imessage"))
+        .await
+        .unwrap();
+
+    let (_pool, mut conn) = open_verify(&db).await;
+    let size_bytes: Option<i64> = sqlx::query_scalar("SELECT size_bytes FROM attachments")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(size_bytes, Some(12));
+}
+
+/// Three attachments on one message: a file, the same bytes under another
+/// name, and a file that is not there. The result counts one of each.
+#[tokio::test]
+async fn an_import_counts_the_files_it_copied_already_held_and_could_not_find() {
+    let tmp = TempDir::new().unwrap();
+    let db = tmp.path().join("messagecrate.db");
+    let assets = tmp.path().join("assets");
+    fs::create_dir_all(tmp.path().join("attachments")).unwrap();
+    fs::write(tmp.path().join("attachments/photo.bin"), b"same bytes").unwrap();
+    fs::write(tmp.path().join("attachments/copy.bin"), b"same bytes").unwrap();
+    let path = write_jsonl(
+        tmp.path(),
+        "counted.jsonl",
+        &conversation_with_attachments(&[
+            "attachments/photo.bin",
+            "attachments/copy.bin",
+            "attachments/gone.bin",
+        ]),
+    );
+
+    let stats = import_jsonl_files(&db, &[path], &replace_opts(&assets, tmp.path(), "imessage"))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        (
+            stats.assets_copied,
+            stats.assets_deduped,
+            stats.assets_missing
+        ),
+        (1, 1, 1)
+    );
 }
 
 #[tokio::test]

@@ -458,6 +458,37 @@ mod tests {
     }
 
     #[test]
+    fn parentheses_nest_32_deep_and_no_deeper() {
+        let nested = |depth: usize| format!("{}a{}", "(".repeat(depth), ")".repeat(depth));
+
+        assert!(matches!(
+            parse_ok(ListKind::Messages, &nested(32)),
+            Expr::Text(_)
+        ));
+        let e = parse_err(ListKind::Messages, &nested(33));
+        assert_eq!(e.kind, QueryErrorKind::TooComplex);
+        assert_eq!(e.message, "The search nests too deeply.");
+    }
+
+    /// A part is a term, a negation, or the `and` or `or` joining them. Field
+    /// terms are used because free words have a lower limit of their own.
+    #[test]
+    fn a_search_has_at_most_64_parts() {
+        // 31 negated terms are 62 parts, one plain term and the `and` make 64.
+        let at_the_limit = format!("{}service:sms", "-service:sms ".repeat(31));
+        assert!(matches!(
+            parse_ok(ListKind::Messages, &at_the_limit),
+            Expr::And(_)
+        ));
+
+        // 32 negated terms and the `and` are 65.
+        let one_over = "-service:sms ".repeat(32);
+        let e = parse_err(ListKind::Messages, &one_over);
+        assert_eq!(e.kind, QueryErrorKind::TooComplex);
+        assert_eq!(e.message, "The search has too many parts.");
+    }
+
+    #[test]
     fn space_is_and_and_or_binds_loosest() {
         let e = parse_ok(ListKind::Messages, "a b or c");
         let Expr::Or(parts) = e else {

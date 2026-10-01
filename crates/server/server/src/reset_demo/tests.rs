@@ -388,6 +388,35 @@ async fn failed_preparation_preserves_active_config() {
     );
 }
 
+/// A complete bundle and no database URL: the reset runs, the bundle's
+/// config becomes the active one, and the database it names holds the demo.
+#[tokio::test]
+async fn a_complete_bundle_resets_and_its_config_becomes_the_active_one() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let bundle = temp.path().join("bundle");
+    write_tiny_reset_bundle(&bundle);
+    let config_dest = temp.path().join("config/config.toml");
+
+    let stats = prepare_config_and_reset(&bundle, &config_dest, DEMO_ACCOUNT_ID, None)
+        .await
+        .expect("a complete bundle resets");
+
+    assert_eq!(stats.import.messages, 3, "one message from each source");
+    assert_eq!(
+        fs::read(&config_dest).expect("read active config"),
+        fs::read(bundle.join("config/config.toml")).expect("read bundle config")
+    );
+    // The bundle's config names the database relative to the folder above
+    // the active config's.
+    let mut conn = test_db_conn(&temp.path().join("data/messagecrate.db")).await;
+    let demo_messages = count(
+        &mut conn,
+        &format!("SELECT COUNT(*) FROM messages WHERE account_id = {DEMO_ACCOUNT_ID}"),
+    )
+    .await;
+    assert_eq!(demo_messages, 3);
+}
+
 #[tokio::test]
 async fn a_db_without_accounts_table_does_not_block_reset_check() {
     let temp = tempfile::tempdir().expect("create test directory");

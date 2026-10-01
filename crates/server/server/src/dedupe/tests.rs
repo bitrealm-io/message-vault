@@ -702,6 +702,51 @@ async fn an_exact_duplicate_across_three_sources_keeps_one() {
     assert_eq!(duplicate_of(&mut conn, ids[2]).await, Some(ids[0]));
 }
 
+/// The same message in three sources, each a second after the last, is one
+/// message: the copy from the first source stays and the other two hide
+/// behind it.
+#[tokio::test]
+async fn a_near_duplicate_across_three_sources_keeps_one() {
+    let (pool, _dir) = engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    setup_db(&mut conn).await;
+    let mut ids = Vec::new();
+    for (guid, source, timestamp) in [
+        ("g1", "go-sms-pro", "2015-03-12T18:04:22Z"),
+        ("g2", "sms-backup-plus", "2015-03-12T18:04:23Z"),
+        ("g3", "sms-backup-restore", "2015-03-12T18:04:24Z"),
+    ] {
+        ids.push(
+            insert_msg(
+                &mut conn,
+                InsertMsgArgs {
+                    source,
+                    guid,
+                    timestamp,
+                    from_me: 1,
+                    body: "Running late",
+                    sort_order: 0,
+                },
+            )
+            .await,
+        );
+    }
+
+    let priority = [
+        "go-sms-pro".into(),
+        "sms-backup-plus".into(),
+        "sms-backup-restore".into(),
+    ];
+    let stats = dedupe_cross_source(&mut conn, TEST_ACCOUNT_ID, Some(&priority), 2)
+        .await
+        .unwrap();
+
+    assert_eq!((stats.exact_flagged, stats.near_flagged), (0, 2));
+    assert_eq!(duplicate_of(&mut conn, ids[0]).await, None);
+    assert_eq!(duplicate_of(&mut conn, ids[1]).await, Some(ids[0]));
+    assert_eq!(duplicate_of(&mut conn, ids[2]).await, Some(ids[0]));
+}
+
 /// Two group members sending the same words a second apart, in copies from
 /// two sources, are two messages. The near pass pairs only rows with the
 /// same sender, so neither is hidden.

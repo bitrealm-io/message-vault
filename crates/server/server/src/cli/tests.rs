@@ -405,6 +405,13 @@ async fn import_refuses_a_negative_window_before_opening_anything() {
     assert!(!dir.path().join("messagecrate.db").exists());
 }
 
+/// Zero is exact-time matching only, and the refusal says ">= 0".
+#[test]
+fn a_window_of_zero_seconds_is_accepted_and_a_negative_one_refused() {
+    assert!(validate_window_secs(0).is_ok());
+    assert!(validate_window_secs(-1).is_err());
+}
+
 #[tokio::test]
 async fn import_refuses_an_unknown_media_mode() {
     let dir = tempfile::tempdir().unwrap();

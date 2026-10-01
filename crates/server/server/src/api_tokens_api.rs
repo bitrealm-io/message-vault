@@ -316,6 +316,20 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn deleting_a_token_that_does_not_exist_is_not_found() {
+        let (fixture, account) = crate::test_support::fixture_with_account().await;
+
+        let (status, text) = crate::test_support::delete_raw(
+            &fixture.state,
+            &format!("/v1/accounts/{}/api-tokens/999999", account.account_id),
+            &account.token,
+        )
+        .await;
+
+        crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
+    }
+
     /// A token never carries `delete`, so a create-token body asking for it
     /// is refused, not quietly stripped: a caller that believes it holds a
     /// delete token would otherwise find out only when a delete fails.

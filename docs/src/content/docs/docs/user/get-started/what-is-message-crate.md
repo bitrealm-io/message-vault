@@ -1,29 +1,58 @@
 ---
-title: What is Message Crate?
-description: Extract messages from phone backups, import them into Message Crate on your own computer, and browse them in an interface you control.
+title: What Message Crate is
+description: Message Crate reads conversations out of phone backups and makes them searchable on a server its owner runs.
 ---
 
-Message Crate helps you extract messages from phone backups and browse them on a machine you control. Nothing is uploaded to a Message Crate cloud service.
+Message Crate pulls conversations out of phone backups and makes them searchable.
+It runs on a computer its owner controls.
+Nothing is sent to a Message Crate cloud service, because there isn't one.
 
-## Two pieces
+## Three pieces
 
-- **The server** — a small program, usually run in Docker. It stores messages in a SQLite database on your computer and serves a website in the browser.
-- **The desktop app** — a program on your computer. It reads phone backups and imports them into Message Crate. It can also write files to disk without talking to the server.
+- **The server** stores the messages and serves the website. It runs in Docker.
+- **The website** is where messages are browsed and searched. Any browser that can reach the server opens it.
+- **The desktop app** shows the same screens as the website and adds **Import** and **Export**. Import lives in the desktop app because reading a phone backup needs access to files on the computer, which a browser doesn't have.
 
-The two talk over a local URL (typically **http://localhost:8080**). The website is enough to look around. Importing a backup needs the desktop app.
+One running installation is called *a Message Crate*.
+It holds one or more accounts, and each account sees only its own messages.
 
-The Message Crate you run has a **local** username and password. That login is not a Bitrealm (or other) cloud account.
+## Who provides the messages
 
-## What you can do
+The person whose messages they are.
+Message Crate reads a backup that person makes of their own phone.
 
-- **Try sample conversations** by logging in as `demo` (see [Try Message Crate](/docs/user/get-started/try-message-crate/))
-- **Import** your own backups with the desktop app
-- **Browse and search** conversations, contacts, and media in the browser or the app
-- **Convert** exports between JSONL (JSON Lines), JSON, CSV, EML, MBOX, and XML when you need files on disk
-- **Keep media** — photos and videos from conversations can be stored with the messages
+Why can't Message Crate fetch the messages itself?
 
-## Where to go next
+Apple, Google, and WhatsApp offer no way for a program to log in and download a message history.
+The messages are already in files, though:
 
-- [Why you provide backups](/docs/user/get-started/why-you-provide-backups/)
-- [Try Message Crate](/docs/user/get-started/try-message-crate/)
-- [Use your own messages](/docs/user/get-started/your-own-messages/) if the sample data is enough to skip ahead
+- An iPhone's messages are inside the backup that Finder, iTunes, or Apple Devices makes on a computer.
+- An Android phone's SMS and MMS can be written to XML files by the SMS Backup & Restore app.
+- WhatsApp keeps its own database on the phone.
+
+The desktop app reads those files on the computer where they sit.
+Every tool that works with message history works this way, so the backup step is a limit of the phones, not of Message Crate.
+
+## What a Message Crate does with them
+
+- Shows every conversation in one list, whichever phone or app it came from.
+- Searches message text, people, dates, and attachments.
+- Keeps photos, videos, and other attachments with their messages.
+- Groups conversations by contact, so one person's messages from several phone numbers sit together.
+- Exports conversations to files again.
+
+## The path from here
+
+1. This page.
+2. [Run a Message Crate with demo data](/docs/user/get-started/run-with-demo-data/).
+3. [Look around the demo data](/docs/user/get-started/look-around-the-demo-data/).
+4. [Start a Message Crate for real messages](/docs/user/get-started/start-your-own-message-crate/).
+5. [Install the desktop app](/docs/user/get-started/install-the-desktop-app/).
+6. Back up the phone: [iPhone](/docs/user/get-started/back-up-an-iphone/) or [Android](/docs/user/get-started/back-up-an-android-phone/).
+7. [Import the backup](/docs/user/get-started/import-your-backup/).
+8. [Where to go next](/docs/user/get-started/where-to-go-next/).
+
+Steps 2 and 3 take a few minutes and need no phone.
+They answer whether Message Crate is worth the work of steps 4 to 7.
+
+Next: [Run a Message Crate with demo data](/docs/user/get-started/run-with-demo-data/).

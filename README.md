@@ -17,7 +17,7 @@
     <br />
     <a href="https://messagecrate.app/docs/user/"><strong>Explore the docs »</strong></a>
     <br />
-    <a href="https://messagecrate.app/docs/user/get-started/try-message-crate/">Try Message Crate</a>
+    <a href="https://messagecrate.app/docs/user/get-started/run-with-demo-data/">Try Message Crate</a>
     &middot;
     <a href="https://github.com/messagecrate/message-crate/issues/new?labels=bug&template=bug_report.md">Report Bug</a>
     &middot;

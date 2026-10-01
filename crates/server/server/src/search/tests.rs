@@ -2830,11 +2830,11 @@ mod docs {
     use crate::search::fields::{FIELDS, for_list, lookup};
 
     const SEARCH_PAGE: &str =
-        include_str!("../../../../../docs/src/content/docs/docs/user/how-to/search.mdx");
+        include_str!("../../../../../docs/src/content/docs/docs/user/features/messages/search.mdx");
     const API_PAGE: &str =
         include_str!("../../../../../docs/src/content/docs/docs/developer/reference/api.md");
     const BROWSE_PAGE: &str =
-        include_str!("../../../../../docs/src/content/docs/docs/user/browse-your-messages.md");
+        include_str!("../../../../../docs/src/content/docs/docs/user/features/messages/browse.md");
 
     /// Every backticked `word:` token on `line`, in order. `search.mdx`
     /// lists one per table row; `api.md`'s prose bullets often name several

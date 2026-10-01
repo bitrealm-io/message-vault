@@ -20,45 +20,78 @@ const limitedBadge = {
   variant: 'caution',
 };
 
+const advancedBadge = {
+  text: 'Advanced',
+  variant: 'note',
+};
+
 const userGuideItems = [
   { label: 'Home', slug: 'docs/user' },
   {
     label: 'Get started',
     items: [
-      'docs/user/get-started/what-is-message-crate',
-      'docs/user/get-started/why-you-provide-backups',
-      'docs/user/get-started/try-message-crate',
-      'docs/user/get-started/your-own-messages',
-      'docs/user/get-started/install-the-desktop-app',
+      { label: '1. What Message Crate is', slug: 'docs/user/get-started/what-is-message-crate' },
+      { label: '2. Run a Message Crate with demo data', slug: 'docs/user/get-started/run-with-demo-data' },
+      { label: '3. Look around the demo data', slug: 'docs/user/get-started/look-around-the-demo-data' },
+      { label: '4. Start your own Message Crate', slug: 'docs/user/get-started/start-your-own-message-crate' },
+      { label: '5. Install the desktop app', slug: 'docs/user/get-started/install-the-desktop-app' },
+      { label: '6. Back up an iPhone', slug: 'docs/user/get-started/back-up-an-iphone' },
+      { label: '6. Back up an Android phone', slug: 'docs/user/get-started/back-up-an-android-phone' },
+      { label: '7. Import your backup', slug: 'docs/user/get-started/import-your-backup' },
+      { label: '8. Where to go next', slug: 'docs/user/get-started/where-to-go-next' },
     ],
   },
   {
-    label: 'Prepare a backup',
+    label: 'Other import sources',
     items: [
-      'docs/user/prepare-a-backup',
-      'docs/user/prepare-a-backup/iphone-ipad',
-      'docs/user/prepare-a-backup/iphone-whatsapp',
-      'docs/user/prepare-a-backup/android-sms',
-      'docs/user/prepare-a-backup/android-whatsapp',
+      'docs/user/import-sources/mac-messages',
+      { slug: 'docs/user/import-sources/whatsapp', badge: advancedBadge },
+      { slug: 'docs/user/import-sources/old-backups', badge: limitedBadge },
     ],
   },
-  'docs/user/import-from-a-backup',
-  'docs/user/browse-your-messages',
   {
-    label: 'How do I…',
+    label: 'Features',
     items: [
-      'docs/user/how-to/search',
-      'docs/user/how-to/contacts-and-labels',
-      'docs/user/how-to/saved-searches',
-      'docs/user/how-to/trash',
-      'docs/user/how-to/settings',
-      'docs/user/how-to/owner-home',
-      'docs/user/how-to/export-your-messages',
-      'docs/user/how-to/convert-formats',
-      'docs/user/how-to/media-and-privacy',
-      { slug: 'docs/user/how-to/rescue-imports', badge: limitedBadge },
-      'docs/user/how-to/update',
-      'docs/user/how-to/troubleshooting',
+      {
+        label: 'Messages',
+        items: [
+          'docs/user/features/messages/browse',
+          'docs/user/features/messages/search',
+          'docs/user/features/messages/saved-searches',
+          'docs/user/features/messages/message-tags',
+          'docs/user/features/messages/trash',
+          'docs/user/features/messages/import',
+          'docs/user/features/messages/export',
+          'docs/user/features/messages/attachments-and-media',
+        ],
+      },
+      {
+        label: 'Contacts',
+        items: [
+          'docs/user/features/contacts/contacts',
+          'docs/user/features/contacts/contact-groups',
+          'docs/user/features/contacts/unknown',
+        ],
+      },
+      {
+        label: 'Settings',
+        items: [
+          'docs/user/features/settings/account-and-profile',
+          'docs/user/features/settings/storage',
+          'docs/user/features/settings/system',
+          'docs/user/features/settings/convert',
+          'docs/user/features/settings/appearance',
+        ],
+      },
+      {
+        label: 'Owner',
+        items: [
+          'docs/user/features/owner/owner-home',
+          'docs/user/features/owner/update',
+          'docs/user/features/owner/run-on-another-machine',
+          'docs/user/features/owner/troubleshooting',
+        ],
+      },
     ],
   },
   'docs/user/glossary',

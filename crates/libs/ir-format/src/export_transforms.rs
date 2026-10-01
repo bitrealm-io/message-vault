@@ -87,7 +87,7 @@ fn obfuscate_imessage(im: &mut IrImessage, anon: &mut Obfuscator) {
     im.app = None;
     im.shared_location = None;
     // Tapbacks are imported, so they stay with only the reactor rewritten.
-    // Anything that is not a tapback object goes.
+    // Every exporter writes them as a list of objects. Anything else goes.
     match im.tapbacks.as_mut() {
         Some(Value::Array(tapbacks)) => {
             tapbacks.retain_mut(|tapback| match tapback {
@@ -98,7 +98,6 @@ fn obfuscate_imessage(im: &mut IrImessage, anon: &mut Obfuscator) {
                 _ => false,
             });
         }
-        Some(Value::Object(fields)) => obfuscate_tapback(fields, anon),
         _ => im.tapbacks = None,
     }
 }

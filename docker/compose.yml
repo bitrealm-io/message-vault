@@ -1,5 +1,5 @@
 # Published Message Crate image. Save this file and run: docker compose up -d
-# Docs: https://messagecrate.app/docs/user/get-started/start-a-message-crate/
+# Docs: https://messagecrate.app/docs/user/features/owner/run-with-docker/
 #
 # Pin a release: change :latest to a release number such as :0.10.0 (no "v").
 # JSONL drop: copy files into ./staging

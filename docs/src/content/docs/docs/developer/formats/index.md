@@ -72,7 +72,7 @@ Discord, Signal, Telegram, and Slack are recognized services in the shared model
 | OpenExtract | Parser notes live with the crate |
 | iMazing | [Input format](/docs/developer/formats/imazing/input/) · [Design](/docs/developer/formats/imazing/design/) |
 | WhatsApp | [Import methods](/docs/user/import-sources/whatsapp/) |
-| iMessage | [Back up an iPhone](/docs/user/get-started/back-up-an-iphone/) |
+| iMessage | [Back up an iPhone](/docs/user/your-messages/back-up-an-iphone/) |
 
 **Common message:** end-user [export structure](/docs/developer/reference/export-structure/); schema [message-ir architecture](/docs/developer/architecture/common-message/). All exporters parse to `ConversationDocument` then project via `message_ir_format::FormatSink` (per-chat JSON/JSONL/CSV/EML/MBOX, or one SyncTech `smses.xml` as the XML format). Output formats: [mail archives](/docs/developer/formats/mail-archive/) and [SMS Backup & Restore XML](/docs/developer/formats/sms-backup-restore-xml/). Attachment modes (none / copy / convert / compress) and obfuscate apply through `FormatSink` for every format.
 

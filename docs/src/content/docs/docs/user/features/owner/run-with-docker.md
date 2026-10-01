@@ -1,18 +1,18 @@
 ---
-title: Start a Message Crate
-description: One Docker command starts a Message Crate that already holds made-up conversations to look at.
+title: Run Message Crate with Docker
+description: One Docker command starts a Message Crate that stays on, for a home server or a computer that is always running.
 ---
 
-This step starts a Message Crate on this computer.
-It is the only one this guide starts: the same Message Crate is looked at in [step 3](/docs/user/get-started/look-around-the-demo-data/) and holds real messages from [step 4](/docs/user/get-started/create-the-owner-and-an-account/) on.
+The desktop app starts a Message Crate of its own, which runs while the app is open.
+Docker runs one that stays on: after a restart, with the app closed, and on a computer nobody sits at.
+It is the same server either way, with the same first screen, the same Demo Account, and the same Owner Home.
 
-Every new Message Crate starts with demo data: made-up conversations, contacts, and attachments.
-It shows what the product does before any phone backup exists.
-The demo data sits in an account of its own, the Demo Account, apart from any real messages, and can be deleted later.
+The two don't share messages.
+A Message Crate started here begins with demo data only, and the Owner, the accounts, and the imports are made in it as in [Your own messages](/docs/user/your-messages/create-the-owner-and-an-account/).
 
 ## Install Docker
 
-The server is published as a Docker image and in no other form, so Docker is required.
+The server is published as a Docker image.
 
 - **Windows and macOS:** [Docker Desktop](https://docs.docker.com/desktop/). Docker Desktop must be running before the command below works.
 - **Linux:** [Docker Engine](https://docs.docker.com/engine/install/).
@@ -57,7 +57,7 @@ Later starts write nothing and answer at once.
 
 [http://localhost:8080](http://localhost:8080) in a browser shows a card titled **Message Crate**, with the word **Connected**, a **Create Owner** form, and an **Explore Demo Account** button.
 
-![The first screen of a new Message Crate: Create Owner, and Explore Demo Account](../../../../../assets/user-guide/login.png)
+![The first screen of a new Message Crate: Create Owner, and Explore Demo Account](../../../../../../assets/user-guide/login.png)
 
 Is port 8080 already in use?
 
@@ -65,4 +65,8 @@ Docker then reports `port is already allocated` and the container doesn't start.
 `docker rm message-crate` removes the failed container.
 Changing the first `8080` in the command to a free port, such as `-p 127.0.0.1:8090:8080`, moves the server to `http://localhost:8090`.
 
-Next: [Look around the demo data](/docs/user/get-started/look-around-the-demo-data/).
+## Connect the desktop app
+
+Importing needs the desktop app.
+On the same computer the app finds this Message Crate at its usual address and starts no server of its own.
+For a Message Crate on another computer, **Change server address** on the app's first screen takes its address; [Run on another machine](/docs/user/features/owner/run-on-another-machine/) has the steps.

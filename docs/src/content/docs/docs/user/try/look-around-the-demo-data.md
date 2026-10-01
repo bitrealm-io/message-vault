@@ -1,18 +1,17 @@
 ---
 title: Look around the demo data
-description: Open the Demo Account in a browser, try the conversation list, search, and contacts, then log out.
+description: Open the Demo Account, try the conversation list, search, and contacts, then log out.
 ---
 
-This step uses a browser only.
-The desktop app comes later, in [step 5](/docs/user/get-started/install-the-desktop-app/), because looking at messages doesn't need it.
+Every new Message Crate starts with demo data: made-up conversations, contacts, and attachments.
+It sits in an account of its own, the Demo Account, apart from any real messages.
 
 ## Open the Demo Account
 
-1. Open [http://localhost:8080](http://localhost:8080).
-2. Select **Explore Demo Account**.
+On the card the app opened on, select **Explore Demo Account**.
 
 The Demo Account has no password, so there is nothing to type.
-The card also shows **Create Owner**, which is for [step 4](/docs/user/get-started/create-the-owner-and-an-account/).
+The card also shows **Create Owner**, which is for [Your own messages](/docs/user/your-messages/create-the-owner-and-an-account/).
 The name at the top right, **demo**, shows which account is logged in.
 
 ## Things to try
@@ -51,6 +50,9 @@ The round button at the top right opens the account menu, which holds **Log out*
 Logging out returns to the first screen, which still shows **Create Owner** and **Explore Demo Account**.
 
 The Demo Account stays for as long as it is useful.
-[Step 7](/docs/user/get-started/import-your-backup/#delete-the-demo-account) ends by deleting it.
+[Import your backup](/docs/user/your-messages/import-your-backup/#delete-the-demo-account) ends by deleting it.
 
-Next: [Create the Owner and an account](/docs/user/get-started/create-the-owner-and-an-account/).
+That is the end of the first part.
+The second part puts real messages into this Message Crate.
+
+Next: [Create the Owner and an account](/docs/user/your-messages/create-the-owner-and-an-account/).

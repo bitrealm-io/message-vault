@@ -28,17 +28,21 @@ const advancedBadge = {
 const userGuideItems = [
   { label: 'Home', slug: 'docs/user' },
   {
-    label: 'Get started',
+    label: 'Try Message Crate',
     items: [
-      { label: '1. What Message Crate is', slug: 'docs/user/get-started/what-is-message-crate' },
-      { label: '2. Start a Message Crate', slug: 'docs/user/get-started/start-a-message-crate' },
-      { label: '3. Look around the demo data', slug: 'docs/user/get-started/look-around-the-demo-data' },
-      { label: '4. Create the Owner and an account', slug: 'docs/user/get-started/create-the-owner-and-an-account' },
-      { label: '5. Install the desktop app', slug: 'docs/user/get-started/install-the-desktop-app' },
-      { label: '6. Back up an iPhone', slug: 'docs/user/get-started/back-up-an-iphone' },
-      { label: '6. Back up an Android phone', slug: 'docs/user/get-started/back-up-an-android-phone' },
-      { label: '7. Import your backup', slug: 'docs/user/get-started/import-your-backup' },
-      { label: '8. Where to go next', slug: 'docs/user/get-started/where-to-go-next' },
+      { label: '1. What Message Crate is', slug: 'docs/user/try/what-is-message-crate' },
+      { label: '2. Install the desktop app', slug: 'docs/user/try/install-the-desktop-app' },
+      { label: '3. Look around the demo data', slug: 'docs/user/try/look-around-the-demo-data' },
+    ],
+  },
+  {
+    label: 'Your own messages',
+    items: [
+      { label: '1. Create the Owner and an account', slug: 'docs/user/your-messages/create-the-owner-and-an-account' },
+      { label: '2. Back up an iPhone', slug: 'docs/user/your-messages/back-up-an-iphone' },
+      { label: '2. Back up an Android phone', slug: 'docs/user/your-messages/back-up-an-android-phone' },
+      { label: '3. Import your backup', slug: 'docs/user/your-messages/import-your-backup' },
+      { label: '4. Where to go next', slug: 'docs/user/your-messages/where-to-go-next' },
     ],
   },
   {
@@ -87,6 +91,7 @@ const userGuideItems = [
         label: 'Owner',
         items: [
           'docs/user/features/owner/owner-home',
+          'docs/user/features/owner/run-with-docker',
           'docs/user/features/owner/update',
           'docs/user/features/owner/run-on-another-machine',
           'docs/user/features/owner/troubleshooting',

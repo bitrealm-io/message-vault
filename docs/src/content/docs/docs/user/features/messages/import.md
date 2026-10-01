@@ -11,7 +11,7 @@ The browser doesn't show it, because reading a backup needs the desktop app.
 The Owner's login doesn't show it either, because the Owner holds no messages.
 Importing also needs the account's import permission, which the Owner sets.
 
-A first import is walked through in [Import your backup](/docs/user/get-started/import-your-backup/).
+A first import is walked through in [Import your backup](/docs/user/your-messages/import-your-backup/).
 This page describes every field and every stage.
 
 ## Without the import permission
@@ -70,7 +70,7 @@ With **iPhone backup**:
 | **iPhone Backup Directory** | The root folder of a device backup made by Finder or iTunes. Required. |
 | **Encryption password** | The backup's password. The app checks the chosen folder, and marks the field required when the backup is encrypted and **(Optional)** when it is not. |
 
-[Back up an iPhone](/docs/user/get-started/back-up-an-iphone/) shows where the backup folder is.
+[Back up an iPhone](/docs/user/your-messages/back-up-an-iphone/) shows where the backup folder is.
 
 With **Mac Messages**:
 

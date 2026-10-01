@@ -3,7 +3,7 @@ title: Create the Owner and an account
 description: Claim the Message Crate by creating its Owner, add an account to hold the messages, and log in as that account.
 ---
 
-This step makes the Message Crate from [step 2](/docs/user/get-started/start-a-message-crate/) ready for real messages, and ends logged in as the account that will hold them.
+This step makes the Message Crate the desktop app started ready for real messages, and ends logged in as the account that will hold them.
 
 It creates two logins, and both are needed:
 
@@ -17,13 +17,13 @@ Real messages never go into the Demo Account. It can't import, so that no backup
 
 ## Create the Owner
 
-1. Open [http://localhost:8080](http://localhost:8080). A Message Crate with no Owner shows **Create Owner**. Whoever fills it in first becomes the Owner.
+1. Open the desktop app. A Message Crate with no Owner shows **Create Owner**. Whoever fills it in first becomes the Owner.
 2. Enter a **Username** and a **Password**, and repeat the password in **Confirm Password**.
 3. Select **Create Owner**.
 
 ![The Create Owner form, filled in](../../../../../assets/user-guide/create-owner.png)
 
-The browser opens **Owner Home** on **User Accounts**, which lists the Owner and **demo**, the Demo Account.
+The app opens **Owner Home** on **User Accounts**, which lists the Owner and **demo**, the Demo Account.
 The first screen now shows **Login** in place of **Create Owner**, and keeps **Explore Demo Account**.
 
 The Owner's password is the only thing between the network and every account on this Message Crate, so it must be one that isn't used anywhere else.
@@ -38,7 +38,7 @@ The Owner's password is the only thing between the network and every account on 
 ![The New account form in Owner Home](../../../../../assets/user-guide/add-account.png)
 
 The screen changes to **User Settings** for the new account.
-Under **Message Permissions**, **Import**, **Export**, and **Delete** are all on, which is what importing in step 7 needs.
+Under **Message Permissions**, **Import**, **Export**, and **Delete** are all on, which is what importing needs.
 
 Why not create the account from the login screen?
 
@@ -63,6 +63,7 @@ Each row under **Your Accounts** has a type, **Text message**, **Email**, or **W
 
 ## Check that it worked
 
-The browser shows **No conversations**, logged in as the new account.
+The app shows **No conversations**, logged in as the new account.
+The left panel has **Import** and **Export**, which a browser doesn't show.
 
-Next: [Install the desktop app](/docs/user/get-started/install-the-desktop-app/).
+Next: back up the phone. [iPhone](/docs/user/your-messages/back-up-an-iphone/) or [Android](/docs/user/your-messages/back-up-an-android-phone/).

@@ -17,7 +17,7 @@
     <br />
     <a href="https://messagecrate.app/docs/user/"><strong>Explore the docs »</strong></a>
     <br />
-    <a href="https://messagecrate.app/docs/user/get-started/start-a-message-crate/">Try Message Crate</a>
+    <a href="https://messagecrate.app/docs/user/try/what-is-message-crate/">Try Message Crate</a>
     &middot;
     <a href="https://github.com/messagecrate/message-crate/issues/new?labels=bug&template=bug_report.md">Report Bug</a>
     &middot;
@@ -76,7 +76,7 @@ This project is for people who want a personal copy of their phone messages. Tha
 
 ## Getting Started
 
-Follow the [User Guide](https://messagecrate.app/docs/user/get-started/what-is-message-crate/) to run the demo and import your own data.
+Follow the [User Guide](https://messagecrate.app/docs/user/try/what-is-message-crate/) to run the demo and import your own data.
 
 The [Developer Guide](https://messagecrate.app/docs/developer/) covers setting up a local development environment and compiling from source.
 

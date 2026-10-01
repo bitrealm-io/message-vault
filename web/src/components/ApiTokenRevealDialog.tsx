@@ -34,16 +34,25 @@ export default function ApiTokenRevealDialog({
 }) {
   const [copied, setCopied] = useState(false);
 
+  // Browsers expose navigator.clipboard only on HTTPS and localhost, and can
+  // refuse the write even there. Either way the person copies by hand.
+  const [copyFailed, setCopyFailed] = useState(false);
+
   useEffect(() => {
-    if (open) setCopied(false);
+    if (open) {
+      setCopied(false);
+      setCopyFailed(false);
+    }
   }, [open]);
 
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(token);
       setCopied(true);
+      setCopyFailed(false);
     } catch {
       setCopied(false);
+      setCopyFailed(true);
     }
   };
 
@@ -75,7 +84,8 @@ export default function ApiTokenRevealDialog({
 
       <div className="mb-3 flex items-stretch gap-2">
         <div className="min-w-0 flex-1 overflow-hidden rounded-xl border border-border bg-bg px-3 py-2.5 font-mono text-[0.813rem] text-text">
-          <span className="block truncate" title={token}>
+          {/* A token that has to be selected by hand is shown whole. */}
+          <span className={copyFailed ? "block break-all" : "block truncate"} title={token}>
             {token}
           </span>
         </div>
@@ -88,8 +98,13 @@ export default function ApiTokenRevealDialog({
           {copied ? "Copied" : "Copy"}
         </Button>
       </div>
+      {copyFailed ? (
+        <p className="mb-3 text-[0.75rem] leading-relaxed text-text" role="alert">
+          This browser can&apos;t copy from this page. Select the token above and copy it.
+        </p>
+      ) : null}
 
-      <p className="mb-5 text-[0.75rem] leading-relaxed text-muted">
+      <p className="mb-5text-[0.75rem] leading-relaxed text-muted">
         For security reasons, this token is only displayed once and cannot be retrieved later. If
         you lose it, you&apos;ll need to create a new one.
       </p>

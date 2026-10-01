@@ -1,3 +1,5 @@
+import { newId } from "./newId";
+
 /** localStorage key for this install's stable identifier. */
 export const DEVICE_ID_KEY = "mc-device-id";
 
@@ -26,7 +28,7 @@ export function getDeviceId(): string {
   } catch {
     // Private browsing and full storage can throw.
   }
-  const fresh = crypto.randomUUID();
+  const fresh = newId();
   cached = fresh;
   try {
     localStorage.setItem(DEVICE_ID_KEY, fresh);

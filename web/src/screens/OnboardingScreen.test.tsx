@@ -66,6 +66,26 @@ describe("OnboardingScreen", () => {
     expect(screen.queryByText(/Welcome to the Message Crate/i)).not.toBeInTheDocument();
   });
 
+  it("renders and adds rows where the browser has no crypto.randomUUID", async () => {
+    // Browsers expose crypto.randomUUID only on HTTPS and localhost, so a
+    // Message Crate opened at http://192.168.x.x has none.
+    Object.defineProperty(crypto, "randomUUID", { value: undefined, configurable: true });
+    try {
+      const user = setupUser();
+      render(<OnboardingScreen />);
+
+      await user.type(rowValue(1), "+1 555-123-4567");
+      await user.click(screen.getByRole("button", { name: "+ Add account" }));
+      await user.type(rowValue(2), "+1 555-123-4568");
+
+      expect(rowValue(1)).toHaveValue("+1 555-123-4567");
+      expect(rowValue(2)).toHaveValue("+1 555-123-4568");
+    } finally {
+      // Drop the shadowing property so the real method shows through again.
+      delete (crypto as { randomUUID?: unknown }).randomUUID;
+    }
+  });
+
   it("shows the name and zone the owner set, for the holder to check", () => {
     profile = { ...blankProfile, preferred_name: "Bob Archer", time_zone: "Asia/Tokyo" };
     render(<OnboardingScreen />);

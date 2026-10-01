@@ -59,6 +59,9 @@ export default function ThemeSettings() {
   const [prevShareString, setPrevShareString] = useState(shareString);
   const [shareError, setShareError] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Browsers expose navigator.clipboard only on HTTPS and localhost, and can
+  // refuse the write even there. The codes stay in the field to copy by hand.
+  const [copyFailed, setCopyFailed] = useState(false);
 
   if (shareString !== prevShareString) {
     setPrevShareString(shareString);
@@ -196,9 +199,10 @@ export default function ThemeSettings() {
               try {
                 await navigator.clipboard.writeText(shareString);
                 setCopied(true);
+                setCopyFailed(false);
                 window.setTimeout(() => setCopied(false), 1500);
               } catch {
-                /* ignore */
+                setCopyFailed(true);
               }
             }}
             className="shrink-0 cursor-pointer rounded-md border border-border bg-panel px-3 py-1.5 text-[0.813rem] text-text"
@@ -209,6 +213,11 @@ export default function ThemeSettings() {
         {shareError ? (
           <p className="mt-1 text-[0.75rem] text-danger" role="alert">
             Enter four valid color codes.
+          </p>
+        ) : null}
+        {copyFailed ? (
+          <p className="mt-1 text-[0.75rem] text-text" role="alert">
+            This browser can&apos;t copy from this page. Select the color codes above and copy them.
           </p>
         ) : null}
       </div>

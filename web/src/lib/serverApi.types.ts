@@ -1251,6 +1251,11 @@ export interface components {
             disabled: boolean;
             /** @description Email addresses linked to the account. */
             emails: string[];
+            /**
+             * @description The account has a password. False for one that logs in with none,
+             *     which deletes itself without `current_password`.
+             */
+            has_password: boolean;
             /** @description True for the seeded demo account (only the owner can delete it). */
             is_demo: boolean;
             /** @description True for the owner: manages accounts, holds no messages. */
@@ -1815,7 +1820,7 @@ export interface components {
         DeleteAccountRequest: {
             /** @description Must be `true`; anything else is rejected. */
             confirm: boolean;
-            /** @description Required when the account has a local password. */
+            /** @description Required when the account's `has_password` is true. */
             current_password?: string | null;
         };
         /**
@@ -2331,6 +2336,11 @@ export interface components {
                 disabled: boolean;
                 /** @description Email addresses linked to the account. */
                 emails: string[];
+                /**
+                 * @description The account has a password. False for one that logs in with none,
+                 *     which deletes itself without `current_password`.
+                 */
+                has_password: boolean;
                 /** @description True for the seeded demo account (only the owner can delete it). */
                 is_demo: boolean;
                 /** @description True for the owner: manages accounts, holds no messages. */

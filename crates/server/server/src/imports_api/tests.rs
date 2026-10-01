@@ -2140,7 +2140,7 @@ async fn completing_an_import_with_messages_creates_its_saved_search_and_contact
         searches,
         [(
             format!("Import whatsapp {date}"),
-            format!("import:{import_id}"),
+            format!("import:#{import_id}"),
             "import".to_string()
         )]
     );
@@ -2158,6 +2158,30 @@ async fn completing_an_import_with_messages_creates_its_saved_search_and_contact
             touched
         )]
     );
+    drop(conn);
+
+    // The stored query has to be one the search accepts, and it has to
+    // answer with this run's messages only. A second run's message is the
+    // one it must leave out (#950).
+    import_one_batch(
+        &state,
+        &token,
+        "sms-backup-restore",
+        "append",
+        wipe_test_batch("sms-backup-restore", &["g-later"]),
+    )
+    .await;
+    let stored = searches[0].1.replace(':', "%3A").replace('#', "%23");
+    let page: serde_json::Value =
+        get_json(&state, &format!("/v1/messages?q={stored}"), &token).await;
+    let mut texts: Vec<&str> = page["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m["text"].as_str().unwrap())
+        .collect();
+    texts.sort_unstable();
+    assert_eq!(texts, ["g-1", "g-2"], "{page}");
 }
 
 /// A run that stored nothing gets no saved search: one matching no

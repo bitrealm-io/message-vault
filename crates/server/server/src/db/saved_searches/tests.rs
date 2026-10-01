@@ -255,7 +255,7 @@ async fn import_saved_search_is_named_and_marked() {
         .await
         .unwrap();
     assert_eq!(made.name, "Import imessage 2026-08-30");
-    assert_eq!(made.query, "import:42");
+    assert_eq!(made.query, "import:#42");
     assert_eq!(made.kind, "import");
 }
 
@@ -276,7 +276,7 @@ async fn repeat_imports_on_one_day_get_numbered_names() {
     assert_eq!(first.name, "Import imessage 2026-08-30");
     assert_eq!(second.name, "Import imessage 2026-08-30 2");
     assert_eq!(third.name, "Import imessage 2026-08-30 3");
-    assert_eq!(third.query, "import:3");
+    assert_eq!(third.query, "import:#3");
 }
 
 #[tokio::test]

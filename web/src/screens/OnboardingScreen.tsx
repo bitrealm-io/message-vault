@@ -17,6 +17,7 @@ import {
   handlePlaceholder,
   handleValidationError,
 } from "../lib/handleService";
+import { newId } from "../lib/newId";
 import { parseSelectKey } from "../lib/selectKey";
 import { updateAccountProfile } from "../lib/serverApi";
 import { browserTimeZone } from "../lib/timeZone";
@@ -64,7 +65,7 @@ interface HandleInput {
 }
 
 function newHandleRow(handle = "", service: HandleService = "phone"): HandleInput {
-  return { id: crypto.randomUUID(), handle, service };
+  return { id: newId(), handle, service };
 }
 
 /** Whether `row` still holds `original` exactly, so there is nothing to send for it. */

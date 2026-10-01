@@ -409,8 +409,10 @@ describe("OwnerHome", () => {
     expect(await screen.findByText("Bob Archer")).toBeInTheDocument();
     await user.type(screen.getByRole("combobox", { name: "Search accounts" }), "archer");
 
-    expect(screen.getByText("bob")).toBeInTheDocument();
-    expect(screen.queryByText("root")).not.toBeInTheDocument();
+    // The header names the logged-in owner, root, so the search is checked in the table alone.
+    const table = within(screen.getByRole("table"));
+    expect(table.getByText("bob")).toBeInTheDocument();
+    expect(table.queryByText("root")).not.toBeInTheDocument();
   });
 
   it("opens an account's Settings from the gear in its row, with the account's own tabs", async () => {

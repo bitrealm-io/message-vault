@@ -1,104 +1,327 @@
 ---
 title: Import
-description: Use the desktop app Import screen to read a phone backup and store its messages in Message Crate.
+description: Every field of the desktop app's Import form, every stage of an Import Run, and what resuming and Force reprocessing do.
 ---
 
-**Import** is in the desktop app sidebar after you log in. It is not shown in the browser-only UI. Pick a backup source, point at the file or folder, and start the run. The app extracts from that backup and imports into Message Crate in one flow.
+**Import** reads a backup on the computer and stores its messages in the Message Crate.
+One import is one Import Run.
 
-A first import is walked through step by step in [Import your backup](/docs/user/get-started/import-your-backup/). This page describes every field and stage.
+Import is in the desktop app's sidebar, under **Messages**.
+The browser doesn't show it, because reading a backup needs the desktop app.
+The Owner's login doesn't show it either, because the Owner holds no messages.
+Importing also needs the account's import permission, which the Owner sets.
 
-## Before you start
+A first import is walked through in [Import your backup](/docs/user/get-started/import-your-backup/).
+This page describes every field and every stage.
 
-- A running Message Crate — [Start your own Message Crate](/docs/user/get-started/start-your-own-message-crate/)
-- The desktop app, logged in as an account. The Owner can't import, because the Owner holds no messages.
-- A backup on this computer — [iPhone](/docs/user/get-started/back-up-an-iphone/) or [Android](/docs/user/get-started/back-up-an-android-phone/)
+## The form
 
-## Run Import
+The form has two sections, **Import Messages** and **Processing Options (Advanced)**, and an **Import** button.
 
-1. Log in to Message Crate in the desktop app
-2. Open **Import** in the sidebar
-3. Choose a **source** that matches the backup:
+The first list in **Import Messages** is the source.
+The fields under it depend on the source.
 
-   | Source in the app | Typical files |
-   |---|---|
-   | **iMessage** → **Platform:** **iPhone backup** | Finder/iTunes backup folder (device UUID directory), not a `.db` file inside it |
-   | **iMessage** → **Platform:** **Mac Messages** | `chat.db` |
-   | **WhatsApp** → **Platform:** **Android** | Folder with `msgstore.db` or `msgstore.db.crypt*` plus key |
-   | **WhatsApp** → **Platform:** **iPhone** | iPhone backup that includes WhatsApp |
-   | **SMS Backup & Restore** | SyncTech XML |
+| Source | What it reads |
+|---|---|
+| **iMessage** | An iPhone backup folder, or `chat.db` from a Mac. Covers SMS and MMS as well as iMessage. |
+| **WhatsApp** | A WhatsApp database from Android, or an iPhone backup that includes WhatsApp. |
+| **SMS Backup & Restore** | A folder of SMS Backup & Restore XML files. |
+| **GO SMS Pro** | A folder of GO SMS Pro backup files. |
+| **iMazing** | An iMazing export. |
+| **SMS Backup+** | A folder of `.eml` files archived from SMS Backup+. |
+| **OpenExtract** | An OpenExtract export. |
 
-   GO SMS Pro, iMazing, OpenExtract, and SMS Backup+ are documented under [old backups](/docs/user/import-sources/old-backups/).
+[Old backups](/docs/user/import-sources/old-backups/) says what GO SMS Pro, iMazing, SMS Backup+, and OpenExtract backups hold and where they fall short.
 
-4. Fill in paths, passwords, keys, or owner phone numbers for that source. A red asterisk marks a field that has no default and must be filled. **(Optional)** marks an empty field you can leave blank. Lists that already have a value (Platform, Attachments) have no extra mark.
-5. Start the run and watch the on-screen progress and log
+A red asterisk marks a field that must be filled.
+**(Optional)** marks a field that may stay empty.
+The **Import** button stays disabled until every needed field is filled and every path exists.
+A path of the wrong kind gets a message under its field, for example `Pick the backup folder.` when a file is chosen where a folder is needed.
+
+**Settings → System** has **Remember importer paths**.
+When it is on, the form restores the last paths used for each source.
+Passwords and keys are never remembered.
 
 ### iMessage fields
 
-After you pick **iMessage**, **Platform** chooses Mac Messages or iPhone backup.
+**Platform** chooses **Mac Messages** or **iPhone backup**.
+It starts on **iPhone backup**.
 
-**iPhone backup**
+With **iPhone backup**:
 
-- **iPhone Backup Directory** (required) — the device UUID folder from Finder or iTunes, not `sms.db` inside it. See [iPhone or iPad](/docs/user/get-started/back-up-an-iphone/).
-- **Encryption password** — required (red asterisk) when the backup is encrypted. **(Optional)** when it is not. Fill it in only for an encrypted backup.
+| Field | What it takes |
+|---|---|
+| **iPhone Backup Directory** | The root folder of a device backup made by Finder or iTunes. Required. |
+| **Encryption password** | The backup's password. The app checks the chosen folder, and marks the field required when the backup is encrypted and **(Optional)** when it is not. |
 
-**Mac Messages**
+[Back up an iPhone](/docs/user/get-started/back-up-an-iphone/) shows where the backup folder is.
 
-- **Messages database** (required) — path to `chat.db`.
-- **Attachment folder (Optional)** — leave empty when `Attachments` and `StickerCache` sit next to `chat.db` (the usual Mac layout under `~/Library/Messages`). Set this only when those folders live somewhere else, for example after copying `chat.db` on its own.
-- **Apple Contacts file (Optional)** — leave empty to use the local AddressBook on a live Mac. Point at `AddressBook-v22.abcddb` or `AddressBook.sqlitedb` only if that file is not in the usual Contacts location. People do not normally move that file.
+With **Mac Messages**:
 
-**Attachments** applies to both platforms: **Copy**, **Convert**, **Compress & Convert**, or **Skip**. See [Attachments and media](/docs/user/features/messages/attachments-and-media/).
+| Field | What it takes |
+|---|---|
+| **Messages database** | The path to `chat.db`. Required. On a Mac that has `~/Library/Messages/chat.db`, the field is filled in with it. |
+| **Attachment folder (Optional)** | The folder that contains `Attachments` and `StickerCache`. Left empty, the folders next to `chat.db` are used. |
+| **Apple Contacts file (Optional)** | `AddressBook-v22.abcddb` or `AddressBook.sqlitedb`. Left empty, the Mac's own AddressBook is used. |
+
+[Mac Messages](/docs/user/import-sources/mac-messages/) covers this source.
+
+Both platforms have **Attachments**, described under [Attachments](#attachments).
 
 ### WhatsApp fields
 
-After you pick **WhatsApp**, **Platform** chooses Android or iPhone. Default Platform is **Android**.
+**Platform** chooses **Android** or **iPhone**.
+It starts on **Android**.
 
-**Android**
+With **Android**:
 
-- **Backup folder** (required) — a folder that contains `msgstore.db` and/or `msgstore.db.crypt12` / `.crypt14` / `.crypt15`. See [WhatsApp on Android](/docs/user/import-sources/whatsapp/).
-- **Decryption key** — required (red asterisk) when the folder has a crypt file and no decrypted `msgstore.db`. **(Optional)** when `msgstore.db` is already in the folder. Enter a key file path or a crypt15 hex string. This is the WhatsApp Android decryption key, not the Apple backup password. The app does not save it.
-- **WhatsApp phone number** (required) — the number the WhatsApp account is registered to, pre-filled from the profile's phone. An Android backup does not carry it, so the form asks. Every imported message records this number as the address it was held at, which is what the identity counts in Settings add up; the number is not added to the profile.
-- **Contacts database (Optional)** — `wa.db`. Leave empty if that file is in the backup folder.
-- **Media folder (Optional)** — leave empty if a `WhatsApp` media folder is in the backup folder.
-- **Message database (Optional)** — leave empty if `msgstore.db` is in the backup folder.
+| Field | What it takes |
+|---|---|
+| **Backup folder** | The folder that contains `msgstore.db`, or `msgstore.db.crypt12`, `.crypt14`, or `.crypt15`. Required. |
+| **Decryption key** | A key file path, or a crypt15 key as hex. Required when the folder holds an encrypted backup and no `msgstore.db`, and **(Optional)** otherwise. |
+| **WhatsApp phone number** | The number the WhatsApp account is registered to. Required, because an Android backup doesn't record it. Filled in from the first phone number on the account's profile. |
+| **Contacts database (Optional)** | `wa.db`. Left empty, the one in the backup folder is used. |
+| **Media folder (Optional)** | The WhatsApp media folder. Left empty, the one in the backup folder is used. |
+| **Message database (Optional)** | `msgstore.db`. Left empty, the one in the backup folder is used. |
 
-**iPhone**
+With **iPhone**:
 
-- **Backup folder** (required) — the device UUID folder from Finder or iTunes. See [WhatsApp on iPhone](/docs/user/import-sources/whatsapp/).
-- **Contacts database (Optional)** — `ContactsV2.sqlite`. Leave empty if that file is in the backup.
-- **WhatsApp Business** — optional checkbox, unmarked by default. Turn it on only for a WhatsApp Business backup. The app does not remember this choice.
-- **WhatsApp phone number (Optional)**, under **Processing Options (Advanced)** — a fallback, pre-filled from the profile's phone. An iPhone backup carries the number in WhatsApp's own preferences, and Import reads it from there; the field is used only when the backup has no such entry. Import stops with a message when the backup has none and the field is empty.
+| Field | What it takes |
+|---|---|
+| **Backup folder** | The root folder of a device backup. Required. |
+| **Contacts database (Optional)** | `ContactsV2.sqlite`. Left empty, the one in the backup is used. |
+| **WhatsApp Business** | A checkbox, off by default, for a backup of the WhatsApp Business app. |
+| **WhatsApp phone number (Optional)** | Under **Processing Options (Advanced)**. A fallback, filled in from the profile. An iPhone backup records the number itself, and Import reads it from there. |
 
-**Attachments** applies to both platforms: **Copy**, **Convert**, **Compress & Convert**, or **Skip**.
+When an iPhone backup doesn't record the number and the fallback field is empty, the run stops with `the backup does not contain your WhatsApp phone number; enter it on the import form`.
+
+[WhatsApp](/docs/user/import-sources/whatsapp/) covers both platforms.
+
+Both platforms have **Attachments**.
+
+### SMS Backup & Restore, GO SMS Pro, and SMS Backup+ fields
+
+The three Android SMS sources share one form.
+
+| Field | What it takes |
+|---|---|
+| **Backup Directory** | The folder that holds the backup files. For SMS Backup & Restore that is a folder of XML files, not a single ZIP, and an encrypted backup must be unlocked first. |
+| **Attachments** | Described under [Attachments](#attachments). |
+| **Backup Device Phone Numbers** | Every phone number the backup's phone had. Filled in from the account's profile. A number from another SIM can be added. |
+| **Backup Device Email Addresses** | **SMS Backup+** only. The Gmail or IMAP account SMS Backup+ synced to, filled in from the profile. Commas separate several addresses. |
+
+These fields carry no asterisk, and all of them are needed.
+The **Import** button stays disabled until the folder is chosen and at least one phone number is entered.
+SMS Backup+ also needs at least one email address.
+
+The phone numbers are how Import tells sent messages from received ones, because these backups don't record whose phone they came from.
+SMS Backup+ needs the email addresses for the same reason: its archive is a mail account, and the sender of a sent message is that account.
+
+When the profile has no phone number, the form says so and links to **Settings → Profile**.
+
+When none of the entered numbers is on the profile, the form shows a notice, and the **Import** button stays disabled until **Allow import from phone numbers not on my profile.** is ticked.
+The notice says what ticking it accepts: the imported messages will not be linked to the account.
+
+### iMazing and OpenExtract fields
+
+Both sources have one field in **Import Messages**, **Backup path**, which takes the folder that holds the export.
+Neither has an **Attachments** setting.
+
+**iMazing** adds **Time zone of the messages** under **Processing Options (Advanced)**.
+iMazing writes each message time without a zone, so Import needs the zone the phone was in.
+The field is filled in with the account's Time Zone.
+
+### Attachments
+
+**Attachments** has four choices: **Copy**, **Convert**, **Compress & Convert**, and **Skip**.
+It starts on **Copy**.
+
+**Compress & Convert** adds three fields: **Target resolution**, **Max FPS**, and **Minimum Video File Size (Megabytes)**.
+
+[Attachments and media](/docs/user/features/messages/attachments-and-media/) describes what each choice produces.
+
+### Processing Options (Advanced)
+
+The section is closed when the form opens.
+
+| Field | Shown for | What it does |
+|---|---|---|
+| **Force reprocessing** | Every source | Makes Upload ignore its record of what it already sent. See [Force reprocessing](#force-reprocessing). |
+| **Obfuscate** | iMessage with **iPhone backup**, and the three Android SMS sources | Replaces names, numbers, message text, and attachments with made-up substitutes. See [Obfuscate](/docs/user/features/messages/attachments-and-media/#obfuscate). |
+| **Time zone of the messages** | iMazing | See above. |
+| **WhatsApp phone number (Optional)** | WhatsApp with **iPhone** | See above. |
+
+## The identity check for iMessage
+
+For an iMessage source, **Import** first reads which addresses the backup's device sent messages from, and compares them with the phone numbers and email addresses on the account's profile.
+
+When the backup records at least one address and none is on the profile, the screen stops before a run exists.
+It reads `None of the addresses this backup sent from are on your profile.` and lists the addresses.
+**Add to profile** beside an address adds that one address to the profile.
+**Continue import** starts the run, whether or not an address was added.
+**Cancel** returns to the form.
 
 ## Stages and approvals
 
-An import is one **Import Run**, and your account has at most one running at a time. It moves through three stages, and it stops to ask you before spending more time or writing anything to Message Crate:
+An account has at most one Import Run at a time.
 
-1. **Staging** reads the backup and copies its messages and original attachments into a staging folder on this computer. Nothing reaches the server yet.
-2. **Staging Review.** The run stops, reads **Awaiting approval**, and shows what it needs you to weigh, read from the staged files rather than estimated: the contacts in the backup, split into **Existing** and **New** to Message Crate; the **Size limit per file** and the **Files over the limit**, marked **Skip upload**, which opens to each file and its size; and an **Identities** table of the addresses the backup's device used, with how many messages each one **Sent** and **Received**, whether it is on your profile, and **Add to profile** for one that is not. When you chose Convert or Compress, a **Conversion estimates** or **Compression estimates** group sorts the large files into **Likely within limit**, **May exceed limit** and **Not audio or video**, and each opens to its files with the staged size and the expected one. These are estimates, because Media has not run yet. The button continues the run, **Upload to Message Crate**, **Convert media** or **Compress media**; **Cancel this import** ends the run and deletes what was staged.
-3. **Media** converts or compresses the staged attachments. This stage exists only when you chose **Convert** or **Compress & Convert**; under **Copy** and **Skip** the run goes straight from the Staging Review to Upload.
-4. **Media Review.** Media's row shows the new total size and how many files could not be converted or compressed. The approval shows what is true now: the size limit per file and the files still over it, by name and size. A file over the limit is not uploaded; its message keeps its text and a placeholder. **Upload to Message Crate** continues, or cancel.
-5. **Upload** writes the staged messages and attachments into Message Crate. Its row then shows what it did: messages that were new, duplicates already stored and failures; attachments uploaded; and the contacts the run created and modified, with a **Contact list** that opens to every contact the run created, named, or gave an identity to, the reason beside each. The **Import log** link appears in this row once Upload starts, because that is when the file is first written, and goes away with the staging directory when the run succeeds.
+A run moves through its Stages in order, and stops at each Review until it is approved or cancelled.
+The whole run is one screen: a list of the Stages, with each Review as a row in the list where the run stops.
+Each row fills in with what that Stage made.
 
-The whole run is one screen: a list of its stages, in order, with each approval as a row in the list where the run stops. Each stage's row fills in with what that stage made. Staging's row holds the staging directory while it exists, the conversations and messages it read, and the attachments: the operation you chose, how many, and their total size. An **Options** group appears there when **Force reprocessing** or **Obfuscate** is on. An approval that has been decided folds to one line, **Approved**.
+1. **Staging**
+2. **Staging Review**
+3. **Media**, only under **Convert** or **Compress & Convert**
+4. **Media Review**, only under **Convert** or **Compress & Convert**
+5. **Upload**
 
-If the run reports errors, they are in one table under the list, grouped by reason, with the stage each happened in. The table is the same size for three errors or three thousand, and scrolls inside itself.
+Under **Copy** and **Skip** the run goes from the Staging Review straight to Upload.
 
-You do not have to sit and wait. A run keeps working while you read messages or edit contacts, and it keeps waiting at an approval while you are elsewhere or after you close the app. The **Import** entry in the sidebar carries a badge while a run is waiting for you or has failed. **Cancel** on the Import screen stops the stage that is running; the run stays where it got to, and the next visit to Import offers to resume or discard it.
+### Staging
 
-## Resume and force reprocessing
+Staging reads the backup and copies its messages and original attachments into the Staging Directory on the computer.
+Nothing reaches the Message Crate during Staging.
 
-Import writes a journal file (`.import-state.jsonl`) next to the work it does. On a later run with the same Message Crate and folder, the journal skips work that already finished.
+The Staging row shows:
 
-Leave **force reprocessing** off when continuing an interrupted upload.
+- **Staging directory**, a link that opens the folder.
+- **Conversations**, with the count of **Messages** under it.
+- **Attachments**: the **Action** chosen on the form, the **Count**, and the **Total size**.
+- **Options**, only when **Force reprocessing** or **Obfuscate** is on.
 
-Turn force reprocessing on when a previous run left messages without attachments, you fixed missing files, or the local journal is wrong. The server still deduplicates on its end — messages and attachments already stored are skipped rather than duplicated. Force reprocessing does not wipe the database.
+The Staging Directory is a new folder for each run, named `staging-` followed by the source and the date and time.
+It is made under `~/message-crate` unless **Settings → System** names another **Staging directory**.
+
+### Staging Review
+
+The run stops and the row reads **Awaiting approval**.
+Everything it shows is read from the staged files, not estimated, except the group that is labelled as estimates.
+
+- **Contacts**: the count of contacts in the backup, split into **Existing** and **New** to the account.
+- **Attachments**: the **Size limit per file**, and **Files over the limit**, marked **Skip upload**. The row opens to each file and its size.
+- **Conversion estimates** or **Compression estimates**, under **Convert** or **Compress & Convert**. It sorts the files that matter into **Likely within limit**, **May exceed limit**, and **Not audio or video**. Each opens to its files, with the staged size and the expected size. The group is marked **Media has not run yet**, because these are estimates.
+- **Identities**, for an iMessage source: the addresses the backup's device used, how many messages each one **Sent** and **Received**, whether it is **On your profile**, and **Add to profile** for one that is not.
+
+The approve button says what happens next: **Upload to Message Crate**, **Convert media**, or **Compress media**.
+**Cancel this import** ends the run and deletes the Staging Directory.
+
+When **Convert** or **Compress & Convert** is chosen and ffmpeg can't be found, the approve button is disabled and the row says so.
+[Attachments and media](/docs/user/features/messages/attachments-and-media/#ffmpeg) says where the ffmpeg folder is set.
+
+### Media
+
+Media converts or compresses the staged attachments.
+
+The Media row then shows the new **Total size** of the attachments, and **Could not be converted** or **Could not be compressed** with the count of files ffmpeg failed on.
+
+### Media Review
+
+The run stops again and reads **Awaiting approval**.
+The row shows the **Size limit per file** and the **Files over the limit** as they are now, after Media, by name and size.
+
+**Upload to Message Crate** continues.
+**Cancel this import** ends the run and deletes the Staging Directory.
+
+### Upload
+
+Upload writes the staged messages and attachments into the Message Crate.
+A file over the size limit is not uploaded, and its message is stored without it.
+
+The Upload row shows, once the run finishes:
+
+- **Messages**: the count sent, split into **New**, **Duplicate**, and **Failed**. A duplicate is a message the Message Crate already holds, which is skipped.
+- **Attachments**: the count **Uploaded**.
+- **Contacts**: **New** and **Modified**, and a **Contact list** that opens to each contact the run touched.
+- **Import log**: a link to `message-crate-push.log` in the Staging Directory.
+
+### Approved Reviews and errors
+
+A Review that has been approved folds to one line, **Approved**.
+
+When a finished run reports errors, an **Errors** table sits under the list, with the count beside the heading.
+Identical errors are grouped.
+Its columns are **Parse File**, **Stage**, and **Error Message**, and a row opens to the full message and the files it names.
+
+## Leaving a run
+
+A run keeps working while other screens are used.
+A run at a Review keeps waiting on another screen and after the app is closed.
+
+The **Import** entry in the sidebar carries a badge that reads **Waiting** while a run is at a Review, and **Failed** when the run in the app has failed.
+
+**Cancel** under the active Stage stops that Stage.
+What follows depends on the Stage:
+
+- A cancelled Staging or Media leaves the run open and the Staging Directory in place, so the run can be resumed.
+- A cancelled Upload ends the run as failed. The Staging Directory stays.
+
+## Resuming
+
+When Import is opened and the account already has a run open, the screen shows that run in place of the form.
+Every case offers **Discard this import**, which ends the run.
+On the computer that staged the run, it also deletes the Staging Directory.
+
+| The run stopped | The screen reads | The button |
+|---|---|---|
+| Before Staging began copying | `Pick up your last import` | **Start over** reads the backup from the beginning with the same settings. |
+| During Staging | `Finish copying your backup` | **Pick up** reads the backup again and skips the conversations already copied. |
+| During Staging, and the backup has changed since | `The backup has changed` | **Start over** reads it fresh, because copying more of it would mix two backups in one folder. |
+| At a Review | `Pick up where you left off` | **Show me the summary** reads the staged files again and returns to the Review. |
+| During Media | `Finish preparing your media` | **Carry on** processes the files Media had not reached. |
+| During Upload | `Finish your last import` | **Upload to Message Crate** uploads without staging again. |
+
+Three cases offer only **Discard this import**, because there is nothing on this computer to carry on from:
+
+- The Staging Directory is gone.
+- The run was started on another computer, and its files are staged there.
+- The run's settings could not be read.
+
+A resumed run uses the settings it was started with.
+The form is not shown, so no setting can be changed.
+
+### The upload journal
+
+Upload keeps a journal named `.import-state.jsonl` in the Staging Directory.
+It records each attachment, each batch of messages, and each conversation that reached the Message Crate, for one server address and one username.
+
+A resumed Upload reads the journal and skips what is recorded there.
+That is why resuming an interrupted Upload does not send everything again.
+
+### Force reprocessing
+
+**Force reprocessing** makes Upload start with an empty journal, so it sends every staged message and attachment again.
+
+It does not create duplicates and does not delete anything.
+The Message Crate recognises a message it already holds and counts it under **Duplicate**, and stores an attachment once however many times it is sent.
+
+The setting is chosen on the form and travels with the run.
+On a new run the journal is empty already, so the setting changes only what a later resume of that run's Upload does.
 
 ## After the run
 
-A run that succeeds deletes its staging directory, the import log with it: Message Crate now holds the messages, and its record of the run under **Settings → Storage → Import history** holds the counts, timings and errors. A run that fails leaves the staging directory in place.
+The heading of a finished run says how it ended.
 
-The finished run leads with where to go next: **View imported conversations** opens the conversation list narrowed to the run (`import:#` followed by the run's number), and **View modified contacts** opens the Contact Group the server made for the run. **Back**, at the top, returns to the Import form. The run's record, with the same contact list, stays under **Settings → Storage → Import history**. See [Browse your messages](/docs/user/features/messages/browse/).
+| Heading | Meaning |
+|---|---|
+| `Imported 1,234 messages` | The run succeeded. The number is the count of new messages. |
+| `Imported 1,234 messages, with errors` | The run succeeded and some messages or files failed. The **Errors** table lists them. |
+| `Import failed` | Nothing was imported, or a Stage failed. |
+| `Import canceled` | A Stage was cancelled. |
 
-API tokens under **Settings → Account** are for programs that call the server's [HTTP API](/docs/developer/reference/api/), not for this screen. Desktop Import uses the logged-in session.
+A run that succeeds deletes its Staging Directory, and the import log and the journal with it.
+The Message Crate now holds the messages, and the staged copy is no longer needed.
+A run that fails or is cancelled leaves the Staging Directory in place, because the staged files are what a resume reads.
+
+A run that succeeded leads with where to go next:
+
+- **View imported conversations** opens the conversation list narrowed to the run, with the search `import:#` followed by the run's number.
+- **View modified contacts** opens the Contact Group the Message Crate made for the run. It is shown when the run created or modified at least one contact.
+
+**Back** returns to the Import form.
+
+The record of the run stays under **Import history** in [**Settings → Storage**](/docs/user/features/settings/storage/).
+
+## Importing the same backup again
+
+A second import of the same backup creates no duplicates.
+The Message Crate recognises the messages it already holds and skips them, so a newer backup of the same phone adds only what is new.

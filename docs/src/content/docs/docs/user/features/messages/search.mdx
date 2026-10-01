@@ -1,53 +1,104 @@
 ---
 title: Search
-description: Find conversations or contacts, then open matches in the thread view.
+description: The search box, the lists a search runs on, and every word of the search language.
 ---
 
 import TypedQuery from '../../../../../../components/TypedQuery.astro';
 import ListTiles from '../../../../../../components/ListTiles.astro';
 
-Use the search box in the app header. Open the advanced search form (chevron next to the box) when you want structured fields instead of typing operators by hand.
+The search box at the top of the screen narrows the list the screen shows.
+One search language works on three lists: **Contacts**, **Conversations**, and **Messages**.
 
-Advanced search has two modes:
+*The table of search words is under [The words](#the-words).*
 
-- **Messages** — *what was said?* Searches message text; the words below narrow it. Results are usually one row per conversation (match count + snippet).
-- **Contacts** — *who do I know?* Filters the contact list by name, phone, and related fields. It does not search message text.
+## Where a search runs
 
-Typing plain words in the search box runs a **Messages** search.
+Which list a search runs on depends on where it is typed.
 
-## Opening a message result
+| Typed in | Runs on |
+|---|---|
+| The search box on **Messages**, which reads **Search messages** | Conversations |
+| The search box on **Contacts**, which reads **Search contacts** | Contacts |
+| The search box on **Trash**, which reads **Search Trash** | Conversations and Contacts in the Trash, both at once |
+| **Find in conversation…** in an open Conversation | Messages, in that one Conversation |
+| The search of an [Export](/docs/user/features/messages/export/) | Messages |
 
-Clicking a message result opens the conversation so you can read the matching thread. Use in-conversation find when you need to step through highlights inside a long chat.
+The search box on **Messages** returns Conversations, not single messages.
+Plain words there match a Conversation's title and the people in it.
+They don't match what was said, because message text belongs to the Messages list.
+`body:avocado` is the search for Conversations where someone wrote "avocado".
 
-Save a query under **Saved searches** in the sidebar — [Saved searches](/docs/user/features/messages/saved-searches/).
+The list narrows as the search is typed.
+A search the server refuses is answered with a message that gives the reason.
+
+## The search box
+
+Typing the start of a search word offers the words the list has.
+Typing a word with a fixed set of values, such as `kind:`, offers those values.
+Typing `with:` and part of a name offers matching Contacts, and choosing one writes the Contact's id, such as `with:#42`.
+
+The Enter key runs the search and adds it to **Recent searches**.
+The box keeps the 10 most recent searches for each screen, in the browser, and **Clear all** removes them.
+The **×** in the box clears the search.
+
+**Advanced search**, at the bottom of the list that opens under the box, is a form that writes the search.
+On **Messages** it has four fields.
+
+| Field | Writes |
+|---|---|
+| **Name or title** | plain words |
+| **Identity** | `handle:` |
+| **Conversation type** | `kind:direct` or `kind:group` |
+| **Group participants** | `participants:` |
+
+On **Contacts** the form holds fields about a Contact, among them **Name**, **Identity**, **First message**, and **Last message**.
+**Search** puts the finished search in the box and runs it.
+
+A search can be kept by name as a [Saved Search](/docs/user/features/messages/saved-searches/).
 
 ## The search language
 
-One language works on all three lists: **Contacts**, **Conversations**, and **Messages**. Plain words search the row's own text: a contact's name and handles, a conversation's title and who is in it, a message's body, subject, and attachment names. Everything else is a word, a colon, and a value.
+Plain words search the row's own text.
+On Contacts that is the Contact's name and Identities.
+On Conversations it is the title, and the names and Identities of the participants.
+On Messages it is the message's body, subject, and attachment file names.
+Everything else is a word, a colon, and a value.
 
 ### How values work
 
-- Put quotes around a value with a space, a colon, or a parenthesis: `group:"Book Club"`, `group:"Family (close)"`. Parentheses group clauses, so an unquoted `group:Family (close)` asks a different question. Two quotes in a row are one quote.
+- A value with a space or a parenthesis needs quotes: `group:"Book Club"`, `group:"Family (close)"`. Parentheses group clauses, so an unquoted `group:Family (close)` asks a different question. Two quotes in a row inside a quoted value are one quote.
 - Case never matters.
 - `#12` means the thing with that id: `group:#7`, `with:#42`, `in:#19`. An id that names nothing matches nothing, so a Saved Search that names a deleted Contact Group still runs.
 - `none` means empty and `any` means not empty, on the words whose row below lists them: `name:none`, `tag:none`, `attachment:any`.
-- Dates name a span: `2024` is the year, `2024-05` the month, `2024-05-01` the day, `7d` or `2w` or `3m` or `1y` the last that long, plus `today` and `yesterday`. Add `>=` for from its start, `<` for before its start, `>` for after its end, `<=` for up to its end, or `a..b` for a range: `date:2019`, `date:>=2019`, `date:<1m`, `date:2019..2021`. Days start and end in the account's time zone (Settings → Profile), so a text sent at 11:59 pm on New Year's Eve belongs to the old year wherever the server runs.
+- Dates name a span: `2024` is the year, `2024-05` the month, `2024-05-01` the day, `7d` or `2w` or `3m` or `1y` the last that long, plus `today` and `yesterday`. A span reaches back 3,650 days at most, so `10y` works and `11y` is refused. Add `>=` for from its start, `<` for before its start, `>` for after its end, `<=` for up to its end, or `a..b` for a range: `date:2019`, `date:>=2019`, `date:<1m`, `date:2019..2021`. Days start and end in the Account's Time Zone, so a message sent at 11:59 pm on New Year's Eve belongs to the old year wherever the server runs.
 - Sizes are `500k`, `1M`, `2G`, or plain bytes. Counts are plain numbers. Both take the same `>`, `>=`, `<`, `<=`, and `a..b`.
-- A comma inside a value means either: `service:imessage,sms`. Repeating a word means both: `tag:Work tag:Urgent`.
-- `-` in front of anything means not: `-tag:Work`, `-avocado`, `-(toast or guacamole)`. It includes the rows that have no value for the word, so `-last-message:2019` on Contacts includes contacts who never sent a message. `not` does the same as a word of its own: `not tag:Work`.
+- A comma inside an unquoted value means either: `service:imessage,sms`. Repeating a word means both: `tag:Work tag:Urgent`.
+- `-` in front of anything means not: `-tag:Work`, `-avocado`, `-(toast or guacamole)`. It includes the rows that have no value for the word, so `-last-message:2019` on Contacts includes Contacts who never sent a message. `not` does the same as a word of its own: `not tag:Work`.
 - A space between two terms means both, and so does `and`. `or` means either, and binds looser than both: `a b or c` is `(a b) or c`. Parentheses group: `(toast or guacamole) avocado`.
-- `avoc*` matches words starting with avoc, and `tag:Hol*` a Message Tag whose name starts with Hol; `"exact phrase"` matches the phrase.
+- `avoc*` matches words starting with avoc, and `tag:Hol*` a Message Tag whose name starts with Hol. `"exact phrase"` matches the phrase.
 - In message text, punctuation inside a word splits it into words that must come next to each other in that order: `o'brien` finds "O'Brien" and "o brien", and `a&b` finds "a & b" but not "b and a". A word that is only punctuation or emoji finds no message text.
 - On a server that runs on SQLite, `cafe` also finds "café" in message text. On Postgres, accents count.
 - A trailing `*` is the only wildcard. `%`, `_`, and `\` are ordinary characters, so `filename:IMG_0001` finds IMG_0001.jpg and not IMGX0001.jpg.
 
-A word the list does not have is refused with a message that says so, and offers the nearest word when there is one.
+A word the list does not have is refused with a message that says so.
+The message names the lists the word works on, or offers the nearest word when the word is a misspelling.
+`from:me` on Conversations answers "from: is not a Conversations word. It works on Messages."
 
-A search is at most 2,048 bytes, 32 plain words, and 32 levels of parentheses. A very long search with many parts is refused with a message that says so.
+A search is at most 2,048 bytes, 32 plain words, and 32 levels of parentheses.
+A longer search is refused with a message that says so.
+A search with very many parts is refused the same way.
 
-Each list leaves some rows out until a search asks for them. Everything in the Trash is left out until the search uses `trashed:`, and that holds everywhere the search looks: a conversation in the Trash does not count for a contact's `kind:`, `tag:`, `date:`, `messages:` or `conversations:`, and a contact in the Trash does not count for a conversation's `group:` or `name:`. Once the search uses `trashed:`, the Trash counts on both sides. On Messages, a copy of a message a later import already had is left out until the search uses `source:` or `import:`. On Conversations, a conversation holding only such copies is left out until the search uses `import:`.
+Each list leaves some rows out until a search asks for them.
+Everything in the Trash is left out until the search uses `trashed:`, and that holds everywhere the search looks.
+A Conversation in the Trash does not count for a Contact's `kind:`, `tag:`, `date:`, `messages:` or `conversations:`, and a Contact in the Trash does not count for a Conversation's `group:` or `name:`.
+Once the search uses `trashed:`, the Trash counts on both sides.
+On Messages, a copy of a message a later import already had is left out until the search uses `source:` or `import:`.
+On Conversations, a Conversation holding only such copies is left out until the search uses `import:`.
 
-On Contacts, a word that counts or dates messages counts only the messages the contact sent you, in a direct or a group conversation. Your own messages and other people's messages in a shared group chat do not count, so `messages:0` is everyone who never messaged you, and `date:2019` is everyone who wrote to you in 2019. To find the people who were in a conversation active in 2019, whoever wrote, search Conversations: `with:jane date:2019`.
+On Contacts, a word that counts or dates messages counts only the messages the Contact sent, in a direct or a group Conversation.
+The Account holder's own messages and other people's messages in a shared group chat do not count.
+So `messages:0` is everyone who never sent a message, and `date:2019` is everyone who wrote in 2019.
+The people who were in a Conversation active in 2019, whoever wrote, are a Conversations search: `with:jane date:2019`.
 
 ### The words
 
@@ -59,11 +110,11 @@ The tiles mark which lists accept the word: <ListTiles on="C" /> Contacts, <List
 | `subject:` | subject line only | text, `none`, `any` | <ListTiles on="V M" /> |
 | `name:` | on Contacts, the contact's own name; elsewhere, the name of someone in the conversation | text, `none`, `any` | <ListTiles on="C V M" /> |
 | `title:` | the conversation's title | text, `none`, `any` | <ListTiles on="V M" /> |
-| `handle:` | a phone number, email, or username: on Contacts, the contact's own; elsewhere, one in the conversation | text, `none`, `any` | <ListTiles on="C V M" /> |
-| `with:` | this person is in the conversation | name, handle, `pre*`, `#id` | <ListTiles on="V M" /> |
-| `from:` | this person sent it | `me`, name, handle, `pre*`, `#id` | <ListTiles on="M" /> |
-| `to:` | it was sent to this person | `me`, name, handle, `pre*`, `#id` | <ListTiles on="M" /> |
-| `in:` | this one conversation | title, handle, `pre*`, `#id` | <ListTiles on="M" /> |
+| `handle:` | an Identity, which is a phone number, email, or username: on Contacts, the contact's own; elsewhere, one in the conversation | text, `none`, `any` | <ListTiles on="C V M" /> |
+| `with:` | this person is in the conversation | name, Identity, `pre*`, `#id` | <ListTiles on="V M" /> |
+| `from:` | this person sent it | `me`, name, Identity, `pre*`, `#id` | <ListTiles on="M" /> |
+| `to:` | it was sent to this person | `me`, name, Identity, `pre*`, `#id` | <ListTiles on="M" /> |
+| `in:` | this one conversation | title, Identity, `pre*`, `#id` | <ListTiles on="M" /> |
 | `group:` | in this Contact Group: on Contacts, the contact; elsewhere, someone in the conversation | name, `pre*`, `#id`, `none`, `unknown` | <ListTiles on="C V M" /> |
 | `tag:` | the conversation carries this Message Tag; on Contacts, one of the contact's conversations does | name, `pre*`, `#id`, `none` | <ListTiles on="C V M" /> |
 | `kind:` | direct or group conversation | `direct`, `group` | <ListTiles on="C V M" /> |
@@ -81,7 +132,7 @@ The tiles mark which lists accept the word: <ListTiles on="C" /> Contacts, <List
 | `groups:` | how many Contact Groups | count | <ListTiles on="C" /> |
 | `participants:` | how many people in the conversation | count | <ListTiles on="V M" /> |
 | `attachments:` | how many attachments on the message | count | <ListTiles on="M" /> |
-| `trashed:` | in the trash | `yes`, `no`, `any` | <ListTiles on="C V M" /> |
+| `trashed:` | in the Trash | `yes`, `no`, `any` | <ListTiles on="C V M" /> |
 
 ### Examples
 
@@ -89,7 +140,7 @@ The tiles mark which lists accept the word: <ListTiles on="C" /> Contacts, <List
 
 <TypedQuery query="-last-message:>=2022" note="on Contacts" />
 
-Everyone you have not heard from since 2022, including people who never messaged you.
+Everyone not heard from since 2022, including the people who never sent a message.
 
 <TypedQuery query="group:Family date:2019..2021 attachment:image size:>1M" note="on Messages" />
 
@@ -99,4 +150,5 @@ Everyone you have not heard from since 2022, including people who never messaged
 
 People with messages who are in no Contact Group.
 
-Sorting, the Contacts switch, and how results are grouped are controls on the screen, not words in the search, so a Saved Search means what you want and never how the screen looked.
+Sort order is a control on the screen, not a word in the search.
+A Saved Search therefore holds what to find and never how the screen looked.

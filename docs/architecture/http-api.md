@@ -30,6 +30,12 @@ The one exception is an Asset, addressed by the SHA-256 of its contents:
 must know the hash before an upload can be deduplicated, and two uploads of
 one file must be one asset.
 
+An asset's Preview has no address of its own. It is
+`/v1/assets/{sha256}/preview`, under the hash of the original, and the
+attachment says whether there is one in `preview_mime_type`.
+Why: the client holds the original's hash and has no use for the preview's, and
+a second hash on the attachment would be a second thing to address by.
+
 Rejected: the name in the path for Contact Groups and Message Tags. It keeps
 every reference to a group the same kind of thing, and it makes the rule
 "id, except where the name is unique". One rule is worth more than the
@@ -295,9 +301,10 @@ the drift the one-shape rule exists to stop.
 `406 Not Acceptable` is answered only when an `Accept` header is present and no
 member of it matches `application/json`, `application/problem+json`, or `*/*`.
 A missing `Accept` is a request for JSON. The check runs on every `/v1` route
-but the two that answer bytes: `GET /v1/assets/{sha256}`, which streams the
-asset's own contents, and `POST /v1/contacts/address-book`, which answers the
-address book as `text/csv`. Nothing outside `/v1` is checked.
+but the three that answer bytes: `GET /v1/assets/{sha256}`, which streams the
+asset's own contents, `GET /v1/assets/{sha256}/preview`, which streams its
+Preview, and `POST /v1/contacts/address-book`, which answers the address book
+as `text/csv`. Nothing outside `/v1` is checked.
 
 Rejected: requiring `Accept: application/json`. None of the server's own clients
 send one, and the rule would refuse the web app on its first request.
@@ -343,6 +350,10 @@ What each reaches:
   attachments, as it still reads its messages. A token has no screen to show
   bytes on; fetching them with one is taking them out, which is what the
   `export` scope decides.
+- `GET /v1/assets/{sha256}/preview` is read under the same rule as the asset
+  it was made from, by the same account and nobody else. Why: a Preview is the
+  attachment's content as much as the original is, so a caller who may not
+  read one may not read the other, and the owner reads neither.
 - `HEAD /v1/assets/{sha256}` also accepts the `import` scope: a program that
   can only push may ask whether an asset exists, and may not read it.
 - Permanent deletion (`DELETE /v1/conversations/{id}`,

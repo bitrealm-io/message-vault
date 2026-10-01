@@ -28,7 +28,7 @@ import {
   getToken,
   problemFromBody,
 } from "./api";
-import { buildAssetPath } from "./assetUrl";
+import { buildAssetPath, buildAssetPreviewPath } from "./assetUrl";
 import type { components, paths } from "./serverApi.types";
 
 type Schema = components["schemas"];
@@ -338,15 +338,16 @@ export function deleteApiToken(id: number): Promise<void> {
 // ── Assets ──────────────────────────────────────────────────────────────────
 
 /**
- * Download an attachment by its content hash and return a temporary blob URL.
+ * Download an attachment by its content hash and return a temporary blob URL:
+ * the original bytes, or with `preview` the preview the server holds of them.
  * The caller must call `URL.revokeObjectURL` when the URL is no longer needed.
  */
 export async function fetchAssetObjectUrl(
   sha256: string,
   source: string,
-  signal?: AbortSignal,
+  { preview = false, signal }: { preview?: boolean; signal?: AbortSignal } = {},
 ): Promise<string> {
-  const path = buildAssetPath(sha256, source);
+  const path = preview ? buildAssetPreviewPath(sha256, source) : buildAssetPath(sha256, source);
   const headers: Record<string, string> = {};
   const token = getToken();
   if (token) {

@@ -799,8 +799,8 @@ async fn json_body_limit_response(response: Response) -> Response {
 ///
 /// Applied to the `/v1` routes only, through `route_layer`, so the static app,
 /// `/health` and the OpenAPI UI keep producing what they produce. The asset
-/// download is the one `/v1` route that streams something other than JSON,
-/// and is let through here by path.
+/// download and its preview stream the file's own bytes, not JSON, and are
+/// let through here by path.
 async fn require_json_acceptable(
     request: axum::extract::Request,
     next: axum::middleware::Next,
@@ -822,14 +822,18 @@ async fn require_json_acceptable(
     next.run(request).await
 }
 
-/// `GET /v1/assets/{sha256}`: the asset's own bytes, in its own media type.
+/// `GET /v1/assets/{sha256}` and `GET /v1/assets/{sha256}/preview`: the
+/// asset's own bytes or its preview's, each in its own media type.
 fn is_asset_download(request: &axum::extract::Request) -> bool {
     request.method() == axum::http::Method::GET
         && request
             .uri()
             .path()
             .strip_prefix("/v1/assets/")
-            .is_some_and(|rest| !rest.is_empty() && !rest.contains('/'))
+            .is_some_and(|rest| {
+                let sha256 = rest.strip_suffix("/preview").unwrap_or(rest);
+                !sha256.is_empty() && !sha256.contains('/')
+            })
 }
 
 /// Whether an `Accept` header admits a JSON answer.

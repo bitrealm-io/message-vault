@@ -11,7 +11,7 @@ Each example below names a file and the item inside it, never a line number, bec
 
 Open every doc comment with a single sentence stating what the item is or does. Put examples, rationale, and error notes in later sentences.
 
-- `crates/server/server/src/server.rs`, `fn is_asset_download` — "`GET /v1/assets/{sha256}`: the asset's own bytes, in its own media type." — Bad: the function answers whether a request is an asset download, and the opening names the route and what it serves instead.
+- `crates/server/server/src/server.rs`, `fn is_asset_download` — "`GET /v1/assets/{sha256}` and `GET /v1/assets/{sha256}/preview`: the asset's own bytes or its preview's, each in its own media type." — Bad: the function answers whether a request is an asset download, and the opening names the route and what it serves instead.
 - `crates/server/server/src/assets_api.rs`, `fn sha256_hex` — "SHA-256 fingerprint of `data` as 64 lowercase hex digits. SHA-256 is a short fingerprint of the file contents." — Bad: the second sentence restates the first; later sentences must add information.
 - `crates/libs/ir/src/lib.rs`, `struct PendingMessage` — "Intermediate message before conversion to [`IrMessage`]." — Good: one sentence states what the type is.
 

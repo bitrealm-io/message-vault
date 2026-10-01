@@ -1,4 +1,5 @@
 import { useAssetObjectUrl } from "../hooks/useAssetObjectUrl";
+import { hasPreview, shownMimeType } from "../lib/attachmentPreview";
 import { missingAttachmentChipLabel } from "../lib/missingAttachmentLabel";
 import type { MessageAttachment } from "../lib/types";
 
@@ -13,11 +14,12 @@ export default function AttachmentThumbnail({
 }) {
   const isMissing = Boolean(attachment.missing_reason);
   // Playable videos never reach here — MessageAttachments routes them to VideoPlayer.
-  const isImage = attachment.mime_type?.startsWith("image/");
+  const isImage = shownMimeType(attachment)?.startsWith("image/");
   const wantsMedia = Boolean(!isMissing && attachment.sha256 && isImage);
   const { url, loading, error } = useAssetObjectUrl(
     wantsMedia ? attachment.sha256 : null,
     wantsMedia ? source : null,
+    hasPreview(attachment),
   );
 
   if (isMissing) {

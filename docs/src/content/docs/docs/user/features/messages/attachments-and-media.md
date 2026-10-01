@@ -91,12 +91,18 @@ The Staging Review estimates which files it will.
 
 ## Copy and the browser
 
-With **Copy**, the Message Crate stores each file exactly as the backup held it, and sends those same bytes to the browser.
-The server does not convert a file for the browser when it is uploaded or when it is shown.
+With **Copy**, the Message Crate stores each file exactly as the backup held it.
+The server does not convert a file when it is uploaded.
 
-A photo in HEIC or a video in HEVC, the formats an iPhone uses, therefore shows only in a browser that can display that format itself.
-In any other browser it does not show.
-Importing with **Convert** stores a `.jpg` in place of the HEIC photo.
+A photo in HEIC or a video in HEVC, the formats an iPhone uses, shows as it is only in a browser that can display that format itself.
+For every other browser the server keeps a preview: a JPEG of a photo, an MP4 of a video.
+A conversation shows the preview of an attachment that has one, and the original of one that has none.
+Opening a photo shows the original, and the preview when the browser cannot display the original.
+The original is never changed.
+
+The server makes previews when `message-crate-server process-assets` runs, which needs ffmpeg on the server.
+An attachment imported since the last run has no preview yet, and until it has one a HEIC photo or an HEVC video does not show in a browser that cannot display it.
+Importing with **Convert** stores a `.jpg` in place of the HEIC photo, which needs no preview.
 
 ## Obfuscate
 

@@ -2423,6 +2423,106 @@
         ]
       }
     },
+    "/v1/assets/{sha256}/preview": {
+      "get": {
+        "tags": [
+          "Assets"
+        ],
+        "summary": "Download the preview of a stored asset: the JPEG, MP4 or MP3 that `process-assets` made from it for a browser to show.",
+        "description": "The URL is the SHA-256 fingerprint of the original, and the body streams\nthe preview's bytes in the preview's own media type. An asset with no\npreview answers `404`; the original is at `/v1/assets/{sha256}`.",
+        "operationId": "get_asset_preview",
+        "parameters": [
+          {
+            "name": "sha256",
+            "in": "path",
+            "description": "Content SHA-256 hex of the original",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Raw preview bytes",
+            "content": {
+              "application/octet-stream": {}
+            }
+          },
+          "401": {
+            "description": "[`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/authentication-required"
+            ]
+          },
+          "403": {
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/insufficient-scope",
+              "https://messagecrate.app/docs/developer/reference/errors/account-disabled"
+            ]
+          },
+          "404": {
+            "description": "[`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/not-found"
+            ]
+          },
+          "422": {
+            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/validation-failed"
+            ]
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "api-token": [
+              "export"
+            ]
+          }
+        ]
+      }
+    },
     "/v1/assets/{sha256}/uploads": {
       "post": {
         "tags": [
@@ -9955,6 +10055,13 @@
               "null"
             ],
             "description": "Path inside the export."
+          },
+          "preview_mime_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "MIME type of the attachment's preview, when it has one. The\npreview's bytes are at `/v1/assets/{sha256}/preview`."
           },
           "sha256": {
             "type": [

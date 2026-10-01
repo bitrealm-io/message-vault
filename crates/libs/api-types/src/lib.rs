@@ -358,6 +358,10 @@ api_shape! {
         /// Why the file is missing, when it is.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub missing_reason: Option<String>,
+        /// MIME type of the attachment's preview, when it has one. The
+        /// preview's bytes are at `/v1/assets/{sha256}/preview`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub preview_mime_type: Option<String>,
     }
 }
 
@@ -426,6 +430,7 @@ mod tests {
                 is_sticker: false,
                 transcription: None,
                 missing_reason: None,
+                preview_mime_type: None,
             }],
             tapbacks: vec![Tapback {
                 part_index: 0,

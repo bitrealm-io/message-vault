@@ -172,7 +172,7 @@ Run the HTTP API. A database that does not exist yet is created with the Demo Ac
 
 ###### **Options:**
 
-* `--config <CONFIG>` — Path to config.toml (must include `[server]` with `bind`)
+* `--config <CONFIG>` — Path to config.toml (must include a `[server]` section)
 
   Default value: `config/config.toml`
 * `--data-dir <DATA_DIR>` — Keep the whole Message Crate in this folder and read no config file: the database is `messagecrate.db` inside it, with every other setting at its default

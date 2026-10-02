@@ -36,13 +36,12 @@ export interface paths {
         put?: never;
         /**
          * Create an account.
-         * @description The owner may always: the owner picks the first password and the
-         *     account holder replaces it at first login, so the owner's choice survives
-         *     one session and no longer. A stranger with no credential may while
-         *     registration is open, and is logged in on creation. Registering is the
-         *     only self-service door, shut unless the owner has opened it; an unclaimed
-         *     Message Crate is shut too, because its first act is being claimed, not
-         *     being joined.
+         * @description The owner may always: the owner picks the first password, and the
+         *     account holder keeps it until they change it under Settings. A stranger
+         *     with no credential may while registration is open, and is logged in on
+         *     creation. Registering is the only self-service door, shut unless the
+         *     owner has opened it; an unclaimed Message Crate is shut too, because its
+         *     first act is being claimed, not being joined.
          */
         post: operations["create_account"];
         delete?: never;

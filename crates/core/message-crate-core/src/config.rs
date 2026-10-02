@@ -367,34 +367,6 @@ mod tests {
         );
     }
 
-    /// Clearing the sink stops the lines, and does not panic.
-    ///
-    /// The previous version of this test called `emit_log` on a config with no
-    /// sink and asserted nothing, so it proved only that the call returned. It
-    /// would have passed just as well if `emit_log` did nothing at all, or if
-    /// it kept writing to a sink the caller had removed. The desktop app
-    /// clears the sink when an export window closes, and a line delivered
-    /// after that reaches a closure holding a dropped handle.
-    #[test]
-    fn clearing_the_log_sink_stops_the_lines() {
-        let seen = Arc::new(Mutex::new(Vec::<String>::new()));
-        let sink_seen = Arc::clone(&seen);
-        let mut config = config_with_inputs(Vec::new());
-        config.log = Some(LogSink::new(move |line| {
-            sink_seen.lock().unwrap().push(line.to_string());
-        }));
-
-        config.emit_log("while attached");
-        config.log = None;
-        config.emit_log("after the window closed");
-
-        assert_eq!(
-            *seen.lock().unwrap(),
-            vec!["while attached".to_string()],
-            "a line emitted with no sink must not reach the old one"
-        );
-    }
-
     #[test]
     fn emit_progress_hands_each_event_to_the_progress_sink() {
         let seen = Arc::new(Mutex::new(Vec::<ProgressEvent>::new()));

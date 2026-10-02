@@ -7,6 +7,7 @@ import {
   useRouteCache,
   useRouteQuery,
 } from "./routeQuery";
+import { narrow } from "./searchQuery";
 
 /**
  * Contact Groups and Message Tags are the same feature over different nouns: a
@@ -91,11 +92,7 @@ export function createNameCollection(config: NameCollectionConfig): NameCollecti
   const isReserved = (name: string) => config.reservedNames.has(name.trim().toLowerCase());
 
   function listQuery(name: string | "none" | null, search: string): string {
-    const parts: string[] = [];
-    if (name) parts.push(config.forName(name));
-    const extra = search.trim();
-    if (extra) parts.push(extra);
-    return parts.join(" ");
+    return narrow(name ? config.forName(name) : "", search);
   }
 
   return {

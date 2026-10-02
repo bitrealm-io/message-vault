@@ -28,7 +28,7 @@ use std::sync::OnceLock;
 use axum::http::StatusCode;
 use serde_json::{Value, json};
 
-use crate::db::account_profile::{self, OWNER_ACCOUNT_ID};
+use crate::db::account_profile::{self, AccountFlags, OWNER_ACCOUNT_ID};
 use crate::db::api_tokens::create_api_token;
 use crate::db::permissions::Permissions;
 use crate::db::session_tokens::insert_account_session_token;
@@ -56,19 +56,25 @@ pub(super) enum Credential {
     Owner,
     /// Alice's session, every permission on.
     Session,
+    /// Alice's session with her `import` permission off.
+    SessionWithoutImport,
+    /// Alice's session with her `export` permission off.
+    SessionWithoutExport,
     /// Alice's session with her `delete` permission off.
     SessionWithoutDelete,
     /// Bob's session, every permission on, calling on Alice's rows.
     OtherAccount,
 }
 
-const CREDENTIALS: [Credential; 8] = [
+const CREDENTIALS: [Credential; 10] = [
     Credential::TokenAllScopes,
     Credential::TokenNoScopes,
     Credential::TokenImportOnly,
     Credential::TokenExportOnly,
     Credential::Owner,
     Credential::Session,
+    Credential::SessionWithoutImport,
+    Credential::SessionWithoutExport,
     Credential::SessionWithoutDelete,
     Credential::OtherAccount,
 ];
@@ -81,9 +87,12 @@ impl Credential {
             | Self::TokenNoScopes
             | Self::TokenImportOnly
             | Self::TokenExportOnly => "api-token",
-            Self::Owner | Self::Session | Self::SessionWithoutDelete | Self::OtherAccount => {
-                "session"
-            }
+            Self::Owner
+            | Self::Session
+            | Self::SessionWithoutImport
+            | Self::SessionWithoutExport
+            | Self::SessionWithoutDelete
+            | Self::OtherAccount => "session",
         }
     }
 
@@ -96,6 +105,8 @@ impl Credential {
             Self::TokenImportOnly => &["import"],
             Self::TokenExportOnly => &["export"],
             Self::Owner => &["owner"],
+            Self::SessionWithoutImport => &["export", "delete"],
+            Self::SessionWithoutExport => &["import", "delete"],
             Self::SessionWithoutDelete => &["import", "export"],
         }
     }
@@ -110,6 +121,8 @@ impl fmt::Display for Credential {
             Self::TokenExportOnly => "token, export only",
             Self::Owner => "owner session",
             Self::Session => "session",
+            Self::SessionWithoutImport => "session, no import",
+            Self::SessionWithoutExport => "session, no export",
             Self::SessionWithoutDelete => "session, no delete",
             Self::OtherAccount => "other account",
         };
@@ -186,6 +199,15 @@ impl Operation {
                             .all(|scope| credential.scopes().contains(&scope))
                 })
         })
+    }
+
+    /// The first credential this operation admits, for a call that has to
+    /// get past the guard. `None` for a public operation, which needs none.
+    pub(super) fn admitted(&self) -> Option<Credential> {
+        self.security.as_ref()?;
+        CREDENTIALS
+            .into_iter()
+            .find(|c| self.expected(*c) == Expected::Accepted)
     }
 
     /// Whether a requirement names the owner's role.
@@ -345,7 +367,10 @@ impl Tokens {
             Credential::TokenImportOnly => &self.import_only,
             Credential::TokenExportOnly => &self.export_only,
             Credential::Owner => &self.owner,
-            Credential::Session | Credential::SessionWithoutDelete => &self.alice,
+            Credential::Session
+            | Credential::SessionWithoutImport
+            | Credential::SessionWithoutExport
+            | Credential::SessionWithoutDelete => &self.alice,
             Credential::OtherAccount => &self.bob,
         }
     }
@@ -656,6 +681,9 @@ pub(super) fn body_for(op: &Operation, n: usize) -> Option<(&'static str, Vec<u8
             json(json!({ "username": "usurper", "password": PASSWORD }))
         }
         ("patch", "/v1/server/settings") => json(json!({ "public_registration": true })),
+        // A size the server does not build, so the call gets past the guard
+        // and stops at validation, and no Demo Account build starts.
+        ("put", "/v1/server/demo-account") => json(json!({ "size": "tiny" })),
         _ => None,
     }
 }
@@ -663,8 +691,27 @@ pub(super) fn body_for(op: &Operation, n: usize) -> Option<(&'static str, Vec<u8
 /// Call one operation with one credential, on accounts made for this call.
 async fn run(shared: &Shared, n: usize, op: Operation, credential: Credential) -> Option<String> {
     let world = World::build(shared, n).await;
-    if credential == Credential::SessionWithoutDelete {
-        shared.fixture.turn_off_delete(world.alice).await;
+    let off = Some(false);
+    let flags = match credential {
+        Credential::SessionWithoutImport => Some(AccountFlags {
+            can_import: off,
+            ..Default::default()
+        }),
+        Credential::SessionWithoutExport => Some(AccountFlags {
+            can_export: off,
+            ..Default::default()
+        }),
+        Credential::SessionWithoutDelete => Some(AccountFlags {
+            can_delete: off,
+            ..Default::default()
+        }),
+        _ => None,
+    };
+    if let Some(flags) = flags {
+        let mut conn = shared.fixture.conn().await;
+        account_profile::set_account_flags(&mut conn, world.alice, flags)
+            .await
+            .unwrap();
     }
     let expected = op.expected(credential);
     let status = world.call(&op, credential).await;
@@ -768,6 +815,28 @@ fn the_expected_outcome_follows_the_declared_security_and_the_owner_rule() {
         Expected::Refused
     );
     assert_eq!(export.expected(Credential::Owner), Expected::Refused);
+    assert_eq!(
+        export.expected(Credential::SessionWithoutExport),
+        Expected::Refused
+    );
+    assert_eq!(
+        export.expected(Credential::SessionWithoutImport),
+        Expected::Accepted
+    );
+
+    let import = op(
+        "post",
+        "/v1/imports",
+        json!([{ "session": ["import"] }, { "api-token": ["import"] }]),
+    );
+    assert_eq!(
+        import.expected(Credential::SessionWithoutImport),
+        Expected::Refused
+    );
+    assert_eq!(
+        import.expected(Credential::SessionWithoutExport),
+        Expected::Accepted
+    );
 
     let account = op("get", "/v1/accounts/{id}", json!([{ "session": [] }]));
     assert_eq!(account.expected(Credential::Owner), Expected::Accepted);

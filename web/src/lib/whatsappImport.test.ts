@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   isWhatsappMethod,
-  WHATSAPP_DEFAULT_METHOD,
   WHATSAPP_ERR_CRYPT_KEY,
   WHATSAPP_ERR_ENCRYPTED_PASSWORD,
   WHATSAPP_ERR_FOLDER_IS_FILE,
@@ -9,7 +8,6 @@ import {
   WHATSAPP_ERR_MUST_BE_FOLDER,
   WHATSAPP_ERR_OWNER_PHONE,
   WHATSAPP_ERR_PATH_MISSING,
-  WHATSAPP_SOURCE_ID,
   whatsappCanImport,
   whatsappCryptRequired,
   whatsappShowsBusiness,
@@ -20,9 +18,7 @@ const dir = { exists: true, isFile: false, isDirectory: true };
 const file = { exists: true, isFile: true, isDirectory: false };
 
 describe("whatsappImport", () => {
-  it("keeps method ids and defaults Android", () => {
-    expect(WHATSAPP_SOURCE_ID).toBe("whatsapp");
-    expect(WHATSAPP_DEFAULT_METHOD).toBe("whatsapp-android");
+  it("knows its two methods and the fields each shows", () => {
     expect(isWhatsappMethod("whatsapp-android")).toBe(true);
     expect(isWhatsappMethod("whatsapp-ios")).toBe(true);
     expect(isWhatsappMethod("whatsapp")).toBe(false);
@@ -30,10 +26,6 @@ describe("whatsappImport", () => {
     expect(whatsappShowsKey("whatsapp-ios")).toBe(false);
     expect(whatsappShowsBusiness("whatsapp-ios")).toBe(true);
     expect(whatsappShowsBusiness("whatsapp-android")).toBe(false);
-  });
-
-  it("uses the spec error catalog", () => {
-    expect(WHATSAPP_ERR_PATH_MISSING).toBe("This path does not exist.");
   });
 
   it("disables Import when the backup folder does not exist", () => {

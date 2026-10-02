@@ -12,13 +12,13 @@ use message_ir::{
     IrAttachment, IrConversationType, IrDirection, IrMessage, IrMessageKind, IrParticipant,
     IrService, IrSource, SCHEMA_VERSION, owner_sender,
 };
+use message_staging::{AttachmentSpool, load_attachment_source};
 use phone::{Handle, OwnerHandleSet};
 use sbr::{
     AttachmentBlob, ConversationKind, ParseStats, Record, infer_owner_phones, parse_file_with,
 };
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 const EXPORT_SOURCE: &str = "sms-backup-restore";
 const EXPORT_TOOL: &str = "SMS Backup & Restore";
@@ -66,11 +66,13 @@ pub struct ReadOptions<'a> {
     pub owner_phones: &'a [String],
     /// Directory staged attachments are written to.
     pub attachments_dir: Option<&'a Path>,
-    /// Whether to write staged attachment files.
-    pub copy_attachments: bool,
-    /// Whether to write the staged attachment files here. `false` leaves
-    /// the bytes on the records for a caller that stages them itself —
-    /// the write queue does, one conversation at a time.
+    /// Where each attachment payload is written the moment its record is
+    /// parsed, so no payload stays in memory; `None` when the run does not
+    /// copy attachments, and then no payload is kept at all.
+    pub spool: Option<&'a AttachmentSpool>,
+    /// Whether to stage the spooled attachments into `attachments_dir`
+    /// here. `false` leaves them in the spool for a caller that stages them
+    /// itself; the write queue does, one conversation at a time.
     pub stage_attachments: bool,
     /// How to write attachment files after parse.
     pub media: MediaMode,
@@ -90,7 +92,6 @@ struct PendingAttachment {
     mime_type: Option<String>,
     digest: String,
     size_bytes: u64,
-    bytes: Option<Arc<[u8]>>,
 }
 
 #[derive(Debug, Clone)]
@@ -153,35 +154,52 @@ fn merge_stats(report: &mut ReadReport, stats: ParseStats) {
     report.dropped_character_references += stats.dropped_character_references;
 }
 
-/// Pending attachments for a message's decoded parts, carrying bytes only when the caller keeps them.
-fn queue_attachments(blobs: &[AttachmentBlob], keep_bytes: bool) -> Vec<PendingAttachment> {
+/// Pending attachments for a message's decoded parts, each payload written
+/// to the spool when there is one. The record, and the decoded bytes with
+/// it, are dropped once this returns.
+///
+/// # Errors
+///
+/// Returns an error when a payload cannot be written to the spool.
+fn queue_attachments(
+    blobs: &[AttachmentBlob],
+    spool: Option<&AttachmentSpool>,
+) -> Result<Vec<PendingAttachment>> {
     blobs
         .iter()
-        .map(|blob| PendingAttachment {
-            original_name: blob.original_name.clone(),
-            mime_type: blob.mime_type.clone(),
-            digest: blob.digest_hex.clone(),
-            size_bytes: blob.data.len() as u64,
-            bytes: keep_bytes.then(|| Arc::clone(&blob.data)),
+        .map(|blob| {
+            if let Some(spool) = spool {
+                spool.put(&blob.data)?;
+            }
+            Ok(PendingAttachment {
+                original_name: blob.original_name.clone(),
+                mime_type: blob.mime_type.clone(),
+                digest: blob.digest_hex.clone(),
+                size_bytes: blob.data.len() as u64,
+            })
         })
         .collect()
 }
 
-/// Write queued attachment bytes after every conversation is built.
+/// Stage the spooled attachments after every conversation is built, reading
+/// one spooled file at a time.
 fn stage_read_attachments(
     documents: &mut [ConversationDocument],
     options: &ReadOptions<'_>,
     report: &mut ReadReport,
 ) -> Result<()> {
-    let payloads: Vec<Option<Vec<u8>>> = documents
+    let mut sources: Vec<_> = documents
         .iter()
-        .flat_map(|doc| {
-            doc.messages
-                .iter()
-                .flat_map(|msg| msg.attachments.iter().map(|att| att.bytes.clone()))
+        .flat_map(|doc| doc.messages.iter())
+        .flat_map(|msg| msg.attachments.iter())
+        .map(|att| {
+            options
+                .spool
+                .and_then(|spool| spool.source(att))
+                .map(|(source, _)| source)
         })
         .collect();
-    let mode = if options.copy_attachments {
+    let mode = if options.spool.is_some() {
         options.media
     } else {
         MediaMode::Disabled
@@ -194,7 +212,10 @@ fn stage_read_attachments(
             mode,
             compress: options.compress.clone(),
         },
-        |i| Ok(payloads.get(i).cloned().flatten()),
+        |i| match sources.get_mut(i) {
+            Some(Some(source)) => load_attachment_source(source),
+            _ => Ok(None),
+        },
         options.log,
         options.progress,
         options.cancel,
@@ -399,8 +420,8 @@ fn ir_message(
     }
 }
 
-/// The IR attachment for one pending attachment. The bytes travel with it
-/// when the XML carried them inline; a path is never known.
+/// The IR attachment for one pending attachment. Neither a path nor the
+/// bytes: whoever stages it reads the payload from the spool by its digest.
 fn ir_attachment(a: &PendingAttachment) -> IrAttachment {
     IrAttachment {
         path: None,
@@ -412,7 +433,7 @@ fn ir_attachment(a: &PendingAttachment) -> IrAttachment {
         sticker_effect: None,
         size_bytes: Some(a.size_bytes),
         missing_reason: None,
-        bytes: a.bytes.as_ref().map(|b| b.as_ref().to_vec()),
+        bytes: None,
     }
 }
 
@@ -479,13 +500,24 @@ pub fn read_backup(
     let mut conversations = BTreeMap::new();
     for path in paths {
         check_cancel(options.cancel)?;
-        // Decode attachment bytes during parse; file writes wait until every
-        // conversation is built. Messages that parse before an XML error are
-        // kept; stats are merged even when the file is truncated.
+        // Each record's attachment payloads go to the spool as the record is
+        // parsed; staging waits until every conversation is built. Messages
+        // that parse before an XML error are kept; stats are merged even
+        // when the file is truncated.
         let mut stats = ParseStats::default();
+        // A spool that cannot be written stops the read rather than counting
+        // as an error in one file.
+        let mut spool_error = None;
         let parse_result = parse_file_with(&path, owners.as_ref(), &mut stats, |record| {
             check_cancel(options.cancel)?;
-            let attachments = queue_attachments(&record.attachments, options.copy_attachments);
+            let attachments = match queue_attachments(&record.attachments, options.spool) {
+                Ok(attachments) => attachments,
+                Err(error) => {
+                    let stop = anyhow::anyhow!("{error:#}");
+                    spool_error = Some(error);
+                    return Err(stop);
+                }
+            };
             match add_record(&mut conversations, record, attachments) {
                 Ok(()) => Ok(()),
                 Err(error) => {
@@ -497,6 +529,9 @@ pub fn read_backup(
             }
         });
         merge_stats(&mut report, stats);
+        if let Some(error) = spool_error {
+            return Err(error);
+        }
         if let Err(error) = parse_result {
             if is_cancelled(options.cancel) || error.to_string() == "cancelled" {
                 return Err(error);
@@ -541,14 +576,14 @@ mod tests {
     fn opts<'a>(
         owner_phones: &'a [String],
         attachments_dir: Option<&'a Path>,
-        copy_attachments: bool,
+        spool: Option<&'a AttachmentSpool>,
     ) -> ReadOptions<'a> {
         ReadOptions {
             owner_phones,
             attachments_dir,
-            copy_attachments,
+            spool,
             stage_attachments: true,
-            media: if copy_attachments {
+            media: if spool.is_some() {
                 MediaMode::Clone
             } else {
                 MediaMode::Disabled
@@ -567,7 +602,8 @@ mod tests {
         fs::write(&input, r#"<smses><mms date="1400773400000" msg_box="2" address="+15555550101" extra="yes"><parts><part seq="0" ct="image/jpeg" name="pic.jpg" data="aGVsbG8="/></parts><addrs><addr address="+15555550100" type="137" charset="106"/><addr address="+15555550101" type="151"/></addrs></mms></smses>"#).unwrap();
         let output = dir.path().join("output");
         let stage = output.join("attachments");
-        let (docs, report) = read_backup(&input, opts(&[], Some(&stage), true)).unwrap();
+        let spool = AttachmentSpool::open(dir.path()).unwrap();
+        let (docs, report) = read_backup(&input, opts(&[], Some(&stage), Some(&spool))).unwrap();
         assert_eq!(report.attachments_saved, 1);
         let staged: Vec<_> = fs::read_dir(&stage)
             .unwrap()
@@ -606,7 +642,8 @@ mod tests {
         .unwrap();
         let output = dir.path().join("output");
         let stage = output.join("attachments");
-        let (docs, report) = read_backup(&input, opts(&[], Some(&stage), true)).unwrap();
+        let spool = AttachmentSpool::open(dir.path()).unwrap();
+        let (docs, report) = read_backup(&input, opts(&[], Some(&stage), Some(&spool))).unwrap();
         assert_eq!(report.attachments_saved, 1);
         let mut writer = SbrBackupSession::create(&output).unwrap();
         writer.append_document(&docs[0]).unwrap();
@@ -623,7 +660,7 @@ mod tests {
     fn group_mms_sender_direction_and_conversation() {
         let fixture =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/group_mms_sender.xml");
-        let (docs, report) = read_backup(&fixture, opts(&[], None, false)).unwrap();
+        let (docs, report) = read_backup(&fixture, opts(&[], None, None)).unwrap();
         assert!(report.errors.is_empty(), "{:?}", report.errors);
         assert_eq!(docs.len(), 1, "every message lands in the same group");
         let doc = &docs[0];
@@ -671,7 +708,7 @@ mod tests {
         )
         .unwrap();
         fs::write(input.join("broken.xml"), "<smses><mms date=").unwrap();
-        let (docs, report) = read_backup(&input, opts(&[], None, false)).unwrap();
+        let (docs, report) = read_backup(&input, opts(&[], None, None)).unwrap();
         assert_eq!(docs[0].export.owner_handle.as_deref(), Some("+15555550100"));
         assert_eq!(report.errors.len(), 1);
     }
@@ -686,7 +723,7 @@ mod tests {
         )
         .unwrap();
         let owner = vec!["+15555550100".to_string()];
-        let (docs, report) = read_backup(&input, opts(&owner, None, false)).unwrap();
+        let (docs, report) = read_backup(&input, opts(&owner, None, None)).unwrap();
         assert_eq!(docs.len(), 1);
         assert_eq!(docs[0].messages.len(), 1);
         assert_eq!(docs[0].messages[0].text, "kept");
@@ -697,29 +734,58 @@ mod tests {
         assert_eq!(report.errors.len(), 1);
     }
 
+    /// Every payload is on disk in the spool once the read returns, and no
+    /// document holds a byte of one, so a backup full of video is never in
+    /// memory at once (issue #1128).
     #[test]
-    fn stage_attachments_false_leaves_the_bytes_for_the_caller() {
+    fn reading_a_backup_spools_every_payload_and_holds_none() {
         let dir = tempfile::tempdir().unwrap();
         let input = dir.path().join("input.xml");
-        fs::write(&input, r#"<smses><mms date="1400773400000" msg_box="2" address="+15555550101"><parts><part seq="0" ct="image/jpeg" name="pic.jpg" data="aGVsbG8="/></parts><addrs><addr address="+15555550100" type="137" charset="106"/><addr address="+15555550101" type="151"/></addrs></mms></smses>"#).unwrap();
+        fs::write(&input, r#"<smses><mms date="1400773400000" msg_box="1" address="+15555550101"><parts><part ct="image/jpeg" name="a.jpg" data="aGVsbG8="/></parts><addrs><addr address="+15555550101" type="137"/></addrs></mms><mms date="1400773500000" msg_box="1" address="+15555550101"><parts><part ct="image/jpeg" name="b.jpg" data="d29ybGQ="/></parts><addrs><addr address="+15555550101" type="137"/></addrs></mms></smses>"#).unwrap();
         let stage = dir.path().join("output").join("attachments");
+        let spool = AttachmentSpool::open(dir.path()).unwrap();
+        let owner = vec!["+15555550100".to_string()];
 
-        let mut options = opts(&[], Some(&stage), true);
+        let mut options = opts(&owner, Some(&stage), Some(&spool));
         options.stage_attachments = false;
         let (docs, report) = read_backup(&input, options).unwrap();
 
-        let att = &docs[0].messages[0].attachments[0];
-        assert_eq!(
-            att.bytes.as_deref(),
-            Some(&b"hello"[..]),
-            "the bytes stay on the record for the caller to stage"
-        );
+        let attachments: Vec<_> = docs[0]
+            .messages
+            .iter()
+            .flat_map(|m| &m.attachments)
+            .collect();
+        let held: usize = attachments
+            .iter()
+            .filter_map(|a| a.bytes.as_ref())
+            .map(Vec::len)
+            .sum();
+        assert_eq!(held, 0, "no payload stays on a document");
+        let spooled: Vec<Vec<u8>> = attachments
+            .iter()
+            .map(|a| fs::read(spool.path(a.digest_sha256.as_deref().unwrap()).unwrap()).unwrap())
+            .collect();
+        assert_eq!(spooled, [b"hello".to_vec(), b"world".to_vec()]);
+        assert_eq!(attachments[0].size_bytes, Some(5));
         assert!(
-            att.path.is_none(),
+            attachments.iter().all(|a| a.path.is_none()),
             "nothing was staged, so nothing to point at"
         );
         assert!(!stage.exists(), "no attachment files were written");
         assert_eq!(report.attachments_saved, 0);
+    }
+
+    /// A run that does not copy attachments keeps no payload anywhere.
+    #[test]
+    fn without_a_spool_no_payload_is_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("input.xml");
+        fs::write(&input, r#"<smses><mms date="1400773400000" msg_box="1" address="+15555550101"><parts><part ct="image/jpeg" name="a.jpg" data="aGVsbG8="/></parts><addrs><addr address="+15555550101" type="137"/></addrs></mms></smses>"#).unwrap();
+        let owner = vec!["+15555550100".to_string()];
+        let (docs, _) = read_backup(&input, opts(&owner, None, None)).unwrap();
+        let att = &docs[0].messages[0].attachments[0];
+        assert!(att.bytes.is_none() && att.path.is_none());
+        assert_eq!(att.size_bytes, Some(5), "the size is still recorded");
     }
 
     /// Read `messages` wrapped in `<smses>` with +15555550100 as the owner.
@@ -728,7 +794,7 @@ mod tests {
         let input = dir.path().join("input.xml");
         fs::write(&input, format!("<smses>{messages}</smses>")).unwrap();
         let owner = vec!["+15555550100".to_string()];
-        let (docs, report) = read_backup(&input, opts(&owner, None, false)).unwrap();
+        let (docs, report) = read_backup(&input, opts(&owner, None, None)).unwrap();
         assert!(report.errors.is_empty(), "{:?}", report.errors);
         docs
     }
@@ -809,7 +875,7 @@ mod tests {
         let input = dir.path().join("input.xml");
         fs::write(&input, r#"<smses><mms date="1400773400000" msg_box="1" address="+447911123456~07700900123"><parts><part ct="text/plain" text="hi"/></parts><addrs><addr address="+447911123456" type="137"/><addr address="07700900123" type="151"/></addrs></mms></smses>"#).unwrap();
         let owner = vec!["+447700900123".to_string()];
-        let (docs, _) = read_backup(&input, opts(&owner, None, false)).unwrap();
+        let (docs, _) = read_backup(&input, opts(&owner, None, None)).unwrap();
         assert_eq!(
             docs[0].conversation.participants.len(),
             1,
@@ -831,7 +897,7 @@ mod tests {
             .iter()
             .map(|i| format!("+1555555010{i}"))
             .collect();
-        let (docs, _) = read_backup(&input, opts(&owners, None, false)).unwrap();
+        let (docs, _) = read_backup(&input, opts(&owners, None, None)).unwrap();
         assert_eq!(docs[0].export.owner_handle.as_deref(), Some("+15555550109"));
     }
 
@@ -879,7 +945,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let input = dir.path().join("input.xml");
         fs::write(&input, r#"<smses><mms date="1400773400000" msg_box="2" address="+447700900123"><parts><part ct="text/plain" text="hi"/></parts><addrs><addr address="+447911123456" type="137"/><addr address="+447700900123" type="151"/></addrs></mms></smses>"#).unwrap();
-        let (docs, _) = read_backup(&input, opts(&[], None, false)).unwrap();
+        let (docs, _) = read_backup(&input, opts(&[], None, None)).unwrap();
         assert_eq!(
             docs[0].export.owner_handle.as_deref(),
             Some("+447911123456")

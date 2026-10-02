@@ -51,7 +51,12 @@ Every command is in AGENTS.md, and nothing is repeated here. Claude Code does no
   alias, a deprecation window, a version handshake, or a migration path for an
   old client, and never argue against a change on the grounds that something
   already calls it. `docs/architecture/http-api.md` says this for the HTTP interface; it holds for every
-  interface. Do not raise this as an open question.
+  interface. Do not raise this as an open question. A version check that only
+  refuses a mismatch, and never adapts to the older side, is allowed: it is not
+  a handshake, because nothing is negotiated. The refusal of a version-3
+  conversation file and the Apple Messages Reader's `PROTOCOL_VERSION`
+  (`crates/helpers/imessage-reader-protocol`, checked in
+  `imessage-ir-exporter/src/helper.rs`) are the two in the code.
 - **SQLite is the only database engine.** Write SQL for SQLite. Never make a
   query more awkward to keep it portable, and never add an engine abstraction
   or a dialect layer. Use a SQLite-only feature when the work at hand needs
@@ -63,7 +68,7 @@ Every command is in AGENTS.md, and nothing is repeated here. Claude Code does no
 - **CI gates** (all in `ci.yml`, all required by the ruleset on `main`): rustfmt, Clippy at `-D warnings` (workspace and `src-tauri`), workspace build + test (with ffmpeg installed, so the media tests run rather than skip), `src-tauri` check/clippy/test, web Biome `ci` + generated-types check + build + Vitest, docs `astro check` + build, license, Docker context, a build of the release Dockerfile when it or a Cargo manifest changes, product version lockstep (and on a `v*` tag, that the tag matches). A `changes` job skips what a PR doesn't touch. Dependency audits run in `audit.yml` on lockfile changes and weekly, not on every PR. Test coverage (`./scripts/coverage.sh`, cargo-llvm-cov) is a report, not a gate: it points at functions no test calls, and `coverage.yml` runs it on each push to `main`. Mutation testing (`./scripts/mutants.sh`, cargo-mutants over the workspace less what `.cargo/mutants.toml` leaves out) is the measure of whether tests would catch a change: `mutants.yml` runs it only when started by hand, never on a schedule or per pull request. `nightly.yml` builds the release Dockerfile from `main` once a night when `main` changed since the previous night, without publishing it; it is not a gate either, and a failed night opens an issue labelled `bug`. Never write a test only to raise coverage; a test earns its place by failing for a bug that matters. Why: `docs/adr/0007-ci-is-the-only-gate.md`.
 - **Git workflow**: never commit to `main`; use a branch or worktree. Verify PR state with `gh pr view` / `gh pr list` / `gh pr checks` before pushing — don't assume. Don't merge PRs unless explicitly asked. Write the PR description to the matching template in `.github/PULL_REQUEST_TEMPLATE/` (`feature.md` or `bugfix.md`) — those are for the author to fill in, not options offered to a reviewer. See AGENTS.md, "Submitting Work".
 - **Biome**: prefer a real fix over `biome-ignore`; prefix unused bindings with `_`.
-- **Tests** use committed fixtures in `tests/fixtures/`; never commit personal backups or real message data.
+- **Tests** use committed fixtures in the `tests/fixtures/` folder of the crate that uses them, such as `crates/exporters/imazing-exporter/tests/fixtures/`. The repository-root `tests/fixtures/` holds only the few that are not one crate's own, such as `tests/fixtures/search/web-queries.txt`, which `web/src/lib/searchQuery.test.ts` writes and the server's search tests read. Never commit personal backups or real message data.
 
 ## Style
 

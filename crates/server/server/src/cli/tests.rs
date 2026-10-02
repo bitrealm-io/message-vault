@@ -177,6 +177,61 @@ async fn import_records_the_conversation_then_dedupe_and_process_assets_run_on_i
     .unwrap();
 }
 
+#[tokio::test]
+async fn process_assets_fails_when_a_conversion_failed_and_names_the_count() {
+    use crate::process_assets::tests::{ACCOUNT, PNG_1X1_RGB, attach_stored_blob, seed_message};
+
+    let dir = tempfile::tempdir().unwrap();
+    let config = server_config(dir.path());
+    with_alice(&config).await;
+    // The process_assets fixtures seed rows for ACCOUNT, which must be alice.
+    assert_eq!(ACCOUNT, ALICE);
+    // A PNG whose original is gone: the conversion fails whether or not
+    // ffmpeg is installed.
+    {
+        let opened = open(&config).await;
+        let mut conn = opened.conn().await.unwrap();
+        let message_id = seed_message(&mut conn, "imessage").await;
+        let sha = "c".repeat(64);
+        attach_stored_blob(
+            &opened,
+            &mut conn,
+            "imessage",
+            message_id,
+            &sha,
+            ".png",
+            PNG_1X1_RGB,
+        )
+        .await;
+        let original = opened
+            .cfg
+            .paths
+            .assets_dir_for_account(ALICE, "imessage")
+            .join(format!("cc/{sha}.png"));
+        fs::remove_file(original).unwrap();
+    }
+
+    let err = run(Cli {
+        command: Commands::ProcessAssets(ProcessAssetsArgs {
+            config: config.clone(),
+            force: false,
+            dry_run: false,
+            skip_image: false,
+            skip_video: false,
+            skip_audio: false,
+            db: None,
+            source: None,
+        }),
+    })
+    .await
+    .unwrap_err();
+
+    assert_eq!(
+        err.to_string(),
+        "1 conversion(s) failed; those originals stay without a browser preview"
+    );
+}
+
 fn imports_discard_args(config: &Path) -> Cli {
     Cli {
         command: Commands::Imports(ImportsArgs {

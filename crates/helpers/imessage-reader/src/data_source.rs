@@ -210,7 +210,8 @@ mod tests {
     #[test]
     fn a_missing_database_is_an_error() {
         let dir = tempfile::tempdir().unwrap();
-        let options = ReaderOptions::from_source(mac_source(&dir.path().join("chat.db")));
+        let options =
+            ReaderOptions::from_source(mac_source(&dir.path().join("chat.db")), dir.path().into());
         assert!(DataSource::from(&options).is_err());
     }
 

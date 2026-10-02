@@ -1146,3 +1146,136 @@ async fn an_identity_only_a_file_knew_goes_when_edit_takes_it_off() {
             .unwrap();
     assert_eq!(keys, ["+15555550100"]);
 }
+
+// --- A phone number whose `+` a spreadsheet dropped ---
+
+/// S4-6: a number whose `+` a spreadsheet dropped is the same identity, and
+/// Edit does not take the real one off the contact.
+#[tokio::test]
+async fn s4_6_a_number_without_its_plus_keeps_the_real_identity() {
+    let (mut conn, _pool, _dir) = account().await;
+    let ada = imported(&mut conn, "Ada", &[("phone", "phone", "+6591234567")]).await;
+    let before = identities_of(&mut conn, ada).await;
+    let row = format!("{ada},Ada,,phone,phone,6591234567");
+    let _ = load(&mut conn, ACCOUNT, &file(&[&row]), LoadMode::Edit).await;
+    assert_eq!(identities_of(&mut conn, ada).await, before);
+}
+
+/// A person editing in a spreadsheet does not see the `+` go, so the load
+/// names the row it read with the `+` back, and changes nothing.
+#[tokio::test]
+async fn a_number_read_with_its_plus_back_is_named_in_the_result() {
+    let (mut conn, _pool, _dir) = account().await;
+    let ada = imported(&mut conn, "Ada", &[("phone", "phone", "+6591234567")]).await;
+    let counts = loaded(
+        &mut conn,
+        &file(&[&format!("{ada},Ada,,phone,phone,6591234567")]),
+        LoadMode::Edit,
+    )
+    .await;
+    assert_eq!(
+        counts,
+        LoadCounts {
+            notes: vec![format!(
+                "row 2: 6591234567 has no +, so it was read as +6591234567, \
+                 which \"Ada\" (contact {ada}) holds"
+            )],
+            ..LoadCounts::default()
+        }
+    );
+}
+
+/// When the contact holds both readings of a number without `+`, the row
+/// cannot say which it means, so the load is refused with both keys.
+#[tokio::test]
+async fn a_number_without_plus_whose_contact_holds_both_readings_is_refused() {
+    let (mut conn, _pool, _dir) = account().await;
+    let ada = imported(
+        &mut conn,
+        "Ada",
+        &[
+            ("phone", "phone", "+6591234567"),
+            ("phone", "phone", "+16591234567"),
+        ],
+    )
+    .await;
+    let reasons = refused(
+        &mut conn,
+        &file(&[&format!("{ada},Ada,,phone,phone,6591234567")]),
+        LoadMode::Edit,
+    )
+    .await;
+    assert_eq!(reasons.len(), 1, "{reasons:?}");
+    assert!(reasons[0].starts_with("row 2: "), "{reasons:?}");
+    assert!(reasons[0].contains("+6591234567"), "{reasons:?}");
+    assert!(reasons[0].contains("+16591234567"), "{reasons:?}");
+}
+
+/// Only the row's own contact is looked at, so a dropped `+` never puts
+/// another person's number on this contact. The value is keyed by the phone
+/// rule, and the result says it became a new identity.
+#[tokio::test]
+async fn a_number_without_plus_never_takes_another_contacts_identity() {
+    let (mut conn, _pool, _dir) = account().await;
+    let bob = imported(&mut conn, "Bob", &[("phone", "phone", "+6591234567")]).await;
+    let ada = imported(&mut conn, "Ada", &[]).await;
+    let counts = loaded(
+        &mut conn,
+        &file(&[&format!("{ada},Ada,,phone,phone,6591234567")]),
+        LoadMode::Append,
+    )
+    .await;
+    assert_eq!(
+        identities_of(&mut conn, bob).await,
+        ["phone/phone/+6591234567"]
+    );
+    assert_eq!(
+        identities_of(&mut conn, ada).await,
+        ["phone/phone/+16591234567"]
+    );
+    assert_eq!(
+        counts.notes,
+        ["row 2: 6591234567 has no +, so it became the new identity +16591234567"]
+    );
+}
+
+/// A number that is not ten digits once its `+` is gone becomes an identity
+/// of bare digits, and the result says so.
+#[tokio::test]
+async fn a_new_identity_of_bare_digits_is_named_in_the_result() {
+    let (mut conn, _pool, _dir) = account().await;
+    let counts = loaded(
+        &mut conn,
+        &file(&["new,Ada,,phone,phone,447700900123"]),
+        LoadMode::Append,
+    )
+    .await;
+    let ada = contact_named(&mut conn, "Ada").await;
+    assert_eq!(
+        identities_of(&mut conn, ada).await,
+        ["phone/phone/447700900123"]
+    );
+    assert_eq!(
+        counts.notes,
+        ["row 2: 447700900123 has no +, so it became the new identity 447700900123"]
+    );
+}
+
+/// A ten-digit US number written without `+` whose `+1` key the account
+/// holds is that identity, as before, and needs no word in the result.
+#[tokio::test]
+async fn a_us_number_without_plus_still_loads_as_its_plus_one_identity() {
+    let (mut conn, _pool, _dir) = account().await;
+    let ada = imported(&mut conn, "Ada", &[("phone", "phone", "+15555550100")]).await;
+    let counts = loaded(
+        &mut conn,
+        &file(&[&format!("{ada},Ada,,phone,phone,555-555-0100")]),
+        LoadMode::Edit,
+    )
+    .await;
+    assert_eq!(counts, LoadCounts::default());
+    assert_eq!(
+        identities_of(&mut conn, ada).await,
+        ["phone/phone/+15555550100"]
+    );
+}

@@ -570,7 +570,7 @@ fn a_dry_run_of_incoming_cleanup_counts_what_it_would_remove_and_removes_nothing
 }
 
 /// The account every database test seeds.
-const ACCOUNT: i64 = 7;
+pub(crate) const ACCOUNT: i64 = 7;
 
 /// A 1x1 plain-RGB PNG, the smallest image this build's ffmpeg decodes
 /// cleanly (an RGBA one of the same size makes its PNG decoder fail).
@@ -613,7 +613,7 @@ async fn seed_account(conn: &mut SqliteConnection, id: i64) {
 
 /// One conversation with one message under `source` for [`ACCOUNT`],
 /// returning the message id an attachment can hang off.
-async fn seed_message(conn: &mut SqliteConnection, source: &str) -> i64 {
+pub(crate) async fn seed_message(conn: &mut SqliteConnection, source: &str) -> i64 {
     let handle_id: i64 = sqlx::query_scalar(
         "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
          VALUES ($1, $2, $2, 'phone', 'phone') RETURNING id",
@@ -648,7 +648,7 @@ async fn seed_message(conn: &mut SqliteConnection, source: &str) -> i64 {
 /// `source`, the way an import leaves it: the blob at `<aa>/<sha><ext>`
 /// in the source's assets folder and a row pointing at it. Returns the
 /// attachment id.
-async fn attach_stored_blob(
+pub(crate) async fn attach_stored_blob(
     opened: &OpenDb,
     conn: &mut SqliteConnection,
     source: &str,

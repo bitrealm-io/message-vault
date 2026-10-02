@@ -32,10 +32,14 @@ describe("tagListQuery", () => {
   it("quotes names that contain spaces", () => {
     expect(tagListQuery("Holiday", "")).toBe("tag:Holiday");
     expect(tagListQuery("none", "")).toBe("tag:none");
-    expect(tagListQuery("Work Friends", "ada")).toBe('tag:"Work Friends" ada');
+    expect(tagListQuery("Work Friends", "ada")).toBe('tag:"Work Friends" (ada)');
   });
 
   it("quotes a name with parentheses, since the language reads them as grouping", () => {
     expect(tagListQuery("Book Club (Tuesdays)", "")).toBe('tag:"Book Club (Tuesdays)"');
+  });
+
+  it("keeps a typed or inside the tag page", () => {
+    expect(tagListQuery("Work", "a or b")).toBe("tag:Work (a or b)");
   });
 });

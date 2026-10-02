@@ -17,7 +17,7 @@ pub(crate) fn write_tiny_reset_bundle(root: &Path) {
         r#"
 [owner]
 display_name = "Demo User"
-handle_specs = [["+14155559000", "phone"]]
+handle_specs = [["+14155550100", "phone"]]
 emails = ["demo.ingest@example.com"]
 
 [account]
@@ -1205,7 +1205,7 @@ async fn a_generated_demo_bundle_imports_whole_and_its_overlap_dedupes() {
     let owner_handles = count(
         &mut conn,
         "SELECT COUNT(*) FROM account_handles ah JOIN handles h ON h.id = ah.handle_id
-         WHERE ah.account_id = $1 AND h.normalized = '+14155559000'",
+         WHERE ah.account_id = $1 AND h.normalized = '+14155550100'",
     )
     .await;
     assert_eq!(owner_handles, 1);

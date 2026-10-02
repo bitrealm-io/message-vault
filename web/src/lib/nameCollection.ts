@@ -65,12 +65,6 @@ export type NameCollectionConfig = {
   routes: NameCollectionRoutes;
   /** This collection's cache prefix, from `queryKeys`. */
   key: RouteQueryKey;
-  /**
-   * Cache keys of the lists that show these names as chips, invalidated after
-   * every write. Matched by prefix, so `keys.contacts.all` covers every page
-   * and every search of the contact list.
-   */
-  invalidates: readonly RouteQueryKey[];
   /** Cached shapes to patch with this collection's names before the server answers. */
   chips: readonly ChipTarget[];
   /** What one of these is called in an error, e.g. `group`. */
@@ -85,7 +79,6 @@ export type NameCollection = {
   /** Cache key parts, before the account is put in front of them. */
   key: RouteQueryKey;
   routes: NameCollectionRoutes;
-  invalidates: readonly RouteQueryKey[];
   chips: readonly ChipTarget[];
   label: string;
   isReserved: (name: string) => boolean;
@@ -108,7 +101,6 @@ export function createNameCollection(config: NameCollectionConfig): NameCollecti
   return {
     key: config.key,
     routes: config.routes,
-    invalidates: config.invalidates,
     chips: config.chips,
     label: config.label,
     isReserved,
@@ -178,7 +170,7 @@ export function useNameCollection(collection: NameCollection): {
 /**
  * The id behind a name: from the cache, else from the server once, else an
  * error and no request. The server-once path covers creating a set and adding
- * to it before the invalidated list has come back.
+ * to it before the list, marked stale by the create, has come back.
  */
 function useIdOf(collection: NameCollection): (name: string) => Promise<number> {
   const cache = useRouteCache();
@@ -207,21 +199,13 @@ function checkedName(collection: NameCollection, name: string): string {
   return trimmed;
 }
 
-/** This collection's list, plus every list that shows its names as chips. */
-function useMarkStale(collection: NameCollection): () => Promise<void> {
-  const cache = useRouteCache();
-  return useCallback(async () => {
-    await cache.invalidate(collection.key, ...collection.invalidates);
-  }, [cache, collection]);
-}
-
 export function useCreateNamedSet(
   collection: NameCollection,
 ): UseMutationResult<NamedSet, Error, string> {
-  const markStale = useMarkStale(collection);
+  const cache = useRouteCache();
   return useMutation<NamedSet, Error, string>({
     mutationFn: async (name) => collection.routes.create({ name: checkedName(collection, name) }),
-    onSettled: markStale,
+    onSettled: () => cache.invalidateAccount(),
   });
 }
 
@@ -229,13 +213,13 @@ export function useRenameNamedSet(
   collection: NameCollection,
 ): UseMutationResult<NamedSet, Error, { from: string; to: string }> {
   const idOf = useIdOf(collection);
-  const markStale = useMarkStale(collection);
+  const cache = useRouteCache();
   return useMutation<NamedSet, Error, { from: string; to: string }>({
     mutationFn: async ({ from, to }) => {
       const name = checkedName(collection, to);
       return collection.routes.update(await idOf(from), { name });
     },
-    onSettled: markStale,
+    onSettled: () => cache.invalidateAccount(),
   });
 }
 
@@ -243,10 +227,10 @@ export function useDeleteNamedSet(
   collection: NameCollection,
 ): UseMutationResult<void, Error, string> {
   const idOf = useIdOf(collection);
-  const markStale = useMarkStale(collection);
+  const cache = useRouteCache();
   return useMutation<void, Error, string>({
     mutationFn: async (name) => collection.routes.remove(await idOf(name)),
-    onSettled: markStale,
+    onSettled: () => cache.invalidateAccount(),
   });
 }
 
@@ -256,8 +240,8 @@ export type ChipSnapshot = { entries: RouteCacheEntries };
 /**
  * Put rows in or out of one set, drawn before the server answers.
  *
- * The chips change on the list and on the open contact at once, and every
- * list showing the name is marked stale once it settles. Two of these can be
+ * The chips change on the list and on the open contact at once, and the
+ * account's cache is marked stale once the write settles. Two of these can be
  * in flight together — the Clear all button fires one per name — but the
  * rollback is a whole-entry snapshot: if the earlier of two overlapping
  * writes fails, restoring its snapshot overwrites the later one's optimistic
@@ -269,7 +253,6 @@ export function useSetNamedSetMembers(
 ): UseMutationResult<MembersChanged, Error, SetMembersVars, ChipSnapshot> {
   const cache = useRouteCache();
   const idOf = useIdOf(collection);
-  const markStale = useMarkStale(collection);
   return useMutation<MembersChanged, Error, SetMembersVars, ChipSnapshot>({
     mutationFn: async ({ name, patch }) =>
       collection.routes.updateMembers(await idOf(name), {
@@ -291,7 +274,7 @@ export function useSetNamedSetMembers(
     onError: (_error, _vars, context) => {
       if (context) cache.restore(context.entries);
     },
-    onSettled: markStale,
+    onSettled: () => cache.invalidateAccount(),
   });
 }
 
@@ -301,7 +284,6 @@ export type NameCollectionActions = {
   rename: (from: string, to: string) => Promise<string>;
   remove: (name: string) => Promise<void>;
   setMembers: (name: string, patch: MembersPatch) => Promise<MembersChanged>;
-  invalidate: () => Promise<void>;
   /** Any of the four in flight, so a screen needs no busy flag of its own. */
   pending: boolean;
   /** The newest of the four to fail, or null once a later one succeeds. */
@@ -315,7 +297,6 @@ export type NameCollectionActions = {
  * the invalidation all belong to the mutations above.
  */
 export function useNameCollectionActions(collection: NameCollection): NameCollectionActions {
-  const cache = useRouteCache();
   const createSet = useCreateNamedSet(collection);
   const renameSet = useRenameNamedSet(collection);
   const deleteSet = useDeleteNamedSet(collection);
@@ -348,9 +329,8 @@ export function useNameCollectionActions(collection: NameCollection): NameCollec
       rename: async (from: string, to: string) => (await rename({ from, to })).name,
       remove: (name: string) => remove(name),
       setMembers: (name: string, patch: MembersPatch) => setMembers({ name, patch }),
-      invalidate: () => cache.invalidate(collection.key),
     }),
-    [create, rename, remove, setMembers, cache, collection.key],
+    [create, rename, remove, setMembers],
   );
 
   return { ...callbacks, pending, error };

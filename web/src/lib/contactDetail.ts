@@ -51,9 +51,10 @@ export function useContactDetail(contactId: string | null): {
  * Change one thing about a contact.
  *
  * The server answers with the contact as it now stands, so the answer goes
- * straight into the entry the drawer reads and nothing asks for it again. The
- * list pages are marked stale because they show the name too; the contact's
- * own entry is not, because it is already right.
+ * straight into the entry the drawer reads, and the drawer shows it before
+ * anything is fetched again. The contact list and every conversation that
+ * names the contact show the old name until the account's cache, marked stale
+ * once the write settles, is fetched again.
  */
 export function useUpdateContact(): UseMutationResult<
   ContactDetail,
@@ -66,6 +67,6 @@ export function useUpdateContact(): UseMutationResult<
     onSuccess: (detail, { contactId }) => {
       cache.set(keys.contacts.detail(contactId), detail);
     },
-    onSettled: () => cache.invalidate(keys.contacts.lists),
+    onSettled: () => cache.invalidateAccount(),
   });
 }

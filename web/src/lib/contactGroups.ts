@@ -83,9 +83,6 @@ export const contactGroups = createNameCollection({
     updateMembers: updateContactGroupMembers,
   },
   key: keys.contactGroups.all,
-  // Contact rows and the contact drawer show group names as chips; one prefix
-  // covers both.
-  invalidates: [keys.contacts.all],
   // A ticked box shows on the contact rows and on the open contact at once.
   chips: [
     { key: keys.contacts.lists, field: "groups", shape: "pages" },

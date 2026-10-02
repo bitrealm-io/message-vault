@@ -31,12 +31,15 @@ const stored = {
 beforeEach(() => {
   getAccountProfile.mockReset();
   updateAccountProfile.mockReset();
-  getAccountProfile.mockResolvedValue(stored);
+  // The server keeps what a write stored, so the read every write starts
+  // answers the new profile, as the server does.
+  let current = stored;
+  getAccountProfile.mockImplementation(async () => ({ ...current }));
   // The server answers with the profile as it now stands: a new object.
-  updateAccountProfile.mockImplementation(async (body: Partial<AccountProfile>) => ({
-    ...stored,
-    ...body,
-  }));
+  updateAccountProfile.mockImplementation(async (body: Partial<AccountProfile>) => {
+    current = { ...current, ...body };
+    return { ...current };
+  });
 });
 afterEach(cleanup);
 

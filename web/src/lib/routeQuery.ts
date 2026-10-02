@@ -258,7 +258,7 @@ export type RouteCacheEntries = readonly [readonly unknown[], unknown][];
  * every key.
  *
  * A mutation draws its change before the server answers, puts the old value
- * back when the server refuses, and says what is stale once it settles. Each of
+ * back when the server refuses, and marks the account stale once it settles. Each of
  * those is one call on the query client — this is that client with the account
  * rule applied, and nothing else. It is not a cache.
  */
@@ -277,8 +277,21 @@ export type RouteCache = {
   patch: <T>(prefix: RouteQueryKey, update: (entry: T | undefined) => T | undefined) => void;
   /** Put snapshotted entries back where they came from. */
   restore: (entries: RouteCacheEntries) => void;
-  /** Mark prefixes stale, so whatever is showing them refetches. */
-  invalidate: (...prefixes: RouteQueryKey[]) => Promise<void>;
+  /**
+   * Mark every entry of the logged-in account stale, so whatever is on screen
+   * refetches. Every write calls this once it settles.
+   *
+   * The whole account, not a list of the entries one write changes: six
+   * writes once left out entries they changed, and the screens showing those
+   * kept the old state. TanStack Query refetches only the entries on screen,
+   * so the cost is a few small requests. See
+   * `docs/adr/0002-one-way-to-fetch-data-in-the-web-app.md`.
+   *
+   * The entries are marked before this returns. The refetches it starts are
+   * not waited for, so a write is finished when the server has answered it,
+   * not when every screen has fetched again.
+   */
+  invalidateAccount: () => void;
 };
 
 export function useRouteCache(): RouteCache {
@@ -305,10 +318,8 @@ export function useRouteCache(): RouteCache {
       restore: (entries: RouteCacheEntries) => {
         for (const [key, data] of entries) client.setQueryData(key, data);
       },
-      invalidate: async (...prefixes: RouteQueryKey[]) => {
-        await Promise.all(
-          prefixes.map((prefix) => client.invalidateQueries({ queryKey: at(prefix) })),
-        );
+      invalidateAccount: () => {
+        void client.invalidateQueries({ queryKey: at([]) });
       },
     };
   }, [client, account]);

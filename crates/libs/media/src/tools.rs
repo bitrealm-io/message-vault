@@ -1,3 +1,4 @@
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
@@ -252,24 +253,73 @@ fn executable_name(name: &str) -> String {
     }
 }
 
-/// Run ffmpeg with `args`, failing with its stderr when it exits non-zero.
+/// How much of the end of ffmpeg's stderr a failure carries.
+const STDERR_TAIL_BYTES: usize = 8 * 1024;
+
+/// Run ffmpeg with `args`, failing with the end of its stderr when it exits
+/// non-zero.
+///
+/// A thread reads stderr while ffmpeg runs. ffmpeg writes a stats line about
+/// twice a second, and a pipe nobody reads fills at 64 KiB on Linux, after
+/// which ffmpeg blocks on the write and never exits (#1178).
 pub(crate) fn run_ffmpeg(args: &[String]) -> Result<()> {
     let ffmpeg = resolve_tool("ffmpeg").ok_or_else(|| {
         anyhow::anyhow!(
             "ffmpeg not found in lib/ (or beside this program), in MESSAGE_CRATE_BIN, or on PATH"
         )
     })?;
-    let status = Command::new(ffmpeg)
+    let mut child = Command::new(ffmpeg)
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
-        .status()?;
+        .spawn()
+        .context("start ffmpeg")?;
+    let stderr = child.stderr.take().context("ffmpeg stderr")?;
+    let reader = std::thread::spawn(move || read_tail(stderr, STDERR_TAIL_BYTES));
+    let status = child.wait().context("wait for ffmpeg")?;
+    let tail = reader
+        .join()
+        .map_err(|_| anyhow::anyhow!("the thread reading ffmpeg's stderr panicked"))?
+        .context("read ffmpeg stderr")?;
     if status.success() {
-        Ok(())
-    } else {
+        return Ok(());
+    }
+    let said = String::from_utf8_lossy(&tail);
+    let said = said.trim();
+    if said.is_empty() {
         bail!("ffmpeg failed ({status})")
     }
+    bail!("ffmpeg failed ({status}): {said}")
+}
+
+/// Read `source` to its end and return its last `limit` bytes, starting at a
+/// line when the start was dropped.
+fn read_tail(mut source: impl Read, limit: usize) -> std::io::Result<Vec<u8>> {
+    let mut tail = Vec::with_capacity(limit * 2);
+    let mut chunk = [0u8; 8 * 1024];
+    let mut dropped = false;
+    loop {
+        let read = match source.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(read) => read,
+            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(err) => return Err(err),
+        };
+        tail.extend_from_slice(&chunk[..read]);
+        if tail.len() > limit * 2 {
+            tail.drain(..tail.len() - limit);
+            dropped = true;
+        }
+    }
+    if tail.len() > limit {
+        tail.drain(..tail.len() - limit);
+        dropped = true;
+    }
+    if dropped && let Some(line_end) = tail.iter().position(|b| matches!(b, b'\n' | b'\r')) {
+        tail.drain(..=line_end);
+    }
+    Ok(tail)
 }
 
 #[derive(Debug, Default, Clone)]
@@ -368,6 +418,126 @@ mod tests {
         let mut perms = fs::metadata(path).unwrap().permissions();
         perms.set_mode(0o755);
         fs::set_permissions(path, perms).unwrap();
+    }
+
+    /// Point the tool location at a folder holding an `ffmpeg` that runs
+    /// `body` and an `ffprobe` that does nothing. Both answer `-version`, so
+    /// the lookup accepts them.
+    fn mock_ffmpeg_dir(body: &str) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        write_mock_tool(&dir.path().join("ffprobe"));
+        let ffmpeg = dir.path().join("ffmpeg");
+        fs::write(
+            &ffmpeg,
+            format!("#!/bin/sh\n[ \"$1\" = -version ] && exit 0\n{body}\n"),
+        )
+        .unwrap();
+        let mut perms = fs::metadata(&ffmpeg).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&ffmpeg, perms).unwrap();
+        set_tools_dir(Some(dir.path().to_path_buf()));
+        dir
+    }
+
+    /// `run_ffmpeg` on another thread, failing the test when it has not
+    /// returned within a minute rather than hanging the test run.
+    fn run_ffmpeg_within_a_minute(args: &[&str]) -> Result<()> {
+        let args: Vec<String> = args.iter().map(|a| (*a).to_string()).collect();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = sender.send(run_ffmpeg(&args));
+        });
+        receiver
+            .recv_timeout(std::time::Duration::from_secs(60))
+            .expect("run_ffmpeg did not return within a minute")
+    }
+
+    /// ffmpeg writes a stats line about twice a second, so a long conversion
+    /// writes more than a pipe holds (64 KiB on Linux). A pipe nobody reads
+    /// blocks ffmpeg on the write, and the wait for it never returns (#1178).
+    #[cfg(unix)]
+    #[test]
+    fn run_ffmpeg_returns_when_ffmpeg_writes_more_than_a_pipe_holds() {
+        let _guard = tools_test_lock();
+        let _restore = RestoreToolsDir::capture();
+        let _dir = mock_ffmpeg_dir(
+            "dd if=/dev/zero bs=1024 count=1024 2>/dev/null | tr '\\0' x >&2\nexit 0",
+        );
+
+        run_ffmpeg_within_a_minute(&["-i", "in.mov", "out.mp4"]).expect("ffmpeg exits 0");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_ffmpeg_failure_carries_what_ffmpeg_said() {
+        let _guard = tools_test_lock();
+        let _restore = RestoreToolsDir::capture();
+        let _dir =
+            mock_ffmpeg_dir("echo 'in.mov: Invalid data found when processing input' >&2\nexit 1");
+
+        let err =
+            run_ffmpeg_within_a_minute(&["-i", "in.mov", "out.mp4"]).expect_err("ffmpeg exits 1");
+        let message = format!("{err:#}");
+        assert!(
+            message.contains("in.mov: Invalid data found when processing input"),
+            "message was {message:?}"
+        );
+    }
+
+    /// A failure after megabytes of warnings keeps the end, where ffmpeg
+    /// writes the reason it stopped, and drops the rest.
+    #[cfg(unix)]
+    #[test]
+    fn run_ffmpeg_failure_keeps_only_the_end_of_a_long_error_output() {
+        let _guard = tools_test_lock();
+        let _restore = RestoreToolsDir::capture();
+        let _dir = mock_ffmpeg_dir(
+            "i=0\nwhile [ $i -lt 20000 ]; do echo \"warning for frame $i\" >&2; i=$((i+1)); done\n\
+             echo 'Conversion failed!' >&2\nexit 1",
+        );
+
+        let err =
+            run_ffmpeg_within_a_minute(&["-i", "in.mov", "out.mp4"]).expect_err("ffmpeg exits 1");
+        let message = format!("{err:#}");
+        assert!(
+            message.ends_with("Conversion failed!"),
+            "message ends {:?}",
+            &message[message.len().saturating_sub(200)..]
+        );
+        assert!(
+            !message.contains("warning for frame 0\n"),
+            "the start was kept"
+        );
+        assert!(
+            message.len() <= STDERR_TAIL_BYTES + 100,
+            "message is {} bytes",
+            message.len()
+        );
+    }
+
+    /// The real ffmpeg, given an input that does not exist, says so, and the
+    /// error says what it said.
+    #[test]
+    fn real_ffmpeg_failure_names_the_missing_input() {
+        let Some(_guard) = crate::testutil::real_ffmpeg_test_guard() else {
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("missing.mov");
+        let output = dir.path().join("out.mp4");
+
+        let err = run_ffmpeg(&[
+            "-y".to_string(),
+            "-i".to_string(),
+            missing.display().to_string(),
+            output.display().to_string(),
+        ])
+        .expect_err("the input does not exist");
+        let message = format!("{err:#}");
+        assert!(
+            message.contains("No such file or directory"),
+            "message was {message:?}"
+        );
     }
 
     #[cfg(unix)]

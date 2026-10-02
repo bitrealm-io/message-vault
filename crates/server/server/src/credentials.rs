@@ -235,7 +235,7 @@ pub(crate) fn normalize_username(raw: &str) -> String {
 /// True for 1 to 128 characters of letters, digits, `_`, `-`, or `.`.
 pub(crate) fn is_valid_username(s: &str) -> bool {
     let s = s.trim();
-    if s.is_empty() || s.len() > 128 {
+    if s.is_empty() || s.chars().count() > 128 {
         return false;
     }
     s.chars()

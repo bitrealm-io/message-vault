@@ -9,6 +9,8 @@ import { deleteAccount, deleteAllMessages as deleteAllMessagesRoute } from "../.
 import { useDeleteAccount, useDeleteAccountMessages } from "../owner/useOwnerAccounts";
 import { dangerButtonClass } from "./profileStyles";
 
+const CANNOT_DELETE = "Deleting is not permitted for this account. The owner can delete it.";
+
 const dangerButton = `${dangerButtonClass} !box-border !w-auto !min-w-[10.5rem] !whitespace-nowrap !border-transparent !px-3 !py-2 !text-[0.813rem] !shadow-[inset_0_0_0_1px_var(--danger-soft-border)]`;
 
 /**
@@ -19,17 +21,24 @@ const dangerButton = `${dangerButtonClass} !box-border !w-auto !min-w-[10.5rem] 
  * else's: no password is asked, because the owner does not know it, and the
  * owner lands back on User Accounts. The owner deletes on the strength of the
  * count and the account holder's word, so the confirmation states the count.
+ *
+ * `canDelete` is the account's own `delete` permission. Deleting the account
+ * deletes its messages, so the server refuses both deletes to an account
+ * without it, and the account is told to ask the owner. The owner deletes
+ * either way.
  */
 export function ProfileDangerZone({
   isDemo,
   username,
   hasPassword,
+  canDelete = true,
   managedAccountId,
   messageCount = 0,
 }: {
   isDemo: boolean;
   username: string;
   hasPassword: boolean;
+  canDelete?: boolean;
   managedAccountId?: number;
   messageCount?: number;
 }) {
@@ -51,10 +60,12 @@ export function ProfileDangerZone({
   const demoLocked = isDemo && !managed;
   // Nobody empties the Demo Account: the owner deletes it or resets it.
   const messagesLocked = isDemo;
+  // An account the owner barred from deleting asks the owner instead.
+  const notPermitted = !canDelete && !managed;
   const count = messageCount.toLocaleString();
 
   const deleteAllMessages = async () => {
-    if (messagesLocked) return;
+    if (messagesLocked || notPermitted) return;
     setDeletingMessages(true);
     setDangerError("");
     try {
@@ -71,7 +82,7 @@ export function ProfileDangerZone({
   };
 
   const performDeleteAccount = async (currentPassword?: string) => {
-    if (demoLocked) return;
+    if (demoLocked || notPermitted) return;
     setDeleting(true);
     setDangerError("");
     try {
@@ -116,6 +127,11 @@ export function ProfileDangerZone({
             ? `Delete ${username}'s messages or permanently remove the account.`
             : "Delete messages or permanently remove your account."}
         </p>
+        {notPermitted && (
+          <p className="ml-5 mt-[0.35rem] text-[0.813rem] text-muted">
+            Ask the owner to delete your messages or your account.
+          </p>
+        )}
 
         {dangerZoneOpen && (
           <div className="ml-5 mt-4 rounded-xl border-solid border-danger p-5 [border-width:0.75px]">
@@ -133,10 +149,16 @@ export function ProfileDangerZone({
               <div className="justify-self-end p-px">
                 <Button
                   variant="danger"
-                  disabled={busy || messagesLocked}
+                  disabled={busy || messagesLocked || notPermitted}
                   onClick={() => setConfirmDeleteMessagesOpen(true)}
                   className={dangerButton}
-                  title={messagesLocked ? "Unavailable on the demo account" : undefined}
+                  title={
+                    messagesLocked
+                      ? "Unavailable on the demo account"
+                      : notPermitted
+                        ? CANNOT_DELETE
+                        : undefined
+                  }
                 >
                   {deletingMessages ? "Deleting…" : "Delete all messages"}
                 </Button>
@@ -154,13 +176,19 @@ export function ProfileDangerZone({
               <div className="justify-self-end p-px">
                 <Button
                   variant="danger"
-                  disabled={busy || demoLocked}
+                  disabled={busy || demoLocked || notPermitted}
                   onClick={() => {
                     setDangerError("");
                     setDeleteDialogOpen(true);
                   }}
                   className={dangerButton}
-                  title={demoLocked ? "Unavailable on the demo account" : undefined}
+                  title={
+                    demoLocked
+                      ? "Unavailable on the demo account"
+                      : notPermitted
+                        ? CANNOT_DELETE
+                        : undefined
+                  }
                 >
                   Delete account
                 </Button>

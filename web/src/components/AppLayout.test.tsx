@@ -8,9 +8,16 @@ import { mockedAuth, Providers } from "../test/providers";
 import AppLayout from "./AppLayout";
 
 // The lists, the header and the drawers fetch their own data; this file is
-// about what the layout does to the URL, so they stand in as nothing.
+// about what the layout does to the URL, so they stand in as nothing, except
+// the conversation list, which offers one row to click.
 vi.mock("../screens/ContactList", () => ({ default: () => null }));
-vi.mock("../screens/ConversationList", () => ({ default: () => null }));
+vi.mock("../screens/ConversationList", () => ({
+  default: ({ onSelect }: { onSelect: (c: { id: number }) => void }) => (
+    <button type="button" onClick={() => onSelect({ id: 6 })}>
+      First result
+    </button>
+  ),
+}));
 vi.mock("./AppHeader", () => ({ default: () => null }));
 vi.mock("./ContactDrawer", () => ({ default: () => null }));
 vi.mock("./CheckedContactsPanel", () => ({ default: () => null }));
@@ -91,4 +98,15 @@ describe("AppLayout", () => {
       expect(screen.getByTestId("location").textContent).toBe(entry);
     },
   );
+
+  it.each([
+    ["a search", "?q=dentist"],
+    ["a contact's conversations", "?q=with%3A%2342&f=with%3A%2342"],
+  ])("keeps %s when a conversation in the list is opened", async (_name, search) => {
+    const user = userEvent.setup();
+    renderLayout(`/${search}`);
+
+    await user.click(screen.getByRole("button", { name: "First result" }));
+    expect(screen.getByTestId("location").textContent).toBe(`/messages/6${search}`);
+  });
 });

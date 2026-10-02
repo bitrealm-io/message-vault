@@ -9,16 +9,32 @@ import AppLayout from "./AppLayout";
 
 // The lists, the header and the drawers fetch their own data; this file is
 // about what the layout does to the URL, so they stand in as nothing, except
-// the conversation list, which offers one row to click.
-vi.mock("../screens/ContactList", () => ({ default: () => null }));
+// the two lists. Each says which filter it was given, so a test can tell a
+// list filtered to a set from a list of everything, and the conversation list
+// offers one row to click.
+vi.mock("../screens/ContactList", () => ({
+  default: ({ groupFilter }: { groupFilter: string | null }) => (
+    <div data-testid="contact-list">{`group filter: ${groupFilter ?? "(none)"}`}</div>
+  ),
+}));
 vi.mock("../screens/ConversationList", () => ({
-  default: ({ onSelect }: { onSelect: (c: { id: number }) => void }) => (
-    <button type="button" onClick={() => onSelect({ id: 6 })}>
-      First result
+  default: ({ query, onSelect }: { query: string; onSelect: (c: { id: number }) => void }) => (
+    <div>
+      <div data-testid="conversation-list">{`query: ${query}`}</div>
+      <button type="button" onClick={() => onSelect({ id: 6 })}>
+        First result
+      </button>
+    </div>
+  ),
+}));
+// The header stands in as one button that searches for "ada".
+vi.mock("./AppHeader", () => ({
+  default: ({ onSearch }: { onSearch: (q: string) => void }) => (
+    <button type="button" onClick={() => onSearch("ada")}>
+      Search for ada
     </button>
   ),
 }));
-vi.mock("./AppHeader", () => ({ default: () => null }));
 vi.mock("./ContactDrawer", () => ({ default: () => null }));
 vi.mock("./CheckedContactsPanel", () => ({ default: () => null }));
 
@@ -26,11 +42,17 @@ vi.mock("../lib/auth", () => ({ useAuth: () => mockedAuth }));
 vi.mock("../lib/useAccountProfile", () => ({
   useAccountProfile: () => ({ profile: null }),
 }));
+const sets = vi.hoisted(() => ({
+  groups: [] as string[],
+  groupsLoading: false,
+  tags: [] as string[],
+  tagsLoading: false,
+}));
 vi.mock("../lib/useContactGroups", () => ({
-  useContactGroups: () => ({ groups: [] }),
+  useContactGroups: () => ({ groups: sets.groups, loading: sets.groupsLoading }),
 }));
 vi.mock("../lib/useMessageTags", () => ({
-  useMessageTags: () => ({ tags: [] }),
+  useMessageTags: () => ({ tags: sets.tags, loading: sets.tagsLoading }),
 }));
 vi.mock("../lib/tauri-check", () => ({ isTauri: () => false }));
 vi.mock("../screens/import/useImportAttention", () => ({
@@ -52,6 +74,10 @@ vi.mock("../lib/savedSearches", () => ({
 
 afterEach(() => {
   cleanup();
+  sets.groups = [];
+  sets.groupsLoading = false;
+  sets.tags = [];
+  sets.tagsLoading = false;
 });
 
 /** Where the router is now, and a Back button. */
@@ -108,5 +134,59 @@ describe("AppLayout", () => {
 
     await user.click(screen.getByRole("button", { name: "First result" }));
     expect(screen.getByTestId("location").textContent).toBe(`/messages/6${search}`);
+  });
+});
+
+describe("AppLayout on a Contact Group or Message Tag page", () => {
+  it("filters the contacts to the group whose whole name is in the link", () => {
+    sets.groups = ["A&B", "A B", "家族"];
+    renderLayout(`/group/${encodeURIComponent("A B")}`);
+    expect(screen.getByTestId("contact-list")).toHaveTextContent("group filter: A B");
+  });
+
+  it("says a tag that does not exist is not found, and lists nothing", () => {
+    sets.tags = ["Holiday"];
+    renderLayout("/tag/Old");
+    expect(screen.queryByTestId("conversation-list")).toBeNull();
+    expect(screen.getByText("There is no Message Tag named Old.")).toBeTruthy();
+  });
+
+  it("says a group that does not exist is not found, and lists nothing", () => {
+    sets.groups = ["Family"];
+    renderLayout("/group/Old");
+    expect(screen.queryByTestId("contact-list")).toBeNull();
+    expect(screen.getByText("There is no Contact Group named Old.")).toBeTruthy();
+  });
+
+  it("shows that the groups are loading, and lists nothing until they have", () => {
+    sets.groupsLoading = true;
+    renderLayout("/group/Family");
+    expect(screen.queryByTestId("contact-list")).toBeNull();
+    expect(screen.getByText("Loading Contact Groups…")).toBeTruthy();
+  });
+
+  it("shows that the tags are loading, and lists nothing until they have", () => {
+    sets.tagsLoading = true;
+    renderLayout("/tag/Holiday");
+    expect(screen.queryByTestId("conversation-list")).toBeNull();
+    expect(screen.getByText("Loading Message Tags…")).toBeTruthy();
+  });
+
+  it("keeps a group whose name holds a question mark when the list is searched", async () => {
+    sets.groups = ["Why?"];
+    const user = userEvent.setup();
+    renderLayout(`/group/${encodeURIComponent("Why?")}`);
+
+    await user.click(screen.getByRole("button", { name: "Search for ada" }));
+    expect(screen.getByTestId("location").textContent).toBe("/group/Why%3F?cq=ada");
+  });
+
+  it("keeps a tag whose name holds a number sign when the list is searched", async () => {
+    sets.tags = ["#1"];
+    const user = userEvent.setup();
+    renderLayout(`/tag/${encodeURIComponent("#1")}`);
+
+    await user.click(screen.getByRole("button", { name: "Search for ada" }));
+    expect(screen.getByTestId("location").textContent).toBe("/tag/%231?q=ada");
   });
 });

@@ -98,6 +98,60 @@ pub(crate) fn mark_ready(db: &Path) -> Result<()> {
     fs::write(&path, []).with_context(|| format!("write {}", path.display()))
 }
 
+/// `server.ready` taken away for a rebuild, and written back when this is
+/// dropped unless [`ReadyWhileRebuilding::keep_cleared`] was called first.
+///
+/// A reset clears the marker before it builds the replacement database, and
+/// almost every way it can fail leaves the active database as it was. Writing
+/// the marker back on drop covers each of those ways out, so sqlite-web is not
+/// left waiting for a database that is already whole.
+#[derive(Debug)]
+pub(crate) struct ReadyWhileRebuilding {
+    db: PathBuf,
+    restore: bool,
+}
+
+impl ReadyWhileRebuilding {
+    /// Remove `server.ready` beside `db` until the returned value is dropped.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the marker exists and cannot be removed.
+    pub(crate) fn clear(db: &Path) -> Result<Self> {
+        clear_ready(db)?;
+        Ok(Self {
+            db: db.to_path_buf(),
+            restore: true,
+        })
+    }
+
+    /// Leave `server.ready` removed: the active database is not whole.
+    pub(crate) fn keep_cleared(&mut self) {
+        self.restore = false;
+    }
+
+    /// Write `server.ready` back now, reporting a failure to the caller.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the marker cannot be written.
+    pub(crate) fn mark_ready(mut self) -> Result<()> {
+        self.restore = false;
+        mark_ready(&self.db)
+    }
+}
+
+impl Drop for ReadyWhileRebuilding {
+    fn drop(&mut self) {
+        if !self.restore {
+            return;
+        }
+        if let Err(error) = mark_ready(&self.db) {
+            eprintln!("warning: could not write server.ready back: {error:#}");
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{clear_ready, mark_ready, ready_path};

@@ -131,6 +131,8 @@ fn writes_group_mms_with_image_part() {
             original_name: Some("photo.jpg".into()),
             mime_type: Some("image/jpeg".into()),
             digest_sha256: Some("deadbeef".into()),
+            size_bytes: None,
+            missing_reason: None,
         },
         is_sticker: false,
         transcription: None,
@@ -404,6 +406,8 @@ fn tapback_and_handwriting_svg_headers() {
             original_name: Some("handwriting.svg".into()),
             mime_type: Some("image/svg+xml".into()),
             digest_sha256: None,
+            size_bytes: None,
+            missing_reason: None,
         },
         is_sticker: false,
         transcription: None,
@@ -540,4 +544,45 @@ fn clean_previous_mail_output_removes_only_mail_archives() {
 fn clean_previous_mail_output_accepts_a_missing_folder() {
     let tmp = tempfile::tempdir().unwrap();
     clean_previous_mail_output(&tmp.path().join("missing")).unwrap();
+}
+
+#[test]
+fn a_messages_own_owner_survives_an_mbox_round_trip() {
+    let mut msg = base_sms();
+    msg.message.direction = IrDirection::Outgoing;
+    msg.message.owner_handle = Some("me@icloud.com".into());
+    let tmp = tempfile::tempdir().unwrap();
+    let path = write_conversation_mbox(tmp.path(), &[msg]).unwrap();
+    let parsed = mail_messages_from_mbox(&path).unwrap();
+    assert_eq!(
+        parsed[0].message.owner_handle.as_deref(),
+        Some("me@icloud.com")
+    );
+    // The conversation's owner stays where it was.
+    assert_eq!(parsed[0].owner_handle, "+15555550100");
+}
+
+#[test]
+fn an_mbox_keeps_the_bytes_of_a_text_attachment() {
+    let card = b"BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Sam\r\nEND:VCARD\r\n".to_vec();
+    let mut msg = base_sms();
+    msg.message.message_kind = message_ir::IrMessageKind::Mms;
+    msg.attachments = vec![MailAttachment {
+        bytes: card.clone(),
+        meta: message_ir::AttachmentMeta {
+            path: None,
+            original_name: Some("sam.vcf".into()),
+            mime_type: Some("text/vcard".into()),
+            digest_sha256: None,
+            size_bytes: None,
+            missing_reason: None,
+        },
+        is_sticker: false,
+        transcription: None,
+        sticker_effect: None,
+    }];
+    let tmp = tempfile::tempdir().unwrap();
+    let path = write_conversation_mbox(tmp.path(), &[msg]).unwrap();
+    let parsed = mail_messages_from_mbox(&path).unwrap();
+    assert_eq!(parsed[0].attachments[0].bytes, card);
 }

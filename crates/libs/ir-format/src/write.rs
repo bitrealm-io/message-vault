@@ -38,6 +38,7 @@ pub const CSV_HEADERS: &[&str] = &[
     "export_tool_version",
     "owner_handle",
     "owner_display_name",
+    "message_owner_handle",
     "android_type",
     "source_fields_json",
     "read_receipt",
@@ -366,7 +367,7 @@ fn csv_record<'a>(
     participants_json: &'a str,
     msg: &'a IrMessage,
     cells: &'a MessageCells,
-) -> [&'a str; 46] {
+) -> [&'a str; 47] {
     let im = &cells.imessage;
     [
         doc.conversation.chat_identifier.as_str(),
@@ -392,6 +393,7 @@ fn csv_record<'a>(
         doc.export.tool_version.as_str(),
         doc.export.owner_handle.as_deref().unwrap_or(""),
         doc.export.owner_display_name.as_deref().unwrap_or(""),
+        msg.owner_handle.as_deref().unwrap_or(""),
         cells.android_type.as_str(),
         cells.source_fields_json.as_str(),
         im.read_receipt.as_str(),

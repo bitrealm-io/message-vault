@@ -839,3 +839,174 @@ fn a_convert_error_marks_only_the_attachment_it_names() {
     assert_eq!(other.missing_reason, None);
     assert_eq!(pathless.missing_reason, None);
 }
+
+/// A sender-chosen name whose text after the last dot is long must not stop
+/// the run (issue #1126).
+///
+/// The staged name `<date>-<digest>.<that text>` passed the 255-byte limit on
+/// Linux, the write failed, and the error ended the whole Staging. That text
+/// is not an extension, so the staged file gets none, and the next
+/// attachment is staged as usual.
+#[test]
+fn an_attachment_name_the_file_system_cannot_take_does_not_stop_the_run() {
+    let dir = tempfile::tempdir().unwrap();
+    let att_dir = dir.path().join("attachments");
+    let long_name = format!("Notes v1.{}", "x".repeat(240));
+    let mut long = empty_att(&long_name);
+    let mut ok = empty_att("photo.jpg");
+    let result = {
+        let mut jobs = [
+            AttachmentJob {
+                attachment: &mut long,
+                timestamp_unix_ms: 1_609_459_200_000,
+                size_hint: None,
+            },
+            AttachmentJob {
+                attachment: &mut ok,
+                timestamp_unix_ms: 1_609_459_200_000,
+                size_hint: None,
+            },
+        ];
+        run_attachment_jobs(
+            &mut jobs,
+            &att_dir,
+            &media_cfg(MediaMode::Clone),
+            |i| Ok(Some(format!("bytes-{i}").into_bytes())),
+            |_| {},
+            None,
+            None,
+        )
+    };
+    assert!(result.is_ok(), "{result:?}");
+    assert!(ok.path.as_deref().unwrap().ends_with(".jpg"));
+    let staged = long.path.as_deref().unwrap();
+    assert!(!staged.contains('.'), "{staged}");
+    assert_eq!(long.original_name.as_deref(), Some(long_name.as_str()));
+}
+
+/// A name whose text after the last dot holds a character some file systems
+/// refuse (`?` on Windows) is staged with no extension on every platform, so
+/// the staged name is the same wherever the run happens.
+#[test]
+fn a_name_with_no_plain_extension_is_staged_without_one() {
+    let dir = tempfile::tempdir().unwrap();
+    let att_dir = dir.path().join("attachments");
+    let mut att = empty_att("Notes v1.2 (draft?)");
+    {
+        let mut jobs = [AttachmentJob {
+            attachment: &mut att,
+            timestamp_unix_ms: 1_609_459_200_000,
+            size_hint: None,
+        }];
+        run_attachment_jobs(
+            &mut jobs,
+            &att_dir,
+            &media_cfg(MediaMode::Clone),
+            |_| Ok(Some(b"draft".to_vec())),
+            |_| {},
+            None,
+            None,
+        )
+        .unwrap();
+    }
+    let staged = att.path.as_deref().unwrap();
+    let name = staged.strip_prefix("attachments/").unwrap();
+    assert!(!name.contains('.'), "{name}");
+    assert!(dir.path().join(staged).is_file());
+    assert_eq!(att.original_name.as_deref(), Some("Notes v1.2 (draft?)"));
+    assert_eq!(att.missing_reason, None);
+}
+
+/// An extension is kept only when it is at most ten ASCII letters and
+/// digits. Anything else is text the sender typed after a dot, and putting it
+/// in the staged name can make a name the file system refuses.
+#[test]
+fn only_a_short_plain_extension_is_kept() {
+    assert_eq!(extension_from_name(Some("Notes v1.2 (draft?)")), "");
+    assert_eq!(extension_from_name(Some("call me.at 5:30")), "");
+    assert_eq!(extension_from_name(Some("photo.jp g")), "");
+    assert_eq!(extension_from_name(Some("photo.jpé")), "");
+    assert_eq!(
+        extension_from_name(Some(&format!("Notes v1.{}", "x".repeat(240)))),
+        ""
+    );
+    assert_eq!(extension_from_name(Some("deck.keynote")), ".keynote");
+    assert_eq!(extension_from_name(Some("a.abcdefghij")), ".abcdefghij");
+    assert_eq!(extension_from_name(Some("a.abcdefghijk")), "");
+}
+
+/// A write or rename that fails for one attachment marks that attachment
+/// `file_missing`, logs the error, and the run goes on, as it does for a
+/// source that cannot be read.
+///
+/// A directory sitting at the staged name of the first attachment makes its
+/// rename fail on every platform.
+#[test]
+fn a_failed_write_marks_only_that_attachment_missing() {
+    let dir = tempfile::tempdir().unwrap();
+    let att_dir = dir.path().join("attachments");
+    let blocked_bytes = b"blocked".to_vec();
+    let blocked_name = attachment_dest_name(1_609_459_200, &hex_sha256(&blocked_bytes), ".jpg");
+    std::fs::create_dir_all(att_dir.join(&blocked_name).join("occupied")).unwrap();
+
+    let mut blocked = empty_att("blocked.jpg");
+    let mut ok = empty_att("photo.jpg");
+    let progress = Mutex::new(Vec::new());
+    let lines = std::sync::Arc::new(Mutex::new(Vec::<String>::new()));
+    let sink_lines = std::sync::Arc::clone(&lines);
+    let sink = crate::process::LogSink::new(move |l: &str| {
+        sink_lines.lock().unwrap().push(l.to_string());
+    });
+    let result = {
+        let mut jobs = [
+            AttachmentJob {
+                attachment: &mut blocked,
+                timestamp_unix_ms: 1_609_459_200_000,
+                size_hint: Some(7),
+            },
+            AttachmentJob {
+                attachment: &mut ok,
+                timestamp_unix_ms: 1_609_459_200_000,
+                size_hint: Some(2),
+            },
+        ];
+        run_attachment_jobs(
+            &mut jobs,
+            &att_dir,
+            &media_cfg(MediaMode::Clone),
+            |i| {
+                Ok(Some(if i == 0 {
+                    blocked_bytes.clone()
+                } else {
+                    b"ok".to_vec()
+                }))
+            },
+            |p| progress.lock().unwrap().push(p),
+            Some(&sink),
+            None,
+        )
+    };
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(blocked.missing_reason.as_deref(), Some("file_missing"));
+    assert_eq!(blocked.path, None);
+    assert_eq!(blocked.digest_sha256, None);
+    assert!(ok.path.is_some());
+    assert_eq!(ok.missing_reason, None);
+    let last = progress.lock().unwrap().last().copied().unwrap();
+    assert_eq!((last.done, last.total), (2, 2));
+    assert_eq!((last.bytes_done, last.bytes_total), (2, 2));
+    let lines = lines.lock().unwrap();
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.contains("blocked.jpg") && l.contains(&blocked_name)),
+        "{lines:?}"
+    );
+    // The failed write leaves no temp file behind.
+    let leftovers: Vec<_> = std::fs::read_dir(&att_dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().into_string().unwrap())
+        .filter(|n| n.ends_with(".tmp"))
+        .collect();
+    assert!(leftovers.is_empty(), "{leftovers:?}");
+}

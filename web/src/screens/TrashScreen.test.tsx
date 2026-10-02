@@ -2,7 +2,7 @@
 
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   deleteContact,
@@ -429,5 +429,37 @@ describe("TrashScreen", () => {
       expect(screen.getByRole("button", { name: "Restore" })).not.toBeDisabled();
       expect(screen.getByRole("button", { name: "Restore Grace Hopper" })).not.toBeDisabled();
     });
+  });
+
+  it("does not show a Restore error from one conversation on the next one selected", async () => {
+    restoreConversationMock.mockRejectedValue(new Error("Restore refused."));
+    getConversationMock.mockImplementation(async (id) =>
+      conversation({ id, participants: [{ name: id === 42 ? "Ada Lovelace" : "Bob Kahn" }] }),
+    );
+    // The left column selects a row by setting `tsel`, as AppLayout does.
+    function SelectBob() {
+      const navigate = useNavigate();
+      return (
+        <button type="button" onClick={() => navigate("/trash?tsel=7")}>
+          select Bob
+        </button>
+      );
+    }
+    render(
+      <Providers>
+        <MemoryRouter initialEntries={["/trash?tsel=42"]}>
+          <SelectBob />
+          <TrashScreen />
+        </MemoryRouter>
+      </Providers>,
+    );
+
+    await screen.findByText("Ada Lovelace");
+    await userEvent.click(screen.getByRole("button", { name: "Restore" }));
+    await screen.findByText("Restore refused.");
+
+    await userEvent.click(screen.getByRole("button", { name: "select Bob" }));
+    await screen.findByText("Bob Kahn");
+    expect(screen.queryByText("Restore refused.")).toBeNull();
   });
 });

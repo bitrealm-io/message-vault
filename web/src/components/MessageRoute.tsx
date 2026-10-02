@@ -74,7 +74,13 @@ export default function MessageRoute() {
       <RightPane>
         <main className="min-h-0 min-w-0 flex-1 overflow-auto bg-bg text-text">
           {conversation ? (
+            // The row clicked in the list stands in as placeholder data, so
+            // the pane never empties between two conversations. Keyed by id,
+            // the thread starts again for each one: its page, year and find,
+            // and any Move to trash or Contact Group still answering for the
+            // last one, which then acts on nothing.
             <MessageView
+              key={conversation.id}
               conversation={conversation}
               onOpenContact={(contactId, preview) => {
                 navigate(location.pathname + location.search, {

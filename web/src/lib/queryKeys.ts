@@ -1,12 +1,14 @@
 /**
  * Every cache key the web app uses, in one place.
  *
- * A key is built here and nowhere else, for one reason: TanStack Query marks
- * entries stale by prefix, so a write can only say "everything about contacts
- * is stale" if something owns the word `contacts`. When keys were literals
- * typed at each call site, that knowledge lived in comments, and screens kept
- * their own override maps rather than trusting an invalidation they could not
- * name.
+ * A key is built here and nowhere else, for one reason: TanStack Query finds
+ * entries by prefix, so an optimistic write can only patch "every contact
+ * list" if something owns the words `contacts` and `list`. When keys were
+ * literals typed at each call site, that knowledge lived in comments, and
+ * screens kept their own override maps rather than trusting a prefix they
+ * could not name. Marking entries stale needs no prefix from here: every
+ * write marks the whole account's cache stale (`invalidateAccount` in
+ * `routeQuery.ts`).
  *
  * One rule, for every resource: a namespace whose `all` is the prefix, with
  * the builders nested under it. The account is not here — `routeQueryKey` puts
@@ -33,9 +35,8 @@ export const keys = {
      * A builder of its own rather than `list("trashed:yes …")` because the
      * contact list screen holds that entry as TanStack Query's paged
      * `InfiniteData` and the Trash screen holds a single page, and two shapes
-     * must not share a key. It still sits under the `lists` prefix, so the
-     * contact trash mutations mark it stale along with everything else that
-     * lists contacts.
+     * must not share a key. It still sits under the `lists` prefix, with
+     * everything else that lists contacts.
      */
     trashed: (q: string) => ["contacts", "list", "trashed", q] as const,
     /**
@@ -54,8 +55,6 @@ export const keys = {
     detail: (id: number) => ["conversations", "detail", String(id)] as const,
     messages: (id: number, p: { offset: number; limit: number }) =>
       ["conversations", "messages", String(id), p.offset, p.limit] as const,
-    /** Every find inside any conversation, for the trash mutations to mark stale. */
-    finds: ["conversations", "find"] as const,
     /** One conversation narrowed to a year or a find term: `GET /v1/messages?q=in:#id …`. */
     find: (id: number, q: string, offset: number, limit: number) =>
       ["conversations", "find", String(id), q, offset, limit] as const,
@@ -77,7 +76,7 @@ export const keys = {
   /** The accounts the owner manages. */
   ownerAccounts: {
     all: ["owner-accounts"] as const,
-    /** One account the owner has opened. Under `all`, so a write to the list refreshes it too. */
+    /** One account the owner has opened. */
     member: (accountId: number) => ["owner-accounts", accountId] as const,
     storage: (accountId: number) => ["owner-accounts", accountId, "storage"] as const,
     identities: (accountId: number) => ["owner-accounts", accountId, "identities"] as const,

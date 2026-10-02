@@ -3,15 +3,14 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../lib/api";
-import { keys } from "../../lib/queryKeys";
 import { loadAddressBook } from "../../lib/serverApi";
 import { AddressBookSection } from "./AddressBookSection";
 
 vi.mock("../../lib/serverApi", () => ({ loadAddressBook: vi.fn() }));
 
-const invalidate = vi.fn().mockResolvedValue(undefined);
+const invalidateAccount = vi.fn();
 vi.mock("../../lib/routeQuery", () => ({
-  useRouteCache: () => ({ invalidate }),
+  useRouteCache: () => ({ invalidateAccount }),
 }));
 
 const post = vi.mocked(loadAddressBook);
@@ -100,17 +99,12 @@ describe("AddressBookSection", () => {
     ]);
   });
 
-  it("marks the contact lists, the Contact Groups and the conversations stale after a load", async () => {
+  it("marks the account's cache stale after a load", async () => {
     post.mockResolvedValue(NOTHING);
     render(<AddressBookSection />);
     chooseFile("address-book.csv", FILE);
 
-    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
-    expect(invalidate).toHaveBeenCalledWith(
-      keys.contacts.all,
-      keys.contactGroups.all,
-      keys.conversations.all,
-    );
+    await waitFor(() => expect(invalidateAccount).toHaveBeenCalledTimes(1));
   });
 
   it("lists every row a refused load names, each on its own line", async () => {
@@ -138,7 +132,7 @@ describe("AddressBookSection", () => {
       "row 7: identity is blank",
     ]);
     expect(alert.textContent).toContain("Nothing was loaded.");
-    expect(invalidate).not.toHaveBeenCalled();
+    expect(invalidateAccount).not.toHaveBeenCalled();
   });
 
   it("shows the reason when the load fails some other way", async () => {

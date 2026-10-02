@@ -39,13 +39,13 @@ Diagnostic skip lists (`skipped_invalid_address.csv`, `skipped_empty_pdu.csv`, `
 </GoSms>
 ```
 
-Each `<SMS>` becomes one message in a shared conversation. `chat_identifier` holds the peer’s E.164 handle.
+Each `<SMS>` becomes one message in a shared conversation. `chat_identifier` holds the peer’s handle key.
 
 ## Known XML children → shared fields
 
 | XML child | Shared field(s) | Notes |
 |-----------|------------------|--------|
-| `<address>` | `chat_identifier`, `sender_handle` | Digits sanitized then E.164. For sent (`type=2`), address is the peer (not the sender). For received (`type=1`), address is also `sender_handle`. A voicemail notice from Google Voice is an SMS from the Google Voice number like any other; Message Crate does not read who called out of its body. |
+| `<address>` | `chat_identifier`, `sender_handle` | Classified once by `phone::Handle::parse`: a number keeps the country its `+` names and is otherwise read as a US number, an address with `@` is an email address, and anything else (such as `AMAZON`) is a sender name, an identity of type `other`. For sent (`type=2`), address is the peer (not the sender). For received (`type=1`), address is also `sender_handle`. A voicemail notice from Google Voice is an SMS from the Google Voice number like any other; Message Crate does not read who called out of its body. |
 | `<contactName>` | `sender_display_name` | Display name filled for incoming when present. |
 | `<date>` | `timestamp_unix_ms`, `timestamp`, `timestamp_utc`, `timestamp_display` | Raw ms in `timestamp_unix_ms`. Converted to local/UTC RFC3339 and a human display string. |
 | `<type>` | `android_type`, `direction` | `1` → `incoming`, `2` → `outgoing`. Other values are skipped. |
@@ -97,8 +97,8 @@ The same lines also show `xml_messages_seen`, `pdu_messages`, and `pdu_group_mes
 |-------|---------|
 | `skipped N invalid-date rows` | XML `<date>` was missing or not a number. A missing date is skipped rather than read as 1970-01-01, because every such row would share timestamp 0 and could falsely deduplicate. |
 | `skipped_unknown_type` | XML `<type>` was not `1` (inbox) or `2` (sent) |
-| `skipped_unknown_address` | XML SMS whose `<address>` had fewer than four digits once non-digits are stripped (empty, a name, junk), the minimum `phone::sanitize_number` (`crates/libs/phone/src/lib.rs`) accepts. 4–6 digit short codes (e.g. AT&T `7535`) are kept. Full list: `skipped_invalid_address.csv`. |
 | `skipped_unreadable_text` | XML SMS with a reference in one of its fields that is not a character or one of the five XML entities, such as `&#55357;` or `&nbsp;`. The reference costs that one message, not the file. |
+| `skipped_unknown_address` | XML SMS whose `<address>` is blank. A sender name is an address and is kept. Full list: `skipped_invalid_address.csv`. |
 | `skipped_empty_pdu` | A stub: a `.pdu` file that does not start with the X-Mms-Message-Type header. GO SMS Pro writes a 17-byte `application/smil` placeholder for an MMS it never downloaded; 709 of the 2,004 files in one real backup are stubs. Full list: `skipped_empty_pdu.csv`. |
 | `skipped_no_other_party` | A PDU whose every number is one of the owner phone numbers entered on the Import form, such as an MMS the owner sent to themself. Full list: `skipped_no_party.csv` (`pdu_filename`, `sender`, `recipients`, `is_sent`). |
 | `skipped_unparseable_pdu` | A PDU that breaks a WAP-209 or WSP rule, or records a transaction that is not a message (a delivery report, a notification). The first twenty are named as `error:` lines in the summary with the rule broken and the byte offset. |
@@ -113,8 +113,8 @@ MMS from `I_<unix>_*.pdu` (received) and `S_<unix>_*.pdu` (sent) files use the s
 | Shared field | PDU behavior |
 |---------------|--------------|
 | `direction` | `m-send-req` is outgoing, `m-retrieve-conf` is incoming. The file name prefix says the same thing and is not consulted. |
-| `sender_handle` | The From header's number on a received message. A sent message carries the Insert-address-token instead of a number, so the export owner is the sender. |
-| `chat_identifier` / `conversation_type` / `group_title` | From the From, To, Cc and Bcc numbers that are not the owner's: one number is a 1:1 chat, two or more a group with a `chat-group-…` id. |
+| `sender_handle` | The From header's address on a received message, classified like an XML `<address>`. A sent message carries the Insert-address-token instead of a number, so the export owner is the sender. |
+| `chat_identifier` / `conversation_type` / `group_title` | From the From, To, Cc and Bcc addresses that are not the owner's: one is a 1:1 chat, two or more a group with a `chat-group-…` id. |
 | `timestamp*` / `timestamp_unix_ms` | The MMS `Date` header; the file name's seconds when the header is absent. |
 | `text` | Every `text/plain` part, in wire order, joined with a newline, with GO SMS Pro emoji codes decoded. When there is no text part, the Subject. |
 | `attachments_json` | Every part that is not `text/plain` and not `application/smil`, with its content type and the name its part headers give it, under `attachments/` |

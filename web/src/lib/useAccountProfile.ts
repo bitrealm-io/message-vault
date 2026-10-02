@@ -43,7 +43,8 @@ export type AccountProfileChange = Parameters<typeof updateAccountProfile>[0];
  * Change the account’s own name or identities.
  *
  * The server answers with the profile as it now stands, so that answer goes
- * into the entry every screen reads. Only the identities list is marked stale.
+ * into the entry every screen reads, and the account's cache is marked stale
+ * once the write settles.
  */
 export function useUpdateAccountProfile(): UseMutationResult<
   AccountProfile,
@@ -55,9 +56,8 @@ export function useUpdateAccountProfile(): UseMutationResult<
     mutationFn: (body) => updateAccountProfile(body),
     onSuccess: (profile) => {
       cache.set(keys.accountProfile.all, profile);
-      // An identity added or removed changes the identities list and its counts.
-      void cache.invalidate(keys.accountProfile.identities);
     },
+    onSettled: () => cache.invalidateAccount(),
   });
 }
 

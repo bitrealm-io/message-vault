@@ -395,6 +395,11 @@ What each reaches:
   that refuses to start or an upload that cannot complete. Rejected:
   refusing a limit below the configured part size, and stopping `serve`
   when the config file's part size is above a stored limit.
+- The attachment size limit holds the attachment uploads only:
+  `PUT /v1/assets/{sha256}` and each part of a multipart upload. Every
+  other route has a body cap fixed in the code. Why: the owner may set any
+  limit of 1 byte or more, and a limit that held every body would refuse
+  the login and the settings change that raise it again.
 
 The credential names the account. No route takes an `account=` parameter.
 

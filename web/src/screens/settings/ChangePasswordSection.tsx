@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Button from "../../components/Button";
 import { useAuth } from "../../lib/auth";
+import { useRouteCache } from "../../lib/routeQuery";
 import { changePassword, setAccountPassword } from "../../lib/serverApi";
 import { inputClassName, sectionTitleClass } from "./profileStyles";
 
@@ -15,6 +16,11 @@ import { inputClassName, sectionTitleClass } from "./profileStyles";
  * The owner must keep one, so its own Settings pass `canReset={false}`.
  * They also pass `requireCurrent`: the owner's account reaches every other, so
  * the server asks for the password being replaced before it changes it.
+ *
+ * An account's own change, or a reset, also deletes every API Token the
+ * account holds (`change_password_on_conn` on the server), so the message
+ * says so. The owner setting another account's password leaves that
+ * account's tokens alone.
  */
 export function ChangePasswordSection({
   disabled = false,
@@ -28,6 +34,7 @@ export function ChangePasswordSection({
   managedAccountId?: number;
 }) {
   const { updateToken } = useAuth();
+  const cache = useRouteCache();
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
@@ -45,7 +52,8 @@ export function ChangePasswordSection({
     setPwOk(false);
     try {
       const body = { password, password_confirmation: confirmation };
-      if (managedAccountId === undefined) {
+      const own = managedAccountId === undefined;
+      if (own) {
         const res = await changePassword(
           requireCurrent ? { ...body, current_password: currentPw } : body,
         );
@@ -55,10 +63,10 @@ export function ChangePasswordSection({
         // Someone else's password: the owner's own session is untouched.
         await setAccountPassword(managedAccountId, body);
       }
+      // The API Tokens and `has_password` on the profile changed with it.
+      cache.invalidateAccount();
       setPwOk(true);
-      setPwMsg(
-        password ? "Password changed." : "Password reset. This account now has no password.",
-      );
+      setPwMsg(passwordMessage(password !== "", own));
       setCurrentPw("");
       setNewPw("");
       setConfirmPw("");
@@ -139,4 +147,14 @@ export function ChangePasswordSection({
       </div>
     </>
   );
+}
+
+/** What the form says once the server has stored the new password, or none. */
+function passwordMessage(changed: boolean, own: boolean): string {
+  if (own) {
+    return changed
+      ? "Password changed. This account's API Tokens were revoked."
+      : "Password reset. This account now has no password, and its API Tokens were revoked.";
+  }
+  return changed ? "Password changed." : "Password reset. This account now has no password.";
 }

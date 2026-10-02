@@ -3,7 +3,7 @@
 use crate::emit::MAX_SKIP_DETAILS;
 use anyhow::{Context, Result, bail};
 use go_sms_mms::decode_gosms_emojis;
-use phone::sanitize_number;
+use phone::Handle;
 use quick_xml::Reader;
 use quick_xml::escape::resolve_predefined_entity;
 use quick_xml::events::{BytesRef, Event};
@@ -12,13 +12,11 @@ use std::path::Path;
 
 #[derive(Debug, Clone)]
 pub(crate) struct XmlMessage {
-    /// Other-party digits (sanitized).
-    pub other_digits: String,
+    /// The other party's address.
+    pub other: Handle,
     pub name_alias: Option<String>,
     pub timestamp_secs: f64,
     pub is_from_me: bool,
-    /// Sender digits when not from me.
-    pub sender_digits: Option<String>,
     pub text: String,
     /// Raw Android `<type>` (`1` received, `2` sent).
     pub android_type: String,
@@ -30,7 +28,7 @@ pub(crate) struct XmlMessage {
     pub xml_fields: BTreeMap<String, String>,
 }
 
-/// Diagnostic row when an XML SMS has no usable `<address>` digits.
+/// Diagnostic row when an XML SMS has a blank `<address>`.
 #[derive(Debug, Clone)]
 pub(crate) struct SkippedBadAddrDetail {
     pub xml_file: String,
@@ -103,7 +101,7 @@ pub(crate) fn parse_xml_str(text: &str) -> Result<(Vec<XmlMessage>, XmlParseStat
     let mut out = Vec::new();
 
     for fields in read_sms_elements(text, &mut stats)? {
-        let addr = sanitize_number(fields.get("address").map_or("", String::as_str));
+        let addr = Handle::parse(fields.get("address").map_or("", String::as_str));
         let contact = fields.get("contactName").cloned().unwrap_or_default();
         let body_raw = fields.get("body").map_or("", String::as_str);
         let body = decode_gosms_emojis(body_raw);
@@ -130,11 +128,10 @@ pub(crate) fn parse_xml_str(text: &str) -> Result<(Vec<XmlMessage>, XmlParseStat
                 };
                 stats.sent += 1;
                 XmlMessage {
-                    other_digits: other,
+                    other,
                     name_alias: message_ir::nonempty(&contact),
                     timestamp_secs,
                     is_from_me: true,
-                    sender_digits: None,
                     text: body,
                     android_type: typ.clone(),
                     date_ms: date_ms.clone(),
@@ -154,11 +151,10 @@ pub(crate) fn parse_xml_str(text: &str) -> Result<(Vec<XmlMessage>, XmlParseStat
                     Some(contact.clone())
                 };
                 XmlMessage {
-                    other_digits: other.clone(),
+                    other,
                     name_alias: hint,
                     timestamp_secs,
                     is_from_me: false,
-                    sender_digits: Some(other),
                     text: body,
                     android_type: typ.clone(),
                     date_ms: date_ms.clone(),
@@ -283,7 +279,7 @@ fn resolve_reference(r: &BytesRef<'_>) -> Option<String> {
     resolve_predefined_entity(r).map(String::from)
 }
 
-/// Record an XML SMS whose `<address>` had no usable digits.
+/// Record an XML SMS whose `<address>` is blank.
 fn push_bad_addr(
     stats: &mut XmlParseStats,
     fields: &BTreeMap<String, String>,
@@ -313,6 +309,7 @@ fn push_bad_addr(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use message_ir::HandleType;
 
     #[test]
     fn parses_sent_and_received() {
@@ -341,7 +338,7 @@ mod tests {
         assert_eq!(msgs.len(), 2);
         assert!(!msgs[0].is_from_me);
         assert_eq!(msgs[0].text, "hello 😂");
-        assert_eq!(msgs[0].other_digits, "4075551234");
+        assert_eq!(msgs[0].other.key(), "+14075551234");
         assert!(msgs[1].is_from_me);
     }
 
@@ -398,6 +395,35 @@ mod tests {
         assert_eq!(msgs[0].android_type, "1");
         assert_eq!(msgs[0].date_ms, "1400773261000");
         assert_eq!(msgs[0].contact_name, "Alice");
+    }
+
+    fn received_from(address: &str) -> (Vec<XmlMessage>, XmlParseStats) {
+        let xml = format!(
+            "<GoSms><SMS><address>{address}</address><date>1400773261000</date><type>1</type><body>hi</body></SMS></GoSms>"
+        );
+        parse_xml_str(&xml).unwrap()
+    }
+
+    #[test]
+    fn a_number_with_its_country_keeps_it() {
+        let (msgs, _) = received_from("+6591234567");
+        assert_eq!(msgs[0].other.key(), "+6591234567");
+    }
+
+    #[test]
+    fn an_email_address_and_a_sender_name_are_not_numbers() {
+        let (msgs, stats) = received_from("ann2020@example.com");
+        assert_eq!(
+            (msgs[0].other.kind(), msgs[0].other.key()),
+            (HandleType::Email, "ann2020@example.com")
+        );
+        assert_eq!(stats.skipped_unknown_address, 0);
+        let (msgs, stats) = received_from("AMAZON");
+        assert_eq!(
+            (msgs[0].other.kind(), msgs[0].other.key()),
+            (HandleType::Other, "AMAZON")
+        );
+        assert_eq!(stats.skipped_unknown_address, 0);
     }
 
     fn sms_with_date(date: &str) -> (Vec<XmlMessage>, XmlParseStats) {

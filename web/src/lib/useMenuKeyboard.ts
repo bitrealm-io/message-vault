@@ -19,7 +19,7 @@ export function useMenuKeyboard(
   onClose: () => void,
   triggerRef?: RefObject<HTMLElement | null>,
 ): { onKeyDown: (e: KeyboardEvent) => void } {
-  useDismissable(open, rootRef, onClose);
+  useDismissable(open, rootRef, onClose, triggerRef);
 
   const wasOpenRef = useRef(false);
 

@@ -10,7 +10,8 @@
 
 use crate::types::ParsedMessage;
 
-/// Who this chat is with, as a stable string (E.164 phone or `chat-…` for groups).
+/// Who this chat is with, as a stable string (the peer's handle key, or
+/// `chat-…` for groups).
 ///
 /// When the mail names the other party but records no address, the chat is
 /// keyed by a stem of that name so each person gets their own conversation.
@@ -25,9 +26,7 @@ pub(crate) fn chat_id_for(msg: &ParsedMessage) -> String {
             None => "unknown".to_string(),
         }
     } else {
-        // Format as E.164 only when unambiguous, so a trunk-zero value stays
-        // digits-as-is instead of becoming `+02079460000`.
-        phone::normalize_lenient(&msg.chat_key)
+        msg.chat_key.clone()
     }
 }
 
@@ -111,23 +110,19 @@ pub(crate) fn cover_identity_from_parts(
 mod tests {
     use super::*;
 
-    fn sample_msg(chat_key: &str, ts: f64, is_from_me: bool, text: &str) -> ParsedMessage {
+    fn sample_msg(address: &str, ts: f64, is_from_me: bool, text: &str) -> ParsedMessage {
+        let peer = phone::Handle::parse(address);
         ParsedMessage {
-            chat_key: chat_key.into(),
+            chat_key: peer
+                .as_ref()
+                .map(|p| p.key().to_string())
+                .unwrap_or_default(),
             conversation_type: "individual".into(),
             group_title: None,
-            participant_digits: if chat_key.is_empty() {
-                vec![]
-            } else {
-                vec![(chat_key.into(), None)]
-            },
+            participants: peer.iter().cloned().collect(),
             timestamp_secs: ts,
             is_from_me,
-            sender_digits: if is_from_me || chat_key.is_empty() {
-                None
-            } else {
-                Some(chat_key.into())
-            },
+            sender: peer.filter(|_| !is_from_me),
             text: text.into(),
             attachments: vec![],
             name_alias: None,

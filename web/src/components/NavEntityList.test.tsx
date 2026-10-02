@@ -80,6 +80,20 @@ function renderTags(path: string, tags: string[]) {
   );
 }
 
+describe("NavEntityList row menu", () => {
+  it("closes the row menu when its options button is clicked again", async () => {
+    const user = userEvent.setup();
+    renderGroups("/contacts", ["Family"]);
+
+    const options = screen.getByRole("button", { name: "Group options for Family" });
+    await user.click(options);
+    expect(screen.getByRole("menu", { name: "Group options for Family" })).toBeInTheDocument();
+
+    await user.click(options);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+});
+
 describe("NavEntityList navigation", () => {
   it("follows a renamed group to its new slug when viewing that group's page", async () => {
     routes.updateContactGroup.mockResolvedValue({ id: 1, name: "Fam" });

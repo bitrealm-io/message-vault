@@ -126,8 +126,8 @@ fn check(data: &[u8]) -> Result<(), String> {
     }
     let mut seen = std::collections::HashSet::new();
     for n in p.sender.iter().chain(&p.recipients) {
-        if n.is_empty() || !n.bytes().all(|b| b.is_ascii_digit()) {
-            return Err(format!("number {n:?} is not digits"));
+        if n.trim().is_empty() || n.trim() != n || n.contains('/') {
+            return Err(format!("address {n:?} is blank, untrimmed or typed"));
         }
     }
     for n in &p.recipients {

@@ -5,7 +5,6 @@
 //! in process.
 
 mod attachments_emit;
-mod chat_id;
 mod emit;
 mod run;
 mod xml;

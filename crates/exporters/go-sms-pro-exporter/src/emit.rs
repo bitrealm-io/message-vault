@@ -3,7 +3,6 @@
 //! output format via [`ExportWriter`].
 
 use crate::attachments_emit::queue_pdu_attachments;
-use crate::chat_id::{chat_id_group, chat_id_individual, guarded_phone};
 use crate::xml::{SkippedBadAddrDetail, XmlMessage, parse_xml_file};
 use anyhow::{Context, Result, bail};
 use go_sms_mms::{ParsedPdu, PduError, parse_pdu_file};
@@ -11,11 +10,12 @@ use message_crate_core::{
     CancelFlag, ExportReport, ExportTransforms, OutputFormat, prepare_outputs, project_conversation,
 };
 use message_ir::{
-    ExportMeta, HandleType, IrAttachment, IrService, IrSource, PendingAttachment,
-    PendingConversation, PendingMessage, ProjectionHooks, ensure_conversation, parse_android_type,
+    ExportMeta, IrAttachment, IrParticipant, IrService, IrSource, PendingAttachment,
+    PendingConversation, PendingMessage, ProjectionHooks, default_participants,
+    ensure_conversation, parse_android_type,
 };
 use message_staging::{AttachmentSource, ExportWriter};
-use phone::{OwnerHandleSet, sanitize_number};
+use phone::{Handle, OwnerHandleSet};
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -70,8 +70,8 @@ fn add_xml_messages(
     msgs: Vec<XmlMessage>,
 ) {
     for msg in msgs {
-        let chat_id = chat_id_individual(&msg.other_digits);
-        let convo = ensure_conversation(conversations, &chat_id, false, None, Vec::new());
+        let chat_id = msg.other.key();
+        let convo = ensure_conversation(conversations, chat_id, false, None, Vec::new());
         let dedupe_key = format!(
             "{}|{}|{}|",
             msg.timestamp_secs as i64,
@@ -81,7 +81,11 @@ fn add_xml_messages(
         convo.messages.push(PendingMessage {
             sort_key: msg.timestamp_secs as i64,
             is_from_me: msg.is_from_me,
-            sender_handle: msg.sender_digits.unwrap_or_default(),
+            sender_handle: if msg.is_from_me {
+                String::new()
+            } else {
+                msg.other.into_key()
+            },
             sender_display_name: msg.name_alias.clone(),
             text: msg.text,
             attachments: Vec::new(),
@@ -112,15 +116,31 @@ fn pdu_basename(parsed: &ParsedPdu) -> String {
         .to_string()
 }
 
-/// Every number on the PDU, the sender first, once each.
-fn pdu_participants(parsed: &ParsedPdu) -> Vec<String> {
-    let mut all: Vec<String> = parsed.sender.iter().cloned().collect();
-    for r in &parsed.recipients {
-        if !all.contains(r) {
-            all.push(r.clone());
+/// The addresses on a PDU, each classified once from the value as written.
+struct PduAddresses {
+    /// The sender of a received PDU.
+    sender: Option<Handle>,
+    /// Every address on the PDU, the sender first, once each by key.
+    participants: Vec<Handle>,
+}
+
+impl PduAddresses {
+    /// A phone writes the same person as `4075551234` on one MMS and
+    /// `+14075551234` on the next; both have one key, so the group they
+    /// share has one chat id.
+    fn of(parsed: &ParsedPdu) -> Self {
+        let sender = parsed.sender.as_deref().and_then(Handle::parse);
+        let mut participants: Vec<Handle> = sender.iter().cloned().collect();
+        for r in parsed.recipients.iter().filter_map(|r| Handle::parse(r)) {
+            if !participants.iter().any(|p| p.key() == r.key()) {
+                participants.push(r);
+            }
+        }
+        Self {
+            sender,
+            participants,
         }
     }
-    all
 }
 
 /// The chat a PDU message lands in.
@@ -128,7 +148,8 @@ struct PduTarget {
     chat_id: String,
     is_group: bool,
     group_title: Option<String>,
-    /// The non-owner peers of a group; empty for an individual chat.
+    /// The handle keys of a group's non-owner peers; empty for an
+    /// individual chat.
     peers: Vec<String>,
 }
 
@@ -136,19 +157,20 @@ struct PduTarget {
 fn add_pdu_message(
     conversations: &mut BTreeMap<String, PendingConversation>,
     parsed: ParsedPdu,
+    addresses: PduAddresses,
     attachments: Vec<PendingAttachment>,
     owners: &OwnerHandleSet,
     report: &mut ExportReport,
     skips: &mut SkipDetails,
 ) {
-    let Some(target) = pdu_target(&parsed, owners, report, skips) else {
+    let Some(target) = pdu_target(&parsed, &addresses, owners, report, skips) else {
         return;
     };
     report.bump("pdu_messages", 1);
     if target.is_group {
         report.bump("pdu_group_messages", 1);
     }
-    let pending = pdu_pending_message(parsed, attachments);
+    let pending = pdu_pending_message(parsed, addresses.sender, attachments);
     let convo = ensure_conversation(
         conversations,
         &target.chat_id,
@@ -159,21 +181,22 @@ fn add_pdu_message(
     convo.messages.push(pending);
 }
 
-/// The chat the PDU belongs to, from the numbers on it that are not the
+/// The chat the PDU belongs to, from the addresses on it that are not the
 /// owner's: a group when there are two or more of them, else the one
 /// other party. `None`, counted and detailed as a skip, when nobody but
 /// the owner is on it.
 fn pdu_target(
     parsed: &ParsedPdu,
+    addresses: &PduAddresses,
     owners: &OwnerHandleSet,
     report: &mut ExportReport,
     skips: &mut SkipDetails,
 ) -> Option<PduTarget> {
-    let participants = pdu_participants(parsed);
-    let others: Vec<_> = participants
+    let others: Vec<String> = addresses
+        .participants
         .iter()
-        .filter(|p| !owners.is_owner(p, HandleType::Phone))
-        .cloned()
+        .filter(|p| !owners.is_owner(p))
+        .map(|p| p.key().to_string())
         .collect();
     if others.is_empty() {
         report.bump("skipped_no_other_party", 1);
@@ -190,16 +213,16 @@ fn pdu_target(
         return None;
     }
     if others.len() >= 2 {
-        let (chat_id, title) = chat_id_group(&participants, owners);
+        let (chat_id, title) = phone::group_chat_id("chat-group-", &others);
         Some(PduTarget {
             chat_id,
             is_group: true,
             group_title: Some(title),
-            peers: others.iter().map(|d| guarded_phone(d)).collect(),
+            peers: others,
         })
     } else {
         Some(PduTarget {
-            chat_id: chat_id_individual(&others[0]),
+            chat_id: others[0].clone(),
             is_group: false,
             group_title: None,
             peers: Vec::new(),
@@ -210,7 +233,11 @@ fn pdu_target(
 /// The pending message for a PDU. Its `extra` map carries the dedupe key
 /// (time, direction, body, attachment digests) and the PDU diagnostics the
 /// projection reads back into the IR source fields.
-fn pdu_pending_message(parsed: ParsedPdu, attachments: Vec<PendingAttachment>) -> PendingMessage {
+fn pdu_pending_message(
+    parsed: ParsedPdu,
+    sender: Option<Handle>,
+    attachments: Vec<PendingAttachment>,
+) -> PendingMessage {
     let att_names: Vec<String> = attachments
         .iter()
         .map(|a| a.digest_sha256.clone().unwrap_or_default())
@@ -224,10 +251,9 @@ fn pdu_pending_message(parsed: ParsedPdu, attachments: Vec<PendingAttachment>) -
     );
     // The projection names the owner as the sender of every outgoing message
     // itself, so only a received PDU carries its sender here.
-    let sender_handle = if parsed.is_sent {
-        String::new()
-    } else {
-        parsed.sender.clone().unwrap_or_default()
+    let sender_handle = match sender {
+        Some(sender) if !parsed.is_sent => sender.into_key(),
+        _ => String::new(),
     };
     let mut extra = BTreeMap::new();
     extra.insert("dedupe_key".into(), dedupe_key);
@@ -329,8 +355,21 @@ impl ProjectionHooks for GoSmsProjection<'_> {
         IrService::Sms
     }
 
+    /// Every handle is a [`Handle`] key already.
     fn normalize_handle(&self, raw: &str) -> String {
-        guarded_phone(raw)
+        raw.to_string()
+    }
+
+    /// The default roster, with each identity's kind read from its key: a
+    /// GO SMS Pro address can be an email address or a sender name.
+    fn participants(&self, chat_id: &str, convo: &PendingConversation) -> Vec<IrParticipant> {
+        let mut participants = default_participants(chat_id, convo, &str::to_string);
+        for p in &mut participants {
+            if let Some(handle) = p.handle.as_deref().and_then(Handle::parse) {
+                p.handle_type = Some(handle.kind());
+            }
+        }
+        participants
     }
 
     fn attachment_to_ir(&self, att: &PendingAttachment, _msg: &PendingMessage) -> IrAttachment {
@@ -543,7 +582,7 @@ impl Ingest<'_> {
     /// that breaks the MMS rules is counted, and the first twenty are named
     /// in the report.
     fn ingest_pdu(&mut self, pdu_path: &Path) {
-        let mut parsed = match parse_pdu_file(pdu_path) {
+        let parsed = match parse_pdu_file(pdu_path) {
             Ok(parsed) => parsed,
             Err(PduError::Stub) => {
                 self.report.bump("skipped_empty_pdu", 1);
@@ -570,22 +609,12 @@ impl Ingest<'_> {
                 return;
             }
         };
-        // The parser keeps an address's digits as written, and a phone writes
-        // the same person as `4075551234` on one MMS and `14075551234` on
-        // the next. One form per number, or the group they share gets two
-        // chat ids.
-        parsed.sender = parsed.sender.as_deref().and_then(sanitize_number);
-        let mut recipients = Vec::with_capacity(parsed.recipients.len());
-        for r in parsed.recipients.iter().filter_map(|r| sanitize_number(r)) {
-            if !recipients.contains(&r) {
-                recipients.push(r);
-            }
-        }
-        parsed.recipients = recipients;
+        let addresses = PduAddresses::of(&parsed);
         let atts = queue_pdu_attachments(&parsed, self.copy_attachments, &mut self.blob_bytes);
         add_pdu_message(
             &mut self.conversations,
             parsed,
+            addresses,
             atts,
             self.owners,
             &mut self.report,
@@ -704,31 +733,37 @@ fn write_skipped_no_party_csv(
 mod tests {
     use super::*;
 
-    #[test]
-    fn group_chat_ids_do_not_collide_on_digit_boundaries() {
-        let owners = OwnerHandleSet::from_phones(&["+15555550100".into()]).unwrap();
-        let (a, _) = chat_id_group(&["12".into(), "34".into()], &owners);
-        let (b, _) = chat_id_group(&["123".into(), "4".into()], &owners);
-        assert_ne!(a, b);
-        assert!(a.contains("2:12"));
-        assert!(b.contains("3:123"));
-    }
-
     /// A group MMS lists the owner's own number among its addresses. The
     /// group is the other people, so the owner's number changes neither the
     /// chat id nor the title.
     #[test]
     fn the_owners_number_is_not_part_of_a_group_chat_id() {
-        let owners = OwnerHandleSet::from_phones(&["+15555550100".into()]).unwrap();
-        let others = ["15555550122".to_string(), "15555550133".to_string()];
-        let with_owner = [
-            "15555550100".to_string(),
-            "15555550122".to_string(),
-            "15555550133".to_string(),
-        ];
+        let target = |recipients: &[&str]| {
+            let owners = OwnerHandleSet::from_phones(&["+15555550100".into()]).unwrap();
+            let parsed = ParsedPdu {
+                path: std::path::PathBuf::from("I_1609459200_x.pdu"),
+                timestamp: 1_609_459_200,
+                is_sent: false,
+                sender: Some("15555550122".into()),
+                recipients: recipients.iter().map(|r| r.to_string()).collect(),
+                body: "hi".into(),
+                attachments: Vec::new(),
+                fields: BTreeMap::new(),
+            };
+            let addresses = PduAddresses::of(&parsed);
+            let target = pdu_target(
+                &parsed,
+                &addresses,
+                &owners,
+                &mut ExportReport::default(),
+                &mut SkipDetails::default(),
+            )
+            .unwrap();
+            (target.chat_id, target.group_title)
+        };
         assert_eq!(
-            chat_id_group(&with_owner, &owners),
-            chat_id_group(&others, &owners)
+            target(&["15555550100", "15555550133"]),
+            target(&["15555550133"])
         );
     }
 
@@ -748,9 +783,11 @@ mod tests {
         let mut conversations = BTreeMap::new();
         let mut report = ExportReport::default();
         let mut skips = SkipDetails::default();
+        let addresses = PduAddresses::of(&parsed);
         add_pdu_message(
             &mut conversations,
             parsed,
+            addresses,
             Vec::new(),
             &owners,
             &mut report,
@@ -761,6 +798,46 @@ mod tests {
         assert!(convo.is_group);
         assert!(convo.chat_id.starts_with("chat-group-"));
         assert_eq!(report.extra("pdu_group_messages"), 1);
+    }
+
+    /// The chat ids a received PDU from `sender` to the owner lands in.
+    fn chat_ids_for_received_pdu(sender: &str) -> Vec<String> {
+        let owners = OwnerHandleSet::from_phones(&["+15555550100".into()]).unwrap();
+        let parsed = ParsedPdu {
+            path: std::path::PathBuf::from("I_1609459200_x.pdu"),
+            timestamp: 1_609_459_200,
+            is_sent: false,
+            sender: Some(sender.into()),
+            recipients: vec!["+15555550100".into()],
+            body: "hi".into(),
+            attachments: Vec::new(),
+            fields: BTreeMap::new(),
+        };
+        let mut conversations = BTreeMap::new();
+        let addresses = PduAddresses::of(&parsed);
+        add_pdu_message(
+            &mut conversations,
+            parsed,
+            addresses,
+            Vec::new(),
+            &owners,
+            &mut ExportReport::default(),
+            &mut SkipDetails::default(),
+        );
+        conversations.into_keys().collect()
+    }
+
+    #[test]
+    fn a_pdu_number_with_its_country_keeps_it() {
+        assert_eq!(chat_ids_for_received_pdu("+6591234567"), ["+6591234567"]);
+    }
+
+    #[test]
+    fn a_pdu_from_an_email_address_is_not_a_phone_number() {
+        assert_eq!(
+            chat_ids_for_received_pdu("ann2020@example.com"),
+            ["ann2020@example.com"]
+        );
     }
 
     fn test_msg(key: &str, attachments: usize) -> PendingMessage {

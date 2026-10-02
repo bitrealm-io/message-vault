@@ -41,7 +41,10 @@ afterEach(cleanup);
 
 describe("DemoAccountCard", () => {
   it("adds the Demo Account at once when there is none, and shows it working", async () => {
-    getDemoAccount.mockResolvedValue(absent);
+    getDemoAccount.mockResolvedValueOnce(absent);
+    // The read the write starts never answers, so only the write's own answer
+    // can show the build.
+    getDemoAccount.mockReturnValue(new Promise(() => {}));
     renderCard();
 
     await userEvent.click(await screen.findByRole("button", { name: "Add Demo Account" }));

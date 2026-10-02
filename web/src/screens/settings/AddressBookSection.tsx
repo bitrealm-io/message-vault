@@ -1,7 +1,6 @@
 import { useRef, useState } from "react";
 import Button from "../../components/Button";
 import { ApiError } from "../../lib/api";
-import { keys } from "../../lib/queryKeys";
 import { useRouteCache } from "../../lib/routeQuery";
 import { type AddressBookLoadMode, loadAddressBook } from "../../lib/serverApi";
 import type { components } from "../../lib/serverApi.types";
@@ -79,9 +78,8 @@ export function AddressBookSection() {
       }
       const content = await file.text();
       setCounts(await loadAddressBook(content, mode));
-      // A load renames contacts and moves identities, so every list that
-      // shows a contact's name or its groups is stale.
-      void cache.invalidate(keys.contacts.all, keys.contactGroups.all, keys.conversations.all);
+      // A load renames contacts and moves identities.
+      cache.invalidateAccount();
     } catch (err) {
       setErrors(refusalLines(err));
     } finally {

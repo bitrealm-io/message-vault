@@ -1,16 +1,21 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { keys } from "../../lib/queryKeys";
+import { testQueryClient } from "../../test/providers";
+import { freshEntries, seedEntries } from "../../test/staleEntries";
 import { ProfileDangerZone } from "./ProfileDangerZone";
 
 const deleteAccount = vi.hoisted(() => vi.fn());
+const deleteAllMessages = vi.hoisted(() => vi.fn());
 const logout = vi.hoisted(() => vi.fn());
 
 vi.mock("../../lib/auth", () => ({
-  useAuth: () => ({ logout }),
+  useAuth: () => ({ accountId: 7, logout }),
 }));
 
 vi.mock("../owner/useOwnerAccounts", () => ({
@@ -21,10 +26,12 @@ vi.mock("../owner/useOwnerAccounts", () => ({
 vi.mock("../../lib/serverApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../lib/serverApi")>()),
   deleteAccount: (...a: unknown[]) => deleteAccount(...a),
+  deleteAllMessages: (...a: unknown[]) => deleteAllMessages(...a),
 }));
 
 beforeEach(() => {
   deleteAccount.mockReset();
+  deleteAllMessages.mockReset();
   logout.mockReset();
 });
 
@@ -35,9 +42,11 @@ describe("ProfileDangerZone", () => {
     deleteAccount.mockRejectedValue(new Error("Current password is incorrect."));
     const user = userEvent.setup({ delay: null });
     render(
-      <MemoryRouter>
-        <ProfileDangerZone isDemo={false} username="carol" hasPassword />
-      </MemoryRouter>,
+      <QueryClientProvider client={testQueryClient()}>
+        <MemoryRouter>
+          <ProfileDangerZone isDemo={false} username="carol" hasPassword />
+        </MemoryRouter>
+      </QueryClientProvider>,
     );
 
     await user.click(screen.getByRole("button", { name: /Danger zone/ }));
@@ -52,5 +61,38 @@ describe("ProfileDangerZone", () => {
       "Current password is incorrect.",
     );
     expect(logout).not.toHaveBeenCalled();
+  });
+
+  it("marks every screen that shows the account's messages stale once they are deleted", async () => {
+    // Messages, contacts, the Trash, Storage and the counts on the profile all
+    // showed the deleted messages from the cache until they were next fetched.
+    const shown = [
+      keys.conversations.all,
+      keys.contacts.all,
+      keys.trash.all,
+      keys.storage.all,
+      keys.accountProfile.all,
+      keys.accountProfile.identities,
+    ];
+    deleteAllMessages.mockResolvedValue({ conversations: 3, attachments: 0 });
+    const client = testQueryClient();
+    seedEntries(client, 7, shown);
+    const user = userEvent.setup({ delay: null });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <ProfileDangerZone isDemo={false} username="carol" hasPassword />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Danger zone/ }));
+    await user.click(screen.getByRole("button", { name: "Delete all messages" }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Delete all messages" }),
+    );
+
+    expect(deleteAllMessages).toHaveBeenCalledWith({ confirm: true });
+    await waitFor(() => expect(freshEntries(client, 7, shown)).toEqual([]));
   });
 });

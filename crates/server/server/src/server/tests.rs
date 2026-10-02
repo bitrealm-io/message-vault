@@ -903,23 +903,13 @@ async fn the_fast_413_carries_cors_headers() {
     let state = with_cors(fixture.state.clone(), &["https://app.example"]);
     crate::test_support::store_asset_max_bytes(&state, 1024).await;
 
-    let (_, created): (String, serde_json::Value) = crate::test_support::post_created_json(
-        &state,
-        "/v1/imports",
-        &user.token,
-        serde_json::json!({ "source": "imessage" }),
-    )
-    .await;
+    let sha = "0".repeat(64);
     let server = crate::test_support::serve(&state).await;
     let response = reqwest::Client::new()
-        .post(format!(
-            "{}/v1/imports/{}/batches",
-            server.base(),
-            created["id"]
-        ))
+        .put(format!("{}/v1/assets/{sha}?source=imessage", server.base()))
         .bearer_auth(&user.token)
         .header(header::ORIGIN, "https://app.example")
-        .header(header::CONTENT_TYPE, "application/x-ndjson")
+        .header(header::CONTENT_TYPE, "image/png")
         // A sized body, so the limit layer answers from Content-Length alone.
         .body(vec![b'x'; 4096])
         .send()
@@ -1785,4 +1775,82 @@ async fn sigterm_drains_the_request_in_flight_then_stops_the_server() {
         .expect("the server kept running after SIGTERM")
         .unwrap()
         .unwrap();
+}
+
+/// The attachment size limit holds the attachment uploads and nothing else.
+/// An owner who sets it to 20 bytes can still log in and change the Server
+/// Settings, and an account can still post an import batch of a few
+/// kilobytes. Only an attachment of 21 bytes is refused. When the limit
+/// capped every body, the login itself answered `413` and nothing could
+/// raise the limit again.
+#[tokio::test]
+async fn a_small_attachment_size_limit_holds_only_the_attachment_uploads() {
+    let fixture = crate::test_support::test_fixture().await;
+    let state = fixture.state.clone();
+    let owner = crate::test_support::claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let importer = crate::test_support::register_via_api(&state, "bob", "hunter2hunter2").await;
+    let _: serde_json::Value = crate::test_support::patch_json(
+        &state,
+        "/v1/server/settings",
+        &owner.token,
+        serde_json::json!({ "asset_max_bytes": 20 }),
+    )
+    .await;
+
+    // The login body is over 20 bytes and is not an attachment. `log_in`
+    // asserts the `201 Created`.
+    let session = crate::test_support::log_in(&state, "keeper", "hunter2hunter2").await;
+    let changed: serde_json::Value = crate::test_support::patch_json(
+        &state,
+        "/v1/server/settings",
+        session["token"].as_str().unwrap(),
+        serde_json::json!({ "asset_max_bytes": 20, "public_registration": true }),
+    )
+    .await;
+    assert_eq!(changed["asset_max_bytes"], 20);
+
+    let (_, created): (String, serde_json::Value) = crate::test_support::post_created_json(
+        &state,
+        "/v1/imports",
+        &importer.token,
+        serde_json::json!({ "source": "whatsapp" }),
+    )
+    .await;
+    let mut batch = String::from(concat!(
+        r#"{"schema_version":4,"export":{"source":"whatsapp","tool":"t","tool_version":"0","owner_handle":"+15550000001","owner_display_name":"Me"},"#,
+        r#""conversation":{"chat_identifier":"+15550000002","conversation_type":"individual","group_title":null,"#,
+        r#""participants":[{"handle":"+15550000002","display_name":null}],"#,
+        r#""stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1700000000000,"last_timestamp_unix_ms":1700000000000}}}"#,
+        "\n",
+    ));
+    batch.push_str(&format!(
+        r#"{{"guid":"g-1","timestamp_unix_ms":1700000000000,"direction":"incoming","service":"whatsapp","message_kind":"sms","sender_handle":"+15550000002","sender_display_name":null,"subject":null,"text":"{}","attachments":[],"imessage":null,"source":null}}"#,
+        "a".repeat(4096)
+    ));
+    batch.push('\n');
+    let (status, text) = crate::test_support::post_raw(
+        &state,
+        &format!("/v1/imports/{}/batches", created["id"]),
+        &importer.token,
+        "application/jsonl",
+        batch,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{text}");
+
+    let bytes = vec![b'x'; 21];
+    let sha = crate::assets_api::sha256_hex(&bytes);
+    let (status, text) = crate::test_support::put_raw(
+        &state,
+        &format!("/v1/assets/{sha}?source=whatsapp"),
+        &importer.token,
+        "image/png",
+        bytes,
+    )
+    .await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::PayloadTooLarge,
+    );
 }

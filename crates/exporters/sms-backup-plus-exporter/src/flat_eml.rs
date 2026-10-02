@@ -3,8 +3,7 @@
 use crate::assets::extract_attachments;
 use crate::types::ParsedMessage;
 use mailparse::{MailHeaderMap, ParsedMail};
-use message_ir::HandleType;
-use phone::{OwnerHandleSet, sanitize_number};
+use phone::{Handle, OwnerHandleSet};
 use regex::Regex;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
@@ -71,27 +70,29 @@ impl MailHeaders {
     }
 }
 
-/// Distinct phone numbers from an `X-smssync-address` header.
-fn smssync_participant_numbers(raw_address: &str) -> Vec<String> {
-    if raw_address.trim().is_empty() {
-        return Vec::new();
-    }
-    let mut numbers = Vec::new();
+/// The addresses in an `X-smssync-address` header, once each by key.
+fn smssync_addresses(raw_address: &str) -> Vec<Handle> {
+    let mut addresses = Vec::new();
     let mut seen = HashSet::new();
-    for part in ADDRESS_SPLIT_RE.split(raw_address) {
-        let token = part.trim();
-        if token.is_empty() {
-            continue;
+    for handle in ADDRESS_SPLIT_RE
+        .split(raw_address)
+        .filter_map(Handle::parse)
+    {
+        if seen.insert(handle.key().to_string()) {
+            addresses.push(handle);
         }
-        let Some(num) = sanitize_number(token) else {
-            continue;
-        };
-        if !seen.insert(num.clone()) {
-            continue;
-        }
-        numbers.push(num);
     }
-    numbers
+    addresses
+}
+
+/// The address in a `From` header, which SMS Backup+ writes as
+/// `"Bob" <+14075555678@unknown.email>`: the part before the `@`.
+fn from_address(from: &str) -> Option<Handle> {
+    let addr_spec = from
+        .split_once('<')
+        .map_or(from, |(_, rest)| rest.split('>').next().unwrap_or(rest));
+    let local = addr_spec.split('@').next().unwrap_or(addr_spec);
+    Handle::parse(local)
 }
 
 /// The contact name from an `SMS with <name>` subject, unless it is a number.
@@ -205,10 +206,7 @@ pub(crate) fn parse_flat_eml_mail(
     }
     let timestamp_secs = timestamp_seconds(headers)?;
     let name_alias = contact_name_from_subject(&headers.subject);
-    let addresses = FlatAddresses::from_headers(headers, name_alias.as_deref(), owners);
-    if addresses.is_blank() {
-        return None;
-    }
+    let addresses = FlatAddresses::from_headers(headers, owners);
     let sent = is_sent(headers, owner_emails);
     let conversation = addresses.conversation(headers, sent, name_alias.as_deref())?;
 
@@ -222,10 +220,10 @@ pub(crate) fn parse_flat_eml_mail(
         chat_key: conversation.chat_key,
         conversation_type: conversation.conversation_type.into(),
         group_title: conversation.group_title,
-        participant_digits: conversation.participant_digits,
+        participants: conversation.participants,
         timestamp_secs,
         is_from_me: sent,
-        sender_digits: conversation.sender_digits,
+        sender: conversation.sender,
         text: extract_body_text(mail),
         attachments,
         name_alias,
@@ -235,15 +233,12 @@ pub(crate) fn parse_flat_eml_mail(
     })
 }
 
-/// The numbers on a flat EML: everyone in the SMS Backup+ address header (or
-/// the subject's name when that header is blank), the first of them as the
-/// address, and those that are not the owner's.
+/// The addresses on a flat EML: everyone in the SMS Backup+ address header,
+/// the first of them, and those that are not the owner's.
 struct FlatAddresses {
-    /// The header text the numbers were read from.
-    raw: String,
-    /// The first participant number, or the raw text sanitized, or blank.
-    first: String,
-    non_owner: Vec<String>,
+    /// The first address in the header.
+    first: Option<Handle>,
+    non_owner: Vec<Handle>,
 }
 
 /// Where a flat EML lands and who sent it.
@@ -251,41 +246,19 @@ struct FlatConversation {
     chat_key: String,
     conversation_type: &'static str,
     group_title: Option<String>,
-    participant_digits: Vec<(String, Option<String>)>,
-    sender_digits: Option<String>,
+    participants: Vec<Handle>,
+    sender: Option<Handle>,
 }
 
 impl FlatAddresses {
-    fn from_headers(
-        headers: &MailHeaders,
-        subject_name: Option<&str>,
-        owners: &OwnerHandleSet,
-    ) -> Self {
-        let raw = if headers.smssync_address.is_empty() {
-            subject_name.unwrap_or_default().to_string()
-        } else {
-            headers.smssync_address.clone()
-        };
-        let numbers = smssync_participant_numbers(&raw);
-        let first = numbers
-            .first()
-            .cloned()
-            .or_else(|| sanitize_number(&raw))
-            .unwrap_or_default();
-        let non_owner = numbers
+    fn from_headers(headers: &MailHeaders, owners: &OwnerHandleSet) -> Self {
+        let addresses = smssync_addresses(&headers.smssync_address);
+        let first = addresses.first().cloned();
+        let non_owner = addresses
             .into_iter()
-            .filter(|n| !owners.is_owner(n, HandleType::Phone))
+            .filter(|a| !owners.is_owner(a))
             .collect();
-        Self {
-            raw,
-            first,
-            non_owner,
-        }
-    }
-
-    /// Nothing at all to key a conversation on.
-    fn is_blank(&self) -> bool {
-        self.first.is_empty() && self.raw.is_empty()
+        Self { first, non_owner }
     }
 
     /// A group when two or more peers are named, else the one-to-one chat
@@ -298,13 +271,14 @@ impl FlatAddresses {
         name_alias: Option<&str>,
     ) -> Option<FlatConversation> {
         if self.non_owner.len() >= 2 {
-            let (chat_key, title) = phone::group_chat_id("group-", &self.non_owner);
+            let keys: Vec<String> = self.non_owner.iter().map(|a| a.key().to_string()).collect();
+            let (chat_key, title) = phone::group_chat_id("group-", &keys);
             return Some(FlatConversation {
                 chat_key,
                 conversation_type: "group",
                 group_title: Some(title),
-                participant_digits: self.non_owner.iter().map(|d| (d.clone(), None)).collect(),
-                sender_digits: if sent {
+                participants: self.non_owner.clone(),
+                sender: if sent {
                     None
                 } else {
                     self.group_sender(headers)
@@ -313,34 +287,33 @@ impl FlatAddresses {
         }
         // Prefer the first non-owner address (groups already use this rule). An
         // owner-first `owner~peer` list must not key the CSV to the owner's number.
-        let peer = self
-            .non_owner
-            .first()
-            .cloned()
-            .unwrap_or_else(|| self.first.clone());
+        let peer = self.non_owner.first().or(self.first.as_ref()).cloned();
         // Keep an empty chat_key when a display name exists so `name_only_key` can key on it.
-        if peer.is_empty() && name_alias.map(str::trim).unwrap_or_default().is_empty() {
+        if peer.is_none() && name_alias.map(str::trim).unwrap_or_default().is_empty() {
             return None;
         }
         Some(FlatConversation {
-            chat_key: peer.clone(),
+            chat_key: peer
+                .as_ref()
+                .map(|p| p.key().to_string())
+                .unwrap_or_default(),
             conversation_type: "individual",
             group_title: None,
-            participant_digits: if peer.is_empty() {
-                vec![]
-            } else {
-                vec![(peer.clone(), name_alias.map(str::to_string))]
-            },
-            sender_digits: (!sent && !peer.is_empty()).then_some(peer),
+            participants: peer.iter().cloned().collect(),
+            sender: peer.filter(|_| !sent),
         })
     }
 
-    /// The sender of an incoming group message: the `From` header's number
+    /// The sender of an incoming group message: the `From` header's address
     /// when it is one of the peers, else the first peer.
-    fn group_sender(&self, headers: &MailHeaders) -> Option<String> {
-        smssync_participant_numbers(&headers.from)
-            .into_iter()
-            .find(|n| self.non_owner.contains(n))
+    fn group_sender(&self, headers: &MailHeaders) -> Option<Handle> {
+        from_address(&headers.from)
+            .and_then(|from| {
+                self.non_owner
+                    .iter()
+                    .find(|peer| peer.key() == from.key())
+                    .cloned()
+            })
             .or_else(|| self.non_owner.first().cloned())
     }
 }
@@ -348,6 +321,7 @@ impl FlatAddresses {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use message_ir::HandleType;
 
     #[test]
     fn parses_flat_received() {
@@ -373,7 +347,7 @@ Hello from Alice\r\n",
         let msg = parse_flat_eml_mail(&path, &mail, &headers, &owners, &[]).unwrap();
         assert!(!msg.is_from_me);
         assert_eq!(msg.text.trim(), "Hello from Alice");
-        assert_eq!(msg.chat_key, "4075551234");
+        assert_eq!(msg.chat_key, "+14075551234");
         assert!((msg.timestamp_secs - 1_609_459_200.0).abs() < 0.001);
     }
 
@@ -400,7 +374,7 @@ Hello\r\n",
         let owners = OwnerHandleSet::from_phones(&["5555550100".to_string()]).unwrap();
         let msg = parse_flat_eml_mail(&path, &mail, &headers, &owners, &["me@example.com".into()])
             .unwrap();
-        assert_eq!(msg.chat_key, "4075551234");
+        assert_eq!(msg.chat_key, "+14075551234");
         assert!(msg.is_from_me);
     }
 
@@ -540,5 +514,42 @@ old message\r\n"
         )
         .unwrap();
         assert_eq!(msg.conversation_type, "individual");
+    }
+
+    fn received_from(address: &str) -> ParsedMessage {
+        parse(
+            &format!("From: x@unknown.email\nTo: me@example.com\nSubject: SMS with X\nX-smssync-type: 1\nX-smssync-address: {address}\nX-smssync-date: 1609459200000\nContent-Type: text/plain; charset=utf-8\n\nhi\n"),
+            &["5555550100"],
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn an_international_number_keeps_its_country() {
+        let msg = received_from("+6591234567");
+        assert_eq!(crate::identity::chat_id_for(&msg), "+6591234567");
+    }
+
+    #[test]
+    fn an_email_address_and_a_sender_name_are_not_numbers() {
+        let msg = received_from("john1985@example.com");
+        assert_eq!(crate::identity::chat_id_for(&msg), "john1985@example.com");
+        let sender = msg.sender.unwrap();
+        assert_eq!(sender.kind(), HandleType::Email);
+        let msg = received_from("AMAZON");
+        assert_eq!(crate::identity::chat_id_for(&msg), "AMAZON");
+        assert_eq!(msg.sender.unwrap().kind(), HandleType::Other);
+    }
+
+    /// The `From` of a group message names its sender inside the address,
+    /// `"Bob" <+447911123456@unknown.email>`.
+    #[test]
+    fn a_group_sender_is_read_from_the_from_address() {
+        let msg = parse(
+            "From: \"Bob\" <+447911123456@unknown.email>\nTo: me@example.com\nSubject: MMS with X\nX-smssync-type: 132\nX-smssync-address: +447700900456~+447911123456\nX-smssync-date: 1609459200000\nContent-Type: text/plain; charset=utf-8\n\nhi\n",
+            &["+447700900123"],
+        )
+        .unwrap();
+        assert_eq!(msg.sender.unwrap().key(), "+447911123456");
     }
 }

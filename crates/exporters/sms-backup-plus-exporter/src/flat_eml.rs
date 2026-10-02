@@ -274,7 +274,7 @@ impl FlatAddresses {
 
     /// A group when two or more peers are named, else the one-to-one chat
     /// with the peer. `None` when nothing identifies the other party and no
-    /// display name exists for the contacts lookup to fill it in.
+    /// display name exists to key the conversation on (`name_only_key`).
     fn conversation(
         &self,
         headers: &MailHeaders,
@@ -302,7 +302,7 @@ impl FlatAddresses {
             .first()
             .cloned()
             .unwrap_or_else(|| self.first.clone());
-        // Keep an empty chat_key when a display name exists so contacts reverse-lookup can fill it.
+        // Keep an empty chat_key when a display name exists so `name_only_key` can key on it.
         if peer.is_empty() && name_alias.map(str::trim).unwrap_or_default().is_empty() {
             return None;
         }

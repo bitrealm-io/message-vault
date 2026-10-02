@@ -1,4 +1,4 @@
-//! Locate and copy iMazing attachment files next to CSV exports.
+//! Locate iMazing attachment files next to CSV exports.
 
 use message_csv::AttachmentCell;
 use std::collections::HashMap;

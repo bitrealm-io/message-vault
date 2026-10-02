@@ -1,4 +1,4 @@
-//! Full export pipeline for CLI and in-process GUI.
+//! Full export pipeline; the desktop app calls it in process.
 
 use crate::emit::{ConvertExportArgs, convert_export};
 use anyhow::{Result, bail};
@@ -6,7 +6,7 @@ use message_crate_core::{ExportTransforms, ExporterConfig, RunResult, SourceConf
 
 /// Check the required inputs, then convert.
 ///
-/// The shared `run_pipeline` cannot host this exporter's `--no-summary` flag
+/// The shared `run_pipeline` cannot apply `SmsBackupPlusConfig::include_summary`
 /// (it appends the summary lines unconditionally), so the SMS Backup+ specifics
 /// stay here and only the shared `finish_run` tail is reused.
 ///
@@ -47,7 +47,7 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
     if source.include_summary {
         return message_crate_core::finish_run(config, &report, config.media.mode.needs_tools());
     }
-    // --no-summary: the shared tail appends the summary unconditionally, so
+    // No summary wanted: the shared tail appends the summary unconditionally, so
     // keep only the media lines.
     report.check_media(config.media.mode.needs_tools())?;
     Ok(RunResult {

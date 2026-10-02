@@ -14,7 +14,7 @@
 
 use super::*;
 
-/// A digest long enough to be shortened, and one that is not.
+/// A full SHA-256 digest, long enough to be shortened.
 const DIGEST: &str = "4d1d2c17461355ae828fa0f1510e009e179d6b8e54a71d7179000934bd15a1ec";
 
 #[test]

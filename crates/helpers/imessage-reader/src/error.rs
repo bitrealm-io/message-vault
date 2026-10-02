@@ -28,7 +28,7 @@ pub const IOS_BACKUP_PASSWORD_INCORRECT: &str = "The iOS backup password was inc
 pub const NOT_AN_IPHONE_BACKUP: &str =
     "This folder is not an iPhone backup, or Messages is missing from it.";
 
-/// Runtime failures while opening sources or writing mail archives.
+/// Runtime failures while opening sources or streaming records.
 #[derive(Debug)]
 pub(crate) enum RuntimeError {
     InvalidOptions(String),

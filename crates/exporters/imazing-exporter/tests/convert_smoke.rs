@@ -39,9 +39,8 @@ fn convert_messages_keys_the_chat_by_its_number() {
     assert!(body.contains("3.5.5"));
 
     // The three messages, read back by column. The substring assertions above
-    // are satisfied by the header line and the export metadata, so they hold
-    // even if every row was dropped — `chat_identifier` and `imazing_type` are
-    // column names, not values.
+    // are satisfied by the export metadata, so they hold even if every row was
+    // dropped.
     assert_csv_row(
         &out,
         &[

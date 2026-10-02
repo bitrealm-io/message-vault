@@ -62,7 +62,6 @@ pub struct ReadReport {
 pub struct ReadOptions<'a> {
     /// Known owner phone numbers (empty triggers inference).
     pub owner_phones: &'a [String],
-    /// Date window messages must fall inside.
     /// Directory staged attachments are written to.
     pub attachments_dir: Option<&'a Path>,
     /// Whether to write staged attachment files.
@@ -443,7 +442,7 @@ fn ir_participants(conversation: &PendingConversation) -> Vec<IrParticipant> {
 
 /// Parse SMS Backup & Restore XML into conversation documents.
 ///
-/// Stages attachments, applies the date filter, and drops duplicate messages.
+/// Stages attachments and drops duplicate messages.
 ///
 /// # Errors
 ///

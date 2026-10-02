@@ -55,7 +55,7 @@ fn convert_all_conversations_keys_the_chat_by_its_number() {
     assert!(body.contains("openextract"));
     assert!(body.contains("all-conversations"));
 
-    // Both messages the fixture carries, read back by column. The three
+    // Both messages the fixture carries, read back by column. The two
     // assertions above are all satisfied by the header line and the export
     // metadata, so before this the crate parsed no content in any test: an
     // exporter that dropped every row still passed.

@@ -1,5 +1,5 @@
-//! Attachment helpers: queue blobs during parse, then map staged attachments
-//! onto the shared [`IrAttachment`] shape after the runner writes files.
+//! Attachment helpers: queue blobs as [`PendingAttachment`] metadata during
+//! parse, and merge attachment lists by content digest.
 
 use crate::types::AttachmentBlob;
 use message_ir::PendingAttachment;

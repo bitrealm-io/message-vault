@@ -1,4 +1,5 @@
-//! Full export pipeline (wtsexporter/JSON convert) for CLI and GUI.
+//! Full export pipeline (wtsexporter, then JSON convert); the desktop app calls
+//! it in process.
 
 use crate::emit::{ConvertRequest, convert_json};
 use crate::ios_backup::decrypt_if_encrypted;
@@ -11,7 +12,7 @@ use message_crate_core::{
 use std::env;
 use std::fs;
 
-/// Resolve JSON (via wtsexporter or `--json`), then convert.
+/// Resolve JSON (via wtsexporter or `WhatsappConfig::json`), then convert.
 ///
 /// # Errors
 ///
@@ -110,7 +111,8 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
         let kept = config.output.join("wtsexporter_result.json");
         fs::copy(&json_out, &kept).with_context(|| format!("copy JSON to {}", kept.display()))?;
 
-        // Work dir (wtsexporter extract) + backup input only — not CWD.
+        // Work dir (wtsexporter extract) + backup input. The backup input is the
+        // process cwd when the config names no input.
         let mut media_roots = vec![work.path().to_path_buf(), input];
         media_roots.sort();
         media_roots.dedup();

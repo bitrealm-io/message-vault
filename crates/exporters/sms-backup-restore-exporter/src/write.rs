@@ -25,7 +25,7 @@ pub(crate) struct SbrBackupSession {
 }
 
 impl SbrBackupSession {
-    /// Start a new `smses-*.xml` backup under `output_dir`, replacing any earlier one.
+    /// Start a new `smses.xml` backup under `output_dir`, replacing any earlier one.
     pub fn create(output_dir: &Path) -> Result<Self> {
         fs::create_dir_all(output_dir)
             .with_context(|| format!("create {}", output_dir.display()))?;
@@ -159,7 +159,8 @@ fn restore_mms(
     Ok(Some(SbrMessage::mms(attrs, parts, addrs)))
 }
 
-/// An SBR element for a message that did not come from SBR: `<mms>` when it has attachments, else `<sms>`.
+/// An SBR element for a message that did not come from SBR: `<mms>` when it
+/// has attachments, is in a group, or is an MMS; else `<sms>`.
 fn synthesize_sbr(
     doc: &ConversationDocument,
     msg: &IrMessage,
@@ -391,7 +392,7 @@ fn contact_name_alias(doc: &ConversationDocument, msg: &IrMessage) -> Option<Str
 /// Rehydrate base64 `data` on MMS parts whose payloads were staged as files.
 ///
 /// Parts are matched to attachments by payload digest rather than by position.
-/// The reader (`part_fields` in `message-sbr`) records the decoded payload
+/// The reader (`part_fields` in `sbr`) records the decoded payload
 /// digest as `data_sha256` on each part and drops the base64 string, and
 /// staged files are content-addressed by that same digest, so a digest lookup
 /// is exact. Positional pairing drifts whenever the part list and attachment

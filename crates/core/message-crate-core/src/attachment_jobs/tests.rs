@@ -347,7 +347,7 @@ fn remap_updates_mime_and_continues_when_one_file_is_unreadable() {
     assert!(ok.missing_reason.is_none());
 }
 #[test]
-fn convert_mode_emits_progress_through_the_log_sink() {
+fn clone_mode_reports_nothing_to_the_log_sink() {
     // Clone has no media pass, so nothing should reach the sink. This
     // pins that the new `log` parameter is wired end to end without
     // requiring ffmpeg in this crate's tests.
@@ -517,9 +517,8 @@ fn staging_a_conversation_writes_the_files_counts_them_and_frees_the_bytes() {
     );
 }
 
-/// The same conversation staged twice must not count the same file twice, and
-/// must not rewrite it. This is the resume case: an export interrupted and
-/// started again.
+/// Two attachments with the same bytes at the same moment must not count the
+/// same file twice, and the second must not rewrite it.
 #[test]
 fn staging_the_same_bytes_twice_writes_one_file() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -652,8 +651,8 @@ fn an_empty_file_is_recorded_as_missing_rather_than_staged() {
 /// The in-memory bytes are dropped once staging is done.
 ///
 /// An exporter that carries attachment bytes on the document — the iMessage
-/// and WhatsApp readers both do — holds the whole backup in memory until this
-/// runs. The clearing loop could be replaced with `()` and nothing
+/// and SMS Backup & Restore exporters both do — holds the whole backup in
+/// memory until this runs. The clearing loop could be replaced with `()` and nothing
 /// failed, which on a large backup is the difference between finishing and
 /// being killed by the kernel.
 #[test]

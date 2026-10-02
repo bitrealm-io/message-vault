@@ -124,7 +124,7 @@ impl AttachmentMedia {
     }
 }
 
-/// iPhone vs Mac backup layout for iMessage / iMazing.
+/// iPhone vs Mac backup layout for iMessage.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ApplePlatform {
     #[default]
@@ -193,11 +193,11 @@ pub struct Form {
     pub apple_platform: ApplePlatform,
     /// Android vs iOS WhatsApp layout.
     pub whatsapp_platform: WhatsappPlatform,
-    /// WhatsApp backup encryption key (never written to `export.ini`).
+    /// WhatsApp backup encryption key.
     pub whatsapp_key: String,
     /// WhatsApp backup file path.
     pub whatsapp_backup: String,
-    /// WhatsApp Web session/wa path.
+    /// WhatsApp contacts database (`wa.db` / `ContactsV2.sqlite`) path.
     pub whatsapp_wa: String,
     /// WhatsApp media folder path.
     pub whatsapp_media: String,
@@ -376,7 +376,7 @@ impl Form {
         }
     }
 
-    /// Build an iMazing config, pushing path and timezone problems onto `errors`.
+    /// Build an iMazing config, pushing path and media problems onto `errors`.
     fn to_imazing_config(
         &self,
         obfuscate: ObfuscateConfig,
@@ -469,7 +469,7 @@ impl Form {
         }
     }
 
-    /// Build an SMS Backup+ config, including owner emails and name mapping.
+    /// Build an SMS Backup+ config, including owner emails.
     fn to_sms_plus_config(
         &self,
         obfuscate: ObfuscateConfig,
@@ -518,7 +518,8 @@ impl Form {
         (input.into_iter().collect(), media, owner_phones)
     }
 
-    /// Media options for Android exporters (always validate compress settings).
+    /// Media options for every exporter except iMessage; compress settings are
+    /// validated only in Compress mode.
     fn validate_media(&self, errors: &mut Vec<String>) -> MediaConfig {
         let mode = self.attachment_media.media_mode();
         let obfuscate_active = self.obfuscate || !self.obfuscate_seed.trim().is_empty();
@@ -557,7 +558,7 @@ impl Form {
         MediaConfig { mode, compress }
     }
 
-    /// Compress options for GUI iMessage post-process (after exporter exits).
+    /// Compress options parsed from the form; checked while the form becomes a config.
     ///
     /// # Errors
     ///

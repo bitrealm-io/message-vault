@@ -1,10 +1,10 @@
-//! Full export pipeline for CLI and in-process GUI.
+//! Full export pipeline; the desktop app calls it in process.
 
 use crate::emit::{ConvertExportArgs, convert_export};
 use anyhow::{Result, bail};
 use message_crate_core::{ExporterConfig, RunResult, SourceConfig};
 
-/// Resolve contacts, convert, then apply media transforms and obfuscation.
+/// Convert, then apply media transforms and obfuscation.
 ///
 /// # Errors
 ///

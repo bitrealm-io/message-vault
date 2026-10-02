@@ -1,4 +1,4 @@
-//! Structured helpers for mail headers (parts, edits, balloons).
+//! Structured helpers for message record fields (parts, edits, balloons).
 //!
 
 use imessage_database::{

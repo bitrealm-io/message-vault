@@ -28,7 +28,8 @@ impl Platform {
 #[derive(Debug, Clone)]
 pub(crate) struct WtsexporterArgs {
     pub platform: Platform,
-    /// Search root for relative defaults (`msgstore.db`, `wa.db`, …). Not the process cwd.
+    /// Search root for relative defaults (`msgstore.db`, `wa.db`, …): the backup
+    /// input, or the process cwd when the config names no input.
     pub input: PathBuf,
     /// Scratch directory for wtsexporter (media extract + JSON). Must outlive convert.
     pub work_dir: PathBuf,

@@ -1,8 +1,8 @@
 //! Convert SMS Backup+ (jberkel) EML files into the shared conversation
 //! structure ([`message_ir::ConversationDocument`]) every exporter writes.
 //!
-//! Library entry: [`run`] for the full pipeline.
-//! The `sms-backup-plus-exporter` binary is a thin CLI over [`run`].
+//! Library entry: [`run`] for the full pipeline; the desktop app calls it
+//! in process.
 
 mod assets;
 mod attachments_emit;

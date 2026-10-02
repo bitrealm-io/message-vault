@@ -3,7 +3,7 @@ name = "whatsapp-exporter"
 version = "0.1.0"
 edition = "2024"
 license = "LicenseRef-FCL-1.0-ALv2"
-description = "Convert WhatsApp DB/backup via wtsexporter JSON to shared per-chat CSV"
+description = "Convert WhatsApp DB/backup via wtsexporter JSON to the shared conversation structure"
 autotests = false
 
 [dependencies]

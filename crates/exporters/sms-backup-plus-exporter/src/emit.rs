@@ -237,7 +237,8 @@ impl ProjectionHooks for SbpProjection<'_> {
 
 const EML_PROGRESS_EVERY: u64 = 5000;
 
-/// Verbose-only log output: every method is a no-op unless `--verbose` was passed.
+/// Verbose-only log output: every method is a no-op unless
+/// `SmsBackupPlusConfig::verbose` is set.
 #[derive(Clone, Copy)]
 struct Verbose<'a> {
     enabled: bool,
@@ -410,8 +411,8 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
 
 /// Read-only inputs every parallel EML parse needs.
 struct ParseInputs {
-    /// The `--input` paths after output preparation; relative EML paths are
-    /// computed against these.
+    /// The `ExporterConfig::inputs` paths after output preparation; relative
+    /// EML paths are computed against these.
     input_roots: Vec<PathBuf>,
     /// The subset of `input_roots` that are single files rather than folders.
     file_inputs: HashSet<PathBuf>,
@@ -770,7 +771,7 @@ mod tests {
         }
     }
 
-    /// A `ParsedMessage` arriving now, with the three fields the decision reads.
+    /// A `ParsedMessage` arriving now, with the two fields the decision reads.
     fn parsed(timestamp_secs: f64, smssync_id: Option<&str>) -> ParsedMessage {
         ParsedMessage {
             chat_key: "+15555550101".into(),

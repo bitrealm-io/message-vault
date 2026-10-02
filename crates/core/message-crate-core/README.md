@@ -1,6 +1,6 @@
 # message-crate-core
 
-Shared form models (`Form`, `Exporter`, `ExporterConfig`), job spawning (`spawn_job` with cancel and progress), and `export.ini` load/save.
+Shared form models (`Form`, `Exporter`, `ExporterConfig`), the shared export pipeline (`run_pipeline`, `finish_run`, `ExportReport`), attachment jobs, cancellation (`CancelFlag`), and progress events (`ProgressEvent`).
 
 The Tauri desktop app in `src-tauri/` uses this crate. Exporter libraries use the same config types.
 

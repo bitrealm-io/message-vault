@@ -1,4 +1,4 @@
-//! Shared parsed message types for SMS Backup+ EML → CSV exports.
+//! Shared parsed message types for SMS Backup+ EML conversion.
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct AttachmentBlob {

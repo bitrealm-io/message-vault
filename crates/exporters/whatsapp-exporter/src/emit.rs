@@ -31,8 +31,10 @@ pub(crate) struct ConvertRequest<'a> {
     pub json_path: &'a Path,
     pub output: &'a Path,
     pub transforms: ExportTransforms,
-    /// Directories tried when resolving relative media paths (typically the
-    /// wtsexporter working directory / process cwd).
+    /// Directories tried when resolving relative media paths. For a ready-made
+    /// `result.json`: the backup input, when given, and the JSON's folder.
+    /// Otherwise: the wtsexporter working directory and the backup input, which
+    /// is the process cwd when the config names no input.
     pub media_search_roots: &'a [PathBuf],
     /// The account holder's number in E.164, stamped on the export header and
     /// so on every message as the address it was held at. `None` records no

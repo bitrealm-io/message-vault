@@ -3,7 +3,7 @@ name = "imazing-exporter"
 version = "0.1.0"
 edition = "2024"
 license = "LicenseRef-FCL-1.0-ALv2"
-description = "Convert iMazing Messages / WhatsApp CSV to shared per-chat CSV"
+description = "Convert iMazing Messages / WhatsApp CSV to the shared conversation structure"
 autotests = false
 
 [dependencies]

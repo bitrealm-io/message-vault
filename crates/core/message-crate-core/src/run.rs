@@ -26,8 +26,8 @@ pub fn run_pipeline(
     finish_run(config, &report, config.media.mode.needs_tools())
 }
 
-/// The run tail shared by exporters whose middle diverges (WhatsApp, iMessage):
-/// media-failure bail plus log-line and summary assembly.
+/// The run tail shared by exporters whose middle diverges (WhatsApp, iMessage,
+/// SMS Backup+): media-failure bail plus log-line and summary assembly.
 ///
 /// # Errors
 ///

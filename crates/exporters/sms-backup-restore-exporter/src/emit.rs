@@ -8,7 +8,7 @@ use message_crate_core::{CancelFlag, ExportReport, ExportTransforms, OutputForma
 use message_staging::{AttachmentSource, ExportWriter};
 use std::path::Path;
 
-/// Map the ir-format read report onto the shared [`ExportReport`] shape,
+/// Map the reader's [`ReadReport`] onto the shared [`ExportReport`] shape,
 /// moving reader-specific counters into `extra`.
 fn to_core_report(report: ReadReport) -> ExportReport {
     let mut out = ExportReport {

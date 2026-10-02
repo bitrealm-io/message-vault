@@ -38,8 +38,8 @@ use crate::{
     session::MailSession,
 };
 
-/// Report often enough that long attachment decrypts between ticks do not
-/// look frozen on large backups.
+/// Report often enough that the message stream does not look frozen on large
+/// backups.
 const MESSAGE_PROGRESS_EVERY: u64 = 1_000;
 
 /// Poll votes and updates: noise that CSV and HTML export skip too.

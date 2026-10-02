@@ -103,7 +103,7 @@ pub struct Source {
 pub enum Request {
     /// Read every message and stream it back as [`Event`] lines.
     Export(ExportRequest),
-    /// Report the raw addresses the backup's device sent from.
+    /// Report the bare addresses the backup's device sent from.
     Identities(Source),
     /// Decrypt one attachment of the export just streamed into a file the
     /// app can read. Only meaningful after [`Event::Source`] reported

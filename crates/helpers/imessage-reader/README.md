@@ -30,7 +30,7 @@ password when the backup is encrypted.
 
 What comes back, one JSON object per line, in this order:
 
-1. `{"event":"source","protocol_version":1,"encrypted":false}` once.
+1. `{"event":"source","protocol_version":3,"encrypted":false}` once.
 2. Any number of `log`, `progress`, `conversation`, and `message` lines,
    interleaved. Each `conversation` names a chat and its participants; each
    `message` is one already-classified message with its attachments listed.
@@ -62,4 +62,4 @@ Workspace setup: [CONTRIBUTING.md](../../../CONTRIBUTING.md).
 
 GNU General Public License v3.0 or later. See [`LICENSE`](LICENSE) in this folder. This is the one crate in the repository not under the Fair Core License.
 
-Parts of `src/backup.rs` and `src/error.rs` are adapted from [`imessage-exporter`](https://github.com/ReagentX/imessage-exporter) by Christopher Sardegna, GPL-3.0-or-later; each file says which parts. Every desktop installer ships this program with `imessage-reader-LICENSE.txt` beside it, made from [`NOTICE.txt`](NOTICE.txt) and `LICENSE` by `src-tauri/build.rs`, and the app's Settings → About names the program and links to the source for the version installed.
+Parts of `src/backup.rs` and `src/error.rs` are adapted from [`imessage-exporter`](https://github.com/ReagentX/imessage-exporter) by Christopher Sardegna, GPL-3.0-or-later; each file says which parts. Every desktop installer ships this program with `imessage-reader-LICENSE.txt` beside it, made from [`NOTICE.txt`](NOTICE.txt) and `LICENSE` by `src-tauri/build.rs`, and the app's Settings → System, under Third-party software, names the program and links to the source and the license for the version installed.

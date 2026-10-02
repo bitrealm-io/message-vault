@@ -196,7 +196,7 @@ pub enum SourceConfig {
     Apple(AppleConfig),
     /// WhatsApp backup source.
     Whatsapp(WhatsappConfig),
-    /// Existing Message Crate output → another IR format (`message-reexporter`).
+    /// Existing Message Crate output → another IR format (`message-reexport`).
     Format(FormatConfig),
 }
 
@@ -250,7 +250,7 @@ pub struct AppleConfig {
     pub copy_method: String,
     /// macOS AddressBook path.
     pub apple_contacts: Option<PathBuf>,
-    /// Apple backup decryption password (never written to `export.ini`).
+    /// Apple backup decryption password.
     pub backup_password: Option<String>,
     /// Use the destination caller id as the outgoing From display name.
     pub use_caller_id: bool,
@@ -276,7 +276,7 @@ pub struct WhatsappConfig {
     pub platform: Option<WhatsappPlatform>,
     /// Optional path to an existing `result.json` to convert (skips wtsexporter).
     pub json: Option<PathBuf>,
-    /// WhatsApp backup decryption key (never written to `export.ini`).
+    /// WhatsApp backup decryption key.
     pub key: Option<String>,
     /// Encrypted backup or iOS backup path.
     pub backup: Option<PathBuf>,

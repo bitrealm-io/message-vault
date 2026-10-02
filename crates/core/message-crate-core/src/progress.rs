@@ -6,10 +6,11 @@
 //! belongs to and carries the counts that stage has, so a caller can match
 //! on the variant and use the fields without parsing anything.
 //!
-//! The events are emitted from the shared write layer (`message-ir-format`'s
-//! `ExportWriter`, write queue, and attachment stager) and from the few
-//! exporter-specific loops that have progress worth showing (iMessage's
-//! message stream and its backup-decrypt setup steps).
+//! The events are emitted from the shared write layer (`message-staging`'s
+//! `ExportWriter` and write queue, `message-ir-format`'s `FormatSink`, and
+//! this crate's attachment stager) and from the few exporter-specific loops
+//! that have progress worth showing (iMessage's message stream and its
+//! backup-decrypt setup steps).
 
 use std::fmt;
 use std::sync::{Arc, Mutex};

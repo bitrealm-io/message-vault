@@ -1,5 +1,5 @@
 //! Convert OpenExtract rows into the shared conversation structure, then write
-//! the chosen output format via [`FormatSink`].
+//! the chosen output format via [`ExportWriter`].
 
 use crate::parse::{RawRow, SourceKind, discover_csv_files, parse_csv_file};
 use anyhow::Result;
@@ -321,7 +321,8 @@ fn resolve_sender(
     (handle, display)
 }
 
-/// Unix seconds and the original string for a row's date, in RFC 3339 or OpenExtract's local formats.
+/// Unix seconds, and the same instant in milliseconds as a string, for a row's
+/// date in RFC 3339 or OpenExtract's local formats.
 fn parse_timestamp(raw: &str) -> Option<(i64, String)> {
     let raw = raw.trim();
     if raw.is_empty() {

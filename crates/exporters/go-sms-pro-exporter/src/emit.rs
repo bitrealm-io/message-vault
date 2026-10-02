@@ -1,6 +1,6 @@
 //! Convert a GO SMS Pro backup into the shared conversation structure
 //! ([`ConversationDocument`]) every exporter writes, then write the chosen
-//! output format via [`FormatSink`].
+//! output format via [`ExportWriter`].
 
 use crate::attachments_emit::queue_pdu_attachments;
 use crate::chat_id::{chat_id_group, chat_id_individual, guarded_phone};
@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 
 const EXPORT_SOURCE: &str = "go-sms-pro";
 const EXPORT_TOOL: &str = "GO SMS Pro";
-/// Upstream app version not pinned yet (empty in CSV).
+/// This crate's version, recorded as the export tool version.
 const EXPORT_TOOL_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Cap on retained skip-detail rows; overflow is counted and reported.
 pub(crate) const MAX_SKIP_DETAILS: usize = 20;
@@ -421,7 +421,7 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
         .primary_owner_handle()
         .expect("from_phones guarantees a phone owner handle");
 
-    // Clean previous CSV / mail artifacts (keep attachments if re-run; rewrite as needed).
+    // Clean the previous run's output, or keep it when `resume` is set.
     let writer = ExportWriter::open(&output_dir, output_format, transforms, resume)?;
     let mut ingest = Ingest {
         owners: &owners,

@@ -139,8 +139,9 @@ impl ExportReport {
         lines
     }
 
-    /// Append the summary lines to `out`: where the export went, then every
-    /// count that is not zero.
+    /// Append the summary lines to `out`: where the export went, then each
+    /// resume, skip, duplicate, attachment, and extension count that is not
+    /// zero, then the errors.
     pub fn summary_lines(
         &self,
         format: OutputFormat,

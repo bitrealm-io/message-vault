@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { formatHandleDate } from "./contactDrawerTypes";
 
-export function handleDateCell(iso: string | null | undefined): string {
-  return formatHandleDate(iso) ?? "—";
+export function handleDateCell(iso: string | null | undefined, zone: string): string {
+  return formatHandleDate(iso, zone) ?? "—";
 }
 
 export type RemoveIdentityTarget = {

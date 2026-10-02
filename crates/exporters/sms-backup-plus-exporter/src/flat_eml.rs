@@ -3,7 +3,8 @@
 use crate::assets::extract_attachments;
 use crate::types::ParsedMessage;
 use mailparse::{MailHeaderMap, ParsedMail};
-use phone::sanitize_number;
+use message_ir::HandleType;
+use phone::{OwnerHandleSet, sanitize_number};
 use regex::Regex;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
@@ -25,6 +26,8 @@ const RECEIVED_TYPES: &[&str] = &["1", "132", "130"];
 /// Cached headers read once per EML (avoids repeated `get_first_value` + alloc).
 #[derive(Debug, Clone)]
 pub(crate) struct MailHeaders {
+    /// `SMS`, `MMS` or `CALLLOG`; SMS Backup+ writes it on every mail.
+    pub smssync_datatype: String,
     pub smssync_type: String,
     pub smssync_address: String,
     pub smssync_date: String,
@@ -47,6 +50,7 @@ impl MailHeaders {
                 .to_string()
         }
         Self {
+            smssync_datatype: one(mail, "X-smssync-datatype"),
             smssync_type: one(mail, "X-smssync-type"),
             smssync_address: one(mail, "X-smssync-address"),
             smssync_date: one(mail, "X-smssync-date"),
@@ -56,6 +60,14 @@ impl MailHeaders {
             to: one(mail, "To"),
             date: one(mail, "Date"),
         }
+    }
+
+    /// True for a mail SMS Backup+ wrote from the phone's call log.
+    ///
+    /// Such a mail carries `X-smssync-type` too, holding the call's type, so
+    /// only `X-smssync-datatype` tells a call from a text message.
+    pub(crate) fn is_call_log(&self) -> bool {
+        self.smssync_datatype.eq_ignore_ascii_case("CALLLOG")
     }
 }
 
@@ -161,8 +173,12 @@ pub(crate) fn extract_body_text(mail: &ParsedMail<'_>) -> String {
     first_body_of_type(mail, "text/plain").unwrap_or_default()
 }
 
-/// True when the EML is one SMS Backup+ message rather than unrelated mail.
+/// True when the EML is one SMS Backup+ message rather than unrelated mail
+/// or a call from the call log.
 fn is_single_sms_eml(headers: &MailHeaders) -> bool {
+    if headers.is_call_log() {
+        return false;
+    }
     if !headers.smssync_type.is_empty() {
         return true;
     }
@@ -181,7 +197,7 @@ pub(crate) fn parse_flat_eml_mail(
     path: &Path,
     mail: &ParsedMail<'_>,
     headers: &MailHeaders,
-    owner_digits: &HashSet<String>,
+    owners: &OwnerHandleSet,
     owner_emails: &[String],
 ) -> Option<ParsedMessage> {
     if !is_single_sms_eml(headers) {
@@ -189,7 +205,7 @@ pub(crate) fn parse_flat_eml_mail(
     }
     let timestamp_secs = timestamp_seconds(headers)?;
     let name_alias = contact_name_from_subject(&headers.subject);
-    let addresses = FlatAddresses::from_headers(headers, name_alias.as_deref(), owner_digits);
+    let addresses = FlatAddresses::from_headers(headers, name_alias.as_deref(), owners);
     if addresses.is_blank() {
         return None;
     }
@@ -243,7 +259,7 @@ impl FlatAddresses {
     fn from_headers(
         headers: &MailHeaders,
         subject_name: Option<&str>,
-        owner_digits: &HashSet<String>,
+        owners: &OwnerHandleSet,
     ) -> Self {
         let raw = if headers.smssync_address.is_empty() {
             subject_name.unwrap_or_default().to_string()
@@ -258,7 +274,7 @@ impl FlatAddresses {
             .unwrap_or_default();
         let non_owner = numbers
             .into_iter()
-            .filter(|n| !owner_digits.contains(n))
+            .filter(|n| !owners.is_owner(n, HandleType::Phone))
             .collect();
         Self {
             raw,
@@ -353,7 +369,7 @@ Hello from Alice\r\n",
         let bytes = std::fs::read(&path).unwrap();
         let mail = mailparse::parse_mail(&bytes).unwrap();
         let headers = MailHeaders::from_mail(&mail);
-        let owners = HashSet::from(["5555550100".to_string()]);
+        let owners = OwnerHandleSet::from_phones(&["5555550100".to_string()]).unwrap();
         let msg = parse_flat_eml_mail(&path, &mail, &headers, &owners, &[]).unwrap();
         assert!(!msg.is_from_me);
         assert_eq!(msg.text.trim(), "Hello from Alice");
@@ -381,7 +397,7 @@ Hello\r\n",
         let bytes = std::fs::read(&path).unwrap();
         let mail = mailparse::parse_mail(&bytes).unwrap();
         let headers = MailHeaders::from_mail(&mail);
-        let owners = HashSet::from(["5555550100".to_string()]);
+        let owners = OwnerHandleSet::from_phones(&["5555550100".to_string()]).unwrap();
         let msg = parse_flat_eml_mail(&path, &mail, &headers, &owners, &["me@example.com".into()])
             .unwrap();
         assert_eq!(msg.chat_key, "4075551234");
@@ -413,7 +429,7 @@ old message\r\n"
         let bytes = std::fs::read(&path).unwrap();
         let mail = mailparse::parse_mail(&bytes).unwrap();
         let headers = MailHeaders::from_mail(&mail);
-        let owners = HashSet::from(["5555550100".to_string()]);
+        let owners = OwnerHandleSet::from_phones(&["5555550100".to_string()]).unwrap();
         let msg = parse_flat_eml_mail(&path, &mail, &headers, &owners, &[]).unwrap();
         assert!((msg.timestamp_secs - 978_307_200.0).abs() < 0.001);
     }
@@ -422,6 +438,7 @@ old message\r\n"
     fn sent_detection_uses_exact_owner_email() {
         fn headers_with_from(from: &str) -> MailHeaders {
             MailHeaders {
+                smssync_datatype: String::new(),
                 smssync_type: String::new(),
                 smssync_address: String::new(),
                 smssync_date: String::new(),
@@ -467,6 +484,7 @@ old message\r\n"
     #[test]
     fn a_mail_without_the_smssync_date_is_timed_by_its_date_header() {
         let headers = MailHeaders {
+            smssync_datatype: String::new(),
             smssync_type: "1".into(),
             smssync_address: "4075551234".into(),
             smssync_date: String::new(),
@@ -486,5 +504,41 @@ old message\r\n"
         assert_ne!(k1, k2);
         assert_eq!(k1, "group-2:12_2:34");
         assert_eq!(k2, "group-3:123_1:4");
+    }
+
+    /// Parse `eml` (written with `\n` line ends) as one flat EML.
+    fn parse(eml: &str, owners: &[&str]) -> Option<ParsedMessage> {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("msg.eml");
+        std::fs::write(&path, eml.replace('\n', "\r\n")).unwrap();
+        let bytes = std::fs::read(&path).unwrap();
+        let mail = mailparse::parse_mail(&bytes).unwrap();
+        let headers = MailHeaders::from_mail(&mail);
+        let owners: Vec<String> = owners.iter().map(|s| s.to_string()).collect();
+        let owners = OwnerHandleSet::from_phones(&owners).unwrap();
+        parse_flat_eml_mail(&path, &mail, &headers, &owners, &[])
+    }
+
+    /// SMS Backup+ writes `X-smssync-type` on a call-log mail too, holding
+    /// the call's type, so only `X-smssync-datatype` tells a call from a text.
+    #[test]
+    fn a_call_log_mail_is_not_a_text_message() {
+        let msg = parse(
+            "From: x@unknown.email\nTo: me@example.com\nSubject: Call with Alice\nX-smssync-datatype: CALLLOG\nX-smssync-type: 1\nX-smssync-address: 4075551234\nX-smssync-date: 1609459200000\nContent-Type: text/plain; charset=utf-8\n\n123s (00:02:03)\n4075551234 (incoming call)\n",
+            &["5555550100"],
+        );
+        assert!(msg.is_none(), "{:?}", msg.map(|m| m.text));
+    }
+
+    /// An MMS whose address list names the owner in national form
+    /// (`07700900123` for `+447700900123`) is one-to-one with the other number.
+    #[test]
+    fn the_owner_in_national_form_is_not_a_peer() {
+        let msg = parse(
+            "From: x@unknown.email\nTo: me@example.com\nSubject: MMS with X\nX-smssync-type: 132\nX-smssync-address: 07700900123~+447911123456\nX-smssync-date: 1609459200000\nContent-Type: text/plain; charset=utf-8\n\nhi\n",
+            &["+447700900123"],
+        )
+        .unwrap();
+        assert_eq!(msg.conversation_type, "individual");
     }
 }

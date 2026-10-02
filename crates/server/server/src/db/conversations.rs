@@ -143,7 +143,9 @@ pub async fn list_conversations_sorted(
 
     let mut params = filter.params().to_vec();
     params.push(SqlParam::Int(limit as i64));
-    params.push(SqlParam::Int(offset as i64));
+    params.push(SqlParam::Int(
+        i64::try_from(offset).map_err(anyhow::Error::from)?,
+    ));
     // The sort reads computed columns (`last_message_at`, `message_count`)
     // inside expressions. Sorting the rows as a derived table makes those
     // aliases real columns.

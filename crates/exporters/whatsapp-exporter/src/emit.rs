@@ -254,6 +254,10 @@ fn resolve_sender(
 }
 
 /// Resolve a media path during parse. Do not copy; the runner writes later.
+///
+/// A file that is not found keeps its attachment with no source, and the
+/// writer marks it `file_missing`, so a message that is only a photo still
+/// says a photo was there.
 fn queue_media(
     src: &str,
     media_base: Option<&str>,
@@ -274,12 +278,11 @@ fn queue_media(
     if !copy_attachments {
         return (vec![pending], None);
     }
-    if let Some(src_path) = resolve_media_file(src, media_base, media_search_roots) {
-        (vec![pending], Some(src_path))
-    } else {
+    let src_path = resolve_media_file(src, media_base, media_search_roots);
+    if src_path.is_none() {
         report.bump("attachments_missing", 1);
-        (Vec::new(), None)
     }
+    (vec![pending], src_path)
 }
 
 /// Collect source paths in the same order attachments will appear on documents.
@@ -411,16 +414,11 @@ impl ProjectionHooks for WhatsappProjection {
             .then_with(|| a.extra_str("key_id").cmp(b.extra_str("key_id")))
     }
 
+    /// `key_id` alone: it tells WhatsApp messages apart, including
+    /// same-second messages with identical text. The attachments stay out,
+    /// so whether a media file was found leaves the GUID unchanged.
     fn guid_materials(&self, msg: &PendingMessage) -> Vec<String> {
-        let mut digests: Vec<String> = msg
-            .attachments
-            .iter()
-            .map(|a| a.digest_sha256.clone().unwrap_or_default())
-            .collect();
-        // key_id uniquely identifies a WhatsApp message; feed it into the GUID
-        // so same-second messages with identical text get distinct GUIDs.
-        digests.push(msg.extra_str("key_id").to_string());
-        digests
+        vec![msg.extra_str("key_id").to_string()]
     }
 
     fn attachment_to_ir(&self, att: &PendingAttachment, msg: &PendingMessage) -> IrAttachment {

@@ -81,3 +81,44 @@ fn run_without_a_summary_still_writes_the_export() {
         .count();
     assert_eq!(files, 1);
 }
+
+/// A call-log mail SMS Backup+ wrote into its "Call log" label.
+const CALL_LOG_EML: &str = "From: alice@unknown.email\n\
+     To: me@example.com\n\
+     Subject: Call with Alice\n\
+     X-smssync-datatype: CALLLOG\n\
+     X-smssync-type: 1\n\
+     X-smssync-duration: 123\n\
+     X-smssync-address: 4075551234\n\
+     X-smssync-date: 1609459300000\n\
+     Content-Type: text/plain; charset=utf-8\n\
+     \n\
+     123s (00:02:03)\n\
+     4075551234 (incoming call)\n";
+
+/// SMS Backup+ has no text in a call-log mail, only the call's length and
+/// number, and Message Crate has no model for a call.
+#[test]
+fn a_call_log_mail_is_skipped_and_counted_in_the_summary() {
+    let tmp = tempfile::tempdir().unwrap();
+    let input = tmp.path().join("backup");
+    fs::create_dir_all(&input).unwrap();
+    fs::write(
+        input.join("1.eml"),
+        eml("1609459200000", "Hello from Alice"),
+    )
+    .unwrap();
+    fs::write(input.join("2.eml"), CALL_LOG_EML).unwrap();
+    let output = tmp.path().join("out");
+
+    let result = crate::run(&jsonl_run_config(&[&input], &output, source(true))).expect("run");
+
+    let written = assert_run_wrote_jsonl(&result, &output, 1);
+    assert!(written.contains("Hello from Alice"), "{written}");
+    assert!(!written.contains("123s"), "{written}");
+    assert!(
+        result.messages.iter().any(|l| l == "  skipped_call_log: 1"),
+        "{:?}",
+        result.messages
+    );
+}

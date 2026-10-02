@@ -10,6 +10,7 @@ import {
 } from "react-aria-components";
 import { formatIsoDateOnly } from "../lib/formatDate";
 import { formatHandleServiceLabel } from "../lib/handleService";
+import { useTimeZone } from "../lib/timeZone";
 import Button from "./Button";
 import { TrashIcon } from "./icons";
 import { type IdentityRow, identityTotals, sortIdentityRows } from "./identityRows";
@@ -53,7 +54,8 @@ function Count({
 }
 
 function DateCell({ value, loading }: { value: string | null; loading: boolean }) {
-  const text = loading ? null : formatIsoDateOnly(value);
+  const zone = useTimeZone();
+  const text = loading ? null : formatIsoDateOnly(value, zone);
   return text ? <span className={mutedClass}>{text}</span> : <Dash />;
 }
 

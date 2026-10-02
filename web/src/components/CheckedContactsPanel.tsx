@@ -13,6 +13,7 @@ import { contactLabelText } from "../lib/contactLabel";
 import { keys } from "../lib/queryKeys";
 import { useRouteCache } from "../lib/routeQuery";
 import { getContactSummaries } from "../lib/serverApi";
+import { useTimeZone } from "../lib/timeZone";
 import Button from "./Button";
 import ContactLabel from "./ContactLabel";
 import { type ContactPreview, sumHandleTotals } from "./contactDrawer/contactDrawerTypes";
@@ -109,6 +110,7 @@ export default function CheckedContactsPanel({
   onClear: () => void;
 }) {
   const cache = useRouteCache();
+  const zone = useTimeZone();
   const heading =
     contacts.length === 1 ? "1 contact selected" : `${contacts.length} contacts selected`;
   const [metrics, setMetrics] = useState<Record<string, RowMetrics>>({});
@@ -257,12 +259,12 @@ export default function CheckedContactsPanel({
                 </Cell>
                 <Cell className={`${tdCenterClass} whitespace-nowrap text-muted`}>
                   <MetricCell loaded={row.totals != null}>
-                    {handleDateCell(row.totals?.start_date)}
+                    {handleDateCell(row.totals?.start_date, zone)}
                   </MetricCell>
                 </Cell>
                 <Cell className={`${tdCenterClass} whitespace-nowrap text-muted`}>
                   <MetricCell loaded={row.totals != null}>
-                    {handleDateCell(row.totals?.end_date)}
+                    {handleDateCell(row.totals?.end_date, zone)}
                   </MetricCell>
                 </Cell>
                 <Cell className={tdRightClass}>

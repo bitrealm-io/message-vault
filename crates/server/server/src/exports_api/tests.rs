@@ -397,6 +397,21 @@ async fn a_selection_refuses_ids_the_account_does_not_hold_naming_them() {
         ]
     );
 
+    // A missing id given twice, with another missing id between, is named
+    // once.
+    let repeated = ExportScope::Selection {
+        conversation_ids: Vec::new(),
+        message_ids: vec![99, 4242, 99],
+    };
+    let err = page(&mut conn, 101, &repeated, 100, 0).await.unwrap_err();
+    let ApiError::ValidationFailed(errors) = err else {
+        panic!("expected validation-failed, got {err:?}");
+    };
+    assert_eq!(
+        errors,
+        ["scope.message_ids: 99, 4242 not found for this account"]
+    );
+
     let empty = ExportScope::Selection {
         conversation_ids: Vec::new(),
         message_ids: Vec::new(),

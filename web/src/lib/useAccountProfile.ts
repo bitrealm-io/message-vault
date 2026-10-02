@@ -20,12 +20,20 @@ import { getAccountProfile, updateAccountProfile } from "./serverApi";
 export function useAccountProfile(): {
   profile: AccountProfile | null;
   loading: boolean;
+  /** Why the profile could not be loaded, or `""`. `loading` is false by then. */
   error: string;
+  /** Ask the server for the profile again, after `error`. */
+  retry: () => void;
 } {
-  const { data, isPending, error } = useRouteQuery(keys.accountProfile.all, (signal) =>
+  const { data, isPending, error, refetch } = useRouteQuery(keys.accountProfile.all, (signal) =>
     getAccountProfile({ signal }),
   );
-  return { profile: data ?? null, loading: isPending, error: error ? error.message : "" };
+  return {
+    profile: data ?? null,
+    loading: isPending,
+    error: error ? error.message : "",
+    retry: () => void refetch(),
+  };
 }
 
 /** What a change to the profile can carry: a name, identities to add, identities to drop. */

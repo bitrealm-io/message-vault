@@ -83,6 +83,15 @@ export const keys = {
     importDetail: (accountId: number, id: number | null) =>
       ["owner-accounts", accountId, "storage", "import", String(id)] as const,
   },
+  imports: {
+    all: ["imports"] as const,
+    /**
+     * The account's running Import Run, or null. The Import screen's resume
+     * check and the sidebar's Import badge read this one entry, so the two
+     * cannot disagree about whether a run is waiting.
+     */
+    running: ["imports", "running"] as const,
+  },
   serverSettings: { all: ["server-settings"] as const },
   /** Where the Demo Account stands, from `GET /v1/server/demo-account`. */
   demoAccount: { all: ["demo-account"] as const },

@@ -332,13 +332,12 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
     let owner_handle = owners
         .primary_owner_handle()
         .expect("from_phones guarantees a phone owner handle");
-    let owner_digits = owners.all_phone_digits();
     let owner_emails_lc: Vec<String> = owner_emails
         .iter()
         .map(|e| e.trim().to_ascii_lowercase())
         .filter(|e| !e.is_empty())
         .collect();
-    verbose.line(format!("owner phones: {}", owner_digits.len()));
+    verbose.line(format!("owner phones: {}", owner_phones.len()));
     verbose.line(format!("owner emails: {}", owner_emails_lc.len()));
     verbose.line(format!("output: {}", output_dir.display()));
 
@@ -356,7 +355,7 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
     let parse = ParseInputs {
         file_inputs: inputs.iter().filter(|p| p.is_file()).cloned().collect(),
         input_roots: inputs,
-        owner_digits,
+        owners,
         owner_emails_lc,
     };
     let mut ingest = EmlIngest::new(writer.copies_attachments(), eml_paths.len());
@@ -416,7 +415,7 @@ struct ParseInputs {
     input_roots: Vec<PathBuf>,
     /// The subset of `input_roots` that are single files rather than folders.
     file_inputs: HashSet<PathBuf>,
-    owner_digits: HashSet<String>,
+    owners: OwnerHandleSet,
     owner_emails_lc: Vec<String>,
 }
 
@@ -466,12 +465,7 @@ fn parse_eml_path(
         return ParsedEmlKind::Cancelled;
     }
     let rel_path = relative_eml_path(eml_path, &inputs.input_roots, &inputs.file_inputs);
-    parse_one_eml(
-        eml_path,
-        rel_path,
-        &inputs.owner_digits,
-        &inputs.owner_emails_lc,
-    )
+    parse_one_eml(eml_path, rel_path, &inputs.owners, &inputs.owner_emails_lc)
 }
 
 /// Everything the scan accumulates: conversations, dedupe state, attachment
@@ -512,6 +506,7 @@ impl EmlIngest {
                 self.add_parsed(*msg);
             }
             ParsedEmlKind::FlatNone => self.report.bump("skipped_parse_error", 1),
+            ParsedEmlKind::CallLog => self.report.bump("skipped_call_log", 1),
             ParsedEmlKind::NotSms => self.report.bump("skipped_not_sms_backup_plus", 1),
             ParsedEmlKind::IoError(msg) => self.report.errors.push(msg),
             ParsedEmlKind::ParseError(msg) => {
@@ -544,10 +539,11 @@ impl EmlIngest {
     /// One line of parse counters for the verbose log.
     fn parse_summary(&self) -> String {
         format!(
-            "parsed: flat_eml={} messages={} unknown_chat={} skipped_not_sms_backup_plus={} skipped_parse_error={}",
+            "parsed: flat_eml={} messages={} unknown_chat={} skipped_call_log={} skipped_not_sms_backup_plus={} skipped_parse_error={}",
             self.report.extra("flat_eml"),
             self.report.extra("messages_before_dedupe"),
             self.report.extra("unknown_chat_messages"),
+            self.report.extra("skipped_call_log"),
             self.report.extra("skipped_not_sms_backup_plus"),
             self.report.extra("skipped_parse_error"),
         )

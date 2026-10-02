@@ -14,7 +14,7 @@ use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 
 use crate::db::named_membership::{self, MembershipSpec};
-use crate::paging::{DEFAULT_LIST_LIMIT, Page, PageQuery, page_of, page_params};
+use crate::paging::{DEFAULT_LIST_LIMIT, MAX_LIST_OFFSET, Page, PageQuery, page_of, page_params};
 use crate::server::{ApiError, AppState, Created, FullAccess};
 
 /// One Contact Group or Message Tag: its id and name.
@@ -54,7 +54,12 @@ pub(crate) async fn list(
     account_id: i64,
     query: PageQuery,
 ) -> Result<Json<Page<NamedSet>>, ApiError> {
-    let params = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
+    let params = page_params(
+        query.limit,
+        query.offset,
+        DEFAULT_LIST_LIMIT,
+        Some(MAX_LIST_OFFSET),
+    )?;
     let mut conn = state.db.acquire().await?;
     let rows: Vec<NamedSet> = named_membership::list_sets(spec, &mut conn, account_id)
         .await?
@@ -119,7 +124,12 @@ pub(crate) async fn members_list(
     id: i64,
     query: PageQuery,
 ) -> Result<Json<Page<i64>>, ApiError> {
-    let params = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
+    let params = page_params(
+        query.limit,
+        query.offset,
+        DEFAULT_LIST_LIMIT,
+        Some(MAX_LIST_OFFSET),
+    )?;
     let mut conn = state.db.acquire().await?;
     let rows = named_membership::list_member_ids_of(spec, &mut conn, account_id, id).await?;
     Ok(Json(page_of(rows, params)))
@@ -188,7 +198,7 @@ macro_rules! named_set_routes {
             security(("session" = [])),
             params(
                 ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
-                ("offset" = Option<usize>, Query, description = "Page offset")
+                ("offset" = Option<usize>, Query, description = "Page offset, max 50000")
             ),
             responses(
                 (status = 200, body = crate::paging::Page<NamedSet>),
@@ -276,7 +286,7 @@ macro_rules! named_set_routes {
             params(
                 ("id" = i64, Path, description = $id_description),
                 ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
-                ("offset" = Option<usize>, Query, description = "Page offset")
+                ("offset" = Option<usize>, Query, description = "Page offset, max 50000")
             ),
             responses(
                 (status = 200, body = crate::paging::Page<i64>),

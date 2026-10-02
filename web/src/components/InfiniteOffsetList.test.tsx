@@ -5,12 +5,39 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import InfiniteOffsetList from "./InfiniteOffsetList";
 
+const tauriMock = vi.hoisted(() => ({ current: false }));
 vi.mock("../lib/tauri-check", () => ({
-  isTauri: () => false,
+  isTauri: () => tauriMock.current,
 }));
 
 afterEach(() => {
   cleanup();
+  tauriMock.current = false;
+});
+
+describe("InfiniteOffsetList in the desktop app", () => {
+  it("opens a search result on one click", async () => {
+    tauriMock.current = true;
+    // jsdom lays out nothing; give the virtualizer a viewport to fill.
+    const heights = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(400);
+    const widths = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(300);
+    try {
+      const onSelect = vi.fn();
+      renderList(
+        [
+          { id: "1", name: "Ada" },
+          { id: "2", name: "Grace" },
+        ],
+        { onSelect, sectioned: false },
+      );
+      await userEvent.click(await screen.findByText("Grace"));
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      expect(onSelect).toHaveBeenCalledWith({ id: "2", name: "Grace" });
+    } finally {
+      heights.mockRestore();
+      widths.mockRestore();
+    }
+  });
 });
 
 type Item = { id: string; name: string };

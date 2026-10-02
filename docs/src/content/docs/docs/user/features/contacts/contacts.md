@@ -189,7 +189,7 @@ The file has one row for each identity, and six columns.
 |---|---|
 | `contact_id` | The number Message Crate knows the contact by. Rows with the same value are one contact. |
 | `display_name` | The contact's name. Blank for a contact with no name. |
-| `groups` | The contact's Contact Groups, separated by `;`. |
+| `groups` | The contact's Contact Groups, separated by `;`. A Contact Group's name can't hold `;`, so the cell never needs escaping. |
 | `service` | `phone` for a text message identity, `whatsapp` for a WhatsApp one. |
 | `handle_type` | `phone`, `email`, `username`, or `other`. |
 | `identity` | The phone number, email address, or username. |

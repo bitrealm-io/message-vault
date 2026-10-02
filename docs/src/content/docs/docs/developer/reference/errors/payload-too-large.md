@@ -11,4 +11,4 @@ editUrl: false
 | Status | `413 Payload Too Large` |
 | Type | `https://messagecrate.app/docs/developer/reference/errors/payload-too-large` |
 
-The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading. An attachment upload (`PUT /v1/assets/{sha256}` and each part of a multipart upload) caps at the attachment size limit, which the owner sets in Server Settings and `GET /v1/server` reports as `asset_max_bytes`. Auth routes cap at 32 KiB, and every other route at a cap fixed in the server, 512 MiB at most. Send less, or, for an attachment, have the owner raise the limit.
+The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading. `PUT /v1/assets/{sha256}` caps at the attachment size limit, which the owner sets in Server Settings and `GET /v1/server` reports as `asset_max_bytes`. Each part of a multipart upload caps at the part size the upload was given when it started. Auth routes cap at 32 KiB, and every other route at a cap fixed in the server, 512 MiB at most. Send less, or, for an attachment, have the owner raise the limit.

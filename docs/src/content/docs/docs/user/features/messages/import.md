@@ -266,11 +266,12 @@ A run at a Review keeps waiting on another screen and after the app is closed.
 
 The **Import** entry in the sidebar carries a badge that reads **Waiting** while a run is at a Review, and **Failed** when the run in the app has failed.
 
-**Cancel** under the active Stage stops that Stage.
-What follows depends on the Stage:
+**Cancel** under Staging or Media stops that Stage.
+The run stays open and the Staging Directory stays in place, so the run can be resumed.
 
-- A cancelled Staging or Media leaves the run open and the Staging Directory in place, so the run can be resumed.
-- A cancelled Upload ends the run as failed. The Staging Directory stays.
+**Pause** under Upload stops the Upload.
+The run stays open at its Upload and the Staging Directory stays in place.
+Resuming it sends only the conversations that are not in the Message Crate yet.
 
 ## Resuming
 
@@ -285,7 +286,7 @@ On the computer that staged the run, it also deletes the Staging Directory.
 | During Staging, and the backup has changed since | `The backup has changed` | **Start over** reads it fresh, because copying more of it would mix two backups in one folder. |
 | At a Review | `Pick up where you left off` | **Show me the summary** reads the staged files again and returns to the Review. |
 | During Media | `Finish preparing your media` | **Carry on** processes the files Media had not reached. |
-| During Upload | `Finish your last import` | **Upload to Message Crate** uploads without staging again. |
+| During Upload, or paused | `Finish your last import` | **Resume** sends the conversations that are not uploaded yet, without staging again. |
 
 Three cases offer only **Discard this import**, because there is nothing on this computer to carry on from:
 
@@ -319,11 +320,12 @@ The heading of a finished run says how it ended.
 | `Imported 1,234 messages` | The run succeeded. The number is the count of new messages. |
 | `Imported 1,234 messages, with errors` | The run succeeded and some messages or files failed. The **Errors** table lists them. |
 | `Import failed` | Nothing was imported, or a Stage failed. |
-| `Import cancelled` | A Stage was cancelled. |
+| `Import cancelled` | Staging or Media was cancelled. |
+| `Import paused` | The Upload was paused. The run can be resumed. |
 
 A run that succeeds deletes its Staging Directory, and the import log and the journal with it.
 The Message Crate now holds the messages, and the staged copy is no longer needed.
-A run that fails or is cancelled leaves the Staging Directory in place, because the staged files are what a resume reads.
+A run that fails, is cancelled, or is paused leaves the Staging Directory in place, because the staged files are what a resume reads.
 
 A run that succeeded leads with where to go next:
 

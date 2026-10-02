@@ -1978,3 +1978,39 @@ async fn a_chunked_attachment_upload_over_the_limit_is_413() {
 
     assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
 }
+
+/// A part of a multipart upload with no `Content-Length` and a body over the
+/// part size its upload started with answers 413, as one with a
+/// `Content-Length` does. `limit_request_body` lets a part through uncapped,
+/// so the part route is the only cap it has.
+#[tokio::test]
+async fn a_chunked_part_over_its_upload_part_size_is_413() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let mut state = fixture.state.clone();
+    state.asset_part_size = 16;
+    let server = crate::test_support::serve(&state).await;
+    let sha = "0".repeat(64);
+    let client = reqwest::Client::new();
+    let started: serde_json::Value = client
+        .post(format!(
+            "{}/v1/assets/{sha}/uploads?source=imessage",
+            server.base()
+        ))
+        .bearer_auth(&user.token)
+        .json(&serde_json::json!({ "bytes": 40 }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(started["part_size"], 16);
+    let path = format!(
+        "/v1/assets/{sha}/uploads/{}/parts/1?source=imessage",
+        started["upload_id"].as_str().unwrap()
+    );
+
+    let status = put_chunked(server.base(), &path, &user.token, &[b'x'; 17]).await;
+
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+}

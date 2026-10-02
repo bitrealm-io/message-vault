@@ -1,7 +1,7 @@
 //! Look up contact names from macOS Address Book or iOS Contacts databases.
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
 };
@@ -19,7 +19,7 @@ const MIN_PHONE_DIGITS: usize = 7;
 
 // MARK: Name
 #[derive(Clone, Debug, PartialEq, Eq)]
-/// Contact name and the handle IDs it resolved from.
+/// A contact's name, as the contacts database gives it.
 pub(crate) struct Name {
     /// First name.
     pub first: String,
@@ -27,10 +27,6 @@ pub(crate) struct Name {
     pub last: String,
     /// Full name.
     pub full: String,
-    /// Combined handle details from the Messages database.
-    pub details: String,
-    /// Original handle IDs that map to this name.
-    pub handle_ids: HashSet<i32>,
 }
 
 impl Name {
@@ -57,34 +53,12 @@ impl Name {
             first: first.unwrap_or_default(),
             last: last.unwrap_or_default(),
             full,
-            details: String::new(),
-            handle_ids: HashSet::new(),
         })
     }
 
     /// Score name completeness: one point each for first and last name.
     fn score(&self) -> u8 {
         u8::from(!self.first.is_empty()) + u8::from(!self.last.is_empty())
-    }
-
-    /// Return the full name, falling back to handle details.
-    pub fn get_display_name(&self) -> &str {
-        if self.full.is_empty() {
-            &self.details
-        } else {
-            &self.full
-        }
-    }
-
-    /// Build a name that only carries the details string.
-    pub fn from_details<D: Into<String>>(details: D) -> Self {
-        Name {
-            first: String::new(),
-            last: String::new(),
-            full: String::new(),
-            details: details.into(),
-            handle_ids: HashSet::new(),
-        }
     }
 }
 
@@ -239,43 +213,6 @@ impl ContactsIndex {
             }
         }
         None
-    }
-
-    /// Build names keyed by deduplicated participant ID.
-    ///
-    /// - `participants`: map of handle ID to handle details
-    /// - `deduped_handles`: map of handle ID to deduplicated handle ID
-    /// - Returns: map of deduplicated handle ID to Name
-    pub fn build_participants_map(
-        &self,
-        participants: &HashMap<i32, String>,
-        deduped_handles: &HashMap<i32, i32>,
-    ) -> HashMap<i32, Name> {
-        let mut result: HashMap<i32, Name> = HashMap::new();
-
-        for (&handle_id, details) in participants {
-            let Some(&deduped_id) = deduped_handles.get(&handle_id) else {
-                continue;
-            };
-
-            result
-                .entry(deduped_id)
-                .and_modify(|name| {
-                    name.handle_ids.insert(handle_id);
-                })
-                .or_insert_with(|| {
-                    let mut name = self
-                        .lookup(details)
-                        .unwrap_or_else(|| Name::from_details(details.clone()));
-
-                    // Keep the original details string for display/fallback
-                    name.details.clone_from(details);
-                    name.handle_ids.insert(handle_id);
-                    name
-                });
-        }
-
-        result
     }
 }
 
@@ -567,17 +504,11 @@ mod tests {
     fn a_name_is_built_from_whichever_parts_exist() {
         let both = Name::from_opt(Some("Sam".into()), Some("Example".into())).unwrap();
         assert_eq!((both.full.as_str(), both.score()), ("Sam Example", 2));
-        assert_eq!(both.get_display_name(), "Sam Example");
 
         let last_only = Name::from_opt(None, Some("Example".into())).unwrap();
         assert_eq!((last_only.full.as_str(), last_only.score()), ("Example", 1));
 
         assert_eq!(Name::from_opt(None, None), None);
-
-        // A name that is only a handle shows the handle.
-        let details = Name::from_details("+15551234567");
-        assert_eq!(details.score(), 0);
-        assert_eq!(details.get_display_name(), "+15551234567");
     }
 
     fn macos_address_book() -> Connection {
@@ -680,33 +611,5 @@ mod tests {
             index.lookup("friend@example.com").map(|n| n.full),
             Some("Robin".to_string())
         );
-    }
-
-    /// Handles that dedupe to one person share one name, and the name keeps
-    /// every handle id that reached it.
-    #[test]
-    fn participants_are_named_by_their_deduped_handle() {
-        let index = ContactsIndex::build_from_ios(&ios_address_book()).unwrap();
-        let participants = HashMap::from([
-            (1, "+15550000002".to_string()),
-            (2, "sam@example.com".to_string()),
-            (3, "+15559990000".to_string()),
-            (4, "orphan".to_string()),
-        ]);
-        let deduped = HashMap::from([(1, 1), (2, 1), (3, 3)]);
-
-        let named = index.build_participants_map(&participants, &deduped);
-        assert_eq!(named.len(), 2, "{named:?}");
-        let sam = &named[&1];
-        assert_eq!(sam.full, "Sam Example");
-        assert_eq!(sam.handle_ids, HashSet::from([1, 2]));
-        assert!(
-            !sam.details.is_empty(),
-            "the details string is kept for fallback"
-        );
-
-        let unknown = &named[&3];
-        assert_eq!(unknown.full, "");
-        assert_eq!(unknown.get_display_name(), "+15559990000");
     }
 }

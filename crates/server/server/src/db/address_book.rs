@@ -32,8 +32,10 @@ pub const COLUMNS: [&str; 6] = [
     "identity",
 ];
 
-/// What separates Contact Group names in the `groups` column.
-const GROUP_SEPARATOR: char = ';';
+/// What separates Contact Group names in the `groups` column. A Contact
+/// Group's name may not hold it (`named_membership::group_spec`), so the cell
+/// needs no escaping and an export loads back as the groups it was written from.
+pub(crate) const GROUP_SEPARATOR: char = ';';
 
 /// How a load applies the file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, utoipa::ToSchema)]

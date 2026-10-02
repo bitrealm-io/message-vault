@@ -32,6 +32,7 @@ vi.mock("./system-settings", () => ({
 function reportJson(overrides: Partial<PushFinishedReport> = {}): string {
   const report = {
     ok: true,
+    cancelled: false,
     messages: 10,
     messages_attempted: 10,
     messages_inserted: 10,
@@ -72,6 +73,14 @@ describe("parseTauriJobResult", () => {
   it("does not attach a report missing conversations_skipped", () => {
     const parsed: Record<string, unknown> = JSON.parse(reportJson());
     delete parsed.conversations_skipped;
+    const result = parseTauriJobResult(JSON.stringify(parsed));
+    expect(result.report).toBeUndefined();
+  });
+
+  // Without `cancelled`, a paused Upload would read as a failed one.
+  it("does not attach a report missing cancelled", () => {
+    const parsed: Record<string, unknown> = JSON.parse(reportJson());
+    delete parsed.cancelled;
     const result = parseTauriJobResult(JSON.stringify(parsed));
     expect(result.report).toBeUndefined();
   });

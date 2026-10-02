@@ -251,6 +251,9 @@ pub fn run(cfg: &PushConfig, progress: Option<&mut ProgressFn<'_>>) -> Result<Pu
     let aborted = drive(&ctx, &files, &mut pipeline, &mut assets, &mut out)?;
     let aborted = settle(cfg, &mut pipeline, aborted, &mut out)?;
     pipeline.record_cancelled(&files, &mut out);
+    // A cancel is the one stop the caller resumes from, so the report tells
+    // it apart from a failure.
+    let cancelled = check_cancel(cfg.cancel.as_ref()).is_err();
     out.flush_file_counter();
 
     let (results, accounting) = pipeline.into_results();
@@ -262,6 +265,7 @@ pub fn run(cfg: &PushConfig, progress: Option<&mut ProgressFn<'_>>) -> Result<Pu
     }
     let report = PushReport {
         ok: counted.failed == 0 && !aborted,
+        cancelled,
         account: session.auth.account_id,
         username: session.username.clone(),
         mode: cfg.mode,

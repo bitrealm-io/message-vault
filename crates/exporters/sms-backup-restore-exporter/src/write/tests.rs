@@ -446,9 +446,26 @@ fn the_archive_restores_source_fields_as_attrs() {
     }
     let tmp = tempfile::tempdir().unwrap();
     let path = SbrArchive
-        .write(tmp.path(), std::slice::from_ref(&doc))
+        .write(
+            tmp.path(),
+            std::slice::from_ref(&doc),
+            &mut message_crate_core::ExportReport::default(),
+        )
         .unwrap();
     let text = fs::read_to_string(&path).unwrap();
     assert!(text.contains(r#"service_center="+15550009999""#));
     assert!(text.contains("hello ir"));
+}
+
+#[test]
+fn the_archive_counts_the_characters_xml_cannot_carry() {
+    let doc = message_ir::testutil::sample_document("bell\u{7} and escape\u{1b}");
+    let tmp = tempfile::tempdir().unwrap();
+    let mut report = message_crate_core::ExportReport::default();
+    let path = SbrArchive
+        .write(tmp.path(), std::slice::from_ref(&doc), &mut report)
+        .unwrap();
+    assert_eq!(report.extra(CHARACTERS_LEFT_OUT), 2);
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(text.contains(r#"body="bell and escape""#), "{text}");
 }

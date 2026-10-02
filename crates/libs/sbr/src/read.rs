@@ -3,7 +3,7 @@
 use anyhow::{Context, Result, bail};
 use base64::Engine;
 use phone::sanitize_number;
-use quick_xml::{Reader, XmlVersion, events::Event};
+use quick_xml::{Reader, events::Event};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -162,15 +162,17 @@ pub struct ParseStats {
 }
 
 /// The element's attributes as a map with lower-case keys.
+///
+/// Each value is taken raw and its references decoded, HTML entities such
+/// as `&nbsp;` included. XML attribute-value normalisation is not applied:
+/// it would turn a literal line break in a message into a space, and
+/// SMS Backup & Restore files hold literal line breaks.
 fn attrs(e: &quick_xml::events::BytesStart<'_>) -> HashMap<String, String> {
     e.attributes()
         .flatten()
         .map(|a| {
             let key = a.key.as_ref().to_ascii_lowercase();
-            let value = a
-                .normalized_value(XmlVersion::Implicit1_0)
-                .map(|v| v.into_owned())
-                .unwrap_or_default();
+            let value = html_escape::decode_html_entities(&a.value).into_owned();
             (key, value)
         })
         .collect()
@@ -1240,5 +1242,37 @@ mod tests {
             assert_eq!(records[0].timestamp_secs, secs, "date {date:?}");
             assert_eq!(records[0].date_ms, date);
         }
+    }
+
+    #[test]
+    fn a_multi_line_body_survives_a_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("out.xml");
+        let mut writer = crate::SbrBackupWriter::create(&path).unwrap();
+        let attrs: BTreeMap<String, String> = [
+            ("protocol", "0"),
+            ("address", "+15555550101"),
+            ("date", "1"),
+            ("type", "1"),
+            ("body", "line1\nline2\ttab"),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+        writer
+            .write_message(&crate::SbrMessage::sms(attrs))
+            .unwrap();
+        let path = writer.finish().unwrap();
+        let (records, _) =
+            parse_reader(std::fs::read(&path).unwrap().as_slice(), &HashSet::new()).unwrap();
+        assert_eq!(records[0].text, "line1\nline2\ttab");
+    }
+
+    #[test]
+    fn a_literal_line_break_in_an_attribute_is_kept() {
+        let xml = b"<smses><sms protocol=\"0\" address=\"+15555550101\" date=\"1\" type=\"1\" body=\"line1\nline2\r\nline3\"/><mms date=\"2\" msg_box=\"1\" address=\"+15555550101\"><parts><part ct=\"text/plain\" text=\"part1\npart2\"/></parts><addrs><addr address=\"+15555550101\" type=\"137\"/></addrs></mms></smses>";
+        let (records, _) = parse_reader(xml.as_slice(), &HashSet::new()).unwrap();
+        assert_eq!(records[0].text, "line1\nline2\nline3");
+        assert_eq!(records[1].text, "part1\npart2");
     }
 }

@@ -1,6 +1,7 @@
 //! Write [`ConversationDocument`] messages as SMS Backup & Restore XML.
 
 use anyhow::{Context, Result};
+use message_crate_core::ExportReport;
 use message_ir::{
     ConversationDocument, IrAttachment, IrConversationType, IrDirection, IrMessage, IrMessageKind,
     nonempty,
@@ -17,6 +18,11 @@ use std::path::{Path, PathBuf};
 
 const MMS_ADDR_FROM: &str = "137";
 const MMS_ADDR_TO: &str = "151";
+
+/// The export report counter for characters left out of `smses.xml`
+/// because XML 1.0 cannot carry them (U+0000 to U+001F other than tab,
+/// line feed and carriage return).
+pub(crate) const CHARACTERS_LEFT_OUT: &str = "control_characters_left_out";
 
 /// Session that appends conversations into a single `{output}/smses.xml`.
 pub(crate) struct SbrBackupSession {
@@ -46,6 +52,11 @@ impl SbrBackupSession {
             self.writer.write_message(&msg)?;
         }
         Ok(())
+    }
+
+    /// Characters left out so far because XML 1.0 cannot carry them.
+    pub fn characters_left_out(&self) -> u64 {
+        self.writer.characters_left_out()
     }
 
     /// Close the XML and return the backup file path.
@@ -465,10 +476,19 @@ fn inject_attachment_data(
 pub struct SbrArchive;
 
 impl MergedArchive for SbrArchive {
-    fn write(&self, output_dir: &Path, documents: &[ConversationDocument]) -> Result<PathBuf> {
+    fn write(
+        &self,
+        output_dir: &Path,
+        documents: &[ConversationDocument],
+        report: &mut ExportReport,
+    ) -> Result<PathBuf> {
         let mut session = SbrBackupSession::create(output_dir)?;
         for doc in documents {
             session.append_document(doc)?;
+        }
+        let left_out = session.characters_left_out();
+        if left_out > 0 {
+            report.bump(CHARACTERS_LEFT_OUT, left_out);
         }
         session.finish()
     }

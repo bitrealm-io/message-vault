@@ -66,6 +66,7 @@ pub struct SbrBackupWriter {
     body_path: PathBuf,
     body: BufWriter<File>,
     count: u64,
+    characters_left_out: u64,
 }
 
 impl SbrBackupWriter {
@@ -92,12 +93,18 @@ impl SbrBackupWriter {
             body_path,
             body,
             count: 0,
+            characters_left_out: 0,
         })
     }
 
     /// Number of messages written so far.
     pub fn count(&self) -> u64 {
         self.count
+    }
+
+    /// Characters left out so far because XML 1.0 cannot carry them.
+    pub fn characters_left_out(&self) -> u64 {
+        self.characters_left_out
     }
 
     /// Serialize one SMS/MMS element into the sidecar body file and increment
@@ -109,14 +116,14 @@ impl SbrBackupWriter {
     pub fn write_message(&mut self, msg: &SbrMessage) -> Result<()> {
         match msg {
             SbrMessage::Sms { attrs } => {
-                write_empty_element(&mut self.body, "sms", attrs)?;
+                self.characters_left_out += write_empty_element(&mut self.body, "sms", attrs)?;
             }
             SbrMessage::Mms {
                 attrs,
                 parts,
                 addrs,
             } => {
-                write_mms(&mut self.body, attrs, parts, addrs)?;
+                self.characters_left_out += write_mms(&mut self.body, attrs, parts, addrs)?;
             }
         }
         self.count += 1;
@@ -166,54 +173,85 @@ pub fn encode_part_data(bytes: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(bytes)
 }
 
-/// Write attributes as ` key="value"` with XML escaping.
-fn write_attrs(w: &mut impl Write, attrs: &BTreeMap<String, String>) -> Result<()> {
+/// Write attributes as ` key="value"` with XML escaping, and return how
+/// many characters were left out because XML 1.0 cannot carry them.
+fn write_attrs(w: &mut impl Write, attrs: &BTreeMap<String, String>) -> Result<u64> {
+    let mut left_out = 0;
     for (k, v) in attrs {
-        // quick-xml's full escape covers exactly the double-quoted attribute
-        // set (`&` `<` `>` `"` `'`).
-        write!(w, r#" {}="{}""#, k, quick_xml::escape::escape(v.as_str()))?;
+        let (value, dropped) = escape_attr(v);
+        left_out += dropped;
+        write!(w, r#" {k}="{value}""#)?;
     }
-    Ok(())
+    Ok(left_out)
 }
 
-/// Write a self-closing element with its attributes.
+/// The value escaped for a double-quoted XML attribute, and the number of
+/// characters left out of it.
+///
+/// An XML reader turns a literal line break or tab in an attribute into a
+/// space, so `\n`, `\r` and `\t` are written as character references. XML
+/// 1.0 cannot carry any other character below U+0020, not even as a
+/// reference, so those are left out.
+fn escape_attr(value: &str) -> (String, u64) {
+    let mut out = String::with_capacity(value.len());
+    let mut left_out = 0;
+    for c in value.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            '\n' => out.push_str("&#10;"),
+            '\r' => out.push_str("&#13;"),
+            '\t' => out.push_str("&#9;"),
+            '\u{0}'..='\u{1f}' => left_out += 1,
+            c => out.push(c),
+        }
+    }
+    (out, left_out)
+}
+
+/// Write a self-closing element with its attributes, and return how many
+/// characters were left out.
 fn write_empty_element(
     w: &mut impl Write,
     name: &str,
     attrs: &BTreeMap<String, String>,
-) -> Result<()> {
+) -> Result<u64> {
     write!(w, "  <{name}")?;
-    write_attrs(w, attrs)?;
+    let left_out = write_attrs(w, attrs)?;
     writeln!(w, " />")?;
-    Ok(())
+    Ok(left_out)
 }
 
-/// Write an `<mms>` element with its `<parts>` and `<addrs>` children.
+/// Write an `<mms>` element with its `<parts>` and `<addrs>` children, and
+/// return how many characters were left out.
 fn write_mms(
     w: &mut impl Write,
     attrs: &BTreeMap<String, String>,
     parts: &[BTreeMap<String, String>],
     addrs: &[BTreeMap<String, String>],
-) -> Result<()> {
+) -> Result<u64> {
     write!(w, "  <mms")?;
-    write_attrs(w, attrs)?;
+    let mut left_out = write_attrs(w, attrs)?;
     writeln!(w, ">")?;
     writeln!(w, "    <parts>")?;
     for part in parts {
         write!(w, "      <part")?;
-        write_attrs(w, part)?;
+        left_out += write_attrs(w, part)?;
         writeln!(w, " />")?;
     }
     writeln!(w, "    </parts>")?;
     writeln!(w, "    <addrs>")?;
     for addr in addrs {
         write!(w, "      <addr")?;
-        write_attrs(w, addr)?;
+        left_out += write_attrs(w, addr)?;
         writeln!(w, " />")?;
     }
     writeln!(w, "    </addrs>")?;
     writeln!(w, "  </mms>")?;
-    Ok(())
+    Ok(left_out)
 }
 
 /// Default filename for a full-backup projection.
@@ -291,5 +329,24 @@ mod tests {
         let text = fs::read_to_string(&path).unwrap();
         assert!(text.contains(r#"count="0""#));
         assert!(text.contains("</smses>"));
+    }
+
+    #[test]
+    fn a_character_xml_cannot_carry_is_left_out_and_counted() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = default_backup_path(tmp.path());
+        let mut w = SbrBackupWriter::create(&path).unwrap();
+        let mut sms = BTreeMap::new();
+        sms.insert("address".into(), "+15555550101".into());
+        sms.insert("body".into(), "a\u{1}b\u{1b}c\r\nd\te".into());
+        w.write_message(&SbrMessage::sms(sms)).unwrap();
+        assert_eq!(w.characters_left_out(), 2);
+        w.finish().unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains(r#"body="abc&#13;&#10;d&#9;e""#), "{text}");
+        assert!(
+            !text.chars().any(|c| c.is_control() && c != '\n'),
+            "every control character is written as a reference or left out"
+        );
     }
 }

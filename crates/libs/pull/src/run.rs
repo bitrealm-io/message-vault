@@ -3,7 +3,7 @@
 //! JSON Lines means one JSON object per line. Message Crate is the HTTP server
 //! that stores imported messages.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -14,7 +14,7 @@ use message_ir_format::write_export_sentinel;
 use serde::Serialize;
 
 use crate::http::{ExportMessagesArgs, HttpSession};
-use crate::project::{build_document, conversation_key, to_ir_message};
+use crate::project::{ExportPath, build_document, conversation_key, export_path, to_ir_message};
 use message_crate_api_types::{ExportQueryList, ExportRun, ExportScope, Message};
 
 /// Page size for `GET /v1/exports/{id}/messages`; the server's maximum.
@@ -76,6 +76,10 @@ pub struct PullReport {
     pub attachments_downloaded: u64,
     /// Attachments already on disk according to the journal.
     pub attachments_skipped: u64,
+    /// Attachment paths the server sent that would leave the output folder,
+    /// as the server sent them. Each such attachment is written at
+    /// `attachments/{sha256}` instead.
+    pub refused_attachment_paths: Vec<String>,
     /// The output folder, as given.
     pub out_dir: String,
 }
@@ -206,6 +210,7 @@ pub fn run(cfg: &PullConfig, mut on_progress: Option<&mut ProgressFn<'_>>) -> Re
         conversations,
         messages,
         assets,
+        refused_paths,
     } = outcome?;
 
     let report = PullReport {
@@ -216,6 +221,7 @@ pub fn run(cfg: &PullConfig, mut on_progress: Option<&mut ProgressFn<'_>>) -> Re
         messages,
         attachments_downloaded: assets.downloaded,
         attachments_skipped: assets.skipped,
+        refused_attachment_paths: refused_paths.into_iter().collect(),
         out_dir: cfg.out_dir.display().to_string(),
     };
     emit(
@@ -236,6 +242,8 @@ struct Fetched {
     by_conv: BTreeMap<String, (Message, Vec<message_ir::IrMessage>)>,
     /// sha256 → (source, relative path under the output folder).
     assets: HashMap<String, (String, String)>,
+    /// Attachment paths the server sent that would leave the output folder.
+    refused_paths: BTreeSet<String>,
     total_messages: u64,
 }
 
@@ -251,6 +259,7 @@ struct Written {
     conversations: u64,
     messages: u64,
     assets: AssetCounts,
+    refused_paths: BTreeSet<String>,
 }
 
 /// One authenticated download run: the connection, the account it resolved
@@ -399,6 +408,7 @@ impl<'a> Pull<'a> {
             conversations,
             messages: fetched.total_messages,
             assets,
+            refused_paths: fetched.refused_paths,
         })
     }
 
@@ -418,6 +428,7 @@ impl<'a> Pull<'a> {
         let mut fetched = Fetched {
             by_conv: BTreeMap::new(),
             assets: HashMap::new(),
+            refused_paths: BTreeSet::new(),
             total_messages: 0,
         };
         let limit = cfg.page_limit.clamp(1, MAX_PAGE_LIMIT);
@@ -447,7 +458,12 @@ impl<'a> Pull<'a> {
             );
             for msg in page.items {
                 if !cfg.skip_attachments {
-                    note_asset_refs(&msg, &mut fetched.assets);
+                    for (path, rel) in note_asset_refs(&msg, &mut fetched.assets) {
+                        let line = refused_path_line(&path, rel.as_deref());
+                        if fetched.refused_paths.insert(path) {
+                            emit(out, ProgressEvent::Log(line));
+                        }
+                    }
                 }
                 let ir = to_ir_message(&msg, cfg.skip_attachments)?;
                 fetched
@@ -621,26 +637,46 @@ impl<'a> Pull<'a> {
     }
 }
 
-/// Remember where each attachment a message references should land on disk.
+/// Remember where each attachment a message references should land on disk,
+/// and return each attachment path [`export_path`] refused, with the path
+/// used in its place.
 ///
 /// The first message to mention a sha256 decides the source and path; the
 /// server stores one blob per fingerprint, so later mentions are the same file.
-fn note_asset_refs(msg: &Message, assets: &mut HashMap<String, (String, String)>) {
+fn note_asset_refs(
+    msg: &Message,
+    assets: &mut HashMap<String, (String, String)>,
+) -> Vec<(String, Option<String>)> {
+    let mut refused = Vec::new();
     for att in &msg.attachments {
-        let Some(sha) = att.sha256.as_deref().and_then(message_ir::trimmed) else {
+        let ExportPath {
+            rel,
+            refused: refused_path,
+        } = export_path(att);
+        if let Some(path) = refused_path {
+            refused.push((path, rel.clone()));
+        }
+        let (Some(sha), Some(rel)) = (att.sha256.as_deref().and_then(message_ir::trimmed), rel)
+        else {
             continue;
         };
-        let rel = att
-            .path
-            .as_deref()
-            .and_then(message_ir::trimmed)
-            .map_or_else(
-                || format!("attachments/{sha}"),
-                |p| p.trim_start_matches('/').to_string(),
-            );
         assets
             .entry(sha.to_string())
             .or_insert_with(|| (msg.source.clone(), rel));
+    }
+    refused
+}
+
+/// The progress line for an attachment path the export refused, naming the
+/// path written in its place.
+fn refused_path_line(path: &str, rel: Option<&str>) -> String {
+    match rel {
+        Some(rel) => format!(
+            "warning: attachment path {path} would leave the output folder; written at {rel} instead"
+        ),
+        None => format!(
+            "warning: attachment path {path} would leave the output folder; the conversation file names no path for it"
+        ),
     }
 }
 
@@ -879,14 +915,15 @@ mod asset_ref_tests {
     fn the_first_mention_of_a_fingerprint_decides_its_source_and_path() {
         let mut assets = HashMap::new();
 
-        note_asset_refs(
+        let refused = note_asset_refs(
             &message_from(
                 "imessage",
                 json!([
                     { "path": "attachments/menu.pdf", "sha256": "ab" },
                     { "path": "/attachments/photo.png", "sha256": "cd" },
                     { "sha256": " ef " },
-                    { "path": "attachments/no-fingerprint.txt" }
+                    { "path": "attachments/no-fingerprint.txt" },
+                    { "path": "../no-fingerprint.txt" }
                 ]),
             ),
             &mut assets,
@@ -905,13 +942,23 @@ mod asset_ref_tests {
                 ),
                 (
                     "cd".to_string(),
-                    ("imessage".to_string(), "attachments/photo.png".to_string())
+                    ("imessage".to_string(), "attachments/cd".to_string())
                 ),
                 (
                     "ef".to_string(),
                     ("imessage".to_string(), "attachments/ef".to_string())
                 ),
             ])
+        );
+        assert_eq!(
+            refused,
+            [
+                (
+                    "/attachments/photo.png".to_string(),
+                    Some("attachments/cd".to_string())
+                ),
+                ("../no-fingerprint.txt".to_string(), None),
+            ]
         );
     }
 }

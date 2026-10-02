@@ -3343,6 +3343,25 @@ mod refusals {
         );
     }
 
+    /// Issue #1207: an empty phrase compiled to `LIKE '%%'`, which matched
+    /// every contact and conversation, and on Messages matched exactly the
+    /// messages with an attachment. It is refused like `body:""`.
+    #[test]
+    fn an_empty_phrase_is_refused_on_every_list() {
+        for list in [
+            ListKind::Contacts,
+            ListKind::Conversations,
+            ListKind::Messages,
+        ] {
+            for (query, span) in [("\"\"", 0..2), ("-\"\"", 0..3), ("a \"\"", 2..4)] {
+                let e = err(list, query);
+                assert_eq!(e.kind, QueryErrorKind::EmptyValue, "{list:?} {query}");
+                assert_eq!(e.span, span, "{list:?} {query}");
+                assert_eq!(e.field, None, "{list:?} {query}");
+            }
+        }
+    }
+
     /// An unknown word's message is the plain "word: is not a search word."
     /// sentence, full stop; any "Did you mean" suffix comes only from a word
     /// that is actually in today's word list, never from a spelling the

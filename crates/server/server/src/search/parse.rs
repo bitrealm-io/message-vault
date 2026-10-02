@@ -388,6 +388,15 @@ impl Parser<'_> {
                 Ok(Expr::Text(TextTerm::Term { text, prefix }))
             }
             TokenKind::Phrase(text) => {
+                // An empty phrase would be a contains-nothing test, which
+                // every row passes, so it is refused like `body:""`.
+                if text.trim().is_empty() {
+                    return Err(QueryError::new(
+                        QueryErrorKind::EmptyValue,
+                        tok.span,
+                        "A quoted phrase needs some text between the quotes.",
+                    ));
+                }
                 self.i += 1;
                 Ok(Expr::Text(TextTerm::Phrase(text)))
             }

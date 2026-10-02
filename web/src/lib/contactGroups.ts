@@ -98,15 +98,16 @@ export function isReservedGroupName(name: string): boolean {
   return contactGroups.isReserved(name);
 }
 
-/** URL slug for a contact group. Keeps letter case so Regroup and regroup stay distinct. */
+/**
+ * What a group's route holds for its name: the whole name, trimmed. Letter
+ * case, spaces and punctuation stay, so every name has a route and no two
+ * names share one. `slugPath` percent-encodes it into the path.
+ */
 export function groupSlug(name: string): string {
-  return name
-    .trim()
-    .replace(/[^a-zA-Z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+  return name.trim();
 }
 
-/** Find the group name that matches this URL slug, or null when none match. */
+/** Find the group whose name is this slug, exactly and then ignoring case, or null. */
 export function groupFromSlug(slug: string, groups: readonly string[]): string | null {
   const trimmed = slug.trim();
   if (!trimmed) return null;
@@ -118,6 +119,27 @@ export function groupFromSlug(slug: string, groups: readonly string[]): string |
     if (groupSlug(name).toLowerCase() === folded) return name;
   }
   return null;
+}
+
+/** The path of one set's page, e.g. `/group/Work%20Friends` for "Work Friends". */
+export function slugPath(routeBase: string, slug: string): string {
+  return `${routeBase}/${encodeURIComponent(slug)}`;
+}
+
+/**
+ * The slug a set page's path holds, decoded, or null when the path is not
+ * under `routeBase`. A malformed escape is read as written, since
+ * `decodeURIComponent` throws on it.
+ */
+export function slugFromPath(pathname: string, routeBase: string): string | null {
+  const prefix = `${routeBase}/`;
+  if (!pathname.startsWith(prefix)) return null;
+  const raw = pathname.slice(prefix.length);
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
 }
 
 /**

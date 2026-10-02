@@ -205,4 +205,33 @@ describe("NavEntityList navigation", () => {
     expect(screen.getByRole("dialog", { name: "Delete Family?" })).toBeTruthy();
     expect(screen.getByTestId("location")).toHaveTextContent("/group/Family");
   });
+
+  it("links each group by its whole name, so names that differ only in punctuation open their own page", async () => {
+    const user = userEvent.setup();
+    renderGroups("/contacts", ["A&B", "A B", "家族"]);
+
+    await user.click(screen.getByRole("button", { name: "A B" }));
+    expect(screen.getByTestId("location").textContent).toBe("/group/A%20B");
+    await user.click(screen.getByRole("button", { name: "A&B" }));
+    expect(screen.getByTestId("location").textContent).toBe("/group/A%26B");
+    await user.click(screen.getByRole("button", { name: "家族" }));
+    expect(screen.getByTestId("location").textContent).toBe(`/group/${encodeURIComponent("家族")}`);
+  });
+
+  it("follows a renamed group whose name holds a space when viewing that group's page", async () => {
+    routes.updateContactGroup.mockResolvedValue({ id: 1, name: "Old Friends" });
+    const user = userEvent.setup();
+    renderGroups("/group/Work%20Friends", ["Work Friends"]);
+
+    await user.click(screen.getByRole("button", { name: "Group options for Work Friends" }));
+    await user.click(screen.getByRole("menuitem", { name: "Rename…" }));
+    const input = screen.getByPlaceholderText("Group name");
+    await user.clear(input);
+    await user.type(input, "Old Friends");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("location").textContent).toBe("/group/Old%20Friends"),
+    );
+  });
 });

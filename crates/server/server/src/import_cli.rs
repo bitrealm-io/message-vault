@@ -207,15 +207,23 @@ async fn import_under_session(
 ///
 /// # Errors
 ///
-/// Returns an error when `dir` cannot be read.
+/// Returns an error when `dir` cannot be read, or when one of its entries
+/// cannot be read, because skipping that entry would leave its conversation
+/// out of the import while the run reports success.
 pub fn list_jsonl_files(dir: &Path) -> Result<Vec<PathBuf>> {
     let entries = fs::read_dir(dir).with_context(|| format!("failed to read {}", dir.display()))?;
+    jsonl_paths(dir, entries.map(|entry| entry.map(|entry| entry.path())))
+}
+
+/// The `.jsonl` paths among `entries`, the listing of `dir`, sorted.
+fn jsonl_paths(
+    dir: &Path,
+    entries: impl IntoIterator<Item = std::io::Result<PathBuf>>,
+) -> Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
     for entry in entries {
-        let Ok(entry) = entry else {
-            continue;
-        };
-        let path = entry.path();
+        let path =
+            entry.with_context(|| format!("failed to read an entry of {}", dir.display()))?;
         let Some(ext) = path.extension().and_then(|ext| ext.to_str()) else {
             continue;
         };
@@ -329,6 +337,24 @@ mod tests {
             "only the conversation's participant became a contact"
         );
         opened.close().await;
+    }
+
+    /// Issue #1166: an entry of the folder that cannot be read fails the
+    /// listing, naming the folder, instead of being skipped.
+    #[test]
+    fn an_unreadable_folder_entry_fails_the_listing() {
+        let dir = Path::new("/exports/phone");
+        let entries = vec![
+            Ok(dir.join("a.jsonl")),
+            Err(std::io::Error::other("entry unreadable")),
+            Ok(dir.join("b.jsonl")),
+        ];
+
+        let err = jsonl_paths(dir, entries).unwrap_err();
+
+        let message = format!("{err:#}");
+        assert!(message.contains("/exports/phone"), "{message}");
+        assert!(message.contains("entry unreadable"), "{message}");
     }
 
     #[test]

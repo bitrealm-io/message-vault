@@ -64,7 +64,9 @@ export default function MessageRoute() {
         <ConversationList
           selectedId={conversationId}
           onSelect={(c) =>
-            navigate(`/messages/${c.id}`, {
+            // The list is filtered by this location's `q` and `f`, so the
+            // conversation opened keeps them and the list stays as it was.
+            navigate(`/messages/${c.id}${location.search}`, {
               state: { conversation: c, openContactId, openContactPreview },
             })
           }

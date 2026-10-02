@@ -186,9 +186,19 @@ export default function AppLayout() {
 
   const threadListQuery = tagListQuery(tagFilter, conversationFilter || conversationSearch);
 
+  // The message route filters its list by `q` and `f` alone, so the
+  // conversation opened carries the list's query in them. The message route's
+  // path has no tag, so a tag page's tag goes into `q`.
   const handleConversationSelect = (c: Conversation) => {
-    const params = tagFilter ? `?q=${encodeURIComponent(threadListQuery)}` : "";
-    navigate(`/messages/${c.id}${params}`, { state: { conversation: c } });
+    const params = new URLSearchParams();
+    if (tagFilter) {
+      params.set("q", threadListQuery);
+    } else {
+      if (conversationSearch) params.set("q", conversationSearch);
+      if (conversationFilter) params.set("f", conversationFilter);
+    }
+    const search = params.toString();
+    navigate(`/messages/${c.id}${search ? `?${search}` : ""}`, { state: { conversation: c } });
   };
 
   const locationState = asMessagesLocationState(location.state);

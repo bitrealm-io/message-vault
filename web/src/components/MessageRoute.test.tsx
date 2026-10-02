@@ -2,7 +2,7 @@
 
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getConversation, listConversationMessages, trashConversation } from "../lib/serverApi";
 import type { Conversation } from "../lib/types";
@@ -21,6 +21,19 @@ vi.mock("../lib/serverApi", async (importOriginal) => ({
   getConversation: vi.fn(),
   listConversationMessages: vi.fn(),
   trashConversation: vi.fn(),
+}));
+
+// The real list virtualizes its rows, and jsdom lays out none. This stand-in
+// offers one row to click and shows the query the route hands the list.
+vi.mock("../screens/ConversationList", () => ({
+  default: ({ onSelect, query }: { onSelect: (c: Conversation) => void; query: string }) => (
+    <div>
+      <output data-testid="list-query">{query}</output>
+      <button type="button" onClick={() => onSelect(conv(6, "Second result"))}>
+        Second result
+      </button>
+    </div>
+  ),
 }));
 
 const getConversationMock = vi.mocked(getConversation);
@@ -63,6 +76,12 @@ function conv(id: number, label: string): Conversation {
 }
 
 function renderAt(path: string, state?: unknown) {
+  /** Where the router is now. */
+  function LocationProbe() {
+    const location = useLocation();
+    return <output data-testid="location">{location.pathname + location.search}</output>;
+  }
+
   /**
    * Opens conversation 8 as a click on its row in the list column does: the row
    * rides along as `location.state`, so the thread pane never shows "Loading".
@@ -79,11 +98,13 @@ function renderAt(path: string, state?: unknown) {
     );
   }
 
+  const [pathname, search = ""] = path.split(/(?=\?)/);
   return render(
     <Providers>
-      <MemoryRouter initialEntries={[{ pathname: path, state }]}>
+      <MemoryRouter initialEntries={[{ pathname, search, state }]}>
         <RightToolbarProvider>
           <OpenEight />
+          <LocationProbe />
           <Routes>
             <Route path="/" element={<div>Conversations list</div>} />
             <Route path="/messages/:conversationId" element={<MessageRoute />} />
@@ -191,5 +212,21 @@ describe("MessageRoute", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(screen.getByText("Chat 8")).toBeInTheDocument();
     expect(screen.queryByText("Conversations list")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["a search", "?q=dentist", "dentist"],
+    ["a tag page's filter", "?q=tag%3AWork+dentist", "tag:Work dentist"],
+    ["a contact's conversations", "?q=with%3A%2342&f=with%3A%2342", "with:#42"],
+  ])("keeps %s when another conversation in the list is opened", async (_name, search, query) => {
+    getConversationMock.mockImplementation(async (id) => conv(id, `Chat ${id}`));
+    const user = userEvent.setup();
+
+    renderAt(`/messages/5${search}`);
+    expect(screen.getByTestId("list-query").textContent).toBe(query);
+
+    await user.click(screen.getByRole("button", { name: "Second result" }));
+    expect(screen.getByTestId("location").textContent).toBe(`/messages/6${search}`);
+    expect(screen.getByTestId("list-query").textContent).toBe(query);
   });
 });

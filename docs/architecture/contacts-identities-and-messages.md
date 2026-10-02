@@ -279,7 +279,10 @@ messages, linking it later shows its counts without a re-import.
 **An import replaces a trashed contact.** When an import meets an identity of
 a trashed contact, it discards that contact with every identity it had and
 makes a new one from the backup, as a first import would. See
-[ADR 0013](../adr/0013-an-import-replaces-a-trashed-contact.md).
+[ADR 0013](../adr/0013-an-import-replaces-a-trashed-contact.md). A person
+named with no address is never matched by name to a trashed contact. Why: the
+same run may discard that contact, and a trashed contact that shares a live
+contact's name would make the name look ambiguous.
 
 **A failed import changes no contact.** Staging meets every identity first,
 so it is where the import makes contacts and discards trashed ones. Staging

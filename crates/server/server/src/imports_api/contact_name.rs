@@ -83,9 +83,10 @@ pub(super) async fn ensure_contact_for_handle(
 /// Bind a participant the source named without recording any address.
 ///
 /// A single existing contact under that name is reused, so the same person
-/// named across several conversations does not become several contacts. When
-/// no contact matches — or when two do, which is ambiguous — a contact is
-/// created carrying the name and no identity. Either way the result is Unknown
+/// named across several conversations does not become several contacts. A
+/// contact in the Trash is never a match. When no contact matches — or when
+/// two do, which is ambiguous — a contact is created carrying the name and no
+/// identity. Either way the result is Unknown
 /// until the person supplies an address for them.
 ///
 /// Returns the contact and the display name to record on the participant.

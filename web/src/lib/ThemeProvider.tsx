@@ -7,6 +7,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { writePref } from "./storage";
 import {
   applyTheme,
   DEFAULT_MODE,
@@ -68,18 +69,18 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setMode = useCallback((next: ThemeMode) => {
     setModeState(next);
-    window.localStorage.setItem(THEME_MODE_KEY, next);
+    writePref(THEME_MODE_KEY, next);
   }, []);
 
   const setSeeds = useCallback((next: ThemeSeeds) => {
     setSeedsState(next);
-    window.localStorage.setItem(THEME_SEEDS_KEY, formatThemeShare(next));
+    writePref(THEME_SEEDS_KEY, formatThemeShare(next));
   }, []);
 
   const patchSeed = useCallback((key: keyof ThemeSeeds, hex: string) => {
     setSeedsState((prev) => {
       const next = { ...prev, [key]: hex };
-      window.localStorage.setItem(THEME_SEEDS_KEY, formatThemeShare(next));
+      writePref(THEME_SEEDS_KEY, formatThemeShare(next));
       return next;
     });
   }, []);
@@ -90,13 +91,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const parsed = parseThemeShare(raw);
     if (!parsed) return false;
     setSeedsState(parsed);
-    window.localStorage.setItem(THEME_SEEDS_KEY, formatThemeShare(parsed));
+    writePref(THEME_SEEDS_KEY, formatThemeShare(parsed));
     return true;
   }, []);
 
   const applyPreset = useCallback((preset: ThemePreset) => {
     setSeedsState(preset.seeds);
-    window.localStorage.setItem(THEME_SEEDS_KEY, formatThemeShare(preset.seeds));
+    writePref(THEME_SEEDS_KEY, formatThemeShare(preset.seeds));
   }, []);
 
   const resolvedMode = resolveMode(mode, prefersDark);

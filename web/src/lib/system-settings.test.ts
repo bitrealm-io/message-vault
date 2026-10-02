@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   defaultStagingDir,
   getImporterExtraPaths,
@@ -16,7 +16,7 @@ const mem = new Map<string, string>();
 
 beforeEach(() => {
   mem.clear();
-  (globalThis as { localStorage?: Storage }).localStorage = {
+  const store: Storage = {
     getItem: (k) => mem.get(k) ?? null,
     setItem: (k, v) => {
       mem.set(k, String(v));
@@ -28,6 +28,13 @@ beforeEach(() => {
     key: () => null,
     length: 0,
   };
+  // The node environment has no window. lib/storage.ts reads window.localStorage.
+  vi.stubGlobal("localStorage", store);
+  vi.stubGlobal("window", { localStorage: store });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe("defaultStagingDir", () => {

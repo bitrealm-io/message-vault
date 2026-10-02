@@ -1,3 +1,5 @@
+import { readPref, writePref } from "../lib/storage";
+
 /** Clamp a column width to [min, max], rounded to the nearest pixel. */
 export function clampWidth(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, Math.round(n)));
@@ -10,22 +12,14 @@ export function loadWidth(
   min: number,
   max: number,
 ): number {
-  try {
-    const raw = localStorage.getItem(storageKey);
-    if (!raw) return defaultWidth;
-    const n = Number(raw);
-    if (!Number.isFinite(n)) return defaultWidth;
-    return clampWidth(n, min, max);
-  } catch {
-    return defaultWidth;
-  }
+  const raw = readPref(storageKey);
+  if (!raw) return defaultWidth;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return defaultWidth;
+  return clampWidth(n, min, max);
 }
 
 /** Persist a column width. Ignores private-browsing / quota failures. */
 export function saveWidth(storageKey: string, n: number): void {
-  try {
-    localStorage.setItem(storageKey, String(n));
-  } catch {
-    // private browsing / quota
-  }
+  writePref(storageKey, String(n));
 }

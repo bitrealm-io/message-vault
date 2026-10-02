@@ -11,6 +11,7 @@ import {
   setOpenToNetwork,
   startLocalServer,
 } from "../../lib/localServer";
+import { readPref, removePref, writePref } from "../../lib/storage";
 import {
   defaultStagingDir,
   getHomeDir,
@@ -48,10 +49,10 @@ function stagingHelpExample(stagingDir: string, defaultDir: string): string {
 function persistFfmpegDir(dir: string): void {
   const trimmed = dir.trim();
   if (!trimmed) {
-    localStorage.removeItem(FFMPEG_TOOLS_STORAGE_KEY);
+    removePref(FFMPEG_TOOLS_STORAGE_KEY);
     return;
   }
-  localStorage.setItem(FFMPEG_TOOLS_STORAGE_KEY, trimmed);
+  writePref(FFMPEG_TOOLS_STORAGE_KEY, trimmed);
 }
 
 function ToolStatusRow({ name, path }: { name: "ffmpeg" | "ffprobe"; path: string | null }) {
@@ -247,7 +248,7 @@ export function SystemSection() {
     if (!isTauri()) return;
 
     setRememberPaths(getRememberImporterPaths());
-    const storedFfmpeg = localStorage.getItem(FFMPEG_TOOLS_STORAGE_KEY) || "";
+    const storedFfmpeg = readPref(FFMPEG_TOOLS_STORAGE_KEY) || "";
     setFfmpegPath(storedFfmpeg);
 
     void (async () => {

@@ -1,4 +1,5 @@
 import { contactLabelText } from "./contactLabel";
+import { readPref, writePref } from "./storage";
 
 /** The two name fields the list can order by; each also gives the A–Z section letters. */
 export type ContactNameSort = "first" | "last";
@@ -147,9 +148,9 @@ function isSortOrder(value: unknown): value is ContactSortOrder {
 }
 
 export function loadContactSort(): ContactSortState {
+  const raw = readPref(STORAGE_KEY);
+  if (!raw) return { ...DEFAULT_CONTACT_SORT };
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_CONTACT_SORT };
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null) {
       return { ...DEFAULT_CONTACT_SORT };
@@ -165,9 +166,5 @@ export function loadContactSort(): ContactSortState {
 }
 
 export function saveContactSort(state: ContactSortState): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // private browsing / quota
-  }
+  writePref(STORAGE_KEY, JSON.stringify(state));
 }

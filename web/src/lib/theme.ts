@@ -1,3 +1,5 @@
+import { readPref } from "./storage";
+
 /** Light, dark, or follow the operating system color scheme. */
 export type ThemeMode = "light" | "dark" | "system";
 
@@ -253,20 +255,18 @@ export function applyTheme(mode: ThemeMode, seeds: ThemeSeeds): ResolvedTheme {
   return resolved;
 }
 
-/** Read the saved appearance mode, or the default when nothing is stored. */
+/** Read the saved appearance mode, or the default when nothing is stored or storage is blocked. */
 export function readStoredMode(): ThemeMode {
-  if (typeof window === "undefined") return DEFAULT_MODE;
-  const raw = window.localStorage.getItem(THEME_MODE_KEY);
+  const raw = readPref(THEME_MODE_KEY);
   if (isThemeMode(raw)) return raw;
   // Older builds stored only "light" or "dark". Treat those as a mode, not "system".
   if (isResolvedTheme(raw)) return raw;
   return DEFAULT_MODE;
 }
 
-/** Read the saved theme colors, or the default palette when nothing is stored. */
+/** Read the saved theme colors, or the default palette when nothing is stored or storage is blocked. */
 export function readStoredSeeds(): ThemeSeeds {
-  if (typeof window === "undefined") return DEFAULT_SEEDS;
-  return parseStoredSeeds(window.localStorage.getItem(THEME_SEEDS_KEY)) ?? DEFAULT_SEEDS;
+  return parseStoredSeeds(readPref(THEME_SEEDS_KEY)) ?? DEFAULT_SEEDS;
 }
 
 // The first-paint theme script lives in web/index.html so the page is not

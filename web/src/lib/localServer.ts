@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { DEFAULT_TAURI_SERVER_URL } from "./authGuards";
+import { readPref, removePref, writePref } from "./storage";
 
 /**
  * The Message Crate the desktop app starts for itself. The app ships the
@@ -44,11 +45,7 @@ const OPEN_TO_NETWORK_KEY = "mc-local-server-open-to-network";
  * plain HTTP.
  */
 export function getOpenToNetwork(): boolean {
-  try {
-    return localStorage.getItem(OPEN_TO_NETWORK_KEY) === "1";
-  } catch {
-    return false;
-  }
+  return readPref(OPEN_TO_NETWORK_KEY) === "1";
 }
 
 /**
@@ -56,12 +53,8 @@ export function getOpenToNetwork(): boolean {
  * restarts the app's own server when it was started the other way.
  */
 export function setOpenToNetwork(on: boolean): void {
-  try {
-    if (on) localStorage.setItem(OPEN_TO_NETWORK_KEY, "1");
-    else localStorage.removeItem(OPEN_TO_NETWORK_KEY);
-  } catch {
-    // Private browsing and full storage can throw.
-  }
+  if (on) writePref(OPEN_TO_NETWORK_KEY, "1");
+  else removePref(OPEN_TO_NETWORK_KEY);
 }
 
 /** Read the state of the app's own Message Crate without starting it. */

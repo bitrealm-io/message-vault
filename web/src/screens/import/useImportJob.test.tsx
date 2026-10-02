@@ -1019,6 +1019,24 @@ describe("useImportJob wiring", () => {
     expect(body.form).toMatchObject({ backupPasswordGiven: true, whatsappKeyGiven: false });
   });
 
+  // A WhatsApp import from an encrypted iPhone backup reads the backup with
+  // the same password, so its resume has to ask for it again too (#941).
+  it("records that a WhatsApp iPhone import was given the backup password", async () => {
+    resolveImportStagingDirMock.mockResolvedValue("/tmp/staging");
+    const { result } = renderHook(() => useImportJob());
+    await act(() =>
+      result.current.startImport({
+        ...baseForm,
+        source: "whatsapp-ios",
+        backupPassword: "hunter2",
+      }),
+    );
+
+    const body = createImportMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(JSON.stringify(body.form)).not.toContain("hunter2");
+    expect(body.form).toMatchObject({ backupPasswordGiven: true, whatsappKeyGiven: false });
+  });
+
   it("keeps the WhatsApp key out of the stored form snapshot", async () => {
     resolveImportStagingDirMock.mockResolvedValue("/tmp/staging");
     const { result } = renderHook(() => useImportJob());

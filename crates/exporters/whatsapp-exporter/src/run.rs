@@ -1,6 +1,7 @@
 //! Full export pipeline (wtsexporter/JSON convert) for CLI and GUI.
 
 use crate::emit::{ConvertRequest, convert_json};
+use crate::ios_backup::decrypt_if_encrypted;
 use crate::owner::{owner_from_backup, owner_from_form};
 use crate::wtsexporter::{Platform, WtsexporterArgs, resolve_wtsexporter, run_wtsexporter};
 use anyhow::{Context, Result, bail};
@@ -78,21 +79,27 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
         // Cooperative only: cancel is checked before and after the external process.
         // Killing wtsexporter mid-run is not implemented.
         message_crate_core::check_cancel(config.cancel.as_ref())?;
-        let log = run_wtsexporter(
-            &bin,
-            &WtsexporterArgs {
-                platform,
-                input: input.clone(),
-                work_dir: work.path().to_path_buf(),
-                key: source.key.clone(),
-                backup: source.backup.clone(),
-                wa: source.wa.clone(),
-                media: source.media.clone(),
-                db: source.db.clone(),
-                business: source.business,
-            },
-            &json_out,
-        )?;
+        let mut args = WtsexporterArgs {
+            platform,
+            input: input.clone(),
+            work_dir: work.path().to_path_buf(),
+            key: source.key.clone(),
+            backup: source.backup.clone(),
+            wa: source.wa.clone(),
+            media: source.media.clone(),
+            db: source.db.clone(),
+            business: source.business,
+        };
+        // wtsexporter cannot be given an iPhone backup password, so an
+        // encrypted backup's WhatsApp files are decrypted into the work dir
+        // first and wtsexporter reads those instead of the backup.
+        if platform == Platform::Ios
+            && let Some(decrypted) = decrypt_if_encrypted(source, work.path(), config)?
+        {
+            args.read_decrypted(decrypted);
+        }
+        message_crate_core::check_cancel(config.cancel.as_ref())?;
+        let log = run_wtsexporter(&bin, &args, &json_out)?;
         message_crate_core::check_cancel(config.cancel.as_ref())?;
 
         if !log.trim().is_empty() {

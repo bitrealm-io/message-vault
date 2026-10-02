@@ -1559,6 +1559,7 @@ dependencies = [
 name = "imessage-reader"
 version = "0.1.0"
 dependencies = [
+ "aes-kw",
  "chat-db-fixture",
  "chrono",
  "crabapple",
@@ -3991,6 +3992,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "hex",
+ "imessage-ir-exporter",
  "media",
  "message-crate-core",
  "message-csv",

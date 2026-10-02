@@ -19,14 +19,17 @@ export type SnapshotSecret = "backupPassword" | "whatsappKey";
  *
  * It records that a backup password or WhatsApp key was given, never the
  * secret itself, so a resume that reads the backup again knows to ask for
- * it. Each is recorded only for the source whose extract reads it: the
- * iPhone backup password and the Android WhatsApp key.
+ * it. Each is recorded only for a source whose extract reads it: the
+ * iPhone backup password (iMessage and WhatsApp from an iPhone backup) and
+ * the Android WhatsApp key.
  */
 export function formSnapshot(form: ImportJobFormValues): Record<string, unknown> {
   const { backupPassword, whatsappKey, ...rest } = form;
   return {
     ...rest,
-    backupPasswordGiven: form.source === "imessage-ios" && backupPassword.trim() !== "",
+    backupPasswordGiven:
+      (form.source === "imessage-ios" || form.source === "whatsapp-ios") &&
+      backupPassword.trim() !== "",
     whatsappKeyGiven: form.source === "whatsapp-android" && whatsappKey.trim() !== "",
   };
 }

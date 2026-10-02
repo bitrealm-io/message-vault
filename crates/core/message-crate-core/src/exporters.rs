@@ -174,7 +174,8 @@ pub struct Form {
     pub attachment_root: String,
     /// macOS AddressBook path (Apple sources).
     pub apple_contacts: String,
-    /// Apple backup decryption password (never written to `export.ini`).
+    /// iPhone backup decryption password, for iMessage and for WhatsApp
+    /// from an iPhone backup (never written to `export.ini`).
     pub backup_password: String,
     /// Packaging format projected from the common message (`json` default).
     pub output_format: OutputFormat,
@@ -361,6 +362,11 @@ impl Form {
                 json: None,
                 key: message_ir::nonempty(&self.whatsapp_key),
                 backup: non_empty_path(&self.whatsapp_backup),
+                backup_password: if self.whatsapp_platform == WhatsappPlatform::Ios {
+                    message_ir::nonempty(&self.backup_password)
+                } else {
+                    None
+                },
                 wa: non_empty_path(&self.whatsapp_wa),
                 media: non_empty_path(&self.whatsapp_media),
                 db: non_empty_path(&self.whatsapp_db),

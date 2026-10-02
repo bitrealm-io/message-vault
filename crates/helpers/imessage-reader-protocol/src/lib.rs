@@ -21,6 +21,10 @@
 //!    [`Event::Attachment`].
 //! 4. The app closes the helper's stdin, and the helper exits.
 //!
+//! [`Request::BackupDomain`] is a session of its own: the helper answers
+//! [`Event::Source`], streams [`Event::Log`] and [`Event::Progress`] lines
+//! while it decrypts, then sends [`Event::BackupDomainDone`].
+//!
 //! This crate carries the type definitions, their serde shapes, and one rule:
 //! [`bare_address`], which says what an owner address looks like on the wire.
 //! It is MIT OR Apache-2.0 so that both sides can link it.
@@ -39,7 +43,8 @@ use serde_json::Value;
 /// does.
 /// 3: [`Event::Identities`] values and [`Message::owner_handle`] are bare
 /// addresses ([`bare_address`]); the app no longer strips prefixes itself.
-pub const PROTOCOL_VERSION: u32 = 3;
+/// 4: [`Request::BackupDomain`] and [`Event::BackupDomainDone`].
+pub const PROTOCOL_VERSION: u32 = 4;
 
 /// The owner address behind a raw `chat.account_login` or
 /// `message.destination_caller_id` value, or `None` when nothing is left.
@@ -107,6 +112,25 @@ pub enum Request {
         /// The `path` an [`AttachmentSource::Path`] reported.
         path: PathBuf,
     },
+    /// Decrypt every file of one domain of an encrypted iPhone backup into a
+    /// folder. This is how another app's data (WhatsApp) comes out of an
+    /// encrypted backup: the program that reads it cannot take the password.
+    BackupDomain(BackupDomainRequest),
+}
+
+/// What decrypting one domain of an encrypted iPhone backup needs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackupDomainRequest {
+    /// The backup folder holding `Manifest.plist`.
+    pub backup_path: PathBuf,
+    /// The backup password.
+    pub backup_password: String,
+    /// The domain as `Manifest.db` spells it, such as
+    /// `AppDomainGroup-group.net.whatsapp.WhatsApp.shared`.
+    pub domain: String,
+    /// A folder the app owns. Each file is written to
+    /// `<out_dir>/<domain>/<its path inside the domain>`.
+    pub out_dir: PathBuf,
 }
 
 /// What an export run needs beyond the source.
@@ -172,6 +196,14 @@ pub enum Event {
     Attachment {
         /// The decrypted file, or `None` when the backup does not hold it.
         path: Option<PathBuf>,
+    },
+    /// The answer to [`Request::BackupDomain`].
+    BackupDomainDone {
+        /// Files written. Zero means the backup does not hold the domain.
+        files: u64,
+        /// Files the manifest lists that could not be decrypted. Each one
+        /// has a line on the log.
+        failures: u64,
     },
     /// The request failed. The helper writes nothing after this line.
     Error {
@@ -371,6 +403,17 @@ mod tests {
         let event = Event::Attachment { path: None };
         let line = serde_json::to_string(&event).unwrap();
         assert_eq!(line, r#"{"event":"attachment","path":null}"#);
+
+        let request = Request::BackupDomain(BackupDomainRequest {
+            backup_path: "/tmp/backup".into(),
+            backup_password: "secret".into(),
+            domain: "AppDomainGroup-group.net.whatsapp.WhatsApp.shared".into(),
+            out_dir: "/tmp/out".into(),
+        });
+        let line = serde_json::to_string(&request).unwrap();
+        assert!(line.starts_with(r#"{"op":"backup_domain""#), "{line}");
+        let back: Request = serde_json::from_str(&line).unwrap();
+        assert!(matches!(back, Request::BackupDomain(_)));
 
         let source = AttachmentSource::Inline {
             text: "<svg/>".into(),

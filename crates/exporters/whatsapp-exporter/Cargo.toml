@@ -9,6 +9,7 @@ autotests = false
 [dependencies]
 anyhow = { workspace = true }
 hex = { workspace = true }
+imessage-ir-exporter = { path = "../imessage-ir-exporter" }
 message-csv = { path = "../../libs/csv" }
 message-crate-core = { path = "../../core/message-crate-core" }
 message-ir = { path = "../../libs/ir" }

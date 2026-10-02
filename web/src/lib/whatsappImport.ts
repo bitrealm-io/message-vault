@@ -31,6 +31,11 @@ export function whatsappShowsBusiness(method: WhatsappMethodId): boolean {
   return method === "whatsapp-ios";
 }
 
+/** An iPhone backup can be encrypted with a password; an Android one takes a key. */
+export function whatsappShowsPassword(method: WhatsappMethodId): boolean {
+  return method === "whatsapp-ios";
+}
+
 export function whatsappShowsContactsDb(_method: WhatsappMethodId): boolean {
   return true;
 }
@@ -58,6 +63,8 @@ export type WhatsappPathStats = {
   db: PathStat | null;
   hasMsgstoreDb: boolean;
   cryptName: string | null;
+  /** Whether the iPhone backup folder is encrypted; null when unknown or not iPhone. */
+  backupEncrypted: boolean | null;
 };
 
 export function emptyWhatsappPathStats(): WhatsappPathStats {
@@ -68,12 +75,15 @@ export function emptyWhatsappPathStats(): WhatsappPathStats {
     db: null,
     hasMsgstoreDb: false,
     cryptName: null,
+    backupEncrypted: null,
   };
 }
 
 export const WHATSAPP_ERR_PATH_MISSING = "This path does not exist.";
 export const WHATSAPP_ERR_FOLDER_IS_FILE = "Pick the backup folder.";
 export const WHATSAPP_ERR_CRYPT_KEY = "Decryption key is required for an encrypted backup.";
+export const WHATSAPP_ERR_ENCRYPTED_PASSWORD =
+  "The backup is encrypted — fill Encryption password.";
 export const WHATSAPP_ERR_MUST_BE_FILE = "This path must be a file.";
 export const WHATSAPP_ERR_MUST_BE_FOLDER = "This path must be a folder.";
 export const WHATSAPP_ERR_OWNER_PHONE = "Owner's WhatsApp number is required.";
@@ -92,6 +102,7 @@ type WhatsappCanImportArgs = {
   method: WhatsappMethodId;
   backupPath: string;
   key: string;
+  backupPassword: string;
   contactsDb: string;
   media: string;
   db: string;
@@ -99,7 +110,14 @@ type WhatsappCanImportArgs = {
   stats: WhatsappPathStats;
 };
 
-type WhatsappImportErrorKey = "backupPath" | "key" | "contactsDb" | "media" | "db" | "ownerPhone";
+type WhatsappImportErrorKey =
+  | "backupPath"
+  | "key"
+  | "backupPassword"
+  | "contactsDb"
+  | "media"
+  | "db"
+  | "ownerPhone";
 
 function checkOptionalPath(
   path: string,
@@ -157,6 +175,14 @@ export function whatsappCanImport(args: WhatsappCanImportArgs): {
     args.key.trim() === ""
   ) {
     errors.key = WHATSAPP_ERR_CRYPT_KEY;
+  }
+
+  if (
+    whatsappShowsPassword(args.method) &&
+    args.stats.backupEncrypted === true &&
+    args.backupPassword.trim() === ""
+  ) {
+    errors.backupPassword = WHATSAPP_ERR_ENCRYPTED_PASSWORD;
   }
 
   if (whatsappOwnerPhoneRequired(args.method) && args.ownerPhone.trim() === "") {

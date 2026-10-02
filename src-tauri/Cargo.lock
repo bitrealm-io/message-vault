@@ -5235,6 +5235,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "hex",
+ "imessage-ir-exporter",
  "media",
  "message-crate-core",
  "message-csv",

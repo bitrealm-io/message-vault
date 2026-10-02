@@ -11,6 +11,7 @@ describe("whatsappExtractFields", () => {
         maxFps: "30",
         minSizeMb: "20",
         key: "deadbeef",
+        backupPassword: "",
         wa: "  ",
         media: "/tmp/WhatsApp",
         db: "/tmp/msgstore.db",
@@ -40,6 +41,7 @@ describe("whatsappExtractFields", () => {
       maxFps: "30",
       minSizeMb: "20",
       key: "",
+      backupPassword: "",
       wa: "",
       media: "",
       db: "",
@@ -60,6 +62,7 @@ describe("whatsappExtractFields", () => {
         maxFps: "30",
         minSizeMb: "20",
         key: "",
+        backupPassword: "",
         wa: "/backups/ContactsV2.sqlite",
         media: "/tmp/WhatsApp",
         db: "/tmp/msgstore.db",
@@ -75,6 +78,32 @@ describe("whatsappExtractFields", () => {
     });
   });
 
+  it("sends the backup password for iPhone and never for Android", () => {
+    const base = {
+      attachmentMedia: "copy" as const,
+      maxResolution: "720p",
+      maxFps: "30",
+      minSizeMb: "20",
+      key: "",
+      backupPassword: "hunter2",
+      wa: "",
+      media: "",
+      db: "",
+      business: false,
+      ownerPhone: "+15555550100",
+    };
+    expect(whatsappExtractFields({ ...base, source: "whatsapp-ios" }).backup_password).toBe(
+      "hunter2",
+    );
+    expect(
+      whatsappExtractFields({ ...base, source: "whatsapp-ios", backupPassword: " " })
+        .backup_password,
+    ).toBeUndefined();
+    expect(
+      whatsappExtractFields({ ...base, source: "whatsapp-android" }).backup_password,
+    ).toBeUndefined();
+  });
+
   it("sets iPhone business and omits leftover key", () => {
     expect(
       whatsappExtractFields({
@@ -84,6 +113,7 @@ describe("whatsappExtractFields", () => {
         maxFps: "30",
         minSizeMb: "20",
         key: "leftover",
+        backupPassword: "",
         wa: "/backups/ContactsV2.sqlite",
         media: "",
         db: "",

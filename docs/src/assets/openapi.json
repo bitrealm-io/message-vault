@@ -12063,7 +12063,7 @@
           },
           "timestamp": {
             "type": "string",
-            "description": "The instant the message was sent: RFC 3339 in UTC with a `Z`\nsuffix. A caller shows it in the account's time zone\n(`AccountProfileResponse.time_zone`); the database stores nothing\nabout where the phone was."
+            "description": "The instant the message was sent: RFC 3339 in UTC with a `Z`\nsuffix. A caller shows it in the account's time zone\n(`Account.time_zone`); the database stores nothing\nabout where the phone was."
           }
         }
       },
@@ -13325,7 +13325,7 @@
                 },
                 "timestamp": {
                   "type": "string",
-                  "description": "The instant the message was sent: RFC 3339 in UTC with a `Z`\nsuffix. A caller shows it in the account's time zone\n(`AccountProfileResponse.time_zone`); the database stores nothing\nabout where the phone was."
+                  "description": "The instant the message was sent: RFC 3339 in UTC with a `Z`\nsuffix. A caller shows it in the account's time zone\n(`Account.time_zone`); the database stores nothing\nabout where the phone was."
                 }
               }
             },

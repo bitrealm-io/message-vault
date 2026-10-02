@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   formatThemeShare,
   normalizeHex,
   parseThemeShare,
+  readStoredMode,
+  readStoredSeeds,
   resolveMode,
   type ThemeSeeds,
 } from "./theme";
@@ -56,5 +58,25 @@ describe("resolveMode", () => {
   it("resolves system from prefersDark", () => {
     expect(resolveMode("system", true)).toBe("dark");
     expect(resolveMode("system", false)).toBe("light");
+  });
+});
+
+describe("stored theme with browser storage blocked", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // ThemeProvider's mount effect calls both. A browser that blocks site data
+  // throws SecurityError from the localStorage getter itself.
+  it("falls back to the defaults instead of throwing", () => {
+    const blocked = {};
+    Object.defineProperty(blocked, "localStorage", {
+      get() {
+        throw new DOMException("The operation is insecure.", "SecurityError");
+      },
+    });
+    vi.stubGlobal("window", blocked);
+    expect(() => readStoredMode()).not.toThrow();
+    expect(() => readStoredSeeds()).not.toThrow();
   });
 });

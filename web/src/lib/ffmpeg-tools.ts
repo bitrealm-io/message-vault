@@ -1,3 +1,4 @@
+import { readPref } from "./storage";
 import { isTauri } from "./tauri-check";
 
 export const FFMPEG_TOOLS_STORAGE_KEY = "mc-ffmpeg-path";
@@ -9,7 +10,7 @@ export function initFfmpegToolsFromStorage(): void {
   if (initStarted || !isTauri()) return;
   initStarted = true;
 
-  const stored = localStorage.getItem(FFMPEG_TOOLS_STORAGE_KEY)?.trim();
+  const stored = readPref(FFMPEG_TOOLS_STORAGE_KEY)?.trim();
   if (!stored) return;
 
   // Loaded on demand: a static import here would put the whole Tauri bridge on

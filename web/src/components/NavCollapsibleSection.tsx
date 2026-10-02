@@ -1,4 +1,5 @@
 import { type ReactNode, useState } from "react";
+import { readPref, writePref } from "../lib/storage";
 import { ChevronRightIcon, PlusIcon } from "./icons";
 import NavGlyphButton from "./NavGlyphButton";
 import {
@@ -10,22 +11,11 @@ import {
 const STORAGE_PREFIX = "mc-left-nav-open:";
 
 function readOpen(id: string): boolean {
-  try {
-    const raw = localStorage.getItem(STORAGE_PREFIX + id);
-    if (raw === "0") return false;
-    if (raw === "1") return true;
-  } catch {
-    /* private mode */
-  }
-  return true;
+  return readPref(STORAGE_PREFIX + id) !== "0";
 }
 
 function writeOpen(id: string, open: boolean) {
-  try {
-    localStorage.setItem(STORAGE_PREFIX + id, open ? "1" : "0");
-  } catch {
-    /* private mode */
-  }
+  writePref(STORAGE_PREFIX + id, open ? "1" : "0");
 }
 
 /**

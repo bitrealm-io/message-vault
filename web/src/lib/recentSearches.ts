@@ -1,3 +1,5 @@
+import { readPref, removePref, writePref } from "./storage";
+
 /**
  * Recent search queries, kept per search bar so the contacts, messages, and
  * trash bars do not offer each other's history — a `handle:` query is noise in
@@ -16,9 +18,9 @@ function storageKey(scope: SearchScope): string {
 const RECENT_SEARCHES_MAX = 10;
 
 function readRaw(scope: SearchScope): unknown {
+  const raw = readPref(storageKey(scope));
+  if (!raw) return null;
   try {
-    const raw = localStorage.getItem(storageKey(scope));
-    if (!raw) return null;
     return JSON.parse(raw);
   } catch {
     return null;
@@ -37,20 +39,12 @@ export function loadRecentSearches(scope: SearchScope): string[] {
 }
 
 function saveRecentSearches(scope: SearchScope, queries: string[]): void {
-  try {
-    localStorage.setItem(storageKey(scope), JSON.stringify(queries.slice(0, RECENT_SEARCHES_MAX)));
-  } catch {
-    // Private browsing and full storage can throw.
-  }
+  writePref(storageKey(scope), JSON.stringify(queries.slice(0, RECENT_SEARCHES_MAX)));
 }
 
 /** Remove every saved query for one search bar. */
 export function clearRecentSearches(scope: SearchScope): void {
-  try {
-    localStorage.removeItem(storageKey(scope));
-  } catch {
-    // Private browsing and full storage can throw.
-  }
+  removePref(storageKey(scope));
 }
 
 /** Put this query at the front of a bar's recents, dropping duplicates. */

@@ -1,4 +1,5 @@
 import type { SortOrder } from "../components/SortMenu";
+import { readPref, writePref } from "./storage";
 
 /**
  * How the conversation list is ordered.
@@ -32,9 +33,9 @@ function isOrder(value: unknown): value is SortOrder {
 }
 
 export function loadConversationSort(): ConversationSortState {
+  const raw = readPref(STORAGE_KEY);
+  if (!raw) return { ...DEFAULT_CONVERSATION_SORT };
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_CONVERSATION_SORT };
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null) {
       return { ...DEFAULT_CONVERSATION_SORT };
@@ -50,9 +51,5 @@ export function loadConversationSort(): ConversationSortState {
 }
 
 export function saveConversationSort(state: ConversationSortState): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // private browsing / quota
-  }
+  writePref(STORAGE_KEY, JSON.stringify(state));
 }

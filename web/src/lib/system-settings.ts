@@ -1,5 +1,6 @@
 /** Browser storage keys for Settings → System in the desktop app. */
 
+import { readPref, removePref, writePref } from "./storage";
 import { invokeHomeDir } from "./tauri";
 import { isTauri } from "./tauri-check";
 
@@ -52,21 +53,13 @@ export function defaultStagingDir(homeDir: string): string {
 
 /** Folder chosen in Settings as the staging parent. Empty when unset. */
 export function getStagingDir(): string {
-  try {
-    return localStorage.getItem(STAGING_DIR_KEY)?.trim() || "";
-  } catch {
-    return "";
-  }
+  return readPref(STAGING_DIR_KEY)?.trim() || "";
 }
 
 export function setStagingDir(dir: string): void {
-  try {
-    const trimmed = dir.trim();
-    if (trimmed) localStorage.setItem(STAGING_DIR_KEY, trimmed);
-    else localStorage.removeItem(STAGING_DIR_KEY);
-  } catch {
-    // Private browsing and full storage can throw. Keep the in-memory value.
-  }
+  const trimmed = dir.trim();
+  if (trimmed) writePref(STAGING_DIR_KEY, trimmed);
+  else removePref(STAGING_DIR_KEY);
 }
 
 /**
@@ -107,26 +100,18 @@ export async function getHomeDir(): Promise<string> {
 
 /** True when Import should reuse the last backup folder for each source. */
 export function getRememberImporterPaths(): boolean {
-  try {
-    return localStorage.getItem(REMEMBER_IMPORTER_PATHS_KEY) === "1";
-  } catch {
-    return false;
-  }
+  return readPref(REMEMBER_IMPORTER_PATHS_KEY) === "1";
 }
 
 export function setRememberImporterPaths(on: boolean): void {
-  try {
-    if (on) localStorage.setItem(REMEMBER_IMPORTER_PATHS_KEY, "1");
-    else localStorage.removeItem(REMEMBER_IMPORTER_PATHS_KEY);
-  } catch {
-    // Private browsing and full storage can throw.
-  }
+  if (on) writePref(REMEMBER_IMPORTER_PATHS_KEY, "1");
+  else removePref(REMEMBER_IMPORTER_PATHS_KEY);
 }
 
 function readImporterPaths(): Record<string, string> {
+  const raw = readPref(IMPORTER_PATHS_KEY);
+  if (!raw) return {};
   try {
-    const raw = localStorage.getItem(IMPORTER_PATHS_KEY);
-    if (!raw) return {};
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return {};
     const out: Record<string, string> = {};
@@ -140,12 +125,8 @@ function readImporterPaths(): Record<string, string> {
 }
 
 function writeImporterPaths(map: Record<string, string>): void {
-  try {
-    if (Object.keys(map).length === 0) localStorage.removeItem(IMPORTER_PATHS_KEY);
-    else localStorage.setItem(IMPORTER_PATHS_KEY, JSON.stringify(map));
-  } catch {
-    // Private browsing and full storage can throw.
-  }
+  if (Object.keys(map).length === 0) removePref(IMPORTER_PATHS_KEY);
+  else writePref(IMPORTER_PATHS_KEY, JSON.stringify(map));
 }
 
 /** Last backup folder remembered for this import source. */
@@ -176,9 +157,9 @@ type ImporterExtraRow = {
 };
 
 function readImporterExtraPaths(): Record<string, ImporterExtraRow> {
+  const raw = readPref(IMPORTER_EXTRA_PATHS_KEY);
+  if (!raw) return {};
   try {
-    const raw = localStorage.getItem(IMPORTER_EXTRA_PATHS_KEY);
-    if (!raw) return {};
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return {};
     const out: Record<string, ImporterExtraRow> = {};
@@ -210,12 +191,8 @@ function readImporterExtraPaths(): Record<string, ImporterExtraRow> {
 }
 
 function writeImporterExtraPaths(map: Record<string, ImporterExtraRow>): void {
-  try {
-    if (Object.keys(map).length === 0) localStorage.removeItem(IMPORTER_EXTRA_PATHS_KEY);
-    else localStorage.setItem(IMPORTER_EXTRA_PATHS_KEY, JSON.stringify(map));
-  } catch {
-    // Private browsing and full storage can throw.
-  }
+  if (Object.keys(map).length === 0) removePref(IMPORTER_EXTRA_PATHS_KEY);
+  else writePref(IMPORTER_EXTRA_PATHS_KEY, JSON.stringify(map));
 }
 
 export type ImporterExtraField =

@@ -12,6 +12,7 @@ import {
 import { ApiError, getToken, setAccountId, setBaseUrl, setToken } from "./api";
 import { parsePersistedAuth } from "./authGuards";
 import { getSession, logout as serverLogout } from "./serverApi";
+import { readPref, removePref, writePref } from "./storage";
 import { isTauri } from "./tauri-check";
 import { fetchAccountProfileFor } from "./useAccountProfile";
 
@@ -57,44 +58,32 @@ function logoutTimeoutSignal(): AbortSignal {
 
 /** Read the last saved login from browser storage. */
 function loadPersisted(): { serverUrl: string; token: string; accountId: number } | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = parsePersistedAuth(raw);
-    if (!parsed) return null;
-    return {
-      serverUrl: parsed.serverUrl,
-      token: parsed.token,
-      accountId: parsed.accountId,
-    };
-  } catch {
-    return null;
-  }
+  const raw = readPref(STORAGE_KEY);
+  if (!raw) return null;
+  const parsed = parsePersistedAuth(raw);
+  if (!parsed) return null;
+  return {
+    serverUrl: parsed.serverUrl,
+    token: parsed.token,
+    accountId: parsed.accountId,
+  };
 }
 
 /** Write the current login to browser storage. Passwords are never stored. */
 function persistState(state: AuthState) {
-  try {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        serverUrl: state.serverUrl,
-        token: state.token,
-        accountId: state.accountId,
-      }),
-    );
-  } catch {
-    // Full or blocked storage should not break login.
-  }
+  writePref(
+    STORAGE_KEY,
+    JSON.stringify({
+      serverUrl: state.serverUrl,
+      token: state.token,
+      accountId: state.accountId,
+    }),
+  );
 }
 
 /** Remove the saved login from browser storage. */
 function clearPersisted() {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // Full or blocked storage should not break logout.
-  }
+  removePref(STORAGE_KEY);
 }
 
 /** Holds login state for the app and restores a saved session on startup. */

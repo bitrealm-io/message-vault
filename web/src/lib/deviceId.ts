@@ -1,4 +1,5 @@
 import { newId } from "./newId";
+import { readPref, writePref } from "./storage";
 
 /** localStorage key for this install's stable identifier. */
 export const DEVICE_ID_KEY = "mc-device-id";
@@ -19,21 +20,13 @@ let cached: string | null = null;
  */
 export function getDeviceId(): string {
   if (cached) return cached;
-  try {
-    const stored = localStorage.getItem(DEVICE_ID_KEY)?.trim();
-    if (stored) {
-      cached = stored;
-      return stored;
-    }
-  } catch {
-    // Private browsing and full storage can throw.
+  const stored = readPref(DEVICE_ID_KEY)?.trim();
+  if (stored) {
+    cached = stored;
+    return stored;
   }
   const fresh = newId();
   cached = fresh;
-  try {
-    localStorage.setItem(DEVICE_ID_KEY, fresh);
-  } catch {
-    // Keep the in-memory value.
-  }
+  writePref(DEVICE_ID_KEY, fresh);
   return fresh;
 }

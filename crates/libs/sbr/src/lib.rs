@@ -6,8 +6,8 @@
 mod read;
 
 pub use read::{
-    AttachmentBlob, ConversationKind, ParseStats, Record, SourceFields, infer_owner_phones,
-    parse_file_with,
+    AttachmentBlob, ConversationKind, ParseStats, Record, SourceFields, contact_name,
+    infer_owner_phones, parse_file_with,
 };
 
 use anyhow::{Context, Result};

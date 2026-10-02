@@ -1939,6 +1939,39 @@ mod kind_words {
         );
     }
 
+    /// `service:` on Contacts asks about the messages of the contact's
+    /// conversations, whoever sent them: a contact the account holder texted
+    /// over SMS, and who never replied, is an SMS contact (#1210).
+    #[tokio::test]
+    async fn service_on_contacts_reads_the_conversations_messages() {
+        let (pool, _dir, f) = seeded().await;
+        let mut conn = pool.acquire().await.unwrap();
+        let a = ACCOUNT;
+        let quiet_h = handle(&mut conn, a, "+15550201", "sms").await;
+        let quiet = contact(&mut conn, a, "Quiet", &[quiet_h]).await;
+        let quiet_c = conversation(&mut conn, a, quiet_h, "individual", None, &[quiet_h]).await;
+        let mut sent = msg(
+            quiet_c,
+            "2024-03-01T10:00:00Z",
+            true,
+            None,
+            "are you there?",
+        );
+        sent.source = "sms";
+        sent.service = "sms";
+        message(&mut conn, a, sent).await;
+
+        assert_eq!(
+            run(&mut conn, ListKind::Contacts, "service:sms").await,
+            sorted(vec![f.bo, quiet])
+        );
+        assert!(
+            !run(&mut conn, ListKind::Contacts, "-service:sms")
+                .await
+                .contains(&quiet)
+        );
+    }
+
     #[tokio::test]
     async fn attachments_by_kind_and_size() {
         let (pool, _dir, f) = seeded().await;

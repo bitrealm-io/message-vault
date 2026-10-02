@@ -7,7 +7,9 @@ use message_crate_core::testutil::{assert_run_wrote_jsonl, jsonl_run_config};
 use message_crate_core::{GoSmsProConfig, SourceConfig};
 use std::fs;
 
-/// One row for every reason an SMS is skipped, around two good messages.
+/// One row for every reason an SMS is skipped, around two good messages. The
+/// address an SMS is skipped for is a blank one: a sender name such as
+/// `Carrier` is an address of its own.
 const SKIPS_XML: &str = r#"<?xml version="1.0"?>
 <GoSms>
   <SMSCount>6</SMSCount>
@@ -37,7 +39,7 @@ const SKIPS_XML: &str = r#"<?xml version="1.0"?>
     <body>no date</body>
   </SMS>
   <SMS>
-    <address>Carrier</address>
+    <address></address>
     <contactName>Nobody</contactName>
     <date>1609459300000</date>
     <type>1</type>
@@ -108,7 +110,7 @@ fn run_writes_the_conversation_and_reports_every_skip_and_error() {
     assert_eq!(rows.len(), 2, "{skipped}");
     assert_eq!(
         rows[1],
-        "gosms_sys_1.xml,Carrier,Nobody,1,1609459300000,no address"
+        "gosms_sys_1.xml,,Nobody,1,1609459300000,no address"
     );
 }
 
@@ -120,7 +122,7 @@ fn run_names_the_first_twenty_bad_address_rows_and_counts_the_rest() {
     let bad_rows: String = (0..22)
         .map(|i| {
             format!(
-                "<SMS><address>Carrier</address><date>16094593{i:05}</date>\
+                "<SMS><address></address><date>16094593{i:05}</date>\
                  <type>1</type><body>no address {i}</body></SMS>\n"
             )
         })

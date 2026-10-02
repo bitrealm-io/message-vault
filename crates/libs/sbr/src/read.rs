@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result, bail};
 use base64::Engine;
-use phone::{OwnerHandleSet, sanitize_number};
+use phone::{Handle, OwnerHandleSet};
 use quick_xml::{Reader, events::Event};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -106,20 +106,20 @@ pub enum SourceFields {
 /// One parsed SMS/MMS message record.
 #[derive(Debug, Clone)]
 pub struct Record {
-    /// Conversation key (single peer number or group key).
+    /// Conversation key: the peer's handle key, or the group key.
     pub chat_key: String,
     /// Individual or group classification.
     pub conversation_kind: ConversationKind,
     /// Generated group title, if group.
     pub group_title: Option<String>,
-    /// (Sanitized digits, display-name hint) pairs for participants.
-    pub participant_digits: Vec<(String, Option<String>)>,
+    /// (Handle, display-name hint) pairs for participants.
+    pub participants: Vec<(Handle, Option<String>)>,
     /// Message timestamp in seconds.
     pub timestamp_secs: f64,
     /// Whether the message is outgoing.
     pub is_from_me: bool,
-    /// Sender digits for incoming messages.
-    pub sender_digits: Option<String>,
+    /// Sender of an incoming message.
+    pub sender: Option<Handle>,
     /// Sender display-name hint, when present.
     pub sender_display_name: Option<String>,
     /// Message body text (HTML-entity decoded).
@@ -527,12 +527,12 @@ fn part_fields(part: &MmsPart, decoded: &DecodedPartData) -> BTreeMap<String, St
 fn parse_sms(attrs: &HashMap<String, String>, stats: &mut ParseStats) -> Option<Record> {
     stats.sms_seen += 1;
     let (date_ms, timestamp_secs) = timestamp_from_date(attrs, stats)?;
-    let address = sanitize_number(get(attrs, "address")).or_else(|| {
+    let address = address_handle(get(attrs, "address")).or_else(|| {
         stats.skipped_unknown_address += 1;
         None
     })?;
     let android_type = get(attrs, "type").trim().to_string();
-    let (is_from_me, sender_digits) = match android_type.as_str() {
+    let (is_from_me, sender) = match android_type.as_str() {
         "1" => (false, Some(address.clone())),
         "2" => (true, None),
         // Draft (3) and outbox (4) SMS carry no delivered content; count them
@@ -549,13 +549,13 @@ fn parse_sms(attrs: &HashMap<String, String>, stats: &mut ParseStats) -> Option<
     };
     let hint = name_alias(attrs);
     Some(Record {
-        chat_key: address.clone(),
+        chat_key: address.key().to_string(),
         conversation_kind: ConversationKind::Individual,
         group_title: None,
-        participant_digits: vec![(address, hint.clone())],
+        participants: vec![(address, hint.clone())],
         timestamp_secs,
         is_from_me,
-        sender_digits,
+        sender,
         sender_display_name: if is_from_me { None } else { hint },
         text: decode_body(get(attrs, "body")),
         subject: non_null(get(attrs, "subject")),
@@ -619,13 +619,13 @@ fn parse_mms(
         stats.skipped_empty_participants += 1;
         return None;
     }
-    let peers = mms_peers(&participants, owners);
+    let peers = mms_peers(participants, owners);
     if peers.is_empty() {
         stats.skipped_unknown_address += 1;
         return None;
     }
     let is_from_me = msg_box == MMS_BOX_SENT;
-    let sender_digits = if is_from_me {
+    let sender = if is_from_me {
         None
     } else {
         mms_sender(addrs, &peers, owners)
@@ -638,10 +638,10 @@ fn parse_mms(
         chat_key: conversation.chat_key,
         conversation_kind: conversation.kind,
         group_title: conversation.group_title,
-        participant_digits: conversation.participant_digits,
+        participants: conversation.participants,
         timestamp_secs,
         is_from_me,
-        sender_digits,
+        sender,
         sender_display_name: if is_from_me { None } else { hint },
         text: mms_text(parts, &text_refs),
         subject: non_null(get(attrs, "sub")),
@@ -662,20 +662,28 @@ fn parse_mms(
     })
 }
 
+/// An address as a [`Handle`], classified from the value as written. `None`
+/// for a blank value and for the placeholder the phone writes where its own
+/// number goes.
+fn address_handle(raw: &str) -> Option<Handle> {
+    if raw.trim().eq_ignore_ascii_case(INSERT_ADDRESS_TOKEN) {
+        return None;
+    }
+    Handle::parse(raw)
+}
+
 /// Every address on the element: the `~`-joined `address` attribute, then
 /// each `<addr>` child. Blank entries are dropped; owners are not.
-fn mms_participants(attrs: &HashMap<String, String>, addrs: &[MmsAddr]) -> Vec<String> {
+fn mms_participants(attrs: &HashMap<String, String>, addrs: &[MmsAddr]) -> Vec<Handle> {
     get(attrs, "address")
         .split('~')
         .chain(addrs.iter().map(|a| a.address.as_str()))
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
+        .filter_map(address_handle)
         .collect()
 }
 
 /// The sender of an incoming MMS: the `FROM` (`type="137"`) address when it
-/// is a number other than the owner's; without one, the peer of a direct
+/// is an address other than the owner's; without one, the peer of a direct
 /// conversation, since nobody else could have sent it; in a group, nobody.
 ///
 /// A group message without a `FROM` is left without a sender rather than
@@ -686,36 +694,35 @@ fn mms_participants(attrs: &HashMap<String, String>, addrs: &[MmsAddr]) -> Vec<S
 /// would be wrong four times out of five.
 fn mms_sender(
     addrs: &[MmsAddr],
-    peers: &[String],
+    peers: &[Handle],
     owners: Option<&OwnerHandleSet>,
-) -> Option<String> {
+) -> Option<Handle> {
     addrs
         .iter()
         .find(|a| a.addr_type == MMS_ADDR_FROM)
-        .filter(|a| !is_owner(owners, &a.address))
-        .and_then(|a| sanitize_number(&a.address))
+        .and_then(|a| address_handle(&a.address))
+        .filter(|a| !is_owner(owners, a))
         .or_else(|| match peers {
             [peer] => Some(peer.clone()),
             _ => None,
         })
 }
 
-/// The other parties: every participant number that is not the owner's,
-/// sorted and de-duplicated so the same group always gets the same key.
-fn mms_peers(participants: &[String], owners: Option<&OwnerHandleSet>) -> Vec<String> {
-    let mut peers: Vec<String> = participants
-        .iter()
+/// The other parties: every participant that is not the owner, sorted by
+/// key and de-duplicated so the same group always gets the same key.
+fn mms_peers(participants: Vec<Handle>, owners: Option<&OwnerHandleSet>) -> Vec<Handle> {
+    let mut peers: Vec<Handle> = participants
+        .into_iter()
         .filter(|p| !is_owner(owners, p))
-        .filter_map(|p| sanitize_number(p))
         .collect();
-    peers.sort();
-    peers.dedup();
+    peers.sort_by(|a, b| a.key().cmp(b.key()));
+    peers.dedup_by(|a, b| a.key() == b.key());
     peers
 }
 
 /// Whether an address is one of the owner's; with no owner given, none is.
-fn is_owner(owners: Option<&OwnerHandleSet>, address: &str) -> bool {
-    owners.is_some_and(|o| o.is_owner(address, HandleType::Phone))
+fn is_owner(owners: Option<&OwnerHandleSet>, address: &Handle) -> bool {
+    owners.is_some_and(|o| o.is_owner(address))
 }
 
 /// The message text: the text parts the SMIL references, in its order, or
@@ -751,44 +758,41 @@ fn mms_text(parts: &[MmsPart], text_refs: &[String]) -> String {
         .join("\n")
 }
 
-/// Where an MMS lands: a one-to-one conversation keyed by the peer's number,
-/// or a group keyed by the sorted peer set.
+/// Where an MMS lands: a one-to-one conversation keyed by the peer's handle
+/// key, or a group keyed by the sorted peer set.
 struct MmsConversation {
     chat_key: String,
     kind: ConversationKind,
     group_title: Option<String>,
-    participant_digits: Vec<(String, Option<String>)>,
+    participants: Vec<(Handle, Option<String>)>,
 }
 
 impl MmsConversation {
     /// `peers` is sorted and non-empty; `hint` is the element's contact name,
     /// which names the one peer of an individual conversation.
-    fn for_peers(mut peers: Vec<String>, hint: Option<String>) -> Self {
+    fn for_peers(mut peers: Vec<Handle>, hint: Option<String>) -> Self {
         if peers.len() == 1 {
             let peer = peers.remove(0);
             return Self {
-                chat_key: peer.clone(),
+                chat_key: peer.key().to_string(),
                 kind: ConversationKind::Individual,
                 group_title: None,
-                participant_digits: vec![(peer, hint)],
+                participants: vec![(peer, hint)],
             };
         }
+        let keys: Vec<&str> = peers.iter().map(Handle::key).collect();
         Self {
-            chat_key: group_chat_key(&peers),
+            chat_key: group_chat_key(&keys),
             kind: ConversationKind::Group,
-            group_title: Some(group_title(&peers)),
-            participant_digits: peers.into_iter().map(|d| (d, None)).collect(),
+            group_title: Some(group_title(&keys)),
+            participants: peers.into_iter().map(|p| (p, None)).collect(),
         }
     }
 }
 
-/// `Group: <up to four numbers>`, with a count for the rest.
-fn group_title(peers: &[String]) -> String {
-    let shown: Vec<String> = peers
-        .iter()
-        .take(4)
-        .map(|d| phone::normalize_lenient(d))
-        .collect();
+/// `Group: <up to four peers>`, with a count for the rest.
+fn group_title(peers: &[&str]) -> String {
+    let shown = &peers[..peers.len().min(4)];
     if peers.len() <= 4 {
         format!("Group: {}", shown.join(", "))
     } else {
@@ -806,7 +810,7 @@ fn group_title(peers: &[String]) -> String {
 /// conversations, an inherent limitation of the source, documented at
 /// https://messagecrate.app/docs/developer/formats/sms-backup-restore/mapping/.
 /// A very long roster is keyed by a hash so the key stays a usable file stem.
-fn group_chat_key(peers: &[String]) -> String {
+fn group_chat_key(peers: &[&str]) -> String {
     let raw_key = format!("group-{}", peers.join("_"));
     if raw_key.len() > 180 {
         format!(
@@ -958,12 +962,10 @@ pub fn infer_owner_phones(path: &Path) -> Result<Vec<String>> {
                         let a = attrs(&e, &mut 0);
                         if get(&a, "type").trim() == MMS_ADDR_FROM {
                             let raw = get(&a, "address");
-                            if !raw.eq_ignore_ascii_case(INSERT_ADDRESS_TOKEN)
-                                // Guarded US-digit form
-                                // (`normalize_digits_us`): never a fabricated `+0…`.
-                                && let Some(normalized) = phone::normalize_digits_us(raw)
+                            if let Some(owner) =
+                                address_handle(raw).filter(|h| h.kind() == HandleType::Phone)
                             {
-                                *counts.entry(normalized).or_default() += 1;
+                                *counts.entry(owner.into_key()).or_default() += 1;
                             }
                         }
                     }
@@ -1001,7 +1003,7 @@ mod tests {
         let (records, _) = parse_reader(xml.as_slice(), Some(&owners)).unwrap();
         assert_eq!(records[0].conversation_kind, ConversationKind::Group);
         assert!(!records[0].is_from_me);
-        assert_eq!(records[0].sender_digits, None);
+        assert!(records[0].sender.is_none());
     }
 
     #[test]
@@ -1010,7 +1012,10 @@ mod tests {
         let xml = br#"<smses><mms date="1" msg_box="1" address="+15555550101~+15555550100"><parts><part ct="text/plain" text="hi"/></parts><addrs><addr address="+15555550101" type="151"/><addr address="+15555550100" type="151"/></addrs></mms></smses>"#;
         let (records, _) = parse_reader(xml.as_slice(), Some(&owners)).unwrap();
         assert_eq!(records[0].conversation_kind, ConversationKind::Individual);
-        assert_eq!(records[0].sender_digits.as_deref(), Some("5555550101"));
+        assert_eq!(
+            records[0].sender.as_ref().map(Handle::key),
+            Some("+15555550101")
+        );
     }
 
     #[test]
@@ -1368,5 +1373,41 @@ mod tests {
         assert_eq!(records[0].text, "ab c d\u{a0}e");
         assert_eq!(records[1].text, "xy");
         assert_eq!(stats.dropped_character_references, 4);
+    }
+
+    #[test]
+    fn an_email_address_is_not_a_phone_number() {
+        let xml = br#"<smses><sms protocol="0" address="john1985@example.com" date="1" type="1" body="hi"/></smses>"#;
+        let (records, _) = parse_reader(xml.as_slice(), None).unwrap();
+        assert_eq!(records[0].chat_key, "john1985@example.com");
+        let sender = records[0].sender.as_ref().unwrap();
+        assert_eq!(
+            (sender.kind(), sender.key()),
+            (HandleType::Email, "john1985@example.com")
+        );
+    }
+
+    #[test]
+    fn a_number_with_its_country_keeps_it() {
+        let xml = br#"<smses><sms protocol="0" address="+6591234567" date="1" type="1" body="hi"/></smses>"#;
+        let (records, _) = parse_reader(xml.as_slice(), None).unwrap();
+        assert_eq!(records[0].chat_key, "+6591234567");
+    }
+
+    #[test]
+    fn a_sender_name_is_imported_as_an_identity_of_type_other() {
+        let xml = br#"<smses><sms protocol="0" address="AMAZON" date="1" type="1" body="Your parcel"/></smses>"#;
+        let (records, stats) = parse_reader(xml.as_slice(), None).unwrap();
+        assert_eq!(stats.skipped_unknown_address, 0);
+        let sender = records[0].sender.as_ref().unwrap();
+        assert_eq!((sender.kind(), sender.key()), (HandleType::Other, "AMAZON"));
+    }
+
+    #[test]
+    fn an_owner_outside_the_us_is_inferred_with_its_country() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("smses.xml");
+        std::fs::write(&path, r#"<smses><mms msg_box="2"><parts/><addrs><addr address="+447911123456" type="137"/></addrs></mms></smses>"#).unwrap();
+        assert_eq!(infer_owner_phones(&path).unwrap(), vec!["+447911123456"]);
     }
 }

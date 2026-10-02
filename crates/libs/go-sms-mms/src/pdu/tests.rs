@@ -18,10 +18,10 @@ fn a_received_message_names_its_sender_recipients_text_and_picture() {
         .build();
     let p = parse("I_1609459300_1_0.pdu", &bytes).unwrap();
     assert!(!p.is_sent);
-    assert_eq!(p.sender.as_deref(), Some("14075551234"));
+    assert_eq!(p.sender.as_deref(), Some("+14075551234"));
     assert_eq!(
         p.recipients,
-        ["15555550100", "14075559876"],
+        ["+15555550100", "+14075559876"],
         "once each, To before Cc"
     );
     assert_eq!(
@@ -49,7 +49,7 @@ fn a_sent_message_has_no_sender() {
     let p = parse("S_1609459300_1_0.pdu", &bytes).unwrap();
     assert!(p.is_sent);
     assert_eq!(p.sender, None);
-    assert_eq!(p.recipients, ["14075551234"]);
+    assert_eq!(p.recipients, ["+14075551234"]);
 }
 
 #[test]
@@ -191,23 +191,22 @@ fn a_ucs2_text_part_is_decoded_by_its_charset() {
 }
 
 #[test]
-fn addresses_keep_their_digits_only() {
+fn addresses_are_kept_as_written_without_their_type() {
     assert_eq!(
-        address_digits("+14075551234/TYPE=PLMN").as_deref(),
-        Some("14075551234")
+        address_value("+6591234567/TYPE=PLMN").as_deref(),
+        Some("+6591234567")
     );
-    assert_eq!(address_digits("4075551234").as_deref(), Some("4075551234"));
     assert_eq!(
-        address_digits("(407) 555-1234").as_deref(),
-        Some("4075551234")
+        address_value("(407) 555-1234").as_deref(),
+        Some("(407) 555-1234")
     );
-    assert_eq!(address_digits("someone@example.com"), None);
-    let bytes = PduBuilder::received("someone@example.com")
-        .to("+15555550100")
+    assert_eq!(address_value(" /TYPE=PLMN"), None);
+    let bytes = PduBuilder::received("ann2020@example.com")
+        .to("+15555550100/TYPE=PLMN")
         .to("other@example.com")
         .text("x")
         .build();
     let p = parse("I_1_1_0.pdu", &bytes).unwrap();
-    assert_eq!(p.sender, None);
-    assert_eq!(p.recipients, ["15555550100"]);
+    assert_eq!(p.sender.as_deref(), Some("ann2020@example.com"));
+    assert_eq!(p.recipients, ["+15555550100", "other@example.com"]);
 }

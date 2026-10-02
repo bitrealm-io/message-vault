@@ -1,5 +1,7 @@
 //! Shared parsed message types for SMS Backup+ EML conversion.
 
+use phone::Handle;
+
 #[derive(Debug, Clone, Default)]
 pub(crate) struct AttachmentBlob {
     pub filename: String,
@@ -12,13 +14,15 @@ pub(crate) struct AttachmentBlob {
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ParsedMessage {
+    /// The peer's handle key, the group key, or empty when the mail records
+    /// no address.
     pub chat_key: String,
     pub conversation_type: String,
     pub group_title: Option<String>,
-    pub participant_digits: Vec<(String, Option<String>)>,
+    pub participants: Vec<Handle>,
     pub timestamp_secs: f64,
     pub is_from_me: bool,
-    pub sender_digits: Option<String>,
+    pub sender: Option<Handle>,
     pub text: String,
     pub attachments: Vec<AttachmentBlob>,
     pub name_alias: Option<String>,

@@ -11,12 +11,13 @@
 //!    `m-retrieve-conf` is received. The file name prefix says the same
 //!    thing and is not consulted. Any other message type is an error: a
 //!    notification or a delivery report is not a message.
-//! 2. **The sender is the From header's phone number**, and the recipients
-//!    are To, Cc and Bcc in that order, each number once. A sent message has
-//!    no From (the phone writes the Insert-address-token), so its sender is
-//!    `None` and the caller knows the owner sent it. Only the digits are
-//!    kept: `+14075551234/TYPE=PLMN` becomes `14075551234`, and an address
-//!    with no digits (an email) is dropped.
+//! 2. **The sender is the From header's address**, and the recipients
+//!    are To, Cc and Bcc in that order, each address once. A sent message
+//!    has no From (the phone writes the Insert-address-token), so its sender
+//!    is `None` and the caller knows the owner sent it. An address is kept as
+//!    written, less its `/TYPE=` suffix: `+6591234567/TYPE=PLMN` becomes
+//!    `+6591234567` and `ann@example.com` stays as it is. What kind of
+//!    address it is, the caller decides.
 //! 3. **The time is the Date header**, and the file name's seconds when
 //!    the header is absent. Every real PDU has the header.
 //! 4. **The body is the `text/plain` parts joined with a newline**, in wire
@@ -58,9 +59,9 @@ pub struct ParsedPdu {
     pub timestamp: i64,
     /// True for a message the owner sent (rule 1).
     pub is_sent: bool,
-    /// Digits of the sender, absent on a sent message (rule 2).
+    /// The sender's address, absent on a sent message (rule 2).
     pub sender: Option<String>,
-    /// Digits of every recipient, once each, in wire order (rule 2).
+    /// Every recipient's address, once each, in wire order (rule 2).
     pub recipients: Vec<String>,
     /// The message text (rule 4).
     pub body: String,
@@ -124,10 +125,10 @@ pub fn parse_pdu_bytes(path: &Path, data: &[u8]) -> Result<ParsedPdu, PduError> 
         Some(other) => return Err(PduError::NotAMessage(other.name())),
         None => return Err(PduError::NotAMessage("a PDU without a type".to_string())),
     };
-    let sender = msg.from.as_deref().and_then(address_digits);
+    let sender = msg.from.as_deref().and_then(address_value);
     let mut recipients: Vec<String> = Vec::new();
     for addr in msg.to.iter().chain(&msg.cc).chain(&msg.bcc) {
-        if let Some(d) = address_digits(addr)
+        if let Some(d) = address_value(addr)
             && !recipients.contains(&d)
         {
             recipients.push(d);
@@ -185,13 +186,11 @@ pub fn parse_pdu_bytes(path: &Path, data: &[u8]) -> Result<ParsedPdu, PduError> 
     })
 }
 
-/// The digits of a phone address: `+14075551234/TYPE=PLMN` gives
-/// `14075551234`. `None` when there are none, which is what an email
-/// address gives.
-fn address_digits(addr: &str) -> Option<String> {
-    let base = addr.split('/').next().unwrap_or(addr);
-    let digits: String = base.chars().filter(char::is_ascii_digit).collect();
-    (!digits.is_empty()).then_some(digits)
+/// An address as written, less its `/TYPE=` suffix:
+/// `+6591234567/TYPE=PLMN` gives `+6591234567`. `None` when nothing is left.
+fn address_value(addr: &str) -> Option<String> {
+    let base = addr.split('/').next().unwrap_or(addr).trim();
+    (!base.is_empty()).then(|| base.to_string())
 }
 
 /// The seconds in `I_<seconds>_...` or `S_<seconds>_...`.

@@ -12,7 +12,7 @@ use message_ir::{
     IrAttachment, IrConversationType, IrDirection, IrMessage, IrMessageKind, IrParticipant,
     IrService, IrSource, SCHEMA_VERSION, owner_sender,
 };
-use phone::OwnerHandleSet;
+use phone::{Handle, OwnerHandleSet};
 use sbr::{
     AttachmentBlob, ConversationKind, ParseStats, Record, infer_owner_phones, parse_file_with,
 };
@@ -97,7 +97,8 @@ struct PendingAttachment {
 struct PendingMessage {
     sort_key: f64,
     is_from_me: bool,
-    sender_digits: Option<String>,
+    /// The sender's handle key, for an incoming message.
+    sender: Option<String>,
     sender_display_name: Option<String>,
     text: String,
     subject: String,
@@ -114,7 +115,8 @@ struct PendingMessage {
 struct PendingConversation {
     kind: ConversationKind,
     group_title: Option<String>,
-    participant_e164s: Vec<String>,
+    /// Each participant's handle key and kind.
+    participants: Vec<(String, HandleType)>,
     messages: Vec<PendingMessage>,
 }
 
@@ -201,14 +203,11 @@ fn stage_read_attachments(
     Ok(())
 }
 
-/// The conversation id: `chat-<key>` for groups, else the guarded-normalized address.
+/// The conversation id: `chat-<key>` for groups, else the peer's handle key.
 fn chat_id(record: &Record) -> String {
     match record.conversation_kind {
         ConversationKind::Group => format!("chat-{}", record.chat_key),
-        // Guarded policy on the raw address: E.164 only when unambiguous, so
-        // a trunk-zero `020 7946 0000` stays digits-as-is instead of being
-        // fabricated into `+02079460000`.
-        ConversationKind::Individual => phone::normalize_lenient(&record.chat_key),
+        ConversationKind::Individual => record.chat_key.clone(),
     }
 }
 
@@ -220,27 +219,27 @@ fn add_record(
 ) -> Result<()> {
     let id = chat_id(&record);
     let peers = record
-        .participant_digits
+        .participants
         .iter()
-        .map(|(d, _)| phone::normalize_lenient(d))
-        .filter(|d| !d.is_empty())
+        .map(|(h, _)| (h.key().to_string(), h.kind()))
         .collect();
     let conversation = conversations
         .entry(id)
         .or_insert_with(|| PendingConversation {
             kind: record.conversation_kind,
             group_title: record.group_title.clone(),
-            participant_e164s: peers,
+            participants: peers,
             messages: Vec::new(),
         });
     let names: Vec<_> = attachments.iter().map(|a| a.digest.as_str()).collect();
     // Include the full fractional timestamp and sender to avoid false deduplication
     // of distinct messages within the same second.
+    let sender = record.sender.map(Handle::into_key);
     let dedupe_key = format!(
         "{}|{}|{}|{}|{}",
         record.timestamp_secs,
         u8::from(record.is_from_me),
-        record.sender_digits.as_deref().unwrap_or(""),
+        sender.as_deref().unwrap_or(""),
         record.text,
         names.join(",")
     );
@@ -251,7 +250,7 @@ fn add_record(
     conversation.messages.push(PendingMessage {
         sort_key: record.timestamp_secs,
         is_from_me: record.is_from_me,
-        sender_digits: record.sender_digits,
+        sender,
         sender_display_name: record.sender_display_name,
         text: record.text,
         subject: record.subject,
@@ -277,21 +276,21 @@ fn dedupe(messages: &mut Vec<PendingMessage>) {
 fn names_by_handle(conversation: &PendingConversation) -> HashMap<String, String> {
     let mut names = HashMap::new();
     for message in &conversation.messages {
-        if let (Some(digits), Some(name)) = (
-            &message.sender_digits,
+        if let (Some(sender), Some(name)) = (
+            &message.sender,
             message
                 .sender_display_name
                 .as_deref()
                 .and_then(message_ir::trimmed),
         ) {
             names
-                .entry(phone::normalize_lenient(digits))
+                .entry(sender.clone())
                 .or_insert_with(|| name.to_string());
         }
         if conversation.kind == ConversationKind::Individual {
             let name = message.contact_name.trim();
             if !name.is_empty() {
-                for peer in &conversation.participant_e164s {
+                for (peer, _) in &conversation.participants {
                     names
                         .entry(peer.clone())
                         .or_insert_with(|| name.to_string());
@@ -370,13 +369,7 @@ fn ir_message(
     let (sender_handle, sender_display_name) = if message.is_from_me {
         owner.clone()
     } else {
-        (
-            message
-                .sender_digits
-                .as_deref()
-                .map(phone::normalize_lenient),
-            message.sender_display_name.clone(),
-        )
+        (message.sender.clone(), message.sender_display_name.clone())
     };
     IrMessage {
         guid: stable_guid(
@@ -426,19 +419,17 @@ fn ir_attachment(a: &PendingAttachment) -> IrAttachment {
     }
 }
 
-/// Every participant as a phone handle, named when the XML named it. SBR
-/// participants are E.164 numbers by construction (`participant_e164s`),
-/// so the type is always Phone.
+/// Every participant with the kind of address it is, named when the XML
+/// named it.
 fn ir_participants(conversation: &PendingConversation) -> Vec<IrParticipant> {
     let names = names_by_handle(conversation);
     conversation
-        .participant_e164s
+        .participants
         .iter()
-        .filter(|h| !h.is_empty())
-        .map(|handle| IrParticipant {
+        .map(|(handle, kind)| IrParticipant {
             handle: Some(handle.clone()),
             display_name: names.get(handle).cloned(),
-            handle_type: Some(HandleType::Phone),
+            handle_type: Some(*kind),
         })
         .collect()
 }
@@ -641,7 +632,7 @@ mod tests {
         let doc = &docs[0];
         assert_eq!(
             doc.conversation.chat_identifier,
-            "chat-group-5555550101_5555550102_5555550103"
+            "chat-group-+15555550101_+15555550102_+15555550103"
         );
         assert_eq!(doc.export.owner_handle.as_deref(), Some("+15555550100"));
         let mut participants: Vec<_> = doc
@@ -835,5 +826,57 @@ mod tests {
             .collect();
         let (docs, _) = read_backup(&input, opts(&owners, None, false)).unwrap();
         assert_eq!(docs[0].export.owner_handle.as_deref(), Some("+15555550109"));
+    }
+
+    #[test]
+    fn an_international_number_keeps_its_country() {
+        let docs = read_xml(
+            r#"<sms protocol="0" address="+6591234567" date="1400773261000" type="1" body="hi"/><sms protocol="0" address="+447700900123" date="1400773261000" type="1" body="hi"/>"#,
+        );
+        let ids: Vec<_> = docs
+            .iter()
+            .map(|d| d.conversation.chat_identifier.as_str())
+            .collect();
+        assert_eq!(ids, ["+447700900123", "+6591234567"]);
+    }
+
+    #[test]
+    fn an_email_sender_is_an_email_identity() {
+        let docs = read_xml(
+            r#"<sms protocol="0" address="john1985@example.com" date="1400773261000" type="1" body="hi"/>"#,
+        );
+        assert_eq!(docs[0].conversation.chat_identifier, "john1985@example.com");
+        let participant = &docs[0].conversation.participants[0];
+        assert_eq!(participant.handle.as_deref(), Some("john1985@example.com"));
+        assert_eq!(participant.handle_type, Some(HandleType::Email));
+        assert_eq!(
+            docs[0].messages[0].sender_handle.as_deref(),
+            Some("john1985@example.com")
+        );
+    }
+
+    #[test]
+    fn a_sender_name_is_an_identity_of_type_other() {
+        let docs = read_xml(
+            r#"<sms protocol="0" address="AMAZON" date="1400773261000" type="1" body="Your parcel"/>"#,
+        );
+        let participant = &docs[0].conversation.participants[0];
+        assert_eq!(participant.handle.as_deref(), Some("AMAZON"));
+        assert_eq!(participant.handle_type, Some(HandleType::Other));
+    }
+
+    /// With no owner on the form, the owner comes from the sent MMS, and a
+    /// UK owner keeps its country, as the account's identity does.
+    #[test]
+    fn an_inferred_owner_outside_the_us_keeps_its_country() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("input.xml");
+        fs::write(&input, r#"<smses><mms date="1400773400000" msg_box="2" address="+447700900123"><parts><part ct="text/plain" text="hi"/></parts><addrs><addr address="+447911123456" type="137"/><addr address="+447700900123" type="151"/></addrs></mms></smses>"#).unwrap();
+        let (docs, _) = read_backup(&input, opts(&[], None, false)).unwrap();
+        assert_eq!(
+            docs[0].export.owner_handle.as_deref(),
+            Some("+447911123456")
+        );
+        assert_eq!(docs[0].conversation.chat_identifier, "+447700900123");
     }
 }

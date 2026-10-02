@@ -18,13 +18,13 @@ Source EML → `ConversationDocument` → [`message_ir_format::FormatSink`](http
 
 The desktop app's Import screen always writes JSON Lines, one file per conversation, because Import and Push read conversation files in that form. Every other format (JSON, CSV, EML, MBOX, SMS Backup & Restore XML) is a rewrite of that output through [Convert](/docs/developer/formats/convert/), which Export and **Settings → Convert** run.
 
-In CSV form: one file per conversation (header + one row per message after dedupe). MIME attachments under `attachments/` when copying/embedding. Filenames: 1:1 → `+E164.csv`; untitled groups → `group_+A_+B_….csv` (max 10 phones, then a hash). Peers with no usable phone number are written to `unknown.csv`. The XML form is a single SyncTech `smses.xml`.
+In CSV form: one file per conversation (header + one row per message after dedupe). MIME attachments under `attachments/` when copying/embedding. Filenames: 1:1 → `+E164.csv`; untitled groups → `group_+A_+B_….csv` (max 10 phones, then a hash). A mail with no `X-smssync-address` is keyed by a stem of the name in its subject. The XML form is a single SyncTech `smses.xml`.
 
 ## Source → shared fields
 
 | Shared field | EML source |
 |---------------|------------|
-| `chat_identifier` | Peer E.164 or `chat-group-…` |
+| `chat_identifier` | Peer's handle key (a number, an email address or a sender name, classified by `phone::Handle::parse`) or `chat-group-…` |
 | `conversation_type` | `individual` / `group` from address list |
 | `group_title` | Derived for groups (empty for 1:1) |
 | `participants_json` | Peer handles for the conversation |

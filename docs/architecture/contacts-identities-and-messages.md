@@ -90,13 +90,24 @@ rows differ only by service, and splitting them would show one person twice.
 **A phone number has one key everywhere.** `phone::normalize_typed_handle`
 gives a number its key, and the same key is used by the `handles` row, by the
 entry the contacts book files it under, and by the owner's own numbers
-(`OwnerHandleSet`). A number written with `+` keeps its country:
-`+65 9123 4567` is `+6591234567`. A number without `+` is read as a US
+(`OwnerHandleSet`). A number with a `+` before its first digit keeps its
+country: `+65 9123 4567` is `+6591234567`, and `(+44) 7700 900123` and
+`tel:+447700900123` are `+447700900123`. A number without `+` is read as a US
 number when it has ten digits, or eleven starting with `1`. Anything else keeps
 its digits as written, so `020 7946 0000` is `02079460000` and never the
 invented `+02079460000`. Why: a book or owner key that differs from the handle
 key names nobody, or names the wrong person. Stripping the `+` first once filed
 `+65 9123 4567` under the US number `+16591234567`.
+
+**An address is classified once, from the value the backup wrote.**
+`phone::Handle::parse` decides what an address is before anything else
+touches it: one with `@` is an email address, one written as a number is a
+phone number keyed as above, and anything else, such as `AMAZON`, is a
+sender name and becomes an identity of type `other`. The SMS exporters
+carry the `Handle` from there to the sender, the participants and the owner.
+Why: the SMS exporters once stripped every address to its digits first, so
+`john1985@example.com` became the phone identity `1985` and a message from
+`AMAZON` was dropped.
 
 **An import names only a nameless contact.** When the backup knows a name and
 the contact has none, the import sets it and marks it as imported. A name a

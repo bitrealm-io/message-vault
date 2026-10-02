@@ -8,6 +8,7 @@
 //! *what that means* for the journal, the report, and the log.
 
 use std::collections::BTreeSet;
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::thread::JoinHandle;
 use std::time::Instant;
@@ -16,6 +17,7 @@ use anyhow::Result;
 use message_crate_core::check_cancel;
 use message_crate_http::HttpError;
 
+use crate::folder::file_label;
 use crate::http;
 use crate::journal::{JournalMessage, RunJournal};
 use crate::prepare::{ImportChunk, PreparedFile, SharedJournal};
@@ -223,7 +225,8 @@ pub(crate) struct ImportPipeline<'a> {
     inflight: Option<JoinHandle<ImportHttpOutcome>>,
     /// One slot per conversation file, filled once its chunks are queued.
     trackers: Vec<Option<FileTracker>>,
-    /// One slot per conversation file, filled as each one finishes or is skipped.
+    /// One slot per conversation file, filled as each one finishes, is
+    /// skipped, or is left unsent by a stop ([`Self::record_cancelled`]).
     results: Vec<Option<FileResult>>,
     accounting: MessageAccounting,
 }
@@ -249,6 +252,40 @@ impl<'a> ImportPipeline<'a> {
             trackers: std::iter::repeat_with(|| None).take(total).collect(),
             results: vec![None; total],
             accounting: MessageAccounting::default(),
+        }
+    }
+
+    /// Give every file still without a result a `cancelled` one.
+    ///
+    /// Only a stopped run leaves such files: the ones it never took up, and
+    /// the one whose messages were partly queued when the stop came. A
+    /// cancelled file is not journalled as done, so a later run sends it
+    /// again; any of its messages that did reach the server are already in
+    /// the journal and are not sent twice.
+    pub(crate) fn record_cancelled(&mut self, files: &[PathBuf], out: &mut Reporter<'_, '_>) {
+        for (idx, path) in files.iter().enumerate() {
+            if self.results[idx].is_some() {
+                continue;
+            }
+            let result = match self.trackers[idx].as_mut() {
+                Some(tracker) => {
+                    tracker.profile.total_ms = elapsed_ms(tracker.total_started);
+                    FileResult {
+                        file: tracker.name.clone(),
+                        status: "cancelled".into(),
+                        error: None,
+                        messages: tracker.successful_messages,
+                        attachments: tracker.attachments,
+                        profile: Some(tracker.profile.clone()),
+                    }
+                }
+                None => FileResult::cancelled(&file_label(path)),
+            };
+            out.log(&format!(
+                "cancelled {} msgs={}",
+                result.file, result.messages
+            ));
+            self.results[idx] = Some(result);
         }
     }
 

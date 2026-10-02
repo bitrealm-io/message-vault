@@ -125,6 +125,13 @@ fn the_server_is_started_on_this_computer_with_no_config_file() {
 }
 
 #[test]
+fn a_dev_build_keeps_its_data_apart_from_the_installed_app() {
+    let app_data = Path::new("/home/someone/.local/share/app.messagecrate.desktop");
+    assert_eq!(data_dir_in(app_data, false), app_data.join("data"));
+    assert_eq!(data_dir_in(app_data, true), app_data.join("data-dev"));
+}
+
+#[test]
 fn open_to_the_network_listens_on_every_address_at_the_same_port() {
     let launch = Launch {
         open_to_network: true,

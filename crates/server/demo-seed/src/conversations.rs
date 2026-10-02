@@ -1326,7 +1326,7 @@ fn push_tapback(
         "kind": kind,
         "emoji": emoji,
         "is_from_me": from_me,
-        "sender": sender_value,
+        "reactor_handle": sender_value,
     }));
     im.tapbacks = Some(serde_json::Value::Array(taps));
 }

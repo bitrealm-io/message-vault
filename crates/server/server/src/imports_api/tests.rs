@@ -248,7 +248,7 @@ fn missing_attachment_json(name: &str) -> String {
     )
 }
 
-const TAPBACK_IMESSAGE: &str = r#"{"is_reply":false,"in_reply_to_guid":null,"thread_originator_part":null,"num_replies":null,"is_deleted":false,"send_effect":null,"shared_location":null,"announcement":null,"read_receipt_rfc3339":null,"parts":null,"edits":null,"tapbacks":[{"emoji":null,"is_from_me":false,"kind":"liked","part_index":0,"sender":"+15555550999"}],"app":null,"balloon_bundle_id":null,"balloon_kind":null,"associated_guid":null,"associated_part":null,"tapback_kind":null,"tapback_emoji":null,"tapback_action":null}"#;
+const TAPBACK_IMESSAGE: &str = r#"{"is_reply":false,"in_reply_to_guid":null,"thread_originator_part":null,"num_replies":null,"is_deleted":false,"send_effect":null,"shared_location":null,"announcement":null,"read_receipt_rfc3339":null,"parts":null,"edits":null,"tapbacks":[{"emoji":null,"is_from_me":false,"kind":"liked","part_index":0,"reactor_handle":"+15555550999"}],"app":null,"balloon_bundle_id":null,"balloon_kind":null,"associated_guid":null,"associated_part":null,"tapback_kind":null,"tapback_emoji":null,"tapback_action":null}"#;
 
 fn chunk_boundary_jsonl() -> String {
     let header = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550123","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550123","display_name":null},{"handle":"+15555550999","display_name":null}],"stats":{"message_count":56,"attachment_count":2,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183517000}}}"#;
@@ -312,6 +312,48 @@ async fn staging_chunks_56_messages_and_keeps_children_on_right_rows() {
     assert_eq!(first_atts, 1);
     assert_eq!(last_atts, 1);
     assert_eq!(second_taps, 1);
+}
+
+/// Bob hearts the owner's message and then removes the heart. The Apple
+/// Messages reader writes both reactions as rows of their own and leaves the
+/// removed heart out of the message's `tapbacks` list. The import stores the
+/// message alone, with no heart on it (#1213).
+#[tokio::test]
+async fn a_removed_reaction_leaves_no_message_and_no_reaction() {
+    let tmp = TempDir::new().unwrap();
+    let db = tmp.path().join("messagecrate.db");
+    let assets = tmp.path().join("assets");
+    let header = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550123","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550123","display_name":"Bob"}],"stats":{"message_count":3,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183464000}}}"#;
+    let target = r#"{"guid":"g-hi","timestamp_unix_ms":1426183462000,"direction":"outgoing","service":"imessage","message_kind":"imessage","sender_handle":null,"sender_display_name":null,"subject":null,"text":"hi","attachments":[],"imessage":null,"source":null}"#;
+    let reaction = |guid: &str, ts: i64, text: &str, action: &str| {
+        format!(
+            r#"{{"guid":"{guid}","timestamp_unix_ms":{ts},"direction":"incoming","service":"imessage","message_kind":"tapback","sender_handle":"+15555550123","sender_display_name":"Bob","subject":null,"text":"{text}","attachments":[],"imessage":{{"is_reply":false,"is_deleted":false,"associated_guid":"g-hi","associated_part":0,"tapback_kind":"loved","tapback_action":"{action}"}},"source":null}}"#
+        )
+    };
+    let loved = reaction("g-love", 1_426_183_463_000, "Loved a message", "add");
+    let removed = reaction("g-unlove", 1_426_183_464_000, "Removed Heart", "remove");
+    let path = write_jsonl(
+        tmp.path(),
+        "removed-heart.jsonl",
+        &format!("{header}\n{target}\n{loved}\n{removed}\n"),
+    );
+    let stats = import_jsonl_files(&db, &[path], &replace_opts(&assets, tmp.path(), "imessage"))
+        .await
+        .unwrap();
+    assert_eq!(stats.messages, 1);
+    assert_eq!(stats.tapbacks, 0);
+
+    let (_pool, mut conn) = open_verify(&db).await;
+    let guids: Vec<String> = sqlx::query_scalar("SELECT guid FROM messages ORDER BY guid")
+        .fetch_all(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(guids, ["g-hi"]);
+    let tapbacks: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tapbacks")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(tapbacks, 0);
 }
 
 #[tokio::test]
@@ -432,7 +474,7 @@ async fn append_existing_guid_adds_missing_children() {
         "children-second.jsonl",
         &format!(
             "{header}\n{}\n",
-            r#"{"guid":"g-children","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550123","sender_display_name":null,"subject":null,"text":"replacement body","attachments":[{"path":"attachments/missing.bin","original_name":"zqinvoice.pdf","mime_type":"application/octet-stream","digest_sha256":null,"is_sticker":false,"transcription":null,"sticker_effect":null,"size_bytes":12,"missing_reason":"not_found"}],"imessage":{"is_reply":false,"in_reply_to_guid":null,"thread_originator_part":null,"num_replies":null,"is_deleted":false,"send_effect":null,"shared_location":null,"announcement":null,"read_receipt_rfc3339":null,"parts":null,"edits":null,"tapbacks":[{"emoji":null,"is_from_me":false,"kind":"liked","part_index":0,"sender":"+15555550999"}],"app":null,"balloon_bundle_id":null,"balloon_kind":null,"associated_guid":null,"associated_part":null,"tapback_kind":null,"tapback_emoji":null,"tapback_action":null},"source":null}"#
+            r#"{"guid":"g-children","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550123","sender_display_name":null,"subject":null,"text":"replacement body","attachments":[{"path":"attachments/missing.bin","original_name":"zqinvoice.pdf","mime_type":"application/octet-stream","digest_sha256":null,"is_sticker":false,"transcription":null,"sticker_effect":null,"size_bytes":12,"missing_reason":"not_found"}],"imessage":{"is_reply":false,"in_reply_to_guid":null,"thread_originator_part":null,"num_replies":null,"is_deleted":false,"send_effect":null,"shared_location":null,"announcement":null,"read_receipt_rfc3339":null,"parts":null,"edits":null,"tapbacks":[{"emoji":null,"is_from_me":false,"kind":"liked","part_index":0,"reactor_handle":"+15555550999"}],"app":null,"balloon_bundle_id":null,"balloon_kind":null,"associated_guid":null,"associated_part":null,"tapback_kind":null,"tapback_emoji":null,"tapback_action":null},"source":null}"#
         ),
     );
 

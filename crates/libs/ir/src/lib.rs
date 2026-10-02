@@ -516,7 +516,10 @@ pub struct IrImessage {
     pub parts: Option<Value>,
     /// Apple `edits` blob as a JSON value.
     pub edits: Option<Value>,
-    /// Apple `tapbacks` blob as a JSON value.
+    /// Apple `tapbacks` blob as a JSON value: a list of reactions, each with
+    /// `part_index`, `kind`, `emoji`, `is_from_me`, `reactor_handle` and
+    /// `reactor_display_name`. Each entry names its own reactor, who is
+    /// rarely the author of the message.
     pub tapbacks: Option<Value>,
     /// Apple `app` blob as a JSON value.
     pub app: Option<Value>,

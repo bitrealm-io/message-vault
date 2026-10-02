@@ -285,15 +285,17 @@ flowchart TD
 ## Open questions
 
 These are what the code does today. None has been decided as a rule, and
-each may change.
+each has an open issue.
 
-- **Should a load replace a name a person typed?** It does. Before the
+- **Should a load replace a name a person typed?** (#1057) It does. Before the
   address book became Message Crate's own CSV, a load replaced only an
   imported name.
-- **Should an import name a nameless contact a load made?** It does not. The
+- **Should an import name a nameless contact a load made?** (#1058) It does
+  not. The
   import's rule needs the contact to be both nameless and of origin
   `import`.
-- **Should a load be able to split one number across two contacts?** It can.
+- **Should a load be able to split one number across two contacts?** (#1059)
+  It can.
   An import puts a number's text-message identity and its WhatsApp identity
   on one contact. A load that lists only one of them moves that one and
   leaves the other behind, which the rule "one number is one person on every

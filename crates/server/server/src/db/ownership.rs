@@ -76,8 +76,8 @@ impl OwnedTable {
     }
 }
 
-/// The ids in `ids` that `table` does not hold for `account_id`, in the
-/// order given.
+/// The ids in `ids` that `table` does not hold for `account_id`, in
+/// ascending order, each once however often `ids` repeats it.
 ///
 /// # Errors
 ///
@@ -108,6 +108,7 @@ pub async fn missing_ids(
         .copied()
         .filter(|id| !found.contains(id))
         .collect();
+    missing.sort_unstable();
     missing.dedup();
     Ok(missing)
 }

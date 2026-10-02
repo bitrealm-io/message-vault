@@ -294,6 +294,51 @@ async fn failed_reset_preserves_existing_demo_account() {
     );
 }
 
+/// A reset whose rebuild fails never touched the active database, so it
+/// leaves `server.ready` in place for sqlite-web, which waits for it (#1224).
+#[tokio::test]
+async fn a_reset_whose_rebuild_fails_leaves_the_database_and_server_ready_in_place() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let db = temp.path().join("messagecrate.db");
+    seed_reset_test_database(&db).await;
+    crate::operation_lock::mark_ready(&db).expect("write server.ready");
+    let bundle = temp.path().join("bundle");
+    write_tiny_reset_bundle(&bundle);
+    fs::write(
+        bundle.join("staging").join(IMESSAGE_SOURCE).join("a.jsonl"),
+        "not a conversation\n",
+    )
+    .expect("write unreadable jsonl");
+    let cfg = Config {
+        paths: PathsConfig {
+            db: db.clone(),
+            data_dir: temp.path().join("data"),
+            assets_dir: "assets".into(),
+            assets_converted_dir: "assets_converted".into(),
+        },
+        server: None,
+    };
+
+    let result = reset_prepared_bundle(
+        &cfg,
+        &bundle,
+        DEMO_ACCOUNT_ID,
+        &temp.path().join("config/config.toml"),
+        &temp.path().join("prepared-config.toml"),
+    )
+    .await;
+
+    assert!(
+        result.is_err(),
+        "an unreadable JSONL file fails the rebuild"
+    );
+    assert!(
+        crate::operation_lock::ready_path(&db).is_file(),
+        "server.ready is back after the failed reset"
+    );
+    assert_reset_test_database(&db).await;
+}
+
 #[tokio::test]
 async fn failed_preparation_preserves_active_config() {
     let temp = tempfile::tempdir().expect("create test directory");
@@ -919,6 +964,8 @@ async fn a_successful_install_removes_the_work_directories() {
         },
         db_work,
         data_work,
+        &mut crate::operation_lock::ReadyWhileRebuilding::clear(&active_db)
+            .expect("clear server.ready"),
     )
     .await
     .expect("install the prepared state");
@@ -957,6 +1004,8 @@ async fn a_failed_install_with_nothing_left_in_the_work_directories_removes_them
     let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID.to_string());
     let active_config = temp.path().join("config/config.toml");
 
+    let mut ready =
+        crate::operation_lock::ReadyWhileRebuilding::clear(&active_db).expect("clear server.ready");
     let error = install_reset_state_or_keep_work(
         &ResetPaths {
             active_db: &active_db,
@@ -968,6 +1017,7 @@ async fn a_failed_install_with_nothing_left_in_the_work_directories_removes_them
         },
         db_work,
         data_work,
+        &mut ready,
     )
     .await
     .expect_err("an incomplete prepared state must fail");
@@ -978,6 +1028,11 @@ async fn a_failed_install_with_nothing_left_in_the_work_directories_removes_them
         "{text}"
     );
     assert!(!text.contains("rollback was incomplete"), "{text}");
+    drop(ready);
+    assert!(
+        crate::operation_lock::ready_path(&active_db).is_file(),
+        "the previous state is still installed, so server.ready is written back"
+    );
     assert!(!db_work_path.exists(), "{}", db_work_path.display());
     assert!(!data_work_path.exists(), "{}", data_work_path.display());
 }
@@ -1002,6 +1057,8 @@ async fn a_failed_install_that_left_previous_state_in_the_work_directories_keeps
     let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID.to_string());
     let active_config = temp.path().join("config/config.toml");
 
+    let mut ready =
+        crate::operation_lock::ReadyWhileRebuilding::clear(&active_db).expect("clear server.ready");
     let error = install_reset_state_or_keep_work(
         &ResetPaths {
             active_db: &active_db,
@@ -1013,9 +1070,15 @@ async fn a_failed_install_that_left_previous_state_in_the_work_directories_keeps
         },
         db_work,
         data_work,
+        &mut ready,
     )
     .await
     .expect_err("an incomplete prepared state must fail");
+    drop(ready);
+    assert!(
+        !crate::operation_lock::ready_path(&active_db).exists(),
+        "the previous state is in the work directories, so server.ready stays removed"
+    );
 
     let text = format!("{error:#}");
     assert!(

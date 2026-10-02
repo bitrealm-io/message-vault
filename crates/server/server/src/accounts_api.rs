@@ -824,13 +824,27 @@ pub async fn delete_account(
     }
 
     account_profile::delete_account(&mut conn, target).await?;
+    // The account is gone once its row is, so a folder that cannot be removed
+    // (a permission error, a busy file) is logged with its path rather than
+    // answered as a failure. No later account takes this id, so the folder
+    // stays out of every account's reach until someone removes it.
     let account_root = state.cfg.paths.data_dir.join(target.to_string());
     if account_root.exists() {
         let root = account_root.clone();
-        tokio::task::spawn_blocking(move || std::fs::remove_dir_all(&root))
-            .await
-            .map_err(|e| ApiError::Internal(anyhow::anyhow!("remove account data dir task: {e}")))?
-            .with_context(|| format!("remove account data dir {}", account_root.display()))?;
+        let removed = tokio::task::spawn_blocking(move || std::fs::remove_dir_all(&root)).await;
+        let failure = match removed {
+            Ok(Ok(())) => None,
+            Ok(Err(e)) => Some(e.to_string()),
+            Err(e) => Some(e.to_string()),
+        };
+        if let Some(error) = failure {
+            tracing::warn!(
+                account_id = target,
+                path = %account_root.display(),
+                %error,
+                "account deleted, but its data folder could not be removed"
+            );
+        }
     }
     Ok(StatusCode::NO_CONTENT)
 }

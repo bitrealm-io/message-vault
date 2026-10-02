@@ -718,6 +718,17 @@ fn kind_of_reads_the_extension_first_and_never_converts_a_gif() {
     assert_eq!(kind_of(Path::new("x.bin"), Some("  "), &[]), None);
 }
 
+#[test]
+fn a_gif_declared_in_capitals_or_with_parameters_is_not_converted() {
+    for mime in ["image/GIF", "image/gif; charset=binary", " Image/Gif "] {
+        assert_eq!(
+            kind_of(Path::new("blob"), Some(mime), &[]),
+            None,
+            "{mime} names a GIF, and a GIF is never converted"
+        );
+    }
+}
+
 const SHA: &str = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
 
 #[test]

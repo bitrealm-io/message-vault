@@ -114,6 +114,9 @@ pub fn tag_spec() -> &'static MembershipSpec {
             "group",
             "labels",
             "label",
+            // `tag:none` means "no tag", quoted or not, so a tag under this
+            // name would list the untagged conversations.
+            "none",
         ],
         special_reserved: &[],
         on_change: None,

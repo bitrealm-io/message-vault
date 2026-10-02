@@ -260,6 +260,7 @@ fn report_for(out_dir: &Path, downloaded: u64, skipped: u64) -> PullReport {
         messages: 3,
         attachments_downloaded: downloaded,
         attachments_skipped: skipped,
+        refused_attachment_paths: Vec::new(),
         out_dir: out_dir.display().to_string(),
     }
 }
@@ -322,6 +323,92 @@ fn a_pull_records_one_run_and_writes_the_conversation_and_every_asset_once_acros
         doc.messages[1].attachments[0].path.as_deref(),
         Some(format!("attachments/{PHOTO_SHA}").as_str())
     );
+}
+
+/// The server can hold an attachment path that climbs out of a folder or
+/// names an absolute one, because an import that reuses a stored fingerprint
+/// never read the file at that path. Joined onto the output folder, such a
+/// path would write the download anywhere on disk. Each one is refused: the
+/// file lands at `attachments/{sha256}`, the conversation file names that
+/// path, and the report and the log name the refused path.
+#[test]
+fn an_attachment_path_that_leaves_the_output_folder_is_written_under_its_fingerprint_instead() {
+    let server = MockServer::start();
+    let _auth = mock_auth(&server);
+    let (_create, complete) = mock_run(&server);
+    let dir = tempdir().unwrap();
+    let out = dir.path().join("pulled");
+    let climbing = "../escape.pdf";
+    let absolute = dir.path().join("absolute.png").display().to_string();
+    let page = server.mock(|when, then| {
+        when.method(GET)
+            .path(format!("/v1/exports/{EXPORT_ID}/messages"))
+            .query_param("offset", "0");
+        then.status(200).json_body(json!({
+            "items": [
+                message(
+                    1, "sms-backup-restore", "guid-1", "2015-03-12T18:05:01Z", "the menu",
+                    json!([menu_attachment(json!(climbing))])
+                ),
+                message(
+                    2, "sms-backup-restore", "guid-2", "2015-03-12T18:05:02Z", "the photo",
+                    json!([{
+                        "path": absolute,
+                        "original_name": "photo.png",
+                        "mime_type": "image/png",
+                        "sha256": PHOTO_SHA
+                    }])
+                )
+            ],
+            "total": 2,
+            "limit": 2,
+            "offset": 0
+        }));
+    });
+    let _menu = mock_asset(&server, MENU_SHA, "sms-backup-restore", MENU_BYTES);
+    let _photo = mock_asset(&server, PHOTO_SHA, "sms-backup-restore", PHOTO_BYTES);
+    let mut events = Vec::new();
+    let mut on_progress = |event: ProgressEvent| events.push(event);
+
+    let report = run(&config(&out, server.base_url()), Some(&mut on_progress)).unwrap();
+
+    page.assert();
+    complete.assert();
+    assert!(!dir.path().join("escape.pdf").exists());
+    assert!(!dir.path().join("absolute.png").exists());
+    assert_eq!(
+        fs::read(out.join("attachments").join(MENU_SHA)).unwrap(),
+        MENU_BYTES
+    );
+    assert_eq!(
+        fs::read(out.join("attachments").join(PHOTO_SHA)).unwrap(),
+        PHOTO_BYTES
+    );
+    let doc = read_conversation_jsonl(&out.join(CONVERSATION_FILE)).unwrap();
+    let written: Vec<Option<&str>> = doc
+        .messages
+        .iter()
+        .map(|m| m.attachments[0].path.as_deref())
+        .collect();
+    assert_eq!(
+        written,
+        [
+            Some(format!("attachments/{MENU_SHA}").as_str()),
+            Some(format!("attachments/{PHOTO_SHA}").as_str()),
+        ]
+    );
+    let mut refused = vec![climbing.to_string(), absolute.clone()];
+    refused.sort();
+    assert_eq!(report.refused_attachment_paths, refused);
+    for (path, sha) in [(climbing, MENU_SHA), (absolute.as_str(), PHOTO_SHA)] {
+        let line = format!(
+            "warning: attachment path {path} would leave the output folder; written at attachments/{sha} instead"
+        );
+        assert!(
+            events.contains(&ProgressEvent::Log(line.clone())),
+            "the log names {path}: {events:?}"
+        );
+    }
 }
 
 #[test]

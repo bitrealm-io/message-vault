@@ -58,7 +58,7 @@ pub fn estimate_bytes(
 ) -> u64 {
     let ext = ext.to_ascii_lowercase();
     let ext = ext.as_str();
-    if untouched_by(ext, mode) || skipped_as_efficient(ext, probe, mode, compress) {
+    if untouched_by(ext, mode) || only_remuxed_by_compress(size_bytes, ext, probe, mode, compress) {
         return size_bytes;
     }
     let factor = format_factor(ext, probe, mode);
@@ -92,7 +92,7 @@ pub fn classify_probed(
     if !is_processable(ext) {
         return size_only(size_bytes, limit_bytes, SizeVerdict::CannotProcess);
     }
-    if untouched_by(ext, mode) || skipped_as_efficient(ext, probe, mode, compress) {
+    if untouched_by(ext, mode) || only_remuxed_by_compress(size_bytes, ext, probe, mode, compress) {
         return size_only(size_bytes, limit_bytes, SizeVerdict::ProbablyTooBig);
     }
     if !needs_probe(size_bytes, limit_bytes) {
@@ -159,29 +159,37 @@ fn untouched_by(ext: &str, mode: MediaMode) -> bool {
     )
 }
 
-/// Would `compress_video` skip re-encoding this file and only remux it,
-/// because it is already an efficient HEVC stream?
+/// Would `compress_video` skip re-encoding this file and only remux it?
 ///
-/// Calls the pass's own [`is_efficient`] predicate rather than restating its
-/// codec/resolution/bitrate thresholds, so the forecast cannot drift from
-/// what `compress_video` (process.rs) actually decides. Only applies to
-/// video in `Compress` mode with `skip_efficient` on and an actual probe in
-/// hand — an un-probed file (outside the probe band, or an audio/image file
-/// this crate never calls ffprobe for) cannot be judged efficient, so this
-/// answers `false` rather than guessing.
-fn skipped_as_efficient(
+/// `compress_video` (process.rs) only remuxes a video in two cases, and this
+/// mirrors both. A video under `min_size_bytes` is remuxed whatever its codec,
+/// so the size rule needs no probe. A video already on an efficient HEVC
+/// stream is remuxed when `skip_efficient` is on; that rule calls the pass's
+/// own [`is_efficient`] predicate rather than restating its
+/// codec/resolution/bitrate thresholds, so the forecast cannot drift from the
+/// pass. An un-probed file (outside the probe band, or an audio/image file
+/// this crate never calls ffprobe for) cannot be judged efficient, so that
+/// rule answers `false` rather than guessing.
+fn only_remuxed_by_compress(
+    size_bytes: u64,
     ext: &str,
     probe: Option<&MediaProbe>,
     mode: MediaMode,
     compress: &CompressOptions,
 ) -> bool {
-    if !matches!(mode, MediaMode::Compress) || !compress.skip_efficient {
+    if !matches!(mode, MediaMode::Compress) {
         return false;
     }
     if !matches!(
         classify(&Path::new("f").with_extension(ext)),
         Some(Kind::Video)
     ) {
+        return false;
+    }
+    if size_bytes < compress.min_size_bytes {
+        return true;
+    }
+    if !compress.skip_efficient {
         return false;
     }
     let Some(probe) = probe else {
@@ -245,14 +253,16 @@ fn format_factor(ext: &str, probe: Option<&MediaProbe>, mode: MediaMode) -> f64 
         // fallback is format_factor's concern), so a source already on a more
         // efficient codec grows — decision 12's headline case.
         //
-        // `compress_video` re-encodes to HEVC (libx265) at a fixed CRF, so an
-        // already-efficient HEVC source never reaches this arm at all — it is
-        // caught upstream by `skipped_as_efficient` and judged on its
-        // unchanged size instead. What *does* land here in `Compress` mode is
-        // a codec (HEVC included) that failed the efficiency check — too big,
-        // too high-bitrate, or the wrong resolution — so the flat 0.7 general
-        // compress factor applies uniformly; there is no case left where the
-        // convert-mode growth factor also belongs to a compressing file.
+        // `compress_video` re-encodes to HEVC (libx265) at a fixed CRF, so a
+        // source under `min_size_bytes` or already on efficient HEVC never
+        // reaches this arm at all — it is caught upstream by
+        // `only_remuxed_by_compress` and judged on its unchanged size
+        // instead. What *does* land here in `Compress` mode is a video at or
+        // over the minimum on a codec (HEVC included) that failed the
+        // efficiency check — too big, too high-bitrate, or the wrong
+        // resolution — so the flat 0.7 general compress factor applies
+        // uniformly; there is no case left where the convert-mode growth
+        // factor also belongs to a compressing file.
         _ => match probe.map(|p| p.codec.as_str()) {
             Some("hevc" | "vp9" | "av1") if !compressing => 1.4,
             Some(_) if compressing => 0.7,

@@ -99,7 +99,7 @@ async fn promote_fts_indexing_covers_only_rows_inserted_by_this_promotion() {
     .await
     .unwrap();
 
-    let indexed = index_messages_fts_from_promote_map(&mut conn, max_id_before_promote)
+    let indexed = index_messages_fts_from_promote_map(&mut conn, max_id_before_promote, 0)
         .await
         .unwrap();
     install_messages_fts_triggers(&mut conn).await.unwrap();
@@ -116,6 +116,63 @@ async fn promote_fts_indexing_covers_only_rows_inserted_by_this_promotion() {
                 .await
                 .unwrap();
         assert_eq!(hits, expected, "unexpected match count for {term}");
+    }
+}
+
+#[tokio::test]
+async fn promote_fts_indexing_reindexes_an_existing_message_that_gained_an_attachment() {
+    let (pool, _fixture) = seeded_schema_fixture().await;
+    let mut conn = pool.acquire().await.unwrap();
+
+    // Two messages an earlier import indexed through the insert trigger.
+    insert_message(&mut conn, 10, "g-gains", "gainsbody").await;
+    insert_message(&mut conn, 12, "g-keeps", "keepsbody").await;
+    let max_id_before_promote: i64 =
+        sqlx::query_scalar("SELECT COALESCE(MAX(id), 0) FROM messages")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    let max_attachment_before_promote: i64 =
+        sqlx::query_scalar("SELECT COALESCE(MAX(id), 0) FROM attachments")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+
+    // An append maps both, and adds an attachment to message 10 only.
+    drop_messages_fts_triggers(&mut conn).await.unwrap();
+    execute_batch(
+        &mut conn,
+        r"
+        CREATE TEMP TABLE _promote_msg_map (
+            staging_id INTEGER PRIMARY KEY,
+            prod_id INTEGER NOT NULL
+        );
+        INSERT INTO _promote_msg_map (staging_id, prod_id) VALUES (1, 10), (2, 12);
+        INSERT INTO attachments (message_id, original_name) VALUES (10, 'lateinvoice.pdf');
+        ",
+    )
+    .await
+    .unwrap();
+
+    let indexed = index_messages_fts_from_promote_map(
+        &mut conn,
+        max_id_before_promote,
+        max_attachment_before_promote,
+    )
+    .await
+    .unwrap();
+    install_messages_fts_triggers(&mut conn).await.unwrap();
+
+    assert_eq!(
+        indexed, 1,
+        "only the existing message that gained an attachment is indexed again"
+    );
+    for (term, expected) in [("lateinvoice", 1), ("gainsbody", 1), ("keepsbody", 1)] {
+        assert_eq!(
+            fts_hits(&mut conn, term).await,
+            expected,
+            "unexpected match count for {term}"
+        );
     }
 }
 

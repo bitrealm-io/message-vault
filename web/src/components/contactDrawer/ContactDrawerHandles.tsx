@@ -27,11 +27,13 @@ function toIdentityRow(h: ContactHandle): IdentityRow {
 /**
  * The identities of the contact in the drawer, with what each takes part in,
  * and the way to add one or remove one. The conversation counts lead to the
- * conversation list, and the Summary row adds every column up.
+ * conversation list. The Summary row adds up the dates and messages, and shows
+ * `conversations`, the contact's own count from the server.
  */
 export function ContactDrawerHandles({
   contactId,
   handleRows,
+  conversations,
   loading,
   onBrowse,
   title = "Contact Identity",
@@ -40,6 +42,8 @@ export function ContactDrawerHandles({
 }: {
   contactId: string;
   handleRows: ContactDetail["identities"];
+  /** The contact's direct and group conversations, each counted once. */
+  conversations: number;
   loading: boolean;
   onBrowse?: BrowseFn;
   title?: ReactNode;
@@ -91,7 +95,7 @@ export function ContactDrawerHandles({
         rows={rows}
         loading={loading}
         busy={busy}
-        totals
+        totalConversations={conversations}
         emptyText={loading ? "Loading…" : "No identities"}
         onRemove={requestRemove}
         onBrowse={onBrowse ? (row) => onBrowse({ kind: "all", handle: row.address }) : undefined}

@@ -93,7 +93,8 @@ function Heading({
  * account holder sent from one of their own.
  *
  * `onBrowse` turns a conversation count into a link (the contact drawer
- * passes one; the Profile tab does not), and `totals` adds the Summary row.
+ * passes one; the Profile tab does not), and `totalConversations` adds the
+ * Summary row.
  */
 export default function IdentityTable({
   rows,
@@ -101,7 +102,7 @@ export default function IdentityTable({
   lastDateHeading,
   loading = false,
   busy = false,
-  totals = false,
+  totalConversations,
   emptyText = "No identities yet.",
   ariaLabel = "Identities",
   onRemove,
@@ -116,8 +117,12 @@ export default function IdentityTable({
   loading?: boolean;
   /** A change is in flight, so Remove is disabled. */
   busy?: boolean;
-  /** Add a Summary row with the earliest, the latest, and the sums. */
-  totals?: boolean;
+  /**
+   * Add a Summary row with the earliest, the latest, the message sums, and
+   * this many conversations: the server's count, which takes a conversation
+   * once however many of the identities are in it.
+   */
+  totalConversations?: number;
   emptyText?: string;
   ariaLabel?: string;
   /** With none, the rows cannot be removed and show no Remove button. */
@@ -127,7 +132,10 @@ export default function IdentityTable({
 }) {
   const [sort, setSort] = useState<SortDescriptor | null>(null);
   const sorted = useMemo(() => sortIdentityRows(rows, sort), [rows, sort]);
-  const summary = useMemo(() => (totals ? identityTotals(rows) : null), [rows, totals]);
+  const summary = useMemo(
+    () => (totalConversations === undefined ? null : identityTotals(rows, totalConversations)),
+    [rows, totalConversations],
+  );
 
   if (rows.length === 0) {
     return <div className="text-[0.813rem] text-muted">{emptyText}</div>;

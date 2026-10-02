@@ -66,17 +66,20 @@ export function sortIdentityRows(
   });
 }
 
-/** The earliest, the latest, and the sums across every row, for the Summary row. */
-export function identityTotals(rows: readonly IdentityRow[]): IdentityRow {
+/**
+ * The Summary row: the earliest, the latest, and the message sums across every
+ * row, with `conversations` as the caller gives it. Conversations are not
+ * summed, because one conversation can hold two of the identities and each
+ * row counts it; a message has one sender, so the message counts add up.
+ */
+export function identityTotals(rows: readonly IdentityRow[], conversations: number): IdentityRow {
   let start: string | null = null;
   let end: string | null = null;
-  let conversations = 0;
   let direct = 0;
   let group = 0;
   for (const row of rows) {
     if (row.start_date && (!start || row.start_date < start)) start = row.start_date;
     if (row.end_date && (!end || row.end_date > end)) end = row.end_date;
-    conversations += row.conversations;
     direct += row.direct_messages;
     group += row.group_messages;
   }

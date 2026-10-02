@@ -766,6 +766,91 @@ async fn get_contact_summaries_counts_two_contacts_in_one_query() {
     );
 }
 
+/// A conversation holding two of one contact's identities is one of the
+/// contact's conversations, not two, both on the contact and in its summary
+/// (#1248). Each identity still counts it once for itself.
+#[tokio::test]
+async fn a_conversation_with_two_of_a_contacts_identities_counts_once() {
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
+    let contact_id: i64 = sqlx::query_scalar(
+        "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Sam') RETURNING id",
+    )
+    .bind(account)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    let mut handles = Vec::new();
+    for (raw, handle_type) in [
+        ("+15555550200", HandleType::Phone),
+        ("sam@example.com", HandleType::Email),
+    ] {
+        let (handle, _) =
+            crate::db::handles::upsert_handle_row(&mut conn, account, raw, handle_type, None)
+                .await
+                .unwrap();
+        sqlx::query(
+            "INSERT INTO contact_handles (account_id, handle_id, contact_id)
+             VALUES ($1, $2, $3)",
+        )
+        .bind(account)
+        .bind(handle)
+        .bind(contact_id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+        handles.push(handle);
+    }
+    let (group_chat, _) = crate::db::handles::upsert_handle_row(
+        &mut conn,
+        account,
+        "chat-sam-group",
+        HandleType::Other,
+        None,
+    )
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO conversations (
+            id, account_id, chat_handle_id, conversation_type, group_title, source_file
+         ) VALUES (1, $1, $2, 'group', 'Sam Group', 'g.jsonl')",
+    )
+    .bind(account)
+    .bind(group_chat)
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+    for handle in &handles {
+        sqlx::query(
+            "INSERT INTO participants (conversation_id, handle_id, name_alias)
+             VALUES (1, $1, 'Sam')",
+        )
+        .bind(handle)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    }
+
+    let detail = get_contact_detail(&mut conn, account, contact_id)
+        .await
+        .unwrap()
+        .expect("contact exists");
+    assert_eq!(detail.identities.len(), 2);
+    for identity in &detail.identities {
+        assert_eq!(identity.conversations, 1, "{}", identity.address);
+    }
+    assert_eq!(detail.direct_conversations, 0);
+    assert_eq!(detail.group_conversations, 1);
+
+    let summaries = get_contact_summaries(&mut conn, account, &[contact_id])
+        .await
+        .unwrap();
+    assert_eq!(summaries.len(), 1);
+    assert_eq!(summaries[0].individual_conversations, 0);
+    assert_eq!(summaries[0].group_conversations, 1);
+}
+
 /// A conversation of `kind` with `participants`, in the trash when `trashed`.
 async fn insert_conversation(
     conn: &mut SqliteConnection,

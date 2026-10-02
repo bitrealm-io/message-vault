@@ -1083,7 +1083,12 @@ pub fn bearer_token(headers: &HeaderMap) -> Result<String, ApiError> {
     let value = value
         .to_str()
         .map_err(|_| ApiError::AuthenticationRequired("invalid Authorization header".into()))?;
-    let Some(token) = value.strip_prefix("Bearer ") else {
+    // RFC 7235, section 2.1: the scheme matches without regard to case.
+    let Some(token) = value
+        .split_once(' ')
+        .filter(|(scheme, _)| scheme.eq_ignore_ascii_case("bearer"))
+        .map(|(_, token)| token)
+    else {
         return Err(ApiError::AuthenticationRequired(
             "Authorization must be Bearer <token>".into(),
         ));

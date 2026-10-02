@@ -5,6 +5,8 @@ import { textInputClassName } from "./TextField";
 interface PathPickerProps {
   value: string;
   onChange: (path: string) => void;
+  /** Called when the text field loses focus. */
+  onBlur?: () => void;
   directory?: boolean;
   placeholder?: string;
   /** Forwarded to the text field so a wrapping label can focus the input. */
@@ -15,6 +17,7 @@ interface PathPickerProps {
 export default function PathPicker({
   value,
   onChange,
+  onBlur,
   directory,
   placeholder,
   id,
@@ -35,6 +38,7 @@ export default function PathPicker({
         id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
         placeholder={placeholder}
         spellCheck={false}
         autoComplete="off"

@@ -40,7 +40,7 @@ pub(super) fn collect_eml_paths<P: AsRef<Path>>(
             bail!("input is not a file or directory: {}", input.display());
         }
         let mut found = message_crate_core::discover_files(input, &is_eml_file)?;
-        found.retain(|p| !in_skipped_dir(p));
+        found.retain(|p| !in_skipped_dir(input, p));
         paths.extend(found);
     }
 
@@ -59,9 +59,13 @@ pub(super) fn collect_eml_paths<P: AsRef<Path>>(
 }
 
 /// True for paths under folders the walk never enters (`duplicate`,
-/// `exclude`, `.git`).
-fn in_skipped_dir(path: &Path) -> bool {
-    path.components().any(|c| {
+/// `exclude`, `.git`) below `input`.
+///
+/// Only the part of `path` below `input` is tested, because an input that
+/// sits under a folder with one of those names is still meant to be read.
+fn in_skipped_dir(input: &Path, path: &Path) -> bool {
+    let below = path.strip_prefix(input).unwrap_or(path);
+    below.components().any(|c| {
         matches!(
             c.as_os_str()
                 .to_str()

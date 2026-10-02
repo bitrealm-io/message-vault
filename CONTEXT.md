@@ -36,8 +36,13 @@ _Avoid_: Thread Tag, Conversation Tag, Label
 One exchange with one person or group, holding its messages and
 participants. It is the unit the product acts on: tagging, trashing, and
 searching all resolve to whole conversations even where the interface
-speaks of messages.
-_Avoid_: Thread, Chat
+speaks of messages. A Conversation the source app keeps as a group is a
+**group conversation**; one with a single other person is a **one-to-one
+conversation**. The search words for the two are `kind:group` and
+`kind:direct`, short because they are typed; everything a person reads says
+"group conversation" and "one-to-one conversation", never "group chat",
+because "group" alone could also mean a Contact Group.
+_Avoid_: Thread, Chat, Group chat, Direct conversation
 
 **Message**:
 One thing sent or received inside a Conversation: who sent it, when, what
@@ -47,6 +52,23 @@ tagging, trashing and deleting happen to its Conversation. Two records a
 backup cannot tell apart, alike in conversation, sender, time, text and
 attachments, are one message.
 _Avoid_: Text, Post, Item, Row
+
+**Deleted in the source app**:
+A mark on a Message the person had deleted in the app it came from before
+the backup was made, while the backup still held it. The message is kept,
+shown muted with its text where the backup has it, and labelled with the
+source, for example "Deleted in WhatsApp"; search finds it, and
+`deleted:yes` or `deleted:no` narrows to or away from it. It is a different
+thing from the Trash, which is what a person removes inside Message Crate.
+_Avoid_: Trashed, Removed, Deleted on the phone
+
+**Unsent**:
+A mark on a Message its sender pulled back after sending it. The backup
+usually holds no text for it, so it is shown as an empty muted bubble that
+reads "Unsent". It is kept apart from Deleted in the source app, because the
+sender took the message back for everyone rather than a person deleting
+their own copy.
+_Avoid_: Retracted, Recalled, Deleted
 
 **Orphaned message**:
 A Message the backup holds without recording which Conversation it was said
@@ -238,8 +260,8 @@ The screen the owner lands on at login and works from, the way any
 other account lands in Messages. It has the frame every account sees: the
 product name, a search bar, the username and the account button across the top, over a
 side panel and a content pane. The side panel lists Dashboard, Server Settings,
-User Accounts, Activity and Logs; Dashboard shows what the whole Message Crate
-holds, and Activity and Logs are named and hold nothing yet. The search bar narrows User Accounts by username or
+User Accounts, Audit Trail and Logs; Dashboard shows what the whole Message Crate
+holds, and Audit Trail and Logs are named and hold nothing yet. The search bar narrows User Accounts by username or
 preferred name. User Accounts lists every account, the owner's own first,
 each by username with its preferred name, its status and its last login. There the owner adds
 accounts. An account's name opens that account's Settings, the screen its
@@ -255,6 +277,16 @@ which is also where the account button's Settings goes. An owner's password
 reset sets the password and nothing more: it does not end the person's
 session and does not make them choose a new one.
 _Avoid_: Console, Dashboard, Admin, Admin panel
+
+**Audit Trail**:
+The permanent record of what each user did on a Message Crate, and when:
+logging in, sessions ending, logins refused, Import Runs, Export Runs, and the
+owner's changes to accounts. It records that something happened and how much,
+never what the messages said. Nobody edits or deletes it, the owner included,
+and deleting an account does not remove its entries. The owner reads it for
+every account on Owner Home. It is not the server's log output, which is Logs.
+Why it outlives the account: `docs/adr/0020`.
+_Avoid_: Activity, Audit log, Event log, History
 
 **Claiming**:
 Making a Message Crate's owner. One with no owner is unclaimed and offers only
@@ -344,6 +376,31 @@ A run left at a review keeps waiting, on another screen or after the app is
 closed, until the person decides. The stop is named for what the person does
 there; "approve" stays the word for the decision that continues the run.
 _Avoid_: Gate, Approval (for the stop), Checkpoint, Confirmation, Deny
+
+**Pause**:
+Halting the running Stage of an Import Run while keeping everything it has
+staged, so the run can resume later from where it halted. The Upload's own
+button pauses it, logging out during an Upload pauses it after asking, and
+an Upload that fails is paused rather than failed, since a failure there is
+mostly the network or the server. A paused run is offered again, with
+Resume or Discard, the next time its account opens Import.
+_Avoid_: Stop, Cancel (for this), Suspend
+
+**Resume**:
+Continuing a paused Import Run, or one interrupted by the app closing, from
+where it halted; an Upload sends only what is still missing.
+_Avoid_: Retry, Restart
+
+**Cancel**:
+Ending an Import Run at a Review, or before Staging starts, and deleting
+what it has staged. A cancelled run is recorded as cancelled.
+_Avoid_: Stop, Abort, Pause (for this)
+
+**Discard**:
+Ending a paused Import Run instead of resuming it, and deleting what it has
+staged. A failed Staging or Media Stage is discarded at once, since nothing
+complete exists to upload.
+_Avoid_: Delete run, Clear
 
 **Message Crate Directory**:
 The one directory the desktop app keeps on a computer, made the first time

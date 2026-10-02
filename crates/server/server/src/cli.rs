@@ -617,13 +617,18 @@ fn serve_config(args: ServeArgs) -> Result<Config> {
 }
 
 /// Convert stored media into browser previews.
+///
+/// # Errors
+///
+/// Returns an error after the summary line when any conversion failed, so a
+/// cron job or script that runs the command sees a non-zero exit status.
 async fn run_process_assets(args: ProcessAssetsArgs) -> Result<()> {
     let cfg = Config::load(&args.config)?.with_db_override(args.db);
     if let Some(ref source) = args.source {
         validate_source_id(source)?;
     }
     let opened = OpenDb::open(cfg).await?;
-    crate::process_assets::run(
+    let stats = crate::process_assets::run(
         &opened,
         &crate::process_assets::ProcessAssetsOptions {
             force: args.force,
@@ -637,6 +642,12 @@ async fn run_process_assets(args: ProcessAssetsArgs) -> Result<()> {
     )
     .await?;
     opened.close().await;
+    if stats.errors > 0 {
+        bail!(
+            "{} conversion(s) failed; those originals stay without a browser preview",
+            stats.errors
+        );
+    }
     Ok(())
 }
 

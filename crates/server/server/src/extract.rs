@@ -178,20 +178,19 @@ mod tests {
         expect_problem(status, &text, ProblemType::UnsupportedMediaType);
     }
 
-    /// A JSON body over the attachment size limit, which is the body cap for
-    /// every route, answers
-    /// the `payload-too-large` problem, while a body under the cap that is
-    /// not JSON still answers `malformed-body`: the cap never turns a syntax
-    /// error into a 413, and a 413 is never a 400. Sent with a
-    /// `Content-Length`, so `limit_request_body` answers before the
-    /// extractor runs; the extractor's own arm is tested below without HTTP.
+    /// A JSON body over the cap its route holds it to answers the
+    /// `payload-too-large` problem, while a body under the cap that is not
+    /// JSON still answers `malformed-body`: the cap never turns a syntax
+    /// error into a 413, and a 413 is never a 400. The cap here is Axum's
+    /// 2 MiB default, and the body is sent with a `Content-Length` over it;
+    /// the extractor's arm for a body it has to read is tested below without
+    /// HTTP.
     #[tokio::test]
     async fn a_json_body_over_the_body_cap_is_a_json_413_and_a_syntax_error_a_400() {
         let (fixture, user) = fixture_with_account().await;
         let state = fixture.state.clone();
-        crate::test_support::store_asset_max_bytes(&state, 1024).await;
 
-        let padding = "a".repeat(4096);
+        let padding = "a".repeat(3 * 1024 * 1024);
         let body = serde_json::json!({ "name": padding, "query": "hi" }).to_string();
         let (status, text) = post_raw(
             &state,

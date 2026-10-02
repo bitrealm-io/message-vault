@@ -1382,8 +1382,12 @@ pub(crate) async fn create_import_batch(
         let temp = tempfile::tempdir()
             .map_err(|e| ApiError::Internal(anyhow::anyhow!("temp dir: {e}")))?;
         let jsonl_path = temp.path().join("_import.jsonl");
-        let max_body_bytes = usize::try_from(state.asset_max_bytes().await?).unwrap_or(usize::MAX);
-        let n = stream_body_to_file(request.into_body(), &jsonl_path, max_body_bytes).await?;
+        let n = stream_body_to_file(
+            request.into_body(),
+            &jsonl_path,
+            crate::server::MAX_REQUEST_BODY_BYTES,
+        )
+        .await?;
         if n == 0 {
             return Err(ApiError::MalformedBody("request body is empty".into()));
         }

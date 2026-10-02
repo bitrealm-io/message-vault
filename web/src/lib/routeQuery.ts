@@ -29,7 +29,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { ApiError } from "./api";
 import { useAuth } from "./auth";
 import { PAGE_SIZE_FILL, PAGE_SIZE_FIRST } from "./listPaging";
@@ -169,8 +169,16 @@ export type PagedListResult<T> = {
  * This returns the shape a long list renders from rather than TanStack Query's
  * own result, so the two screens that use it do not each repeat the same
  * mapping from `isPending` / `isFetchingNextPage` to "loading" and "filling".
+ *
+ * Offsets move when a row is added or removed between two page fetches, by an
+ * import, a move to the Trash, or another tab. The next page can then repeat a
+ * row already on screen or start past one never shown. A repeated row is shown
+ * once, by its id. A page whose `total` differs from the first page's means
+ * the offsets moved, so the list is fetched again from offset 0. A row added
+ * and another removed between two fetches leaves the total the same, and a
+ * row skipped that way stays missing until the list is next fetched.
  */
-export function useRoutePagedList<T>(
+export function useRoutePagedList<T extends { id: string | number }>(
   key: RouteQueryKey,
   fetchPage: PagedFetchPage<T>,
   opts?: { firstPageSize?: number; fillPageSize?: number },
@@ -205,7 +213,26 @@ export function useRoutePagedList<T>(
   // A new array every render defeats every memo downstream (the tag menu and
   // its effect included), so this is the one place that must not recompute
   // unless the query actually produced new pages.
-  const items = useMemo(() => pages.flatMap((page) => page.items), [pages]);
+  const items = useMemo(() => {
+    const seen = new Set<string | number>();
+    const rows: T[] = [];
+    for (const page of pages) {
+      for (const row of page.items) {
+        if (seen.has(row.id)) continue;
+        seen.add(row.id);
+        rows.push(row);
+      }
+    }
+    return rows;
+  }, [pages]);
+
+  const totalMoved = pages.some((page) => page.total !== pages[0]?.total);
+  const { isFetching, refetch } = query;
+  useEffect(() => {
+    // A refetch starts at the first page's offset, 0, and works out every
+    // later offset again from the pages it fetches.
+    if (totalMoved && !isFetching) void refetch();
+  }, [totalMoved, isFetching, refetch]);
 
   return {
     items,

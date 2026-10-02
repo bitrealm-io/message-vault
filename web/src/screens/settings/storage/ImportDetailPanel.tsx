@@ -81,7 +81,9 @@ export default function ImportDetailPanel({
             <div>
               <dt className="text-muted">Finished</dt>
               <dd className="mt-1">
-                {formatImportDate(selectedImport.finished_at ?? selectedImport.started_at)}
+                {selectedImport.finished_at
+                  ? formatImportDate(selectedImport.finished_at)
+                  : "Not finished"}
               </dd>
             </div>
             <div>

@@ -17,12 +17,18 @@ use std::path::{Path, PathBuf};
 /// crate knows no archive format by name.
 pub trait MergedArchive: std::fmt::Debug + Send {
     /// Write `documents` under `output_dir` as one file and return its path.
+    /// Anything the format could not carry is counted in `report`.
     ///
     /// # Errors
     ///
     /// Returns an error when the file cannot be written or an attachment
     /// it embeds cannot be read.
-    fn write(&self, output_dir: &Path, documents: &[ConversationDocument]) -> Result<PathBuf>;
+    fn write(
+        &self,
+        output_dir: &Path,
+        documents: &[ConversationDocument],
+        report: &mut ExportReport,
+    ) -> Result<PathBuf>;
 }
 
 /// Writes conversations in the requested [`OutputFormat`], or through a
@@ -175,7 +181,7 @@ impl FormatSink {
         report.obfuscated_docs += outcome.obfuscated_docs as u64;
 
         if let Some(archive) = &self.archive {
-            archive.write(&self.output_dir, &self.docs)?;
+            archive.write(&self.output_dir, &self.docs, report)?;
         } else {
             let mut docs: Vec<&mut ConversationDocument> = self.docs.iter_mut().collect();
             message_ir::give_each_document_its_own_file(&mut docs).map_err(anyhow::Error::msg)?;
@@ -318,7 +324,12 @@ mod tests {
     struct LineArchive;
 
     impl MergedArchive for LineArchive {
-        fn write(&self, output_dir: &Path, documents: &[ConversationDocument]) -> Result<PathBuf> {
+        fn write(
+            &self,
+            output_dir: &Path,
+            documents: &[ConversationDocument],
+            _report: &mut ExportReport,
+        ) -> Result<PathBuf> {
             let path = output_dir.join("all.txt");
             let body: Vec<String> = documents
                 .iter()

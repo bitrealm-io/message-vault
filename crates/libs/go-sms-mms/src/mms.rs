@@ -13,11 +13,15 @@
 //!    last, and the bytes after it are the body. Nothing after it is read as
 //!    a header, so image bytes can never become an address.
 //! 3. **Every field code has one value shape.** The shape comes from
-//!    WAP-209 table 8 and is read exactly; there is no fallback shape. A
-//!    code this decoder does not know is an error, because its value has no
-//!    length prefix and the walk cannot stay aligned past it. The real
-//!    backup uses eleven codes and this decoder knows every code the
-//!    1.0 through 1.3 tables assign.
+//!    WAP-209 table 8 and, for the codes MMS 1.2 and 1.3 add (0x22 to
+//!    0x3F), from OMA MMS 1.3 section 7.3 and table 25. It is read exactly;
+//!    there is no fallback shape. A code this decoder does not know is an
+//!    error, because its value has no length prefix and the walk cannot stay
+//!    aligned past it. The real backup uses eleven codes and this decoder
+//!    knows every code the 1.0 through 1.3 tables assign, except Content
+//!    (0x2E) and Additional-headers (0x30): table 25 allows those only as
+//!    names inside an X-Mms-Attributes list, so as a header they have no
+//!    value shape and are refused like an unknown code.
 //! 4. **From is Value-length then Address-present-token (0x80) and an
 //!    Encoded-string-value, or Insert-address-token (0x81) alone** (section
 //!    7.2.11). The insert token is what a phone writes on a message it
@@ -43,7 +47,8 @@ use crate::wsp::{
 };
 use std::collections::BTreeMap;
 
-/// WAP-209 table 8 field codes, without the high bit.
+/// WAP-209 table 8 and OMA MMS 1.3 table 25 field codes, without the high
+/// bit.
 const BCC: u8 = 0x01;
 const CC: u8 = 0x02;
 const CONTENT_LOCATION: u8 = 0x03;
@@ -77,6 +82,34 @@ const REPLY_CHARGING_ID: u8 = 0x1e;
 const REPLY_CHARGING_SIZE: u8 = 0x1f;
 const PREVIOUSLY_SENT_BY: u8 = 0x20;
 const PREVIOUSLY_SENT_DATE: u8 = 0x21;
+const STORE: u8 = 0x22;
+const MM_STATE: u8 = 0x23;
+const MM_FLAGS: u8 = 0x24;
+const STORE_STATUS: u8 = 0x25;
+const STORE_STATUS_TEXT: u8 = 0x26;
+const STORED: u8 = 0x27;
+const ATTRIBUTES: u8 = 0x28;
+const TOTALS: u8 = 0x29;
+const MBOX_TOTALS: u8 = 0x2a;
+const QUOTAS: u8 = 0x2b;
+const MBOX_QUOTAS: u8 = 0x2c;
+const MESSAGE_COUNT: u8 = 0x2d;
+const START: u8 = 0x2f;
+const DISTRIBUTION_INDICATOR: u8 = 0x31;
+const ELEMENT_DESCRIPTOR: u8 = 0x32;
+const LIMIT: u8 = 0x33;
+const RECOMMENDED_RETRIEVAL_MODE: u8 = 0x34;
+const RECOMMENDED_RETRIEVAL_MODE_TEXT: u8 = 0x35;
+const STATUS_TEXT: u8 = 0x36;
+const APPLIC_ID: u8 = 0x37;
+const REPLY_APPLIC_ID: u8 = 0x38;
+const AUX_APPLIC_INFO: u8 = 0x39;
+const CONTENT_CLASS: u8 = 0x3a;
+const DRM_CONTENT: u8 = 0x3b;
+const ADAPTATION_ALLOWED: u8 = 0x3c;
+const REPLACE_ID: u8 = 0x3d;
+const CANCEL_ID: u8 = 0x3e;
+const CANCEL_STATUS: u8 = 0x3f;
 
 /// The kind of MMS transaction a PDU records.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -281,6 +314,61 @@ fn header(code: u8, cur: &mut Cursor<'_>, msg: &mut Message) -> Result<()> {
                 ],
             )?,
         ),
+        STORE => ("store", yes_no(cur)?),
+        STORED => ("stored", yes_no(cur)?),
+        TOTALS => ("totals", yes_no(cur)?),
+        QUOTAS => ("quotas", yes_no(cur)?),
+        DISTRIBUTION_INDICATOR => ("distribution-indicator", yes_no(cur)?),
+        DRM_CONTENT => ("drm-content", yes_no(cur)?),
+        ADAPTATION_ALLOWED => ("adaptation-allowed", yes_no(cur)?),
+        MM_STATE => (
+            "mm-state",
+            token(cur, &["Draft", "Sent", "New", "Retrieved", "Forwarded"])?,
+        ),
+        MM_FLAGS => ("mm-flags", mm_flags(cur)?),
+        STORE_STATUS => ("store-status", short_integer(cur)?.to_string()),
+        STORE_STATUS_TEXT => ("store-status-text", string(cur)?),
+        ATTRIBUTES => ("attributes", format!("0x{:02x}", short_integer(cur)?)),
+        MBOX_TOTALS => ("mbox-totals", mbox_count(cur)?),
+        MBOX_QUOTAS => ("mbox-quotas", mbox_count(cur)?),
+        MESSAGE_COUNT => ("message-count", integer_value(cur)?.to_string()),
+        START => ("start", integer_value(cur)?.to_string()),
+        LIMIT => ("limit", integer_value(cur)?.to_string()),
+        ELEMENT_DESCRIPTOR => ("element-descriptor", element_descriptor(cur)?),
+        RECOMMENDED_RETRIEVAL_MODE => ("recommended-retrieval-mode", token(cur, &["Manual"])?),
+        RECOMMENDED_RETRIEVAL_MODE_TEXT => ("recommended-retrieval-mode-text", string(cur)?),
+        STATUS_TEXT => ("status-text", string(cur)?),
+        APPLIC_ID => ("applic-id", string(cur)?),
+        REPLY_APPLIC_ID => ("reply-applic-id", string(cur)?),
+        AUX_APPLIC_INFO => ("aux-applic-info", string(cur)?),
+        REPLACE_ID => ("replace-id", string(cur)?),
+        CANCEL_ID => ("cancel-id", string(cur)?),
+        CONTENT_CLASS => (
+            "content-class",
+            token(
+                cur,
+                &[
+                    "text",
+                    "image-basic",
+                    "image-rich",
+                    "video-basic",
+                    "video-rich",
+                    "megapixel",
+                    "content-basic",
+                    "content-rich",
+                ],
+            )?,
+        ),
+        CANCEL_STATUS => (
+            "cancel-status",
+            token(
+                cur,
+                &[
+                    "Cancel Request Successfully received",
+                    "Cancel Request corrupted",
+                ],
+            )?,
+        ),
         _ => {
             return Err(wsp::Error {
                 at: cur.pos - 1,
@@ -376,6 +464,66 @@ fn previously_sent(cur: &mut Cursor<'_>, is_date: bool) -> Result<String> {
         });
     }
     Ok(format!("{count}:{value}"))
+}
+
+/// MM-flags-value (OMA MMS 1.3 section 7.3.32): Value-length, then
+/// Add-token (0x80), Remove-token (0x81) or Filter-token (0x82), then an
+/// Encoded-string-value keyword. Decoded as `<token>:<keyword>`.
+fn mm_flags(cur: &mut Cursor<'_>) -> Result<String> {
+    let start = cur.pos;
+    let len = value_length(cur)?;
+    let end = cur.pos + len;
+    let action = token(cur, &["Add", "Remove", "Filter"])?;
+    let keyword = string(cur)?;
+    if cur.pos != end {
+        return Err(wsp::Error {
+            at: start,
+            what: "mm-flags length does not match",
+        });
+    }
+    Ok(format!("{action}:{keyword}"))
+}
+
+/// Mbox-totals-value and Mbox-quotas-value (OMA MMS 1.3 sections 7.3.25
+/// and 7.3.26): Value-length, a Message (0x80) or Size (0x81) token, then
+/// an Integer-value. Decoded as `<token>:<count>`.
+fn mbox_count(cur: &mut Cursor<'_>) -> Result<String> {
+    let start = cur.pos;
+    let len = value_length(cur)?;
+    let end = cur.pos + len;
+    let kind = token(cur, &["Message", "Size"])?;
+    let count = integer_value(cur)?;
+    if cur.pos != end {
+        return Err(wsp::Error {
+            at: start,
+            what: "mbox count length does not match",
+        });
+    }
+    Ok(format!("{kind}:{count}"))
+}
+
+/// Element-Descriptor-value (OMA MMS 1.3 section 7.3.18): Value-length, a
+/// Text-string content reference, then parameters. Decoded as the content
+/// reference; the parameters are skipped by the length.
+fn element_descriptor(cur: &mut Cursor<'_>) -> Result<String> {
+    let start = cur.pos;
+    let len = value_length(cur)?;
+    let end = cur.pos + len;
+    if end > cur.data.len() {
+        return Err(wsp::Error {
+            at: start,
+            what: "element-descriptor length past the end",
+        });
+    }
+    let reference = String::from_utf8_lossy(&text_string(cur)?).into_owned();
+    if cur.pos > end {
+        return Err(wsp::Error {
+            at: start,
+            what: "element-descriptor length does not match",
+        });
+    }
+    cur.pos = end;
+    Ok(reference)
 }
 
 /// Message-class-value: a well-known token or a Token-text.

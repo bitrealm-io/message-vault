@@ -160,7 +160,8 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
     // Drop tempdir after convert (media files already copied).
     drop(_work_keep_alive);
 
-    let result = message_crate_core::finish_run(config, &report, needs_media_tools)?;
-    messages.extend(result.messages);
-    Ok(RunResult { messages })
+    let mut result = message_crate_core::finish_run(config, &report, needs_media_tools)?;
+    messages.append(&mut result.messages);
+    result.messages = messages;
+    Ok(result)
 }

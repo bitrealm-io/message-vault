@@ -3014,3 +3014,51 @@ async fn an_append_in_a_second_already_held_sorts_after_the_stored_messages() {
         ["m1", "m2", "m3"]
     );
 }
+
+/// The header of an Apple Messages one-to-one chat keyed by `chat`, whose
+/// one participant is written as `chat` too.
+fn one_to_one_header(chat: &str) -> String {
+    format!(
+        r#"{{"schema_version":4,"export":{{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null}},"conversation":{{"chat_identifier":"{chat}","conversation_type":"individual","group_title":null,"participants":[{{"handle":"{chat}","display_name":null}}],"stats":{{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}}}}"#
+    )
+}
+
+/// #1173: two conversations whose chat ids differ as written and normalise
+/// to one identity, in one batch, become one conversation holding both
+/// conversations' messages, as they do when they arrive in separate batches.
+/// Both messages share one second, so the second conversation's message
+/// takes the next `sort_order` rather than repeating the first's.
+#[tokio::test]
+async fn two_conversations_on_one_identity_in_one_batch_become_one() {
+    let (state, _fixture, token) = importer().await;
+    let body = format!(
+        "{}\n{}\n{}\n{}\n",
+        one_to_one_header("+15551234567"),
+        same_second_message("m1", 1_426_183_462_000),
+        one_to_one_header("5551234567"),
+        same_second_message("m2", 1_426_183_462_000),
+    );
+    post_batches_of_one_run(&state, &token, vec![body]).await;
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let conversations: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM conversations")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(conversations, 1);
+    let participants: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM participants")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(participants, 1, "the one person is listed once");
+    let messages: Vec<(String, i64)> =
+        sqlx::query_as("SELECT guid, sort_order FROM messages ORDER BY sort_order, id")
+            .fetch_all(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(
+        messages,
+        [("m1".to_string(), 0), ("m2".to_string(), 1)],
+        "both messages are in the one conversation, in the batch's order"
+    );
+}

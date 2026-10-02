@@ -405,7 +405,7 @@ fn an_upload_session_is_stale_after_a_day_by_its_manifest_or_its_folder() {
     let without_manifest = dir.path().join("without-manifest");
     fs::create_dir_all(&without_manifest).unwrap();
     let now = SystemTime::now();
-    let limit = Duration::from_secs(STALE_UPLOAD_SESSION_SECS);
+    let limit = Duration::from_secs(STALE_UPLOAD_SECS);
 
     assert!(!upload_session_is_stale(&with_manifest, now).unwrap());
     assert!(!upload_session_is_stale(&without_manifest, now).unwrap());
@@ -429,13 +429,27 @@ fn an_upload_session_idle_for_23_hours_is_kept_and_one_idle_for_25_is_stale() {
     assert!(upload_session_is_stale(&session, now + hours(25)).unwrap());
 }
 
+/// Set `path`'s modified time to two days ago, twice the upload age limit,
+/// so the `.incoming/` sweep treats it as abandoned.
+fn make_abandoned(path: &Path) {
+    let two_days_ago = SystemTime::now() - Duration::from_secs(2 * STALE_UPLOAD_SECS);
+    fs::File::options()
+        .write(true)
+        .open(path)
+        .unwrap()
+        .set_modified(two_days_ago)
+        .unwrap();
+}
+
 /// An assets folder whose `.incoming/` holds one of each thing cleanup
-/// meets: a `.part` temp, a file that is not a `.part`, a multipart
-/// session two days old, and one still being uploaded.
+/// meets: a `.part` temp two days old, a `.part` temp a live upload is
+/// still writing, a file that is not a `.part`, a multipart session two
+/// days old, and one still being uploaded.
 struct Incoming {
     _dir: tempfile::TempDir,
     assets: PathBuf,
-    part: PathBuf,
+    stale_part: PathBuf,
+    live_part: PathBuf,
     other_file: PathBuf,
     stale_session: PathBuf,
     fresh_session: PathBuf,
@@ -446,8 +460,11 @@ fn incoming_with_leftovers() -> Incoming {
     let assets = dir.path().join("assets");
     let incoming = assets.join(".incoming");
     fs::create_dir_all(&incoming).unwrap();
-    let part = incoming.join(format!("{}-1.part", "a".repeat(64)));
-    fs::write(&part, b"half an upload").unwrap();
+    let stale_part = incoming.join(format!("{}-1.part", "a".repeat(64)));
+    fs::write(&stale_part, b"half an upload").unwrap();
+    make_abandoned(&stale_part);
+    let live_part = incoming.join(format!("{}-2.part", "d".repeat(64)));
+    fs::write(&live_part, b"an upload in progress").unwrap();
     let other_file = incoming.join("notes.txt");
     fs::write(&other_file, b"not a temp").unwrap();
 
@@ -455,13 +472,7 @@ fn incoming_with_leftovers() -> Incoming {
     fs::create_dir_all(&stale_session).unwrap();
     let manifest = stale_session.join("manifest.json");
     fs::write(&manifest, b"{}").unwrap();
-    let two_days_ago = SystemTime::now() - Duration::from_secs(2 * STALE_UPLOAD_SESSION_SECS);
-    fs::File::options()
-        .write(true)
-        .open(&manifest)
-        .unwrap()
-        .set_modified(two_days_ago)
-        .unwrap();
+    make_abandoned(&manifest);
 
     let fresh_session = incoming.join("c".repeat(64)).join("upload-fresh");
     fs::create_dir_all(&fresh_session).unwrap();
@@ -470,7 +481,8 @@ fn incoming_with_leftovers() -> Incoming {
     Incoming {
         _dir: dir,
         assets,
-        part,
+        stale_part,
+        live_part,
         other_file,
         stale_session,
         fresh_session,
@@ -481,10 +493,10 @@ fn incoming_with_leftovers() -> Incoming {
 fn incoming_cleanup_removes_part_temps_and_stale_sessions_and_nothing_else() {
     let incoming = incoming_with_leftovers();
 
-    let removed = cleanup_incoming_parts(&incoming.assets, false).unwrap();
+    let removed = cleanup_incoming_parts(&incoming.assets, false);
 
-    assert_eq!(removed, 2, "the .part temp and the stale session");
-    assert!(!incoming.part.exists());
+    assert_eq!(removed, 2, "the abandoned .part temp and the stale session");
+    assert!(!incoming.stale_part.exists());
     assert!(!incoming.stale_session.exists());
     assert!(
         !incoming.stale_session.parent().unwrap().exists(),
@@ -492,20 +504,63 @@ fn incoming_cleanup_removes_part_temps_and_stale_sessions_and_nothing_else() {
     );
     assert!(incoming.other_file.exists(), "only .part files are temps");
     assert!(
+        incoming.live_part.exists(),
+        "a .part file younger than a day may be a live upload's, so it is kept"
+    );
+    assert!(
         incoming.fresh_session.join("manifest.json").exists(),
         "an upload still in progress is kept"
     );
+}
+
+/// A `.part` file is abandoned after a day on the clock, the same limit a
+/// multipart session has.
+#[test]
+fn a_part_file_idle_for_23_hours_is_kept_and_one_idle_for_25_is_removed() {
+    let dir = tempfile::tempdir().unwrap();
+    let part = dir.path().join(format!("{SHA}-1.part"));
+    fs::write(&part, b"half").unwrap();
+    let listed = [part.clone()];
+    let now = SystemTime::now();
+    let hours = |n: u64| Duration::from_secs(n * 3600);
+
+    assert_eq!(remove_stale_parts(&listed, now + hours(23), false), 0);
+    assert!(part.exists(), "a .part file 23 hours old is kept");
+    assert_eq!(remove_stale_parts(&listed, now + hours(25), false), 1);
+    assert!(!part.exists(), "a .part file 25 hours old is removed");
+}
+
+/// The server removes a `.part` file itself when its upload finishes or
+/// fails, so a file the sweep listed can be gone by the time the sweep
+/// reaches it. That is not an error, and the sweep goes on to the rest.
+#[test]
+fn a_part_file_gone_between_the_listing_and_the_removal_does_not_stop_the_sweep() {
+    let dir = tempfile::tempdir().unwrap();
+    let gone = dir.path().join(format!("{}-1.part", "a".repeat(64)));
+    let left = dir.path().join(format!("{}-2.part", "b".repeat(64)));
+    for part in [&gone, &left] {
+        fs::write(part, b"half").unwrap();
+        make_abandoned(part);
+    }
+    let listed = [gone.clone(), left.clone()];
+    fs::remove_file(&gone).unwrap();
+
+    let removed = remove_stale_parts(&listed, SystemTime::now(), false);
+
+    assert_eq!(removed, 1, "only the file still there counts");
+    assert!(!left.exists(), "the sweep went on past the missing file");
 }
 
 #[test]
 fn a_dry_run_of_incoming_cleanup_counts_what_it_would_remove_and_removes_nothing() {
     let incoming = incoming_with_leftovers();
 
-    let removed = cleanup_incoming_parts(&incoming.assets, true).unwrap();
+    let removed = cleanup_incoming_parts(&incoming.assets, true);
 
-    assert_eq!(removed, 2, "the .part temp and the stale session");
+    assert_eq!(removed, 2, "the abandoned .part temp and the stale session");
     for kept in [
-        &incoming.part,
+        &incoming.stale_part,
+        &incoming.live_part,
         &incoming.other_file,
         &incoming.stale_session.join("manifest.json"),
         &incoming.fresh_session.join("manifest.json"),
@@ -515,7 +570,7 @@ fn a_dry_run_of_incoming_cleanup_counts_what_it_would_remove_and_removes_nothing
 }
 
 /// The account every database test seeds.
-const ACCOUNT: i64 = 7;
+pub(crate) const ACCOUNT: i64 = 7;
 
 /// A 1x1 plain-RGB PNG, the smallest image this build's ffmpeg decodes
 /// cleanly (an RGBA one of the same size makes its PNG decoder fail).
@@ -558,7 +613,7 @@ async fn seed_account(conn: &mut SqliteConnection, id: i64) {
 
 /// One conversation with one message under `source` for [`ACCOUNT`],
 /// returning the message id an attachment can hang off.
-async fn seed_message(conn: &mut SqliteConnection, source: &str) -> i64 {
+pub(crate) async fn seed_message(conn: &mut SqliteConnection, source: &str) -> i64 {
     let handle_id: i64 = sqlx::query_scalar(
         "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
          VALUES ($1, $2, $2, 'phone', 'phone') RETURNING id",
@@ -593,7 +648,7 @@ async fn seed_message(conn: &mut SqliteConnection, source: &str) -> i64 {
 /// `source`, the way an import leaves it: the blob at `<aa>/<sha><ext>`
 /// in the source's assets folder and a row pointing at it. Returns the
 /// attachment id.
-async fn attach_stored_blob(
+pub(crate) async fn attach_stored_blob(
     opened: &OpenDb,
     conn: &mut SqliteConnection,
     source: &str,
@@ -1008,6 +1063,9 @@ async fn opening_a_source_makes_its_converted_folder_and_cleans_its_incoming_tem
     let part = assets.join(".incoming").join(format!("{SHA}-1.part"));
     fs::create_dir_all(part.parent().unwrap()).unwrap();
     fs::write(&part, b"half").unwrap();
+    make_abandoned(&part);
+    let live_part = assets.join(".incoming").join(format!("{SHA}-2.part"));
+    fs::write(&live_part, b"an upload in progress").unwrap();
 
     let pass = SourcePass::open(&opened.cfg, &opts, work.path(), ACCOUNT, "imessage")
         .unwrap()
@@ -1022,5 +1080,9 @@ async fn opening_a_source_makes_its_converted_folder_and_cleans_its_incoming_tem
     assert_eq!(pass.account_id, ACCOUNT);
     assert_eq!(pass.source_id, "imessage");
     assert!(converted.is_dir());
-    assert!(!part.exists(), "a leftover upload temp is removed on open");
+    assert!(
+        !part.exists(),
+        "an abandoned upload temp is removed on open"
+    );
+    assert!(live_part.exists(), "a live upload's temp is kept on open");
 }

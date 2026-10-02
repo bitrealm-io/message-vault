@@ -51,6 +51,7 @@ fn finished_push_events(
         "conversations_total": report.conversations_total,
         "conversations_failed": report.conversations_failed,
         "conversations_skipped": report.conversations_skipped,
+        "conversations_cancelled": report.conversations_cancelled,
         "results": report.results,
     });
     (progress, summary)
@@ -360,6 +361,7 @@ mod tests {
             conversations_ok: 2,
             conversations_failed: 0,
             conversations_skipped: 1,
+            conversations_cancelled: 0,
             messages_attempted: 45,
             messages_inserted: 42,
             messages_deduped: 2,
@@ -390,6 +392,7 @@ mod tests {
         assert_eq!(summary["messages_failed"], 1);
         assert_eq!(summary["conversations_failed"], 0);
         assert_eq!(summary["conversations_skipped"], 1);
+        assert_eq!(summary["conversations_cancelled"], 0);
         assert_eq!(summary["results"][0]["error"], "attachment exceeds limit");
         assert_eq!(
             summary["summary"],

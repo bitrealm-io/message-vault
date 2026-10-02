@@ -39,7 +39,7 @@ pub const SCHEMA_VERSION: u32 = 4;
 /// The rescue exporters (iMazing, OpenExtract, SMS Backup+) read formats that
 /// sometimes identify the other party by name alone. They set this so the
 /// projection emits a participant carrying the name and no identity, instead
-/// of promoting the name stem into the handle field. The server resolves the
+/// of promoting the chat id made from the name into the handle field. The server resolves the
 /// name against contacts on import.
 pub const CHAT_ID_IS_NAME: &str = "chat_id_is_name";
 /// One exported chat: export metadata, conversation roster and stats, and messages.

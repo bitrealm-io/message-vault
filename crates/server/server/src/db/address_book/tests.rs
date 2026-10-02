@@ -508,6 +508,44 @@ async fn an_identity_of_a_named_contact_outside_the_file_is_refused_naming_both_
     );
 }
 
+/// A contact in the Trash cannot be added to the file, because its id reads
+/// as unknown text. The refusal says to restore it or delete it for good.
+#[tokio::test]
+async fn an_identity_of_a_trashed_named_contact_is_refused_saying_it_is_in_the_trash() {
+    let (mut conn, _pool, _dir) = account().await;
+    let ada = imported(&mut conn, "Ada", &[("phone", "phone", "+15555550100")]).await;
+    let bob = imported(&mut conn, "Bob", &[("phone", "phone", "+15555550142")]).await;
+    sqlx::query("INSERT INTO trashed_contacts (account_id, contact_id) VALUES ($1, $2)")
+        .bind(ACCOUNT)
+        .bind(bob)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    let expected = format!(
+        "row 2: +15555550142 belongs to \"Bob\" (contact {bob}), which is in the Trash, \
+         so it cannot move to \"Ada\" (contact {ada}); restore \"Bob\" and add it to the file, \
+         or delete \"Bob\" for good, to move it"
+    );
+    let without_bob = file(&[&format!("{ada},Ada,,phone,phone,+15555550142")]);
+    let with_bob = file(&[
+        &format!("{ada},Ada,,phone,phone,+15555550142"),
+        &format!("{bob},Bob,,,,"),
+    ]);
+    for text in [without_bob, with_bob] {
+        for mode in [LoadMode::Append, LoadMode::Edit] {
+            assert_eq!(
+                refused(&mut conn, &text, mode).await,
+                std::slice::from_ref(&expected)
+            );
+        }
+    }
+    assert_eq!(
+        identities_of(&mut conn, bob).await,
+        ["phone/phone/+15555550142"],
+        "nothing moved"
+    );
+}
+
 // --- Which contact a row speaks for ---
 
 #[tokio::test]

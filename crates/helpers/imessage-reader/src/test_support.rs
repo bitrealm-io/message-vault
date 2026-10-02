@@ -34,7 +34,7 @@ impl FixtureDb {
             attachment_root: None,
             contacts_path: None,
             use_caller_id: true,
-            scratch_dir: Some(self.dir.path().to_path_buf()),
+            scratch_dir: self.dir.path().to_path_buf(),
         }
     }
 

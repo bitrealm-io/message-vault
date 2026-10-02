@@ -8,16 +8,17 @@ license = "LicenseRef-FCL-1.0-ALv2"
 [dependencies]
 anyhow = { workspace = true }
 fs2 = "0.4.3"
+hex = { workspace = true }
 media = { path = "../media" }
 message-ir = { path = "../ir" }
 message-ir-format = { path = "../ir-format" }
 message-crate-core = { path = "../../core/message-crate-core" }
 serde = { workspace = true }
+sha2 = { workspace = true }
 
 [dev-dependencies]
 media = { path = "../media", features = ["testutil"] }
 message-ir = { path = "../ir", features = ["testutil"] }
-sha2 = { workspace = true }
 tempfile = { workspace = true }
 
 [lints]

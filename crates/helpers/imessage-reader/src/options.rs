@@ -27,18 +27,17 @@ pub(crate) struct ReaderOptions {
 impl ReaderOptions {
     /// Options for a full export.
     pub fn from_export(request: ExportRequest) -> Self {
-        let scratch_dir = request.scratch_dir.unwrap_or_else(std::env::temp_dir);
         Self {
             attachment_root: request.attachment_root,
             contacts_path: request.contacts_path,
             use_caller_id: request.use_caller_id,
-            scratch_dir,
-            ..Self::from_source(request.source)
+            ..Self::from_source(request.source, request.scratch_dir)
         }
     }
 
-    /// Options for opening the source and nothing more.
-    pub fn from_source(source: Source) -> Self {
+    /// Options for opening the source and nothing more. Decrypted files go
+    /// to `scratch_dir` and nowhere else.
+    pub fn from_source(source: Source, scratch_dir: PathBuf) -> Self {
         Self {
             db_path: source.db_path,
             attachment_root: None,
@@ -50,7 +49,7 @@ impl ReaderOptions {
             },
             cleartext_password: source.backup_password,
             contacts_path: None,
-            scratch_dir: std::env::temp_dir(),
+            scratch_dir,
         }
     }
 
@@ -101,7 +100,7 @@ mod tests {
 
     /// An export request carries everything the source alone does not: the
     /// attachment root, the contacts file, the caller-id choice and the
-    /// scratch folder. Without a scratch folder the system temp dir is used.
+    /// scratch folder.
     #[test]
     fn an_export_request_fills_every_option() {
         let options = ReaderOptions::from_export(ExportRequest {
@@ -109,7 +108,7 @@ mod tests {
             attachment_root: Some("/phone/files".to_string()),
             contacts_path: Some(PathBuf::from("/contacts.db")),
             use_caller_id: false,
-            scratch_dir: Some(PathBuf::from("/scratch")),
+            scratch_dir: PathBuf::from("/scratch"),
         });
         assert!(matches!(options.platform, Platform::iOS));
         assert_eq!(options.db_path, PathBuf::from("/backups/one"));
@@ -118,38 +117,39 @@ mod tests {
         assert!(!options.use_caller_id);
         assert_eq!(options.cleartext_password.as_deref(), Some("secret"));
         assert_eq!(options.scratch_dir(), Path::new("/scratch"));
-
-        let options = ReaderOptions::from_export(ExportRequest {
-            source: source(imessage_reader_protocol::Platform::MacOs),
-            attachment_root: None,
-            contacts_path: None,
-            use_caller_id: true,
-            scratch_dir: None,
-        });
-        assert!(matches!(options.platform, Platform::macOS));
-        assert_eq!(options.scratch_dir(), std::env::temp_dir());
     }
 
-    /// A source on its own is enough to open the database: the identities
-    /// request sends nothing else.
+    /// A source and a scratch folder are enough to open the database: the
+    /// identities request sends nothing else. Decrypted files go to the
+    /// scratch folder it names, never to the system's temporary folder.
     #[test]
     fn a_source_alone_opens_with_defaults() {
-        let options = ReaderOptions::from_source(source(imessage_reader_protocol::Platform::MacOs));
+        let options = ReaderOptions::from_source(
+            source(imessage_reader_protocol::Platform::MacOs),
+            PathBuf::from("/app/scratch/one"),
+        );
         assert!(matches!(options.platform, Platform::macOS));
         assert_eq!(options.attachment_root, None);
         assert_eq!(options.contacts_path, None);
         assert!(options.use_caller_id);
         assert_eq!(options.cleartext_password.as_deref(), Some("secret"));
+        assert_eq!(options.scratch_dir(), Path::new("/app/scratch/one"));
     }
 
     /// A Mac `chat.db` is the path itself; an iOS backup folder holds the
     /// database under its hashed file name.
     #[test]
     fn the_database_path_depends_on_the_platform() {
-        let mac = ReaderOptions::from_source(source(imessage_reader_protocol::Platform::MacOs));
+        let mac = ReaderOptions::from_source(
+            source(imessage_reader_protocol::Platform::MacOs),
+            PathBuf::from("/scratch"),
+        );
         assert_eq!(mac.get_db_path(), PathBuf::from("/backups/one"));
 
-        let ios = ReaderOptions::from_source(source(imessage_reader_protocol::Platform::Ios));
+        let ios = ReaderOptions::from_source(
+            source(imessage_reader_protocol::Platform::Ios),
+            PathBuf::from("/scratch"),
+        );
         assert_eq!(
             ios.get_db_path(),
             PathBuf::from("/backups/one").join(DEFAULT_PATH_IOS)
@@ -160,7 +160,10 @@ mod tests {
     /// for people followed by a setup progress event for the bar.
     #[test]
     fn setup_steps_and_log_lines_are_emitted() {
-        let options = ReaderOptions::from_source(source(imessage_reader_protocol::Platform::MacOs));
+        let options = ReaderOptions::from_source(
+            source(imessage_reader_protocol::Platform::MacOs),
+            PathBuf::from("/scratch"),
+        );
         let events = crate::log::capture::events(|| {
             options.emit_log("hello");
             options.setup_step(1, 4, "Caching chats");

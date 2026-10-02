@@ -9,8 +9,12 @@ import {
   forHandle,
   forPerson,
   forTag,
+  lastToken,
   type MessagesQueryInput,
+  narrow,
   quote,
+  replaceLastToken,
+  searchTokens,
   suggestion,
   trashed,
   withKind,
@@ -60,6 +64,20 @@ describe("forTag", () => {
   });
 });
 
+describe("names the server would read as syntax", () => {
+  // Unquoted, the server splits a value on commas, reads #N as an id and a
+  // trailing * as a prefix (crates/server/server/src/search/parse.rs).
+  it("quotes a group name with a comma", () => {
+    expect(forGroup("Smith,Jones")).toBe('group:"Smith,Jones"');
+  });
+  it("quotes a tag name that looks like an id", () => {
+    expect(forTag("#3")).toBe('tag:"#3"');
+  });
+  it("quotes a tag name that ends in a star", () => {
+    expect(forTag("Work*")).toBe('tag:"Work*"');
+  });
+});
+
 describe("forHandle", () => {
   it("trims and builds a bare handle term", () => {
     expect(forHandle("  ann@example.com  ")).toBe("handle:ann@example.com");
@@ -99,15 +117,41 @@ describe("forPerson", () => {
   });
 });
 
+describe("narrow", () => {
+  it("puts the typed text in parentheses after the filter", () => {
+    expect(narrow("tag:Work", "a or b")).toBe("tag:Work (a or b)");
+  });
+
+  it("is the filter alone when nothing is typed", () => {
+    expect(narrow("tag:Work", "   ")).toBe("tag:Work");
+  });
+
+  it("is the typed text alone when there is no filter", () => {
+    expect(narrow("", "  a or b ")).toBe("a or b");
+  });
+
+  it("leaves typed text whose parentheses do not pair up outside the parentheses", () => {
+    // Wrapped, `a) or (b` would close the parentheses early and the `or`
+    // would reach past the filter. Unwrapped, the server refuses the
+    // stray `)`.
+    expect(narrow("tag:Work", "a) or (b")).toBe("tag:Work a) or (b");
+    expect(narrow("tag:Work", "(a")).toBe("tag:Work (a");
+  });
+
+  it("does not count a parenthesis inside quotes", () => {
+    expect(narrow("tag:Work", '"a)" or subject:"(b"')).toBe('tag:Work ("a)" or subject:"(b")');
+  });
+});
+
 describe("withKind", () => {
   it("returns the query unchanged for all, rather than appending an empty term", () => {
     expect(withKind("q", "all")).toBe("q");
     expect(withKind("", "all")).toBe("");
   });
 
-  it("appends kind:direct or kind:group to a non-empty query", () => {
-    expect(withKind("q", "direct")).toBe("q kind:direct");
-    expect(withKind("q", "group")).toBe("q kind:group");
+  it("puts the query in parentheses before kind:direct or kind:group", () => {
+    expect(withKind("q", "direct")).toBe("kind:direct (q)");
+    expect(withKind("a or b", "group")).toBe("kind:group (a or b)");
   });
 
   it("builds a bare kind term when the query is empty", () => {
@@ -121,8 +165,97 @@ describe("trashed", () => {
     expect(trashed("   ")).toBe("trashed:yes");
   });
 
-  it("appends a trimmed search term", () => {
-    expect(trashed("  ada  ")).toBe("trashed:yes ada");
+  it("puts a trimmed search in parentheses after trashed:yes", () => {
+    expect(trashed("  ada  ")).toBe("trashed:yes (ada)");
+  });
+
+  it("keeps a typed or inside the Trash", () => {
+    expect(trashed("gone or name:jane")).toBe("trashed:yes (gone or name:jane)");
+  });
+});
+
+// The cases of the server's lexer (crates/server/server/src/search/lex.rs,
+// its tests), read for where each token starts and ends.
+describe("searchTokens", () => {
+  const texts = (q: string) => searchTokens(q).map((t) => q.slice(t.start, t.end));
+
+  it("reads words, phrases and prefixes", () => {
+    expect(texts('hello "two words" avoc*')).toEqual(["hello", '"two words"', "avoc*"]);
+  });
+
+  it("reads bare and quoted field values", () => {
+    expect(texts('tag:Work group:"Book Club" date:2019..2021')).toEqual([
+      "tag:Work",
+      'group:"Book Club"',
+      "date:2019..2021",
+    ]);
+  });
+
+  it("reads a doubled quote as a quote inside the value", () => {
+    expect(texts('title:"say ""hi"" now" x')).toEqual(['title:"say ""hi"" now"', "x"]);
+  });
+
+  it("reads operators, negation and parentheses", () => {
+    expect(texts("-tag:Work or (a and not b)")).toEqual([
+      "-tag:Work",
+      "or",
+      "(",
+      "a",
+      "and",
+      "not",
+      "b",
+      ")",
+    ]);
+    expect(searchTokens("(a)").map((t) => t.kind)).toEqual(["open", "text", "close"]);
+  });
+
+  it("reads a minus before a group as part of the group's parenthesis", () => {
+    expect(texts("-(a or b)")).toEqual(["-(", "a", "or", "b", ")"]);
+    expect(searchTokens("-(a)")[0].kind).toBe("open");
+    // A `-` before a space or a closing parenthesis is a word.
+    expect(texts("- a")).toEqual(["-", "a"]);
+    expect(texts("(a -)")).toEqual(["(", "a", "-", ")"]);
+  });
+
+  it("reads a field word only when it is letters and hyphens", () => {
+    expect(texts("http://x")).toEqual(["http://x"]);
+    expect(texts('First-Message:"a b"')).toEqual(['First-Message:"a b"']);
+    // Not a field word, so the quote is text and the space ends the word.
+    expect(texts('1x:"a b"')).toEqual(['1x:"a', 'b"']);
+  });
+
+  it("reads a quote inside a bare word as text", () => {
+    expect(texts('ab"c d')).toEqual(['ab"c', "d"]);
+  });
+
+  it("runs a quote that never closes to the end", () => {
+    expect(texts('a tag:"Book (Club')).toEqual(["a", 'tag:"Book (Club']);
+    expect(texts('"a b')).toEqual(['"a b']);
+  });
+
+  it("reads tabs and line breaks as spaces", () => {
+    expect(texts("a\tb\nc")).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("lastToken", () => {
+  it("is the token that runs to the end of the query", () => {
+    expect(lastToken("hello wi")).toEqual({ start: 6, text: "wi" });
+    expect(lastToken("(ta")).toEqual({ start: 1, text: "ta" });
+    expect(lastToken('with:"ann l')).toEqual({ start: 0, text: 'with:"ann l' });
+  });
+
+  it("is empty after a space", () => {
+    expect(lastToken("hello ")).toEqual({ start: 6, text: "" });
+    expect(lastToken("")).toEqual({ start: 0, text: "" });
+  });
+});
+
+describe("replaceLastToken", () => {
+  it("changes only the token being typed", () => {
+    expect(replaceLastToken('subject:"a  b"   wi', "with:")).toBe('subject:"a  b"   with:');
+    expect(replaceLastToken("(ta", "tag:")).toBe("(tag:");
+    expect(replaceLastToken("a ", "tag:")).toBe("a tag:");
   });
 });
 
@@ -204,6 +337,22 @@ describe("advancedContacts", () => {
     );
   });
 
+  it("keeps the end day of a Between with an end date only, as a start and an end do", () => {
+    // `a..b` takes in all of b; `<b` stops before b (search/value.rs, parse_date).
+    expect(
+      advancedContacts({
+        contactName: "",
+        handle: "",
+        firstMessageBound: { op: "any", start: "", end: "" },
+        lastMessageBound: { op: "between", start: "", end: "2021-06-01" },
+        activity: "any",
+        noPreferredName: false,
+        noHandle: false,
+        services: [],
+      }),
+    ).toBe("last-message:<=2021-06-01");
+  });
+
   it("quotes a handle with a space instead of always quoting it", () => {
     expect(
       advancedContacts({
@@ -255,7 +404,16 @@ type ListName = "contacts" | "conversations" | "messages";
  * unquoted (`Unbalanced`), which is what lets the Rust side of this fixture
  * ever go red for a quoting regression rather than silently accepting a
  * differently-wrong query. */
-const AWKWARD_NAMES = ["Ana", "Book Club", "Family (close)", 'Say "Hi"', "x)"];
+const AWKWARD_NAMES = [
+  "Ana",
+  "Book Club",
+  "Family (close)",
+  'Say "Hi"',
+  "x)",
+  "Smith,Jones",
+  "#3",
+  "Work*",
+];
 
 function addLines(lines: Set<string>, query: string, lists: readonly ListName[]): void {
   for (const list of lists) lines.add(`${list}\t${query}`);
@@ -301,10 +459,10 @@ function buildFixtureLines(): string[] {
   }
   addLines(lines, withKind("", "group"), ["conversations"]);
 
-  // trashed: the term both Trash panes (contacts and conversations) append
-  // after trashed:yes. The search text itself is the person's own query,
-  // already valid syntax, not a raw value this builder quotes.
-  for (const search of ["", "  ada  ", '"guacamole night"']) {
+  // trashed: the search both Trash panes (contacts and conversations) put in
+  // parentheses after trashed:yes. The search text itself is the person's
+  // own query, already valid syntax, not a raw value this builder quotes.
+  for (const search of ["", "  ada  ", '"guacamole night"', "gone or ada"]) {
     addLines(lines, trashed(search), ["contacts", "conversations"]);
   }
 

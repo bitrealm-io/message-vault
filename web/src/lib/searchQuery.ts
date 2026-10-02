@@ -12,18 +12,160 @@
  * the language's own grouping syntax rather than as text
  * (`crates/server/server/src/search/lex.rs`, `is_bare_end`); a Contact Group
  * named `Family (close)` sent as `group:Family (close)` therefore means
- * something different from what the person picked.
+ * something different from what the person picked. An unquoted value is
+ * also split on commas, read as an id when it is `#` and digits, and read as
+ * a prefix when it ends in `*` (`crates/server/server/src/search/parse.rs`),
+ * so a value with a comma, a leading `#`, or a trailing `*` is quoted too.
+ *
+ * A page's filter and the text the person typed are joined by `narrow`, and
+ * by nothing else, so an `or` in the typed text stays inside the filter.
  *
  * This module only turns values into search terms — no fetching, no React,
  * no imports from `components/`.
  */
 
-/** Quote `value` if the language would otherwise read it as more than one token. */
+/** Quote `value` if the language would otherwise read it as syntax rather than one value. */
 export function quote(value: string): string {
-  if (value === "" || /[\s()"]/.test(value)) {
+  if (value === "" || /[\s(),"]/.test(value) || value.startsWith("#") || value.endsWith("*")) {
     return `"${value.replace(/"/g, '""')}"`;
   }
   return value;
+}
+
+// --- Reading a query as the server's lexer does ----------------------
+
+/**
+ * One token of a query: where it starts and ends, and whether it opens a
+ * group (`(`, or `-(` with its minus), closes one, or is anything else.
+ */
+export type SearchToken = { kind: "open" | "close" | "text"; start: number; end: number };
+
+/** The lexer's whitespace (`u8::is_ascii_whitespace`), plus NUL, which it reads as a space. */
+function isSpace(c: string | undefined): boolean {
+  return c === " " || c === "\t" || c === "\n" || c === "\f" || c === "\r" || c === "\0";
+}
+
+/** A character that ends an unquoted run (`lex.rs`, `is_bare_end`). */
+function isBareEnd(c: string | undefined): boolean {
+  return isSpace(c) || c === "(" || c === ")";
+}
+
+/**
+ * The index just past the quoted value whose opening quote is at `quote`.
+ * `""` inside is one quote. A quote that never closes runs to the end.
+ */
+function quotedEnd(query: string, quote: number): number {
+  let i = quote + 1;
+  while (i < query.length) {
+    if (query[i] === '"') {
+      if (query[i + 1] === '"') {
+        i += 2;
+        continue;
+      }
+      return i + 1;
+    }
+    i += 1;
+  }
+  return query.length;
+}
+
+/**
+ * Split `query` into tokens the way the server's lexer does
+ * (`crates/server/server/src/search/lex.rs`, `tokenize`): a leading `-`
+ * belongs to the token after it, a quote opens a value only at the start of
+ * a token or right after `word:`, and an unquoted run ends at whitespace or a
+ * parenthesis. Where the lexer refuses a quote that never closes, this
+ * returns a token that runs to the end, so a box still being typed in can be
+ * read.
+ */
+export function searchTokens(query: string): SearchToken[] {
+  const tokens: SearchToken[] = [];
+  const n = query.length;
+  let i = 0;
+  for (;;) {
+    while (i < n && isSpace(query[i])) i += 1;
+    if (i >= n) return tokens;
+    const start = i;
+    if (query[i] === ")") {
+      tokens.push({ kind: "close", start, end: i + 1 });
+      i += 1;
+      continue;
+    }
+    // A `-` with nothing, a space, or `)` after it is a word of its own.
+    if (query[i] === "-" && i + 1 < n && !isSpace(query[i + 1]) && query[i + 1] !== ")") i += 1;
+    let end: number;
+    if (query[i] === "(") {
+      tokens.push({ kind: "open", start, end: i + 1 });
+      i += 1;
+      continue;
+    }
+    if (query[i] === '"') {
+      end = quotedEnd(query, i);
+    } else {
+      let head = i;
+      while (head < n && !isBareEnd(query[head]) && query[head] !== ":") head += 1;
+      const isField =
+        query[head] === ":" &&
+        /^[A-Za-z][A-Za-z-]*$/.test(query.slice(i, head)) &&
+        query[head + 1] !== "/";
+      if (isField && query[head + 1] === '"') {
+        end = quotedEnd(query, head + 1);
+      } else {
+        end = i;
+        while (end < n && !isBareEnd(query[end])) end += 1;
+      }
+    }
+    tokens.push({ kind: "text", start, end });
+    i = end;
+  }
+}
+
+/**
+ * The token being typed at the end of `query`, and where it starts: the last
+ * token when it runs to the end, or nothing after a trailing space.
+ */
+export function lastToken(query: string): { start: number; text: string } {
+  const last = searchTokens(query).at(-1);
+  if (last && last.end === query.length) {
+    return { start: last.start, text: query.slice(last.start) };
+  }
+  return { start: query.length, text: "" };
+}
+
+/** `query` with the token being typed replaced by `text`, and the rest left as typed. */
+export function replaceLastToken(query: string, text: string): string {
+  return query.slice(0, lastToken(query).start) + text;
+}
+
+/** True when every `)` in `query` closes a `(` before it, and none is left open. */
+function parenthesesPair(query: string): boolean {
+  let depth = 0;
+  for (const token of searchTokens(query)) {
+    if (token.kind === "open") depth += 1;
+    if (token.kind === "close") {
+      depth -= 1;
+      if (depth < 0) return false;
+    }
+  }
+  return depth === 0;
+}
+
+/**
+ * Narrow the text the person typed to a page's filter, as `filter (typed)`.
+ *
+ * `or` binds looser than a space (`docs/architecture/search.md`), so without
+ * the parentheses `trashed:yes gone or name:jane` would be
+ * `(trashed:yes gone) or name:jane` and reach rows outside the filter. Typed
+ * text whose parentheses do not pair up is joined without them: wrapped,
+ * `a) or (b` would close the group early, and unwrapped, the server refuses
+ * it.
+ */
+export function narrow(filter: string, typed: string): string {
+  const f = filter.trim();
+  const t = typed.trim();
+  if (!t) return f;
+  if (!f) return t;
+  return parenthesesPair(t) ? `${f} (${t})` : `${f} ${t}`;
 }
 
 /** A Contact Group term, e.g. `group:Family` or `group:"Family (close)"`. */
@@ -58,18 +200,16 @@ export type ConversationKind = "all" | "direct" | "group";
 
 /**
  * Narrow `query` to direct or group conversations, or leave it unchanged for
- * `all` rather than appending an empty term.
+ * `all` rather than adding an empty term.
  */
 export function withKind(query: string, kind: ConversationKind): string {
   if (kind === "all") return query;
-  const term = `kind:${kind}`;
-  return query ? `${query} ${term}` : term;
+  return narrow(`kind:${kind}`, query);
 }
 
 /** Trash is always `trashed:yes`; a typed search narrows within it. */
 export function trashed(search: string): string {
-  const term = search.trim();
-  return term ? `trashed:yes ${term}` : "trashed:yes";
+  return narrow("trashed:yes", search);
 }
 
 /** One autocomplete term, e.g. `tag:Work` or `tag:"Book Club"`. */
@@ -125,7 +265,7 @@ export function composeCountComparison(input: CountFilterInput): string | null {
   return `${input.comparator}${value}`;
 }
 
-/** Push one `prefix:` date token: `>=D`, `<D`, or an inclusive `D..D` range. */
+/** Push one `prefix:` date token: `>=D`, `<D`, `<=D`, or an inclusive `D..D` range. */
 function pushDateBoundTokens(
   push: (s: string) => void,
   prefix: "first-message" | "last-message",
@@ -143,7 +283,8 @@ function pushDateBoundTokens(
     case "between":
       if (bound.start && bound.end) push(`${prefix}:${bound.start}..${bound.end}`);
       else if (bound.start) push(`${prefix}:>=${bound.start}`);
-      else if (bound.end) push(`${prefix}:<${bound.end}`);
+      // `a..b` takes in all of b, so an end alone takes in its day too.
+      else if (bound.end) push(`${prefix}:<=${bound.end}`);
       return;
   }
 }

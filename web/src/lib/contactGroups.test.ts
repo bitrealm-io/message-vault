@@ -106,8 +106,8 @@ describe("contactBelongsToGroup", () => {
 describe("groupListQuery", () => {
   it("quotes names that contain spaces and keeps typed search", () => {
     expect(groupListQuery("Family", "")).toBe("group:Family");
-    expect(groupListQuery("Work Friends", "ada")).toBe('group:"Work Friends" ada');
-    expect(groupListQuery("none", "bob")).toBe("group:none bob");
+    expect(groupListQuery("Work Friends", "ada")).toBe('group:"Work Friends" (ada)');
+    expect(groupListQuery("none", "bob")).toBe("group:none (bob)");
     expect(groupListQuery(null, "ada")).toBe("ada");
   });
 

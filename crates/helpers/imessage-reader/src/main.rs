@@ -66,8 +66,8 @@ fn main() {
         .unwrap_or_else(|e| fail(format!("the request is not valid JSON: {e}")));
 
     match request {
-        Request::Identities(source) => {
-            let found = identities::identities(source).unwrap_or_else(|e| fail(e));
+        Request::Identities(request) => {
+            let found = identities::identities(request).unwrap_or_else(|e| fail(e));
             emit(&Event::Source {
                 protocol_version: PROTOCOL_VERSION,
                 encrypted: found.encrypted,

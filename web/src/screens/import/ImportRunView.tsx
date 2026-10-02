@@ -251,7 +251,7 @@ export default function ImportRunView({
   onApprove: () => void;
   /** Cancel the run from a review: the run ends and what was staged is deleted. */
   onCancelRun: () => void;
-  /** Stop the stage that is running. */
+  /** Stop the stage that is running: Cancel for Staging and Media, Pause for Upload. */
   onCancel: () => void;
   /** Leave a finished run for the import form. */
   onBack: () => void;
@@ -272,13 +272,17 @@ export default function ImportRunView({
   const uploadStep = steps.find((step) => step.label === UPLOAD_LABEL);
   const mediaStep = steps.find((step) => step.label === MEDIA_LABEL);
 
-  const cancelButton = running ? (
-    <div className="mt-2">
-      <Button onClick={onCancel} disabled={cancelDisabled}>
-        Cancel
-      </Button>
-    </div>
-  ) : null;
+  // The same stop under two names: a stopped Upload is paused and resumes
+  // later, so its button says so.
+  const stopButton = (label: "Cancel" | "Pause") =>
+    running ? (
+      <div className="mt-2">
+        <Button onClick={onCancel} disabled={cancelDisabled}>
+          {label}
+        </Button>
+      </div>
+    ) : null;
+  const cancelButton = stopButton("Cancel");
 
   function stagingContent(): ReactNode {
     if (!trimmedStaging && !stagingSummary && !form) return null;
@@ -513,7 +517,7 @@ export default function ImportRunView({
         content: (
           <>
             {uploadContent(step)}
-            {active ? cancelButton : null}
+            {active ? stopButton("Pause") : null}
           </>
         ),
       });

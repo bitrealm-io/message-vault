@@ -155,6 +155,7 @@ function runResultWithIssue(result: TauriJobResult, issue: ImportIssueEvent) {
 function failedReport(): PushFinishedReport {
   return {
     ok: false,
+    cancelled: false,
     messages: 8_000,
     messages_attempted: 8_000,
     messages_inserted: 0,
@@ -173,6 +174,7 @@ function failedReport(): PushFinishedReport {
 function okReport(overrides: Partial<PushFinishedReport> = {}): PushFinishedReport {
   return {
     ok: true,
+    cancelled: false,
     messages: 10,
     messages_attempted: 10,
     messages_inserted: 10,
@@ -1005,6 +1007,54 @@ describe("useImportJob wiring", () => {
     await act(() => approved);
 
     expect(invokePushMock).not.toHaveBeenCalled();
+    // The Upload is paused, not ended: the run stays at `pushing` with its folder.
+    expect(result.current.summaryView?.status).toBe("paused");
+    expect(completeImportMock).not.toHaveBeenCalled();
+    expect(invokeDeleteStagingMock).not.toHaveBeenCalled();
+  });
+
+  it("pauses an Upload the cancel flag stopped: no /complete, and the staged files stay", async () => {
+    const { result } = renderHook(() => useImportJob());
+    await act(() => result.current.startImport(form({ attachmentMedia: "copy" })));
+    // What run.rs reports when the cancel flag stops `drive` after 200 of 681.
+    runMock.mockImplementationOnce(
+      runResult({
+        summary: "Push complete",
+        report: okReport({
+          ok: false,
+          cancelled: true,
+          conversations_ok: 200,
+          conversations_total: 681,
+          conversations_failed: 0,
+        }),
+      }),
+    );
+    await act(() => result.current.approve());
+
+    expect(result.current.summaryView?.status).toBe("paused");
+    expect(completeImportMock).not.toHaveBeenCalled();
+    expect(invokeDeleteStagingMock).not.toHaveBeenCalled();
+    expect(result.current.stagingDir).toBe("/home/sam/message-crate/staging-iphone");
+  });
+
+  it("fails an Upload that stopped short without a cancel, and keeps the staged files", async () => {
+    const { result } = renderHook(() => useImportJob());
+    await act(() => result.current.startImport(form({ attachmentMedia: "copy" })));
+    runMock.mockImplementationOnce(
+      runResult({
+        summary: "Push complete",
+        report: okReport({
+          ok: false,
+          conversations_ok: 200,
+          conversations_total: 681,
+          conversations_failed: 0,
+        }),
+      }),
+    );
+    await act(() => result.current.approve());
+
+    expect(result.current.summaryView?.status).toBe("failed");
+    expect(invokeDeleteStagingMock).not.toHaveBeenCalled();
   });
 
   it("sends Cancel again once a job has started, when it was pressed while the job was starting", async () => {

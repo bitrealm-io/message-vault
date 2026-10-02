@@ -372,7 +372,7 @@
           "Accounts"
         ],
         "summary": "Permanently delete an account: login, profile, contacts, and every message it owns, with its data directory.",
-        "description": "The owner deletes any account outright, the demo account included,\nwhich is how a demo Message Crate is cleared into a real one. An account deletes\nitself with a body carrying the confirmation and its current password: a\ncredential belongs in a body, not in a URL or a header of the server's own\ninvention, and a DELETE body has no defined meaning in RFC 9110 but is not\nforbidden. The demo account refuses its own deletion, and nobody deletes\nthe owner.",
+        "description": "The owner deletes any account outright, the demo account included,\nwhich is how a demo Message Crate is cleared into a real one. An account deletes\nitself with a body carrying the confirmation and its current password: a\ncredential belongs in a body, not in a URL or a header of the server's own\ninvention, and a DELETE body has no defined meaning in RFC 9110 but is not\nforbidden. Deleting an account deletes its messages, so an account needs\nthe `delete` permission to delete itself, and one without it asks the\nowner. The demo account refuses its own deletion, and nobody deletes the\nowner.",
         "operationId": "delete_account",
         "parameters": [
           {
@@ -531,7 +531,14 @@
         },
         "security": [
           {
-            "session": []
+            "session": [
+              "owner"
+            ]
+          },
+          {
+            "session": [
+              "delete"
+            ]
           }
         ]
       },

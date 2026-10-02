@@ -74,6 +74,7 @@ export function AccountSettingsPanel({ managedAccountId }: { managedAccountId?: 
           isDemo={profile.is_demo === true}
           username={profile.username}
           hasPassword={profile.has_password}
+          canDelete={profile.can_delete ?? true}
           managedAccountId={managedAccountId}
           messageCount={profile.message_count}
         />

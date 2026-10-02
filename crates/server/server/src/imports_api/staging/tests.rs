@@ -271,3 +271,83 @@ async fn a_file_with_neither_header_nor_messages_is_refused() {
         "Could not read line 1 of the file: the file has no conversation header."
     );
 }
+
+/// A WhatsApp conversation header with `chat_identifier`, `kind` and the
+/// participants JSON array `participants`.
+fn whatsapp_header(chat_identifier: &str, kind: &str, participants: &str) -> String {
+    format!(
+        r#"{{"schema_version":4,"export":{{"source":"whatsapp","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null}},"conversation":{{"chat_identifier":"{chat_identifier}","conversation_type":"{kind}","group_title":null,"participants":{participants},"stats":{{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}}}}"#
+    ) + "\n"
+}
+
+/// An incoming WhatsApp line from `sender`.
+fn incoming_whatsapp(guid: &str, sender: &str) -> String {
+    incoming(guid, sender).replace(
+        r#""service":"imessage","message_kind":"imessage""#,
+        r#""service":"whatsapp","message_kind":"unknown""#,
+    )
+}
+
+/// Every `(raw, handle_type)` the account's handles hold, sorted.
+async fn handle_types(conn: &mut SqliteConnection) -> Vec<(String, String)> {
+    sqlx::query_as("SELECT raw, handle_type FROM handles WHERE account_id = $1 ORDER BY raw")
+        .bind(TEST_ACCOUNT)
+        .fetch_all(&mut *conn)
+        .await
+        .unwrap()
+}
+
+/// A WhatsApp group's id ends in `@g.us`, which has an `@` in it, but it is
+/// the group's key and nobody's address. Typed by its shape it was stored as
+/// an email identity (#1141).
+#[tokio::test]
+async fn a_group_chat_id_is_stored_as_other_whatever_its_shape() {
+    let (pool, _dir) = crate::db::engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    let body = whatsapp_header(
+        "120363042@g.us",
+        "group",
+        r#"[{"handle":"+15555550702","display_name":null,"handle_type":"phone"}]"#,
+    ) + &incoming_whatsapp("g-group-1", "+15555550702");
+    import_one(&mut conn, "120363042@g.us.jsonl", &body)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        handle_types(&mut conn).await,
+        [
+            ("+15555550702".to_string(), "phone".to_string()),
+            ("120363042@g.us".to_string(), "other".to_string()),
+        ]
+    );
+}
+
+/// A one-to-one WhatsApp chat keyed by an internal `@lid` id: the header
+/// types its one participant `other`. The chat's identity and the sender of
+/// its messages take that type, so neither becomes an email identity, as they
+/// did when the chat id and the sender were typed by their shape (#1141).
+#[tokio::test]
+async fn an_individual_chat_id_takes_the_type_its_participant_has_in_the_header() {
+    let (pool, _dir) = crate::db::engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    let body = whatsapp_header(
+        "123456@lid",
+        "individual",
+        r#"[{"handle":"123456@lid","display_name":null,"handle_type":"other"}]"#,
+    ) + &incoming_whatsapp("g-lid-1", "123456@lid");
+    import_one(&mut conn, "123456@lid.jsonl", &body)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        handle_types(&mut conn).await,
+        [("123456@lid".to_string(), "other".to_string())]
+    );
+    let contacts: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM contact_handles WHERE account_id = $1")
+            .bind(TEST_ACCOUNT)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(contacts, 1, "the one person in the chat is one contact");
+}

@@ -1535,6 +1535,62 @@ async fn an_account_deletes_itself_with_its_password_and_the_demo_account_refuse
     );
 }
 
+/// Deleting an account deletes every message it owns, so an account whose
+/// `delete` permission the owner turned off cannot delete itself, even with
+/// its password, and is told the owner can. The owner still deletes it.
+#[tokio::test]
+async fn an_account_without_the_delete_permission_cannot_delete_itself() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
+    let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
+    seed_one_message(&state, bob.account_id).await;
+    fixture.turn_off_delete(bob.account_id).await;
+    let path = member(bob.account_id);
+
+    let (status, text) = crate::test_support::delete_raw_with_body(
+        &state,
+        &path,
+        &bob.token,
+        serde_json::json!({ "confirm": true, "current_password": "hunter2hunter2" }),
+    )
+    .await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::InsufficientScope,
+    );
+    assert!(
+        problem
+            .detail
+            .as_deref()
+            .is_some_and(|d| d.contains("owner")),
+        "the refusal names the owner: {text}"
+    );
+    assert_eq!(
+        login_status(&state, "bob", "hunter2hunter2").await,
+        StatusCode::CREATED,
+        "the account is still there"
+    );
+    let mut conn = state.db.acquire().await.unwrap();
+    let messages: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE account_id = $1")
+        .bind(bob.account_id)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    drop(conn);
+    assert_eq!(messages, 1, "a refused delete leaves the messages");
+
+    assert_eq!(
+        delete_status(&state, &path, &owner.token).await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        login_status(&state, "bob", "hunter2hunter2").await,
+        StatusCode::UNAUTHORIZED
+    );
+}
+
 /// The Demo Account has no password, so its limits are fixed for everyone:
 /// neither the account nor the owner sets its password, its status, its
 /// permissions or its identities, or deletes its messages for good. Its

@@ -582,9 +582,10 @@ async fn an_asset_get_for_an_unknown_sha_is_a_json_404() {
     crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
 }
 
-/// A part body past `asset_part_size` is a 413. The layer holds a part to the
-/// attachment size limit (512 MiB by default) and the part limit is far
-/// smaller, so the handler's own check is what answers. `docs/architecture/http-api.md`: the status carries the meaning.
+/// A part body past the part size its upload started with is a 413, and the
+/// sentence names that part size. The layer lets a part through uncapped, so
+/// the handler's own check is what answers. `docs/architecture/http-api.md`:
+/// the status carries the meaning.
 #[tokio::test]
 async fn an_upload_part_over_the_part_size_is_a_json_413() {
     let (fixture, user) = crate::test_support::fixture_with_account().await;
@@ -594,9 +595,20 @@ async fn an_upload_part_over_the_part_size_is_a_json_413() {
     state.asset_part_size = 16;
 
     let sha = "0".repeat(64);
+    let (status, text) = crate::test_support::post_raw(
+        &state,
+        &format!("/v1/assets/{sha}/uploads?source=sms-backup-restore"),
+        &user.token,
+        "application/json",
+        serde_json::json!({ "bytes": 40 }).to_string(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{text}");
+    let started: serde_json::Value = serde_json::from_str(&text).unwrap();
+    let upload_id = started["upload_id"].as_str().unwrap();
     let (status, text) = crate::test_support::put_raw(
         &state,
-        &format!("/v1/assets/{sha}/uploads/upload-1/parts/1?source=sms-backup-restore"),
+        &format!("/v1/assets/{sha}/uploads/{upload_id}/parts/1?source=sms-backup-restore"),
         &user.token,
         "application/octet-stream",
         vec![b'x'; 4096],
@@ -609,7 +621,7 @@ async fn an_upload_part_over_the_part_size_is_a_json_413() {
     );
     assert_eq!(
         problem.detail.as_deref(),
-        Some("request body too large"),
+        Some("a part of this upload is at most 16 bytes"),
         "the sentence must be the handler's own, proving the layer did not answer: {text}"
     );
 }
@@ -758,6 +770,71 @@ async fn a_multipart_upload_works_under_a_limit_below_the_configured_part_size()
         &text,
         crate::problem::ProblemType::AssetUploadInvalid,
     );
+}
+
+/// A multipart upload keeps the part size it started with. The owner lowers
+/// the attachment size limit to 10 bytes after a 40-byte upload has opened
+/// with 16-byte parts, and every remaining 16-byte part is still stored and
+/// the upload completes, because the limit holds from the next upload.
+#[tokio::test]
+async fn a_multipart_upload_keeps_its_part_size_when_the_limit_is_lowered() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let mut state = fixture.state.clone();
+    state.asset_part_size = 16;
+    let owner = crate::test_support::claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let bytes: Vec<u8> = (0u8..40).collect();
+    let sha = sha256_hex(&bytes);
+    let server = crate::test_support::serve(&state).await;
+    let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}?source=imessage", server.base());
+    let client = reqwest::Client::new();
+
+    let response = client
+        .post(url("/uploads"))
+        .bearer_auth(&user.token)
+        .json(&serde_json::json!({ "bytes": bytes.len(), "mime": "image/png" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let started: serde_json::Value = response.json().await.unwrap();
+    let upload_id = started["upload_id"].as_str().unwrap().to_string();
+    let part_size = started["part_size"].as_u64().unwrap() as usize;
+    assert_eq!(part_size, 16);
+
+    let _: serde_json::Value = crate::test_support::patch_json(
+        &state,
+        "/v1/server/settings",
+        &owner.token,
+        serde_json::json!({ "asset_max_bytes": 10 }),
+    )
+    .await;
+
+    for (index, chunk) in bytes.chunks(part_size).enumerate() {
+        let response = client
+            .put(url(&format!("/uploads/{upload_id}/parts/{}", index + 1)))
+            .bearer_auth(&user.token)
+            .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+            .body(chunk.to_vec())
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "part {}", index + 1);
+    }
+    let response = client
+        .post(url(&format!("/uploads/{upload_id}/complete")))
+        .bearer_auth(&user.token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let response = client
+        .get(url(""))
+        .bearer_auth(&user.token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.bytes().await.unwrap().as_ref(), bytes.as_slice());
 }
 
 /// What `serve` reads as it starts: with a stored limit below the part size

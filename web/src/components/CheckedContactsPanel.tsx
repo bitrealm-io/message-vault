@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import {
   Cell,
   Column,
@@ -8,10 +8,11 @@ import {
   TableBody,
   TableHeader,
 } from "react-aria-components";
+import { apiErrorMessage } from "../lib/apiErrorMessage";
 import type { ContactDetail } from "../lib/contactDetail";
 import { contactLabelText } from "../lib/contactLabel";
 import { keys } from "../lib/queryKeys";
-import { useRouteCache } from "../lib/routeQuery";
+import { useRouteCache, useRouteQuery } from "../lib/routeQuery";
 import { getContactSummaries } from "../lib/serverApi";
 import { useTimeZone } from "../lib/timeZone";
 import Button from "./Button";
@@ -48,6 +49,34 @@ type RowMetrics = {
   name: string;
   totals: ContactTotals;
 };
+
+/**
+ * Figures for every id, asked for in batches the server accepts.
+ *
+ * Ids that are not positive numbers cannot name a stored contact, so they are
+ * not sent; their rows keep "—".
+ */
+async function fetchSummaries(
+  ids: readonly string[],
+  signal: AbortSignal,
+): Promise<Record<string, RowMetrics>> {
+  const batches = chunkIds([...ids], SUMMARY_BATCH_SIZE)
+    .map((batch) => batch.map(Number).filter((id) => Number.isFinite(id) && id > 0))
+    .filter((batch) => batch.length > 0);
+  const pages = await Promise.all(
+    batches.map((batch) => getContactSummaries({ ids: batch }, { signal })),
+  );
+  const metrics: Record<string, RowMetrics> = {};
+  for (const page of pages) {
+    for (const summary of page.items) {
+      metrics[String(summary.id)] = {
+        name: summary.name,
+        totals: totalsFromSummary(summary),
+      };
+    }
+  }
+  return metrics;
+}
 
 type ContactRow = {
   id: string;
@@ -113,57 +142,27 @@ export default function CheckedContactsPanel({
   const zone = useTimeZone();
   const heading =
     contacts.length === 1 ? "1 contact selected" : `${contacts.length} contacts selected`;
-  const [metrics, setMetrics] = useState<Record<string, RowMetrics>>({});
   const [sortDescriptor, setSortDescriptor] = useState<SortDescriptor | null>(null);
-  const contactKey = contacts.map((c) => c.id).join(",");
-  const contactsRef = useRef(contacts);
-  contactsRef.current = contacts;
+  const ids = useMemo(() => contacts.map((c) => c.id), [contacts]);
+  // The figures come from `POST /v1/contacts/summaries`. A contact whose
+  // drawer was opened in this session already has its own figures in the
+  // cache, so its row shows those while the summaries load, or if they fail.
+  const summaries = useRouteQuery(
+    keys.contacts.summaries(ids),
+    (signal) => fetchSummaries(ids, signal),
+    { enabled: ids.length > 0 },
+  );
 
-  useEffect(() => {
-    void contactKey;
-    const selected = contactsRef.current;
-    const ac = new AbortController();
-    const seeded: Record<string, RowMetrics> = {};
-    const missing: string[] = [];
-    for (const c of selected) {
-      const cached = cache.read<ContactDetail>(keys.contacts.detail(c.id));
+  const metrics = useMemo<Record<string, RowMetrics>>(() => {
+    const merged: Record<string, RowMetrics> = {};
+    for (const id of ids) {
+      const cached = cache.read<ContactDetail>(keys.contacts.detail(id));
       if (cached) {
-        seeded[c.id] = {
-          name: cached.name,
-          totals: sumHandleTotals(cached.identities),
-        };
-      } else {
-        missing.push(c.id);
+        merged[id] = { name: cached.name, totals: sumHandleTotals(cached.identities) };
       }
     }
-    setMetrics(seeded);
-    const batches = chunkIds(missing, SUMMARY_BATCH_SIZE)
-      .map((ids) => ids.map(Number).filter((id) => Number.isFinite(id) && id > 0))
-      .filter((ids) => ids.length > 0);
-    if (batches.length === 0) {
-      return () => ac.abort();
-    }
-    void Promise.all(batches.map((ids) => getContactSummaries({ ids }, { signal: ac.signal })))
-      .then((pages) => {
-        if (ac.signal.aborted) return;
-        setMetrics((prev) => {
-          const next = { ...prev };
-          for (const page of pages) {
-            for (const summary of page.items) {
-              next[String(summary.id)] = {
-                name: summary.name,
-                totals: totalsFromSummary(summary),
-              };
-            }
-          }
-          return next;
-        });
-      })
-      .catch(() => {
-        /* aborted or failed — uncached rows stay on em dash until a later load */
-      });
-    return () => ac.abort();
-  }, [contactKey, cache.read]);
+    return { ...merged, ...summaries.data };
+  }, [ids, cache, summaries.data]);
 
   const rows = useMemo<ContactRow[]>(() => {
     const built = contacts.map((c) => {
@@ -194,6 +193,22 @@ export default function CheckedContactsPanel({
       className="flex h-full min-h-0 min-w-0 flex-col overflow-x-hidden overflow-y-auto bg-panel px-6 pb-6 pt-2 outline-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       aria-label={heading}
     >
+      {summaries.error && !summaries.data ? (
+        <div
+          role="alert"
+          className="mb-3 flex items-start justify-between gap-3 rounded border border-danger-soft-border bg-danger-soft-bg px-3 py-2 text-[0.813rem] text-danger"
+        >
+          <div className="min-w-0">
+            <p className="m-0 font-semibold">The figures for these contacts could not be loaded.</p>
+            <p className="m-0 mt-1">
+              {apiErrorMessage(summaries.error, "The server did not answer.")}
+            </p>
+          </div>
+          <Button variant="secondary" size="chip" onClick={() => void summaries.refetch()}>
+            Try again
+          </Button>
+        </div>
+      ) : null}
       <DataCard
         title={<h2 className="m-0 text-[1.125rem] font-semibold">{heading}</h2>}
         toolbar={

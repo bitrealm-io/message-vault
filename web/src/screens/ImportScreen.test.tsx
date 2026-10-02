@@ -5,7 +5,7 @@
 // may flash on screen while that check is in flight, and a server that
 // can't answer falls through to the form rather than blocking it.
 
-import { act, cleanup, screen } from "@testing-library/react";
+import { act, cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActiveImportSession } from "../lib/importSession";
@@ -43,6 +43,7 @@ const invokeDeleteStagingMock = vi.hoisted(() => vi.fn());
 const invokePathStatMock = vi.hoisted(() => vi.fn());
 const apiPostMock = vi.hoisted(() => vi.fn());
 const apiGetMock = vi.hoisted(() => vi.fn());
+const listImportsMock = vi.hoisted(() => vi.fn());
 
 vi.mock("./import/useImportJob", async (importOriginal) => {
   // Only useImportJob itself is replaced; parseStoredStagingSummary stays
@@ -90,10 +91,11 @@ vi.mock("../lib/deviceId", () => ({
   getDeviceId: () => "this-device",
 }));
 
-// The three server calls this screen makes, faked by name. The rest of
+// The server calls this screen makes, faked by name. The rest of
 // serverApi stays real, since other modules in this graph import from it.
 vi.mock("../lib/serverApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/serverApi")>()),
+  listImports: (...args: unknown[]) => listImportsMock(...args),
   unmatchedIdentities: (...args: unknown[]) => apiPostMock(...args),
   updateAccountProfile: (...args: unknown[]) => apiPostMock(...args),
   getAccountProfile: (...args: unknown[]) => apiGetMock(...args),
@@ -165,6 +167,7 @@ vi.mock("./import/ResumeImportPanel", () => ({
 }));
 
 const { default: ImportScreen } = await import("./ImportScreen");
+const { useImportAttention } = await import("./import/useImportAttention");
 
 function stagingSummary(overrides: Partial<StagingSummary> = {}): StagingSummary {
   return {
@@ -340,6 +343,41 @@ describe("ImportScreen entering Import", () => {
 
     expect(discardImportSessionMock).toHaveBeenCalledWith(7);
     expect(await screen.findByTestId("import-form")).toBeInTheDocument();
+  });
+
+  it("takes the sidebar's waiting badge away when the waiting run is discarded", async () => {
+    // A run left waiting at the Staging Review before the app was closed is
+    // only on the server, so the badge reads it from there. Discard ends it,
+    // and the badge must go at once rather than on a later refetch.
+    const user = userEvent.setup();
+    let running: ActiveImportSession | null = session({ stage: "awaiting_gate_1" });
+    getActiveImportSessionMock.mockImplementation(async () => running);
+    listImportsMock.mockImplementation(async () => ({
+      items: running ? [running] : [],
+      total: running ? 1 : 0,
+      limit: 1,
+      offset: 0,
+    }));
+    discardImportSessionMock.mockImplementation(async () => {
+      running = null;
+    });
+    /** The sidebar's Import badge, as `LeftPanel` reads it. */
+    function ImportBadge() {
+      return <span data-testid="import-badge">{String(useImportAttention(true))}</span>;
+    }
+    renderWithProviders(
+      <>
+        <ImportBadge />
+        <ImportScreen />
+      </>,
+    );
+
+    await screen.findByTestId("resume-panel");
+    await waitFor(() => expect(screen.getByTestId("import-badge")).toHaveTextContent("waiting"));
+    await user.click(screen.getByText("discard-action"));
+
+    expect(await screen.findByTestId("import-form")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("import-badge")).toHaveTextContent("null"));
   });
 
   it("also deletes the staging folder when discarding a this-device session", async () => {

@@ -18,6 +18,8 @@ import {
   shouldPrefillMacMessagesDb,
 } from "../lib/imessageImport";
 import { discardImportSession, getActiveImportSession } from "../lib/importSession";
+import { keys } from "../lib/queryKeys";
+import { useRouteCache } from "../lib/routeQuery";
 import { unmatchedIdentities } from "../lib/serverApi";
 import {
   getImporterPath,
@@ -109,6 +111,7 @@ async function stagingFolderCheck(stagingDir: string): Promise<FolderCheck> {
 
 export default function ImportScreen() {
   const fetchAccountProfile = useFetchAccountProfile();
+  const cache = useRouteCache();
   const {
     phase,
     steps,
@@ -229,16 +232,22 @@ export default function ImportScreen() {
    * discard failed before the create 409'd. Without it, Back lands on a
    * blank form whose Import button 409s until the route is remounted.
    *
-   * `phase` is the only dependency and nothing here writes it, so this
-   * cannot loop; the early return keeps it from running against a session
-   * an import is currently using.
+   * The answer is stored under `keys.imports.running`, the entry the
+   * sidebar's Import badge reads, so every return to the form refreshes the
+   * badge too and the two cannot disagree.
+   *
+   * Nothing here writes `phase` or `cache`, so this cannot loop; the early
+   * return keeps it from running against a session an import is currently
+   * using.
    */
   useEffect(() => {
     if (phase !== "form") return;
     let cancelled = false;
     void (async () => {
       try {
-        const session = await getActiveImportSession();
+        const session = await cache.fetch(keys.imports.running, (signal) =>
+          getActiveImportSession(signal),
+        );
         const folder = session?.staging_dir
           ? await stagingFolderCheck(session.staging_dir)
           : "missing";
@@ -273,7 +282,7 @@ export default function ImportScreen() {
     return () => {
       cancelled = true;
     };
-  }, [phase]);
+  }, [phase, cache]);
 
   /**
    * Ask the server which of the staged contact identifiers this account
@@ -361,6 +370,9 @@ export default function ImportScreen() {
     } finally {
       discardingRef.current = false;
       setResume(NO_RESUME);
+      // The run is gone, or the server still has it; either way the badge
+      // asks again rather than keep saying "waiting".
+      void cache.invalidate(keys.imports.running);
     }
   }
 
@@ -453,6 +465,7 @@ export default function ImportScreen() {
         // Best effort -- if the server is unreachable the create call below
         // surfaces its own error the same as any other failed import start.
       }
+      void cache.invalidate(keys.imports.running);
       setResume(NO_RESUME);
       await startImport(restoredForm);
     } finally {

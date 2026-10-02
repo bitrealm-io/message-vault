@@ -40,6 +40,7 @@ fn finished_push_events(
             report.assets_uploaded
         ),
         "ok": report.ok,
+        "cancelled": report.cancelled,
         "messages": report.messages,
         "messages_attempted": report.messages_attempted,
         "messages_inserted": report.messages_inserted,
@@ -351,6 +352,7 @@ mod tests {
     fn finished_push_event_reports_complete_upload_and_totals() {
         let report = PushReport {
             ok: true,
+            cancelled: false,
             account: 1,
             username: "user".into(),
             mode: ImportMode::Append,
@@ -401,5 +403,6 @@ mod tests {
         assert_eq!(summary["assets_bytes"], 12_345);
         assert_eq!(summary["conversations_ok"], 2);
         assert_eq!(summary["conversations_total"], 3);
+        assert_eq!(summary["cancelled"], false);
     }
 }

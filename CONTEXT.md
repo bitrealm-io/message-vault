@@ -43,8 +43,19 @@ _Avoid_: Thread, Chat
 One thing sent or received inside a Conversation: who sent it, when, what
 it said, and what was attached. A message can be read and pointed at on its
 own, and picked by hand for an Export Run, but it is never acted on alone:
-tagging, trashing and deleting happen to its Conversation.
+tagging, trashing and deleting happen to its Conversation. Two records a
+backup cannot tell apart, alike in conversation, sender, time, text and
+attachments, are one message.
 _Avoid_: Text, Post, Item, Row
+
+**Orphaned message**:
+A Message the backup holds without recording which Conversation it was said
+in. Orphaned messages one person sent sit in a Conversation of their own with
+that person as its only participant, apart from the one-to-one Conversation
+with them; the ones the account holder sent, whose recipient is not recorded,
+sit together in one with no participants. Such a Conversation is neither
+one-to-one nor a group.
+_Avoid_: Stray, Unfiled, Lost message
 
 **Asset**:
 The bytes of one attachment, stored once and named by the hash of its
@@ -152,7 +163,9 @@ _Avoid_: Handle, Address, Number
 Another person in a Conversation, as the account holder sees it. The account
 holder is never a participant: every conversation in an account is the holder's
 own, so Message Crate knows they are in it without listing them. Which of the
-holder's identities a message used is recorded on the message.
+holder's identities a message used is recorded on the message. A conversation
+the holder has with themselves, notes sent to their own address, therefore has
+no participants and makes no contact; it goes by the account's display name.
 _Avoid_: Member, Recipient
 
 **Last heard from**:

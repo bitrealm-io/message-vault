@@ -204,6 +204,36 @@ participant row for the holder would need a contact, a name, and a place in
 every participant count and conversation title, and each reader would then have
 to leave it out again.
 
+**An import drops a participant that is the account holder.** A backup can
+list the holder's own address among a group's members. The exporter leaves out
+the addresses the backup names as the owner's, and the server leaves out any
+participant whose address is one of the account's identities, for every source.
+Why: the two know different addresses. The backup may list the holder under an
+old number the exporter cannot know is theirs. Not built on the server yet:
+[#1093](https://github.com/messagecrate/message-crate/issues/1093).
+
+**A conversation with yourself has no participants.** Notes the holder sends to
+their own address are a conversation whose chat handle is one of the holder's
+identities. It has no participants and makes no contact. Both rows of each note
+are kept, the sent and the received, and the received row has no sender. Its
+title is the account's display name, or the address when there is none, computed
+when it is shown. `with:me` finds it. Why: the other person in it is the holder,
+and the holder is never a participant. A contact for the holder would be a
+second record of the account. Not built yet:
+[#1094](https://github.com/messagecrate/message-crate/issues/1094).
+
+**Orphaned messages sit in conversations of their own kind.** A backup can hold
+a message without recording which conversation it was said in. The ones one
+person sent sit in a conversation with that person as its only participant,
+apart from the one-to-one conversation with them, titled with the contact's name
+and "Missing recipient". The ones the holder sent have no recorded recipient and
+sit together in one conversation with no participants, titled "Unknown
+recipient". These conversations are neither one-to-one nor a group, and
+`kind:orphaned` lists them. Why: one conversation holding hundreds of people's
+messages reads as an exchange that never happened, and putting them in the
+one-to-one conversation would claim something the backup does not say. Not
+built yet: [#1095](https://github.com/messagecrate/message-crate/issues/1095).
+
 **An account's own identity means ownership, and its message counts
 describe the messages it holds.** A contact's identity says the person took
 part; an account's identity (`account_handles`) says the messages sent from or

@@ -1,10 +1,22 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render as rtlRender, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mockedAuth, renderWithProviders as render } from "../../test/providers";
+import { ApiTokenRevealProvider } from "../../components/ApiTokenRevealDialog";
+import { mockedAuth, Providers } from "../../test/providers";
 import { ApiTokensSection } from "./ApiTokensSection";
+
+/** The app renders the reveal dialog above Settings, so the tests do too. */
+const render = (ui: ReactElement | null) =>
+  rtlRender(ui, {
+    wrapper: ({ children }: { children: ReactNode }) => (
+      <Providers>
+        <ApiTokenRevealProvider>{children}</ApiTokenRevealProvider>
+      </Providers>
+    ),
+  });
 
 const apiGet = vi.hoisted(() => vi.fn());
 const apiPost = vi.hoisted(() => vi.fn());
@@ -194,5 +206,40 @@ describe("ApiTokensSection table", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByRole("dialog", { name: "API Token created" })).toBeTruthy();
     expect(wording()).not.toMatch(/API keys?|(this|delete) key/i);
+  });
+});
+
+describe("ApiTokensSection reveal", () => {
+  it("shows the new secret when the server answers after Settings was left", async () => {
+    let answer: (value: unknown) => void = () => {};
+    apiPost.mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    // Switching to another Settings tab, or leaving Settings, unmounts the section.
+    const screenWith = (section: boolean) =>
+      section ? <ApiTokensSection accountCanImport={true} accountCanExport={true} /> : null;
+    const { rerender } = render(screenWith(true));
+    await waitFor(() => expect(apiGet).toHaveBeenCalled());
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    await user.type(screen.getByLabelText("API Token name"), "Phone");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalled());
+
+    rerender(screenWith(false));
+    answer({
+      id: 2,
+      label: "Phone",
+      can_import: true,
+      can_export: true,
+      created_at: "1700000000",
+      token_hint: "mc-api-ph..ne",
+      token: "mc-api-phone-secret",
+    });
+
+    const dialog = await screen.findByRole("dialog", { name: "API Token created" });
+    expect(within(dialog).getByText("mc-api-phone-secret")).toBeTruthy();
   });
 });

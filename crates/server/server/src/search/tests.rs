@@ -2059,6 +2059,36 @@ mod kind_words {
         assert!(!run(&mut conn, ListKind::Contacts, "").await.contains(&f.cy));
     }
 
+    /// A page's filter and the typed text are joined as `filter (typed)`
+    /// (`web/src/lib/searchQuery.ts`, `narrow`). Without the parentheses an
+    /// `or` in the typed text binds looser than the space before it, so
+    /// `trashed:yes gone or name:jane` is `(trashed:yes gone) or name:jane`,
+    /// and the Trash list would show conversations that are not in the Trash.
+    #[tokio::test]
+    async fn a_typed_or_inside_parentheses_stays_in_the_trash() {
+        let (pool, _dir, f) = seeded().await;
+        let mut conn = pool.acquire().await.unwrap();
+        let unbracketed = run(
+            &mut conn,
+            ListKind::Conversations,
+            "trashed:yes gone or name:jane",
+        )
+        .await;
+        assert!(
+            unbracketed.iter().any(|&id| id != f.trashed_conv),
+            "without parentheses the `or` reaches past the filter: {unbracketed:?}"
+        );
+        assert_eq!(
+            run(
+                &mut conn,
+                ListKind::Conversations,
+                "trashed:yes (gone or name:jane)",
+            )
+            .await,
+            vec![f.trashed_conv]
+        );
+    }
+
     /// Pins the unchanged default: a Messages query that never mentions
     /// `trashed:` still leaves the trashed conversation's message out, even
     /// one that matches the query on its own text. If it goes red, the

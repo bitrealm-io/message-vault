@@ -1,75 +1,104 @@
 contacts	
 contacts	ada first-message:>=2020-01-01 last-message:2021-01-01..2021-06-01 messages:>0 name:none service:imessage,sms
+contacts	group:"#3"
 contacts	group:"Book Club"
 contacts	group:"Family (close)"
 contacts	group:"Say ""Hi"""
+contacts	group:"Smith,Jones"
+contacts	group:"Work*"
 contacts	group:"x)"
 contacts	group:Ana
+contacts	handle:"#3"
 contacts	handle:"Book Club"
 contacts	handle:"Book Club" first-message:<2022-01-01 messages:0 handle:none
 contacts	handle:"Family (close)"
 contacts	handle:"Say ""Hi"""
 contacts	handle:"Say ""Hi""" service:whatsapp
+contacts	handle:"Smith,Jones"
+contacts	handle:"Work*"
 contacts	handle:"x)"
 contacts	handle:Ana
+contacts	tag:"#3"
 contacts	tag:"Book Club"
 contacts	tag:"Family (close)"
 contacts	tag:"Say ""Hi"""
+contacts	tag:"Smith,Jones"
+contacts	tag:"Work*"
 contacts	tag:"x)"
 contacts	tag:Ana
 contacts	trashed:yes
-contacts	trashed:yes "guacamole night"
-contacts	trashed:yes ada
-contacts	trashed:yes ada first-message:>=2020-01-01 last-message:2021-01-01..2021-06-01 messages:>0 name:none service:imessage,sms
-contacts	trashed:yes handle:"Book Club" first-message:<2022-01-01 messages:0 handle:none
-contacts	trashed:yes handle:"Say ""Hi""" service:whatsapp
+contacts	trashed:yes ("guacamole night")
+contacts	trashed:yes (ada first-message:>=2020-01-01 last-message:2021-01-01..2021-06-01 messages:>0 name:none service:imessage,sms)
+contacts	trashed:yes (ada)
+contacts	trashed:yes (gone or ada)
+contacts	trashed:yes (handle:"Book Club" first-message:<2022-01-01 messages:0 handle:none)
+contacts	trashed:yes (handle:"Say ""Hi""" service:whatsapp)
 conversations	
 conversations	ada handle:"Ann Lee" kind:direct participants:>3
+conversations	group:"#3"
 conversations	group:"Book Club"
 conversations	group:"Family (close)"
 conversations	group:"Say ""Hi"""
+conversations	group:"Smith,Jones"
+conversations	group:"Work*"
 conversations	group:"x)"
 conversations	group:Ana
+conversations	handle:"#3"
 conversations	handle:"Book Club"
-conversations	handle:"Book Club" kind:direct
-conversations	handle:"Book Club" kind:group
 conversations	handle:"Family (close)"
 conversations	handle:"Family (close)" kind:group participants:=5
 conversations	handle:"Say ""Hi"""
 conversations	handle:"Say ""Hi""" participants:<2
+conversations	handle:"Smith,Jones"
+conversations	handle:"Work*"
 conversations	handle:"x)"
 conversations	handle:Ana
+conversations	kind:direct (handle:"Book Club")
+conversations	kind:direct (with:#42)
 conversations	kind:group
+conversations	kind:group (handle:"Book Club")
+conversations	kind:group (with:#42)
+conversations	tag:"#3"
 conversations	tag:"Book Club"
 conversations	tag:"Family (close)"
 conversations	tag:"Say ""Hi"""
+conversations	tag:"Smith,Jones"
+conversations	tag:"Work*"
 conversations	tag:"x)"
 conversations	tag:Ana
 conversations	trashed:yes
-conversations	trashed:yes "guacamole night"
-conversations	trashed:yes ada
-conversations	trashed:yes ada first-message:>=2020-01-01 last-message:2021-01-01..2021-06-01 messages:>0 name:none service:imessage,sms
-conversations	trashed:yes handle:"Book Club" first-message:<2022-01-01 messages:0 handle:none
-conversations	trashed:yes handle:"Say ""Hi""" service:whatsapp
+conversations	trashed:yes ("guacamole night")
+conversations	trashed:yes (ada first-message:>=2020-01-01 last-message:2021-01-01..2021-06-01 messages:>0 name:none service:imessage,sms)
+conversations	trashed:yes (ada)
+conversations	trashed:yes (gone or ada)
+conversations	trashed:yes (handle:"Book Club" first-message:<2022-01-01 messages:0 handle:none)
+conversations	trashed:yes (handle:"Say ""Hi""" service:whatsapp)
 conversations	with:#42
-conversations	with:#42 kind:direct
-conversations	with:#42 kind:group
 conversations	with:#7
 messages	from:#42
 messages	from:#7
+messages	group:"#3"
 messages	group:"Book Club"
 messages	group:"Family (close)"
 messages	group:"Say ""Hi"""
+messages	group:"Smith,Jones"
+messages	group:"Work*"
 messages	group:"x)"
 messages	group:Ana
+messages	handle:"#3"
 messages	handle:"Book Club"
 messages	handle:"Family (close)"
 messages	handle:"Say ""Hi"""
+messages	handle:"Smith,Jones"
+messages	handle:"Work*"
 messages	handle:"x)"
 messages	handle:Ana
+messages	tag:"#3"
 messages	tag:"Book Club"
 messages	tag:"Family (close)"
 messages	tag:"Say ""Hi"""
+messages	tag:"Smith,Jones"
+messages	tag:"Work*"
 messages	tag:"x)"
 messages	tag:Ana
 messages	to:#42

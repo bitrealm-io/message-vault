@@ -14108,7 +14108,7 @@
               "string",
               "null"
             ],
-            "description": "Display name to set; `None` (or empty) leaves the current name unchanged."
+            "description": "Display name. Absent leaves the current name unchanged, `null` clears\nit, and a string sets it, trimmed. A string that is empty after\ntrimming clears it."
           },
           "remove_identities": {
             "type": "array",

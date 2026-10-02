@@ -3412,7 +3412,11 @@ export interface components {
             disabled?: boolean | null;
             /** @description Identities to link onto the account profile. */
             identities?: components["schemas"]["AccountIdentityRequest"][];
-            /** @description Display name to set; `None` (or empty) leaves the current name unchanged. */
+            /**
+             * @description Display name. Absent leaves the current name unchanged, `null` clears
+             *     it, and a string sets it, trimmed. A string that is empty after
+             *     trimming clears it.
+             */
             preferred_name?: string | null;
             /** @description Identities to unlink from the account profile. */
             remove_identities?: components["schemas"]["AccountIdentityRequest"][];

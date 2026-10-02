@@ -614,6 +614,59 @@ async fn the_owner_sets_each_profile_field_on_its_own() {
     assert_eq!(read["emails"], serde_json::json!(["carol@example.com"]));
 }
 
+/// The display name has three cases on the wire. A body without the field
+/// leaves the name alone, `null` clears it, and a string sets it, with a
+/// string that is empty after trimming clearing it. Settings clears the
+/// name by sending `null`, so reading `null` as "leave alone" made the name
+/// impossible to clear.
+#[tokio::test]
+async fn the_display_name_is_left_alone_when_absent_and_cleared_by_null_or_blank() {
+    let (fixture, account) = fixture_with_account().await;
+    let state = &fixture.state;
+    let path = member(account.account_id);
+    let set_alex = || serde_json::json!({ "preferred_name": "Alex" });
+
+    let _: serde_json::Value = patch_json(state, &path, &account.token, set_alex()).await;
+    let patched: serde_json::Value = patch_json(
+        state,
+        &path,
+        &account.token,
+        serde_json::json!({ "time_zone": "Asia/Tokyo" }),
+    )
+    .await;
+    assert_eq!(
+        patched["preferred_name"], "Alex",
+        "an absent field leaves it"
+    );
+
+    let patched: serde_json::Value = patch_json(
+        state,
+        &path,
+        &account.token,
+        serde_json::json!({ "preferred_name": null }),
+    )
+    .await;
+    assert_eq!(
+        patched["preferred_name"],
+        serde_json::Value::Null,
+        "null clears it"
+    );
+
+    let _: serde_json::Value = patch_json(state, &path, &account.token, set_alex()).await;
+    let patched: serde_json::Value = patch_json(
+        state,
+        &path,
+        &account.token,
+        serde_json::json!({ "preferred_name": "  " }),
+    )
+    .await;
+    assert_eq!(
+        patched["preferred_name"],
+        serde_json::Value::Null,
+        "a blank string clears it"
+    );
+}
+
 /// A phone given when the owner creates an account is linked to it.
 #[tokio::test]
 async fn a_phone_given_at_creation_is_linked_to_the_account() {
@@ -1857,7 +1910,7 @@ async fn apply_profile_update_sets_name_and_handles() {
     apply_profile_update(
         &mut conn,
         account_id,
-        Some("Alex"),
+        Some(Some("Alex")),
         None,
         &[
             AccountIdentityRequest {
@@ -1925,7 +1978,7 @@ async fn saving_a_profile_clears_the_setup_owed_flag() {
         &mut conn,
         account_id,
         &UpdateAccountRequest {
-            preferred_name: Some("Alex".into()),
+            preferred_name: Some(Some("Alex".into())),
             ..UpdateAccountRequest::default()
         },
         true,
@@ -1980,7 +2033,7 @@ async fn profile_update_rolls_back_when_a_handle_service_is_unsupported() {
         &mut conn,
         account_id,
         &UpdateAccountRequest {
-            preferred_name: Some("Changed Name".into()),
+            preferred_name: Some(Some("Changed Name".into())),
             identities: vec![AccountIdentityRequest {
                 address: "alice@example.com".into(),
                 service: "unsupported".into(),

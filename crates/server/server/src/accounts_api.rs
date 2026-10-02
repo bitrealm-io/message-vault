@@ -443,9 +443,12 @@ pub struct AccountIdentityRequest {
 /// disabled flag and the three permissions are the owner's alone.
 #[derive(Debug, Default, Deserialize, utoipa::ToSchema)]
 pub struct UpdateAccountRequest {
-    /// Display name to set; `None` (or empty) leaves the current name unchanged.
-    #[serde(default)]
-    pub preferred_name: Option<String>,
+    /// Display name. Absent leaves the current name unchanged, `null` clears
+    /// it, and a string sets it, trimmed. A string that is empty after
+    /// trimming clears it.
+    #[serde(default, deserialize_with = "present")]
+    #[schema(value_type = Option<String>)]
+    pub preferred_name: Option<Option<String>>,
     /// IANA time zone to set, for example `America/New_York`; `None` leaves
     /// the current zone unchanged. An unknown name is a 422.
     #[serde(default)]
@@ -468,6 +471,17 @@ pub struct UpdateAccountRequest {
     /// Allow or forbid deleting message data.
     #[serde(default)]
     pub can_delete: Option<bool>,
+}
+
+/// Read a field that is in the body as `Some`, `null` included. With
+/// `#[serde(default)]` an absent field stays `None` and `null` becomes
+/// `Some(None)`, so a PATCH can tell "leave alone" from "clear".
+fn present<'de, D, T>(deserializer: D) -> std::result::Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
 }
 
 impl UpdateAccountRequest {
@@ -545,7 +559,7 @@ fn parse_profile_service(
 async fn apply_profile_update(
     conn: &mut SqliteConnection,
     account_id: i64,
-    preferred_name: Option<&str>,
+    preferred_name: Option<Option<&str>>,
     time_zone: Option<&str>,
     identities: &[AccountIdentityRequest],
     remove_identities: &[AccountIdentityRequest],
@@ -557,12 +571,7 @@ async fn apply_profile_update(
         account_profile::set_time_zone(conn, account_id, zone).await?;
     }
     if let Some(name) = preferred_name {
-        let name = name.trim();
-        let stored_name = if name.is_empty() {
-            None::<&str>
-        } else {
-            Some(name)
-        };
+        let stored_name = name.map(str::trim).filter(|n| !n.is_empty());
         account_profile::set_preferred_name(conn, account_id, stored_name).await?;
     }
 
@@ -631,7 +640,7 @@ async fn update_profile_on_conn(
     apply_profile_update(
         &mut tx,
         account_id,
-        req.preferred_name.as_deref(),
+        req.preferred_name.as_ref().map(Option::as_deref),
         req.time_zone.as_deref(),
         &req.identities,
         &req.remove_identities,

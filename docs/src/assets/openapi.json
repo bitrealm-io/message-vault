@@ -10641,8 +10641,11 @@
             "description": "Group label from the export, when present."
           },
           "last_message_at": {
-            "type": "string",
-            "description": "Timestamp of the last message."
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Timestamp of the last message; `null` when every message in the\nconversation is a duplicate, so none is left to date it."
           },
           "message_count": {
             "type": "integer",
@@ -12684,8 +12687,11 @@
                   "description": "Group label from the export, when present."
                 },
                 "last_message_at": {
-                  "type": "string",
-                  "description": "Timestamp of the last message."
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Timestamp of the last message; `null` when every message in the\nconversation is a duplicate, so none is left to date it."
                 },
                 "message_count": {
                   "type": "integer",

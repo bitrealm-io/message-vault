@@ -6,7 +6,7 @@ import VirtualizedImportIssuesTable from "../../components/import/VirtualizedImp
 import OpenPathButton from "../../components/OpenPathButton";
 import StepProgress, { type Step } from "../../components/StepProgress";
 import { formatBytes } from "../../lib/attachmentProgressCopy";
-import { groupSlug } from "../../lib/contactGroups";
+import { groupSlug, slugPath } from "../../lib/contactGroups";
 import { useRouteQuery } from "../../lib/routeQuery";
 import { getImport } from "../../lib/serverApi";
 import type { AttachmentForecast, StagingSummary } from "../../lib/tauri";
@@ -168,7 +168,10 @@ function FinishedExits({ importId }: { importId: number }) {
         <Button
           onClick={() =>
             navigate(
-              `/group/${groupSlug(importGroupName(run.source, run.finished_at, run.started_at))}`,
+              slugPath(
+                "/group",
+                groupSlug(importGroupName(run.source, run.finished_at, run.started_at)),
+              ),
             )
           }
         >

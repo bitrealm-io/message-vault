@@ -38,6 +38,11 @@ pub struct ProcessAssetsOptions {
     pub skip_audio: bool,
     /// Only process this source id.
     pub source: Option<String>,
+    /// Only process this account. `None` processes every account, which is
+    /// what the `process-assets` command does. A Demo Account build names
+    /// the Demo Account, so it converts nothing of any other account and
+    /// never sweeps another account's upload temps.
+    pub account: Option<i64>,
 }
 
 /// Counts reported by one derived-media processing pass.
@@ -79,18 +84,22 @@ impl AssetRow {
     }
 }
 
-/// Run derived-media conversion for every account/source in the database.
+/// Run derived-media conversion for every source of the account `opts`
+/// names, or of every account in the database when it names none.
 ///
 /// # Errors
 ///
-/// Returns an error when the database has no accounts, a query fails, or a
+/// Returns an error when no account is named and the database has none, a query fails, or a
 /// source's asset folders cannot be prepared. A conversion that fails for one
 /// attachment is counted in `errors` and printed, and the run goes on.
 pub async fn run(opened: &OpenDb, opts: &ProcessAssetsOptions) -> Result<ProcessAssetsStats> {
     let cfg = &opened.cfg;
     let mut conn = opened.conn().await?;
 
-    let account_ids = list_account_ids(&mut conn, &cfg.paths.data_dir).await?;
+    let account_ids = match opts.account {
+        Some(account_id) => vec![account_id],
+        None => list_account_ids(&mut conn, &cfg.paths.data_dir).await?,
+    };
     if account_ids.is_empty() {
         bail!("no accounts found — create an account or run reset-demo first");
     }
@@ -692,4 +701,4 @@ fn store_derived_file(derived_dir: &Path, file_path: &Path, ext: &str) -> Result
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

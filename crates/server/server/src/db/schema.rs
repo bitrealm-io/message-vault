@@ -315,10 +315,31 @@ pub(crate) async fn create_messages_secondary_indexes(conn: &mut SqliteConnectio
 /// indexed, so `min_new_message_id`, the highest `messages.id` that existed
 /// before this promotion inserted anything, keeps them out: only distinct
 /// production ids above it are indexed here.
+///
+/// The exception is an existing message that gained an attachment in this
+/// promotion, which an append does when the first import lacked it. Its
+/// index row holds the old attachment text, so it is removed and written
+/// again whole. `min_new_attachment_id`, the highest `attachments.id` that
+/// existed before the attachments were promoted, names those messages: an
+/// attachment above it was inserted by this promotion.
 pub(crate) async fn index_messages_fts_from_promote_map(
     conn: &mut SqliteConnection,
     min_new_message_id: i64,
+    min_new_attachment_id: i64,
 ) -> Result<u64> {
+    sqlx::query(
+        r"
+        DELETE FROM messages_fts
+        WHERE rowid IN (
+            SELECT message_id FROM attachments
+            WHERE id > $2 AND message_id <= $1
+        )
+        ",
+    )
+    .bind(min_new_message_id)
+    .bind(min_new_attachment_id)
+    .execute(&mut *conn)
+    .await?;
     let n = sqlx::query(
         r"
         INSERT INTO messages_fts(rowid, body, subject, attachment_text)
@@ -335,12 +356,15 @@ pub(crate) async fn index_messages_fts_from_promote_map(
                 WHERE a.message_id = m.id
             ), '')
         FROM (
-            SELECT DISTINCT prod_id FROM _promote_msg_map WHERE prod_id > $1
+            SELECT prod_id FROM _promote_msg_map WHERE prod_id > $1
+            UNION
+            SELECT message_id FROM attachments WHERE id > $2 AND message_id <= $1
         ) mm
         JOIN messages m ON m.id = mm.prod_id
         ",
     )
     .bind(min_new_message_id)
+    .bind(min_new_attachment_id)
     .execute(&mut *conn)
     .await?;
     Ok(n.rows_affected())

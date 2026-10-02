@@ -330,3 +330,36 @@ fn a_file_in_the_band_is_worth_probing_and_a_small_one_is_not() {
     assert!(needs_probe(30 * 1024 * 1024, LIMIT));
     assert!(needs_probe(900 * 1024 * 1024, LIMIT));
 }
+
+/// Compress only remuxes a video under `min_size_bytes`, so the forecast
+/// keeps the video's own size.
+#[test]
+fn a_video_under_the_compress_minimum_is_forecast_unchanged() {
+    let opts = CompressOptions::default();
+    let size = 11 * 1024 * 1024;
+    assert!(size < opts.min_size_bytes);
+    let p = probe("h264", 1920, 1080, Some(60.0), 20_000_000);
+    assert_eq!(
+        estimate_bytes(size, Some(&p), "mp4", MediaMode::Compress, &opts),
+        size
+    );
+}
+
+/// A video over the limit and under the compress minimum stays over the
+/// limit after the remux, so it reads as too big before the run.
+#[test]
+fn a_video_under_the_compress_minimum_and_over_the_limit_is_too_big() {
+    let opts = CompressOptions::default();
+    let p = probe("h264", 1920, 1080, Some(60.0), 20_000_000);
+    assert_eq!(
+        classify_probed(
+            11 * 1024 * 1024,
+            Some(&p),
+            "mp4",
+            MediaMode::Compress,
+            &opts,
+            10 * 1024 * 1024
+        ),
+        SizeVerdict::ProbablyTooBig
+    );
+}

@@ -1318,6 +1318,21 @@ pub(crate) fn is_jsonl_content_type(base: &str) -> bool {
         || base.eq_ignore_ascii_case("application/x-ndjson")
 }
 
+/// The problem a failed read of a request body answers. `limit_request_body`
+/// wraps a body with no `Content-Length` in `Limited`, which ends the stream
+/// with a `LengthLimitError` once the body passes its cap: that body is too
+/// large. Any other failure leaves the body unreadable.
+fn body_read_error(error: axum::Error) -> ApiError {
+    let mut source: Option<&(dyn std::error::Error + 'static)> = Some(&error);
+    while let Some(cause) = source {
+        if cause.is::<http_body_util::LengthLimitError>() {
+            return ApiError::PayloadTooLarge("request body too large".into());
+        }
+        source = cause.source();
+    }
+    ApiError::MalformedBody(format!("failed to read body: {error}"))
+}
+
 /// Read the whole request body into memory, failing once it passes `max_bytes`.
 pub(crate) async fn read_body_limited(
     body: axum::body::Body,
@@ -1326,8 +1341,7 @@ pub(crate) async fn read_body_limited(
     let mut out = Vec::new();
     let mut stream = body.into_data_stream();
     while let Some(chunk) = stream.next().await {
-        let chunk =
-            chunk.map_err(|e| ApiError::MalformedBody(format!("failed to read body: {e}")))?;
+        let chunk = chunk.map_err(body_read_error)?;
         if out.len().saturating_add(chunk.len()) > max_bytes {
             return Err(ApiError::PayloadTooLarge("request body too large".into()));
         }
@@ -1344,8 +1358,7 @@ pub(crate) async fn discard_body(
     let mut stream = body.into_data_stream();
     let mut seen = 0usize;
     while let Some(chunk) = stream.next().await {
-        let chunk =
-            chunk.map_err(|e| ApiError::MalformedBody(format!("failed to read body: {e}")))?;
+        let chunk = chunk.map_err(body_read_error)?;
         seen = seen.saturating_add(chunk.len());
         if seen > max_body_bytes {
             return Err(ApiError::PayloadTooLarge("request body too large".into()));
@@ -1376,8 +1389,7 @@ pub(crate) async fn stream_body_to_file(
     let mut written = 0u64;
     let mut stream = body.into_data_stream();
     while let Some(chunk) = stream.next().await {
-        let chunk =
-            chunk.map_err(|e| ApiError::MalformedBody(format!("failed to read body: {e}")))?;
+        let chunk = chunk.map_err(body_read_error)?;
         written = written.saturating_add(chunk.len() as u64);
         if written > max_body_bytes as u64 {
             return Err(ApiError::PayloadTooLarge("request body too large".into()));

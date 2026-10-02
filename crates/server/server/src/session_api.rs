@@ -157,6 +157,16 @@ pub async fn create_session(
         ));
     };
 
+    // The Demo Account cannot be entered while it is being built: until the
+    // build ends it holds part of its data, and a failed build removes it.
+    // The login card is told there is no Demo Account, so the answer here is
+    // the one for a username that does not exist.
+    if account_id == account_profile::DEMO_ACCOUNT_ID && state.demo_build.is_building() {
+        return Err(ApiError::InvalidCredentials(
+            "invalid username or password".into(),
+        ));
+    }
+
     let password_hash = account_profile::load_password_hash(&mut conn, account_id).await?;
     if !verify_login_password(password_hash.as_deref(), &password) {
         return Err(ApiError::InvalidCredentials(

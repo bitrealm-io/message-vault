@@ -156,7 +156,7 @@ fn message_from_record(cols: &HashMap<&str, usize>, row: &csv::StringRecord) -> 
         message_kind: IrMessageKind::parse(get("message_kind")),
         sender_handle: nonempty(get("sender_handle")),
         sender_display_name: nonempty(get("sender_display_name")),
-        owner_handle: None,
+        owner_handle: nonempty(get("message_owner_handle")),
         subject: nonempty(get("subject")),
         text: get("text").to_string(),
         attachments,

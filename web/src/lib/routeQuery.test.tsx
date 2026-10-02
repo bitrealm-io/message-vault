@@ -85,9 +85,16 @@ describe("useRouteQuery", () => {
   });
 });
 
-/** A page of `count` numbered rows, out of `total`. */
-function page(offset: number, count: number, total: number): OffsetPage<number> {
-  return { items: Array.from({ length: count }, (_, i) => offset + i), total };
+type Row = { id: number };
+
+/** A page of `count` rows numbered from `offset`, out of `total`. */
+function page(offset: number, count: number, total: number): OffsetPage<Row> {
+  return { items: Array.from({ length: count }, (_, i) => ({ id: offset + i })), total };
+}
+
+/** The ids of the rows on screen, in order. */
+function ids(rows: Row[]): number[] {
+  return rows.map((row) => row.id);
 }
 
 describe("useRoutePagedList", () => {
@@ -98,12 +105,12 @@ describe("useRoutePagedList", () => {
       { wrapper },
     );
 
-    await waitFor(() => expect(result.current.items).toEqual([0, 1]));
+    await waitFor(() => expect(ids(result.current.items)).toEqual([0, 1]));
     expect(result.current.total).toBe(5);
     expect(result.current.hasMore).toBe(true);
 
     act(() => result.current.loadMore());
-    await waitFor(() => expect(result.current.items).toEqual([0, 1, 2, 3]));
+    await waitFor(() => expect(ids(result.current.items)).toEqual([0, 1, 2, 3]));
   });
 
   it("has no next page once the loaded rows cover the total", async () => {
@@ -112,7 +119,7 @@ describe("useRoutePagedList", () => {
       () => useRoutePagedList(["rows"], fetchPage, { firstPageSize: 2, fillPageSize: 2 }),
       { wrapper },
     );
-    await waitFor(() => expect(result.current.items).toEqual([0, 1]));
+    await waitFor(() => expect(ids(result.current.items)).toEqual([0, 1]));
     expect(result.current.hasMore).toBe(false);
   });
 
@@ -153,7 +160,7 @@ describe("useRoutePagedList", () => {
     // A later page is loading, and the rows already on screen stay put.
     await waitFor(() => expect(result.current.filling).toBe(true));
     expect(result.current.loading).toBe(false);
-    expect(result.current.items).toEqual([0, 1]);
+    expect(ids(result.current.items)).toEqual([0, 1]);
 
     act(() => release?.());
     await waitFor(() => expect(result.current.filling).toBe(false));
@@ -166,12 +173,12 @@ describe("useRoutePagedList", () => {
         useRoutePagedList(["rows", q], fetchPage, { firstPageSize: 2, fillPageSize: 2 }),
       { wrapper, initialProps: { q: "first" } },
     );
-    await waitFor(() => expect(result.current.items).toEqual([0, 1]));
+    await waitFor(() => expect(ids(result.current.items)).toEqual([0, 1]));
     act(() => result.current.loadMore());
-    await waitFor(() => expect(result.current.items).toEqual([0, 1, 2, 3]));
+    await waitFor(() => expect(ids(result.current.items)).toEqual([0, 1, 2, 3]));
 
     rerender({ q: "second" });
-    await waitFor(() => expect(result.current.items).toEqual([0, 1]));
+    await waitFor(() => expect(ids(result.current.items)).toEqual([0, 1]));
   });
 
   it("does not ask for another page while one is already loading", async () => {
@@ -188,7 +195,7 @@ describe("useRoutePagedList", () => {
       () => useRoutePagedList(["rows"], fetchPage, { firstPageSize: 2, fillPageSize: 2 }),
       { wrapper },
     );
-    await waitFor(() => expect(result.current.items).toEqual([0, 1]));
+    await waitFor(() => expect(ids(result.current.items)).toEqual([0, 1]));
 
     act(() => result.current.loadMore());
     await waitFor(() => expect(result.current.filling).toBe(true));
@@ -198,6 +205,47 @@ describe("useRoutePagedList", () => {
     expect(fetchPage).toHaveBeenCalledTimes(2);
     act(() => release?.());
     await waitFor(() => expect(result.current.filling).toBe(false));
+  });
+
+  it("shows a row once when the next page repeats it", async () => {
+    // A row was added before the end of the first page and another removed
+    // after it, so the total stayed the same and the offsets moved by one: the
+    // second page starts with the last row of the first.
+    const fetchPage = vi.fn(async ({ offset }: { offset: number }) =>
+      offset === 0 ? page(0, 2, 5) : page(1, 2, 5),
+    );
+    const { result } = renderHook(
+      () => useRoutePagedList(["rows"], fetchPage, { firstPageSize: 2, fillPageSize: 2 }),
+      { wrapper },
+    );
+    await waitFor(() => expect(ids(result.current.items)).toEqual([0, 1]));
+
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(fetchPage).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.filling).toBe(false));
+    expect(ids(result.current.items)).toEqual([0, 1, 2]);
+  });
+
+  it("fetches the list again from the start when a later page reports another total", async () => {
+    // A row was added somewhere while the first page was on screen: the second
+    // page counts one more row than the first did, so its offset is no longer
+    // where the first page ended.
+    let total = 5;
+    const fetchPage = vi.fn(async ({ offset }: { offset: number }) => page(offset, 2, total));
+    const { result } = renderHook(
+      () => useRoutePagedList(["rows"], fetchPage, { firstPageSize: 2, fillPageSize: 2 }),
+      { wrapper },
+    );
+    await waitFor(() => expect(ids(result.current.items)).toEqual([0, 1]));
+
+    total = 6;
+    act(() => result.current.loadMore());
+
+    await waitFor(() => expect(fetchPage).toHaveBeenCalledTimes(4));
+    expect(fetchPage.mock.calls.map(([args]) => args.offset)).toEqual([0, 2, 0, 2]);
+    await waitFor(() => expect(result.current.refreshing).toBe(false));
+    expect(ids(result.current.items)).toEqual([0, 1, 2, 3]);
+    expect(result.current.total).toBe(6);
   });
 });
 

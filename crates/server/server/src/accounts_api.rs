@@ -22,8 +22,9 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Connection, SqliteConnection};
 
 use crate::credentials::{
-    change_password_on_conn, check_auth_rate_limit, hash_owner_password, hash_user_password,
-    passwords_match, require_username_free, require_valid_username,
+    change_password_on_conn, check_auth_rate_limit, count_auth_failure, hash_owner_password,
+    hash_user_password, password_bucket, passwords_match, refuse_when_rate_limited,
+    require_username_free, require_valid_username,
 };
 use crate::db::dialect::BEGIN_IMMEDIATE_SQL;
 use crate::db::handles::{self, Identity};
@@ -778,7 +779,8 @@ pub struct DeleteAccountRequest {
         crate::problem::openapi::InvalidCredentials,
         crate::problem::openapi::DemoAccountProtected,
         crate::problem::openapi::NotTheOwner,
-        crate::problem::openapi::StateConflict
+        crate::problem::openapi::StateConflict,
+        crate::problem::openapi::RateLimited
     )
 )]
 pub async fn delete_account(
@@ -821,22 +823,32 @@ pub async fn delete_account(
                     "Current password is required to delete this account.",
                 ));
             };
-            if !passwords_match(password_hash.as_deref(), pw) {
-                return Err(ApiError::InvalidCredentials(
-                    "Current password is incorrect.".into(),
-                ));
-            }
+            require_current_password(&state, target, password_hash.as_deref(), pw)?;
         }
     }
 
     account_profile::delete_account(&mut conn, target).await?;
+    // The account is gone once its row is, so a folder that cannot be removed
+    // (a permission error, a busy file) is logged with its path rather than
+    // answered as a failure. No later account takes this id, so the folder
+    // stays out of every account's reach until someone removes it.
     let account_root = state.cfg.paths.data_dir.join(target.to_string());
     if account_root.exists() {
         let root = account_root.clone();
-        tokio::task::spawn_blocking(move || std::fs::remove_dir_all(&root))
-            .await
-            .map_err(|e| ApiError::Internal(anyhow::anyhow!("remove account data dir task: {e}")))?
-            .with_context(|| format!("remove account data dir {}", account_root.display()))?;
+        let removed = tokio::task::spawn_blocking(move || std::fs::remove_dir_all(&root)).await;
+        let failure = match removed {
+            Ok(Ok(())) => None,
+            Ok(Err(e)) => Some(e.to_string()),
+            Err(e) => Some(e.to_string()),
+        };
+        if let Some(error) = failure {
+            tracing::warn!(
+                account_id = target,
+                path = %account_root.display(),
+                %error,
+                "account deleted, but its data folder could not be removed"
+            );
+        }
     }
     Ok(StatusCode::NO_CONTENT)
 }
@@ -844,6 +856,28 @@ pub async fn delete_account(
 // ---------------------------------------------------------------------------
 // Password
 // ---------------------------------------------------------------------------
+
+/// Check the `current_password` an account sent to confirm a change to
+/// itself. A wrong one counts in the same bucket as a failed login as that
+/// account, and past the login's limit the guess is refused unchecked: an open
+/// session must not be a way to guess the password faster than the login
+/// allows.
+fn require_current_password(
+    state: &AppState,
+    account_id: i64,
+    password_hash: Option<&str>,
+    current: &str,
+) -> Result<(), ApiError> {
+    let bucket = password_bucket(account_id);
+    refuse_when_rate_limited(&state.auth_rate_limits, &bucket)?;
+    if !passwords_match(password_hash, current) {
+        count_auth_failure(&state.auth_rate_limits, &bucket)?;
+        return Err(ApiError::InvalidCredentials(
+            "Current password is incorrect.".into(),
+        ));
+    }
+    Ok(())
+}
 
 /// The new password.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
@@ -891,7 +925,8 @@ pub struct ReplaceAccountPasswordResponse {
         (status = 204, description = "Password set by the owner"),
         crate::problem::openapi::InvalidCredentials,
         crate::problem::openapi::NotTheOwner,
-        crate::problem::openapi::DemoAccountProtected
+        crate::problem::openapi::DemoAccountProtected,
+        crate::problem::openapi::RateLimited
     )
 )]
 pub async fn replace_account_password(
@@ -916,11 +951,7 @@ pub async fn replace_account_password(
             ));
         };
         let password_hash = account_profile::load_password_hash(&mut conn, target).await?;
-        if !passwords_match(password_hash.as_deref(), current) {
-            return Err(ApiError::InvalidCredentials(
-                "Current password is incorrect.".into(),
-            ));
-        }
+        require_current_password(&state, target, password_hash.as_deref(), current)?;
         if req.password != req.password_confirmation {
             return Err(ApiError::validation("New passwords do not match."));
         }

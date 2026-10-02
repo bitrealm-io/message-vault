@@ -184,7 +184,7 @@ impl ProblemType {
             Self::InvalidCredentials => "The username or password did not match an account, or the current password given to confirm deleting an account or changing the owner's password was wrong. The server does not say which half failed. Check both and try again; repeated attempts are rate limited.".to_string(),
             Self::AuthenticationRequired => "The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. Log in again, or issue a new API token, and send the new token.".to_string(),
             Self::RateLimited => format!(
-                "The server refused an authentication attempt because too many came too fast: more than {} attempts inside {} seconds to log in as one username, or to register an account or claim Message Crate, which count once for the whole server. Wait the number of seconds in the `Retry-After` header (repeated as `retry_after` in the body) and try again.",
+                "The server refused an authentication attempt because too many came too fast: more than {} attempts inside {} seconds at one account's password, or to register an account or claim Message Crate, which count once for the whole server. Logging in as an account under any spelling of its username counts against its password, and so does a wrong current password sent to change the owner's password or to delete an account. Wait the number of seconds in the `Retry-After` header (repeated as `retry_after` in the body) and try again.",
                 crate::credentials::AUTH_RATE_MAX,
                 crate::credentials::AUTH_RATE_WINDOW.as_secs()
             ),

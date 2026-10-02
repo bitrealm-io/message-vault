@@ -405,8 +405,14 @@ The credential names the account. No route takes an `account=` parameter.
 
 Rate limiting guards the three routes that take no credential and make one,
 over a 60-second window; the limit is documented in the developer reference.
-`POST /v1/session` counts per username, because it guards one account's
-password. `POST /v1/accounts` and `POST /v1/server/claim` count once for the
+`POST /v1/session` counts per account, because it guards one account's
+password: by the account's id when the username names one, and otherwise by
+the username folded the way the lookup folds it, so no spelling of a username
+gets a count of its own. A wrong `current_password` sent to
+`PUT /v1/accounts/{id}/password` or `DELETE /v1/accounts/{id}` counts in the
+same per-account count, and past the limit those routes answer `429` without
+checking the guess: an open session must not guess faster than the login.
+`POST /v1/accounts` and `POST /v1/server/claim` count once for the
 whole server, because they guard against a flood of new accounts, and a count
 per name lets a script that tries a new name each time straight through.
 

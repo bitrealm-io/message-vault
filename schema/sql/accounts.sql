@@ -2,8 +2,11 @@
 CREATE TABLE IF NOT EXISTS accounts (
     -- Account id. Ids below 100 are reserved for accounts the server makes
     -- itself: the owner is 1 and the demo account 2. Every other account takes
-    -- the next id above both that range and the highest id present.
-    id INTEGER PRIMARY KEY,
+    -- the next id above both that range and the highest id the table has ever
+    -- held. AUTOINCREMENT keeps that high mark in sqlite_sequence, so a
+    -- deleted account's id, and any folder of its files left behind, never
+    -- passes to a new account.
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     -- Login user id; unique case-insensitively.
     username TEXT NOT NULL UNIQUE COLLATE NOCASE,
     -- Password verifier hash; NULL when password auth is unused.

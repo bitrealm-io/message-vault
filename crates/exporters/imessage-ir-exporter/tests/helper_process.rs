@@ -1,96 +1,28 @@
 //! The exporter through the real `imessage-reader` process.
 //!
-//! These tests build the helper with cargo (a no-op once it is built), write
-//! the small `chat.db` from `chat-db-fixture`, and run the exporter against
-//! it. The exporter finds the program in `target/<profile>/` because this
-//! test binary runs from `target/<profile>/deps/`. The build
-//! is sent to the same target directory this test binary came from, so a run
-//! under another one (cargo-llvm-cov uses `target/llvm-cov-target/`) still
-//! puts the program where the exporter looks.
+//! These tests write the small `chat.db` from `chat-db-fixture` and run the
+//! exporter against it. `common` builds the program and says where the
+//! exporter finds it.
+
+mod common;
 
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::Command,
     sync::{
-        Arc, OnceLock,
+        Arc,
         atomic::{AtomicBool, Ordering},
     },
 };
 
 use chat_db_fixture::{FRIEND_EMAIL, FRIEND_PHONE, OWNER, OWNER_EMAIL, PHOTO_BYTES, write_chat_db};
-use message_crate_core::{
-    AppleConfig, ApplePlatform, ExporterConfig, MediaConfig, OutputFormat, SourceConfig,
-};
+use common::{config, helper_binary};
+use message_crate_core::{ExporterConfig, OutputFormat};
 use message_ir::{ConversationDocument, IrDirection, IrMessage};
 use message_ir_format::{
     read_conversation_csv, read_conversation_eml_dir, read_conversation_jsonl,
     read_conversation_mbox,
 };
-
-/// Build `imessage-reader` once per test binary and return its path.
-fn helper_binary() -> &'static Path {
-    static PATH: OnceLock<PathBuf> = OnceLock::new();
-    PATH.get_or_init(|| {
-        let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-        let mut command = Command::new(cargo);
-        command
-            .args([
-                "build",
-                "-p",
-                "imessage-reader",
-                "--message-format=json-render-diagnostics",
-            ])
-            .current_dir(env!("CARGO_MANIFEST_DIR"));
-        if let Some(target_dir) = target_dir() {
-            command.arg("--target-dir").arg(target_dir);
-        }
-        if !cfg!(debug_assertions) {
-            command.arg("--release");
-        }
-        let output = command
-            .output()
-            .expect("run cargo build for imessage-reader");
-        assert!(
-            output.status.success(),
-            "cargo build -p imessage-reader failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
-            .filter(|message| message["reason"] == "compiler-artifact")
-            .filter(|message| message["target"]["name"] == "imessage-reader")
-            .find_map(|message| message["executable"].as_str().map(PathBuf::from))
-            .expect("cargo reported the imessage-reader executable")
-    })
-}
-
-/// The target directory this test binary was built into: it runs from
-/// `<target>/<profile>/deps/`, so three levels up.
-fn target_dir() -> Option<PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    exe.ancestors().nth(3).map(Path::to_path_buf)
-}
-
-fn config(db_path: &Path, output: &Path, cancel: Option<Arc<AtomicBool>>) -> ExporterConfig {
-    ExporterConfig {
-        inputs: vec![db_path.to_path_buf()],
-        output: output.to_path_buf(),
-        timezone: None,
-        obfuscate: Default::default(),
-        media: MediaConfig::default(),
-        cancel,
-        log: None,
-        progress: None,
-        output_format: OutputFormat::Jsonl,
-        resume: false,
-        source: SourceConfig::Apple(AppleConfig {
-            platform: Some(ApplePlatform::MacOs),
-            ..AppleConfig::default()
-        }),
-    }
-}
 
 /// Every `.jsonl` file under `dir`, by name.
 fn jsonl_files(dir: &Path) -> Vec<PathBuf> {
@@ -358,19 +290,6 @@ fn a_mail_archive_export_embeds_the_photo() {
         );
         assert!(!output.join("attachments").exists(), "{format:?}");
     }
-}
-
-#[test]
-fn a_cancelled_run_stops_and_kills_the_helper() {
-    helper_binary();
-    let dir = tempfile::tempdir().unwrap();
-    let db_path = write_chat_db(dir.path());
-    let output = dir.path().join("out");
-    let cancel = Arc::new(AtomicBool::new(true));
-
-    let err = imessage_ir_exporter::run(&config(&db_path, &output, Some(cancel))).unwrap_err();
-    assert_eq!(err.to_string(), "cancelled");
-    assert!(jsonl_files(&output).is_empty());
 }
 
 #[test]

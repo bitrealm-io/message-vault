@@ -3,6 +3,7 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { holdDesktopJob } from "../../lib/desktopJob";
 import { ConvertSection } from "./ConvertSection";
 
 const tauriState = vi.hoisted(() => ({ isTauri: true }));
@@ -20,7 +21,8 @@ vi.mock("../../lib/tauri", async (importOriginal) => {
     EXPORT_FORMATS: actual.EXPORT_FORMATS,
     invokeFormat: (...args: unknown[]) => invokeFormat(...args),
     invokeCancel: (...args: unknown[]) => invokeCancel(...args),
-    awaitTauriJob: (...args: unknown[]) => awaitTauriJob(...args),
+    // The job's name comes first; the mocks below take what follows it.
+    awaitTauriJob: (_job: string, ...args: unknown[]) => awaitTauriJob(...args),
     onExtractEvents: vi.fn(async () => () => {}),
   };
 });
@@ -59,6 +61,20 @@ async function fillFolders(input: string, output: string, formatLabel?: string) 
 }
 
 describe("ConvertSection", () => {
+  it("does not start while another desktop job runs, and names that job", async () => {
+    const release = holdDesktopJob("Export");
+    try {
+      await fillFolders("/home/demo/export-json", "/home/demo/export-csv");
+      expect(convertButton()).toBeDisabled();
+      expect(screen.getByRole("status").textContent).toBe(
+        "An export is running. Convert can start once it ends.",
+      );
+    } finally {
+      release();
+    }
+    await waitFor(() => expect(convertButton()).toBeEnabled());
+  });
+
   it("shows the desktop-only stub when not in Tauri", () => {
     tauriState.isTauri = false;
     render(<ConvertSection />);

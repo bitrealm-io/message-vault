@@ -570,7 +570,13 @@ function recordError(step: ImportIssue["step"], message: string): void {
  * `CANCELLED_MESSAGE` the way a job cancelled while it runs does.
  */
 function runJob(invokeFn: () => Promise<void>): Promise<TauriJobResult> {
-  return awaitTauriJob(scratch.runCancel.guard(invokeFn), undefined, applyProgress, recordIssue);
+  return awaitTauriJob(
+    "Import Run",
+    scratch.runCancel.guard(invokeFn),
+    undefined,
+    applyProgress,
+    recordIssue,
+  );
 }
 
 /**

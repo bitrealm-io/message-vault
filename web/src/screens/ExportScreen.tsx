@@ -101,15 +101,16 @@ export default function ExportScreen() {
   // `running` only turns true once a job starts, which leaves two windows
   // where the Export button would be live mid-export: while the staging path
   // resolves (a `home_dir` round trip on the first export), and between the
-  // pull and the conversion. A second job started in either window would
-  // break `jobs.rs`'s "one job runs at a time" assumption, and two exports
+  // pull and the conversion. The desktop refuses a second job while one runs
+  // (`jobs.rs`), but between two jobs it has nothing to refuse, and two exports
   // begun in the same second would share a staging folder, so the first
   // cleanup would delete the second's files. This covers the whole run.
   const [busy, setBusy] = useState(false);
-  const { running, finished, run } = useTauriJob();
+  const { running, finished, run } = useTauriJob({ job: "Export" });
   // The Cancel of the export under way. A Cancel pressed after the pull and
-  // before the conversion starts must stop the conversion, and the shared
-  // cancel flag alone would not: `format` clears it when it starts.
+  // before the conversion starts must stop the conversion, and the desktop
+  // alone would not: with no job running, its Cancel stops nothing, and
+  // `format` starts with a cancel flag of its own.
   const runCancel = useRef<RunCancel>(createRunCancel());
 
   const appendLog = useCallback((line: string) => {
@@ -189,6 +190,7 @@ export default function ExportScreen() {
   return (
     <TauriJobFormShell
       title="Export"
+      job="Export"
       requireTauri
       startLabel="Export"
       runningLabel="Exporting…"

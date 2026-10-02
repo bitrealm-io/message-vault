@@ -14,6 +14,7 @@ import {
   needsOwnerEmails,
   splitEmails,
 } from "../../lib/androidSmsSources";
+import { desktopJobRunningText, useDesktopJob } from "../../lib/desktopJob";
 import { EXPORT_SOURCES, IMAZING_SOURCE_ID } from "../../lib/exportSources";
 import {
   IMESSAGE_SOURCE_ID,
@@ -322,14 +323,21 @@ export default function ImportFormFields(props: ImportFormFieldsProps) {
     (!required.ownerPhones || filled.ownerPhones) &&
     hasOwnerEmail;
 
-  const canImport = imessageGate
-    ? imessageGate.enabled && !props.running
-    : whatsappGate
-      ? whatsappGate.enabled && !props.running
-      : requiredFilled &&
-        !props.running &&
-        (!isAndroidSms || props.profilePhonesReady) &&
-        (!phonesMismatch || mismatchAck);
+  // The desktop runs one job at a time, so an export or a conversion that
+  // is running would make it refuse the Import Run's first job.
+  const runningJob = useDesktopJob();
+  const blockedBy = runningJob !== null && runningJob !== "Import Run" ? runningJob : null;
+
+  const canImport =
+    blockedBy === null &&
+    (imessageGate
+      ? imessageGate.enabled && !props.running
+      : whatsappGate
+        ? whatsappGate.enabled && !props.running
+        : requiredFilled &&
+          !props.running &&
+          (!isAndroidSms || props.profilePhonesReady) &&
+          (!phonesMismatch || mismatchAck));
 
   function handleImport(): void {
     if (isAndroidSms) {
@@ -783,6 +791,12 @@ export default function ImportFormFields(props: ImportFormFieldsProps) {
             </StackedField>
           ) : null}
         </CollapsibleSection>
+      ) : null}
+
+      {blockedBy ? (
+        <p role="status" className="mt-2 mb-0 text-[0.813rem] text-muted">
+          {desktopJobRunningText(blockedBy, "Import")}
+        </p>
       ) : null}
 
       <div className="mt-2 flex gap-3">

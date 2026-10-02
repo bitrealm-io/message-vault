@@ -133,10 +133,15 @@ describe("ImportExportRoute", () => {
     expect(screen.queryByText("the form")).toBeNull();
   });
 
-  it("does not let a run in progress open Export", () => {
-    state.profile = { ...allowed, can_export: false };
+  it("does not let a run in progress open Export, for an account that may export", async () => {
+    state.profile = allowed;
     importRunStore.set({ phase: "running", running: true });
     renderRoute("export");
+    // Let the Suspense boundary settle before asserting.
+    await act(async () => {});
     expect(screen.queryByText("the form")).toBeNull();
+    expect(screen.getByRole("status").textContent).toMatch(
+      /An Import Run is running\. Export can start once it ends\./,
+    );
   });
 });

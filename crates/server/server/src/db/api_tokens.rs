@@ -102,12 +102,13 @@ pub fn generate_api_token() -> Result<String> {
 }
 
 /// Look up which account owns this API token Bearer value.
-/// On a successful match, updates `last_accessed_at`. Expired or disabled
-/// tokens are rejected.
+/// On a successful match, updates `last_accessed_at`; a failed update is
+/// logged and does not reject the token. Expired or disabled tokens are
+/// rejected.
 ///
 /// # Errors
 ///
-/// Returns an error when the lookup or last-accessed update fails.
+/// Returns an error when the lookup fails.
 pub async fn lookup_account_for_api_token(
     conn: &mut SqliteConnection,
     token: &str,
@@ -133,14 +134,19 @@ pub async fn lookup_account_for_api_token(
                     return Ok(None);
                 }
             }
-            sqlx::query(
+            // The last-used time is a record, not a check: when the write
+            // fails, for example because an import holds SQLite's write lock
+            // past `busy_timeout`, the request is still served (#1189).
+            if let Err(err) = sqlx::query(
                 "UPDATE account_api_tokens SET last_accessed_at = $1 WHERE token_hash = $2",
             )
             .bind(unix_secs_string())
             .bind(token_hash)
             .execute(&mut *conn)
             .await
-            .with_context(|| "update API token last_accessed_at")?;
+            {
+                tracing::warn!(account_id, error = %err, "could not record when an API token was last used");
+            }
             Ok(Some(ApiTokenAuth {
                 account_id,
                 permissions: Permissions::token(can_import != 0, can_export != 0),

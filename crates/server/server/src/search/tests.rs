@@ -2364,6 +2364,55 @@ mod measure_words {
         );
     }
 
+    /// Year 9999 ends at the start of year 10000, which in UTC or west of it
+    /// is an instant chrono writes `+10000-…`. As text that sorts before every
+    /// stored timestamp, so the comparison went the wrong way (#1205).
+    #[tokio::test]
+    async fn year_9999_ends_after_every_message() {
+        let (pool, _dir, _f) = seeded().await;
+        let mut conn = pool.acquire().await.unwrap();
+        let m = ListKind::Messages;
+        let every = run(&mut conn, m, "").await;
+        assert!(!every.is_empty());
+        for zone in [chrono_tz::UTC, chrono_tz::America::New_York] {
+            assert_eq!(
+                run_in(&mut conn, m, "date:>9999", zone).await,
+                Vec::<i64>::new(),
+                "date:>9999 in {zone}"
+            );
+            assert_eq!(
+                run_in(&mut conn, m, "date:<=9999", zone).await,
+                every,
+                "date:<=9999 in {zone}"
+            );
+            assert_eq!(
+                run_in(&mut conn, m, "date:2000..9999", zone).await,
+                every,
+                "date:2000..9999 in {zone}"
+            );
+            assert_eq!(
+                run_in(&mut conn, m, "-date:<=9999", zone).await,
+                Vec::<i64>::new(),
+                "-date:<=9999 in {zone}"
+            );
+            assert_eq!(
+                run_in(&mut conn, m, "date:9999", zone).await,
+                Vec::<i64>::new(),
+                "date:9999 in {zone}"
+            );
+        }
+        // On Contacts, `-q` still includes the contacts who never sent a
+        // message, and only them.
+        let c = ListKind::Contacts;
+        let silent = run(&mut conn, c, "messages:0").await;
+        assert!(!silent.is_empty());
+        assert_eq!(
+            run(&mut conn, c, "last-message:>9999").await,
+            Vec::<i64>::new()
+        );
+        assert_eq!(run(&mut conn, c, "-last-message:<=9999").await, silent);
+    }
+
     /// On Contacts, `first-message:`, `last-message:`, `date:` and
     /// `messages:` are about the messages the contact sent, not the messages
     /// of a conversation they are in (#726). Each case is a row of the table

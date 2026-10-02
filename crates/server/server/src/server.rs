@@ -1233,7 +1233,16 @@ pub async fn resolve_auth_on_conn(
 
     let resolved = if let Some(session) = session_tokens::lookup_session(&mut *conn, token).await? {
         if let Some(app) = app {
-            session_tokens::record_connecting_app(&mut *conn, &session, app).await?;
+            // A record, not a check: a failed write still serves the
+            // request (#1189).
+            if let Err(err) = session_tokens::record_connecting_app(&mut *conn, &session, app).await
+            {
+                tracing::warn!(
+                    account_id = session.account_id,
+                    error = %format!("{err:#}"),
+                    "could not record the connecting app"
+                );
+            }
         }
         Some((session.account_id, Credential::Session))
     } else {

@@ -1,6 +1,8 @@
 //! Defaults plus one emitter per word. Every emitter writes SQL against the
 //! innermost alias it needs and lets `ListCtx` wrap it for the base row.
 
+use chrono::NaiveDate;
+
 use crate::db::contacts::UNKNOWN_CONTACT_SQL;
 use crate::db::dialect::name_eq_ci;
 
@@ -962,20 +964,41 @@ fn emit_kind_word(
 fn date_sql(out: &mut Sql, expr: &str, cmp: &DateCmp, zone: chrono_tz::Tz) {
     match cmp {
         DateCmp::In(span) => {
-            out.push(&format!("({expr} >= "));
-            out.bind_text(utc_instant(zone, span.start));
-            out.push(&format!(" AND {expr} < "));
-            out.bind_text(utc_instant(zone, span.end));
+            out.push("(");
+            at_or_after_sql(out, expr, zone, span.start);
+            out.push(" AND ");
+            before_sql(out, expr, zone, span.end);
             out.push(")");
         }
-        DateCmp::Gte(d) | DateCmp::Gt(d) => {
+        DateCmp::Gte(d) | DateCmp::Gt(d) => at_or_after_sql(out, expr, zone, *d),
+        DateCmp::Lt(d) | DateCmp::Lte(d) => before_sql(out, expr, zone, *d),
+    }
+}
+
+/// `expr` is at or after the instant `day` begins in `zone`. No stored
+/// timestamp is after year 9999, so a day that begins after it matches no
+/// row.
+fn at_or_after_sql(out: &mut Sql, expr: &str, zone: chrono_tz::Tz, day: NaiveDate) {
+    match utc_instant(zone, day) {
+        Some(instant) => {
             out.push(&format!("{expr} >= "));
-            out.bind_text(utc_instant(zone, *d));
+            out.bind_text(instant);
         }
-        DateCmp::Lt(d) | DateCmp::Lte(d) => {
+        None => out.push("0=1"),
+    }
+}
+
+/// `expr` is before the instant `day` begins in `zone`. No stored timestamp
+/// is after year 9999, so a day that begins after it matches every row that
+/// has a value. `expr IS NOT NULL` leaves out a row with none (a contact with
+/// no messages under `last-message:`), as the comparison would.
+fn before_sql(out: &mut Sql, expr: &str, zone: chrono_tz::Tz, day: NaiveDate) {
+    match utc_instant(zone, day) {
+        Some(instant) => {
             out.push(&format!("{expr} < "));
-            out.bind_text(utc_instant(zone, *d));
+            out.bind_text(instant);
         }
+        None => out.push(&format!("{expr} IS NOT NULL")),
     }
 }
 

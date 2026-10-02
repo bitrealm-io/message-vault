@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { APP_BUILD } from "../../lib/build";
 import { getOpenToNetwork } from "../../lib/localServer";
+import { getStagingDir } from "../../lib/system-settings";
 import { readerLicenseUrl, readerSourceUrl } from "../../lib/thirdPartySoftware";
 import { SystemSection } from "./SystemSection";
 
@@ -174,6 +175,28 @@ describe("SystemSection", () => {
     await user.type(stagingInput, "/tmp/my-staging");
 
     expect(localStorage.getItem("mc-staging-dir")).toBe("/tmp/my-staging");
+  });
+
+  it("says why a relative staging directory is not saved, and shows the one in use on blur", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem("mc-staging-dir", "/srv/staging");
+    render(<SystemSection />);
+    const stagingInput = await screen.findByDisplayValue("/srv/staging");
+
+    // Typed over the whole path: an empty field would clear the setting on its own.
+    await user.type(stagingInput, "staging", {
+      initialSelectionStart: 0,
+      initialSelectionEnd: "/srv/staging".length,
+    });
+
+    expect(stagingInput).toHaveValue("staging");
+    expect(screen.getByText(/must be a full path/)).toBeInTheDocument();
+    expect(getStagingDir()).toBe("/srv/staging");
+
+    await user.tab();
+
+    expect(stagingInput).toHaveValue("/srv/staging");
+    expect(screen.queryByText(/must be a full path/)).toBeNull();
   });
 
   it("shows Found lines when both tools are present", async () => {

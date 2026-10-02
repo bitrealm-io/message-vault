@@ -245,6 +245,10 @@ pub async fn delete_account(conn: &mut SqliteConnection, account_id: i64) -> Res
 /// Stable id for the seeded demo account (`reset-demo`).
 pub const DEMO_ACCOUNT_ID: i64 = 2;
 
+/// The Demo Account's username. It stays reserved while the Demo Account is
+/// absent, so no other account can take it and block the next build.
+pub const DEMO_USERNAME: &str = "demo";
+
 /// True when `account_id` is the seeded demo account.
 pub fn is_demo_account(account_id: i64) -> bool {
     account_id == DEMO_ACCOUNT_ID

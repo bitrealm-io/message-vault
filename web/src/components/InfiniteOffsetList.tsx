@@ -119,20 +119,28 @@ function Row({
   );
 }
 
-function rangeFromScroll(
-  scrollTop: number,
-  clientHeight: number,
-  estimateSize: number,
-  count: number,
-  bottomInset = 0,
-): VisibleRange {
-  if (count === 0 || clientHeight <= 0 || estimateSize <= 0) {
-    return { start: 0, end: 0 };
+/**
+ * The 1-based range of the rows React Aria's Virtualizer has drawn that reach
+ * into the viewport above `bottomInset`. Each drawn row carries its place in
+ * the list as `aria-posinset`, and its own height, so rows taller than the
+ * estimate count as they are drawn. The virtualizer draws only the rows near
+ * the viewport, and not always in list order, so every one is checked.
+ */
+function rangeFromDrawnRows(root: HTMLElement, bottomInset: number): VisibleRange {
+  const rootRect = root.getBoundingClientRect();
+  const viewTop = rootRect.top;
+  const viewBottom = rootRect.bottom - bottomInset;
+  let start = 0;
+  let end = 0;
+  for (const row of root.querySelectorAll<HTMLElement>('[role="option"][aria-posinset]')) {
+    const rect = row.getBoundingClientRect();
+    if (rect.bottom <= viewTop || rect.top >= viewBottom) continue;
+    const position = Number(row.getAttribute("aria-posinset"));
+    if (!Number.isInteger(position) || position < 1) continue;
+    if (start === 0 || position < start) start = position;
+    if (position > end) end = position;
   }
-  const visibleHeight = Math.max(0, clientHeight - bottomInset);
-  const startIdx = Math.floor(scrollTop / estimateSize);
-  const endIdx = Math.min(count - 1, Math.ceil((scrollTop + visibleHeight) / estimateSize) - 1);
-  return { start: startIdx + 1, end: Math.max(startIdx, endIdx) + 1 };
+  return { start, end };
 }
 
 function RacVirtualList<T extends object>({
@@ -168,30 +176,78 @@ function RacVirtualList<T extends object>({
   empty?: ReactNode;
   ariaLabel: string;
 }) {
-  const maybeRequestMore = useCallback(
-    (end1Based: number) => {
-      if (!hasMore || items.length === 0) return;
-      if (end1Based >= items.length - NEAR_END_THRESHOLD) {
-        requestMore();
-      }
+  const listRef = useRef<HTMLDivElement>(null);
+  const publishedRef = useRef<VisibleRange | null>(null);
+  const onRangeRef = useRef(onVisibleRangeChange);
+  onRangeRef.current = onVisibleRangeChange;
+  const requestMoreRef = useRef(requestMore);
+  requestMoreRef.current = requestMore;
+
+  const publishVisibleRange = useCallback(() => {
+    const root = listRef.current;
+    const range = root ? rangeFromDrawnRows(root, RANGE_PILL_OVERLAY_INSET) : { start: 0, end: 0 };
+    const published = publishedRef.current;
+    if (!published || published.start !== range.start || published.end !== range.end) {
+      publishedRef.current = range;
+      onRangeRef.current(range);
+    }
+    if (hasMore && items.length > 0 && range.end >= items.length - NEAR_END_THRESHOLD) {
+      requestMoreRef.current();
+    }
+  }, [items, hasMore]);
+
+  // Scroll events and the virtualizer's redraws outpace frames; one
+  // measurement per frame is all that can show. The frame runs the newest
+  // publishVisibleRange, so a page that lands while one is waiting still counts.
+  const publishRef = useRef(publishVisibleRange);
+  const rangeFrameRef = useRef(0);
+  const scheduleVisibleRange = useCallback(() => {
+    if (rangeFrameRef.current) return;
+    rangeFrameRef.current = requestAnimationFrame(() => {
+      rangeFrameRef.current = 0;
+      publishRef.current();
+    });
+  }, []);
+  useEffect(
+    () => () => {
+      if (rangeFrameRef.current) cancelAnimationFrame(rangeFrameRef.current);
+      rangeFrameRef.current = 0;
     },
-    [hasMore, items.length, requestMore],
+    [],
   );
 
-  const onScroll = (e: UIEvent<HTMLElement>) => {
-    const el = e.currentTarget;
-    const range = rangeFromScroll(
-      el.scrollTop,
-      el.clientHeight,
-      estimateSize,
-      items.length,
-      RANGE_PILL_OVERLAY_INSET,
-    );
-    onVisibleRangeChange(range);
-    maybeRequestMore(range.end);
-  };
+  // On mount and whenever a new page, a new search or the end of the results
+  // arrives. A first page that fits the viewport never scrolls, so waiting for
+  // a scroll left the range unknown and the next page unasked for (#1244).
+  useEffect(() => {
+    publishRef.current = publishVisibleRange;
+    scheduleVisibleRange();
+  }, [publishVisibleRange, scheduleVisibleRange]);
 
-  if (items.length === 0 && empty) {
+  // The virtualizer draws its rows only after it has measured the viewport,
+  // and draws others when the window is resized or a row's height is measured.
+  // The range follows the rows it has drawn.
+  const showsList = !(items.length === 0 && empty);
+  useEffect(() => {
+    const root = listRef.current;
+    if (!showsList || !root) return;
+    const mutations = new MutationObserver(scheduleVisibleRange);
+    mutations.observe(root, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["style"],
+    });
+    const resizes =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleVisibleRange);
+    resizes?.observe(root);
+    return () => {
+      mutations.disconnect();
+      resizes?.disconnect();
+    };
+  }, [showsList, scheduleVisibleRange]);
+
+  if (!showsList) {
     return <div className="min-h-0 flex-1 overflow-auto">{empty}</div>;
   }
 
@@ -202,12 +258,13 @@ function RacVirtualList<T extends object>({
   return (
     <Virtualizer layout={ListLayout} layoutOptions={layoutOptions}>
       <ListBox
+        ref={listRef}
         aria-label={ariaLabel}
         items={items}
         // No selection mode: with one, React Aria runs a row's onAction only on a
         // double click or Enter, so one click would not open the row (#1245).
         // The open row is drawn from selectedId instead, as the browser path does.
-        onScroll={onScroll}
+        onScroll={scheduleVisibleRange}
         className={`min-h-0 flex-1 overflow-auto outline-none ${resizeHandleGutter}`}
         style={{
           display: "block",

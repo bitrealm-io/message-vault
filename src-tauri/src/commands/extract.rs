@@ -7,14 +7,13 @@
 //! `ProgressEvent`), `extract:finished` (a summary string or JSON object),
 //! and `extract:error` ([`ExtractErrorEvent`]).
 //!
-//! The shared cancel flag lives in [`AppState`]. `cancel` sets it to true.
-//! `extract` turns it off at the start of a job. The exporter checks it
-//! between steps through `ExporterConfig.cancel`.
+//! `cancel` sets the cancel flag of the job that is running (see
+//! `commands::jobs`). The exporter checks it between steps through
+//! `ExporterConfig.cancel`.
 
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::path::Path;
-use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
 use media::{CompressOptions, MaxResolution};
@@ -34,14 +33,15 @@ use whatsapp_exporter::run as run_whatsapp;
 
 use super::events;
 use super::events::{ExtractErrorEvent, ExtractProgressEvent};
-use super::jobs::{reset_and_clone_cancel, spawn_job};
+use super::jobs::{cancel_running_job, spawn_job, start_job};
 use super::last_log_line_or;
 use crate::state::AppState;
 
-/// Ask this process to stop the export that is currently running.
+/// Ask this process to stop the job that is running. Does nothing when no
+/// job runs.
 ///
-/// Sets the shared cancel flag. The exporter checks the flag between steps
-/// and exits on its own. There is no hard kill.
+/// Sets that job's cancel flag. The job checks the flag between steps and
+/// exits on its own. There is no hard kill.
 ///
 /// # Errors
 ///
@@ -49,9 +49,7 @@ use crate::state::AppState;
 /// state lock.
 #[tauri::command(async)]
 pub fn cancel(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<(), String> {
-    let state = state.lock().map_err(|e| e.to_string())?;
-    state.cancel_flag.store(true, Ordering::Relaxed);
-    Ok(())
+    cancel_running_job(&state)
 }
 
 /// How many conversation files and messages an extract wrote.
@@ -185,8 +183,8 @@ pub struct ExtractArgs {
 ///
 /// # Errors
 ///
-/// Returns an error if a form field is invalid, the source is unknown, or
-/// another thread panicked while holding the shared state lock. Failures
+/// Returns an error if a form field is invalid, the source is unknown,
+/// another job is running, or another thread panicked while holding the shared state lock. Failures
 /// during the export itself are sent as `extract:error`, not returned here.
 #[tauri::command(async)]
 pub fn extract(
@@ -219,10 +217,10 @@ pub fn extract(
     let mut config = build_exporter_config(&args.source, &args.path, &output_dir, &options)?;
     config.resume = args.resume.unwrap_or(false);
 
-    let cancel = reset_and_clone_cancel(&state)?;
+    let job = start_job(&state, "an extract")?;
 
     let app_handle = app.clone();
-    config.cancel = Some(cancel);
+    config.cancel = Some(job.cancel_flag());
     // Two channels, two jobs: log lines are for the person reading the log
     // panel, progress events are for the bar. Nothing reads counts out of
     // the prose.
@@ -239,43 +237,26 @@ pub fn extract(
         );
     }));
 
-    spawn_job(app, move || {
-        let result = run_exporter(&config);
-
-        match result {
-            Ok(run_result) => {
-                let summary = last_log_line_or(&run_result.messages, "Export complete.");
-                for line in run_result.messages {
-                    events::emit(&app_handle, events::LOG, line);
-                }
-                match count_jsonl_output(Path::new(&output_dir)) {
-                    Ok(counts) => {
-                        let payload = serde_json::json!({
-                            "summary": summary,
-                            "files_parsed": counts.files,
-                            "messages_parsed": counts.messages,
-                        });
-                        events::emit(&app_handle, events::FINISHED, payload.to_string());
-                    }
-                    Err(err) => {
-                        events::emit(&app_handle,
-                            events::ERROR,
-                            ExtractErrorEvent {
-                                detail: format!(
-                                    "count extracted JSON Lines records in {output_dir}: {err:#}"
-                                ),
-                                user_message: Some(
-                                    "Extraction completed, but the generated message count could not be verified."
-                                        .into(),
-                                ),
-                            },
-                        );
-                    }
-                }
-            }
-            Err(err) => return Err(err),
+    spawn_job(app, job, move || {
+        let run_result = run_exporter(&config)?;
+        let summary = last_log_line_or(&run_result.messages, "Export complete.");
+        for line in run_result.messages {
+            events::emit(&app_handle, events::LOG, line);
         }
-        Ok(())
+        let counts =
+            count_jsonl_output(Path::new(&output_dir)).map_err(|err| ExtractErrorEvent {
+                detail: format!("count extracted JSON Lines records in {output_dir}: {err:#}"),
+                user_message: Some(
+                    "Extraction completed, but the generated message count could not be verified."
+                        .into(),
+                ),
+            })?;
+        let payload = serde_json::json!({
+            "summary": summary,
+            "files_parsed": counts.files,
+            "messages_parsed": counts.messages,
+        });
+        Ok(payload.to_string())
     });
 
     Ok(())

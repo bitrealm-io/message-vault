@@ -1,8 +1,9 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { renderWithProviders as render } from "../test/providers";
 
 const logout = vi.fn();
 const apiPost = vi.fn(async () => ({}));
@@ -17,18 +18,32 @@ vi.mock("../lib/auth", () => ({
   }),
 }));
 
+// The account's identities as the server lists them, each with its service; a
+// test sets them to what the owner added.
+type Service = "phone" | "email" | "whatsapp";
+let identities: { address: string; service: Service }[] = [];
+
 vi.mock("../lib/serverApi", () => ({
   updateAccountProfile: (...args: unknown[]) => apiPost(...(args as [])),
+  listAccountIdentities: async () => ({
+    items: identities.map(({ address, service }) => ({
+      address,
+      service,
+      start_date: null,
+      end_date: null,
+      conversations: 0,
+      direct_messages: 0,
+      group_messages: 0,
+    })),
+    total: identities.length,
+    limit: 40,
+    offset: 0,
+  }),
 }));
 
 // What the server says the account already holds; a test sets it to what the owner filled in.
-const blankProfile = { preferred_name: null, time_zone: "UTC", phones: [], emails: [] };
-let profile: {
-  preferred_name: string | null;
-  time_zone: string;
-  phones: string[];
-  emails: string[];
-} = blankProfile;
+const blankProfile = { preferred_name: null, time_zone: "UTC" };
+let profile: { preferred_name: string | null; time_zone: string } = blankProfile;
 
 vi.mock("../lib/useAccountProfile", () => ({
   useAccountProfile: () => ({ profile, loading: false, error: "" }),
@@ -50,6 +65,7 @@ describe("OnboardingScreen", () => {
     logout.mockReset();
     apiPost.mockReset();
     profile = blankProfile;
+    identities = [];
   });
 
   afterEach(() => {
@@ -102,19 +118,59 @@ describe("OnboardingScreen", () => {
     expect(screen.getByRole("combobox", { name: "Time Zone" })).not.toHaveValue("");
   });
 
-  it("puts each identity the owner added in its own row, for the holder to change", () => {
-    profile = { ...blankProfile, phones: ["+15555550100"], emails: ["bob@example.com"] };
+  it("puts each identity the owner added in its own row, for the holder to change", async () => {
+    identities = [
+      { address: "+15555550100", service: "phone" },
+      { address: "bob@example.com", service: "email" },
+    ];
     render(<OnboardingScreen />);
 
+    expect(await screen.findByRole("button", { name: "Email Account 2 type" })).toBeInTheDocument();
     expect(rowValue(1)).toHaveValue("+15555550100");
     expect(rowValue(2)).toHaveValue("bob@example.com");
-    expect(screen.getByRole("button", { name: "Email Account 2 type" })).toBeInTheDocument();
     expect(screen.queryByText(/Already on this account/)).not.toBeInTheDocument();
   });
 
-  it("counts an identity the owner added, so another is not required", async () => {
-    profile = { ...blankProfile, phones: ["+15555550100"] };
+  it("shows a number on Text message and on WhatsApp as two rows, and does not block Continue", async () => {
+    profile = { ...blankProfile, preferred_name: "Bob" };
+    identities = [
+      { address: "+15555550123", service: "phone" },
+      { address: "+15555550123", service: "whatsapp" },
+    ];
+    const user = setupUser();
     render(<OnboardingScreen />);
+
+    expect(
+      await screen.findByRole("button", { name: "WhatsApp Account 2 type" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Text message Account 1 type" })).toBeInTheDocument();
+    expect(rowValue(1)).toHaveValue("+15555550123");
+    expect(rowValue(2)).toHaveValue("+15555550123");
+
+    const go = screen.getByRole("button", { name: "Continue to Message Crate" });
+    expect(go).toBeEnabled();
+    await user.click(go);
+    expect(screen.queryByText("This account is already in the list.")).not.toBeInTheDocument();
+    await waitFor(() => expect(apiPost).toHaveBeenCalled());
+    expect(apiPost).toHaveBeenCalledWith(
+      expect.objectContaining({ identities: [], remove_identities: [] }),
+    );
+  });
+
+  it("shows an identity that is on WhatsApp only as WhatsApp", async () => {
+    identities = [{ address: "+15555550123", service: "whatsapp" }];
+    render(<OnboardingScreen />);
+
+    expect(
+      await screen.findByRole("button", { name: "WhatsApp Account 1 type" }),
+    ).toBeInTheDocument();
+    expect(rowValue(1)).toHaveValue("+15555550123");
+  });
+
+  it("counts an identity the owner added, so another is not required", async () => {
+    identities = [{ address: "+15555550100", service: "phone" }];
+    render(<OnboardingScreen />);
+    await waitFor(() => expect(rowValue(1)).toHaveValue("+15555550100"));
 
     const go = screen.getByRole("button", { name: "Continue to Message Crate" });
     expect(go).toBeDisabled();
@@ -123,13 +179,14 @@ describe("OnboardingScreen", () => {
   });
 
   it("sends only what changed: an edited identity is unlinked and its new value linked", async () => {
-    profile = {
-      ...blankProfile,
-      preferred_name: "Bob",
-      phones: ["+15555550100", "+15555550101"],
-    };
+    profile = { ...blankProfile, preferred_name: "Bob" };
+    identities = [
+      { address: "+15555550100", service: "phone" },
+      { address: "+15555550101", service: "phone" },
+    ];
     const user = setupUser();
     render(<OnboardingScreen />);
+    await waitFor(() => expect(rowValue(2)).toHaveValue("+15555550101"));
 
     await user.clear(rowValue(1));
     await user.paste("+1 555-555-0199");
@@ -145,15 +202,15 @@ describe("OnboardingScreen", () => {
   });
 
   it("unlinks an identity whose row is removed", async () => {
-    profile = {
-      ...blankProfile,
-      preferred_name: "Bob",
-      phones: ["+15555550100", "+15555550101"],
-    };
+    profile = { ...blankProfile, preferred_name: "Bob" };
+    identities = [
+      { address: "+15555550100", service: "phone" },
+      { address: "+15555550101", service: "phone" },
+    ];
     const user = setupUser();
     render(<OnboardingScreen />);
 
-    await user.click(screen.getByRole("button", { name: "Remove account 2" }));
+    await user.click(await screen.findByRole("button", { name: "Remove account 2" }));
     await user.click(screen.getByRole("button", { name: "Continue to Message Crate" }));
 
     await waitFor(() => expect(apiPost).toHaveBeenCalled());
@@ -166,18 +223,21 @@ describe("OnboardingScreen", () => {
   });
 
   it("shows no more identities than the card has rows for, and leaves the rest alone", async () => {
-    profile = {
-      ...blankProfile,
-      preferred_name: "Bob",
-      phones: ["+15555550100", "+15555550101", "+15555550102", "+15555550103"],
-      emails: ["bob@example.com", "b@example.com"],
-    };
+    profile = { ...blankProfile, preferred_name: "Bob" };
+    identities = [
+      { address: "+15555550100", service: "phone" },
+      { address: "+15555550101", service: "phone" },
+      { address: "+15555550102", service: "phone" },
+      { address: "+15555550103", service: "phone" },
+      { address: "bob@example.com", service: "email" },
+      { address: "b@example.com", service: "email" },
+    ];
     const user = setupUser();
     render(<OnboardingScreen />);
 
+    expect(await screen.findByText("2 more are in Settings.")).toBeInTheDocument();
     expect(rowValue(4)).toHaveValue("+15555550103");
     expect(screen.queryByRole("textbox", { name: "Account 5 value" })).not.toBeInTheDocument();
-    expect(screen.getByText("2 more are in Settings.")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Continue to Message Crate" }));
     await waitFor(() => expect(apiPost).toHaveBeenCalled());

@@ -310,3 +310,110 @@ async fn renaming_the_contact_renames_an_address_less_participant_too() {
          unless the contacts join keys on p.contact_id for them"
     );
 }
+
+async fn trash_contact(conn: &mut sqlx::SqliteConnection, contact_id: i64) {
+    let owned = crate::db::trash::move_to_trash(
+        conn,
+        TEST_ACCOUNT,
+        crate::db::trash::Trashable::Contact(contact_id),
+    )
+    .await
+    .unwrap();
+    assert!(owned);
+}
+
+async fn restore_contact(conn: &mut sqlx::SqliteConnection, contact_id: i64) {
+    let owned = crate::db::trash::restore(
+        conn,
+        TEST_ACCOUNT,
+        crate::db::trash::Trashable::Contact(contact_id),
+    )
+    .await
+    .unwrap();
+    assert!(owned);
+}
+
+/// A trashed contact is not one of a conversation's contacts (CONTEXT.md,
+/// "Trash"): its participant is named as if no contact held the identity, and
+/// carries no contact id, because `GET /v1/contacts/{id}` answers 404 for it.
+/// Restoring the contact brings the name and the id back.
+#[tokio::test]
+async fn a_trashed_contact_neither_names_nor_links_its_participant() {
+    let (pool, _dir) = crate::db::engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    let (conversation_id, handle_id) = seed(&mut conn, "+15555550123", Some("Bobby")).await;
+    let (bare_conversation, bare_handle) = seed(&mut conn, "+15555550124", None).await;
+    let contact_id = link(&mut conn, handle_id, "Ada").await;
+    let bare_contact = link(&mut conn, bare_handle, "Grace").await;
+    trash_contact(&mut conn, contact_id).await;
+    trash_contact(&mut conn, bare_contact).await;
+
+    let loaded = load_for_conversations(&mut conn, &[conversation_id, bare_conversation])
+        .await
+        .unwrap();
+    let p = &loaded[&conversation_id][0];
+    assert_eq!(p.name, "Bobby");
+    assert_eq!(p.contact_id, None);
+    let p = &loaded[&bare_conversation][0];
+    assert_eq!(p.name, "+15555550124");
+    assert_eq!(p.contact_id, None);
+
+    restore_contact(&mut conn, contact_id).await;
+    let loaded = load_for_conversations(&mut conn, &[conversation_id])
+        .await
+        .unwrap();
+    let p = &loaded[&conversation_id][0];
+    assert_eq!(p.name, "Ada");
+    assert_eq!(p.contact_id, Some(contact_id));
+}
+
+/// The same for a participant with no address, whose contact is reached
+/// through `participants.contact_id`: the backup's name stays, the link goes.
+#[tokio::test]
+async fn a_trashed_contact_does_not_link_an_address_less_participant() {
+    let (pool, _dir) = crate::db::engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    let (conversation_id, _handle_id) = seed(&mut conn, "+15555550125", None).await;
+    sqlx::query("DELETE FROM participants WHERE conversation_id = $1")
+        .bind(conversation_id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    let contact_id = seed_address_less(&mut conn, conversation_id, "Sarah Vale").await;
+    sqlx::query("UPDATE contacts SET preferred_name = 'Sarah Connor' WHERE id = $1")
+        .bind(contact_id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    trash_contact(&mut conn, contact_id).await;
+
+    let loaded = load_for_conversations(&mut conn, &[conversation_id])
+        .await
+        .unwrap();
+    let p = &loaded[&conversation_id][0];
+    assert_eq!(p.name, "Sarah Vale");
+    assert_eq!(p.contact_id, None);
+}
+
+/// The chat-handle fallback, for a conversation with no participants rows,
+/// leaves a trashed contact out the same way.
+#[tokio::test]
+async fn the_chat_handle_ignores_a_trashed_contact() {
+    let (pool, _dir) = crate::db::engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    let (conversation_id, handle_id) = seed(&mut conn, "+15555550126", None).await;
+    sqlx::query("DELETE FROM participants WHERE conversation_id = $1")
+        .bind(conversation_id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    let contact_id = link(&mut conn, handle_id, "Ada").await;
+    trash_contact(&mut conn, contact_id).await;
+
+    let loaded = load_for_conversations(&mut conn, &[conversation_id])
+        .await
+        .unwrap();
+    let p = &loaded[&conversation_id][0];
+    assert_eq!(p.name, "+15555550126");
+    assert_eq!(p.contact_id, None);
+}

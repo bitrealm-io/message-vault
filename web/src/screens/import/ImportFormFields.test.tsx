@@ -3,6 +3,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { holdDesktopJob } from "../../lib/desktopJob";
 import { EXPORT_SOURCES } from "../../lib/exportSources";
 import { IMESSAGE_METHODS, IMESSAGE_SOURCE_ID } from "../../lib/imessageImport";
 import {
@@ -142,6 +143,19 @@ describe("ImportFormFields iMessage methods", () => {
     const passwordLabel = screen.getByText("Encryption password").closest("label");
     expect(passwordLabel?.textContent).toContain("*");
     expect(screen.queryByLabelText("Encryption password (Optional)")).toBeNull();
+  });
+
+  it("does not start an Import Run while another desktop job runs, and names that job", () => {
+    const release = holdDesktopJob("Export");
+    try {
+      renderForm({ source: "imessage-ios" });
+      expect(screen.getByRole("button", { name: "Import" })).toBeDisabled();
+      expect(screen.getByRole("status").textContent).toBe(
+        "An export is running. Import can start once it ends.",
+      );
+    } finally {
+      release();
+    }
   });
 
   it("shows password and hides attachment folder on iPhone backup", () => {

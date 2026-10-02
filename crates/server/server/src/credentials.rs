@@ -194,7 +194,10 @@ pub(crate) fn require_valid_username(raw: &str) -> Result<String, ApiError> {
     Ok(username)
 }
 
-/// Refuse a username another account already has.
+/// Refuse a username another account already has, and the Demo Account's
+/// username whether or not the Demo Account exists: the build writes the
+/// Demo Account under that name, so an account holding it would make every
+/// later build fail. No caller creates the Demo Account itself.
 ///
 /// # Errors
 ///
@@ -203,6 +206,14 @@ pub(crate) async fn require_username_free(
     conn: &mut SqliteConnection,
     username: &str,
 ) -> Result<(), ApiError> {
+    if username
+        .trim()
+        .eq_ignore_ascii_case(account_profile::DEMO_USERNAME)
+    {
+        return Err(ApiError::UsernameTaken(format!(
+            "username already taken: {username} belongs to the Demo Account"
+        )));
+    }
     if account_profile::lookup_account_by_username(conn, username)
         .await
         .map_err(ApiError::Internal)?

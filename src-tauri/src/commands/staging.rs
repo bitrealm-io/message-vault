@@ -40,7 +40,7 @@ use message_staging::{StagingSummary, TranscodeOptions, TranscodeReport};
 use super::events;
 use super::events::ExtractProgressEvent;
 use super::extract::{parse_attachment_media, parse_compress_options, parse_max_resolution};
-use super::jobs::{reset_and_clone_cancel, spawn_job};
+use super::jobs::{spawn_job, start_job};
 use super::paths::{resolve_openable_path, resolve_staging_root};
 use crate::state::AppState;
 
@@ -222,8 +222,8 @@ fn transcode_summary(report: &TranscodeReport) -> String {
 /// Run the convert/compress pass over a staged folder, after the first review
 /// approves it.
 ///
-/// Follows `extract`'s job shape: the cancel flag is reset through
-/// [`reset_and_clone_cancel`], the pass runs on a background thread, and
+/// Follows `extract`'s job shape: the job starts through [`start_job`], with
+/// a cancel flag of its own, the pass runs on a background thread, and
 /// progress/log/finished go back as `extract:*` events so the UI reuses one
 /// progress view. A cancelled pass is reported through `extract:error` the
 /// same way any other failure is — exactly how a cancelled `extract` run
@@ -244,8 +244,8 @@ fn transcode_summary(report: &TranscodeReport) -> String {
 /// # Errors
 ///
 /// Returns an error if a form field is invalid, `staging_dir` is not a
-/// direct child of `staging_root` or is missing the export sentinel, or
-/// another thread panicked while holding the shared state lock. Failures
+/// direct child of `staging_root` or is missing the export sentinel, another
+/// job is running, or another thread panicked while holding the shared state lock. Failures
 /// during the pass — including a cancellation and ffmpeg/ffprobe being
 /// unavailable — are sent as `extract:error`, verbatim, not returned here.
 #[tauri::command(async)]
@@ -257,14 +257,15 @@ pub fn transcode_staging(
     let options = build_transcode_options(&args)?;
     // Writes to and deletes originals inside the folder: sentinel required.
     let staging_dir = resolve_staging_child(&args.staging_dir, &args.staging_root, true)?;
-    let cancel = reset_and_clone_cancel(&state)?;
+    let job = start_job(&state, "a Media pass")?;
+    let cancel = job.cancel_flag();
     let has_media_step = matches!(
         options.mode,
         media::MediaMode::Convert | media::MediaMode::Compress
     );
 
     let app_handle = app.clone();
-    spawn_job(app, move || {
+    spawn_job(app, job, move || {
         if has_media_step {
             events::emit(
                 &app_handle,
@@ -320,8 +321,7 @@ pub fn transcode_staging(
             "bytes_before": report.bytes_before,
             "bytes_after": report.bytes_after,
         });
-        events::emit(&app_handle, events::FINISHED, payload.to_string());
-        Ok(())
+        Ok(payload.to_string())
     });
 
     Ok(())

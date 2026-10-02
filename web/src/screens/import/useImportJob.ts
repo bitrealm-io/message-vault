@@ -442,6 +442,7 @@ function returnToForm(): void {
     mediaToolsMissing: false,
     mediaPartiallyRan: false,
     computingSummary: false,
+    reviewError: null,
     form: null,
   });
 }
@@ -570,7 +571,13 @@ function recordError(step: ImportIssue["step"], message: string): void {
  * `CANCELLED_MESSAGE` the way a job cancelled while it runs does.
  */
 function runJob(invokeFn: () => Promise<void>): Promise<TauriJobResult> {
-  return awaitTauriJob(scratch.runCancel.guard(invokeFn), undefined, applyProgress, recordIssue);
+  return awaitTauriJob(
+    "Import Run",
+    scratch.runCancel.guard(invokeFn),
+    undefined,
+    applyProgress,
+    recordIssue,
+  );
 }
 
 /**
@@ -595,19 +602,54 @@ async function summarizeStagingWithProgress(config: StagingConfig): Promise<Stag
 }
 
 /**
+ * A stage change the server did not record. The run stops where the server
+ * last recorded it, so a later visit resumes it from there.
+ */
+class StageNotRecordedError extends Error {}
+
+/**
  * Move a live run to another stage, carrying the summary the person just
  * approved when there is one. `approvedPlan` is simply forwarded, undefined
  * and all: `setImportStage` posts `{ stage, summary: approvedPlan }`, and
  * `JSON.stringify` drops an `undefined`-valued property outright, so an
  * omitted plan and an explicit `undefined` reach the server identically —
  * no `summary` key at all, leaving whatever plan is already stored untouched.
+ *
+ * Throws `StageNotRecordedError` when the write fails. A later visit resumes
+ * the run from the stage the server holds, so the caller must not go on to
+ * work the server does not know the run reached.
  */
 async function moveStage(
   sessionId: number,
   stage: ImportStage,
   approvedPlan?: StagingSummary,
 ): Promise<void> {
-  await setImportStage(sessionId, stage, approvedPlan).catch(() => {});
+  try {
+    await setImportStage(sessionId, stage, approvedPlan);
+  } catch (e: unknown) {
+    const reason = e instanceof Error ? e.message : String(e);
+    throw new StageNotRecordedError(`Message Crate didn't record the run's progress: ${reason}`);
+  }
+}
+
+/**
+ * Record that the run is waiting at a review. A failure leaves the review on
+ * screen with the error on it (`reviewError`), and approving writes the stage
+ * again before anything else (`approve`). Returns whether the server has it.
+ */
+async function moveStageAtReview(
+  sessionId: number,
+  stage: "awaiting_gate_1" | "awaiting_gate_2",
+  approvedPlan?: StagingSummary,
+): Promise<boolean> {
+  try {
+    await moveStage(sessionId, stage, approvedPlan);
+    store.set({ reviewError: null });
+    return true;
+  } catch (e: unknown) {
+    store.set({ reviewError: e instanceof Error ? e.message : String(e) });
+    return false;
+  }
 }
 
 /** True when ffmpeg is needed for this mode and cannot be found. */
@@ -785,7 +827,23 @@ async function runPush(
   store.set({ running: true, phase: "running" });
   scratch.activeStep = "upload";
   setRowByLabel(UPLOAD_LABEL, { status: "active", detail: "Uploading to Message Crate…" });
-  await moveStage(sessionId, "pushing", approvedPlan);
+  try {
+    await moveStage(sessionId, "pushing", approvedPlan);
+  } catch (e: unknown) {
+    // The server still has the run at its review, so the run stays there
+    // and is not completed: a later visit offers that review again.
+    recordError("upload", e instanceof Error ? e.message : String(e));
+    failActiveStep();
+    await finishImport({
+      sessionId,
+      threw: true,
+      pushReport: null,
+      uploadMs: null,
+      skipComplete: true,
+      approved: approvedPlan,
+    });
+    return;
+  }
 
   const uploadStartedAt = performance.now();
   let pushResult: TauriJobResult | null = null;
@@ -856,7 +914,22 @@ async function runMediaPass(
   // Carries the plan approved at the Staging Review even on this stage: a
   // crash mid-pass must not leave `summary_json` null with no baseline for
   // a later resume to diff against.
-  await moveStage(sessionId, "transcode", approvedSummary);
+  try {
+    await moveStage(sessionId, "transcode", approvedSummary);
+  } catch (e: unknown) {
+    // The server still has the run at the Staging Review, so the run stays
+    // there and is not completed: a later visit offers that review again.
+    recordError("media", e instanceof Error ? e.message : String(e));
+    failActiveStep();
+    await finishImport({
+      sessionId,
+      threw: true,
+      pushReport: null,
+      uploadMs: null,
+      skipComplete: true,
+    });
+    return;
+  }
 
   const mediaStartedAt = performance.now();
   let transcodeReport: TranscodeFinishedReport | undefined;
@@ -915,7 +988,7 @@ async function runMediaPass(
       ...stagingMediaFields(form),
     });
     store.set({ mediaSummary: actual, mediaFailedCount: transcodeReport?.failed ?? null });
-    await moveStage(sessionId, "awaiting_gate_2", approvedSummary);
+    await moveStageAtReview(sessionId, "awaiting_gate_2", approvedSummary);
     waitAtReview("media_review");
   } catch (e: unknown) {
     // The stage itself succeeded; only the recompute after it failed. Still
@@ -996,6 +1069,7 @@ async function runImport(
     mediaToolsMissing: false,
     mediaPartiallyRan: false,
     resumeError: null,
+    reviewError: null,
     computingSummary: false,
   });
 
@@ -1109,7 +1183,7 @@ async function runImport(
       computingSummary: true,
     });
 
-    await moveStage(sessionId, "awaiting_gate_1");
+    await moveStageAtReview(sessionId, "awaiting_gate_1");
     // The extract itself is done and staged: an error from here on is a
     // failed read of a folder that already holds the staged work, not a run
     // that failed. Routing it through the outer catch (below) would post
@@ -1139,9 +1213,11 @@ async function runImport(
     // A cancelled Staging is not a failure: the conversations already
     // written are real work, and Staging can pick up from them. Leaving the
     // run at `write` is what lets the next Import visit offer that. A
-    // genuine failure still completes: a broken backup must not lock the
-    // account out of importing.
+    // `write` stage the server did not record stops the run where the server
+    // has it, so it is not completed either. A genuine failure still
+    // completes: a broken backup must not lock the account out of importing.
     const cancelled = msg === CANCELLED_MESSAGE;
+    const stageNotRecorded = e instanceof StageNotRecordedError;
     if (!cancelled) recordError(scratch.activeStep, msg);
     failActiveStep();
     store.set({ computingSummary: false });
@@ -1151,7 +1227,7 @@ async function runImport(
       cancelled,
       pushReport: null,
       uploadMs: null,
-      skipComplete: cancelled,
+      skipComplete: cancelled || stageNotRecorded,
     });
   }
 }
@@ -1269,6 +1345,7 @@ export function useImportJob() {
       stagingDir: outputDir,
       stagingSummary,
       mediaSummary,
+      reviewError,
     } = store.get();
     // What the person is approving: the folder as Media left it at the
     // Media Review, as Staging left it at the Staging Review.
@@ -1278,6 +1355,15 @@ export function useImportJob() {
     scratch.reviewAction = true;
     scratch.runCancel = createRunCancel();
     try {
+      // The review's own stage did not reach the server, so it is written
+      // first: a later visit must find the run at this review.
+      if (reviewError != null) {
+        const recorded =
+          phase === "media_review"
+            ? await moveStageAtReview(sessionId, "awaiting_gate_2", stagingSummary ?? undefined)
+            : await moveStageAtReview(sessionId, "awaiting_gate_1");
+        if (!recorded) return;
+      }
       if (phase === "staging_review" && mediaJobVerb(form.attachmentMedia) !== null) {
         await runMediaPass(form, sessionId, outputDir, approvedSummary);
       } else {
@@ -1335,6 +1421,7 @@ export function useImportJob() {
     beginRun(resumedForm, session.stage === "transcode" ? "media" : "parse");
     store.set({
       resumeError: null,
+      reviewError: null,
       form: resumedForm,
       summaryView: null,
       stagingDir: outputDir,
@@ -1428,6 +1515,7 @@ export function useImportJob() {
     mediaToolsMissing: state.mediaToolsMissing,
     mediaPartiallyRan: state.mediaPartiallyRan,
     resumeError: state.resumeError,
+    reviewError: state.reviewError,
     computingSummary: state.computingSummary,
     completionText:
       state.phase === "done" ? completionTextFor(state.summaryView?.status) : undefined,

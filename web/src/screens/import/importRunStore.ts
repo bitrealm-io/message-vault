@@ -52,6 +52,11 @@ export type ImportRunState = {
    */
   resumeError: string | null;
   /**
+   * The server did not record that the run reached the review on screen.
+   * Shown on the review; approving writes the stage again before it goes on.
+   */
+  reviewError: string | null;
+  /**
    * True only while a not-cancellable summarize call is in flight: the
    * review renders once the summary resolves, and until then the run
    * view stays up with Cancel disabled, since there is nothing to stop.
@@ -75,6 +80,7 @@ export function initialImportRunState(steps: ImportStep[]): ImportRunState {
     mediaToolsMissing: false,
     mediaPartiallyRan: false,
     resumeError: null,
+    reviewError: null,
     computingSummary: false,
     sourceIdentities: null,
   };

@@ -159,6 +159,9 @@ pub struct ParseStats {
     pub skipped_empty_participants: u64,
     /// Parts with undecodable base64 `data`.
     pub skipped_bad_attachment: u64,
+    /// Character references dropped from an attribute because they are not
+    /// a character, such as `&#0;` or a lone surrogate.
+    pub dropped_character_references: u64,
 }
 
 /// The element's attributes as a map with lower-case keys.
@@ -166,16 +169,75 @@ pub struct ParseStats {
 /// Each value is taken raw and its references decoded, HTML entities such
 /// as `&nbsp;` included. XML attribute-value normalisation is not applied:
 /// it would turn a literal line break in a message into a space, and
-/// SMS Backup & Restore files hold literal line breaks.
-fn attrs(e: &quick_xml::events::BytesStart<'_>) -> HashMap<String, String> {
+/// SMS Backup & Restore files hold literal line breaks. A reference that is
+/// not a character is dropped and added to `dropped`.
+fn attrs(e: &quick_xml::events::BytesStart<'_>, dropped: &mut u64) -> HashMap<String, String> {
     e.attributes()
         .flatten()
         .map(|a| {
             let key = a.key.as_ref().to_ascii_lowercase();
-            let value = html_escape::decode_html_entities(&a.value).into_owned();
+            let value = decode_references(&a.value, dropped);
             (key, value)
         })
         .collect()
+}
+
+/// `raw` with its references decoded.
+///
+/// A numeric reference is decoded here: a UTF-16 surrogate pair written as
+/// two references, as older SMS Backup & Restore versions write an emoji,
+/// becomes one character. A reference that is not a character (`&#0;`, a
+/// lone surrogate, a number past U+10FFFF) is dropped and added to
+/// `dropped`. The text between numeric references, named entities such as
+/// `&nbsp;` included, is decoded by `html_escape`.
+fn decode_references(raw: &str, dropped: &mut u64) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let (mut plain, mut from) = (0, 0);
+    while let Some(offset) = raw[from..].find("&#") {
+        let at = from + offset;
+        let Some((code, len)) = numeric_reference(&raw[at..]) else {
+            from = at + 2;
+            continue;
+        };
+        out.push_str(&html_escape::decode_html_entities(&raw[plain..at]));
+        let mut end = at + len;
+        let ch = if (0xD800..=0xDBFF).contains(&code) {
+            numeric_reference(&raw[end..])
+                .filter(|(low, _)| (0xDC00..=0xDFFF).contains(low))
+                .and_then(|(low, low_len)| {
+                    end += low_len;
+                    char::from_u32(0x10000 + ((code - 0xD800) << 10) + (low - 0xDC00))
+                })
+        } else {
+            char::from_u32(code)
+        };
+        match ch.filter(|c| *c != '\0') {
+            Some(c) => out.push(c),
+            None => *dropped += 1,
+        }
+        (plain, from) = (end, end);
+    }
+    out.push_str(&html_escape::decode_html_entities(&raw[plain..]));
+    out
+}
+
+/// The code point and byte length of the `&#…;` or `&#x…;` reference that
+/// `s` starts with. A number too large for `u32` is `u32::MAX`, which is
+/// not a character.
+fn numeric_reference(s: &str) -> Option<(u32, usize)> {
+    let body = s.strip_prefix("&#")?;
+    let (digits, radix, prefix) = match body.strip_prefix(['x', 'X']) {
+        Some(hex) => (hex, 16, 3),
+        None => (body, 10, 2),
+    };
+    let count = digits
+        .find(|c: char| !c.is_digit(radix))
+        .unwrap_or(digits.len());
+    if count == 0 || !digits[count..].starts_with(';') {
+        return None;
+    }
+    let code = u32::from_str_radix(&digits[..count], radix).unwrap_or(u32::MAX);
+    Some((code, prefix + count + 1))
 }
 
 /// The attribute value, or an empty string.
@@ -803,26 +865,34 @@ where
     loop {
         match xml.read_event_into(&mut buf) {
             Ok(Event::Start(e)) => match e.name().as_ref().to_ascii_lowercase().as_str() {
-                "sms" => sms = attrs(&e),
+                "sms" => sms = attrs(&e, &mut stats.dropped_character_references),
                 "mms" => {
-                    mms = attrs(&e);
+                    mms = attrs(&e, &mut stats.dropped_character_references);
                     parts.clear();
                     addrs.clear();
                 }
-                "part" => parts.push(part(&attrs(&e))),
-                "addr" => addrs.push(addr(&attrs(&e))),
+                "part" => parts.push(part(&attrs(&e, &mut stats.dropped_character_references))),
+                "addr" => addrs.push(addr(&attrs(&e, &mut stats.dropped_character_references))),
                 _ => {}
             },
             Ok(Event::Empty(e)) => match e.name().as_ref().to_ascii_lowercase().as_str() {
                 "sms" => {
-                    if let Some(r) = parse_sms(&attrs(&e), stats) {
+                    if let Some(r) =
+                        parse_sms(&attrs(&e, &mut stats.dropped_character_references), stats)
+                    {
                         on_record(r)?;
                     }
                 }
-                "part" => parts.push(part(&attrs(&e))),
-                "addr" => addrs.push(addr(&attrs(&e))),
+                "part" => parts.push(part(&attrs(&e, &mut stats.dropped_character_references))),
+                "addr" => addrs.push(addr(&attrs(&e, &mut stats.dropped_character_references))),
                 "mms" => {
-                    if let Some(r) = parse_mms(&attrs(&e), &[], &[], owners, stats) {
+                    if let Some(r) = parse_mms(
+                        &attrs(&e, &mut stats.dropped_character_references),
+                        &[],
+                        &[],
+                        owners,
+                        stats,
+                    ) {
                         on_record(r)?;
                     }
                 }
@@ -883,9 +953,9 @@ pub fn infer_owner_phones(path: &Path) -> Result<Vec<String>> {
         match xml.read_event_into(&mut buf) {
             Ok(Event::Start(e) | Event::Empty(e)) => {
                 match e.name().as_ref().to_ascii_lowercase().as_str() {
-                    "mms" => in_sent = get(&attrs(&e), "msg_box").trim() == MMS_BOX_SENT,
+                    "mms" => in_sent = get(&attrs(&e, &mut 0), "msg_box").trim() == MMS_BOX_SENT,
                     "addr" if in_sent => {
-                        let a = attrs(&e);
+                        let a = attrs(&e, &mut 0);
                         if get(&a, "type").trim() == MMS_ADDR_FROM {
                             let raw = get(&a, "address");
                             if !raw.eq_ignore_ascii_case(INSERT_ADDRESS_TOKEN)
@@ -1282,5 +1352,21 @@ mod tests {
         let (records, _) = parse_reader(xml.as_slice(), None).unwrap();
         assert_eq!(records[0].text, "line1\nline2\nline3");
         assert_eq!(records[1].text, "part1\npart2");
+    }
+
+    #[test]
+    fn a_surrogate_pair_reference_is_one_character() {
+        let xml = br#"<smses><sms protocol="0" address="+15555550101" date="1" type="1" body="On my way &#55357;&#56832;"/></smses>"#;
+        let (records, _) = parse_reader(xml.as_slice(), None).unwrap();
+        assert_eq!(records[0].text, "On my way \u{1F600}");
+    }
+
+    #[test]
+    fn a_reference_that_is_no_character_costs_only_itself() {
+        let xml = br#"<smses><sms protocol="0" address="+15555550101" date="1" type="1" body="a&#0;b &#55357;c &#xDE00;d&nbsp;e"/><mms date="2" msg_box="1" address="+15555550101"><parts><part ct="text/plain" text="x&#55357;y"/></parts><addrs><addr address="+15555550101" type="137"/></addrs></mms></smses>"#;
+        let (records, stats) = parse_reader(xml.as_slice(), None).unwrap();
+        assert_eq!(records[0].text, "ab c d\u{a0}e");
+        assert_eq!(records[1].text, "xy");
+        assert_eq!(stats.dropped_character_references, 4);
     }
 }

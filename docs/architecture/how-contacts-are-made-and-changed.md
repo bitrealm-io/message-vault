@@ -186,6 +186,16 @@ An identity belongs to one contact. It moves to the file's contact freely
 when its current holder has no name, or when the holder is also in the file.
 Taking an identity from a named contact the file does not mention refuses
 the load.
+The refusal names the row, the identity, and both contacts, and says how to
+let the identity move.
+
+Can the holder be added to the file?
+
+Only when it is in Contacts.
+A holder in the Trash can't be, because its id reads as unknown text and
+makes a new contact (step 2).
+For a holder in the Trash, the refusal says so, and says to restore it and
+add it to the file, or to delete it for good first.
 
 A move takes only the identity the row lists. The same number on the other
 service stays where it is unless the file lists it too.
@@ -201,7 +211,9 @@ flowchart TD
   D -- nobody --> D1["Put on the contact. Counts as identities_added."]
   D -- "this contact" --> D2["Nothing changes"]
   D -- "another contact" --> E{"Holder has no name, or holder is in the file?"}
-  E -- no --> R2{{"Refused: names the row, the identity and both contacts"}}
+  E -- no --> F{"Holder in the Trash?"}
+  F -- no --> R2{{"Refused: names the row, the identity and both contacts, and says to add the holder to the file"}}
+  F -- yes --> R3{{"Refused: names the row, the identity and both contacts, and says to restore the holder and add it to the file, or delete it for good"}}
   E -- yes --> E1["Moved to this contact. Counts as identities_moved."]
 ```
 

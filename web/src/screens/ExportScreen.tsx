@@ -101,15 +101,20 @@ export default function ExportScreen() {
   // `running` only turns true once a job starts, which leaves two windows
   // where the Export button would be live mid-export: while the staging path
   // resolves (a `home_dir` round trip on the first export), and between the
-  // pull and the conversion. A second job started in either window would
-  // break `jobs.rs`'s "one job runs at a time" assumption, and two exports
+  // pull and the conversion. The desktop refuses a second job while one runs
+  // (`jobs.rs`), but between two jobs it has nothing to refuse, and two exports
   // begun in the same second would share a staging folder, so the first
   // cleanup would delete the second's files. This covers the whole run.
   const [busy, setBusy] = useState(false);
-  const { running, finished, run } = useTauriJob();
+  // The folder and format each export was started with, so the success
+  // message names what was written even after the form changes.
+  const { running, finished, run } = useTauriJob<{ savePath: string; format: ExportFormat }>({
+    job: "Export",
+  });
   // The Cancel of the export under way. A Cancel pressed after the pull and
-  // before the conversion starts must stop the conversion, and the shared
-  // cancel flag alone would not: `format` clears it when it starts.
+  // before the conversion starts must stop the conversion, and the desktop
+  // alone would not: with no job running, its Cancel stops nothing, and
+  // `format` starts with a cancel flag of its own.
   const runCancel = useRef<RunCancel>(createRunCancel());
 
   const appendLog = useCallback((line: string) => {
@@ -127,6 +132,7 @@ export default function ExportScreen() {
     setLog([]);
     const exportCancel = createRunCancel();
     runCancel.current = exportCancel;
+    const request = { savePath, format };
 
     const pullInto = (outDir: string) =>
       run(
@@ -141,6 +147,7 @@ export default function ExportScreen() {
             skip_attachments: false,
           }),
         ),
+        request,
         { onLog: appendLog },
       );
 
@@ -161,6 +168,7 @@ export default function ExportScreen() {
                 output_format: format,
               }),
             ),
+            request,
             { onLog: appendLog },
           );
         } finally {
@@ -189,6 +197,7 @@ export default function ExportScreen() {
   return (
     <TauriJobFormShell
       title="Export"
+      job="Export"
       requireTauri
       startLabel="Export"
       runningLabel="Exporting…"
@@ -205,9 +214,11 @@ export default function ExportScreen() {
         </p>
       }
       success={
-        finished && !error ? (
+        // `busy` hides it from the moment the next export starts, and between
+        // the pull and the conversion, when the pull alone has finished.
+        finished && !busy && !error ? (
           <div className="mt-4 rounded-md bg-ok-soft-bg p-4 text-[0.875rem]">
-            Export complete. {formatLabel(format)} saved to {savePath}.
+            Export complete. {formatLabel(finished.format)} saved to {finished.savePath}.
           </div>
         ) : null
       }
@@ -266,6 +277,7 @@ export default function ExportScreen() {
           onChange={setSavePath}
           directory
           placeholder="Choose folder…"
+          isDisabled={running || busy}
         />
       </FormRow>
       <FormRow label="Format">

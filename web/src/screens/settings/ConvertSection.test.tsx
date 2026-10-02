@@ -3,6 +3,7 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { holdDesktopJob } from "../../lib/desktopJob";
 import { ConvertSection } from "./ConvertSection";
 
 const tauriState = vi.hoisted(() => ({ isTauri: true }));
@@ -20,7 +21,8 @@ vi.mock("../../lib/tauri", async (importOriginal) => {
     EXPORT_FORMATS: actual.EXPORT_FORMATS,
     invokeFormat: (...args: unknown[]) => invokeFormat(...args),
     invokeCancel: (...args: unknown[]) => invokeCancel(...args),
-    awaitTauriJob: (...args: unknown[]) => awaitTauriJob(...args),
+    // The job's name comes first; the mocks below take what follows it.
+    awaitTauriJob: (_job: string, ...args: unknown[]) => awaitTauriJob(...args),
     onExtractEvents: vi.fn(async () => () => {}),
   };
 });
@@ -59,6 +61,20 @@ async function fillFolders(input: string, output: string, formatLabel?: string) 
 }
 
 describe("ConvertSection", () => {
+  it("does not start while another desktop job runs, and names that job", async () => {
+    const release = holdDesktopJob("Export");
+    try {
+      await fillFolders("/home/demo/export-json", "/home/demo/export-csv");
+      expect(convertButton()).toBeDisabled();
+      expect(screen.getByRole("status").textContent).toBe(
+        "An export is running. Convert can start once it ends.",
+      );
+    } finally {
+      release();
+    }
+    await waitFor(() => expect(convertButton()).toBeEnabled());
+  });
+
   it("shows the desktop-only stub when not in Tauri", () => {
     tauriState.isTauri = false;
     render(<ConvertSection />);
@@ -128,5 +144,41 @@ describe("ConvertSection", () => {
 
     expect(await screen.findByText("input and output directories must be different")).toBeTruthy();
     expect(screen.queryByText(/Conversion complete/)).toBeNull();
+  });
+
+  it("names the folder and format the conversion wrote to after the form changes", async () => {
+    const user = await fillFolders("/home/demo/export-json", "/a", "CSV (.csv)");
+    await user.click(convertButton());
+    await screen.findByText(/Conversion complete/);
+
+    const field = screen.getByLabelText("Output folder");
+    await user.clear(field);
+    await user.type(field, "/b");
+    await user.click(screen.getByRole("button", { name: /Output format/ }));
+    await user.click(await screen.findByRole("option", { name: "JSON Lines (.jsonl)" }));
+
+    expect(screen.getByText(/Conversion complete/)).toHaveTextContent(
+      "Conversion complete. CSV (.csv) written to /a.",
+    );
+  });
+
+  it("locks both folder fields while a conversion runs", async () => {
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    awaitTauriJob.mockImplementationOnce(async (invokeFn: () => Promise<void>) => {
+      await held;
+      await invokeFn();
+      return { summary: "Format conversion complete." };
+    });
+
+    const user = await fillFolders("/home/demo/export-json", "/a");
+    await user.click(convertButton());
+    expect(screen.getByLabelText("Input folder")).toBeDisabled();
+    expect(screen.getByLabelText("Output folder")).toBeDisabled();
+    release();
+    await screen.findByText(/Conversion complete/);
+    expect(screen.getByLabelText("Output folder")).toBeEnabled();
   });
 });

@@ -78,7 +78,7 @@ function renderPanel(initialEntries?: string[], browseQuery = "") {
   return render(
     <Providers>
       <MemoryRouter initialEntries={initialEntries}>
-        <LeftPanel onSearchChange={() => {}} browseQuery={browseQuery} />
+        <LeftPanel browseQuery={browseQuery} />
         <LocationProbe />
       </MemoryRouter>
     </Providers>,

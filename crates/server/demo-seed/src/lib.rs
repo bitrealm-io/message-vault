@@ -86,15 +86,37 @@ fn output_parent_dir(out: &Path) -> &Path {
     }
 }
 
-/// If putting the new files in place failed and the previous copies are still
-/// sitting in the temp directory, leave that directory on disk so nothing is
-/// lost. Otherwise let the temp directory be deleted as usual.
+/// The context on an error after which the previous demo files could not all
+/// be moved back: some are still in the backup folder.
+///
+/// [`restore_previous_paths`] attaches it, and [`keep_prepared_if_restore_failed`]
+/// looks for it. The backup folder still existing is not the sign: it is also
+/// left behind when the restore worked and only its removal failed.
+#[derive(Debug)]
+struct RestoreFailed {
+    backup: PathBuf,
+    restore_errors: Vec<String>,
+}
+
+impl std::fmt::Display for RestoreFailed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "replace generated demo bundle; could not fully restore the previous files; copies were kept at {}: {}",
+            self.backup.display(),
+            self.restore_errors.join("; ")
+        )
+    }
+}
+
+/// If putting the new files in place failed and the previous copies could not
+/// all be moved back, leave the temp directory on disk so nothing is lost.
+/// Otherwise let the temp directory be deleted as usual.
 fn keep_prepared_if_restore_failed(
     prepared: tempfile::TempDir,
     error: anyhow::Error,
 ) -> anyhow::Error {
-    let previous_copies = prepared.path().join(".previous-active");
-    if !previous_copies.exists() {
+    if error.downcast_ref::<RestoreFailed>().is_none() {
         return error;
     }
     let kept = prepared.keep();
@@ -260,7 +282,9 @@ fn is_jsonl_file(path: &Path) -> bool {
 /// Returns an error if a rename fails. If the previous files cannot be fully
 /// restored, they are left in the backup folder and the error says so.
 fn replace_generated_paths(active: &Path, prepared: &Path) -> Result<()> {
-    replace_generated_paths_with(active, prepared, move_path)
+    replace_generated_paths_with(active, prepared, move_path, |backup| {
+        fs::remove_dir_all(backup)
+    })
 }
 
 /// Move `source` onto `destination`: a rename, or, when the paths sit on
@@ -347,14 +371,21 @@ fn copy_dir_recursive(source: &Path, destination: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Same as [`replace_generated_paths`], but uses `rename` so tests can fail a move on purpose.
+/// Same as [`replace_generated_paths`], but uses `rename` and `remove_backup`
+/// so tests can fail a move or the removal of the backup folder on purpose.
 ///
 /// # Errors
 ///
 /// Returns an error if `rename` fails. Tries to put the previous files back.
-fn replace_generated_paths_with<F>(active: &Path, prepared: &Path, mut rename: F) -> Result<()>
+fn replace_generated_paths_with<F, R>(
+    active: &Path,
+    prepared: &Path,
+    mut rename: F,
+    remove_backup: R,
+) -> Result<()>
 where
     F: FnMut(&Path, &Path) -> Result<()>,
+    R: FnOnce(&Path) -> io::Result<()>,
 {
     fs::create_dir_all(active)
         .with_context(|| format!("create active demo root {}", active.display()))?;
@@ -374,10 +405,18 @@ where
     );
 
     if let Err(error) = replacement {
-        return restore_previous_paths(active, &backup, &mut rename, &backed_up, &installed, error);
+        return restore_previous_paths(
+            active,
+            &backup,
+            &mut rename,
+            remove_backup,
+            &backed_up,
+            &installed,
+            error,
+        );
     }
 
-    if let Err(cleanup_error) = fs::remove_dir_all(&backup) {
+    if let Err(cleanup_error) = remove_backup(&backup) {
         eprintln!(
             "warning: installed the generated demo bundle but could not remove backup {}: {cleanup_error}",
             backup.display()
@@ -439,18 +478,22 @@ where
 ///
 /// # Errors
 ///
-/// Always returns `error`, with extra context if the previous files could not
-/// all be restored.
-fn restore_previous_paths<F>(
+/// Always returns `error`, with context that says whether the previous files
+/// were restored. When they were not all restored, that context is
+/// [`RestoreFailed`]. When they were and only the backup folder could not be
+/// removed, the context names the folder.
+fn restore_previous_paths<F, R>(
     active: &Path,
     backup: &Path,
     rename: &mut F,
+    remove_backup: R,
     backed_up: &[PathBuf],
     installed: &[PathBuf],
     error: anyhow::Error,
 ) -> Result<()>
 where
     F: FnMut(&Path, &Path) -> Result<()>,
+    R: FnOnce(&Path) -> io::Result<()>,
 {
     let mut restore_errors = Vec::new();
     for name in installed.iter().rev() {
@@ -472,20 +515,19 @@ where
             ));
         }
     }
-    if restore_errors.is_empty() {
-        if let Err(cleanup_error) = fs::remove_dir_all(backup) {
-            eprintln!(
-                "warning: restored the previous demo bundle but could not remove backup {}: {cleanup_error}",
-                backup.display()
-            );
-        }
-        return Err(error.context("replace generated demo bundle"));
+    if !restore_errors.is_empty() {
+        return Err(error.context(RestoreFailed {
+            backup: backup.to_path_buf(),
+            restore_errors,
+        }));
     }
-    Err(anyhow::anyhow!(
-        "replace generated demo bundle: {error:#}; could not fully restore the previous files; copies were kept at {}: {}",
-        backup.display(),
-        restore_errors.join("; ")
-    ))
+    if let Err(cleanup_error) = remove_backup(backup) {
+        return Err(error.context(format!(
+            "replace generated demo bundle; the previous demo files were restored, and their emptied backup folder was left at {} because it could not be removed: {cleanup_error}",
+            backup.display()
+        )));
+    }
+    Err(error.context("replace generated demo bundle"))
 }
 
 /// Delete `path` if it exists. Directories are removed with their contents.

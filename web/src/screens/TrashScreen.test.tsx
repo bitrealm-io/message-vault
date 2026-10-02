@@ -164,6 +164,54 @@ describe("TrashScreen", () => {
     expect(listConversationsMock).not.toHaveBeenCalled();
   });
 
+  it("names a word neither list knows once, and not as the other list's word", async () => {
+    // `re` is a search word of neither list (#1234).
+    renderAt("/trash?tq=re:lunch");
+
+    expect(await screen.findByText("re: is not a search word")).toBeTruthy();
+    expect(screen.queryByText("re: applies to contacts only")).toBeNull();
+    expect(screen.queryByText("re: applies to conversations only")).toBeNull();
+    expect(listConversationsMock).not.toHaveBeenCalled();
+    expect(listContactsMock).not.toHaveBeenCalled();
+  });
+
+  it("shows the error, and blames no list, when the search words cannot be loaded", async () => {
+    // With no registry, `trashed:` (which the page adds itself) read as a word
+    // both lists refuse (#1234).
+    listSearchFieldsMock.mockRejectedValue(new Error("Server unreachable"));
+    renderAt("/trash");
+
+    expect(
+      await screen.findByText(
+        "Could not load the search words. Server unreachable",
+        {},
+        { timeout: 4000 },
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/applies to/)).toBeNull();
+    expect(screen.queryByText("Trash is empty.")).toBeNull();
+  });
+
+  it("shows the error, not an empty Trash, when trashed contacts cannot be loaded", async () => {
+    listConversationsMock.mockResolvedValue({ items: [], total: 0, limit: 1, offset: 0 });
+    listContactsMock.mockRejectedValue(new Error("Server unreachable"));
+    renderAt("/trash");
+
+    expect(await screen.findByText("Server unreachable", {}, { timeout: 4000 })).toBeTruthy();
+    expect(screen.queryByText("Trash is empty.")).toBeNull();
+    expect(screen.queryByText("No contacts in Trash.")).toBeNull();
+    expect(screen.getByRole("button", { name: "Empty Trash" })).toBeTruthy();
+  });
+
+  it("shows the error, not an empty Trash, when trashed conversations cannot be counted", async () => {
+    listConversationsMock.mockRejectedValue(new Error("Server unreachable"));
+    renderAt("/trash");
+
+    expect(await screen.findByText("Server unreachable", {}, { timeout: 4000 })).toBeTruthy();
+    expect(screen.queryByText("Trash is empty.")).toBeNull();
+    expect(screen.queryByText("No conversations in Trash.")).toBeNull();
+  });
+
   it("reads correctly when the trash is empty", async () => {
     listConversationsMock.mockResolvedValue({ items: [], total: 0, limit: 1, offset: 0 });
     renderAt("/trash");

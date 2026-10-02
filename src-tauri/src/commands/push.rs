@@ -8,7 +8,7 @@ use message_crate_push::{ProgressEvent, PushConfig, run as run_push};
 
 use super::events;
 use super::events::ExtractProgressEvent;
-use super::jobs::{reset_and_clone_cancel, spawn_job};
+use super::jobs::{spawn_job, start_job};
 use crate::state::AppState;
 
 /// Convert a report count to the `usize` the progress event uses.
@@ -94,21 +94,24 @@ pub struct PushArgs {
 ///
 /// # Errors
 ///
-/// Returns an error if another thread panicked while holding the shared
-/// state lock. Failures during the upload are sent as `extract:error`.
+/// Returns an error if another job is running, or if another thread panicked
+/// while holding the shared state lock. Failures during the upload are sent
+/// as `extract:error`.
 #[tauri::command(async)]
 pub fn push(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     app: tauri::AppHandle,
     args: PushArgs,
 ) -> Result<(), String> {
-    let cancel = reset_and_clone_cancel(&state)?;
+    let job = start_job(&state, "an upload")?;
+    let cancel = job.cancel_flag();
     let app_handle = app.clone();
-    spawn_job(app, move || {
+    spawn_job(app, job, move || {
         let mut cfg = push_config(args);
         cfg.cancel = Some(cancel);
         let mut progress = |event: ProgressEvent| forward_push_event(&app_handle, event);
-        run_push(&cfg, Some(&mut progress)).map(|_report| ())
+        let report = run_push(&cfg, Some(&mut progress))?;
+        Ok(finished_push_events(&report).1.to_string())
     });
     Ok(())
 }
@@ -197,9 +200,9 @@ fn forward_push_event(app: &tauri::AppHandle, event: ProgressEvent) {
             );
         }
         ProgressEvent::Finished(report) => {
-            let (progress, summary) = finished_push_events(&report);
+            // The finished event goes out once the job has ended (`spawn_job`).
+            let (progress, _summary) = finished_push_events(&report);
             events::emit(app, events::PROGRESS, progress);
-            events::emit(app, events::FINISHED, summary.to_string());
         }
     }
 }

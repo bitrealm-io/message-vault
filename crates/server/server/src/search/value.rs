@@ -2,7 +2,7 @@
 //! year and `date:>2019` is after it ends; `today` is an input, never the clock.
 
 use chrono::TimeZone;
-use chrono::{Datelike, Days, NaiveDate};
+use chrono::{DateTime, Datelike, Days, Duration, NaiveDate, NaiveDateTime, Utc};
 
 /// Relative spans further back than this are refused.
 const MAX_LOOKBACK_DAYS: u64 = 3_650;
@@ -60,22 +60,37 @@ pub(crate) enum Value {
 
 /// The instant `day` begins in `zone`, as the RFC 3339 UTC text the server
 /// stores (`2024-01-01T05:00:00Z`), so a day or a year in the account's time
-/// zone compares against `messages.timestamp` as text. A
-/// day whose midnight falls in a daylight-saving gap starts at the first
-/// instant after the gap.
+/// zone compares against `messages.timestamp` as text. A day whose midnight
+/// falls in a daylight-saving gap starts at the first instant after the gap.
+/// A day the zone skipped whole (Pacific/Apia, 30 December 2011) starts where
+/// the next day starts, so it holds no instant.
 pub(crate) fn utc_instant(zone: chrono_tz::Tz, day: NaiveDate) -> String {
     let midnight = day.and_hms_opt(0, 0, 0).expect("midnight is a valid time");
-    let start = zone
-        .from_local_datetime(&midnight)
-        .earliest()
-        .or_else(|| {
-            zone.from_local_datetime(&(midnight + chrono::Duration::hours(1)))
-                .earliest()
-        })
-        .expect("every calendar day begins at some instant");
-    start
-        .with_timezone(&chrono::Utc)
-        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+    first_instant_at_or_after(zone, midnight).to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+}
+
+/// The first instant whose clock reading in `zone` is `local` or later.
+/// When `local` exists, that is its earliest occurrence. When it falls in a
+/// gap of any length, it is the instant the gap ends.
+fn first_instant_at_or_after(zone: chrono_tz::Tz, local: NaiveDateTime) -> DateTime<Utc> {
+    if let Some(t) = zone.from_local_datetime(&local).earliest() {
+        return t.with_timezone(&Utc);
+    }
+    // Every UTC offset is shorter than a day, so a day before `local` read as
+    // UTC the clock shows an earlier time, and a day after it a later one.
+    // The gap's end lies between. A binary search over whole seconds finds
+    // it, because every transition falls on a whole second.
+    let mut before = local.and_utc() - Duration::days(1);
+    let mut after = local.and_utc() + Duration::days(1);
+    while after - before > Duration::seconds(1) {
+        let mid = before + (after - before) / 2;
+        if mid.with_timezone(&zone).naive_local() >= local {
+            after = mid;
+        } else {
+            before = mid;
+        }
+    }
+    after
 }
 
 /// The first day of the month after `(y, m)`.
@@ -450,5 +465,44 @@ mod tests {
         assert!(parse_id("12").is_none());
         assert!(parse_id("#").is_none());
         assert!(parse_id("#-1").is_none());
+    }
+
+    /// Pacific/Apia skipped 30 December 2011: the clock went from the end of
+    /// the 29th at -10:00 straight to the 31st at +14:00. The skipped day
+    /// begins where the 31st begins, so it holds no instant (#1204).
+    #[test]
+    fn a_skipped_day_begins_where_the_next_day_begins() {
+        let zone = chrono_tz::Pacific::Apia;
+        assert_eq!(utc_instant(zone, d(2011, 12, 29)), "2011-12-29T10:00:00Z");
+        assert_eq!(utc_instant(zone, d(2011, 12, 30)), "2011-12-30T10:00:00Z");
+        assert_eq!(utc_instant(zone, d(2011, 12, 31)), "2011-12-30T10:00:00Z");
+        assert_eq!(utc_instant(zone, d(2012, 1, 1)), "2011-12-31T10:00:00Z");
+    }
+
+    /// Kwajalein skipped 21 August 1993, and Kiritimati 31 December 1994.
+    #[test]
+    fn every_skipped_day_begins_where_the_next_day_begins() {
+        for (zone, skipped) in [
+            (chrono_tz::Pacific::Kwajalein, d(1993, 8, 21)),
+            (chrono_tz::Pacific::Kiritimati, d(1994, 12, 31)),
+            (chrono_tz::Pacific::Fakaofo, d(2011, 12, 30)),
+        ] {
+            let next = skipped.succ_opt().unwrap();
+            assert_eq!(
+                utc_instant(zone, skipped),
+                utc_instant(zone, next),
+                "{zone} {skipped}"
+            );
+        }
+    }
+
+    /// São Paulo moved its clocks from midnight to 01:00 on 4 November 2018,
+    /// so that day begins at 01:00 -02:00.
+    #[test]
+    fn a_midnight_in_a_one_hour_gap_starts_the_day_after_the_gap() {
+        assert_eq!(
+            utc_instant(chrono_tz::America::Sao_Paulo, d(2018, 11, 4)),
+            "2018-11-04T03:00:00Z"
+        );
     }
 }

@@ -1073,6 +1073,20 @@ async fn seed_demo_account_on_conn(
 ) -> Result<()> {
     account_profile::ensure_account_row(conn, account_id).await?;
 
+    // Account creation reserves the name, but a database written before the
+    // reservation may already give it to another account.
+    let username = &seed.account.username;
+    if let Some(holder) = account_profile::lookup_account_by_username(conn, username).await?
+        && holder != account_id
+    {
+        let held_as = account_profile::username_for_account(conn, holder)
+            .await?
+            .unwrap_or_default();
+        anyhow::bail!(
+            "account {holder} ({held_as}) already has the username {username}, which belongs to the Demo Account; delete that account to add the Demo Account"
+        );
+    }
+
     // The Demo Account has no password, so anyone at the login card can enter
     // it. It may export, and trash and restore; it may not import, so a
     // person's own messages never land in Demo Data, and it may not delete
@@ -1093,7 +1107,7 @@ async fn seed_demo_account_on_conn(
         ",
     )
     .bind(account_id)
-    .bind(&seed.account.username)
+    .bind(username)
     .bind(&seed.owner.display_name)
     .execute(&mut *conn)
     .await?;

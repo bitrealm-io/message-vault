@@ -126,6 +126,8 @@ pub(crate) fn resolve_attachment_cell(
             original_name: Some(csv_name.to_string()),
             mime_type: mime.clone(),
             digest_sha256: None,
+            size_bytes: None,
+            missing_reason: None,
         },
         is_sticker,
         transcription: None,

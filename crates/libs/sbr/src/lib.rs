@@ -14,7 +14,7 @@ use anyhow::{Context, Result};
 use base64::Engine;
 use std::collections::BTreeMap;
 use std::fs::{self, File};
-use std::io::{BufWriter, Write};
+use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 /// One `<sms>` or `<mms>` element ready to serialize.
@@ -140,8 +140,10 @@ impl SbrBackupWriter {
         self.body.flush().context("flush sbr body")?;
         drop(self.body);
 
-        let body_bytes = fs::read(&self.body_path)
-            .with_context(|| format!("read {}", self.body_path.display()))?;
+        // The body carries every attachment as base64, so it is copied to
+        // the backup as a stream rather than read into memory.
+        let mut body = File::open(&self.body_path)
+            .with_context(|| format!("open {}", self.body_path.display()))?;
 
         let mut tmp = self.path.clone();
         tmp.set_extension("xml.tmp");
@@ -154,13 +156,14 @@ impl SbrBackupWriter {
                 r"<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>"
             )?;
             writeln!(out, r#"<smses count="{}">"#, self.count)?;
-            out.write_all(&body_bytes)?;
-            if !body_bytes.is_empty() && !body_bytes.ends_with(b"\n") {
-                writeln!(out)?;
-            }
+            // Every element written to the body ends with a line break, so
+            // the closing tag starts a line of its own.
+            io::copy(&mut body, &mut out)
+                .with_context(|| format!("copy {}", self.body_path.display()))?;
             writeln!(out, "</smses>")?;
             out.flush()?;
         }
+        drop(body);
         fs::rename(&tmp, &self.path)
             .with_context(|| format!("rename {} → {}", tmp.display(), self.path.display()))?;
         let _ = fs::remove_file(&self.body_path);

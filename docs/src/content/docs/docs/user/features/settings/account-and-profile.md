@@ -181,6 +181,12 @@ The Address Book is a CSV file of contacts, written by **Export** on the Contact
 The section then lists what the load changed: contacts created, updated and deleted, identities added, moved and removed, and Contact Groups created.
 A file with a mistake in it is refused whole, and each row at fault is listed with its reason.
 
+A spreadsheet can save a phone number such as `+6591234567` as `6591234567`, without its `+`.
+A number written without `+` names the identity its contact already holds under `+` and those digits, so the contact keeps that identity.
+When the contact holds the number both ways, for example `+6591234567` and `+16591234567`, the file is refused, because the row cannot say which it means.
+Any other number without `+` is read as a US number when it has ten digits, and as its digits otherwise.
+After the load, the section lists each number without `+` that it read with its `+` back, and each one that became a new identity.
+
 Contacts the file does not mention stay as they are.
 
 Contacts themselves are covered in [Contacts](/docs/user/features/contacts/contacts/).

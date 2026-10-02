@@ -2150,6 +2150,7 @@ async fn an_address_book_loads_and_a_bad_one_is_a_422_naming_each_row() {
             "identities_moved": 0,
             "identities_removed": 0,
             "groups_created": 1,
+            "notes": [],
         })
     );
 }
@@ -2390,7 +2391,7 @@ async fn the_address_book_export_never_holds_another_accounts_contact() {
 }
 
 /// The file the export route answers goes back through the load route
-/// unchanged, in both modes, with every count zero.
+/// unchanged, in both modes, with every count zero and no note.
 #[tokio::test]
 async fn the_exported_file_loads_back_through_the_route_and_changes_nothing() {
     let (fixture, account) = contacts_fixture_with_handles(&["+15555550100", "+15555550101"]).await;
@@ -2399,8 +2400,10 @@ async fn the_exported_file_loads_back_through_the_route_and_changes_nothing() {
     for query in ["?mode=append", "?mode=edit"] {
         let (status, text) = load_address_book(&fixture, &account, query, file.clone()).await;
         assert_eq!(status, StatusCode::OK, "{text}");
-        let body: serde_json::Value = serde_json::from_str(&text).unwrap();
-        for (count, value) in body.as_object().unwrap() {
+        let mut body: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let body = body.as_object_mut().unwrap();
+        assert_eq!(body.remove("notes"), Some(serde_json::json!([])), "{query}");
+        for (count, value) in body.iter() {
             assert_eq!(value, 0, "{query}: {count}");
         }
         let (_, _, _, again) =

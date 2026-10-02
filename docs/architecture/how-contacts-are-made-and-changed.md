@@ -110,7 +110,7 @@ flowchart TD
   G -- Edit --> H["Take identities off each file contact that its rows do not list (step 6)"]
   H --> I["Delete contacts left with no name and no identity"]
   I --> J["Delete identities a load made that nothing uses"]
-  J --> K["Commit and report the seven counts"]
+  J --> K["Commit and report the seven counts and the notes"]
 ```
 
 ### 2. Which contact a row speaks for
@@ -159,6 +159,28 @@ identity. That is how a contact with no identity is written.
 An identity written exactly as Message Crate already keys it is accepted as
 it stands, so an exported file always loads back.
 
+A phone number written without `+` that matches no key as written may be one
+whose `+` a spreadsheet dropped.
+Export writes `+6591234567`, and a spreadsheet can save that cell as the
+number `6591234567`.
+So the load first asks whether the contact the row names already holds `+`
+followed by the value's digits.
+If it does, the row names that identity.
+Only the row's own contact is looked at, so a dropped `+` never attaches
+another person's number to this contact.
+A contact that holds both readings, such as `+6591234567` and
+`+16591234567`, refuses the load, naming both keys, because the row cannot
+say which it means.
+Otherwise the value is keyed by the phone rule: ten digits as a US number,
+eleven starting with `1` likewise, and any other count as bare digits.
+A ten-digit US number written without `+`, whose `+1` key the account holds,
+therefore still loads as that identity.
+
+A person editing in a spreadsheet does not see the `+` go, so the load says
+what it did.
+Its `notes` name each row it read with the `+` back, and each value without
+`+` that became a new identity.
+
 ```mermaid
 flowchart TD
   A{"service, handle_type and identity all blank?"} -- yes --> A1["Row lists no identity"]
@@ -173,7 +195,13 @@ flowchart TD
   E -- no --> F{"handle_type"}
   F -- phone --> G{"4 to 15 digits, and only digits, spaces and + - ( ) . ?"}
   G -- no --> R4{{"Refused: not a phone number"}}
-  G -- yes --> G1["Key is the normalized phone number"]
+  G -- yes --> P{"Written with + ?"}
+  P -- yes --> G1["Key is the normalized phone number"]
+  P -- no --> Q{"Does the row's contact hold + and its digits?"}
+  Q -- no --> G2["Key is the normalized phone number. A note if no identity has that key yet."]
+  Q -- yes --> S{"Does it also hold the normalized key?"}
+  S -- yes --> R6{{"Refused: names both keys"}}
+  S -- no --> G3["Key is + and its digits. A note says so."]
   F -- email --> H{"One @ with text on both sides, no spaces?"}
   H -- no --> R5{{"Refused: not an email address"}}
   H -- yes --> H1["Key is the address in lower case"]
@@ -266,6 +294,10 @@ flowchart TD
 | `identities_moved` | Identities taken from one contact and given to another |
 | `identities_removed` | Identities taken off a contact. Edit only |
 | `groups_created` | Contact Groups the load created |
+
+Beside the counts, `notes` holds one sentence for each phone number written
+without `+` that the load read with its `+` back, or that became a new
+identity (step 4). Each sentence starts with its row number.
 
 ## The two side by side
 

@@ -517,8 +517,8 @@ fn staging_a_conversation_writes_the_files_counts_them_and_frees_the_bytes() {
     );
 }
 
-/// Two attachments with the same bytes at the same moment must not count the
-/// same file twice, and the second must not rewrite it.
+/// Two attachments with the same bytes at the same moment are one file, and
+/// both records point at it.
 #[test]
 fn staging_the_same_bytes_twice_writes_one_file() {
     let dir = tempfile::tempdir().expect("tempdir");

@@ -5,7 +5,7 @@ use media::{CompressOptions, MediaMode};
 pub use message_crate_core::RunResult;
 use message_crate_core::{
     ExportReport, ExportTransforms, ExporterConfig, MediaConfig, OutputFormat, document_messages,
-    stage_conversation_attachments,
+    prepare_outputs, stage_conversation_attachments,
 };
 use message_ir::ConversationDocument;
 use message_ir_format::{
@@ -23,8 +23,8 @@ use std::path::{Path, PathBuf};
 ///
 /// # Errors
 ///
-/// Returns an error when the input is missing or ambiguous, the output is the
-/// input directory, an artifact cannot be read, or the output cannot be written.
+/// Returns an error when the input is missing or ambiguous, the output is or
+/// holds the input directory, an artifact cannot be read, or the output cannot be written.
 pub fn run(config: &ExporterConfig) -> Result<RunResult> {
     let input = config.require_input().map_err(anyhow::Error::msg)?;
     if config.output.as_os_str().is_empty() {
@@ -69,22 +69,14 @@ impl ReexportReport {
 
 /// Detect the input format, copy attachments if needed, and write the new export.
 fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportReport> {
-    let input_canon = fs::canonicalize(input_dir)
-        .with_context(|| format!("canonicalize input {}", input_dir.display()))?;
-    if config.output.exists() {
-        let output_canon = fs::canonicalize(&config.output)
-            .with_context(|| format!("canonicalize output {}", config.output.display()))?;
-        if input_canon == output_canon {
-            bail!("input and output directories must be different");
-        }
-    }
+    // The output is cleaned below, so one that is or holds the input is
+    // refused before anything is written.
+    prepare_outputs(&[input_dir.to_path_buf()], &config.output)?;
 
     let detected = detect_ir_export(input_dir)?;
     let transforms = ExportTransforms::from_config(config);
     let copy_attachments = transforms.copies_attachments();
 
-    fs::create_dir_all(&config.output)
-        .with_context(|| format!("create {}", config.output.display()))?;
     clean_previous_ir_output(&config.output)?;
 
     if copy_attachments {

@@ -8,6 +8,7 @@ use crate::wtsexporter::{Platform, WtsexporterArgs, resolve_wtsexporter, run_wts
 use anyhow::{Context, Result, bail};
 use message_crate_core::{
     ExportTransforms, ExporterConfig, RunResult, SourceConfig, WhatsappPlatform as CorePlatform,
+    prepare_outputs,
 };
 use std::env;
 use std::fs;
@@ -16,9 +17,9 @@ use std::fs;
 ///
 /// # Errors
 ///
-/// Returns an error when the source is not WhatsApp, wtsexporter cannot run,
-/// conversion fails, media processing fails for every candidate file, or the
-/// user cancels.
+/// Returns an error when the source is not WhatsApp, the output folder is or
+/// holds what the run reads, wtsexporter cannot run, conversion fails, media
+/// processing fails for every candidate file, or the user cancels.
 pub fn run(config: &ExporterConfig) -> Result<RunResult> {
     let SourceConfig::Whatsapp(source) = &config.source else {
         bail!("whatsapp-exporter requires SourceConfig::Whatsapp");
@@ -32,6 +33,19 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
         None => None,
     };
     let input = config.primary_input().map(|p| p.to_path_buf());
+
+    // The output is cleaned before it is written, so one that is or holds
+    // what this run reads is refused first: the backup (the working folder
+    // when none is named and wtsexporter runs) and a ready-made JSON.
+    let mut read_paths = config.inputs.clone();
+    match &source.json {
+        Some(json) => read_paths.push(json.clone()),
+        None if input.is_none() => {
+            read_paths.push(env::current_dir().context("resolve current working directory")?);
+        }
+        None => {}
+    }
+    prepare_outputs(&read_paths, &config.output)?;
 
     // The number typed on the form, under the server's handle key. Android's
     // only source; iPhone's fallback when the backup carries no owner key.
@@ -67,8 +81,6 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
 
         message_crate_core::check_cancel(config.cancel.as_ref())?;
         let bin = resolve_wtsexporter()?;
-        fs::create_dir_all(&config.output)
-            .with_context(|| format!("create {}", config.output.display()))?;
         // Scratch dir for wtsexporter cwd (iOS/Android extract) + result.json.
         // Kept until after convert so media copy can read extracted files.
         let work = tempfile::Builder::new()
@@ -163,4 +175,64 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
     let result = message_crate_core::finish_run(config, &report, needs_media_tools)?;
     messages.extend(result.messages);
     Ok(RunResult { messages })
+}
+
+#[cfg(test)]
+mod tests {
+    use message_crate_core::testutil::jsonl_run_config;
+    use message_crate_core::{SourceConfig, WhatsappConfig};
+    use std::fs;
+    use std::path::Path;
+
+    /// The names in `dir`, sorted.
+    fn entries(dir: &Path) -> Vec<String> {
+        let mut names: Vec<String> = fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        names
+    }
+
+    /// The writer cleans its output folder before it writes, so an output
+    /// that is or holds the backup or the JSON would delete what is being
+    /// read.
+    #[test]
+    fn run_refuses_an_output_that_is_or_contains_an_input() {
+        let tmp = tempfile::tempdir().unwrap();
+        let backup = tmp.path().join("backup");
+        fs::create_dir_all(&backup).unwrap();
+        let json = backup.join("result.json");
+        fs::write(&json, "{}").unwrap();
+
+        for (inputs, output) in [
+            // The JSON's folder.
+            (vec![], backup.clone()),
+            // A folder above the backup named as the input.
+            (vec![backup.as_path()], tmp.path().to_path_buf()),
+        ] {
+            let config = jsonl_run_config(
+                &inputs,
+                &output,
+                SourceConfig::Whatsapp(WhatsappConfig {
+                    json: Some(json.clone()),
+                    ..WhatsappConfig::default()
+                }),
+            );
+            let before = entries(&output);
+            let err = crate::run(&config).unwrap_err().to_string();
+            assert!(
+                err.contains("must not be the same as, or contain, the input"),
+                "{}: {err}",
+                output.display()
+            );
+            assert!(json.is_file(), "the JSON is left as it was");
+            assert_eq!(
+                entries(&output),
+                before,
+                "nothing is written to {}",
+                output.display()
+            );
+        }
+    }
 }

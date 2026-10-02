@@ -172,17 +172,26 @@ fn mixed_formats_error() {
     assert!(error.contains("mixed"), "{error}");
 }
 
+/// Convert cleans its output folder before it writes, so an output that is
+/// or holds the input would delete the export being read.
 #[test]
-fn same_path_errors() {
-    let directory = tempfile::tempdir().unwrap();
-    write_fixture(directory.path(), OutputFormat::Json);
-    let error = convert_export(
-        directory.path(),
-        &config(directory.path(), directory.path(), OutputFormat::Csv),
-    )
-    .unwrap_err()
-    .to_string();
-    assert!(error.contains("different"), "{error}");
+fn an_output_that_is_or_contains_the_input_is_refused() {
+    let tmp = tempfile::tempdir().unwrap();
+    let input = tmp.path().join("export");
+    write_fixture(&input, OutputFormat::Json);
+    let json = find_file(&input, "json");
+
+    for output in [input.clone(), tmp.path().to_path_buf()] {
+        let error = convert_export(&input, &config(&input, &output, OutputFormat::Csv))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("must not be the same as, or contain, the input"),
+            "{}: {error}",
+            output.display()
+        );
+        assert!(json.is_file(), "the input is left as it was");
+    }
 }
 
 #[test]

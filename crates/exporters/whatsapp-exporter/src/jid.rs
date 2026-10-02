@@ -8,6 +8,18 @@ pub(crate) fn is_group_jid(jid: &str) -> bool {
     jid.trim().ends_with("@g.us")
 }
 
+/// True for `status@broadcast`, the chat that holds Status updates: posts to
+/// many people that expire after 24 hours, not a conversation.
+pub(crate) fn is_status_jid(jid: &str) -> bool {
+    jid.trim().eq_ignore_ascii_case("status@broadcast")
+}
+
+/// True for `@newsletter` JIDs, WhatsApp Channels: one-way feeds from a
+/// publisher that nobody can write back to.
+pub(crate) fn is_channel_jid(jid: &str) -> bool {
+    jid.trim().ends_with("@newsletter")
+}
+
 /// The domain of a user JID, the only kind whose local part is a phone number.
 const USER_JID_DOMAIN: &str = "s.whatsapp.net";
 
@@ -114,6 +126,15 @@ mod tests {
     fn group_jid_detection() {
         assert!(is_group_jid("120363042@g.us"));
         assert!(!is_group_jid("15555550122@s.whatsapp.net"));
+    }
+
+    #[test]
+    fn status_and_channel_jid_detection() {
+        assert!(is_status_jid("status@broadcast"));
+        assert!(is_status_jid(" STATUS@broadcast "));
+        assert!(!is_status_jid("15555550122@broadcast"));
+        assert!(is_channel_jid("120363000000000001@newsletter"));
+        assert!(!is_channel_jid("120363042@g.us"));
     }
 
     #[test]

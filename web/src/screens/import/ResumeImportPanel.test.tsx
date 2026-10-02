@@ -48,11 +48,11 @@ describe("ResumeImportPanel", () => {
     expect(screen.getByText("Finish your last import")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Your messages are staged and ready to upload. Picking up where you left off skips the extract.",
+        "Your messages are staged. Resuming the Upload sends the conversations that are not in your Message Crate yet.",
       ),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Upload to Message Crate" }));
+    await user.click(screen.getByRole("button", { name: "Resume" }));
     expect(onResume).toHaveBeenCalledTimes(1);
     expect(onDiscard).not.toHaveBeenCalled();
 
@@ -148,9 +148,7 @@ describe("ResumeImportPanel", () => {
         "This import's folder is no longer at /home/u/message-crate/staging-260830. Discarding it lets you start a new one.",
       ),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Upload to Message Crate" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Start over" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Discard this import" }));
@@ -245,9 +243,7 @@ describe("ResumeImportPanel", () => {
         "The import is still open here, but the settings it was started with are not readable. Discarding it lets you start a new one.",
       ),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Upload to Message Crate" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Start over" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Discard this import" }));

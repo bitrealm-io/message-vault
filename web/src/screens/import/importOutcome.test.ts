@@ -10,6 +10,7 @@ import { importOutcome, stableStem } from "./importOutcome";
 function report(overrides: Partial<PushFinishedReport> = {}): PushFinishedReport {
   return {
     ok: true,
+    cancelled: false,
     messages: 100,
     messages_attempted: 100,
     messages_inserted: 100,
@@ -118,6 +119,28 @@ describe("importOutcome", () => {
   it("is completed_with_issues when messages failed inside ok conversations", () => {
     const r = report({ messages_failed: 3 });
     expect(importOutcome({ report: r, threw: false, issues: [] })).toBe("completed_with_issues");
+  });
+
+  it("is cancelled when the cancel flag stopped the push partway", () => {
+    // What run.rs reports when the cancel flag stops `drive` after 200 of 681.
+    const r = report({
+      ok: false,
+      cancelled: true,
+      conversations_total: 681,
+      conversations_ok: 200,
+      conversations_failed: 0,
+    });
+    expect(importOutcome({ report: r, threw: false, issues: [] })).toBe("cancelled");
+  });
+
+  it("is failed when the push stopped short with no failed conversation and no cancel", () => {
+    const r = report({
+      ok: false,
+      conversations_total: 681,
+      conversations_ok: 200,
+      conversations_failed: 0,
+    });
+    expect(importOutcome({ report: r, threw: false, issues: [] })).toBe("failed");
   });
 
   it("is completed_with_issues when the run recorded an issue", () => {

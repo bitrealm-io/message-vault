@@ -96,6 +96,12 @@ pub struct UploadProfile {
 pub struct PushReport {
     /// `true` when no conversation failed and the run was not cancelled.
     pub ok: bool,
+    /// `true` when the cancel flag stopped the run. The conversations it did
+    /// not finish sending are in `conversations_cancelled`, and the journal
+    /// leaves them for the next push. A failed request also stops the run
+    /// and leaves `cancelled` rows, but this stays `false`, so a caller can
+    /// tell a pause from a failure.
+    pub cancelled: bool,
     /// Account id the key resolved to.
     pub account: i64,
     /// Username the server reports for that account, else the account id.
@@ -310,6 +316,7 @@ mod tests {
     fn sample_report() -> PushReport {
         PushReport {
             ok: true,
+            cancelled: false,
             account: 1,
             username: "user".into(),
             mode: ImportMode::Append,

@@ -27,7 +27,7 @@ const MODES: ReadonlyArray<{ value: AddressBookLoadMode; label: string; detail: 
 ];
 
 /** The seven counts a load answers, in the order the result lists them. */
-const COUNTS: ReadonlyArray<{ field: keyof LoadCounts; label: string }> = [
+const COUNTS: ReadonlyArray<{ field: Exclude<keyof LoadCounts, "notes">; label: string }> = [
   { field: "contacts_created", label: "Contacts created" },
   { field: "contacts_updated", label: "Contacts updated" },
   { field: "contacts_deleted", label: "Contacts deleted" },
@@ -141,6 +141,18 @@ export function AddressBookSection() {
             </div>
           ))}
         </dl>
+      ) : null}
+      {counts && counts.notes.length > 0 ? (
+        <div className="mt-3 text-[0.813rem]">
+          <p className="m-0 mb-1">
+            A spreadsheet can drop the + from a phone number. These numbers had none:
+          </p>
+          <ul aria-label="Numbers written without +" className="m-0 list-none p-0 text-muted">
+            {counts.notes.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
       ) : null}
       {errors.length > 0 ? (
         <div role="alert" className="mt-3 text-[0.813rem] text-danger">

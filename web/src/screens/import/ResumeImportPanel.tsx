@@ -19,8 +19,8 @@ const COPY: Record<ResumableKind, PanelCopy> = {
   resume_push: {
     heading: () => "Finish your last import",
     body: () =>
-      "Your messages are staged and ready to upload. Picking up where you left off skips the extract.",
-    primary: { label: "Upload to Message Crate", action: "resume" },
+      "Your messages are staged. Resuming the Upload sends the conversations that are not in your Message Crate yet.",
+    primary: { label: "Resume", action: "resume" },
     secondary: { label: "Discard this import", action: "discard" },
   },
   restart: {

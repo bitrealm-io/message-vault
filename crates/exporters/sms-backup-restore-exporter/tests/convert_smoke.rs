@@ -410,3 +410,34 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
         })
     });
 }
+
+/// Each payload waits on disk in the writer's spool between parse and
+/// write, and both write arms stage it from there: the queue (JSON Lines)
+/// and the sink (CSV, and every other format). The spool is gone once the
+/// export is written (issue #1128).
+#[test]
+fn attachments_are_staged_from_the_spool_on_both_write_arms() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let input = tmp.path().join("input.xml");
+    fs::write(
+        &input,
+        r#"<smses><mms date="1400773400000" msg_box="1" address="+15555550101"><parts><part ct="image/jpeg" name="a.jpg" data="aGVsbG8="/></parts><addrs><addr address="+15555550101" type="137"/></addrs></mms><mms date="1400773500000" msg_box="1" address="+15555550101"><parts><part ct="image/jpeg" name="b.jpg" data="d29ybGQ="/></parts><addrs><addr address="+15555550101" type="137"/></addrs></mms></smses>"#,
+    )
+    .unwrap();
+    for format in [OutputFormat::Jsonl, OutputFormat::Csv] {
+        let output = tmp.path().join(format.as_str());
+        let report = convert(&input, &output, &["+15555550100".into()], format)
+            .expect("convert_export should succeed");
+        assert_eq!(report.attachments_saved, 2, "{format:?}");
+        let mut staged: Vec<Vec<u8>> = fs::read_dir(output.join("attachments"))
+            .unwrap()
+            .map(|e| fs::read(e.unwrap().path()).unwrap())
+            .collect();
+        staged.sort();
+        assert_eq!(staged, [b"hello".to_vec(), b"world".to_vec()], "{format:?}");
+        assert!(
+            !output.join(".attachment-spool").exists(),
+            "{format:?}: the spool is removed"
+        );
+    }
+}

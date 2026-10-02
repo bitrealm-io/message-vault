@@ -53,11 +53,15 @@ fn exports_a_mac_chat_db_through_the_helper_process() {
     );
 
     let files = jsonl_files(&output);
-    assert_eq!(files.len(), 3, "one file per conversation: {files:?}");
+    assert_eq!(files.len(), 7, "one file per conversation: {files:?}");
     let all: String = files
         .iter()
         .map(|path| fs::read_to_string(path).unwrap())
         .collect();
+    assert!(
+        !all.contains("+15550000002 sam@example.com"),
+        "one person's two addresses are never joined into one: {all}"
+    );
     assert!(all.contains("\"guid-1\""), "{all}");
     assert!(all.contains("\"Nice\""), "{all}");
     assert!(all.contains("\"Saturday works\""), "{all}");
@@ -253,7 +257,7 @@ fn a_csv_export_writes_each_conversation_and_copies_the_photo() {
         .collect();
     assert_eq!(
         csv_files.len(),
-        3,
+        7,
         "one file per conversation: {csv_files:?}"
     );
 
@@ -329,7 +333,7 @@ fn a_second_run_reuses_the_cancelled_flag_only_when_set() {
     let cancel = Arc::new(AtomicBool::new(false));
 
     imessage_ir_exporter::run(&config(&db_path, &output, Some(cancel.clone()))).unwrap();
-    assert_eq!(jsonl_files(&output).len(), 3);
+    assert_eq!(jsonl_files(&output).len(), 7);
     cancel.store(true, Ordering::Relaxed);
     let err = imessage_ir_exporter::run(&config(&db_path, &output, Some(cancel))).unwrap_err();
     assert_eq!(err.to_string(), "cancelled");

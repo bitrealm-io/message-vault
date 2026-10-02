@@ -474,6 +474,12 @@ export interface paths {
          *     the file every identity and membership its rows do not list. A contact
          *     the file does not mention is left alone in both modes.
          *
+         *     A phone number written without `+`, which a spreadsheet can save in place
+         *     of `+6591234567`, names the identity `+` and its digits when the row's
+         *     contact holds that key. Otherwise it is keyed as written: ten digits as a
+         *     US number, any other count as bare digits. `notes` names each row read
+         *     with its `+` back, and each such number that became a new identity.
+         *
          *     The load is one transaction. A file that breaks a rule is refused whole
          *     with `422 Unprocessable Entity`, and `errors` holds one sentence for each
          *     bad row, starting with its row number.
@@ -2345,6 +2351,14 @@ export interface components {
              * @description Identities taken off a contact, which only Edit does.
              */
             identities_removed: number;
+            /**
+             * @description One sentence for each phone number the file wrote without `+` that
+             *     the load matched to the `+` key its contact holds, or that became a
+             *     new identity. Each starts with its row number. A spreadsheet can drop
+             *     the `+` from a number without showing it, so the load says how it
+             *     read the number.
+             */
+            notes: string[];
         };
         /**
          * @description How a load applies the file.

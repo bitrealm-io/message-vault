@@ -2106,6 +2106,10 @@ fn a_cancelled_push_sends_no_further_batch_and_resumes_later() {
     let report = run(&cfg, Some(&mut on_progress)).unwrap();
 
     assert!(!report.ok, "a cancelled push is not ok");
+    assert!(
+        report.cancelled,
+        "the report says the cancel flag stopped it"
+    );
     assert_eq!(import.calls(), 1, "no batch is sent after the cancel");
     assert_eq!(report.conversations_ok, 1);
     assert_eq!(journal_events(dir.path(), "file_ok").len(), 1);
@@ -2178,6 +2182,7 @@ fn a_cancelled_push_reports_every_conversation_in_one_category() {
     assert_eq!(report.conversations_total, 4);
     assert_eq!(report.conversations_ok, 1);
     assert_eq!(report.conversations_cancelled, 3);
+    assert!(report.cancelled, "the cancel flag stopped the run");
     assert_eq!(
         report.conversations_ok
             + report.conversations_failed
@@ -2259,6 +2264,7 @@ fn a_conversation_cut_off_mid_way_by_a_cancel_is_counted_as_cancelled() {
     assert_eq!(first_batch.calls(), 1, "no batch is sent after the cancel");
     assert_eq!(report.conversations_total, 1);
     assert_eq!(report.conversations_cancelled, 1, "{:?}", report.results);
+    assert!(report.cancelled, "the cancel flag stopped the run");
     assert_eq!(report.results.len(), 1);
     assert_eq!(report.results[0].status, "cancelled");
     assert_eq!(
@@ -2314,6 +2320,7 @@ fn a_second_push_sends_only_the_conversation_whose_batch_failed() {
 
     let first = run(&cfg, None).unwrap();
     assert!(!first.ok);
+    assert!(!first.cancelled, "a failed batch is not a cancel");
     assert_eq!(first.conversations_ok, 2);
     assert_eq!(first.conversations_failed, 1);
     assert_eq!(failing.calls(), 1);

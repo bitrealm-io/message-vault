@@ -1040,6 +1040,35 @@ async fn a_wrong_password_is_401_and_the_limit_answers_429_with_retry_after() {
     assert!((1..=crate::credentials::AUTH_RATE_WINDOW.as_secs()).contains(&retry_after));
 }
 
+/// The account lookup ignores case, so every spelling of one username guesses
+/// at one password: they share one count, and the attempt after the limit is
+/// refused under each of them. A username that names no account folds the
+/// same way.
+#[tokio::test]
+async fn every_spelling_of_a_username_counts_against_one_limit() {
+    let (fixture, _) = crate::test_support::fixture_with_account().await;
+    let state = fixture.state.clone();
+
+    for spellings in [["alice", "Alice", "aLice"], ["nobody", "NOBODY", "noBody"]] {
+        for attempt in 0..crate::credentials::AUTH_RATE_MAX {
+            let username = spellings[attempt % spellings.len()];
+            assert_eq!(
+                crate::test_support::login_status(&state, username, "not-it-at-all").await,
+                StatusCode::UNAUTHORIZED,
+                "attempt {} as {username}",
+                attempt + 1
+            );
+        }
+        for username in spellings {
+            assert_eq!(
+                crate::test_support::login_status(&state, username, "not-it-at-all").await,
+                StatusCode::TOO_MANY_REQUESTS,
+                "past the limit as {username}"
+            );
+        }
+    }
+}
+
 /// Every `/v1` operation in the document refuses a query parameter it does
 /// not declare, and accepts the ones it does: walked over the whole document
 /// once, as `docs/architecture/http-api.md` asks of a rule every route

@@ -77,7 +77,10 @@ from `100` up.
 - Web login uses username + password (Argon2id hash in `accounts.password_hash`).
   An account may have no password (`password_hash` NULL); an empty password is
   accepted only for those accounts.
-- Logging in is rate-limited to 20 attempts per username per 60 seconds.
+- Guesses at one account's password are rate-limited to 20 per 60 seconds:
+  every login as the account, under any spelling of its username, and every
+  wrong current password sent to change the owner's password or to delete the
+  account.
   Creating an account and claiming Message Crate are each limited to 20 attempts
   per 60 seconds across the whole server, whatever the username.
 - Each account can create named **API tokens** for programs that call the HTTP API

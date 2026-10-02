@@ -42,7 +42,9 @@ pub struct UpdateContactIdentityRequest {
     pub previous_address: String,
     /// The replacement address.
     pub address: String,
-    /// Platform service for the new address.
+    /// Platform service of both addresses. When omitted, the previous address
+    /// is looked up on the phone service first and WhatsApp second, and the
+    /// new address takes the service of the previous one.
     #[serde(default)]
     pub service: Option<String>,
 }

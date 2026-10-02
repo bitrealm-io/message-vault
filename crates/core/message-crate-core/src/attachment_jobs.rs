@@ -44,13 +44,15 @@ pub struct AttachmentJob<'a> {
 /// is the file to stage. An `Err` from `load(i)` other than `"cancelled"` is
 /// caught here and treated the same as a missing source: the attachment gets
 /// `missing_reason = "file_missing"` and the run continues rather than
-/// aborting. Cancel is checked before each job.
+/// aborting. A write or rename of the staged file that fails is handled the
+/// same way, and its error goes to `log`. Cancel is checked before each job.
 ///
 /// # Errors
 ///
 /// Returns `"cancelled"` when the flag is set before a job starts, or when
 /// `load(i)` itself returns `"cancelled"`. Returns an I/O or convert error
-/// string when the staging directory cannot be used.
+/// string when the staging directory cannot be created or the convert pass
+/// cannot run.
 pub fn run_attachment_jobs(
     jobs: &mut [AttachmentJob<'_>],
     attachments_dir: &Path,
@@ -121,7 +123,29 @@ pub fn run_attachment_jobs(
         // from the file (Apple's `total_bytes` often does): count the file.
         bytes_total = bytes_total.saturating_sub(job.size_hint.unwrap_or(0)) + bytes.len() as u64;
 
-        persist_clone(job, attachments_dir, &bytes)?;
+        // A write the file system refuses is that attachment's problem, as
+        // an unreadable source is: mark it missing and stage the rest.
+        if let Err(err) = persist_clone(job, attachments_dir, &bytes) {
+            emit_log(
+                log,
+                format!(
+                    "  attachment {} not staged: {err}",
+                    job.attachment
+                        .original_name
+                        .as_deref()
+                        .unwrap_or("(no name)")
+                ),
+            );
+            job.attachment.missing_reason = Some("file_missing".into());
+            bytes_total = bytes_total.saturating_sub(bytes.len() as u64);
+            on_progress(AttachmentProgress {
+                done: i + 1,
+                total,
+                bytes_done,
+                bytes_total,
+            });
+            continue;
+        }
         bytes_done += bytes.len() as u64;
         on_progress(AttachmentProgress {
             done: i + 1,
@@ -283,8 +307,17 @@ fn persist_clone(
     let name = attachment_dest_name(secs, &digest_hex, &ext);
     let dest = attachments_dir.join(&name);
     let tmp = attachments_dir.join(next_clone_temp_name(&name));
-    fs::write(&tmp, bytes).map_err(|e| format!("write {}: {e}", tmp.display()))?;
-    fs::rename(&tmp, &dest).map_err(|e| format!("rename {}: {e}", dest.display()))?;
+    let written = fs::write(&tmp, bytes)
+        .map_err(|e| format!("write {}: {e}", tmp.display()))
+        .and_then(|()| {
+            fs::rename(&tmp, &dest).map_err(|e| format!("rename {}: {e}", dest.display()))
+        });
+    if let Err(err) = written {
+        // A write that stopped part way, or a rename that never happened,
+        // leaves the temp file behind, and nothing points at it.
+        let _ = fs::remove_file(&tmp);
+        return Err(err);
+    }
     job.attachment.path = Some(format!("attachments/{name}"));
     job.attachment.digest_sha256 = Some(digest_hex);
     job.attachment.size_bytes = Some(bytes.len() as u64);
@@ -382,10 +415,25 @@ fn hex_sha256(bytes: &[u8]) -> String {
         .collect()
 }
 
+/// Longest extension kept on a staged file name. `pkpasses` and `keynote`
+/// fit; text a sender typed after a dot mostly does not.
+const MAX_EXTENSION_LEN: usize = 10;
+
+/// The extension of the sender's name, with its dot, for the staged file
+/// name; empty when the name has none worth keeping.
+///
+/// The name comes from the sender, so the text after its last dot can be
+/// anything: `Notes v1.2 (draft?)`, or hundreds of characters. Only one to
+/// [`MAX_EXTENSION_LEN`] ASCII letters and digits are kept, because anything
+/// else can make a staged name the file system refuses (too long on Linux,
+/// `?` or `:` on Windows). The original name stays on the attachment record.
 fn extension_from_name(original_name: Option<&str>) -> String {
     original_name
         .and_then(|name| Path::new(name).extension())
         .and_then(|ext| ext.to_str())
+        .filter(|ext| {
+            ext.len() <= MAX_EXTENSION_LEN && ext.bytes().all(|b| b.is_ascii_alphanumeric())
+        })
         .map(|ext| format!(".{ext}"))
         .unwrap_or_default()
 }

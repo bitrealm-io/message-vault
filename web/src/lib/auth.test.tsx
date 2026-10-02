@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 
+import { useMutation } from "@tanstack/react-query";
 import { act, render, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -22,9 +23,11 @@ let currentAccountId: number | null = null;
 vi.mock("./api", () => ({
   ApiError: class ApiError extends Error {
     readonly status: number;
-    constructor(status: number, message: string) {
+    readonly type: string | null;
+    constructor(status: number, message: string, problem: { type: string } | null = null) {
       super(message);
       this.status = status;
+      this.type = problem ? problem.type.slice(problem.type.lastIndexOf("/") + 1) : null;
     }
   },
   setToken: (token: string | null) => {
@@ -409,6 +412,111 @@ describe("AuthProvider restoring a saved login", () => {
 
     expect(result.current.isAuthenticated).toBe(false);
     expect(get).not.toHaveBeenCalled();
+    expect(localStorage.getItem(STORAGE_KEY)).toContain("session-token");
+  });
+});
+
+describe("AuthProvider when the server says the session has ended", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    currentToken = null;
+    get.mockReset();
+    getProfile.mockReset();
+    isTauri.mockReset();
+    isTauri.mockReturnValue(false);
+    get.mockResolvedValue({ account_id: 7 });
+    getProfile.mockResolvedValue({ preferred_name: "Sam", phones: [], emails: [] });
+  });
+
+  const wrapper = async () => {
+    const { AuthProvider } = await import("./auth");
+    return ({ children }: { children: ReactNode }) => (
+      <Providers>
+        <AuthProvider>{children}</AuthProvider>
+      </Providers>
+    );
+  };
+
+  it("logs out when a query fails with 401 Unauthorized", async () => {
+    seedSession();
+    const { ApiError } = await import("./api");
+    const { useAuth } = await import("./auth");
+    const { useRouteQuery } = await import("./routeQuery");
+    const ended = vi.fn(async (): Promise<string[]> => {
+      throw new ApiError(401, "expired session token");
+    });
+
+    const { result } = renderHook(
+      () => {
+        const auth = useAuth();
+        useRouteQuery(["contact-groups"], ended, { enabled: auth.isAuthenticated });
+        return auth;
+      },
+      { wrapper: await wrapper() },
+    );
+
+    await waitFor(() => expect(ended).toHaveBeenCalled());
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(false));
+    expect(currentToken).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it("logs out when a mutation fails with 401 Unauthorized", async () => {
+    seedSession();
+    const { ApiError } = await import("./api");
+    const { useAuth } = await import("./auth");
+
+    const { result } = renderHook(
+      () => ({
+        auth: useAuth(),
+        rename: useMutation({
+          mutationFn: async (_name: string) => {
+            throw new ApiError(401, "expired session token");
+          },
+        }),
+      }),
+      { wrapper: await wrapper() },
+    );
+    await waitFor(() => expect(get).toHaveBeenCalled());
+
+    await act(async () => {
+      await result.current.rename.mutateAsync("Family").catch(() => {});
+    });
+
+    await waitFor(() => expect(result.current.auth.isAuthenticated).toBe(false));
+    expect(currentToken).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it("stays logged in when a mistyped password is refused with 401 Unauthorized", async () => {
+    // The server answers a wrong current password with the same status as an
+    // ended session. Only the problem type tells them apart.
+    seedSession();
+    const { ApiError } = await import("./api");
+    const { useAuth } = await import("./auth");
+
+    const { result } = renderHook(
+      () => ({
+        auth: useAuth(),
+        remove: useMutation({
+          mutationFn: async (_password: string) => {
+            throw new ApiError(401, "Current password is incorrect.", {
+              type: "https://messagecrate.app/problems/invalid-credentials",
+              title: "Invalid credentials",
+              status: 401,
+            });
+          },
+        }),
+      }),
+      { wrapper: await wrapper() },
+    );
+    await waitFor(() => expect(get).toHaveBeenCalled());
+
+    await act(async () => {
+      await result.current.remove.mutateAsync("wrong").catch(() => {});
+    });
+
+    expect(result.current.auth.isAuthenticated).toBe(true);
     expect(localStorage.getItem(STORAGE_KEY)).toContain("session-token");
   });
 });

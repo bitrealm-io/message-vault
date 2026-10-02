@@ -65,16 +65,27 @@ export function formatUnixDate(secs: string | null | undefined): string {
   }
 }
 
-/** API ISO timestamp → YYYY-MM-DD (UTC), or null when unparseable. */
-export function formatIsoDateOnly(iso: string | null | undefined): string | null {
+/**
+ * Calendar date of a message instant as YYYY-MM-DD, read in `zone`, or null
+ * when unparseable.
+ *
+ * The zone is the account's (`useTimeZone`), as for `formatDay`, so the day
+ * is the one the contact list and the conversation show.
+ */
+export function formatIsoDateOnly(iso: string | null | undefined, zone: string): string | null {
   if (!iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) {
     const m = iso.match(/^(\d{4}-\d{2}-\d{2})/);
     return m ? m[1] : null;
   }
-  const y = d.getUTCFullYear();
-  const mo = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  return `${y}-${mo}-${day}`;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: zone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
 }

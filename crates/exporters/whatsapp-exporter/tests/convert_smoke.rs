@@ -353,3 +353,57 @@ fn a_media_path_in_the_media_field_is_copied() {
     .expect("convert");
     assert_eq!(report.attachments_saved, 1);
 }
+
+/// A photo-only message, as wtsexporter writes it, with its file at
+/// `photo.jpg` under the conversion's search root.
+fn photo_only_chat() -> serde_json::Value {
+    let mut photo = row("K1", 1_609_459_200.into(), "photo.jpg".into());
+    photo["media"] = true.into();
+    photo["mime"] = "image/jpeg".into();
+    serde_json::json!({
+        "15555550122@s.whatsapp.net": { "name": "Sam Example", "messages": { "K1": photo } }
+    })
+}
+
+/// A media file that is not found stays on the message, marked
+/// `file_missing`, so a photo-only message does not become an empty one.
+/// Finding the file later gives the message the same GUID, so a second
+/// import with the media in place lands on the same message.
+#[test]
+fn a_media_file_not_found_is_kept_as_file_missing_and_the_guid_does_not_change() {
+    let (report, documents) = convert_to_documents(&photo_only_chat());
+    let missing = &documents["+15555550122"].messages[0];
+    assert_eq!(missing.attachments.len(), 1);
+    assert_eq!(
+        missing.attachments[0].missing_reason.as_deref(),
+        Some("file_missing")
+    );
+    assert_eq!(
+        missing.attachments[0].original_name.as_deref(),
+        Some("photo.jpg")
+    );
+    assert_eq!(report.extra.get("attachments_missing").copied(), Some(1));
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    fs::write(dir.path().join("photo.jpg"), b"fake-jpeg").expect("write media");
+    let json_path = dir.path().join("result.json");
+    fs::write(&json_path, photo_only_chat().to_string()).expect("write json");
+    let out = dir.path().join("out");
+    let report = convert_json(ConvertRequest {
+        json_path: &json_path,
+        output: &out,
+        transforms: ExportTransforms::none(),
+        media_search_roots: &[dir.path().to_path_buf()],
+        owner_handle: None,
+        output_format: OutputFormat::Json,
+        cancel: None,
+        resume: false,
+    })
+    .expect("convert");
+    assert_eq!(report.attachments_saved, 1);
+    let found = message_ir_format::read_conversation_json(&out.join("+15555550122__whatsapp.json"))
+        .expect("read back");
+    let found = &found.messages[0];
+    assert_eq!(found.attachments[0].missing_reason, None);
+    assert_eq!(found.guid, missing.guid);
+}

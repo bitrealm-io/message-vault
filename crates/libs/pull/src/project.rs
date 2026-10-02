@@ -3,6 +3,8 @@
 //! The export API is the Message Crate HTTP server's read path. Each document
 //! is later written as JSON Lines (one JSON object per line).
 
+use std::path::Path;
+
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, NaiveDateTime};
 use message_ir::{
@@ -157,14 +159,57 @@ fn participants_from_seed(seed: &Message) -> Vec<IrParticipant> {
     participants
 }
 
+/// Where an export writes one attachment, relative to the output folder.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportPath {
+    /// The path the file is written at and the conversation file names:
+    /// the server's path when the check accepts it, else
+    /// `attachments/{sha256}`. `None` when the attachment has neither a usable
+    /// path nor a fingerprint.
+    pub rel: Option<String>,
+    /// The server's path, as sent, when the check refused it.
+    pub refused: Option<String>,
+}
+
+/// Choose where an attachment is written under the output folder.
+///
+/// The server's path is input: an import that reuses a stored fingerprint
+/// never read the file, so the server can hold `../x` or an absolute path.
+/// Joined onto the output folder, such a path writes outside it, so it goes
+/// through [`message_ir::safe_attachment_path`] like every other reader of an
+/// attachment path. A refused path is not used: the attachment falls back to
+/// `attachments/{sha256}`, the name an attachment with no path gets.
+pub fn export_path(att: &Attachment) -> ExportPath {
+    let by_fingerprint = att
+        .sha256
+        .as_deref()
+        .and_then(message_ir::trimmed)
+        .map(|sha| format!("attachments/{sha}"));
+    let Some(path) = att.path.as_deref().and_then(message_ir::trimmed) else {
+        return ExportPath {
+            rel: by_fingerprint,
+            refused: None,
+        };
+    };
+    // The base is empty because only the verdict matters here: the caller
+    // joins the accepted path onto the output folder itself.
+    if message_ir::safe_attachment_path(Path::new(""), path).is_ok() {
+        ExportPath {
+            rel: Some(path.to_string()),
+            refused: None,
+        }
+    } else {
+        ExportPath {
+            rel: by_fingerprint,
+            refused: att.path.clone(),
+        }
+    }
+}
+
 /// Map one server attachment record onto the shared attachment type.
 fn to_ir_attachment(att: &Attachment) -> IrAttachment {
-    let path = att
-        .path
-        .clone()
-        .or_else(|| att.sha256.as_ref().map(|sha| format!("attachments/{sha}")));
     IrAttachment {
-        path,
+        path: export_path(att).rel,
         original_name: att.original_name.clone(),
         mime_type: att.mime_type.clone(),
         digest_sha256: att.sha256.clone(),

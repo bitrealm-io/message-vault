@@ -128,6 +128,7 @@ Prefix: **`X-ME-`** (Message Crate). JSON header values are compact single-line 
 | `X-ME-Sender-Display-Name` | string | |
 | `X-ME-Owner-Handle` | string | Export owner handle |
 | `X-ME-Owner-Display-Name` | string | Export owner display (caller-id / `"Me"`) |
+| `X-ME-Message-Owner-Handle` | string | The owner's own address on this message (CSV `message_owner_handle`); omitted when the source records no owner per message |
 | `X-ME-Service` | lowercase common-message vocabulary preferred (`sms` / `imessage` / …) | Older exports may use `SMS` / `iMessage` |
 | `X-ME-Message-Kind` | see taxonomy below | |
 | `X-ME-Timestamp-Unix-Ms` | integer string | Authoritative epoch ms (UTC) |
@@ -181,12 +182,15 @@ SMS writers use `sms` / `mms` only. Absence of iMessage-only headers means “no
     "is_sticker": false,
     "transcription": null,
     "sticker_effect": null,
-    "digest_sha256": "…"
+    "digest_sha256": "…",
+    "size_bytes": 2048000
   }
 ]
 ```
 
 - `path` may be null when bytes are embedded only; digest supports dedupe across re-exports.
+- `size_bytes` and `missing_reason` appear only when set. An attachment whose file was not copied has an empty MIME part, and its `missing_reason` (`too_large`, `not_copied`, …) says why.
+- Every attachment part is written with `Content-Transfer-Encoding: base64`, text files included. A text file written as bare lines would lose its CRLF line ends in an mbox, which stores LF only, and its bytes would no longer match `digest_sha256`.
 - **Never** assign leftover MIME parts to the “last” message in a conversation (Plus archive anti-pattern).
 
 Media is transformed then embedded; FormatSink removes the staged `attachments/` directory after write so the mail archive folder is the product.
@@ -331,6 +335,8 @@ Normal sticker sends: image MIME part + `X-ME-Attachment-Meta` (`is_sticker`, `s
 | `android_type` | `X-ME-Android-Type` |
 | `source_fields_json` / PDU extras | `X-ME-Source-Fields` |
 | `export_*` | `X-ME-Export-*` |
+| `owner_handle` / `owner_display_name` | `X-ME-Owner-*` |
+| `message_owner_handle` | `X-ME-Message-Owner-Handle` |
 | `participants_json` (iMessage) | `X-ME-Participants` |
 | `tapbacks_json` | tapback EMLs (+ optional `X-ME-Tapbacks`) |
 | `parts_json` / `edits_json` / `app_json` | `X-ME-Parts` / `X-ME-Edits` / `X-ME-App` |

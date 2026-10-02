@@ -163,7 +163,8 @@ pub struct DedupeStats {
     pub keys_filled: u64,
     /// Groups of messages sharing one content key.
     pub exact_groups: u64,
-    /// Messages hidden as exact duplicates (all but the survivor per group).
+    /// Messages hidden as exact duplicates: all but as many per group as one
+    /// source holds.
     pub exact_flagged: u64,
     /// Messages flagged as near duplicates.
     pub near_flagged: u64,
@@ -519,7 +520,9 @@ struct Cand {
     att_count: i64,
 }
 
-/// Hide every message that shares a fingerprint with a preferred-source twin. Returns (groups, hidden).
+/// Hide the messages that share a fingerprint with a preferred-source twin,
+/// keeping as many as one source holds (see [`exact_group_flags`]). Returns
+/// (groups, hidden).
 async fn flag_exact_content_key_dupes(
     conn: &mut SqliteConnection,
     account_id: i64,
@@ -566,12 +569,7 @@ async fn flag_exact_content_key_dupes(
             continue;
         }
         groups += 1;
-        let winner = pick_winner(cands, prio);
-        for c in cands {
-            if c.id != winner {
-                flags.push((c.id, winner));
-            }
-        }
+        flags.extend(exact_group_flags(cands, prio));
     }
     let flagged = flags.len() as u64;
 
@@ -582,6 +580,44 @@ async fn flag_exact_content_key_dupes(
     apply_duplicate_flags(conn, "_pass_a_flags", &flags).await?;
 
     Ok((groups, flagged))
+}
+
+/// The `(loser, winner)` pairs of one content key that two or more sources
+/// hold.
+///
+/// One source that holds a message twice holds two messages, so the group
+/// stays shown as many times as the source that holds it most often. The
+/// winner's source fills those places first, then the other sources in
+/// priority order. Within a source, the rows go in the order [`pick_winner`]
+/// ranks them. Every other row is hidden as a duplicate of the winner.
+fn exact_group_flags(cands: &[Cand], prio: &HashMap<&str, usize>) -> Vec<(i64, i64)> {
+    let winner = pick_winner(cands, prio);
+    let winner_source = cands
+        .iter()
+        .find(|c| c.id == winner)
+        .map_or("", |c| c.source.as_str());
+    let mut by_source: HashMap<&str, Vec<&Cand>> = HashMap::new();
+    for c in cands {
+        by_source.entry(c.source.as_str()).or_default().push(c);
+    }
+    let shown = by_source.values().map(Vec::len).max().unwrap_or(0);
+    let mut sources: Vec<(&str, Vec<&Cand>)> = by_source.into_iter().collect();
+    sources.sort_by_key(|&(source, _)| {
+        (
+            source != winner_source,
+            prio.get(source).copied().unwrap_or(usize::MAX),
+            source,
+        )
+    });
+    sources
+        .into_iter()
+        .flat_map(|(_, mut rows)| {
+            rows.sort_by(|a, b| b.att_count.cmp(&a.att_count).then(a.id.cmp(&b.id)));
+            rows
+        })
+        .skip(shown)
+        .map(|c| (c.id, winner))
+        .collect()
 }
 
 /// The message to keep from a duplicate group: most attachments, then the earliest-imported source, then the lowest id.
@@ -623,18 +659,25 @@ struct NearRow {
     body_norm: String,
     att_fp: String,
     att_count: i64,
+    content_key: String,
 }
 
 impl NearRow {
     /// Whether `other`, a later row of the same conversation, is a near-time
-    /// twin of this one: same direction and sender, a different source, and
-    /// the same body or the same attachments.
+    /// twin of this one: same direction and sender, a different source, a
+    /// different content key, and the same body or the same attachments.
+    ///
+    /// Two shown rows with one content key are rows the exact pass chose to
+    /// keep, because one source holds the message that many times, so they
+    /// are never twins here.
     fn is_twin_of(&self, other: &NearRow) -> bool {
         let same_body = !self.body_norm.is_empty() && other.body_norm == self.body_norm;
         let same_attachments = !self.att_fp.is_empty() && other.att_fp == self.att_fp;
+        let same_key = !self.content_key.is_empty() && other.content_key == self.content_key;
         other.is_from_me == self.is_from_me
             && other.sender_norm == self.sender_norm
             && other.source != self.source
+            && !same_key
             && (same_body || same_attachments)
     }
 
@@ -672,11 +715,20 @@ async fn load_near_rows(
     conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<HashMap<i64, Vec<NearRow>>> {
-    type NearDedupeRow = (i64, i64, String, i64, String, Option<String>, String);
+    type NearDedupeRow = (
+        i64,
+        i64,
+        String,
+        i64,
+        String,
+        Option<String>,
+        String,
+        String,
+    );
     let msg_rows: Vec<NearDedupeRow> = sqlx::query_as(
         r"
         SELECT m.id, m.conversation_id, m.source, m.is_from_me, m.timestamp, m.body,
-               COALESCE(hs.normalized, '')
+               COALESCE(hs.normalized, ''), COALESCE(m.content_key, '')
         FROM messages m
         JOIN conversations c ON c.id = m.conversation_id
         LEFT JOIN handles hs ON hs.id = m.sender_handle_id
@@ -708,7 +760,7 @@ async fn load_near_rows(
     }
 
     let mut by_conversation: HashMap<i64, Vec<NearRow>> = HashMap::new();
-    for (id, conversation_id, source, is_from_me, ts, body, sender_norm) in msg_rows {
+    for (id, conversation_id, source, is_from_me, ts, body, sender_norm, content_key) in msg_rows {
         let Some(secs) = parse_rfc3339_utc_secs(ts.trim()) else {
             continue;
         };
@@ -730,6 +782,7 @@ async fn load_near_rows(
                 body_norm: normalize_body(body.as_deref()),
                 att_count: shas.len() as i64,
                 att_fp: shas.join(","),
+                content_key,
             });
     }
     Ok(by_conversation)

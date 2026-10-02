@@ -9,7 +9,7 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use httpmock::prelude::*;
 use message_crate_push::{AuthError, ProgressEvent, PushConfig, authenticate, run};
@@ -1932,8 +1932,9 @@ fn mock_session(server: &MockServer) -> httpmock::Mock<'_> {
 ///
 /// Guards `with_retries` around the batch POST, which no other test drives
 /// end to end (every other config sets `max_retries: 0`, except
-/// `an_unreadable_2xx_answer_is_not_retried`, which checks that no retry
-/// happens). A regression that counts each attempt, or journals the batch on
+/// `an_unreadable_2xx_answer_is_not_retried` and
+/// `a_2xx_answer_whose_body_is_cut_off_is_not_retried`, which check that no
+/// retry happens). A regression that counts each attempt, or journals the batch on
 /// the failed try, fails here.
 #[test]
 fn a_batch_retried_after_a_503_is_counted_and_journaled_once() {
@@ -2180,6 +2181,96 @@ fn an_unreadable_2xx_answer_is_not_retried() {
     let report = run(&cfg, None).unwrap();
 
     assert_eq!(import.calls(), 1, "a 2xx must not be posted again");
+    assert!(!report.ok);
+    assert_eq!(report.conversations_failed, 1);
+    let error = report.results[0].error.as_deref().unwrap_or_default();
+    assert!(
+        error.contains("could not read the server's answer to import batch"),
+        "{error}"
+    );
+    assert!(journal_events(dir.path(), "file_ok").is_empty());
+}
+
+/// A server that answers each request on its own connection and closes it.
+/// The batch POST gets a `200 OK` whose headers promise a body the server
+/// never sends, so the client fails while reading it; the other routes a
+/// push calls get their usual answers. Returns the base URL and a count of
+/// batch POSTs.
+fn serve_a_200_that_drops_the_batch_body() -> (String, Arc<AtomicUsize>) {
+    use std::io::{BufRead, BufReader, Read};
+    use std::net::TcpListener;
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base_url = format!("http://{}", listener.local_addr().unwrap());
+    let batches = Arc::new(AtomicUsize::new(0));
+    let counted = Arc::clone(&batches);
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { return };
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut request_line = String::new();
+            if reader.read_line(&mut request_line).is_err() {
+                continue;
+            }
+            let mut content_length = 0usize;
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap_or(0) == 0 || line == "\r\n" {
+                    break;
+                }
+                if let Some((name, value)) = line.split_once(':')
+                    && name.eq_ignore_ascii_case("content-length")
+                {
+                    content_length = value.trim().parse().unwrap_or(0);
+                }
+            }
+            let mut body = vec![0u8; content_length];
+            let _ = reader.read_exact(&mut body);
+            let answer = |status: &str, body: &str| {
+                format!(
+                    "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                )
+            };
+            let response = if request_line.starts_with("GET /v1/session ") {
+                answer("200 OK", r#"{"account_id":1,"username":"alice"}"#)
+            } else if request_line.starts_with("POST /v1/imports ") {
+                answer("201 Created", r#"{"id":7}"#)
+            } else if request_line.starts_with("POST /v1/imports/7/batches ") {
+                counted.fetch_add(1, Ordering::SeqCst);
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 4096\r\nConnection: close\r\n\r\n{\"messages\":".to_string()
+            } else {
+                answer("404 Not Found", "{}")
+            };
+            let _ = stream.write_all(response.as_bytes());
+            let _ = stream.shutdown(std::net::Shutdown::Both);
+        }
+    });
+    (base_url, batches)
+}
+
+/// A `200 OK` whose body is cut off means the server committed the batch.
+/// Sending it again would store every message without a GUID a second time,
+/// so the batch is posted once and the conversation fails with a sentence
+/// saying the answer could not be read (#1162).
+#[test]
+fn a_2xx_answer_whose_body_is_cut_off_is_not_retried() {
+    let (base_url, batches) = serve_a_200_that_drops_the_batch_body();
+
+    let dir = tempdir().unwrap();
+    write_jsonl(dir.path(), &sample_doc());
+    let cfg = PushConfig {
+        max_retries: 2,
+        ..text_only_config(dir.path(), base_url)
+    };
+
+    let report = run(&cfg, None).unwrap();
+
+    assert_eq!(
+        batches.load(Ordering::SeqCst),
+        1,
+        "a 2xx must not be posted again"
+    );
     assert!(!report.ok);
     assert_eq!(report.conversations_failed, 1);
     let error = report.results[0].error.as_deref().unwrap_or_default();

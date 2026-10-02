@@ -419,6 +419,12 @@ pub struct AttachmentMeta {
     /// 64-hex SHA-256 of the file contents (content addressing).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub digest_sha256: Option<String>,
+    /// Stored file length in bytes, as [`IrAttachment::size_bytes`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_bytes: Option<u64>,
+    /// Why the file is not there, as [`IrAttachment::missing_reason`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub missing_reason: Option<String>,
 }
 
 impl From<&IrAttachment> for AttachmentMeta {
@@ -428,6 +434,8 @@ impl From<&IrAttachment> for AttachmentMeta {
             original_name: a.original_name.clone(),
             mime_type: a.mime_type.clone(),
             digest_sha256: a.digest_sha256.clone(),
+            size_bytes: a.size_bytes,
+            missing_reason: a.missing_reason.clone(),
         }
     }
 }

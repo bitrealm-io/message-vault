@@ -199,6 +199,10 @@ again.
 **A participant's display name has one rule.** The contact's name, else what
 that backup called them in that conversation, else the identity. One loader
 applies it for the conversation list, the message pane, and Export.
+A contact in the trash counts as no contact here: the participant takes the
+backup's name, else the identity, and carries no contact id.
+Why: the contact cannot be opened while it is in the trash, so a link to it
+would lead to `404 Not Found`.
 
 **Deleting a contact keeps its conversations.** The name and details go. The
 identities stay in their conversations and the person becomes Unknown again.
@@ -286,7 +290,10 @@ messages, linking it later shows its counts without a re-import.
 **An import replaces a trashed contact.** When an import meets an identity of
 a trashed contact, it discards that contact with every identity it had and
 makes a new one from the backup, as a first import would. See
-[ADR 0013](../adr/0013-an-import-replaces-a-trashed-contact.md).
+[ADR 0013](../adr/0013-an-import-replaces-a-trashed-contact.md). A person
+named with no address is never matched by name to a trashed contact. Why: the
+same run may discard that contact, and a trashed contact that shares a live
+contact's name would make the name look ambiguous.
 
 **A failed import changes no contact.** Staging meets every identity first,
 so it is where the import makes contacts and discards trashed ones. Staging

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import Button from "../components/Button";
 import { setBaseUrl } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -10,6 +10,12 @@ import { accentLink, authCard, authCardBody, authScreenTitle, pageCenter } from 
 import { useLocalServer } from "../lib/useLocalServer";
 import { useServerHealth } from "../lib/useServerHealth";
 import { useServerState } from "../lib/useServerState";
+import {
+  type Connection,
+  connectionReducer,
+  initialConnection,
+  shownState,
+} from "./auth/connectionState";
 import ExploreDemoAccountButton from "./auth/ExploreDemoAccountButton";
 import LocalAuthTabs from "./auth/LocalAuthTabs";
 import ServerSettingsScreen from "./auth/ServerSettingsScreen";
@@ -95,6 +101,37 @@ function StartFailed({
   );
 }
 
+/** How an address is named to a person: blank is the website's own origin. */
+function addressName(address: string): string {
+  return address === "" ? window.location.origin : address;
+}
+
+/**
+ * Says that an address tried in place of the card's own did not answer, and
+ * whether the card is still connected to the one it was on. Without it the
+ * card would show only the word for the address it is on, which says nothing
+ * about the one the person asked for.
+ */
+function TryFailed({
+  connection,
+  failed,
+}: {
+  connection: Connection;
+  failed: NonNullable<Connection["failed"]>;
+}) {
+  const reason = failed.message ?? `Nothing answered at ${addressName(failed.address)}.`;
+  const still =
+    connection.status === "connected"
+      ? ` Still connected to ${addressName(connection.address)}.`
+      : "";
+  return (
+    <p className="m-0 mb-5 text-center text-[0.813rem] text-danger" role="alert">
+      {reason}
+      {still}
+    </p>
+  );
+}
+
 /**
  * The way into a Message Crate. The card resolves an address on mount and confirms the
  * server is reachable itself, so the only question the old first screen asked —
@@ -103,12 +140,18 @@ function StartFailed({
  */
 export default function LoginScreen() {
   const { setServer: setAuthServer, serverUrl: savedUrl, retrySavedLogin } = useAuth();
-  const [address, setAddress] = useState(() => initialLoginServerUrl(savedUrl, isTauri()));
+  const [connection, dispatch] = useReducer(
+    connectionReducer,
+    initialLoginServerUrl(savedUrl, isTauri()),
+    initialConnection,
+  );
+  // The address the card is on. It changes only when another one answers.
+  const address = connection.address;
+  const state = shownState(connection);
+  const hasConnectedOnce = connection.hasConnectedOnce;
+  // The address the card is after: the one being tried, or the one it is on.
+  const target = connection.trying ?? address;
   const [draft, setDraft] = useState(address);
-  const [state, setState] = useState<ServerConnection>("connecting");
-  // Sticky once true: once the login form has been shown, keep showing it
-  // (dimmed while disconnected) instead of reverting to the skeleton.
-  const [hasConnectedOnce, setHasConnectedOnce] = useState(false);
   // The desktop app opens on this card only for its own Message Crate. An
   // address the person entered is theirs to confirm at every start, and the
   // connection screen is also the way back to the app's own.
@@ -120,32 +163,36 @@ export default function LoginScreen() {
   // not been tested since the last edit.
   const [tested, setTested] = useState<ServerConnection | null>(null);
 
-  // A disconnected card keeps checking the address it already has, so it can
-  // heal itself the moment the server comes back. Nothing else probes: the
+  // A disconnected card keeps checking the address it is on, so it can heal
+  // itself the moment the server comes back. Nothing else probes: the
   // settings screen asks explicitly, with Test.
   const health = useServerHealth(state === "disconnected" ? address : null);
 
-  // The desktop app starts a Message Crate of its own at its own address and
+  // The desktop app starts a Message Crate of its own when the card is after
+  // the app's own address, whether it is on it already or trying it, and
   // nowhere else. The browser, and any address the person entered, start
   // nothing.
   const { status: localServer, retry: retryLocalServer } = useLocalServer(
-    isTauri() && isOwnAddress(address),
+    isTauri() && isOwnAddress(target),
   );
   const localStarting = localServer?.status === "starting";
   const localFailed = localServer?.status === "failed" ? localServer : null;
+  // Read by `connect` once its probe is back, which may be after renders it
+  // did not see.
+  const localServerRef = useRef(localServer);
+  localServerRef.current = localServer;
 
   // Which forms this card offers is the server's answer, not a guess made here.
   // Asked only once the address is reachable, so an unreachable server reports
-  // "disconnected" rather than a failed state query.
+  // "disconnected" rather than a failed state query. Kept while another
+  // address is tried, since the card is still on this one.
   const { state: serverState, demoAccount } = useServerState(
-    state === "connected" ? address : null,
+    connection.status === "connected" ? address : null,
   );
 
   // Two connects can be in flight at once — the background self-heal for the
-  // address already saved, and the explicit reconnect for one just typed — so
-  // only the newest may write. An earlier slow probe that lands second would
-  // otherwise put its own address back in the box, and the address the person
-  // typed would disappear in front of them.
+  // address the card is on, and the explicit one for an address just typed —
+  // so only the newest may write.
   const connectRun = useRef(0);
   const connectAbort = useRef<AbortController | null>(null);
   const connect = useCallback(
@@ -158,23 +205,30 @@ export default function LoginScreen() {
       connectAbort.current?.abort();
       const controller = new AbortController();
       connectAbort.current = controller;
-      setState("connecting");
-      setBaseUrl(trimmed);
+      dispatch({ type: "try", address: trimmed });
       // GET /health answers plain text, not JSON, so this probes it directly
       // rather than through apiClient (which always parses the body as
       // JSON). The body is discarded either way — only reachability matters.
+      // The API client's base URL is left alone until the address answers,
+      // so a request made meanwhile still goes to the Message Crate the card
+      // is on.
       const reachable = await checkServerHealth(trimmed, controller.signal);
       if (connectRun.current !== run) return;
       if (reachable) {
-        setAddress(trimmed);
+        setBaseUrl(trimmed);
         setDraft(trimmed);
-        setHasConnectedOnce(true);
         setAuthServer(trimmed);
-        setState("connected");
-      } else {
-        // Nothing answered. That is the status line's problem, not the form's.
-        setState("disconnected");
+        dispatch({ type: "answered", address: trimmed });
+        return;
       }
+      // The app's own address answers once the app has started its server,
+      // so while that start is under way the try is not over: the effects
+      // below finish it when the start settles.
+      const local = localServerRef.current;
+      const startUnderWay =
+        local === null || local.status === "idle" || local.status === "starting";
+      if (isTauri() && isOwnAddress(trimmed) && startUnderWay) return;
+      dispatch({ type: "noAnswer", address: trimmed });
     },
     [setAuthServer],
   );
@@ -211,8 +265,23 @@ export default function LoginScreen() {
   useEffect(() => {
     const becameReady = !previousLocalReady.current && localReady;
     previousLocalReady.current = localReady;
-    if (becameReady && state !== "connected") void connect(address);
-  }, [localReady, state, address, connect]);
+    if (becameReady && state !== "connected") void connect(target);
+  }, [localReady, state, target, connect]);
+
+  // A start that failed ends a try of the app's own address, with the
+  // reason the app gave. When the card is on that address already, the card
+  // shows the failure in place of its forms instead.
+  const previousLocalFailed = useRef(false);
+  const trying = connection.trying;
+  useEffect(() => {
+    const becameFailed = !previousLocalFailed.current && localFailed !== null;
+    previousLocalFailed.current = localFailed !== null;
+    if (becameFailed && trying !== null && isOwnAddress(trying)) {
+      connectRun.current += 1;
+      connectAbort.current?.abort();
+      dispatch({ type: "noAnswer", address: trying, message: localFailed.message });
+    }
+  }, [localFailed, trying]);
 
   // Only the newest Test may write the result: an earlier slow probe must not
   // stamp its answer over a later one, or over a screen that has since closed.
@@ -238,7 +307,12 @@ export default function LoginScreen() {
    */
   const trimmedDraft = draft.trim();
   const settingsStatus: ServerConnection =
-    tested ?? (trimmedDraft === address ? state : "untested");
+    tested ??
+    (trimmedDraft === connection.trying
+      ? "connecting"
+      : trimmedDraft === address
+        ? connection.status
+        : "untested");
 
   // Use this address applies an address. An empty field names no address,
   // and the one already connected is not a change: applying it would drop the
@@ -298,9 +372,12 @@ export default function LoginScreen() {
                 <ServerStatus
                   state={localStarting && state !== "connected" ? "connecting" : state}
                   label={state === "connected" ? undefined : startingLabel(localServer)}
-                  className="mb-5 text-center"
+                  className={`${connection.failed ? "mb-2" : "mb-5"} text-center`}
                 />
               )}
+              {connection.failed ? (
+                <TryFailed connection={connection} failed={connection.failed} />
+              ) : null}
 
               {/* The card waits for the server's own answer as well as for the
                   connection: which forms belong here is the server's to say, and

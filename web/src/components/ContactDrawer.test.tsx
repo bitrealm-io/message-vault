@@ -5,6 +5,7 @@ import { cleanup, render as rtlRender, screen, waitFor } from "@testing-library/
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../lib/api";
 import type { ContactDetail } from "../lib/contactDetail";
 import { keys } from "../lib/queryKeys";
 import { routeQueryKey } from "../lib/routeQueryKey";
@@ -251,6 +252,46 @@ describe("ContactDrawer", () => {
       expect(screen.getByText("Work")).toBeTruthy();
       expect(screen.queryByText("No groups")).toBeNull();
     });
+  });
+
+  it("says a contact could not be loaded, stops claiming to load, and loads it on Try again", async () => {
+    get.mockRejectedValueOnce(new ApiError(500, "The server could not answer."));
+    get.mockResolvedValueOnce(detail(26, { name: "Zed" }));
+    const user = userEvent.setup();
+
+    render(
+      <ContactDrawer
+        variant="overlay"
+        contactId="26"
+        preview={{ id: "26", name: "Zed" }}
+        onClose={() => {}}
+      />,
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("This contact could not be loaded.");
+    expect(alert.textContent).toContain("The server could not answer.");
+    expect(screen.getByRole("dialog").getAttribute("aria-busy")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Group-26")).toBeTruthy();
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("dialog").getAttribute("aria-busy")).toBeNull();
+  });
+
+  it("says plainly that a contact no longer exists when the server answers 404 Not Found", async () => {
+    get.mockRejectedValue(new ApiError(404, "No contact with id 26."));
+
+    render(<ContactDrawer variant="overlay" contactId="26" preview={null} onClose={() => {}} />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("This contact is no longer in your contacts.");
+    expect(screen.queryByText("Loading…")).toBeNull();
+    expect(screen.getByRole("dialog").getAttribute("aria-busy")).toBeNull();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
   });
 
   it("stubs one handle row when preview lists raw and normalized forms of the same identity", async () => {

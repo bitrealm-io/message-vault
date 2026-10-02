@@ -38,6 +38,13 @@ export const keys = {
      * lists contacts.
      */
     trashed: (q: string) => ["contacts", "list", "trashed", q] as const,
+    /**
+     * The figures `POST /v1/contacts/summaries` returns for the checked
+     * contacts, one entry per set of ids. Outside `lists`, whose entries are
+     * pages of contacts and are patched as such, and under `all`, so a write
+     * that marks every contact stale refreshes these figures too.
+     */
+    summaries: (ids: readonly string[]) => ["contacts", "summaries", ids.join(",")] as const,
   },
   conversations: {
     all: ["conversations"] as const,

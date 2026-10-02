@@ -799,6 +799,42 @@ async fn the_owner_adds_the_demo_account_and_no_other_account_changes() {
     );
 }
 
+/// `demo` belongs to the Demo Account even while it does not exist. Once the
+/// owner has deleted it, neither the owner nor a stranger may give the name
+/// to another account, so adding the Demo Account again still succeeds
+/// (#1226).
+#[tokio::test(flavor = "multi_thread")]
+async fn the_demo_username_stays_reserved_after_the_demo_account_is_deleted() {
+    let fixture = test_fixture().await;
+    let mut state = fixture.state.clone();
+    state.demo_bundle_generator = tiny_bundle;
+    let demo = fixture
+        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
+        .await;
+    let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+    assert_eq!(
+        crate::test_support::delete_status(&state, &format!("/v1/accounts/{demo}"), &owner.token)
+            .await,
+        StatusCode::NO_CONTENT
+    );
+
+    let body =
+        |username: &str| serde_json::json!({ "username": username, "password": "hunter2hunter2" });
+    assert_eq!(
+        post_status(&state, "/v1/accounts", &owner.token, body("demo")).await,
+        StatusCode::CONFLICT,
+        "the owner may not create an account named demo"
+    );
+    let (status, text) =
+        crate::test_support::post_logged_out(&state, "/v1/accounts", body("Demo")).await;
+    crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::UsernameTaken);
+
+    let (status, body) = start_demo_build(&state, &owner.token).await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+    let demo = demo_account_after_build(&state, &owner.token).await;
+    assert_eq!(demo.status, DemoAccountStatus::Ready, "{:?}", demo.error);
+}
+
 /// While one build runs, a second is refused and so is deleting the Demo
 /// Account: either would pull the account out from under the import.
 #[tokio::test(flavor = "multi_thread")]

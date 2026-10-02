@@ -304,10 +304,11 @@ pub fn classify(path: &Path) -> Option<Kind> {
 /// is not media, so a `application/pdf` blob called `clip.mp4` is not a video.
 ///
 /// GIFs are animations and are never converted: a `.gif` name or an
-/// `image/gif` MIME answers `None`.
+/// `image/gif` MIME answers `None`. The MIME is read as `kind_for_mime` reads
+/// it, so `image/GIF` and `image/gif; charset=binary` are GIFs too.
 pub fn kind_of(path: &Path, mime: Option<&str>, name_hints: &[Option<&str>]) -> Option<Kind> {
     let declared = mime.map(str::trim).filter(|m| !m.is_empty());
-    if declared == Some("image/gif") || has_gif_ext(path) {
+    if declared.and_then(crate::mime::ext_for_mime) == Some(".gif") || has_gif_ext(path) {
         return None;
     }
     if let Some(kind) = classify(path) {

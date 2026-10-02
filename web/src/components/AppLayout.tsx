@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { contactBrowseQuery } from "../lib/contactBrowseQuery";
-import { groupFromSlug } from "../lib/contactGroups";
+import { groupFromSlug, slugFromPath, slugPath } from "../lib/contactGroups";
 import { asMessagesLocationState } from "../lib/messagesLocationState";
 import { tagFromSlug, tagListQuery } from "../lib/messageTags";
 import { trashed } from "../lib/searchQuery";
@@ -49,6 +49,39 @@ function modeFromPathname(pathname: string): ColumnMode {
   return "conversations";
 }
 
+/**
+ * Why a Contact Group or Message Tag page has no list: the sets have not
+ * loaded yet, or no set has the name in the link. A page in either state
+ * lists nothing, so it never shows every contact or conversation under the
+ * set's name, and nothing on it exports them.
+ */
+type SetPageState = "loading" | "missing" | null;
+
+function setPageState(slug: string | null, loading: boolean, found: string | null): SetPageState {
+  if (slug === null) return null;
+  if (loading) return "loading";
+  return found === null ? "missing" : null;
+}
+
+/** What the list column says in place of a list for a set page it cannot show. */
+function SetPageStatus({
+  state,
+  setLabel,
+  setsLabel,
+  name,
+}: {
+  state: "loading" | "missing";
+  setLabel: string;
+  setsLabel: string;
+  name: string;
+}) {
+  return (
+    <div role="status" className="p-4 text-[0.813rem] text-muted">
+      {state === "loading" ? `Loading ${setsLabel}…` : `There is no ${setLabel} named ${name}.`}
+    </div>
+  );
+}
+
 /** Scrollable content column that hosts the routed screen. */
 const mainPane = "min-w-0 flex-1 overflow-auto bg-bg text-text";
 
@@ -74,8 +107,8 @@ export default function AppLayout() {
   const clearCheckedContacts = useCallback(() => {
     setClearCheckedRev((n) => n + 1);
   }, []);
-  const { groups } = useContactGroups();
-  const { tags } = useMessageTags();
+  const { groups, loading: groupsLoading } = useContactGroups();
+  const { tags, loading: tagsLoading } = useMessageTags();
 
   const pathname = location.pathname;
   const mode = modeFromPathname(pathname);
@@ -83,18 +116,16 @@ export default function AppLayout() {
   const contactsMode = mode === "contacts";
   const noGroupMode = pathname === "/no-group";
   const unknownMode = pathname === "/unknown";
-  const groupSlugParam = pathname.startsWith("/group/")
-    ? decodeURIComponent(pathname.slice("/group/".length))
-    : null;
+  const groupSlugParam = slugFromPath(pathname, "/group");
   const activeGroup = groupSlugParam ? groupFromSlug(groupSlugParam, groups) : null;
+  const groupPage = setPageState(groupSlugParam, groupsLoading, activeGroup);
   // "unknown" reaches the server as `group:unknown`, which it answers from
   // contact state rather than from stored membership.
   const groupFilter = unknownMode ? "unknown" : noGroupMode ? "none" : activeGroup;
   const noTagMode = pathname === "/no-tag";
-  const tagSlugParam = pathname.startsWith("/tag/")
-    ? decodeURIComponent(pathname.slice("/tag/".length))
-    : null;
+  const tagSlugParam = slugFromPath(pathname, "/tag");
   const activeTag = tagSlugParam ? tagFromSlug(tagSlugParam, tags) : null;
+  const tagPage = setPageState(tagSlugParam, tagsLoading, activeTag);
   const tagFilter = noTagMode ? "none" : activeTag;
 
   const conversationSearch = searchParams.get("q") || "";
@@ -144,8 +175,8 @@ export default function AppLayout() {
         navigate(`/no-group${params}`);
       } else if (unknownMode) {
         navigate(`/unknown${params}`);
-      } else if (groupSlugParam) {
-        navigate(`/group/${groupSlugParam}${params}`);
+      } else if (groupSlugParam !== null) {
+        navigate(`${slugPath("/group", groupSlugParam)}${params}`);
       } else {
         navigate(`/contacts${params}`);
       }
@@ -160,8 +191,8 @@ export default function AppLayout() {
       navigate(`/?q=${encodeURIComponent(q)}`);
     } else if (noTagMode) {
       navigate(`/no-tag${q ? `?q=${encodeURIComponent(q)}` : ""}`);
-    } else if (tagSlugParam) {
-      navigate(`/tag/${tagSlugParam}${q ? `?q=${encodeURIComponent(q)}` : ""}`);
+    } else if (tagSlugParam !== null) {
+      navigate(`${slugPath("/tag", tagSlugParam)}${q ? `?q=${encodeURIComponent(q)}` : ""}`);
     } else {
       navigate(`/?q=${encodeURIComponent(q)}`);
     }
@@ -231,8 +262,8 @@ export default function AppLayout() {
 
   // What Export starts from: the conversation list's query, tag filter
   // included, and nothing when the person is on contacts, Trash, or a
-  // full-screen route.
-  const browseQuery = mode === "conversations" ? threadListQuery : "";
+  // full-screen route. A tag page with no list has nothing to export.
+  const browseQuery = mode === "conversations" && tagPage === null ? threadListQuery : "";
 
   return (
     <RightToolbarProvider>
@@ -251,11 +282,20 @@ export default function AppLayout() {
             {mode === "conversations" && !isMessageRoute && (
               <>
                 <ListColumn>
-                  <ConversationList
-                    selectedId={null}
-                    onSelect={handleConversationSelect}
-                    query={threadListQuery}
-                  />
+                  {tagPage ? (
+                    <SetPageStatus
+                      state={tagPage}
+                      setLabel="Message Tag"
+                      setsLabel="Message Tags"
+                      name={tagSlugParam ?? ""}
+                    />
+                  ) : (
+                    <ConversationList
+                      selectedId={null}
+                      onSelect={handleConversationSelect}
+                      query={threadListQuery}
+                    />
+                  )}
                 </ListColumn>
                 <RightPane>
                   <main className={mainPane}>
@@ -269,14 +309,23 @@ export default function AppLayout() {
             {mode === "contacts" && (
               <>
                 <ListColumn>
-                  <ContactList
-                    filter={contactSearch}
-                    groupFilter={groupFilter}
-                    selectedId={selectedContact?.id ?? null}
-                    onSelect={(c) => setSelectedContact(contactPreviewFromListRow(c))}
-                    onCheckedChange={handleCheckedContacts}
-                    clearCheckedRev={clearCheckedRev}
-                  />
+                  {groupPage ? (
+                    <SetPageStatus
+                      state={groupPage}
+                      setLabel="Contact Group"
+                      setsLabel="Contact Groups"
+                      name={groupSlugParam ?? ""}
+                    />
+                  ) : (
+                    <ContactList
+                      filter={contactSearch}
+                      groupFilter={groupFilter}
+                      selectedId={selectedContact?.id ?? null}
+                      onSelect={(c) => setSelectedContact(contactPreviewFromListRow(c))}
+                      onCheckedChange={handleCheckedContacts}
+                      clearCheckedRev={clearCheckedRev}
+                    />
+                  )}
                 </ListColumn>
                 <RightPane>
                   {checkedContacts.length > 0 ? (

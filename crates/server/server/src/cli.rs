@@ -632,6 +632,7 @@ async fn run_process_assets(args: ProcessAssetsArgs) -> Result<()> {
             skip_video: args.skip_video,
             skip_audio: args.skip_audio,
             source: args.source,
+            account: None,
         },
     )
     .await?;

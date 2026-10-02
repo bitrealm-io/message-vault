@@ -41,9 +41,11 @@ pub struct ServerInfo {
     /// `unclaimed` shows Create Owner alone; `closed` shows Login alone;
     /// `open` shows Login and Create Account.
     pub state: ServerState,
-    /// Whether the Demo Account exists. While it does, the screen offers a
-    /// way into it beside whatever `state` shows: it has no password, so
-    /// there is nothing to type.
+    /// Whether the Demo Account exists and is not being built. While it
+    /// does, the screen offers a way into it beside whatever `state` shows:
+    /// it has no password, so there is nothing to type. During a build it
+    /// reads `false`, because the account cannot be entered until the build
+    /// ends.
     pub demo_account: bool,
     /// The server's Build: its Product Version, plus the commit it was built
     /// from unless it is a release. An app compares the Product Version with
@@ -94,12 +96,10 @@ pub async fn get_server(State(state): State<AppState>) -> Result<Json<ServerInfo
     let mut conn = state.db.acquire().await?;
     Ok(Json(ServerInfo {
         state: state_on_conn(&mut conn).await?,
-        demo_account: account_profile::username_for_account(
-            &mut conn,
-            account_profile::DEMO_ACCOUNT_ID,
-        )
-        .await?
-        .is_some(),
+        demo_account: !state.demo_build.is_building()
+            && account_profile::username_for_account(&mut conn, account_profile::DEMO_ACCOUNT_ID)
+                .await?
+                .is_some(),
         version: crate::BUILD.to_string(),
         schema_fingerprint: crate::db::schema::SCHEMA_FINGERPRINT,
         asset_max_bytes: server_settings::load(&mut conn).await?.asset_max_bytes,
@@ -392,8 +392,9 @@ impl From<DemoDataSize> for demo_seed::DemoSize {
 pub enum DemoAccountStatus {
     /// There is no Demo Account.
     Absent,
-    /// The server is building it. It may be logged into, and holds part of
-    /// its data until the build ends.
+    /// The server is building it. It cannot be entered until the build
+    /// ends: `GET /v1/server` reports no Demo Account, a login as `demo` is
+    /// refused, and every Session it had ended when the build started.
     Building,
     /// It exists and no build is running.
     Ready,
@@ -461,7 +462,8 @@ impl DemoBuild {
         true
     }
 
-    /// Whether a build is running. Deleting the Demo Account waits for it.
+    /// Whether a build is running. Deleting the Demo Account waits for it,
+    /// and logging in to it is refused until it ends.
     pub(crate) fn is_building(&self) -> bool {
         matches!(self.get(), DemoBuildState::Building(_))
     }
@@ -522,10 +524,15 @@ pub async fn get_demo_account(
 /// Add the Demo Account, or reset it.
 ///
 /// The Demo Account is removed, with everything a visitor changed in it, and
-/// built again with Demo Data of the size given. No other account is touched.
+/// built again with Demo Data of the size given. No other account is touched:
+/// only the Demo Account's attachments are converted, and each source is
+/// imported in batches no larger than an Upload sends, so another account's
+/// write waits for one batch at most.
 /// The build runs after the answer is sent, while the server keeps serving:
 /// the answer is `202` with `status` `building`, and `GET` reports when it
-/// ends. A second request while one build runs is refused.
+/// ends. Every Session of the Demo Account ends when the build starts, and
+/// the account cannot be entered until the build ends. A second request
+/// while one build runs is refused.
 #[utoipa::path(
     put,
     path = "/v1/server/demo-account",
@@ -547,12 +554,19 @@ pub async fn replace_demo_account(
             "the Demo Account is already being built".into(),
         ));
     }
+    // The build is marked first, so no login can make a Session after the
+    // Sessions are ended here.
+    if let Err(error) = end_demo_sessions(&state).await {
+        state.demo_build.set(DemoBuildState::Idle);
+        return Err(error);
+    }
     let build = state.demo_build.clone();
+    let db = state.db.clone();
     let cfg = state.cfg.clone();
     let generate = state.demo_bundle_generator;
     tokio::spawn(async move {
         let started = std::time::Instant::now();
-        match crate::reset_demo::build_demo_account(cfg, req.size.into(), generate).await {
+        match crate::reset_demo::build_demo_account(db, cfg, req.size.into(), generate).await {
             Ok(messages) => {
                 tracing::info!(
                     messages,
@@ -575,6 +589,15 @@ pub async fn replace_demo_account(
             error: None,
         }),
     ))
+}
+
+/// End every Session of the Demo Account, so nobody is inside it while it
+/// is removed and built again.
+async fn end_demo_sessions(state: &AppState) -> Result<(), ApiError> {
+    let mut conn = state.db.acquire().await?;
+    crate::db::session_tokens::revoke_account_sessions(&mut conn, account_profile::DEMO_ACCOUNT_ID)
+        .await
+        .map_err(ApiError::Internal)
 }
 
 #[cfg(test)]

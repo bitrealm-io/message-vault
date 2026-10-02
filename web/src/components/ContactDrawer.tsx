@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ApiError } from "../lib/api";
 import { apiErrorMessage } from "../lib/apiErrorMessage";
 import { type ContactDetail, useContactDetail, useUpdateContact } from "../lib/contactDetail";
 import { contactLabelText } from "../lib/contactLabel";
@@ -99,7 +100,11 @@ function OneContactDrawer({
 }: ContactDrawerProps) {
   const updateContact = useUpdateContact();
   const trashContact = useTrashContact();
-  const { detail: matchedDetail } = useContactDetail(contactId);
+  const {
+    detail: matchedDetail,
+    error: detailError,
+    retry: retryDetail,
+  } = useContactDetail(contactId);
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState("");
   // Why the last save of the name was refused. The editor stays open with it.
@@ -110,6 +115,9 @@ function OneContactDrawer({
   const drawerLeft = useDrawerLeft(variant === "overlay" && !!contactId);
 
   const detailMatches = !!matchedDetail;
+  // A failed refetch behind a contact already on screen keeps showing it; only
+  // a drawer with nothing to show says the load failed.
+  const loadError = detailMatches ? null : detailError;
   const previewMatches = !!contactId && !!preview && String(preview.id) === String(contactId);
   const matchedName = matchedDetail?.name;
 
@@ -117,8 +125,10 @@ function OneContactDrawer({
     ? matchedDetail.name
     : previewMatches
       ? preview?.name
-      : "Loading…";
-  const loading = !detailMatches;
+      : loadError
+        ? "Contact"
+        : "Loading…";
+  const loading = !detailMatches && !loadError;
 
   useEffect(() => {
     setNameValue(displayName === "Loading…" ? "" : displayName);
@@ -240,6 +250,19 @@ function OneContactDrawer({
           right: drawerLeft == null ? 0 : undefined,
         }
       : undefined;
+
+  if (loadError) {
+    return (
+      <aside role="dialog" aria-label={displayName} className={panelClass} style={panelStyle}>
+        <ContactLoadFailed
+          name={displayName}
+          error={loadError}
+          onRetry={retryDetail}
+          onClose={onClose}
+        />
+      </aside>
+    );
+  }
 
   return (
     <aside
@@ -368,5 +391,59 @@ function OneContactDrawer({
         }
       />
     </aside>
+  );
+}
+
+/**
+ * In place of the drawer's contents while its contact cannot be loaded.
+ *
+ * `404 Not Found` gets its own sentence: the contact was moved to the Trash or
+ * deleted somewhere else, and the server's own message would only say it was
+ * not found.
+ */
+function ContactLoadFailed({
+  name,
+  error,
+  onRetry,
+  onClose,
+}: {
+  name: string;
+  error: Error;
+  onRetry: () => void;
+  onClose: () => void;
+}) {
+  const gone = error instanceof ApiError && error.status === 404;
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="m-0 min-w-0 truncate text-[1.125rem] font-semibold">{name}</h2>
+        <button
+          type="button"
+          aria-label="Close"
+          onClick={onClose}
+          className="cursor-pointer border-none bg-transparent p-0 text-[1.25rem] leading-none text-muted outline-none hover:text-text"
+        >
+          ×
+        </button>
+      </div>
+      <div
+        role="alert"
+        className="rounded border border-danger-soft-border bg-danger-soft-bg px-3 py-2 text-[0.813rem] text-danger"
+      >
+        {gone ? (
+          <p className="m-0">This contact is no longer in your contacts.</p>
+        ) : (
+          <>
+            <p className="m-0 font-semibold">This contact could not be loaded.</p>
+            <p className="m-0 mt-1">{apiErrorMessage(error, "The server did not answer.")}</p>
+          </>
+        )}
+      </div>
+      <div>
+        <Button variant="secondary" size="sm" onClick={onRetry}>
+          Try again
+        </Button>
+      </div>
+    </div>
   );
 }

@@ -17,6 +17,7 @@ import {
   useRestoreContact,
   useRestoreConversation,
 } from "../lib/trash";
+import type { Conversation } from "../lib/types";
 import { useAccountProfile } from "../lib/useAccountProfile";
 
 /**
@@ -141,7 +142,6 @@ export default function TrashScreen() {
     { enabled: selectedId !== null },
   );
 
-  const restoreConversation = useRestoreConversation();
   const restoreContact = useRestoreContact();
   const deleteConversation = useDeleteConversation();
   const deleteContact = useDeleteContact();
@@ -257,52 +257,24 @@ export default function TrashScreen() {
               selectedLoading ? (
                 <div className="text-[0.875rem] text-muted">Loading…</div>
               ) : selected ? (
-                <div className="rounded border border-border bg-elevated p-4">
-                  <div className="mb-1 text-[0.938rem] font-semibold text-text">{selectedName}</div>
-                  <div className="mb-3 text-[0.75rem] text-muted">
-                    {plural(selected.message_count, "message")}
-                  </div>
-                  {restoreConversation.error && (
-                    <div className={errorBox}>
-                      {apiErrorMessage(
-                        restoreConversation.error,
-                        "Could not restore this conversation.",
-                      )}
-                    </div>
-                  )}
-                  <div className="flex items-center gap-4">
-                    <Button
-                      variant="secondary"
-                      disabled={restoreConversation.isPending || dialogBusy}
-                      onClick={() =>
-                        restoreConversation.mutate(selectedId, { onSuccess: clearSelection })
-                      }
-                    >
-                      {restoreConversation.isPending ? "Restoring…" : "Restore"}
-                    </Button>
-                    <Button
-                      variant="danger"
-                      disabled={!canDelete || restoreConversation.isPending || dialogBusy}
-                      title={canDelete ? undefined : CANNOT_DELETE}
-                      onClick={() =>
-                        setPending({
-                          kind: "conversation",
-                          id: selectedId,
-                          name: selectedName,
-                          messageCount: selected.message_count,
-                        })
-                      }
-                    >
-                      Delete
-                    </Button>
-                    <Link
-                      to={`/messages/${selectedId}`}
-                      className="text-[0.875rem] text-accent underline-offset-2 hover:underline"
-                    >
-                      View conversation
-                    </Link>
-                  </div>
-                </div>
+                // Keyed by the selection, so a Restore error or a Restore still
+                // answering for the last conversation selected stays with it.
+                <SelectedConversation
+                  key={selectedId}
+                  conversation={selected}
+                  name={selectedName}
+                  canDelete={canDelete}
+                  dialogBusy={dialogBusy}
+                  onRestored={clearSelection}
+                  onDelete={() =>
+                    setPending({
+                      kind: "conversation",
+                      id: selectedId,
+                      name: selectedName,
+                      messageCount: selected.message_count,
+                    })
+                  }
+                />
               ) : (
                 <div className="text-[0.875rem] text-danger">
                   {apiErrorMessage(selectedError, "Could not load this conversation.")}
@@ -440,6 +412,61 @@ export default function TrashScreen() {
         onClose={closeDialog}
         onConfirm={confirmDelete}
       />
+    </div>
+  );
+}
+
+/** The trashed conversation selected in the list column, with Restore and Delete. */
+function SelectedConversation({
+  conversation,
+  name,
+  canDelete,
+  dialogBusy,
+  onRestored,
+  onDelete,
+}: {
+  conversation: Conversation;
+  name: string;
+  canDelete: boolean;
+  dialogBusy: boolean;
+  onRestored: () => void;
+  onDelete: () => void;
+}) {
+  const restoreConversation = useRestoreConversation();
+  return (
+    <div className="rounded border border-border bg-elevated p-4">
+      <div className="mb-1 text-[0.938rem] font-semibold text-text">{name}</div>
+      <div className="mb-3 text-[0.75rem] text-muted">
+        {plural(conversation.message_count, "message")}
+      </div>
+      {restoreConversation.error && (
+        <div className={errorBox}>
+          {apiErrorMessage(restoreConversation.error, "Could not restore this conversation.")}
+        </div>
+      )}
+      <div className="flex items-center gap-4">
+        <Button
+          variant="secondary"
+          disabled={restoreConversation.isPending || dialogBusy}
+          onClick={() => restoreConversation.mutate(conversation.id, { onSuccess: onRestored })}
+        >
+          {restoreConversation.isPending ? "Restoring…" : "Restore"}
+        </Button>
+        <Button
+          variant="danger"
+          disabled={!canDelete || restoreConversation.isPending || dialogBusy}
+          title={canDelete ? undefined : CANNOT_DELETE}
+          onClick={onDelete}
+        >
+          Delete
+        </Button>
+        <Link
+          to={`/messages/${conversation.id}`}
+          className="text-[0.875rem] text-accent underline-offset-2 hover:underline"
+        >
+          View conversation
+        </Link>
+      </div>
     </div>
   );
 }

@@ -688,4 +688,46 @@ describe("ContactDrawer", () => {
     expect(await screen.findByText("Could not move this contact.")).toBeTruthy();
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it("does not show a Move to trash error from one contact on the next one opened", async () => {
+    get.mockImplementation(async (id: string) => detail(Number(id)));
+    trash.mockRejectedValue(new Error("Trash refused."));
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+
+    const { rerender } = render(<ContactDrawer variant="docked" contactId="1" onClose={onClose} />);
+    await screen.findByRole("heading", { name: "Contact 1" });
+    await user.click(screen.getByRole("button", { name: "Move to trash" }));
+    await screen.findByText("Trash refused.");
+
+    rerender(<ContactDrawer variant="docked" contactId="2" onClose={onClose} />);
+    await screen.findByRole("heading", { name: "Contact 2" });
+    expect(screen.queryByText("Trash refused.")).toBeNull();
+  });
+
+  it("leaves the next contact open when a Move to trash pressed on the last one succeeds", async () => {
+    get.mockImplementation(async (id: string) => detail(Number(id)));
+    let finishTrash: () => void = () => {};
+    trash.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishTrash = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+
+    const { rerender } = render(<ContactDrawer variant="docked" contactId="1" onClose={onClose} />);
+    await screen.findByRole("heading", { name: "Contact 1" });
+    await user.click(screen.getByRole("button", { name: "Move to trash" }));
+    await waitFor(() => expect(trash).toHaveBeenCalledWith("1", expect.anything()));
+
+    rerender(<ContactDrawer variant="docked" contactId="2" onClose={onClose} />);
+    await screen.findByRole("heading", { name: "Contact 2" });
+    // Contact 2 has nothing pending, so its button is live.
+    expect(screen.getByRole("button", { name: "Move to trash" })).not.toBeDisabled();
+
+    finishTrash();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });

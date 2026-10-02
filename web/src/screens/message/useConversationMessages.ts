@@ -97,6 +97,10 @@ function threadScope(queryKey: readonly unknown[] | undefined): string | null {
 /**
  * Load messages for one conversation a page at a time: the whole thread, one
  * calendar year of it, or the messages matching the find box.
+ *
+ * The view state belongs to one conversation. `MessageRoute` keys
+ * `MessageView` by conversation id, so a new conversation starts with fresh
+ * state rather than this hook resetting it.
  */
 export function useConversationMessages(conversationId: number) {
   /** `offset`, `activeYear`, `findTerm` and `activeMatch` are view state, not
@@ -107,19 +111,6 @@ export function useConversationMessages(conversationId: number) {
   const [activeYear, setActiveYear] = useState<number | null>(null);
   const [findTerm, setFindTermState] = useState("");
   const [activeMatch, setActiveMatch] = useState(0);
-
-  // A new conversation starts back at page one, with no year filter or find
-  // term carried over from the last one. Adjusted during render, per React's
-  // own guidance for resetting state on a prop change, rather than in an
-  // effect that would otherwise run one render late.
-  const [renderedConversationId, setRenderedConversationId] = useState(conversationId);
-  if (conversationId !== renderedConversationId) {
-    setRenderedConversationId(conversationId);
-    setOffset(0);
-    setActiveYear(null);
-    setFindTermState("");
-    setActiveMatch(0);
-  }
 
   const finding = findTerm.trim().length > 0;
   // The whole thread is the conversation read by id; a year or a find is a

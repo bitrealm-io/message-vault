@@ -996,8 +996,15 @@ pub(crate) fn http_app(state: AppState) -> Router {
         .route_layer(axum::middleware::from_fn_with_state(
             declared_queries,
             crate::declared_query::refuse_undeclared_query,
-        ))
-        .method_not_allowed_fallback(api_method_not_allowed)
+        ));
+    // After both route layers, so the Swagger UI answers a browser's
+    // `Accept: text/html` and is not held to a declared query, and before
+    // every layer below, so its responses carry the request id, the CORS
+    // headers and the log line every other response does.
+    if openapi_ui {
+        api = api.merge(utoipa_swagger_ui::SwaggerUi::new("/docs").url("/openapi.json", spec));
+    }
+    api.method_not_allowed_fallback(api_method_not_allowed)
         .fallback_service(ServeDir::new(static_dir))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
@@ -1033,13 +1040,8 @@ pub(crate) fn http_app(state: AppState) -> Router {
         )
         // Outermost of all: the request id is made before the trace span
         // reads it and stays in scope while every problem body is built.
-        .layer(axum::middleware::from_fn(crate::request_id::layer));
-
-    if openapi_ui {
-        api = api.merge(utoipa_swagger_ui::SwaggerUi::new("/docs").url("/openapi.json", spec));
-    }
-
-    api.with_state(state)
+        .layer(axum::middleware::from_fn(crate::request_id::layer))
+        .with_state(state)
 }
 
 /// Start the HTTP server.

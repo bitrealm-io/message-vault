@@ -27,6 +27,7 @@ use axum::http::HeaderMap;
 use crate::assets_api::AssetStats;
 use crate::config::{PathsConfig, validate_source_id};
 use crate::db::dialect;
+#[cfg(test)]
 use crate::db::engine;
 use crate::db::imports::{self, CompleteImportArgs};
 use crate::db::schema;
@@ -173,73 +174,6 @@ impl ImportStats {
     }
 }
 
-/// Arguments for [`import_export`].
-#[derive(Debug, Clone, Copy)]
-pub struct ImportExportArgs<'a> {
-    /// Folder of `*.jsonl` conversation files to import.
-    pub export_dir: &'a Path,
-    /// Database to import into.
-    pub db: &'a Path,
-    /// Content-addressed asset store directory.
-    pub assets_dir: &'a Path,
-    /// Import mode: replace or append.
-    pub mode: ImportMode,
-    /// Fixed source id applied to every conversation.
-    pub source: &'a str,
-    /// Account the import writes into.
-    pub account_id: i64,
-}
-
-/// Import every JSON Lines file (`*.jsonl`, one JSON object per line) under
-/// `args.export_dir` (the demo seed's path — `reset_demo` imports the
-/// generated export directory through it).
-///
-/// # Errors
-///
-/// Returns an error when the export directory is missing, a file cannot be
-/// parsed, or a database write fails.
-pub async fn import_export(args: &ImportExportArgs<'_>) -> Result<ImportStats> {
-    if !args.export_dir.is_dir() {
-        bail!(
-            "export directory does not exist: {}",
-            args.export_dir.display()
-        );
-    }
-
-    let paths = crate::import_cli::list_jsonl_files(args.export_dir)?;
-
-    let pool = engine::open_pool_for_path(args.db).await?;
-    let mut conn = pool.acquire().await?;
-    schema::ensure_schema(&mut conn).await?;
-    crate::db::account_profile::ensure_account_row(&mut conn, args.account_id).await?;
-
-    let session = OwnedSession::start(
-        &mut conn,
-        args.account_id,
-        args.source,
-        args.mode,
-        "message-crate-server",
-    )
-    .await?;
-    let result = import_jsonl_files_on_conn(
-        &mut conn,
-        &paths,
-        &ImportOptions::fixed(FixedImportArgs {
-            assets_dir: args.assets_dir,
-            asset_root: args.export_dir,
-            mode: args.mode,
-            source: args.source,
-            account_id: args.account_id,
-            fill_content_keys: true,
-            import_id: Some(session.id),
-        }),
-        ImportSchemaMode::AssumeReady,
-    )
-    .await;
-    session.finish(&mut conn, &result).await;
-    result
-}
-
 /// An import session this process opened for one run, as opposed to one a
 /// client (message-crate-push) owns and closes itself. Whoever starts one must
 /// finish it whatever the import does, so the Settings import table never
@@ -302,7 +236,7 @@ pub enum ImportSchemaMode {
 /// Test helper: open a configured database and run one import.
 ///
 /// Production paths use [`import_jsonl_files_on_conn`] on their own
-/// connection (HTTP serve, CLI import) or [`import_export`] (demo seed).
+/// connection (HTTP serve, CLI import, the Demo Account build).
 #[cfg(test)]
 pub(crate) async fn import_jsonl_files(
     db_path: &Path,

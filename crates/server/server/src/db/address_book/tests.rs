@@ -951,6 +951,48 @@ async fn a_new_contact_with_no_name_and_no_identity_is_refused_with_its_row() {
     );
 }
 
+/// A row with more fields than the header is malformed: a name holding a
+/// comma without quotes would otherwise move every later cell one column to
+/// the right.
+#[tokio::test]
+async fn a_row_with_more_fields_than_the_header_is_refused_with_its_row() {
+    let (mut conn, _pool, _dir) = account().await;
+    let ada = imported(
+        &mut conn,
+        "Ada Lovelace",
+        &[("phone", "phone", "+15550001111")],
+    )
+    .await;
+    join_group(&mut conn, ada, "Family").await;
+    let before = picture(&mut conn).await;
+    let text = file(&[&format!("{ada},Lovelace, Ada,,,,")]);
+    for mode in [LoadMode::Append, LoadMode::Edit] {
+        let reasons = refused(&mut conn, &text, mode).await;
+        assert_eq!(
+            reasons,
+            [
+                "row 2: has 7 fields where the header has 6; put a cell that holds a comma in double quotes"
+            ]
+        );
+        assert_eq!(picture(&mut conn).await, before, "the load wrote");
+    }
+}
+
+/// A spreadsheet can drop the empty cells at the end of a row. No column
+/// moves, so the missing cells read as blank.
+#[tokio::test]
+async fn a_row_with_fewer_fields_than_the_header_reads_the_missing_cells_as_blank() {
+    let (mut conn, _pool, _dir) = account().await;
+    let text = file(&["a,Ada", "a,,,phone,phone,+15555550100"]);
+    let counts = loaded(&mut conn, &text, LoadMode::Append).await;
+    assert_eq!(counts.contacts_created, 1);
+    let ada = contact_named(&mut conn, "Ada").await;
+    assert_eq!(
+        identities_of(&mut conn, ada).await,
+        ["phone/phone/+15555550100"]
+    );
+}
+
 /// A spreadsheet saves a byte-order mark, its own column order, and empty
 /// rows at the end. None of them is an error.
 #[tokio::test]

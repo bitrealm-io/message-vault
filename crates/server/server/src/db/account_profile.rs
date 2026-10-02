@@ -541,11 +541,14 @@ pub async fn insert_account(
     // because that generator would hand out 1 on an empty table, and 1 is
     // the owner. Ids below `FIRST_GENERATED_ACCOUNT_ID` belong to the accounts
     // the server makes itself; every other account takes the next id above
-    // both that floor and the highest id present, so a fixed id inserted
-    // later never lands on a row that already exists.
-    let highest: Option<i64> = sqlx::query_scalar("SELECT MAX(id) FROM accounts")
-        .fetch_one(&mut *conn)
-        .await?;
+    // both that floor and the highest id the table has ever held. The column
+    // is AUTOINCREMENT, so `sqlite_sequence` keeps that high mark after the
+    // row is deleted: a deleted account's id never passes to a new account,
+    // which would otherwise inherit any folder of files the delete left.
+    let highest: Option<i64> =
+        sqlx::query_scalar("SELECT seq FROM sqlite_sequence WHERE name = 'accounts'")
+            .fetch_optional(&mut *conn)
+            .await?;
     let id = highest.map_or(FIRST_GENERATED_ACCOUNT_ID, |highest| {
         highest.max(FIRST_GENERATED_ACCOUNT_ID - 1) + 1
     });
@@ -739,6 +742,28 @@ mod tests {
             insert_account(&mut conn, "dave", None, None).await.unwrap(),
             501
         );
+    }
+
+    /// A deleted account's id is never handed out again, because a folder of
+    /// its files can outlive the row and the next account must not inherit it.
+    #[tokio::test]
+    async fn the_id_of_a_deleted_account_is_not_handed_out_again() {
+        let fixture = crate::test_support::test_fixture().await;
+        let mut conn = fixture.conn().await;
+        let alice = insert_account(&mut conn, "alice", None, None)
+            .await
+            .unwrap();
+        let bob = insert_account(&mut conn, "bob", None, None).await.unwrap();
+        delete_account(&mut conn, bob).await.unwrap();
+        let carol = insert_account(&mut conn, "carol", None, None)
+            .await
+            .unwrap();
+        assert!(carol > bob, "carol got {carol}, after bob's {bob}");
+        // With every generated account gone, the next id still climbs.
+        delete_account(&mut conn, carol).await.unwrap();
+        delete_account(&mut conn, alice).await.unwrap();
+        let dave = insert_account(&mut conn, "dave", None, None).await.unwrap();
+        assert!(dave > carol, "dave got {dave}, after carol's {carol}");
     }
 
     #[tokio::test]

@@ -1,6 +1,7 @@
 import { type ReactNode, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { apiErrorMessage } from "../lib/apiErrorMessage";
+import { slugFromPath, slugPath } from "../lib/contactGroups";
 import { type NameCollection, useNameCollectionActions } from "../lib/nameCollection";
 import { Z_ROW_MENU } from "../lib/zLayers";
 import ConfirmDialog from "./ConfirmDialog";
@@ -79,6 +80,9 @@ export default function NavEntityList({
   const [deleteFor, setDeleteFor] = useState<string | null>(null);
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
+  // The slug of the set whose page is open, decoded, so a name with spaces
+  // or other escaped characters compares as itself.
+  const openSlug = slugFromPath(location.pathname, copy.routeBase);
 
   const create = async (name: string) => {
     if (collection.isReserved(name)) {
@@ -89,7 +93,7 @@ export default function NavEntityList({
     try {
       const created = await actions.create(name);
       setCreateOpen(false);
-      navigate(`${copy.routeBase}/${slug(created)}`);
+      navigate(slugPath(copy.routeBase, slug(created)));
     } catch (err) {
       setError(apiErrorMessage(err, copy.createError));
     }
@@ -104,8 +108,8 @@ export default function NavEntityList({
     try {
       const next = await actions.rename(from, to);
       setRenameFor(null);
-      if (location.pathname === `${copy.routeBase}/${slug(from)}`) {
-        navigate(`${copy.routeBase}/${slug(next)}`);
+      if (openSlug === slug(from)) {
+        navigate(slugPath(copy.routeBase, slug(next)));
       }
     } catch (err) {
       setError(apiErrorMessage(err, copy.renameError));
@@ -117,7 +121,7 @@ export default function NavEntityList({
     try {
       await actions.remove(name);
       setDeleteFor(null);
-      if (location.pathname === `${copy.routeBase}/${slug(name)}`) {
+      if (openSlug === slug(name)) {
         navigate(copy.fallbackRoute);
       }
     } catch (err) {
@@ -151,8 +155,8 @@ export default function NavEntityList({
           </button>
         ) : null}
         {names.map((name) => {
-          const href = `${copy.routeBase}/${slug(name)}`;
-          const active = location.pathname === href;
+          const href = slugPath(copy.routeBase, slug(name));
+          const active = openSlug === slug(name);
           const menuOpen = menuFor === name;
           return (
             <div key={name} className="relative w-full">

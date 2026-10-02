@@ -360,6 +360,18 @@ fn a_username_is_one_to_128_characters_of_a_known_set() {
     assert!(is_valid_username(&"a".repeat(128)), "128 is allowed");
     assert!(!is_valid_username(&"a".repeat(129)), "129 is not");
 
+    // The limit counts characters, not bytes. A Cyrillic letter is two bytes
+    // in UTF-8, so a byte count refused a 65-letter Cyrillic name with a
+    // message saying 1–128 characters.
+    assert!(
+        is_valid_username(&"д".repeat(128)),
+        "128 Cyrillic letters are allowed"
+    );
+    assert!(
+        !is_valid_username(&"д".repeat(129)),
+        "129 Cyrillic letters are not"
+    );
+
     // Surrounding whitespace is trimmed before the rule is applied, so a
     // pasted name with a trailing newline is accepted and stored trimmed.
     assert!(is_valid_username("  matt  "));

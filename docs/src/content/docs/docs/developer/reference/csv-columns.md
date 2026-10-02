@@ -30,7 +30,7 @@ CSV output contains one row per message. Conversation and export identity are re
 | `sender_display_name` | Sender name. Outgoing rows default to `Me` when an owner handle is known. |
 | `subject` | Message subject when present. |
 | `text` | Message body. |
-| `attachments_json` | JSON array with attachment path, original name, media type, and available file fingerprints and media details. |
+| `attachments_json` | JSON array with attachment path, original name, media type, and available file fingerprints and media details. An attachment whose file was not copied keeps its `size_bytes` and its `missing_reason` (`file_missing`, `too_large`, `not_copied`, or `convert_failed: <detail>`). |
 
 ## Source and owner
 
@@ -41,6 +41,7 @@ CSV output contains one row per message. Conversation and export identity are re
 | `export_tool_version` | Source version recorded by the importer. |
 | `owner_handle` | Phone number or email for the person whose backup was exported. |
 | `owner_display_name` | Display name for the owner. |
+| `message_owner_handle` | The owner's own address on this message: the one it was sent from or received at. Apple Messages records it per message, so one conversation can hold rows from a phone number and an Apple ID. Empty when the source records no owner per message, and `owner_handle` then stands for the row. |
 | `android_type` | Original Android SMS type or MMS box number, or empty for other sources. |
 | `source_fields_json` | Compact JSON containing source-specific fields that do not have shared columns. |
 

@@ -308,8 +308,7 @@ pub fn default_writer_count() -> usize {
 }
 
 /// Drain `units` through the write queue, fold the written/skipped counts
-/// into `report`, and return the `FormatSinkResult` the sink path would
-/// have produced. The shared tail of every exporter's queue arm.
+/// into `report`. The shared tail of every exporter's queue arm.
 pub fn drain_units(
     output_dir: &Path,
     units: Vec<ConversationUnit>,
@@ -479,9 +478,9 @@ pub fn drain_write_queue(
 /// Convert or compress the staged originals, once every writer is done.
 ///
 /// Writers stage originals and nothing else, so this is where convert and
-/// compress actually happen. Running it as its own pass buys the CLI what the
-/// desktop already had: per-file commits, so an interruption keeps every
-/// derivative already finished, and progress worth printing.
+/// compress actually happen. Running it as its own pass gives per-file commits,
+/// so an interruption keeps every derivative already finished, and progress
+/// worth reporting.
 fn run_media_post_pass(
     output_dir: &Path,
     options: &WriteQueueOptions,

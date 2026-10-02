@@ -14,7 +14,7 @@ use anyhow::{Context, Result};
 
 use crate::report::{FileResult, PushReport, UploadProfile, elapsed_ms, format_profile_line};
 
-/// Events the GUI/CLI can show while a push is running.
+/// Events the desktop app can show while a push is running.
 #[derive(Debug, Clone)]
 pub enum ProgressEvent {
     /// One line for the log panel.
@@ -57,7 +57,7 @@ pub enum ProgressEvent {
     Finished(PushReport),
 }
 
-/// Callback type for live progress (GUI log panel, CLI stderr, tests).
+/// Callback type for live progress (desktop log panel, tests).
 pub type ProgressFn<'a> = dyn FnMut(ProgressEvent) + Send + 'a;
 
 /// How many finished conversations are grouped into one "files N/M …" log line.

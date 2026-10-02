@@ -52,7 +52,7 @@
 //! ## Tool availability and failure
 //!
 //! ffmpeg/ffprobe are probed once, before any document is touched — parity
-//! with `media::process_attachments_dir`. A missing pair fails the whole
+//! with `media::process_attachment_files`. A missing pair fails the whole
 //! pass; it must never brand every attachment `convert_failed: ffmpeg not
 //! found`. An attachment ffmpeg genuinely fails on, by contrast, is an
 //! item-level issue: `missing_reason` gets `convert_failed: <detail>` and the
@@ -80,7 +80,7 @@ const IN_PROGRESS_SUFFIX: &str = ".in_progress";
 /// Suffix on a committed derivative's stem, marking it as already converted.
 ///
 /// Staged attachment names come from `attachment_dest_name`
-/// (`{local-date}-{digest16}{ext}`), whose stem never ends in `-mv`: `m` and
+/// (`{utc-date}-{digest16}{ext}`), whose stem never ends in `-mv`: `m` and
 /// `v` are not hex digits. That makes this suffix an unambiguous "already
 /// done" marker no staged original can wear by coincidence.
 ///
@@ -157,7 +157,7 @@ pub fn transcode_staged(
     // A cancel already requested short-circuits before we even ask whether
     // the tools are there.
     check_cancel(cancel)?;
-    // Parity with `process_attachments_dir`: fail the whole pass up front
+    // Parity with `process_attachment_files`: fail the whole pass up front
     // when the tools are missing, rather than branding every attachment
     // `convert_failed: ffmpeg not found`.
     if !media::ffmpeg_available() {

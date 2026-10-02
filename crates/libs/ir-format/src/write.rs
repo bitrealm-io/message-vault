@@ -9,7 +9,7 @@ use message_ir::{ConversationDocument, ConversationHeader, IrImessage, IrMessage
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
-/// Unified CSV columns for every exporter (IR v3 projection).
+/// Unified CSV columns for every exporter (IR v4 projection).
 ///
 /// Apple-only cells are empty for non-iMessage sources. Legacy names
 /// (`date_ms`, `contact_name`, `xml_fields_json`) are gone — use

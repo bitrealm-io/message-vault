@@ -94,7 +94,9 @@ pub struct PushConfig {
     pub input: PathBuf,
     /// Server base URL, e.g. `http://127.0.0.1:8080`.
     pub base_url: String,
-    /// Account username, recorded in the report and progress events.
+    /// Account username. The run never reads it: the report and progress
+    /// events carry the username the server reports at login, else the
+    /// account id.
     pub username: String,
     /// API token or session token for the server.
     pub key: String,
@@ -105,12 +107,12 @@ pub struct PushConfig {
     /// Text-only import: do not upload or attach media.
     pub skip_attachments: bool,
     /// If true, always re-hash files and fail when the export's claimed sha256
-    /// does not match the bytes on disk.
+    /// does not match the bytes on disk. Overrides `trust_export`.
     ///
-    /// If false (default), trust a SHA-256 fingerprint already written in the
-    /// JSON Lines file when it is present. That skips a slow full-file hash for
-    /// every attachment. Files with an empty digest are still hashed. A path
-    /// cache avoids hashing the same file twice when several chats share it.
+    /// If false (default), files are still hashed from disk unless
+    /// `trust_export` skips them, and a mismatch is a warning: the disk hash is
+    /// used. A path cache avoids hashing the same file twice when several chats
+    /// share it.
     pub verify_digests: bool,
     /// If true, skip re-hashing attachments when the JSON Lines `size_bytes` matches
     /// the file size on disk. Default remains full verification of every file.

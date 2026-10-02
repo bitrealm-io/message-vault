@@ -53,7 +53,7 @@ fn text_string_drops_the_quote_byte_and_needs_a_nul() {
 
 #[test]
 fn encoded_string_reads_a_charset_and_checks_its_length() {
-    // Value-length 5: charset UTF-8 (0xea), "hi", NUL — as a phone writes a To.
+    // Value-length 4: charset UTF-8 (0xea), "hi", NUL — as a phone writes a To.
     let mut c = cur(&[0x04, 0xea, b'h', b'i', 0x00, 0x97]);
     assert_eq!(
         encoded_string(&mut c).unwrap(),

@@ -133,8 +133,8 @@ impl Session {
     ///
     /// # Errors
     ///
-    /// Returns an error for a bad key (401), a username that does not match
-    /// the key (403), or any other failure.
+    /// Returns an error for a bad key (401), a key the server refuses for
+    /// this route (403), or any other failure.
     pub(crate) fn head_asset(&self, source: &str, sha256: &str) -> Result<bool> {
         let url = self.asset_url(source, &[sha256])?;
         let response = self

@@ -73,7 +73,8 @@ pub fn estimate_bytes(
     (size_bytes as f64 * scale * factor).round() as u64
 }
 
-/// Classify one file, probing it first when it is close enough to matter.
+/// Classify one file, using the caller's `probe` when it has one. The caller
+/// decides whether to probe ([`needs_probe`]).
 ///
 /// `ext` is matched case-insensitively (normalized internally), so callers
 /// may pass it exactly as read from a file name.

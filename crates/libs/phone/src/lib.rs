@@ -16,7 +16,7 @@ use sha2::{Digest, Sha256};
 /// Rejects junk like `"4"` or `"06"`.
 const MIN_PHONE_DIGITS: usize = 4;
 
-/// Region rules for [`normalize_checked`] (contacts validation only).
+/// Region rules for [`normalize_checked`] and [`normalize_guarded`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PhoneRegion {
     /// US NANP: certain only for 10 digits or 11 digits starting with `1`.
@@ -112,9 +112,8 @@ pub fn sanitize_phone_shaped(value: &str) -> Option<String> {
 /// reason it is not.
 ///
 /// Unlike [`sanitize_number`], this does **not** accept short codes or
-/// ambiguous lengths. Contacts validation uses this before rewriting files.
-/// The error strings are fixed so the validate log groups failures under one
-/// header per reason.
+/// ambiguous lengths. [`normalize_guarded`] calls it and keeps the error
+/// string as the review note the server shows.
 ///
 /// # Errors
 ///

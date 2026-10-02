@@ -29,7 +29,7 @@ pub trait MergedArchive: std::fmt::Debug + Send {
 /// [`MergedArchive`] when the caller supplied one.
 ///
 /// Documents are buffered until [`finish`](Self::finish), which applies
-/// attachment media transforms and obfuscation, then projects all chats.
+/// obfuscation, then projects all chats.
 #[derive(Debug)]
 pub struct FormatSink {
     output_dir: PathBuf,
@@ -154,11 +154,11 @@ impl FormatSink {
         Ok(())
     }
 
-    /// Apply media and obfuscation transforms, then write all buffered documents.
+    /// Apply the export transforms, then write all buffered documents.
     ///
-    /// For EML, MBOX, and a merged archive, media is transformed then
-    /// embedded. The staged `attachments/` directory is removed so the output
-    /// folder holds only the archive.
+    /// For EML, MBOX, and a merged archive, attachment bytes are embedded.
+    /// The staged `attachments/` directory is removed so the output folder
+    /// holds only the archive.
     ///
     /// Folds the obfuscated-document count into `report`. Convert and
     /// compress ran in the staging step before documents reached the sink,

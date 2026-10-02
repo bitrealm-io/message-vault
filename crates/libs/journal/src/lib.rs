@@ -85,8 +85,8 @@ pub fn load_events<E: DeserializeOwned>(
 /// [`append`] either lands before the read or after the rewrite, never between
 /// them.
 ///
-/// Corrupt lines are skipped silently during the read, matching both CLI
-/// crates' compaction behavior.
+/// Corrupt lines are skipped silently during the read, in the push journal
+/// and the pull journal alike.
 ///
 /// # Errors
 ///
@@ -100,8 +100,7 @@ where
     let _guard = JOURNAL_WRITE_LOCK
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    // Corrupt lines are skipped silently, matching both CLI crates'
-    // compaction behavior.
+    // Corrupt lines are skipped silently.
     let events = load_events::<E>(label, path, &mut |_, _| {})?;
     let events = rebuild(events);
     write_unlocked(path, &events)

@@ -1,7 +1,7 @@
 //! Upload a folder of conversation files into the Message Crate HTTP server.
 //!
 //! Each conversation is a JSON Lines file (one JSON object per line). The
-//! `message-crate-push` command and the desktop app's Import screen both call this crate.
+//! desktop app's Import screen calls this crate.
 //!
 //! Module map:
 //! - [`run`] — configuration, login, and the main loop that ties the rest together.

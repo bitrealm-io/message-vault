@@ -1,4 +1,5 @@
-//! Media convert/compress and obfuscation applied before writing files.
+//! Obfuscation, and dropping attachment paths when media is disabled, applied
+//! before writing files.
 
 use anyhow::Result;
 use media::MediaMode;

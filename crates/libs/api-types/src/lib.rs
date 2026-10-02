@@ -363,7 +363,7 @@ api_shape! {
         pub guid: Option<String>,
         /// The instant the message was sent: RFC 3339 in UTC with a `Z`
         /// suffix. A caller shows it in the account's time zone
-        /// (`AccountProfileResponse.time_zone`); the database stores nothing
+        /// (`Account.time_zone`); the database stores nothing
         /// about where the phone was.
         pub timestamp: String,
         /// Ordering key within the conversation.

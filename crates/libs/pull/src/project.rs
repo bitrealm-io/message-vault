@@ -239,8 +239,8 @@ fn parse_timestamp_unix_ms(raw: &str) -> Result<i64> {
         // Heuristic: seconds vs millis.
         // Any numeric value below 10^10 is a seconds timestamp (year 2286 in
         // seconds, well beyond any real SMS data). Values at or above 10^10
-        // are millisecond timestamps (1973-03-03 in ms, still before SMS but
-        // close enough that real data won't hit the ambiguity).
+        // are millisecond timestamps (10^10 ms is 1970-04-26, long before any
+        // SMS, so real data won't hit the ambiguity).
         return Ok(if ms.abs() < 10_000_000_000 {
             ms.saturating_mul(1000)
         } else {
@@ -274,10 +274,10 @@ mod tests {
     /// attachment with no byte length, and a participant the source named
     /// without recording an address, whose `handle` and `service` are `null`.
     ///
-    /// This is a string literal on purpose. Every fixture in this module
-    /// builds the mirror types in Rust, which is what let three of them drift
-    /// away from the shape they mirror without the compiler or the suite
-    /// noticing: `handle: String` rejected `"handle": null` and aborted every
+    /// This is a string literal on purpose. Every other fixture in this module
+    /// builds the `message_crate_api_types` shapes in Rust, which is what let
+    /// three of them drift away from what the server sends without the
+    /// compiler or the suite noticing: `handle: String` rejected `"handle": null` and aborted every
     /// pull of a conversation holding an address-less participant, and
     /// `conversation.service` read a field the server has never sent, so every
     /// pulled message came out `IrService::Unknown`.

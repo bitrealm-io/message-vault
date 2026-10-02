@@ -35,7 +35,9 @@ pub struct PullConfig {
     pub out_dir: PathBuf,
     /// Server base URL, e.g. `http://127.0.0.1:8080`.
     pub base_url: String,
-    /// Account username, recorded in the journal and progress events.
+    /// Account username. The run never reads it: the journal and progress
+    /// events carry the username the server reports at login, else the
+    /// account id.
     pub username: String,
     /// API token or session token for the server.
     pub key: String,
@@ -78,7 +80,7 @@ pub struct PullReport {
     pub out_dir: String,
 }
 
-/// Live progress sent to the CLI or desktop app during a query or download.
+/// Live progress sent to the desktop app during a query or download.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProgressEvent {
     /// One line for the log panel.
@@ -101,7 +103,7 @@ pub enum ProgressEvent {
     Done(PullReport),
 }
 
-/// Callback type for live progress (CLI stderr, desktop log panel, tests).
+/// Callback type for live progress (desktop log panel, tests).
 pub type ProgressFn<'a> = dyn FnMut(ProgressEvent) + 'a;
 
 /// Send one event to the caller's progress callback when it supplied one.

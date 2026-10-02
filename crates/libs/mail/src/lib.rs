@@ -338,7 +338,7 @@ fn write_mboxrd_record(writer: &mut impl Write, msg: &MailMessage) -> Result<()>
     writeln!(writer, "From {envelope} {asctime}").context("write mbox From_ line")?;
 
     let text = String::from_utf8_lossy(&eml);
-    // Convert CRLF to LF. Strip a single trailing newline so the writer
+    // Convert CRLF to LF. Strip every trailing CR and LF so the writer
     // can add the mbox record separator.
     let body = text.trim_end_matches(['\r', '\n']);
     for line in body.split('\n') {
@@ -440,7 +440,8 @@ fn synthetic_address(handle: &str, display_name: Option<&str>) -> Address<'stati
     Address::new_address(name, email)
 }
 
-/// The owner's address: their handle (or `me`) with the display name `Me`.
+/// The owner's address: their handle (or `me`) with their display name (or
+/// `Me`).
 fn owner_address(msg: &MailMessage) -> Address<'static> {
     let handle = msg.owner_handle.trim();
     let handle = if handle.is_empty() { "me" } else { handle };
@@ -840,7 +841,8 @@ fn mail_subject(msg: &MailMessage) -> String {
     format!("Message with {with}")
 }
 
-/// Who the subject names: the group title (or member list), or the peer.
+/// Who the subject names: the group title (else the chat id, else `group`),
+/// or the peer.
 fn conversation_subject_label(msg: &MailMessage) -> String {
     if msg.conversation_type.eq_ignore_ascii_case("group") {
         if let Some(t) = msg.group_title.as_deref().and_then(message_ir::trimmed) {

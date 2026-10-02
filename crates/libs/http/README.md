@@ -5,9 +5,9 @@ talk to a Message Crate server. Calls block so they can run on worker threads
 without an async runtime.
 
 One `HttpSession` carries the connection pool; `auth_check` performs the login
-probe; `ok_json` reads every server answer, turning a failure into the server's
-own `{error}` sentence rather than a status code; and `classify_retry` decides
-which failures are worth trying again.
+probe; `ok_json` reads every server answer, turning a failure into the `detail`
+sentence of the server's RFC 7807 problem document rather than a status code;
+and `classify_retry` decides which failures are worth trying again.
 
 `message-crate-push` and `message-crate-pull` use this crate, and the desktop app reaches
 `AuthError` through their re-exports.

@@ -77,8 +77,9 @@ pub struct AttachmentBlob {
 /// Serde-tagged raw source bag (`kind: sms|mms`) preserved for write-back.
 ///
 /// `Deserialize` recovers the bag from an IR message's `source.fields` on the
-/// write-back path (`ir-format`'s SBR writer); `parts`/`addrs` default to
-/// empty so a bag written without them still parses.
+/// write-back path (`sms-backup-restore-exporter`'s SBR writer);
+/// `parts`/`addrs` default to empty so a bag written without them still
+/// parses.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind")]
 pub enum SourceFields {
@@ -877,8 +878,8 @@ pub fn infer_owner_phones(path: &Path) -> Result<Vec<String>> {
                         if get(&a, "type").trim() == MMS_ADDR_FROM {
                             let raw = get(&a, "address");
                             if !raw.eq_ignore_ascii_case(INSERT_ADDRESS_TOKEN)
-                                // Guarded (US-digit form, matching
-                                // OwnerPhoneSet): never a fabricated `+0…`.
+                                // Guarded US-digit form
+                                // (`normalize_digits_us`): never a fabricated `+0…`.
                                 && let Some(normalized) = phone::normalize_digits_us(raw)
                             {
                                 *counts.entry(normalized).or_default() += 1;

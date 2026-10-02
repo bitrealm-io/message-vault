@@ -1,4 +1,4 @@
-# message-contacts
+# contacts
 
 Parses a vCard (VCF) file into cards: names, phone numbers, email and categories.
 

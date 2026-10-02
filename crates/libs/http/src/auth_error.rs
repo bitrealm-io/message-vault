@@ -207,7 +207,7 @@ impl AuthError {
         }
     }
 
-    /// Technical detail for the Log tab / CLI.
+    /// Technical detail for a log line or an error message.
     pub fn detail(&self) -> String {
         self.to_string()
     }

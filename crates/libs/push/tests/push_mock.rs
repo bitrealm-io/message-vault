@@ -101,7 +101,8 @@ fn mock_import_run(server: &MockServer, id: i64) -> httpmock::Mock<'_> {
     })
 }
 
-/// Push config that skips attachments, pointed at a mock server URL.
+/// Push config with no retries, pointed at a mock server URL. Attachments are
+/// not skipped (`skip_attachments: false`).
 fn text_only_config(dir: &Path, base_url: String) -> PushConfig {
     PushConfig {
         input: dir.to_path_buf(),
@@ -795,7 +796,7 @@ fn two_attachment_docs(
 }
 
 #[test]
-fn puts_two_new_assets_without_head() {
+fn puts_two_new_assets_after_one_preflight_head() {
     const A: &[u8] = b"new-asset-alpha";
     const B: &[u8] = b"new-asset-bravo";
 
@@ -1930,8 +1931,10 @@ fn mock_session(server: &MockServer) -> httpmock::Mock<'_> {
 /// messages the run sent, not the requests it made.
 ///
 /// Guards `with_retries` around the batch POST, which no other test drives
-/// end to end (every other config sets `max_retries: 0`). A regression that
-/// counts each attempt, or journals the batch on the failed try, fails here.
+/// end to end (every other config sets `max_retries: 0`, except
+/// `an_unreadable_2xx_answer_is_not_retried`, which checks that no retry
+/// happens). A regression that counts each attempt, or journals the batch on
+/// the failed try, fails here.
 #[test]
 fn a_batch_retried_after_a_503_is_counted_and_journaled_once() {
     let server = MockServer::start();

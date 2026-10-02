@@ -15,12 +15,13 @@ use serde::{Deserialize, Serialize};
 pub struct FileResult {
     /// File name relative to the input folder.
     pub file: String,
-    /// `ok`, `failed`, or `skipped`.
+    /// `ok`, `failed`, `skipped`, or `cancelled` (the run was stopped before
+    /// every message of the file was sent).
     pub status: String,
     /// The failure, when `status` is `failed`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
-    /// Messages sent to the server from this file.
+    /// Messages of this file the server accepted.
     pub messages: u64,
     /// Attachments this file refers to, uploaded or not.
     pub attachments: u64,
@@ -36,6 +37,18 @@ impl FileResult {
         Self {
             file: file.to_string(),
             status: "skipped".into(),
+            error: None,
+            messages: 0,
+            attachments: 0,
+            profile: None,
+        }
+    }
+
+    /// Result row for a conversation the run was stopped before taking up.
+    pub(crate) fn cancelled(file: &str) -> Self {
+        Self {
+            file: file.to_string(),
+            status: "cancelled".into(),
             error: None,
             messages: 0,
             attachments: 0,
@@ -103,6 +116,8 @@ pub struct PushReport {
     pub conversations_failed: u64,
     /// Files the journal said were already imported.
     pub conversations_skipped: u64,
+    /// Files the run was stopped before it finished sending.
+    pub conversations_cancelled: u64,
     /// Messages placed in HTTP import request bodies.
     #[serde(default)]
     pub messages_attempted: u64,
@@ -161,11 +176,13 @@ pub(crate) struct FileResultCounts {
     pub ok: u64,
     pub failed: u64,
     pub skipped: u64,
+    pub cancelled: u64,
     pub messages: u64,
     pub attachments: u64,
 }
 
-/// Count ok / failed / skipped conversations and sum messages and attachments.
+/// Count ok / failed / skipped / cancelled conversations and sum the messages
+/// and attachments of the ok ones.
 pub(crate) fn count_file_results(results: &[FileResult]) -> FileResultCounts {
     let mut counted = FileResultCounts::default();
     for result in results {
@@ -177,6 +194,7 @@ pub(crate) fn count_file_results(results: &[FileResult]) -> FileResultCounts {
             }
             "failed" => counted.failed += 1,
             "skipped" => counted.skipped += 1,
+            "cancelled" => counted.cancelled += 1,
             _ => {}
         }
     }
@@ -239,7 +257,7 @@ pub fn format_push_summary(report: &PushReport) -> String {
     format!(
         "==== Summary ====\n\
 Import {status}\n\
-Conversations: {} ok, {} failed, {} skipped ({} total)\n\
+Conversations: {} ok, {} failed, {} skipped, {} cancelled ({} total)\n\
 Messages: {}\n\
 Message accounting: {} attempted = {} new + {} deduped + {} failed\n\
 Assets: {} uploaded, {} skipped\n\
@@ -247,6 +265,7 @@ Elapsed: {} ({} ms)",
         report.conversations_ok,
         report.conversations_failed,
         report.conversations_skipped,
+        report.conversations_cancelled,
         report.conversations_total,
         report.messages,
         report.messages_attempted,
@@ -301,6 +320,7 @@ mod tests {
             conversations_ok: 10,
             conversations_failed: 0,
             conversations_skipped: 0,
+            conversations_cancelled: 0,
             messages_attempted: 100,
             messages_inserted: 90,
             messages_deduped: 10,
@@ -328,7 +348,9 @@ mod tests {
         let summary = format_push_summary(&report);
         assert!(summary.contains("==== Summary ===="));
         assert!(summary.contains("Import success"));
-        assert!(summary.contains("Conversations: 8 ok, 1 failed, 1 skipped (10 total)"));
+        assert!(
+            summary.contains("Conversations: 8 ok, 1 failed, 1 skipped, 0 cancelled (10 total)")
+        );
         assert!(summary.contains("Messages: 100"));
         assert!(
             summary.contains("Message accounting: 100 attempted = 90 new + 10 deduped + 0 failed")
@@ -388,9 +410,18 @@ mod tests {
             },
             FileResult::failed("b.jsonl", "boom"),
             FileResult::skipped("c.jsonl"),
+            FileResult::cancelled("d.jsonl"),
         ];
         let counted = count_file_results(&results);
-        assert_eq!((counted.ok, counted.failed, counted.skipped), (1, 1, 1));
+        assert_eq!(
+            (
+                counted.ok,
+                counted.failed,
+                counted.skipped,
+                counted.cancelled
+            ),
+            (1, 1, 1, 1)
+        );
         assert_eq!((counted.messages, counted.attachments), (5, 2));
     }
 }

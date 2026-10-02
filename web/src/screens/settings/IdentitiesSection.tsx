@@ -23,6 +23,24 @@ function profileIncludes(p: AccountProfile, handle: string, service: string): bo
   return p.phones.some((phone) => phonesMatch(handle, phone));
 }
 
+/**
+ * Whether `rows` hold `address` on `service`, however the address was typed.
+ *
+ * A removal is judged here rather than by `profile.phones`, because one number
+ * can be a Text message identity and a WhatsApp identity at once, and
+ * `profile.phones` lists it for each with no service.
+ */
+function listsIdentity(rows: Identity[], address: string, service: string): boolean {
+  const needle = address.trim().toLowerCase();
+  return rows.some(
+    (row) =>
+      row.service === service &&
+      (service === "email"
+        ? row.address.toLowerCase() === needle
+        : phonesMatch(address, row.address)),
+  );
+}
+
 /** The profile's own identities as placeholder rows, shown until the server lists them. */
 function placeholderRows(profile: AccountProfile): Identity[] {
   return [
@@ -100,10 +118,9 @@ export function IdentitiesSection({
     const { address, service } = removeTarget;
     setRemoveError("");
     try {
-      const updated = await updateProfile.mutateAsync({
-        remove_identities: [{ address, service }],
-      });
-      if (profileIncludes(updated, address, service)) {
+      await updateProfile.mutateAsync({ remove_identities: [{ address, service }] });
+      const { data } = await identities.refetch({ throwOnError: true });
+      if (listsIdentity(data?.items ?? [], address, service)) {
         throw new Error("The server did not remove that identity.");
       }
       setRemoveTarget(null);

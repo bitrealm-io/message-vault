@@ -322,7 +322,7 @@ pub fn default_participants(
     if participants.is_empty() && !convo.is_group && !chat_id.is_empty() {
         if convo.extra.contains_key(crate::CHAT_ID_IS_NAME) {
             // The source named this person and recorded no address for them,
-            // so the chat id is a stem of the name — not something to store
+            // so the chat id is made from the name — not something to store
             // as an identity.
             participants.push(IrParticipant {
                 handle: None,

@@ -12,7 +12,9 @@ This crate does not open `chat.db` itself. The library that parses it, `imessage
 cargo test -p imessage-ir-exporter
 ```
 
-The integration tests in `tests/helper_process.rs` build `imessage-reader` with cargo and run the exporter through the real process against a small `chat.db` they write themselves.
+The integration tests in `tests/helper_process.rs` and `tests/cancel.rs` build `imessage-reader` with cargo and run the exporter through the real process against a small `chat.db` they write themselves.
+`tests/cancel.rs` cancels a run while the reader is running and checks that the reader was killed.
+It runs on Unix only, because it lists child processes with `ps`.
 
 Workspace setup: [CONTRIBUTING.md](../../../CONTRIBUTING.md).
 

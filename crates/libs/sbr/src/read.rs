@@ -279,15 +279,21 @@ fn decode_body(raw: &str) -> String {
         .replace('\r', "\n")
 }
 
-/// The contact name from `contact_name` or `name`, when it is a real name.
-fn name_alias(attrs: &HashMap<String, String>) -> Option<String> {
-    let value = if get(attrs, "contact_name").is_empty() {
-        get(attrs, "name")
-    } else {
-        get(attrs, "contact_name")
-    };
-    let value = value.trim();
-    (!value.is_empty() && !value.eq_ignore_ascii_case("null")).then(|| value.to_string())
+/// The person a raw `contact_name` names, or `None` when it names nobody.
+///
+/// SMS Backup & Restore writes `null` or `(Unknown)` where the phone has no
+/// contact for the address, so an empty value and those two, compared without
+/// case, give no name. In a group the value is the members' names joined by
+/// `, `, which names the group rather than the sender, so a group gives no name.
+pub fn contact_name(raw: &str, kind: ConversationKind) -> Option<&str> {
+    if kind == ConversationKind::Group {
+        return None;
+    }
+    let value = raw.trim();
+    let placeholder = value.is_empty()
+        || value.eq_ignore_ascii_case("null")
+        || value.eq_ignore_ascii_case("(Unknown)");
+    (!placeholder).then_some(value)
 }
 
 /// The contact name as written: `contact_name`, else `name`.
@@ -547,7 +553,8 @@ fn parse_sms(attrs: &HashMap<String, String>, stats: &mut ParseStats) -> Option<
             return None;
         }
     };
-    let hint = name_alias(attrs);
+    let raw_name = raw_name(attrs);
+    let hint = contact_name(&raw_name, ConversationKind::Individual).map(String::from);
     Some(Record {
         chat_key: address.key().to_string(),
         conversation_kind: ConversationKind::Individual,
@@ -562,7 +569,7 @@ fn parse_sms(attrs: &HashMap<String, String>, stats: &mut ParseStats) -> Option<
         attachments: Vec::new(),
         message_kind: "sms",
         date_ms,
-        contact_name: raw_name(attrs),
+        contact_name: raw_name,
         android_type,
         source_fields: SourceFields::Sms {
             attrs: btree(attrs),
@@ -632,8 +639,9 @@ fn parse_mms(
     };
     let decoded: Vec<DecodedPartData> = parts.iter().map(|p| decode_part_data(&p.data)).collect();
     let (text_refs, image_refs) = smil_refs(parts, &decoded);
-    let hint = name_alias(attrs);
-    let conversation = MmsConversation::for_peers(peers, hint.clone());
+    let raw_name = raw_name(attrs);
+    let conversation = MmsConversation::for_peers(peers, &raw_name);
+    let hint = contact_name(&raw_name, conversation.kind).map(String::from);
     Some(Record {
         chat_key: conversation.chat_key,
         conversation_kind: conversation.kind,
@@ -648,7 +656,7 @@ fn parse_mms(
         attachments: attachments(parts, &decoded, &image_refs, stats),
         message_kind: "mms",
         date_ms,
-        contact_name: raw_name(attrs),
+        contact_name: raw_name,
         android_type: msg_box,
         source_fields: SourceFields::Mms {
             attrs: btree(attrs),
@@ -768,16 +776,18 @@ struct MmsConversation {
 }
 
 impl MmsConversation {
-    /// `peers` is sorted and non-empty; `hint` is the element's contact name,
-    /// which names the one peer of an individual conversation.
-    fn for_peers(mut peers: Vec<Handle>, hint: Option<String>) -> Self {
+    /// `peers` is sorted and non-empty; `raw_name` is the element's contact
+    /// name as written, which names the one peer of an individual
+    /// conversation and nobody in a group.
+    fn for_peers(mut peers: Vec<Handle>, raw_name: &str) -> Self {
         if peers.len() == 1 {
             let peer = peers.remove(0);
+            let name = contact_name(raw_name, ConversationKind::Individual).map(String::from);
             return Self {
                 chat_key: peer.key().to_string(),
                 kind: ConversationKind::Individual,
                 group_title: None,
-                participants: vec![(peer, hint)],
+                participants: vec![(peer, name)],
             };
         }
         let keys: Vec<&str> = peers.iter().map(Handle::key).collect();
@@ -1159,6 +1169,12 @@ mod tests {
         assert_eq!(null.sender_display_name, None);
         assert_eq!(null.subject, "");
 
+        // The app writes "(Unknown)" where the phone has no contact.
+        for unknown in ["(Unknown)", "(unknown)", " (UNKNOWN) "] {
+            let record = sms(&format!(r#"contact_name="{unknown}""#));
+            assert_eq!(record.sender_display_name, None, "{unknown:?}");
+        }
+
         let fallback = sms(r#"contact_name="" name="Alex" subject="""#);
         assert_eq!(fallback.sender_display_name.as_deref(), Some("Alex"));
         assert_eq!(fallback.contact_name, "Alex");
@@ -1409,5 +1425,29 @@ mod tests {
         let path = dir.path().join("smses.xml");
         std::fs::write(&path, r#"<smses><mms msg_box="2"><parts/><addrs><addr address="+447911123456" type="137"/></addrs></mms></smses>"#).unwrap();
         assert_eq!(infer_owner_phones(&path).unwrap(), vec!["+447911123456"]);
+    }
+
+    /// A group MMS's `contact_name` is the members' names joined by ", ", so
+    /// it names the group, not the sender.
+    #[test]
+    fn a_group_mms_contact_name_does_not_name_its_sender() {
+        let xml = br#"<smses><mms date="1" msg_box="1" address="+15555550101~+15555550102" contact_name="Ana, Lee"><parts><part ct="text/plain" text="hi"/></parts><addrs><addr address="+15555550102" type="137"/><addr address="+15555550101" type="151"/></addrs></mms></smses>"#;
+        let (records, _) = parse_reader(xml.as_slice(), None).unwrap();
+        assert_eq!(records[0].conversation_kind, ConversationKind::Group);
+        assert_eq!(records[0].sender_display_name, None);
+        assert!(
+            records[0]
+                .participants
+                .iter()
+                .all(|(_, name)| name.is_none())
+        );
+    }
+
+    #[test]
+    fn a_direct_mms_contact_name_names_its_peer_and_sender() {
+        let xml = br#"<smses><mms date="1" msg_box="1" address="+15555550101" contact_name="Sam"><parts><part ct="text/plain" text="hi"/></parts><addrs><addr address="+15555550101" type="137"/></addrs></mms></smses>"#;
+        let (records, _) = parse_reader(xml.as_slice(), None).unwrap();
+        assert_eq!(records[0].sender_display_name.as_deref(), Some("Sam"));
+        assert_eq!(records[0].participants[0].1.as_deref(), Some("Sam"));
     }
 }

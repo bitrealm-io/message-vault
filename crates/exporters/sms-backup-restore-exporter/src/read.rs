@@ -287,14 +287,11 @@ fn names_by_handle(conversation: &PendingConversation) -> HashMap<String, String
                 .entry(sender.clone())
                 .or_insert_with(|| name.to_string());
         }
-        if conversation.kind == ConversationKind::Individual {
-            let name = message.contact_name.trim();
-            if !name.is_empty() {
-                for (peer, _) in &conversation.participants {
-                    names
-                        .entry(peer.clone())
-                        .or_insert_with(|| name.to_string());
-                }
+        if let Some(name) = sbr::contact_name(&message.contact_name, conversation.kind) {
+            for (peer, _) in &conversation.participants {
+                names
+                    .entry(peer.clone())
+                    .or_insert_with(|| name.to_string());
             }
         }
     }
@@ -754,18 +751,28 @@ mod tests {
     }
 
     #[test]
-    fn a_group_sender_name_names_only_that_sender() {
+    fn a_placeholder_contact_name_names_nobody() {
+        for placeholder in ["null", "(Unknown)"] {
+            let docs = read_xml(&format!(
+                r#"<sms protocol="0" address="+15555550101" date="1400773261000" type="2" body="hi" contact_name="{placeholder}"/><sms protocol="0" address="+15555550101" date="1400773262000" type="1" body="hey" contact_name="{placeholder}"/>"#,
+            ));
+            assert_eq!(roster(&docs[0]), [("+15555550101", None)], "{placeholder}");
+            assert_eq!(docs[0].messages[1].sender_display_name, None);
+        }
+    }
+
+    /// A group MMS's `contact_name` is the members' names joined by ", ",
+    /// which names the group, so no participant takes it as a name.
+    #[test]
+    fn a_group_contact_name_names_no_sender() {
         let docs = read_xml(
-            r#"<mms date="1400773400000" msg_box="1" address="+15555550101~+15555550102~+15555550100" contact_name="Lee"><parts><part ct="text/plain" text="hi"/></parts><addrs><addr address="+15555550102" type="137"/><addr address="+15555550101" type="151"/><addr address="+15555550100" type="151"/></addrs></mms>"#,
+            r#"<mms date="1400773400000" msg_box="1" address="+15555550101~+15555550102~+15555550100" contact_name="Ana, Lee"><parts><part ct="text/plain" text="hi"/></parts><addrs><addr address="+15555550102" type="137"/><addr address="+15555550101" type="151"/><addr address="+15555550100" type="151"/></addrs></mms>"#,
         );
         assert_eq!(
             roster(&docs[0]),
-            [("+15555550101", None), ("+15555550102", Some("Lee"))]
+            [("+15555550101", None), ("+15555550102", None)]
         );
-        assert_eq!(
-            docs[0].messages[0].sender_display_name.as_deref(),
-            Some("Lee")
-        );
+        assert_eq!(docs[0].messages[0].sender_display_name, None);
     }
 
     #[test]

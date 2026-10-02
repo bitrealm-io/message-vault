@@ -50,7 +50,5 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
     // No summary wanted: the shared tail appends the summary unconditionally, so
     // keep only the media lines.
     report.check_media(config.media.mode.needs_tools())?;
-    Ok(RunResult {
-        messages: report.media_lines(),
-    })
+    Ok(RunResult::new(report.media_lines(), &report))
 }

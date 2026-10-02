@@ -60,10 +60,10 @@ export default function SourcesPanel({
             <div key={s.backup_name} className="mb-3 rounded bg-elevated p-2">
               <div className="text-[0.875rem] font-medium">{s.backup_name}</div>
               <div className="text-[0.75rem] text-muted">
-                {s.message_count.toLocaleString()} messages ({s.percentage}% of total)
+                {s.message_count.toLocaleString()} messages
               </div>
               <div className="text-[0.75rem] text-muted">
-                {s.unique_count.toLocaleString()} unique
+                {s.unique_count.toLocaleString()} unique ({s.percentage}% of unique messages)
               </div>
             </div>
           ))}

@@ -50,6 +50,19 @@ describe("searchTimeZones", () => {
     expect(ids("utc-10")).toContain("Pacific/Honolulu");
   });
 
+  it("offers a zone found by its own name as its own row", () => {
+    expect(ids("knox")).toContain("America/Indiana/Knox");
+    expect(ids("knox")).not.toContain("America/Chicago");
+    expect(ids("chicago")).toEqual(["America/Chicago"]);
+  });
+
+  it("offers each zone on one row, though tzdb lists some in two groups", () => {
+    // A repeated key leaves the combobox's collection broken.
+    const found = ids("/");
+    expect(found).toContain("Europe/Busingen");
+    expect(new Set(found).size).toBe(found.length);
+  });
+
   it("returns every row for an empty query and none for nonsense", () => {
     expect(searchTimeZones("  ")).toHaveLength(timeZoneChoices().length);
     expect(searchTimeZones("qqqzzz")).toEqual([]);
@@ -57,10 +70,17 @@ describe("searchTimeZones", () => {
 });
 
 describe("choiceForZone", () => {
-  it("maps another name for a zone to that zone's row", () => {
-    expect(choiceForZone("UTC").id).toBe("Etc/UTC");
-    expect(choiceForZone("US/Central").id).toBe("America/Chicago");
-    expect(choiceForZone("America/Indiana/Knox").id).toBe("America/Chicago");
+  it("finds the row a zone names", () => {
+    expect(choiceForZone("America/Chicago").label).toMatch(/Central Time/);
+  });
+
+  it("gives a zone that shares a row a row under its own name", () => {
+    // Knox shares Chicago's rules today, and kept Eastern time from 1991 to 2006.
+    expect(choiceForZone("America/Indiana/Knox")).toMatchObject({
+      id: "America/Indiana/Knox",
+      label: expect.stringMatching(/^\(UTC−0[56]:00\) America\/Indiana\/Knox$/),
+    });
+    expect(choiceForZone("UTC")).toMatchObject({ id: "UTC", label: "(UTC+00:00) UTC" });
   });
 
   it("gives a zone no row knows a row of its own", () => {

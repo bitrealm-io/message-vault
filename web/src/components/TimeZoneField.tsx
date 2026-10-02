@@ -28,7 +28,8 @@ const sectionHeaderClass =
  * both use. Typing narrows the rows by city, country, abbreviation, offset or
  * IANA name; with nothing typed, this browser's zone sits above the full list.
  *
- * `value` is the stored IANA name and `onChange` is given the picked row's.
+ * `value` is the stored IANA name and `onChange` is given the picked row's;
+ * "This browser" gives the zone exactly as the browser names it.
  * The field shows the picked row's label, and goes back to it when the person
  * leaves without picking.
  */

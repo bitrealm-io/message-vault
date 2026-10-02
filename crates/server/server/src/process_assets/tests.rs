@@ -25,7 +25,7 @@ const FRESH: OnDisk = OnDisk {
     derived_exists: false,
 };
 
-/// A pass over `assets_dir` for account `acc`, source `imessage`.
+/// A pass over `assets_dir` for account 7, source `imessage`.
 fn pass<'a>(
     opts: &'a ProcessAssetsOptions,
     work_dir: &'a Path,

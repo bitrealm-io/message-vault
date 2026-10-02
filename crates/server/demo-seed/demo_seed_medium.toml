@@ -16,7 +16,7 @@ first_middle_last = 0.02
 first_only = 0.02
 # Phone mix
 us_phones = 0.90
-# Small extras for UI exercises (beyond `count`)
+# Small extras for UI exercises (fractions of `count`)
 inactive_fraction = 0.02
 no_messages_fraction = 0.03
 multi_phone_fraction = 0.05
@@ -91,7 +91,7 @@ orphaned_messages = 6
 empty_individual = true
 empty_group = true
 
-# Dual backup sources: imessage (primary) + sms-backup-restore (Android XML-style).
+# Backup sources: imessage (primary), sms-backup-restore (Android XML-style), and whatsapp.
 [sources]
 # Share of 1:1 contacts (after overlap) that are Android-only.
 android_only_fraction = 0.12

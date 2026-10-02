@@ -1,4 +1,5 @@
-# Demo account identity used only by `reset-demo`.
+# Demo account identity, read only when the server builds the Demo Account
+# (`reset-demo`, `serve` on a new database, the Owner Home action).
 # Not copied into the runtime config.toml.
 
 [owner]

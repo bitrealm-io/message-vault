@@ -797,8 +797,8 @@ async fn the_same_words_from_two_group_members_are_never_near_duplicates() {
 // ---------------------------------------------------------------------------
 // Several conversations, handles, senders and attachments.
 //
-// The tests above use one 1:1 conversation and two messages. The ones below
-// build what a real database holds: 1:1 and group conversations, the same group
+// Most tests above use the one 1:1 conversation `setup_db` makes and two or
+// three messages. The ones below build what a real database holds: 1:1 and group conversations, the same group
 // under two chat identifiers (two exporters naming one group differently),
 // incoming group messages with a sender, and attachments.
 // ---------------------------------------------------------------------------

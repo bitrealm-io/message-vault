@@ -1,8 +1,9 @@
 //! Import message-ir JSONL into the database.
 //!
-//! The pipeline runs in three stages: `staging` parses JSONL files and writes
-//! staging rows, `promote` copies staging rows into the production tables, and
-//! `contact_name` links handles to contacts and merges display names.
+//! The pipeline runs in two stages: `staging` parses JSONL files and writes
+//! staging rows, and `promote` copies staging rows into the production tables.
+//! `staging` calls `contact_name` as it goes, to link handles to contacts and
+//! merge display names.
 //! The HTTP handlers for the `/v1/imports` routes, an Import Run and the
 //! batches posted into it, live at the end of this module.
 
@@ -190,7 +191,8 @@ pub struct ImportExportArgs<'a> {
 }
 
 /// Import every JSON Lines file (`*.jsonl`, one JSON object per line) under
-/// `args.export_dir` (CLI staging path — the temporary import area).
+/// `args.export_dir` (the demo seed's path — `reset_demo` imports the
+/// generated export directory through it).
 ///
 /// # Errors
 ///
@@ -291,7 +293,7 @@ impl OwnedSession {
 /// Whether import should run DDL/schema ensure on the connection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportSchemaMode {
-    /// CLI / one-shot: ensure the schema.
+    /// Tests: ensure the schema first.
     Ensure,
     /// HTTP serve hot path: schema already ensured on the warm connection.
     AssumeReady,
@@ -300,7 +302,7 @@ pub enum ImportSchemaMode {
 /// Test helper: open a configured database and run one import.
 ///
 /// Production paths use [`import_jsonl_files_on_conn`] on their own
-/// connection (HTTP serve) or [`import_export`] (CLI directory import).
+/// connection (HTTP serve, CLI import) or [`import_export`] (demo seed).
 #[cfg(test)]
 pub(crate) async fn import_jsonl_files(
     db_path: &Path,
@@ -722,8 +724,9 @@ pub(crate) struct CompleteImportResponse {
     pub(crate) bytes_uploaded: i64,
 }
 
-/// `GET /v1/imports`: a page, narrowed to one `status` when given. The one
-/// list with a filter parameter (`docs/architecture/http-api.md`): it has no search language.
+/// `GET /v1/imports`: a page, narrowed to one `status` when given. One of the
+/// two lists with a filter parameter, beside the Export Run list
+/// (`docs/architecture/http-api.md`): it has no search language.
 #[derive(Debug, Deserialize)]
 pub(crate) struct ListImportsQuery {
     #[serde(default)]

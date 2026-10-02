@@ -177,9 +177,9 @@ async fn contact_match_is_scoped_to_the_calling_account() {
     assert_eq!(response["items"], serde_json::json!(["+15550100"]));
 }
 
-/// A refusal reaches the person as a 400 carrying the sentence written
-/// for them, and a request that names no edit at all is refused the same
-/// way. Both went through a downcast on the error's type before
+/// A refusal reaches the person as a 422 Unprocessable Entity carrying the
+/// sentence written for them, and a request that names no edit at all is
+/// refused the same way. Both went through a downcast on the error's type before
 /// `ContactEditError` existed.
 #[tokio::test]
 async fn a_refused_contact_edit_answers_422_with_the_persons_sentence() {
@@ -1579,7 +1579,8 @@ async fn list_contacts_filters_has_messages_and_never_messaged() {
     assert_eq!(never.items[0].name, "Silent");
 }
 
-/// One received message in `conversation_id`, sent from `phone`'s handle at `ts`.
+/// One message in `conversation_id` at `ts`, with `phone`'s handle as its
+/// sender handle; `is_from_me` marks it as the owner's own.
 async fn insert_message_from(
     conn: &mut SqliteConnection,
     account: i64,

@@ -1,7 +1,8 @@
 # Message Crate demo dataset
 
 Generated message-ir JSONL bundle for local browsing without a real phone backup.
-`staging/` is written by `demo-seed` / `reset-demo` and is not stored in git.
+`staging/` is written by `demo-seed` and is not stored in git.
+`reset-demo` writes its bundle into a temporary directory instead.
 
 Three staging trees simulate separate backups:
 

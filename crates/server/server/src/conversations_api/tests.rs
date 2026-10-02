@@ -64,17 +64,13 @@ async fn conversation_list_takes_the_search_language() {
     assert_eq!(status, axum::http::StatusCode::OK);
 }
 
-/// A fixture with account `00000000-0000-4000-8000-0000000000c2` and one
-/// conversation (id 1) on a handle linked through the account profile,
-/// with one participant and one message.
+/// A fixture with account `alice` (id 101) and one conversation (id 1) on a
+/// handle linked through the account profile, with one participant and one
+/// message.
 ///
-/// The peer handle goes through `account_profile::link_account_handle`
-/// rather than `seed_conversation`, because the participant-naming query
-/// reads the `account_handles` link that call creates and
-/// `seed_conversation`'s bare `handles` insert does not make one; the
-/// `participants` row (`name_alias`) that query also reads has no
-/// counterpart in the seeder at all. So this stays as explicit SQL
-/// rather than using the shared seeder.
+/// The participant-naming query reads the `participants` row
+/// (`name_alias`), which has no counterpart in `seed_conversation`. So this
+/// stays as explicit SQL rather than using the shared seeder.
 async fn conversations_setup() -> (sqlx::SqlitePool, TestFixture, i64) {
     let fixture = test_fixture().await;
     let account = fixture.account_with_id(101, "alice").await;
@@ -429,7 +425,7 @@ async fn list_queries_enforce_search_limits() {
 }
 
 #[tokio::test]
-async fn malformed_boolean_queries_are_bad_requests_for_export() {
+async fn malformed_boolean_queries_are_invalid_search_queries_for_export() {
     let (pool, _fixture, account) = conversations_setup().await;
     let mut conn = pool.acquire().await.unwrap();
 
@@ -978,8 +974,9 @@ async fn sort_is_parsed_against_the_lists_keys() {
 async fn duplicate_only_threads_sort_last_in_either_date_direction() {
     // `last_message_at` is NULL for a thread whose every message is a
     // duplicate. Those threads are only listed under an `import:` filter,
-    // which is the one path where NULL ordering is observable — and the two
-    // engines disagree about it unless the query says where NULLs go.
+    // which is the one path where NULL ordering is observable — and SQLite
+    // sorts NULL first in an ascending order unless the query says where
+    // NULLs go.
     let fixture = test_fixture().await;
     let pool = fixture.state.db.clone();
     let account = 101_i64;

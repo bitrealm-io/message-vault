@@ -205,7 +205,6 @@ fn make_contact(
 /// Pick first-only, first-middle-last, or first-last from the configured shares.
 // The final `else` intentionally mirrors the first-last branch as a defensive
 // fallthrough for configs whose shares sum to less than 1.0.
-/// Pick a first, last, and display name for a persona, in one of the shapes real address books have.
 #[allow(clippy::if_same_then_else)]
 fn sample_name_shape(
     cfg: &SeedConfig,

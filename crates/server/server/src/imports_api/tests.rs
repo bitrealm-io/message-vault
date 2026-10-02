@@ -1121,9 +1121,9 @@ async fn a_group_chat_identifier_never_becomes_a_contact() {
 }
 
 /// `resolve_name_only_participant` returns `(None, None)` when the source
-/// recorded neither an address nor a name for a participant, but the
-/// insert that follows it in `staging.rs` runs unconditionally — so this
-/// pins that a participant record carrying neither still cannot reach the
+/// recorded neither an address nor a name for a participant, and
+/// `staging.rs` returns before the insert that follows it. This pins that a
+/// participant record carrying neither cannot reach the
 /// `participants` table with `handle_id` and `name_alias` both NULL, the
 /// shape `participant_names::load_for_conversations`'s COALESCE-to-`''`
 /// fallback assumes never exists.

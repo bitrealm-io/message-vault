@@ -363,8 +363,8 @@ impl<'a> World<'a> {
         let state = &shared.fixture.state;
         let mut conn = shared.fixture.conn().await;
         let hash = Some(password_hash());
-        // Ids of the call's own, because calls run side by side and the next
-        // free id is read and then written. They count down from the top, so
+        // Ids of the call's own, because every call adds its accounts to the
+        // one shared database. They count down from the top, so
         // the account the owner creates with the next free id never meets one.
         let alice = 10_000_000 - 2 * n as i64;
         let bob = alice + 1;

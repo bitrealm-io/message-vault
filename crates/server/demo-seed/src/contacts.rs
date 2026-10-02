@@ -1,4 +1,5 @@
-//! Writes the demo's address book and the small config files used by `reset-demo`.
+//! Writes the demo's address book and the small config files the server reads
+//! when it builds the Demo Account.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -16,10 +17,10 @@ const ADDRESS_BOOK_HEADER: &str = "contact_id,display_name,groups,service,handle
 ///
 /// The demo is built the way a person builds theirs. The three backups are
 /// imported first and carry no names for these people, so each arrives as an
-/// Unknown. `reset-demo` then loads this file, which names them: every
-/// contact here is a new one under a key of the file's own (`demo-1`,
-/// `demo-2`, ...), and its identities move to it from the Unknown the import
-/// made. A contact on WhatsApp lists its number once for each service, so the
+/// Unknown. The server's Demo Account build then loads this file, which names
+/// them: every contact here is a new one under a key of the file's own
+/// (`demo-1`, `demo-2`, ...), and its identities move to it from the Unknown
+/// the import made. A contact on WhatsApp lists its number once for each service, so the
 /// Unknown is left holding nothing and goes.
 ///
 /// # Errors
@@ -86,8 +87,9 @@ assets_converted_dir = "assets_converted"
 
 /// Write `seed.toml` with the demo account name, phone, and username.
 ///
-/// This file is only used by `reset-demo`. It is not copied into the running
-/// server config.
+/// The server reads this file only when it builds the Demo Account:
+/// `reset-demo`, `serve` on a new database, and the Owner Home action. It is
+/// not copied into the running server config.
 ///
 /// # Errors
 ///
@@ -95,7 +97,8 @@ assets_converted_dir = "assets_converted"
 pub fn write_seed_toml(config_dir: &Path) -> Result<()> {
     let path = config_dir.join("seed.toml");
     let body = format!(
-        r#"# Demo account identity used only by `reset-demo`.
+        r#"# Demo account identity, read only when the server builds the Demo Account
+# (`reset-demo`, `serve` on a new database, the Owner Home action).
 # Not copied into the runtime config.toml.
 
 [owner]

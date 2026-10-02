@@ -191,6 +191,35 @@ async fn the_chat_handle_falls_back_to_itself() {
     assert_eq!(loaded[0].contact_id, None);
 }
 
+/// A group's chat id names the conversation, not a person
+/// (`docs/architecture/contacts-identities-and-messages.md`, "A group
+/// conversation is not a person"), so a group with no participants rows has
+/// no participants rather than one named `chat1000000005`.
+#[tokio::test]
+async fn a_group_with_no_participants_rows_has_no_participants() {
+    let (pool, _dir) = crate::db::engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    let (conversation_id, _handle_id) = seed(&mut conn, "chat1000000005", None).await;
+    sqlx::query("UPDATE conversations SET conversation_type = 'group' WHERE id = $1")
+        .bind(conversation_id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM participants WHERE conversation_id = $1")
+        .bind(conversation_id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+
+    let loaded = load_for_conversations(&mut conn, &[conversation_id])
+        .await
+        .unwrap();
+    assert!(
+        loaded.get(&conversation_id).is_none_or(Vec::is_empty),
+        "the group's chat id is not a participant: {loaded:?}"
+    );
+}
+
 /// `participants.contact_id` is not consulted: only the link in
 /// `contact_handles` names someone, so naming a Contact renames them in
 /// every conversation at once.

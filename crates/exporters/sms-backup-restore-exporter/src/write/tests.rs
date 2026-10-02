@@ -88,7 +88,7 @@ fn pair(address: &str, addr_type: &str) -> (String, String) {
 }
 
 #[test]
-fn a_group_mms_keeps_its_addresses_names_and_attachment() {
+fn a_group_mms_keeps_its_addresses_and_attachment() {
     let mut doc = message_ir::testutil::sample_document("look");
     doc.conversation.chat_identifier = "chat-group".into();
     doc.conversation.conversation_type = IrConversationType::Group;
@@ -129,7 +129,9 @@ fn a_group_mms_keeps_its_addresses_names_and_attachment() {
     assert_eq!(incoming.direction, IrDirection::Incoming);
     assert_eq!(incoming.text, "look");
     assert_eq!(incoming.sender_handle.as_deref(), Some("+15555550102"));
-    assert_eq!(incoming.sender_display_name.as_deref(), Some("Lee"));
+    // A group MMS's `contact_name` names the group, so the reader takes no
+    // sender name from it.
+    assert_eq!(incoming.sender_display_name, None);
     assert_eq!(
         addrs(incoming),
         [
@@ -268,7 +270,7 @@ fn a_text_only_group_message_from_another_app_stays_in_its_group() {
     };
     assert_eq!(incoming.direction, IrDirection::Incoming);
     assert_eq!(incoming.sender_handle.as_deref(), Some("+15555550102"));
-    assert_eq!(incoming.sender_display_name.as_deref(), Some("Lee"));
+    assert_eq!(incoming.sender_display_name, None);
     assert_eq!(incoming.text, "who is in?");
     assert!(incoming.attachments.is_empty());
     assert_eq!(outgoing.direction, IrDirection::Outgoing);

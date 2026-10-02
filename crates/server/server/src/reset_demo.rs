@@ -459,7 +459,7 @@ async fn reset_prepared_bundle(
 ) -> Result<ResetPreparedStats> {
     let prepared = validate_prepared_bundle(bundle)?;
     let _operation_lock = crate::operation_lock::acquire_for_reset(&cfg.paths.db)?;
-    crate::operation_lock::clear_ready(&cfg.paths.db)?;
+    let mut ready = crate::operation_lock::ReadyWhileRebuilding::clear(&cfg.paths.db)?;
     let db_parent = parent_dir_or_cwd(&cfg.paths.db);
     fs::create_dir_all(db_parent)
         .with_context(|| format!("create database parent {}", db_parent.display()))?;
@@ -495,18 +495,21 @@ async fn reset_prepared_bundle(
         active_config: config_dest,
         prepared_config,
     };
-    install_reset_state_or_keep_work(&paths, db_work, data_work).await?;
-    crate::operation_lock::mark_ready(&cfg.paths.db)?;
+    install_reset_state_or_keep_work(&paths, db_work, data_work, &mut ready).await?;
+    ready.mark_ready()?;
     Ok(stats)
 }
 
 /// Swap the prepared state in. When the swap fails and its rollback left any
 /// of the previous state in the work directories, keep those directories on
-/// disk and name them in the error so nothing is lost.
+/// disk, name them in the error so nothing is lost, and leave `server.ready`
+/// removed, since the active state is not whole. Every other failure here
+/// leaves the previous state installed, and `ready` writes the marker back.
 async fn install_reset_state_or_keep_work(
     paths: &ResetPaths<'_>,
     db_work: tempfile::TempDir,
     data_work: tempfile::TempDir,
+    ready: &mut crate::operation_lock::ReadyWhileRebuilding,
 ) -> Result<()> {
     let Err(error) = install_reset_state(paths).await else {
         return Ok(());
@@ -516,6 +519,7 @@ async fn install_reset_state_or_keep_work(
         || data_work.path().join("previous-account").exists()
         || config_backup.exists();
     if previous_state_still_in_work {
+        ready.keep_cleared();
         let db_work = db_work.keep();
         let data_work = data_work.keep();
         return Err(error.context(format!(

@@ -202,7 +202,7 @@ Or, browser only (no Tauri):
 cd web && npm run dev        # http://localhost:5173, proxies /v1 to :8080
 ```
 
-`cargo tauri dev` uses the server on **127.0.0.1:8080** when one is running, so start `./scripts/run-dev.sh` first to work against the repository's `data/`. With nothing on that port the app starts its own server, built by `src-tauri/build.rs`, with its data in the app-data folder (`~/.local/share/app.messagecrate.desktop/data` on Linux), and stops it when the window closes.
+`cargo tauri dev` uses the server on **127.0.0.1:8080** when one is running, so start `./scripts/run-dev.sh` first to work against the repository's `data/`. With nothing on that port the app starts its own server, built by `src-tauri/build.rs`, with its data in `data-dev` in the app-data folder (`~/.local/share/app.messagecrate.desktop/data-dev` on Linux), and stops it when the window closes. The installed app keeps its data in `data` beside it, and a dev build never opens that folder, because a branch with another Schema Fingerprint would rebuild the installed app's database empty. **Open data folder** in a dev build opens `data-dev`.
 
 Do not run `npm run dev` and `cargo tauri dev` at the same time. Point the app at **http://127.0.0.1:8080** (not `localhost` — that can resolve to IPv6, which the server does not listen on). `web/` and `src-tauri/` usually reload; restart `cargo tauri dev` if they do not.
 

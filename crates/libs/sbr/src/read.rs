@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result, bail};
 use base64::Engine;
-use phone::sanitize_number;
+use phone::{OwnerHandleSet, sanitize_number};
 use quick_xml::{Reader, events::Event};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -12,7 +12,7 @@ use std::io::BufRead;
 use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
-use message_ir::valid_filename;
+use message_ir::{HandleType, valid_filename};
 
 const INSERT_ADDRESS_TOKEN: &str = "insert-address-token";
 const MMS_ADDR_FROM: &str = "137";
@@ -539,7 +539,7 @@ fn parse_mms(
     attrs: &HashMap<String, String>,
     parts: &[MmsPart],
     addrs: &[MmsAddr],
-    owners: &HashSet<String>,
+    owners: Option<&OwnerHandleSet>,
     stats: &mut ParseStats,
 ) -> Option<Record> {
     stats.mms_seen += 1;
@@ -622,12 +622,16 @@ fn mms_participants(attrs: &HashMap<String, String>, addrs: &[MmsAddr]) -> Vec<S
 /// sender sits in the `address` list is arbitrary: in that backup it is the
 /// first entry on 1,192 of 5,367 received group MMS, so "the first peer"
 /// would be wrong four times out of five.
-fn mms_sender(addrs: &[MmsAddr], peers: &[String], owners: &HashSet<String>) -> Option<String> {
+fn mms_sender(
+    addrs: &[MmsAddr],
+    peers: &[String],
+    owners: Option<&OwnerHandleSet>,
+) -> Option<String> {
     addrs
         .iter()
         .find(|a| a.addr_type == MMS_ADDR_FROM)
+        .filter(|a| !is_owner(owners, &a.address))
         .and_then(|a| sanitize_number(&a.address))
-        .filter(|d| !owners.contains(d))
         .or_else(|| match peers {
             [peer] => Some(peer.clone()),
             _ => None,
@@ -636,15 +640,20 @@ fn mms_sender(addrs: &[MmsAddr], peers: &[String], owners: &HashSet<String>) -> 
 
 /// The other parties: every participant number that is not the owner's,
 /// sorted and de-duplicated so the same group always gets the same key.
-fn mms_peers(participants: &[String], owners: &HashSet<String>) -> Vec<String> {
+fn mms_peers(participants: &[String], owners: Option<&OwnerHandleSet>) -> Vec<String> {
     let mut peers: Vec<String> = participants
         .iter()
+        .filter(|p| !is_owner(owners, p))
         .filter_map(|p| sanitize_number(p))
-        .filter(|p| !owners.contains(p))
         .collect();
     peers.sort();
     peers.dedup();
     peers
+}
+
+/// Whether an address is one of the owner's; with no owner given, none is.
+fn is_owner(owners: Option<&OwnerHandleSet>, address: &str) -> bool {
+    owners.is_some_and(|o| o.is_owner(address, HandleType::Phone))
 }
 
 /// The message text: the text parts the SMIL references, in its order, or
@@ -764,7 +773,7 @@ fn group_chat_key(peers: &[String]) -> String {
 /// or `on_record` returns an error.
 pub fn parse_file_with<F>(
     path: &Path,
-    owners: &HashSet<String>,
+    owners: Option<&OwnerHandleSet>,
     stats: &mut ParseStats,
     on_record: F,
 ) -> Result<()>
@@ -778,7 +787,7 @@ where
 /// Stream the XML, calling `on_record` for each SMS or MMS as it completes.
 fn parse_reader_with<R, F>(
     reader: R,
-    owners: &HashSet<String>,
+    owners: Option<&OwnerHandleSet>,
     stats: &mut ParseStats,
     mut on_record: F,
 ) -> Result<()>
@@ -850,7 +859,7 @@ where
 #[cfg(test)]
 fn parse_reader<R: BufRead>(
     reader: R,
-    owners: &HashSet<String>,
+    owners: Option<&OwnerHandleSet>,
 ) -> Result<(Vec<Record>, ParseStats)> {
     let mut records = Vec::new();
     let mut stats = ParseStats::default();
@@ -917,9 +926,9 @@ mod tests {
 
     #[test]
     fn group_mms_without_from_has_no_sender() {
-        let owners = HashSet::from(["5555550100".to_string()]);
+        let owners = OwnerHandleSet::from_phones(&["5555550100".to_string()]).unwrap();
         let xml = br#"<smses><mms date="1" msg_box="1" address="+15555550101~+15555550102~+15555550100"><parts><part ct="text/plain" text="hi"/></parts><addrs><addr address="+15555550101" type="151"/><addr address="+15555550102" type="151"/><addr address="+15555550100" type="151"/></addrs></mms></smses>"#;
-        let (records, _) = parse_reader(xml.as_slice(), &owners).unwrap();
+        let (records, _) = parse_reader(xml.as_slice(), Some(&owners)).unwrap();
         assert_eq!(records[0].conversation_kind, ConversationKind::Group);
         assert!(!records[0].is_from_me);
         assert_eq!(records[0].sender_digits, None);
@@ -927,9 +936,9 @@ mod tests {
 
     #[test]
     fn direct_mms_without_from_is_from_the_peer() {
-        let owners = HashSet::from(["5555550100".to_string()]);
+        let owners = OwnerHandleSet::from_phones(&["5555550100".to_string()]).unwrap();
         let xml = br#"<smses><mms date="1" msg_box="1" address="+15555550101~+15555550100"><parts><part ct="text/plain" text="hi"/></parts><addrs><addr address="+15555550101" type="151"/><addr address="+15555550100" type="151"/></addrs></mms></smses>"#;
-        let (records, _) = parse_reader(xml.as_slice(), &owners).unwrap();
+        let (records, _) = parse_reader(xml.as_slice(), Some(&owners)).unwrap();
         assert_eq!(records[0].conversation_kind, ConversationKind::Individual);
         assert_eq!(records[0].sender_digits.as_deref(), Some("5555550101"));
     }
@@ -937,7 +946,7 @@ mod tests {
     #[test]
     fn mms_text_part_without_a_name_keeps_its_text() {
         let xml = br#"<smses><mms date="1" msg_box="1" address="+15555550101"><parts><part ct="text/plain" text="hi"/></parts><addrs><addr address="+15555550101" type="137"/></addrs></mms></smses>"#;
-        let (records, _) = parse_reader(xml.as_slice(), &HashSet::new()).unwrap();
+        let (records, _) = parse_reader(xml.as_slice(), None).unwrap();
         assert_eq!(records[0].text, "hi");
     }
 
@@ -946,7 +955,7 @@ mod tests {
         let xml = format!(
             r#"<smses><mms date="1" msg_box="1" address="+15555550101"><parts>{parts}</parts><addrs><addr address="+15555550101" type="137"/></addrs></mms></smses>"#
         );
-        let (mut records, _) = parse_reader(xml.as_bytes(), &HashSet::new()).unwrap();
+        let (mut records, _) = parse_reader(xml.as_bytes(), None).unwrap();
         records.remove(0)
     }
 
@@ -996,7 +1005,7 @@ mod tests {
         let xml = format!(
             r#"<smses><mms date="1" msg_box="1" address="{address}"><parts><part ct="text/plain" text="hi"/></parts><addrs/></mms></smses>"#
         );
-        let (mut records, _) = parse_reader(xml.as_bytes(), &HashSet::new()).unwrap();
+        let (mut records, _) = parse_reader(xml.as_bytes(), None).unwrap();
         records.remove(0)
     }
 
@@ -1053,7 +1062,7 @@ mod tests {
     #[test]
     fn sms_body_is_decoded_and_normalized() {
         let xml = br#"<smses><sms protocol="0" address="+15555550101" date="1" type="1" body="Tom &amp;amp; Jerry&#13;&#10;line two&#13;three"/></smses>"#;
-        let (records, _) = parse_reader(xml.as_slice(), &HashSet::new()).unwrap();
+        let (records, _) = parse_reader(xml.as_slice(), None).unwrap();
         assert_eq!(records[0].text, "Tom & Jerry\nline two\nthree");
     }
 
@@ -1063,7 +1072,7 @@ mod tests {
             let xml = format!(
                 r#"<smses><sms protocol="0" address="+15555550101" date="1" type="1" body="hi" {attrs}/></smses>"#
             );
-            let (mut records, _) = parse_reader(xml.as_bytes(), &HashSet::new()).unwrap();
+            let (mut records, _) = parse_reader(xml.as_bytes(), None).unwrap();
             records.remove(0)
         };
         let named = sms(r#"contact_name="Sam" subject="Plans""#);
@@ -1117,7 +1126,7 @@ mod tests {
     #[test]
     fn parses_attachment_and_preserves_fields() {
         let xml = br#"<smses><mms date="1400773400000" msg_box="1" address="+15555550101" extra="x"><parts><part seq="0" ct="image/jpeg" name="pic.jpg" data="aGVsbG8="/></parts><addrs><addr address="+15555550101" type="137" charset="106"/></addrs></mms></smses>"#;
-        let (records, stats) = parse_reader(xml.as_slice(), &HashSet::new()).unwrap();
+        let (records, stats) = parse_reader(xml.as_slice(), None).unwrap();
         assert_eq!(stats.mms_seen, 1);
         assert_eq!(records[0].attachments[0].data.as_ref(), b"hello");
         let SourceFields::Mms {
@@ -1136,7 +1145,7 @@ mod tests {
     #[test]
     fn attachment_filename_is_content_addressed() {
         let xml = br#"<smses><mms date="1" msg_box="1" address="+15555550101"><parts><part ct="image/jpeg" name="first.jpg" data="aGVsbG8="/><part ct="image/jpeg" name="second.jpg" data="aGVsbG8="/></parts><addrs><addr address="+15555550101" type="137"/></addrs></mms></smses>"#;
-        let (records, _) = parse_reader(xml.as_slice(), &HashSet::new()).unwrap();
+        let (records, _) = parse_reader(xml.as_slice(), None).unwrap();
         assert_eq!(records[0].attachments.len(), 1);
         let attachment = &records[0].attachments[0];
         assert!(attachment.filename.starts_with(&attachment.digest_hex));
@@ -1160,7 +1169,7 @@ mod tests {
         .unwrap();
         let mut n = 0u32;
         let mut stats = ParseStats::default();
-        parse_file_with(&path, &HashSet::new(), &mut stats, |_| {
+        parse_file_with(&path, None, &mut stats, |_| {
             n += 1;
             Ok(())
         })
@@ -1173,7 +1182,7 @@ mod tests {
     #[test]
     fn skipped_bad_attachment_records_decode_error() {
         let xml = br#"<smses><mms date="1" msg_box="1" address="+15555550101"><parts><part ct="image/jpeg" name="pic.jpg" data="@@@not-base64@@@"/></parts><addrs><addr address="+15555550101" type="137"/></addrs></mms></smses>"#;
-        let (records, stats) = parse_reader(xml.as_slice(), &HashSet::new()).unwrap();
+        let (records, stats) = parse_reader(xml.as_slice(), None).unwrap();
         assert_eq!(stats.skipped_bad_attachment, 1);
         assert!(records[0].attachments.is_empty());
         let SourceFields::Mms { parts, .. } = &records[0].source_fields else {
@@ -1191,7 +1200,7 @@ mod tests {
         let xml = format!(
             r#"<smses><mms date="1" msg_box="1" address="+15555550101"><parts><part ct="application/smil" data="{smil}"/><part ct="image/jpeg" name="pic.jpg" data="aGVsbG8="/></parts><addrs><addr address="+15555550101" type="137"/></addrs></mms></smses>"#
         );
-        let (records, stats) = parse_reader(xml.as_bytes(), &HashSet::new()).unwrap();
+        let (records, stats) = parse_reader(xml.as_bytes(), None).unwrap();
         assert_eq!(stats.mms_seen, 1);
         assert_eq!(records[0].attachments.len(), 1);
         assert_eq!(records[0].attachments[0].data.as_ref(), b"hello");
@@ -1201,7 +1210,7 @@ mod tests {
         let xml = format!(
             r#"<smses><sms protocol="0" address="+15555550101" date="{date}" type="1" body="hi"/></smses>"#
         );
-        parse_reader(xml.as_bytes(), &HashSet::new()).unwrap()
+        parse_reader(xml.as_bytes(), None).unwrap()
     }
 
     #[test]
@@ -1263,15 +1272,14 @@ mod tests {
             .write_message(&crate::SbrMessage::sms(attrs))
             .unwrap();
         let path = writer.finish().unwrap();
-        let (records, _) =
-            parse_reader(std::fs::read(&path).unwrap().as_slice(), &HashSet::new()).unwrap();
+        let (records, _) = parse_reader(std::fs::read(&path).unwrap().as_slice(), None).unwrap();
         assert_eq!(records[0].text, "line1\nline2\ttab");
     }
 
     #[test]
     fn a_literal_line_break_in_an_attribute_is_kept() {
         let xml = b"<smses><sms protocol=\"0\" address=\"+15555550101\" date=\"1\" type=\"1\" body=\"line1\nline2\r\nline3\"/><mms date=\"2\" msg_box=\"1\" address=\"+15555550101\"><parts><part ct=\"text/plain\" text=\"part1\npart2\"/></parts><addrs><addr address=\"+15555550101\" type=\"137\"/></addrs></mms></smses>";
-        let (records, _) = parse_reader(xml.as_slice(), &HashSet::new()).unwrap();
+        let (records, _) = parse_reader(xml.as_slice(), None).unwrap();
         assert_eq!(records[0].text, "line1\nline2\nline3");
         assert_eq!(records[1].text, "part1\npart2");
     }

@@ -77,15 +77,15 @@ describe("formatUnixDate", () => {
 
 describe("formatIsoDateOnly", () => {
   it("returns null for empty input", () => {
-    expect(formatIsoDateOnly(null)).toBeNull();
-    expect(formatIsoDateOnly(undefined)).toBeNull();
+    expect(formatIsoDateOnly(null, "UTC")).toBeNull();
+    expect(formatIsoDateOnly(undefined, "UTC")).toBeNull();
   });
 
-  it("formats parseable ISO as UTC YYYY-MM-DD", () => {
-    expect(formatIsoDateOnly("2024-09-09T15:30:00.000Z")).toBe("2024-09-09");
+  it("formats parseable ISO as YYYY-MM-DD in the zone", () => {
+    expect(formatIsoDateOnly("2024-09-09T15:30:00.000Z", "UTC")).toBe("2024-09-09");
   });
 
   it("extracts leading date from unparseable strings", () => {
-    expect(formatIsoDateOnly("2024-09-09")).toBe("2024-09-09");
+    expect(formatIsoDateOnly("2024-09-09", "UTC")).toBe("2024-09-09");
   });
 });

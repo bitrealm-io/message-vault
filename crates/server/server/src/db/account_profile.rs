@@ -517,7 +517,7 @@ pub async fn account_ids_page(
     )
     .bind(OWNER_ACCOUNT_ID)
     .bind(limit as i64)
-    .bind(offset as i64)
+    .bind(i64::try_from(offset)?)
     .fetch_all(&mut *conn)
     .await?)
 }

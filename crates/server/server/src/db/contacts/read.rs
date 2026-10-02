@@ -227,7 +227,9 @@ pub async fn list_contacts_sorted(
     );
     let mut params = filter.params().to_vec();
     params.push(SqlParam::Int(limit as i64));
-    params.push(SqlParam::Int(offset as i64));
+    params.push(SqlParam::Int(
+        i64::try_from(offset).map_err(anyhow::Error::from)?,
+    ));
     let rows: Vec<ContactRow> = sqlx::query_as_with(&sql, bind_args(&params))
         .fetch_all(&mut *conn)
         .await?;

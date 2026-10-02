@@ -135,3 +135,16 @@ describe("MessageAttachments and previews", () => {
     expect(fetched()).toEqual({ sha256: "eee", source: "imessage", preview: true });
   });
 });
+
+describe("a video with no stored file", () => {
+  it("shows a file chip, as a photo with no digest does", () => {
+    render(
+      <MessageAttachments
+        message={message([
+          { original_name: "clip.mov", mime_type: "video/quicktime", sha256: null },
+        ])}
+      />,
+    );
+    expect(screen.getByText("clip.mov")).toBeInTheDocument();
+  });
+});

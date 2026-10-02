@@ -88,7 +88,7 @@ pub struct Account {
     pub can_delete: bool,
     /// Messages this account owns.
     pub message_count: i64,
-    /// Attachment bytes this account owns.
+    /// Attachment bytes this account stores, each stored file counted once.
     pub storage_bytes: i64,
 }
 
@@ -1061,7 +1061,7 @@ pub async fn delete_account_messages(
 /// What an account holds: counts, attachment bytes and the largest files.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct AccountStorage {
-    /// Attachment bytes, by original file size.
+    /// Attachment bytes, by original file size, each stored file counted once.
     pub total_bytes: i64,
     /// Attachment rows.
     pub attachment_count: i64,

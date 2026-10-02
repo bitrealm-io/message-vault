@@ -50,8 +50,10 @@ export type ActiveImportSession = {
  * The account's running Import Run, or null when there is none. At most one
  * runs at a time, so the first item of `status=running` is the one.
  */
-export async function getActiveImportSession(): Promise<ActiveImportSession | null> {
-  const session = (await listImports({ status: "running", limit: 1 })).items[0];
+export async function getActiveImportSession(
+  signal?: AbortSignal,
+): Promise<ActiveImportSession | null> {
+  const session = (await listImports({ status: "running", limit: 1 }, { signal })).items[0];
   if (!session) return null;
   return {
     ...session,

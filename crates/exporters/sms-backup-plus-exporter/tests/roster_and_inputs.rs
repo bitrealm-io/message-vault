@@ -235,6 +235,24 @@ fn files_under_duplicate_and_exclude_are_skipped() {
     assert_eq!(texts, vec!["Hello from Alice"]);
 }
 
+/// An input that sits under folders named `Duplicate`, `Exclude` or `.git`
+/// is still read, because only the folders below the input are skipped.
+///
+/// Testing every folder of the absolute path skipped the whole input and
+/// failed the run with "no .eml files".
+#[test]
+fn an_input_under_a_folder_named_duplicate_is_read() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let parent = tmp.path().join("Duplicate").join("Exclude").join(".git");
+    let input = input_with(&parent, &["flat_received.eml"]);
+    let out = tmp.path().join("out");
+
+    let report = convert(&input, &out);
+
+    assert_eq!(report.extra("flat_eml"), 1);
+    assert_eq!(report.messages, 1);
+}
+
 /// A JPEG part is one attachment with a `.jpg` name; the text part and the
 /// empty part beside it are not attachments, and a plain SMS has none.
 ///

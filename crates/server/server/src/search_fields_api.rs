@@ -9,7 +9,7 @@
 use crate::extract::{Json, Query};
 use serde::Deserialize;
 
-use crate::paging::{DEFAULT_LIST_LIMIT, Page, page_of, page_params};
+use crate::paging::{DEFAULT_LIST_LIMIT, MAX_LIST_OFFSET, Page, page_of, page_params};
 use crate::search::{FieldDoc, ListKind, describe};
 use crate::server::{ApiError, FullAccess};
 
@@ -19,7 +19,7 @@ pub(crate) struct ListSearchFieldsQuery {
     /// Page size, default 40, max 500.
     #[serde(default)]
     limit: Option<usize>,
-    /// Page offset.
+    /// Page offset, max 50000.
     #[serde(default)]
     offset: Option<usize>,
 }
@@ -29,7 +29,12 @@ fn search_fields(
     list: ListKind,
     query: &ListSearchFieldsQuery,
 ) -> Result<Page<FieldDoc>, ApiError> {
-    let params = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
+    let params = page_params(
+        query.limit,
+        query.offset,
+        DEFAULT_LIST_LIMIT,
+        Some(MAX_LIST_OFFSET),
+    )?;
     Ok(page_of(describe(list), params))
 }
 

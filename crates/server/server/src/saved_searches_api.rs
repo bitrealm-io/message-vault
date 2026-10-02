@@ -6,7 +6,7 @@
 //! changing field as the key.
 
 use crate::extract::{Json, Path, Query};
-use crate::paging::{DEFAULT_LIST_LIMIT, Page, PageQuery, page_of, page_params};
+use crate::paging::{DEFAULT_LIST_LIMIT, MAX_LIST_OFFSET, Page, PageQuery, page_of, page_params};
 use axum::extract::State;
 use axum::http::StatusCode;
 use serde::Deserialize;
@@ -29,7 +29,7 @@ pub(crate) struct SavedSearchRequest {
     security(("session" = [])),
     params(
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
-        ("offset" = Option<usize>, Query, description = "Page offset")
+        ("offset" = Option<usize>, Query, description = "Page offset, max 50000")
     ),
     responses(
         (status = 200, body = crate::paging::Page<SavedSearch>),
@@ -40,7 +40,12 @@ pub(crate) async fn list_saved_searches(
     FullAccess(auth): FullAccess,
     Query(query): Query<PageQuery>,
 ) -> Result<Json<Page<SavedSearch>>, ApiError> {
-    let params = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
+    let params = page_params(
+        query.limit,
+        query.offset,
+        DEFAULT_LIST_LIMIT,
+        Some(MAX_LIST_OFFSET),
+    )?;
     let mut conn = state.db.acquire().await?;
     let rows = saved_searches::list(&mut conn, auth.account_id).await?;
     Ok(Json(page_of(rows, params)))

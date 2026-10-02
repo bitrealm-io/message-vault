@@ -229,4 +229,20 @@ mod tests {
         msg.name_alias = Some("  José Ramírez \t".into());
         assert_eq!(chat_id_for(&msg), "José Ramírez");
     }
+
+    #[test]
+    fn verify_e3_1_two_group_senders_in_one_second_have_two_identities() {
+        let mut alice = sample_msg(
+            "15555550111_15555550122",
+            1_600_000_000.1,
+            false,
+            "Happy birthday!",
+        );
+        alice.conversation_type = "group".into();
+        alice.sender = phone::Handle::parse("15555550111");
+        let mut bob = alice.clone();
+        bob.timestamp_secs = 1_600_000_000.6;
+        bob.sender = phone::Handle::parse("15555550122");
+        assert_ne!(cover_identity(&alice), cover_identity(&bob));
+    }
 }

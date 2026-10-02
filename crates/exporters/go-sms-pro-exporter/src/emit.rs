@@ -926,4 +926,30 @@ mod tests {
         assert_eq!(msgs[0].attachments.len(), 1);
         assert_eq!(msgs[0].extra_str("source_kind"), "pdu");
     }
+
+    #[test]
+    fn verify_e1_5_two_group_senders_in_one_second_are_both_kept() {
+        let pdu = |sender: &str| ParsedPdu {
+            path: std::path::PathBuf::from(format!("I_1609459200_{sender}.pdu")),
+            timestamp: 1_609_459_200,
+            is_sent: false,
+            sender: Some(sender.into()),
+            recipients: vec!["15555550122".into(), "15555550133".into()],
+            body: "ok".into(),
+            attachments: Vec::new(),
+            fields: BTreeMap::new(),
+        };
+        let pending = |sender: &str| {
+            let parsed = pdu(sender);
+            let addresses = PduAddresses::of(&parsed);
+            pdu_pending_message(parsed, addresses.sender, Vec::new())
+        };
+        let mut msgs = vec![pending("15555550122"), pending("15555550133")];
+        dedupe_messages(&mut msgs);
+        assert_eq!(
+            msgs.len(),
+            2,
+            "Lee's message was dropped as a duplicate of Ana's"
+        );
+    }
 }

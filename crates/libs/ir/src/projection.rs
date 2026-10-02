@@ -603,4 +603,57 @@ mod tests {
         let (doc, _) = pending_to_document("+15555550122", &convo, &TestHooks);
         assert_ne!(doc.messages[0].guid, doc.messages[1].guid);
     }
+
+    #[test]
+    fn p1_1_two_senders_same_second_same_text_get_their_own_guids() {
+        let mut convo = PendingConversation::new("group-1", true, None, Vec::new());
+        let mut alice = msg(1_609_459_200, false, "lol");
+        alice.sender_handle = "+15555550122".into();
+        let mut bob = msg(1_609_459_200, false, "lol");
+        bob.sender_handle = "+15555550133".into();
+        convo.messages = vec![alice, bob];
+        let (doc, _) = pending_to_document("group-1", &convo, &TestHooks);
+        assert_eq!(doc.messages.len(), 2);
+        assert_ne!(
+            doc.messages[0].guid, doc.messages[1].guid,
+            "Alice's and Bob's 'lol' in the same second share one GUID"
+        );
+    }
+
+    /// Child half of the P1-2 test: prints the GUID under the process's TZ.
+    #[test]
+    #[ignore = "run by p1_2_guid_does_not_depend_on_the_computer_time_zone"]
+    fn p1_2_child_print_guid() {
+        let mut convo = PendingConversation::new("+15555550122", false, None, Vec::new());
+        convo.messages = vec![msg(1_609_459_200, false, "hi")];
+        let (doc, _) = pending_to_document("+15555550122", &convo, &TestHooks);
+        println!("GUID={}", doc.messages[0].guid);
+    }
+
+    #[test]
+    fn p1_2_guid_does_not_depend_on_the_computer_time_zone() {
+        let guid_in = |tz: &str| {
+            let out = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--ignored",
+                    "--exact",
+                    "projection::tests::p1_2_child_print_guid",
+                    "--nocapture",
+                ])
+                .env("TZ", tz)
+                .output()
+                .unwrap();
+            let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+            stdout
+                .lines()
+                .find_map(|l| l.strip_prefix("GUID=").map(str::to_string))
+                .expect("child printed a GUID")
+        };
+        let new_york = guid_in("America/New_York");
+        let london = guid_in("Europe/London");
+        assert_eq!(
+            new_york, london,
+            "the same message gets a different GUID in another time zone"
+        );
+    }
 }

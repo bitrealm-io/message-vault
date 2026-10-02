@@ -952,4 +952,13 @@ mod tests {
         );
         assert_eq!(docs[0].conversation.chat_identifier, "+447700900123");
     }
+
+    #[test]
+    fn verify_e1_4_two_group_senders_in_one_second_get_two_guids() {
+        let docs = read_xml(
+            r#"<mms date="1400773400100" msg_box="1" address="+15555550101~+15555550102~+15555550100"><parts><part ct="text/plain" text="lol"/></parts><addrs><addr address="+15555550101" type="137"/><addr address="+15555550102" type="151"/><addr address="+15555550100" type="151"/></addrs></mms><mms date="1400773400200" msg_box="1" address="+15555550101~+15555550102~+15555550100"><parts><part ct="text/plain" text="lol"/></parts><addrs><addr address="+15555550102" type="137"/><addr address="+15555550101" type="151"/><addr address="+15555550100" type="151"/></addrs></mms>"#,
+        );
+        assert_eq!(docs[0].messages.len(), 2, "the exporter keeps both");
+        assert_ne!(docs[0].messages[0].guid, docs[0].messages[1].guid);
+    }
 }

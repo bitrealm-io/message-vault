@@ -193,7 +193,7 @@ pub struct SourcesConfig {
 }
 
 impl SeedConfig {
-    /// Load settings from a TOML file and check that group-size ranges make sense.
+    /// Load settings from a TOML file and check them with [`Self::validate`].
     ///
     /// # Errors
     ///
@@ -224,12 +224,16 @@ impl SeedConfig {
         Ok(cfg)
     }
 
-    /// Check that the large-group size range sits inside the overall group size range.
+    /// Check that `labels.names` has four entries, that the name-shape shares
+    /// sum to at most 1.0, and that the large-group size range sits inside the
+    /// overall group size range.
     ///
     /// # Errors
     ///
-    /// Returns an error if the minimum is larger than the maximum, or if the
-    /// large-group range sticks out past the overall min or max.
+    /// Returns an error if `labels.names` does not have exactly four entries,
+    /// if the name-shape shares sum to more than 1.0, if the minimum is larger
+    /// than the maximum, or if the large-group range sticks out past the
+    /// overall min or max.
     pub fn validate(&self) -> Result<()> {
         if self.labels.names.len() != 4 {
             anyhow::bail!(

@@ -201,11 +201,10 @@ async fn account_rows_carry_no_message_content_fields() {
 // Creating an account
 // ---------------------------------------------------------------------------
 
-/// The owner picks a first password and the account holder replaces it, so
-/// the owner's choice survives one login and no longer. The owner's
-/// creation opens no session.
+/// The owner picks a first password and the account logs in with it. The
+/// account owes profile setup, and the owner's creation opens no session.
 #[tokio::test]
-async fn a_created_account_must_replace_the_password_the_owner_chose() {
+async fn a_created_account_logs_in_with_the_password_the_owner_chose() {
     let fixture = test_fixture().await;
     let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
@@ -232,7 +231,7 @@ async fn a_created_account_must_replace_the_password_the_owner_chose() {
     assert_eq!(
         login_status(&state, "carol", "hunter2hunter2").await,
         StatusCode::CREATED,
-        "the owner's password logs in once"
+        "the owner's password logs in"
     );
 }
 

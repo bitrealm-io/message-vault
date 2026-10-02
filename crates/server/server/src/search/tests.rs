@@ -984,10 +984,6 @@ mod free_text {
         }
     }
 
-    /// `messages:` on Contacts counts each conversation's messages in a
-    /// subquery that names no outer alias, so the engine computes it once
-    /// for the list. The earlier shape scanned every message of the
-    /// account again for each contact (#413).
     #[test]
     /// The Contacts words that count or date messages, the contact list's
     /// `last_heard_at`, and the contact drawer's count all read the one
@@ -1409,9 +1405,10 @@ mod like_characters {
     }
 }
 
-/// Free text on Messages goes to the full-text index, where `&`, `|`, `!`,
-/// `:`, `<`, `>`, quotes, and backslashes are query operators. None of that
-/// may reach the index: punctuation inside a word splits it into words that
+/// Free text on Messages goes to the FTS5 index, whose query syntax gives
+/// quotes, `*`, `:`, `^`, `+`, `-`, and parentheses a meaning and refuses
+/// other punctuation outside a quoted string. None of that may reach the
+/// index: punctuation inside a word splits it into words that
 /// must appear in that order, a word that is only punctuation or emoji finds
 /// nothing, and a NUL separates words like a space.
 mod index_characters {
@@ -2042,10 +2039,9 @@ mod kind_words {
 
     /// Pins the unchanged default: a Messages query that never mentions
     /// `trashed:` still leaves the trashed conversation's message out, even
-    /// one that matches the query on its own text. This must pass before
-    /// and after the Messages arm gets its `trashed:` gate — if it ever
-    /// goes red, the gate broke the default every Export and download
-    /// relies on.
+    /// one that matches the query on its own text. If it goes red, the
+    /// Messages arm's `trashed:` gate broke the default every Export and
+    /// download relies on.
     #[tokio::test]
     async fn messages_still_exclude_trash_by_default() {
         let (pool, _dir, f) = seeded().await;
@@ -2821,11 +2817,10 @@ mod docs {
 
     /// The words `api.md`'s bullets list, a bullet possibly naming several.
     ///
-    /// Only the bullets under the "Search operators" heading count. The page has
-    /// backticked `word:` bullets elsewhere — the two `Content-Type:` lines
-    /// under "Import body" — and reading the whole file would report them as
-    /// search words the language does not have, which is a confusing way for
-    /// this test to fail.
+    /// Only the bullets under the "Search operators" heading count. A
+    /// backticked `word:` bullet in another section, such as a header name,
+    /// would otherwise read as a search word the language does not have, which
+    /// is a confusing way for this test to fail.
     fn api_page_words() -> Vec<String> {
         API_PAGE
             .lines()
@@ -2872,7 +2867,7 @@ mod docs {
             .collect()
     }
 
-    /// The tour page names its search words in prose rather than in a table,
+    /// The Browse messages page names its search words in prose rather than in a table,
     /// so `the_page_lists_every_word_and_nothing_else` never read it. It told
     /// people to search `is:group` for years — an operator the language has
     /// never had. This is the check that would have caught it.
@@ -2881,13 +2876,13 @@ mod docs {
         let words = prose_words(BROWSE_PAGE);
         assert!(
             !words.is_empty(),
-            "browse-your-messages.md names no search word at all, so this test \
+            "browse.md names no search word at all, so this test \
              is no longer reading what it thinks it is"
         );
         for word in &words {
             assert!(
                 lookup(word).is_some(),
-                "browse-your-messages.md tells people to search {word}:, which \
+                "browse.md tells people to search {word}:, which \
                  the language does not have"
             );
         }

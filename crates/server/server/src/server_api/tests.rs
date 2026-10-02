@@ -641,7 +641,7 @@ async fn the_owner_reads_the_server_totals_summed_over_every_account() {
         totals.database_bytes
     );
     // A table that holds a row takes at least one page, and so does the
-    // search index over it. 4096 bytes is the smaller engine's page.
+    // search index over it. 4096 bytes is SQLite's default page size.
     assert!(
         totals.messages_bytes >= 4096,
         "messages_bytes {}",

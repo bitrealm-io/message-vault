@@ -87,7 +87,8 @@ async fn a_query_scope_takes_the_search_language() {
     got.sort_unstable();
     assert_eq!(got, vec![f.jane_avocado_from_me, f.sam_avocado_from_me]);
 
-    // A word the language does not have is a 400, not a text search.
+    // A word the language does not have is a 422 Unprocessable Entity, not a
+    // text search.
     let err = page(&mut conn, account, &query("sparkle:yes"), 50, 0)
         .await
         .unwrap_err();
@@ -103,7 +104,7 @@ async fn a_query_scope_takes_the_search_language() {
     );
 }
 
-/// A fixture with account `a1` (id 101) and two individual conversations
+/// A fixture with account `alice` (id 101) and two individual conversations
 /// (`+1555`, `+1666`), each holding one SMS message ("hello one" in the
 /// first, "hello two" in the second) with ids 1 and 2. Returns the
 /// conversation ids the seeder made.

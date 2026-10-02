@@ -35,8 +35,8 @@ fn assert_stats_match_the_seed(stats: &GenStats, cfg: &SeedConfig) {
         stats.groups
     );
 
-    // One file per one-to-one conversation plus one per group, and no contact
-    // has more than one one-to-one conversation.
+    // At least one file per group, and at most one per contact plus one for
+    // each group the seed could make.
     assert!(
         stats.conversation_files >= stats.groups,
         "every group has a file"
@@ -47,9 +47,11 @@ fn assert_stats_match_the_seed(stats: &GenStats, cfg: &SeedConfig) {
         stats.conversation_files
     );
 
-    // Every conversation carries at least the minimum the seed sets, so a
-    // generator that quietly wrote empty conversations fails here. The two
-    // deliberate empties from `[edge_cases]` are the exception.
+    // The messages add up to at least the seed's minimum for every
+    // conversation, so a generator that quietly wrote empty conversations
+    // fails here. The bound is on the total, because an unassigned
+    // conversation may hold fewer. The two deliberate empties from
+    // `[edge_cases]` are left out of the count.
     let non_empty = stats.conversation_files.saturating_sub(2);
     let least = non_empty * cfg.one_to_one.min_per_year as usize;
     assert!(

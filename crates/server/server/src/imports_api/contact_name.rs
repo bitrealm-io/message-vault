@@ -121,7 +121,7 @@ pub(super) struct IncomingSender<'a> {
     /// The address's type when the source stated it; inferred from the
     /// address's shape when it did not.
     pub handle_type: Option<HandleType>,
-    /// Platform service the message arrived on, e.g. `imessage`.
+    /// Platform the message arrived on: `phone` or `whatsapp`.
     pub platform: &'a str,
 }
 

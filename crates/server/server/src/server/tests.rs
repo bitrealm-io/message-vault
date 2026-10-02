@@ -701,9 +701,9 @@ async fn a_second_session_is_refused_with_conflict() {
     let ApiError::StateConflict(message) = &err else {
         panic!("expected StateConflict, got {err:?}");
     };
-    // The 409 has to name the way out: the only place a stranded
-    // session can be resumed or discarded is the desktop app's Import
-    // screen.
+    // The 409 has to name the way out: a stranded session is resumed or
+    // discarded from the desktop app's Import screen, or discarded with
+    // `message-crate-server imports discard`.
     assert!(
         message.contains("Import in the desktop app"),
         "the conflict names how to clear the session: {message}"
@@ -761,9 +761,9 @@ async fn discard_frees_the_slot() {
     assert!(running_import(&state, &token).await.is_none());
 }
 
-/// `/v1/contacts/{id}` takes an `i64`, and two literal routes sit beside
-/// it: `summaries` and `unmatched-identities`. Both are `POST`, and editing a
-/// contact is a `PATCH`, so if the `{id}` route ever swallowed one of them
+/// `/v1/contacts/{id}` takes an `i64`, and three literal routes sit beside
+/// it: `summaries`, `unmatched-identities`, and `address-book`. This test
+/// covers the first two. Each is a `POST`, and editing a contact is a `PATCH`, so if the `{id}` route ever swallowed one of them
 /// the request would come back 405 (no `POST` on `/v1/contacts/{id}`)
 /// instead of reaching its own handler. Each assertion below distinguishes
 /// "matched my route and rejected my body" from "matched the wrong route".
@@ -803,9 +803,6 @@ async fn literal_contact_routes_are_not_captured_by_the_id_route() {
 
 /// The `ImportAccess` extractor guards `GET /v1/imports`: with
 /// `can_import` off, the endpoint refuses; turned back on, it succeeds.
-/// Nothing else in the suite calls this route through the real HTTP
-/// stack, so swapping the handler onto a weaker extractor would ship
-/// green without this test.
 #[tokio::test]
 async fn import_endpoint_honors_can_import_flag() {
     let fixture = crate::test_support::test_fixture().await;
@@ -1192,8 +1189,9 @@ async fn accept_is_checked_on_v1_json_routes_only() {
         .unwrap();
     assert_ne!(page.status(), StatusCode::NOT_ACCEPTABLE);
 
-    // The one /v1 route that streams bytes takes any Accept; the route then
-    // refuses for its own reasons (no source named), never for the header.
+    // The asset download, one of three /v1 routes that answer bytes, takes
+    // any Accept; the route then refuses for its own reasons (no source
+    // named), never for the header.
     let asset = client
         .get(format!(
             "{}/v1/assets/{}",

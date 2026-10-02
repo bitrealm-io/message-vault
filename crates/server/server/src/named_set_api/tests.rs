@@ -8,7 +8,8 @@ use crate::test_support::{
     test_fixture,
 };
 
-/// Which collection a case runs against. Every case runs for both.
+/// Which collection a case runs against. Every case runs for both, except
+/// the reserved Contact Group names, which only Contact Groups have.
 #[derive(Clone, Copy)]
 enum Kind {
     Groups,

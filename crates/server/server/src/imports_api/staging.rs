@@ -333,9 +333,9 @@ impl StagedConversation {
     }
 }
 
-/// One JSON Lines file being staged: the connection and prepared statements,
-/// the options, the counters its conversations add to, and the file's name
-/// for the conversation rows.
+/// One JSON Lines file being staged: the connection and the per-import insert
+/// state, the options, the counters its conversations add to, and the file's
+/// name for the conversation rows.
 struct FileStaging<'a> {
     tx: &'a mut SqliteConnection,
     stmts: &'a mut StagingInserts,

@@ -390,9 +390,9 @@ mod tests {
     }
 
     #[test]
-    fn a_field_word_is_lowercase_letters_and_hyphens() {
+    fn a_field_word_is_letters_and_hyphens_in_any_case() {
         // `Re:` inside a phrase is text, and a token like `http://x` is a word,
-        // not a field, because the part before the colon is not a field shape.
+        // not a field, because the value after the colon starts with `/`.
         assert_eq!(
             kinds("http://x")[0],
             TokenKind::Word {

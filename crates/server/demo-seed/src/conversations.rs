@@ -99,8 +99,8 @@ pub struct StagingDirs<'a> {
 /// Write every conversation file into the three backup folders and return counts.
 ///
 /// One-to-one contacts are split into iMessage-only, Android-only, and overlap.
-/// Groups, unassigned handles, empty threads, and WhatsApp copies are written
-/// after that.
+/// Unassigned handles, groups, `orphaned.jsonl`, empty threads, and WhatsApp
+/// copies are written after that, in that order.
 ///
 /// # Errors
 ///

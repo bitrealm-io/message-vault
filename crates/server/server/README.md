@@ -11,11 +11,11 @@ cargo test -p message-crate-server
 cargo run --release -p message-crate-server -- serve
 ```
 
-Docker (release-shaped image from this checkout): `docker compose -f docker/compose.release.yml up --build`. Day-to-day from a clone: `./scripts/run-dev.sh` (see [CONTRIBUTING.md](../../../CONTRIBUTING.md)). Published image: [Try Message Crate](https://messagecrate.app/docs/user/get-started/run-with-demo-data/).
+Docker (release-shaped image from this checkout): `docker compose -f docker/compose.release.yml up --build`. Day-to-day from a clone: `./scripts/run-dev.sh` (see [CONTRIBUTING.md](../../../CONTRIBUTING.md)). Published image: [Run Message Crate with Docker](https://messagecrate.app/docs/user/features/owner/run-with-docker/).
 
 ## Docs
 
-- Try Message Crate: https://messagecrate.app/docs/user/get-started/run-with-demo-data/
+- Try Message Crate: https://messagecrate.app/docs/user/try/what-is-message-crate/
 - Operator Docker: https://messagecrate.app/docs/developer/docker-compose/
 - Server CLI: https://messagecrate.app/docs/developer/reference/server-cli/
 - API: https://messagecrate.app/docs/developer/reference/api/

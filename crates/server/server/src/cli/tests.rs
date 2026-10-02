@@ -1,6 +1,7 @@
 //! The command line, driven the way `main` drives it: a parsed [`Cli`] in,
-//! effects on the database out. Each test writes a config file into a temp dir
-//! and asserts on the database afterwards, never on what was printed.
+//! effects on the database out. Most tests write a config file into a temp dir
+//! and assert on the database afterwards. A few check a file a command writes
+//! or the text it prints.
 
 use std::fs;
 use std::path::{Path, PathBuf};

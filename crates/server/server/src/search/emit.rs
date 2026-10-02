@@ -652,8 +652,9 @@ impl NamedSet {
 
 /// The seven people-and-places words: `with`, `from`, `to`, `in`, `group`,
 /// `tag`, `import`. `from:` and `to:` are Messages-only in the registry, so
-/// they read `m.` directly; `with:`, `group:`, `tag:`, and `import:` go
-/// through the bridges so they work on every list the registry allows.
+/// they read `m.` directly; `with:`, `group:`, and `tag:` go through the
+/// bridges so they work on every list the registry allows. `import:` writes
+/// its own SQL (see `emit_import`).
 fn emit_people_word(
     ctx: &ListCtx,
     out: &mut Sql,

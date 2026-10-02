@@ -1,7 +1,8 @@
 //! Copy staged import rows into the production tables.
 //!
-//! Every statement is in `db::staging`; this stage runs them in order, logs
-//! each phase and keeps the counts.
+//! The statements are in `db::staging`, `db::schema` (source wipes, indexes,
+//! and the FTS triggers), and `dedupe` (content keys); this stage runs them in
+//! order, logs each phase and keeps the counts.
 
 use std::collections::HashMap;
 use std::io::{self, Write};

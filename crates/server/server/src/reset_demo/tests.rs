@@ -1485,8 +1485,8 @@ async fn seed_previous_demo(db: &Path, data_dir: &Path) -> PathBuf {
 }
 
 /// The wipe removes the demo account's rows and its data folder, and nothing
-/// else. On the SQLite path the folder wiped is the empty work directory, so
-/// this is the one place the folder removal is observed (#780).
+/// else. In a reset the folder wiped is the empty work directory, so this is
+/// the one place the folder removal is observed (#780).
 #[tokio::test]
 async fn the_wipe_removes_the_demo_rows_and_folder_and_leaves_other_accounts() {
     let temp = tempfile::tempdir().expect("create test directory");
@@ -1549,10 +1549,9 @@ async fn the_wipe_removes_the_demo_rows_and_folder_and_leaves_other_accounts() {
     );
 }
 
-/// A reset on the SQLite path leaves a claimed Message Crate where `demo` logs in
-/// with an empty password and the owner with `admin`/`admin`, holds none of
-/// the previous demo's rows or files, and has deduped the new demo data
-/// across its sources (#780).
+/// A reset leaves an unclaimed Message Crate with no owner, where `demo` logs
+/// in with an empty password. It holds none of the previous demo's rows or
+/// files, and has deduped the new demo data across its sources (#780).
 #[tokio::test]
 async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
     let temp = tempfile::tempdir().expect("create test directory");

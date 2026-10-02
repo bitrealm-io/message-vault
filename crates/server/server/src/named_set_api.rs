@@ -70,8 +70,9 @@ pub(crate) async fn list(
 }
 
 /// Create a set and answer `201 Created` with its id and trimmed name, and a
-/// `Location` of `{root_path}/{id}`. A blank or over-long name, or a reserved
-/// name, answers 422; a name already taken (ignoring case) answers 409.
+/// `Location` of `{root_path}/{id}`. A blank or over-long name, a name holding
+/// the spec's refused character, or a reserved name, answers 422; a name
+/// already taken (ignoring case) answers 409.
 pub(crate) async fn create(
     spec: &'static MembershipSpec,
     root_path: &str,
@@ -88,8 +89,9 @@ pub(crate) async fn create(
 }
 
 /// Rename a set by id, answering its id and the new name. An unknown or
-/// another account's id answers 404; a blank, over-long, or reserved name
-/// answers 422; another set's name (ignoring case) answers 409.
+/// another account's id answers 404; a blank or over-long name, a name holding
+/// the spec's refused character, or a reserved name answers 422; another set's
+/// name (ignoring case) answers 409.
 pub(crate) async fn update(
     spec: &'static MembershipSpec,
     state: &AppState,

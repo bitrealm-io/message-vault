@@ -195,6 +195,43 @@ async fn names_over_max_len_rejected() {
     }
 }
 
+// S4-1: the address book lists a contact's Contact Groups in one `groups`
+// cell, separated by `;`. A group named `Work; 2024` would come back from an
+// export as the two groups `Work` and `2024`, so the name is refused.
+#[tokio::test]
+async fn a_contact_group_name_cannot_hold_a_semicolon() {
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
+    let expected =
+        "name can't hold \";\", because the address book separates Contact Group names with it";
+    match create_set(group_spec(), &mut conn, account, "Work; 2024")
+        .await
+        .unwrap_err()
+    {
+        MembershipError::BadRequest(msg) => assert_eq!(msg, expected),
+        other => panic!("create: expected BadRequest, got {other:?}"),
+    }
+    let (work_id, _) = create_set(group_spec(), &mut conn, account, "Work")
+        .await
+        .unwrap();
+    match rename_set(group_spec(), &mut conn, account, work_id, "Work; 2024")
+        .await
+        .unwrap_err()
+    {
+        MembershipError::BadRequest(msg) => assert_eq!(msg, expected),
+        other => panic!("rename: expected BadRequest, got {other:?}"),
+    }
+    assert_eq!(
+        check_name(group_spec(), "Work; 2024").unwrap_err(),
+        expected
+    );
+    // Message Tags are not in the address book, so a tag keeps the name.
+    create_set(tag_spec(), &mut conn, account, "Work; 2024")
+        .await
+        .unwrap();
+}
+
 #[tokio::test]
 async fn create_set_refuses_an_empty_name() {
     let fixture = crate::test_support::test_fixture().await;

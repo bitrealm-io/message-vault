@@ -377,9 +377,9 @@ pub async fn live_contact_exists(
     Ok(found.is_some())
 }
 
-/// Id of the handle row for `raw` that is linked to this contact, if any.
-/// With a service, only that service's row; without one, the phone row
-/// first, then WhatsApp, then anything else.
+/// Id and service of the handle row for `raw` that is linked to this
+/// contact, if any. With a service, only that service's row; without one,
+/// the phone row first, then WhatsApp, then anything else.
 ///
 /// # Errors
 ///
@@ -390,22 +390,22 @@ pub async fn linked_handle_id(
     contact_id: i64,
     raw: &str,
     service: Option<&str>,
-) -> Result<Option<i64>> {
+) -> Result<Option<(i64, message_ir::HandleService)>> {
     let needle = raw.trim();
     if needle.is_empty() {
         return Ok(None);
     }
     let mut sql = String::from(
-        "SELECT ch.handle_id
+        "SELECT ch.handle_id, h.service
          FROM contact_handles ch
          JOIN handles h ON h.id = ch.handle_id
          WHERE ch.account_id = $1 AND ch.contact_id = $2
            AND (h.raw = $3 OR h.normalized = $3)",
     );
-    let id = if let Some(svc) = service.and_then(message_ir::trimmed) {
+    let row = if let Some(svc) = service.and_then(message_ir::trimmed) {
         sql.push_str(" AND h.service = $4 LIMIT 1");
         let platform = message_ir::HandleService::parse(svc);
-        sqlx::query_scalar::<_, i64>(&sql)
+        sqlx::query_as::<_, (i64, String)>(&sql)
             .bind(account_id)
             .bind(contact_id)
             .bind(needle)
@@ -417,14 +417,14 @@ pub async fn linked_handle_id(
             " ORDER BY CASE h.service WHEN 'phone' THEN 0 WHEN 'whatsapp' THEN 1 ELSE 2 END
              LIMIT 1",
         );
-        sqlx::query_scalar::<_, i64>(&sql)
+        sqlx::query_as::<_, (i64, String)>(&sql)
             .bind(account_id)
             .bind(contact_id)
             .bind(needle)
             .fetch_optional(&mut *conn)
             .await?
     };
-    Ok(id)
+    Ok(row.map(|(id, service)| (id, message_ir::HandleService::parse(&service))))
 }
 
 /// Point the contact's link at `new_handle_id` in place of `old_handle_id`.

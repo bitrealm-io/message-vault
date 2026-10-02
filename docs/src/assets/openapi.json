@@ -14187,7 +14187,7 @@
               "string",
               "null"
             ],
-            "description": "Platform service for the new address."
+            "description": "Platform service of both addresses. When omitted, the previous address\nis looked up on the phone service first and WhatsApp second, and the\nnew address takes the service of the previous one."
           }
         }
       },

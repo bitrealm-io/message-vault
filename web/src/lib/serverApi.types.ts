@@ -68,8 +68,10 @@ export interface paths {
          *     itself with a body carrying the confirmation and its current password: a
          *     credential belongs in a body, not in a URL or a header of the server's own
          *     invention, and a DELETE body has no defined meaning in RFC 9110 but is not
-         *     forbidden. The demo account refuses its own deletion, and nobody deletes
-         *     the owner.
+         *     forbidden. Deleting an account deletes its messages, so an account needs
+         *     the `delete` permission to delete itself, and one without it asks the
+         *     owner. The demo account refuses its own deletion, and nobody deletes the
+         *     owner.
          */
         delete: operations["delete_account"];
         options?: never;

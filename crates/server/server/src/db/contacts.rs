@@ -255,6 +255,12 @@ pub async fn contact_id_of_sibling_handle(
 /// address: a unique match binds to that contact instead of creating a second
 /// row for the same person.
 ///
+/// A contact in the Trash is left out, as it is from the rest of an import
+/// (ADR 0013). The same run may discard it on meeting one of its identities,
+/// and a participant bound to it would then point at a deleted id. A trashed
+/// contact that shares a live contact's name would also make the name look
+/// ambiguous.
+///
 /// # Errors
 ///
 /// Returns an error when the query fails.
@@ -270,8 +276,10 @@ pub async fn contact_id_by_preferred_name(
     // Two contacts sharing a name is ambiguous, and choosing between them
     // would silently merge different people. Leave that for the person.
     let ids: Vec<i64> = sqlx::query_scalar(
-        "SELECT id FROM contacts
-         WHERE account_id = $1 AND lower(trim(preferred_name)) = lower($2)
+        "SELECT c.id FROM contacts c
+         WHERE c.account_id = $1 AND lower(trim(c.preferred_name)) = lower($2)
+           AND NOT EXISTS (SELECT 1 FROM trashed_contacts t
+                           WHERE t.account_id = c.account_id AND t.contact_id = c.id)
          LIMIT 2",
     )
     .bind(account_id)

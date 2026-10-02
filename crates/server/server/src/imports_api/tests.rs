@@ -2735,3 +2735,143 @@ async fn search_forgets_the_attachment_name_of_a_deleted_message() {
         "a message imported after the delete is not found by the deleted attachment's name"
     );
 }
+
+const S1_HEADER_1: &str = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15551234567","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15551234567","display_name":"Bob"}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}"#;
+
+fn s1_message(guid: &str, sender: &str, ms: i64, text: &str) -> String {
+    format!(
+        r#"{{"guid":"{guid}","timestamp_unix_ms":{ms},"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"{sender}","sender_display_name":null,"subject":null,"text":"{text}","attachments":[],"imessage":null,"source":null}}"#
+    )
+}
+
+/// A group header that names `name` with no address and lists `sender`, and
+/// one message from `sender`.
+fn name_only_group_batch(chat: &str, name: &str, sender: &str, guid: &str) -> String {
+    let header = format!(
+        r#"{{"schema_version":4,"export":{{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null}},"conversation":{{"chat_identifier":"{chat}","conversation_type":"group","group_title":"Trip","participants":[{{"handle":null,"display_name":"{name}"}},{{"handle":"{sender}","display_name":null}}],"stats":{{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}}}}"#
+    );
+    format!(
+        "{header}\n{}\n",
+        s1_message(guid, sender, 1426183463000, "yo")
+    )
+}
+
+/// A name-only participant whose name matches a contact in the Trash, in a run
+/// that then meets that contact's address. The run discards the trashed
+/// contact (ADR 0013), so the name lookup must not bind the participant to it:
+/// promote would then fail on the deleted id, on every retry.
+#[tokio::test]
+async fn a_name_only_participant_matching_a_trashed_contact_does_not_fail_the_import() {
+    let (state, _fixture, token) = importer().await;
+    import_one_batch(
+        &state,
+        &token,
+        "imessage",
+        "append",
+        format!(
+            "{S1_HEADER_1}\n{}\n",
+            s1_message("g1", "+15551234567", 1426183462000, "hi")
+        ),
+    )
+    .await;
+    // A second contact made after Bob, so Bob's id is not the highest and
+    // SQLite does not hand it out again.
+    import_one_batch(
+        &state,
+        &token,
+        "imessage",
+        "append",
+        format!(
+            "{}\n{}\n",
+            S1_HEADER_1
+                .replace("+15551234567", "+15559990000")
+                .replace("Bob", "Carol"),
+            s1_message("g0", "+15559990000", 1426183462000, "hey")
+        ),
+    )
+    .await;
+    {
+        let mut conn = state.db.acquire().await.unwrap();
+        let (bob, account_id): (i64, i64) =
+            sqlx::query_as("SELECT id, account_id FROM contacts WHERE preferred_name = 'Bob'")
+                .fetch_one(&mut *conn)
+                .await
+                .unwrap();
+        crate::db::trash::move_to_trash(
+            &mut conn,
+            account_id,
+            crate::db::trash::Trashable::Contact(bob),
+        )
+        .await
+        .unwrap();
+    }
+    let path = batches_path(&state, &token, "imessage").await;
+    let (status, text) = crate::test_support::post_raw(
+        &state,
+        &path,
+        &token,
+        "application/jsonl",
+        name_only_group_batch("chat900", "Bob", "+15551234567", "g2"),
+    )
+    .await;
+    assert_eq!(status, axum::http::StatusCode::OK, "{text}");
+}
+
+/// A live and a trashed contact share a name. The trashed one is invisible to
+/// the import, so the name is not ambiguous: a participant named with no
+/// address is bound to the live contact, and no third contact is made.
+#[tokio::test]
+async fn a_name_only_participant_binds_to_the_live_contact_when_a_trashed_one_shares_the_name() {
+    let (state, _fixture, token) = importer().await;
+    let live = {
+        let mut conn = state.db.acquire().await.unwrap();
+        let account_id: i64 =
+            sqlx::query_scalar("SELECT id FROM accounts WHERE username = 'importer'")
+                .fetch_one(&mut *conn)
+                .await
+                .unwrap();
+        let mut ids = Vec::new();
+        for _ in 0..2 {
+            ids.push(
+                crate::db::contacts::create_contact(
+                    &mut conn,
+                    account_id,
+                    "Sarah Vale",
+                    crate::db::contacts::Origin::User,
+                )
+                .await
+                .unwrap(),
+            );
+        }
+        let (live, trashed) = (ids[0], ids[1]);
+        crate::db::trash::move_to_trash(
+            &mut conn,
+            account_id,
+            crate::db::trash::Trashable::Contact(trashed),
+        )
+        .await
+        .unwrap();
+        live
+    };
+    import_one_batch(
+        &state,
+        &token,
+        "imessage",
+        "append",
+        name_only_group_batch("chat901", "Sarah Vale", "+15557770000", "g3"),
+    )
+    .await;
+    let mut conn = state.db.acquire().await.unwrap();
+    let bound: Vec<i64> =
+        sqlx::query_scalar("SELECT contact_id FROM participants WHERE handle_id IS NULL")
+            .fetch_all(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(bound, vec![live]);
+    let sarahs: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM contacts WHERE preferred_name = 'Sarah Vale'")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(sarahs, 2, "no third Sarah Vale is made");
+}

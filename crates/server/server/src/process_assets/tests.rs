@@ -1086,3 +1086,34 @@ async fn opening_a_source_makes_its_converted_folder_and_cleans_its_incoming_tem
     );
     assert!(live_part.exists(), "a live upload's temp is kept on open");
 }
+
+/// A preview left cut short by an interrupted run is written again when the
+/// same bytes are stored, so `--force` repairs it.
+#[test]
+fn a_truncated_derived_file_is_rewritten() {
+    let dir = tempfile::tempdir().unwrap();
+    let buf = vec![7u8; 4096];
+    let rel = derived_rel_path(&crate::assets_api::sha256_hex(&buf), ".jpg");
+    let dest = dir.path().join(&rel);
+    std::fs::create_dir_all(dest.parent().unwrap()).unwrap();
+    std::fs::write(&dest, &buf[..100]).unwrap();
+    store_derived_bytes(dir.path(), &buf, ".jpg").unwrap();
+    let stored = std::fs::read(&dest).unwrap();
+    assert_eq!(stored.len(), buf.len(), "the cut-short file is replaced");
+    assert!(stored == buf, "the stored bytes are the preview's bytes");
+}
+
+/// Storing a preview leaves no temporary file beside it.
+#[test]
+fn storing_a_derived_file_leaves_only_the_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let buf = vec![9u8; 512];
+    let blob = store_derived_bytes(dir.path(), &buf, ".jpg").unwrap();
+    let dest = dir.path().join(&blob.assets_path);
+    let names: Vec<_> = std::fs::read_dir(dest.parent().unwrap())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert_eq!(names, vec![dest.file_name().unwrap().to_owned()]);
+    assert_eq!(std::fs::read(&dest).unwrap(), buf);
+}

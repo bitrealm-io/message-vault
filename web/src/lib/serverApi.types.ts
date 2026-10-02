@@ -5518,7 +5518,7 @@ export interface operations {
             query?: {
                 /** @description Page size, default 40, max 500 */
                 limit?: number;
-                /** @description Page offset */
+                /** @description Page offset, max 50000 */
                 offset?: number;
             };
             header?: never;
@@ -5831,7 +5831,7 @@ export interface operations {
             query?: {
                 /** @description Page size, default 40, max 500 */
                 limit?: number;
-                /** @description Page offset */
+                /** @description Page offset, max 50000 */
                 offset?: number;
             };
             header?: never;
@@ -8302,7 +8302,7 @@ export interface operations {
             query?: {
                 /** @description Page size, default 40, max 500 */
                 limit?: number;
-                /** @description Page offset */
+                /** @description Page offset, max 50000 */
                 offset?: number;
             };
             header?: never;
@@ -8615,7 +8615,7 @@ export interface operations {
             query?: {
                 /** @description Page size, default 40, max 500 */
                 limit?: number;
-                /** @description Page offset */
+                /** @description Page offset, max 50000 */
                 offset?: number;
             };
             header?: never;
@@ -8904,7 +8904,7 @@ export interface operations {
             query?: {
                 /** @description Page size, default 40, max 500 */
                 limit?: number;
-                /** @description Page offset */
+                /** @description Page offset, max 50000 */
                 offset?: number;
             };
             header?: never;
@@ -9217,7 +9217,7 @@ export interface operations {
             query?: {
                 /** @description Page size, default 40, max 500. */
                 limit?: number | null;
-                /** @description Page offset. */
+                /** @description Page offset, max 50000. */
                 offset?: number | null;
             };
             header?: never;
@@ -9273,7 +9273,7 @@ export interface operations {
             query?: {
                 /** @description Page size, default 40, max 500. */
                 limit?: number | null;
-                /** @description Page offset. */
+                /** @description Page offset, max 50000. */
                 offset?: number | null;
             };
             header?: never;

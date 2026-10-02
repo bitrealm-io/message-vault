@@ -12,8 +12,10 @@ use crate::server::ApiError;
 pub const DEFAULT_LIST_LIMIT: usize = 40;
 /// The largest page any list route returns. One number, one meaning.
 pub const MAX_LIST_LIMIT: usize = 500;
-/// Cap on `OFFSET` skips for the Contacts and Conversations lists. Export has
-/// no cap: it walks the whole set.
+/// Cap on `offset` for the browse lists: Contacts, Conversations, messages,
+/// Import and Export Runs, Contact Groups, Message Tags, Saved Searches and
+/// the search fields. A list that walks the whole set, such as an Export
+/// Run's messages, has no cap.
 pub const MAX_LIST_OFFSET: usize = 50_000;
 /// Most contact ids one `POST /v1/contacts/summaries` body may carry, so the
 /// `IN` list stays under SQLite's variable cap.
@@ -169,6 +171,8 @@ pub struct PageParams {
 
 /// Turn the raw `limit` and `offset` into a page, or a 422 that says which
 /// one is wrong. `max_offset` is `None` for a route that may walk the whole set.
+/// Every `offset`, capped or not, fits in an `i64`, the type SQLite binds an
+/// `OFFSET` as, so a caller that passes it to SQL never sees it wrap negative.
 pub fn page_params(
     limit: Option<usize>,
     offset: Option<usize>,
@@ -185,6 +189,12 @@ pub fn page_params(
         )));
     }
     let offset = offset.unwrap_or(0);
+    if i64::try_from(offset).is_err() {
+        return Err(ApiError::validation(format!(
+            "offset exceeds maximum of {}",
+            i64::MAX
+        )));
+    }
     if let Some(max) = max_offset
         && offset > max
     {
@@ -348,6 +358,23 @@ mod tests {
         );
         let p = page_params(None, Some(50_001), 40, None).unwrap();
         assert_eq!(p.offset, 50_001);
+    }
+
+    #[test]
+    fn an_offset_too_large_for_sql_is_refused_even_without_a_cap() {
+        // SQLite binds an `OFFSET` as `i64`; a larger value would wrap to a
+        // negative number, which SQLite reads as 0, and answer the first page.
+        let huge = usize::try_from(u64::MAX).unwrap();
+        let err = page_params(None, Some(huge), 40, None).unwrap_err();
+        assert!(
+            matches!(&err, ApiError::ValidationFailed(m) if m.len() == 1 && m[0].starts_with("offset ")),
+            "{err:?}"
+        );
+        let largest = usize::try_from(i64::MAX).unwrap();
+        assert_eq!(
+            page_params(None, Some(largest), 40, None).unwrap().offset,
+            largest
+        );
     }
 
     #[test]

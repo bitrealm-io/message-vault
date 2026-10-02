@@ -351,7 +351,7 @@ pub(crate) async fn exports_page(
         status,
         &order,
         page.limit as i64,
-        page.offset as i64,
+        i64::try_from(page.offset).map_err(anyhow::Error::from)?,
     )
     .await?;
     Ok(Json(Page {

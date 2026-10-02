@@ -3125,7 +3125,7 @@
           {
             "name": "offset",
             "in": "query",
-            "description": "Page offset",
+            "description": "Page offset, max 50000",
             "required": false,
             "schema": {
               "type": "integer",
@@ -3592,7 +3592,7 @@
           {
             "name": "offset",
             "in": "query",
-            "description": "Page offset",
+            "description": "Page offset, max 50000",
             "required": false,
             "schema": {
               "type": "integer",
@@ -7380,7 +7380,7 @@
           {
             "name": "offset",
             "in": "query",
-            "description": "Page offset",
+            "description": "Page offset, max 50000",
             "required": false,
             "schema": {
               "type": "integer",
@@ -7847,7 +7847,7 @@
           {
             "name": "offset",
             "in": "query",
-            "description": "Page offset",
+            "description": "Page offset, max 50000",
             "required": false,
             "schema": {
               "type": "integer",
@@ -8285,7 +8285,7 @@
           {
             "name": "offset",
             "in": "query",
-            "description": "Page offset",
+            "description": "Page offset, max 50000",
             "required": false,
             "schema": {
               "type": "integer",
@@ -8746,7 +8746,7 @@
           {
             "name": "offset",
             "in": "query",
-            "description": "Page offset.",
+            "description": "Page offset, max 50000.",
             "required": false,
             "schema": {
               "type": [
@@ -8840,7 +8840,7 @@
           {
             "name": "offset",
             "in": "query",
-            "description": "Page offset.",
+            "description": "Page offset, max 50000.",
             "required": false,
             "schema": {
               "type": [

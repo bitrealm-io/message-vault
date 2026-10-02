@@ -197,7 +197,9 @@ fn find_attachment_source(
     index.and_then(|i| find_attachment_on_disk(csv_name, csv_parent, i))
 }
 
-fn mime_hint(attachment_type: &str, filename: &str) -> Option<String> {
+/// The MIME type of an attachment, from its `Attachment type` cell or, when
+/// that is empty, from the file name's extension.
+pub(crate) fn mime_hint(attachment_type: &str, filename: &str) -> Option<String> {
     let t = attachment_type.trim().to_ascii_lowercase();
     if !t.is_empty() {
         return Some(match t.as_str() {

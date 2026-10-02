@@ -11,7 +11,7 @@ use sqlx::{SqliteConnection, SqlitePool};
 
 use crate::credentials::{
     MAX_PASSWORD_BYTES, check_auth_rate_limit, dummy_password_hash, normalize_username,
-    verify_login_password, verify_password,
+    password_bucket, unknown_username_bucket, verify_login_password, verify_password,
 };
 use crate::db::{account_profile, api_tokens, schema, session_tokens};
 use crate::dedupe;
@@ -135,17 +135,22 @@ pub async fn create_session(
     if username.is_empty() {
         return Err(ApiError::validation("username is required"));
     }
-    check_auth_rate_limit(&state.auth_rate_limits, &format!("session:{username}"))?;
+    let mut conn = state.db.acquire().await?;
+    let account_id = account_profile::lookup_account_by_username(&mut conn, &username).await?;
+    // Counted per account, not per username as typed: the lookup ignores
+    // case, so every spelling of a username guesses at the same password.
+    let bucket = match account_id {
+        Some(id) => password_bucket(id),
+        None => unknown_username_bucket(&username),
+    };
+    check_auth_rate_limit(&state.auth_rate_limits, &bucket)?;
     if req.password.len() > MAX_PASSWORD_BYTES {
         return Err(ApiError::validation("password is too long"));
     }
 
     let password = req.password.clone();
 
-    let mut conn = state.db.acquire().await?;
-    let Some(account_id) =
-        account_profile::lookup_account_by_username(&mut conn, &username).await?
-    else {
+    let Some(account_id) = account_id else {
         let _ = verify_password(dummy_password_hash(), &password);
         return Err(ApiError::InvalidCredentials(
             "invalid username or password".into(),

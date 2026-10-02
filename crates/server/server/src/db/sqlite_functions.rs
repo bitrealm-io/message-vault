@@ -4,9 +4,10 @@
 //! with ICU, and the bundled build is not, so `lower('Élodie')` is
 //! `'Élodie'`. The search words compare `lower(column)` with `lower(text)`
 //! (see [`crate::db::dialect::like_ci`]), so they need a `lower()` that
-//! folds every letter. [`register`] replaces the built-in with one backed
-//! by Rust's `str::to_lowercase`, which folds every letter Unicode gives a
-//! lower-case mapping.
+//! folds every letter. [`register`] replaces the built-in with one that
+//! lowers each letter Unicode gives a lower-case mapping, one letter at a
+//! time, so a word's start lowers the same alone as inside the word
+//! ([`lower_each_letter`]).
 //!
 //! The replacement is registered through `sqlite3_auto_extension`, which
 //! SQLite runs for every connection the process opens from then on. That is
@@ -93,7 +94,7 @@ unsafe extern "C" fn unicode_lower(
         }
         let len = usize::try_from(ffi::sqlite3_value_bytes(value)).unwrap_or(0);
         let bytes = slice::from_raw_parts(text, len);
-        let folded = String::from_utf8_lossy(bytes).to_lowercase();
+        let folded = lower_each_letter(&String::from_utf8_lossy(bytes));
         ffi::sqlite3_result_text64(
             ctx,
             folded.as_ptr().cast::<c_char>(),
@@ -102,6 +103,26 @@ unsafe extern "C" fn unicode_lower(
             ffi::SQLITE_UTF8 as c_uchar,
         );
     }
+}
+
+/// `text` with each letter lowered on its own, never by its neighbours.
+///
+/// `str::to_lowercase` reads a letter's neighbours: it lowers a word-final
+/// `Σ` to `ς` and every other `Σ` to `σ`. A search lowers the typed text and
+/// the column apart, so `ΚΩΣ` would lower to `κως` and miss `κωστας`.
+/// `char::to_lowercase` reads no neighbours, but lowers `İ` (U+0130) to two
+/// characters, `i` and a combining dot, so `istanbul` would miss
+/// "İstanbul"; `İ` lowers to `i` alone here.
+fn lower_each_letter(text: &str) -> String {
+    let mut lowered = String::with_capacity(text.len());
+    for c in text.chars() {
+        if c == 'İ' {
+            lowered.push('i');
+        } else {
+            lowered.extend(c.to_lowercase());
+        }
+    }
+    lowered
 }
 
 #[cfg(test)]
@@ -150,5 +171,23 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(number, "42");
+    }
+
+    /// A word's start, lowered alone, is the start of the whole word
+    /// lowered: `Σ` lowers to `σ` wherever it stands, and `İ` to `i`
+    /// alone, so `name:ΚΩΣ*` finds "ΚΩΣΤΑΣ" and `name:istanbul` finds
+    /// "İstanbul".
+    #[tokio::test]
+    async fn a_lowered_prefix_matches_the_lowered_word() {
+        let (pool, _dir) = test_pool().await;
+        for (word, prefix) in [("ΚΩΣΤΑΣ", "ΚΩΣ"), ("İstanbul", "istanbul")] {
+            let hit: i64 = sqlx::query_scalar("SELECT instr(lower($1), lower($2)) = 1")
+                .bind(word)
+                .bind(prefix)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            assert_eq!(hit, 1, "{prefix} does not match {word}");
+        }
     }
 }

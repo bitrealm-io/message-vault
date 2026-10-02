@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ApiTokenRevealDialog from "./ApiTokenRevealDialog";
 
@@ -40,5 +41,37 @@ describe("ApiTokenRevealDialog", () => {
     expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
     expect(writeText).toHaveBeenCalledWith("mc-pat-abc123");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  // The secret can't be shown again, so only the dialog's own buttons close it.
+  it.each([
+    [
+      "Escape",
+      (user: ReturnType<typeof userEvent.setup>) => {
+        screen.getByRole("dialog").focus();
+        return user.keyboard("{Escape}");
+      },
+    ],
+    ["a click outside it", (user: ReturnType<typeof userEvent.setup>) => user.click(document.body)],
+  ])("stays open on %s", async (_name, dismiss) => {
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(<ApiTokenRevealDialog open label="laptop" token="mc-pat-abc123" onClose={onClose} />);
+
+    await dismiss(user);
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByText("mc-pat-abc123")).toBeInTheDocument();
+  });
+
+  it("closes from its own two buttons", async () => {
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(<ApiTokenRevealDialog open label="laptop" token="mc-pat-abc123" onClose={onClose} />);
+
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await user.click(screen.getByRole("button", { name: "Done" }));
+
+    expect(onClose).toHaveBeenCalledTimes(2);
   });
 });

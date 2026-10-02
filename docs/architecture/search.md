@@ -113,6 +113,9 @@ The parser refuses a query with more than 32 free-text terms, more than 64
 nodes in its tree, or parentheses and `not` nested deeper than 32. An
 unclosed quote or parenthesis, an `or` or `and` with nothing on one side, and
 a `word:` with no value are refused with the span of the text at fault.
+An empty quoted phrase, `""` or one holding only spaces, is refused with the
+same empty-value error as `body:""`, because a phrase that contains nothing
+would match every row.
 
 ## Values
 
@@ -161,6 +164,9 @@ Case and accents:
   `LIKE` and `NOCASE` collation fold no more, so the server replaces
   `lower()` on every connection with one that folds Unicode
   (`db/sqlite_functions.rs`, registered through `sqlite3_auto_extension`).
+  It lowers each letter on its own, never by its neighbours, so a word's
+  start lowers the same as the word: `name:ΚΩΣ*` finds "ΚΩΣΤΑΣ", and `İ`
+  lowers to a plain `i`, so `name:istanbul` finds "İstanbul".
   Message text, which goes through the full-text index, folds case too.
 - Accents matter, except in message text, whose full-text index folds them:
   `cafe` finds "café" there.

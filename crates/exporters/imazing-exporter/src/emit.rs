@@ -1,12 +1,15 @@
 //! Convert iMazing Messages / WhatsApp rows into the shared conversation
 //! structure, then write the chosen output format via [`ExportWriter`].
 
-use crate::attachments::{AttachmentIndex, ResolveAttachmentArgs, resolve_attachment_cell};
+use crate::attachments::{
+    AttachmentIndex, ResolveAttachmentArgs, mime_hint, resolve_attachment_cell,
+};
 use crate::attachments_emit::{attachment_guid_materials, pending_attachment_to_ir};
 use crate::parse::{DiscoveredCsv, RawRow, SourceKind, discover_csv_files, parse_csv_file};
 use crate::parse_emit::{
     PeerInfo, collect_peer_info, is_notification, is_outgoing, parse_message_date, resolve_sender,
 };
+use crate::unnamed_files::{FolderRows, UnnamedFile, file_name_second, unnamed_files};
 use anyhow::Result;
 use message_crate_core::{
     CancelFlag, ExportReport, ExportTransforms, OutputFormat, prepare_outputs, project_conversation,
@@ -18,8 +21,8 @@ use message_ir::{
 };
 use message_staging::{AttachmentSource, ExportWriter};
 use serde_json::Map;
-use std::collections::{BTreeMap, HashSet};
-use std::path::Path;
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::path::{Path, PathBuf};
 
 const EXPORT_SOURCE: &str = "imazing";
 const EXPORT_TOOL: &str = "iMazing";
@@ -88,11 +91,16 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
         copy_attachments,
         conversations: BTreeMap::new(),
         seen_keys: BTreeMap::new(),
+        claims: Vec::new(),
+        folder_texts: BTreeMap::new(),
         report: ExportReport::default(),
     };
-    for discovered in discover_csv_files(input)? {
+    for (csv_index, discovered) in discover_csv_files(input)?.iter().enumerate() {
         message_crate_core::check_cancel(cancel)?;
-        ingest.ingest_file(&discovered);
+        ingest.ingest_file(csv_index, discovered);
+    }
+    if copy_attachments {
+        ingest.attach_unnamed_files();
     }
     let Ingest {
         conversations,
@@ -152,7 +160,32 @@ struct Ingest {
     /// Parse-time dedupe state keyed by conversation key (the shared
     /// `PendingConversation` carries document data only).
     seen_keys: BTreeMap<String, HashSet<String>>,
+    /// Every row matched to a file, in the order the rows were read.
+    claims: Vec<FileClaim>,
+    /// Each chat folder's row texts, keyed by the row's `Message Date` as
+    /// iMazing writes it into a file name. A chat folder is one that holds a
+    /// CSV.
+    folder_texts: BTreeMap<PathBuf, HashMap<String, Vec<String>>>,
     report: ExportReport,
+}
+
+/// A row matched to a file on disk, and the message the row became.
+struct FileClaim {
+    source: PathBuf,
+    /// Whether the row's `Attachment type` is Image.
+    is_image: bool,
+    /// The row's `Attachment` cell.
+    csv_name: String,
+    /// Where the row sits in the export: the CSV's place in discovery order,
+    /// then the row's place in that CSV.
+    order: (usize, usize),
+    convo_key: String,
+    message: usize,
+}
+
+/// The `extra` key of the source file of a message's `index`-th attachment.
+fn attachment_source_key(index: usize) -> String {
+    format!("attachment_source.{index}")
 }
 
 impl Ingest {
@@ -160,7 +193,7 @@ impl Ingest {
     ///
     /// A file that fails to parse is recorded in the report and skipped so
     /// one bad export does not stop the rest.
-    fn ingest_file(&mut self, discovered: &DiscoveredCsv) {
+    fn ingest_file(&mut self, csv_index: usize, discovered: &DiscoveredCsv) {
         match discovered.kind {
             SourceKind::Messages => self.report.bump("messages_files", 1),
             SourceKind::WhatsApp => self.report.bump("whatsapp_files", 1),
@@ -174,21 +207,38 @@ impl Ingest {
                 return;
             }
         };
-        let mut by_session: BTreeMap<String, Vec<&RawRow>> = BTreeMap::new();
-        for row in &rows {
+        let folder = csv_folder(discovered).to_path_buf();
+        let texts = self.folder_texts.entry(folder).or_default();
+        let mut by_session: BTreeMap<String, Vec<(usize, &RawRow)>> = BTreeMap::new();
+        for (row_index, row) in rows.iter().enumerate() {
+            // Only a run that copies attachments looks at the folder's files
+            // (`attach_unnamed_files`), so only it needs the texts.
+            if self.copy_attachments && !row.text.is_empty() {
+                texts
+                    .entry(file_name_second(&row.message_date))
+                    .or_default()
+                    .push(row.text.clone());
+            }
             by_session
                 .entry(row.chat_session.clone())
                 .or_default()
-                .push(row);
+                .push((row_index, row));
         }
         for (session, session_rows) in by_session {
-            self.ingest_session(discovered, &session, &session_rows);
+            self.ingest_session(csv_index, discovered, &session, &session_rows);
         }
     }
 
     /// Work out who one chat session is with, then add each of its rows.
-    fn ingest_session(&mut self, discovered: &DiscoveredCsv, session: &str, rows: &[&RawRow]) {
-        let peer = collect_peer_info(discovered.kind, session, rows);
+    fn ingest_session(
+        &mut self,
+        csv_index: usize,
+        discovered: &DiscoveredCsv,
+        session: &str,
+        rows: &[(usize, &RawRow)],
+    ) {
+        let session_rows: Vec<&RawRow> = rows.iter().map(|(_, row)| *row).collect();
+        let peer = collect_peer_info(discovered.kind, session, &session_rows);
         if peer.unresolved_chat {
             self.report.bump("name_only_chat", 1);
         }
@@ -217,14 +267,27 @@ impl Ingest {
                 }
                 convo
             });
-        for row in rows {
-            if let Some(message) = self.message_from_row(discovered, row, &peer, &convo_key) {
-                self.conversations
-                    .get_mut(&convo_key)
-                    .expect("conversation inserted above")
-                    .messages
-                    .push(message);
+        for &(row_index, row) in rows {
+            let Some(message) = self.message_from_row(discovered, row, &peer, &convo_key) else {
+                continue;
+            };
+            let messages = &mut self
+                .conversations
+                .get_mut(&convo_key)
+                .expect("conversation inserted above")
+                .messages;
+            let source = message.extra_str(&attachment_source_key(0));
+            if !source.is_empty() {
+                self.claims.push(FileClaim {
+                    source: PathBuf::from(source),
+                    is_image: row.attachment_type.trim().eq_ignore_ascii_case("image"),
+                    csv_name: row.attachment.clone(),
+                    order: (csv_index, row_index),
+                    convo_key: convo_key.clone(),
+                    message: messages.len(),
+                });
             }
+            messages.push(message);
         }
     }
 
@@ -323,7 +386,7 @@ impl Ingest {
         if row.attachment.is_empty() {
             return (Vec::new(), BTreeMap::new());
         }
-        let csv_parent = discovered.path.parent().unwrap_or_else(|| Path::new("."));
+        let csv_parent = csv_folder(discovered);
         let (cell, source) = resolve_attachment_cell(ResolveAttachmentArgs {
             csv_name: &row.attachment,
             attachment_type: &row.attachment_type,
@@ -351,26 +414,107 @@ impl Ingest {
             cell.sticker_effect.unwrap_or_default(),
         );
         if let Some(src) = source {
-            extra.insert(
-                "attachment_source".into(),
-                src.to_string_lossy().into_owned(),
-            );
+            extra.insert(attachment_source_key(0), src.to_string_lossy().into_owned());
         }
         (vec![attachment], extra)
     }
+
+    /// Deal with the files in each chat folder that no row names: attach a
+    /// Live Photo's video to the message of the row that names its picture,
+    /// and count link previews and every other such file in the report.
+    ///
+    /// Runs only when attachments are copied, because only then is any row
+    /// matched to a file, so only then is "named by no row" known.
+    fn attach_unnamed_files(&mut self) {
+        let named: HashSet<PathBuf> = self.claims.iter().map(|c| c.source.clone()).collect();
+        // Each picture an Image row names, with those rows in CSV order.
+        let mut pictures: HashMap<PathBuf, Vec<usize>> = HashMap::new();
+        for (index, claim) in self.claims.iter().enumerate() {
+            if claim.is_image {
+                pictures
+                    .entry(claim.source.clone())
+                    .or_default()
+                    .push(index);
+            }
+        }
+        for rows in pictures.values_mut() {
+            rows.sort_by_key(|&index| self.claims[index].order);
+        }
+        let mut found = Vec::new();
+        for (folder, texts_at) in &self.folder_texts {
+            let rows = FolderRows {
+                named: &named,
+                pictures: &pictures,
+                texts_at,
+            };
+            found.extend(unnamed_files(folder, &rows));
+        }
+        for file in found {
+            match file {
+                UnnamedFile::LivePhotoVideo { video, picture } => {
+                    self.attach_live_photo_video(&video, &picture, &pictures[&picture]);
+                }
+                UnnamedFile::LinkPreview => {
+                    self.report.bump("link_previews_already_in_message", 1);
+                }
+                UnnamedFile::Other => self.report.bump("files_named_by_no_row", 1),
+            }
+        }
+    }
+
+    /// Add `video` to the message of the first of `rows`, the claims of the
+    /// Image rows that name `picture` in CSV order. When more than one row
+    /// names it, the report says which picture and that the first row took
+    /// the video.
+    fn attach_live_photo_video(&mut self, video: &Path, picture: &Path, rows: &[usize]) {
+        let first = &self.claims[rows[0]];
+        if rows.len() > 1 {
+            self.report.errors.push(format!(
+                "{}: {} rows name this picture; its Live Photo video goes to the first of them in the CSV",
+                picture.display(),
+                rows.len()
+            ));
+        }
+        // The picture's name as the row gives it, with the video's extension:
+        // the name the phone gave the video.
+        let extension = video
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("mov")
+            .to_ascii_lowercase();
+        let name = Path::new(&first.csv_name)
+            .with_extension(extension)
+            .to_string_lossy()
+            .into_owned();
+        let message = &mut self
+            .conversations
+            .get_mut(&first.convo_key)
+            .expect("a claim names a conversation that exists")
+            .messages[first.message];
+        message.extra.insert(
+            attachment_source_key(message.attachments.len()),
+            video.to_string_lossy().into_owned(),
+        );
+        message.attachments.push(PendingAttachment {
+            rel_path: name.clone(),
+            content_type: mime_hint("", &name).unwrap_or_default(),
+            digest_sha256: None,
+            name_hint: Some(name),
+        });
+        self.report.bump("live_photo_videos", 1);
+    }
 }
 
-fn collect_attachment_sources(
-    convo: &PendingConversation,
-    out: &mut Vec<Option<std::path::PathBuf>>,
-) {
+/// The chat folder a CSV sits in: the folder iMazing wrote its media into.
+fn csv_folder(discovered: &DiscoveredCsv) -> &Path {
+    discovered.path.parent().unwrap_or_else(|| Path::new("."))
+}
+
+fn collect_attachment_sources(convo: &PendingConversation, out: &mut Vec<Option<PathBuf>>) {
     for msg in &convo.messages {
-        if msg.attachments.is_empty() {
-            continue;
-        }
-        let source = msg.extra_str("attachment_source").to_string();
-        for _ in &msg.attachments {
-            out.push((!source.is_empty()).then(|| std::path::PathBuf::from(&source)));
+        for index in 0..msg.attachments.len() {
+            let source = msg.extra_str(&attachment_source_key(index));
+            out.push((!source.is_empty()).then(|| PathBuf::from(source)));
         }
     }
 }

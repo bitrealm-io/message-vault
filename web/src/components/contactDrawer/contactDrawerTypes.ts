@@ -162,21 +162,26 @@ export function previewHandleStubRows(
   return rows;
 }
 
-/** The earliest, the latest, and the sums across a contact's identities. */
-export function sumHandleTotals(handles: ContactDetail["identities"]): {
+/**
+ * A contact's totals: its conversations as the server counts them, once each,
+ * and the earliest, the latest, and the message sums across its identities.
+ * Conversations are not summed, because one conversation can hold two of the
+ * identities and each identity counts it; a message has one sender, so the
+ * message counts add up.
+ */
+export function contactTotals(detail: ContactDetail): {
   conversations: number;
   direct_messages: number;
   group_messages: number;
   start_date: string | null;
   end_date: string | null;
 } {
-  let conversations = 0;
+  const conversations = detail.direct_conversations + detail.group_conversations;
   let direct_messages = 0;
   let group_messages = 0;
   let start_date: string | null = null;
   let end_date: string | null = null;
-  for (const h of handles) {
-    conversations += h.conversations;
+  for (const h of detail.identities) {
     direct_messages += h.direct_messages;
     group_messages += h.group_messages;
     if (h.start_date && (!start_date || h.start_date < start_date)) start_date = h.start_date;

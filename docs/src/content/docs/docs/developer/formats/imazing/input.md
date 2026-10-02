@@ -26,6 +26,11 @@ Media files sit beside the CSV in each chat folder. There is no `Attachments/` s
 
 The CSV `Attachment` cell usually contains only the original basename.
 
+Two kinds of file in a Messages chat folder are named by no row:
+
+- **A Live Photo's video**, `{message timestamp} - {label} - {stem}.mov`, sits beside its picture, `{message timestamp} - {label} - {stem}.jpg` or `.jpeg`. Only the extension differs.
+- **A link preview**, `{message timestamp} - {label} - Web link.url`, or `Web link 2` and on when two share a second, is one `[InternetShortcut]` section holding a single `URL=` line. It has no title and no image, and its address appears in the `Text` of a row at the same second.
+
 ## Accepted input paths
 
 The path given on the Import form accepts:

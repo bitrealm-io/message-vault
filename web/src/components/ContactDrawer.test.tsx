@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render as rtlRender, screen, waitFor } from "@testing-library/react";
+import { cleanup, render as rtlRender, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -667,6 +667,42 @@ describe("ContactDrawer", () => {
     const remove = screen.getByRole("button", { name: "Remove +15550001 (Text message)" });
     expect(remove.closest("[role=row]")?.lastElementChild).toContainElement(remove);
     expect(screen.getByText("Summary")).toBeTruthy();
+  });
+
+  it("counts a conversation two of the contact's identities share once in the Summary row", async () => {
+    // A phone and an email take part in one group conversation, the contact's
+    // only one: each identity counts it, and the contact has one (#1248).
+    const shared = {
+      start_date: "2024-06-01T12:00:00Z",
+      end_date: "2024-06-01T12:00:00Z",
+      conversations: 1,
+      direct_messages: 0,
+      group_messages: 2,
+    };
+    get.mockResolvedValue(
+      detail(1, {
+        identities: [
+          { ...shared, address: "+15550001", service: "phone" },
+          { ...shared, address: "sam@example.com", service: "email" },
+        ],
+        direct_conversations: 0,
+        group_conversations: 1,
+        total_messages: 4,
+      }),
+    );
+    render(<ContactDrawer variant="docked" contactId="1" onClose={() => {}} />);
+
+    const summary = (await screen.findByText("Summary")).closest("[role=row]");
+    const cells = within(summary as HTMLElement).getAllByRole("gridcell");
+    expect(cells.map((c) => c.textContent)).toEqual([
+      "Summary",
+      "2024-06-01",
+      "2024-06-01",
+      "1",
+      "—",
+      "4",
+      "",
+    ]);
   });
 
   it("moves the contact to trash and closes the drawer", async () => {

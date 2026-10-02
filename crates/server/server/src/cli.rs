@@ -224,7 +224,7 @@ pub struct CreateDatabaseArgs {
 /// Options for `serve`.
 #[derive(Debug, Args)]
 pub struct ServeArgs {
-    /// Path to config.toml (must include `[server]` with `bind`)
+    /// Path to config.toml (must include a `[server]` section)
     #[arg(long, default_value = "config/config.toml")]
     pub config: PathBuf,
 

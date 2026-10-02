@@ -287,13 +287,13 @@ mod tests {
     use crate::db::api_tokens::{ApiTokenLabelError, ApiTokenMutationError};
 
     #[test]
-    fn label_errors_map_to_bad_request_with_the_same_message() {
+    fn label_errors_map_to_validation_failed_with_the_same_message() {
         let err = map_label_error(ApiTokenMutationError::InvalidLabel(
             ApiTokenLabelError::Required,
         ));
         match err {
             ApiError::ValidationFailed(msg) => assert_eq!(msg, ["label is required"]),
-            other => panic!("expected BadRequest, got {other:?}"),
+            other => panic!("expected ValidationFailed, got {other:?}"),
         }
 
         let err = map_label_error(ApiTokenMutationError::InvalidLabel(
@@ -303,7 +303,7 @@ mod tests {
             ApiError::ValidationFailed(msg) => {
                 assert_eq!(msg, ["label must be at most 120 characters"]);
             }
-            other => panic!("expected BadRequest, got {other:?}"),
+            other => panic!("expected ValidationFailed, got {other:?}"),
         }
     }
 

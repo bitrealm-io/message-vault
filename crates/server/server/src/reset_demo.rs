@@ -1,9 +1,10 @@
 //! Generate the demo bundle, clear the demo account's data, import, load the
 //! demo's address book, and process media.
 //!
-//! Two callers: `reset-demo`, and `serve` on a database that does not exist
+//! Three callers: `reset-demo`; `serve` on a database that does not exist
 //! yet ([`seed_new_database`]), which is how every new Message Crate starts
-//! with the Demo Account.
+//! with the Demo Account; and `PUT /v1/server/demo-account`
+//! ([`build_demo_account`]), the owner's rebuild on a running server.
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -27,7 +28,7 @@ use crate::imports_api::{self, ImportExportArgs, ImportMode};
 use crate::open_db::OpenDb;
 use crate::process_assets::{self, ProcessAssetsOptions};
 
-/// Stable demo account id used when `reset-demo` runs without `--account`.
+/// Stable id of the Demo Account, which every demo build writes.
 pub use crate::db::account_profile::DEMO_ACCOUNT_ID;
 
 const IMESSAGE_SOURCE: &str = "imessage";
@@ -87,8 +88,8 @@ struct PreparedBundle {
 }
 
 /// One per-source import in a demo reset. [`import_demo_sources`] loops over
-/// [`DEMO_IMPORT_SOURCES`] for both transports, so the sources, their order,
-/// and their Replace-then-Append modes stay in sync.
+/// [`DEMO_IMPORT_SOURCES`], so the sources, their order, and their
+/// Replace-then-Append modes are written down once.
 struct DemoImportSource {
     /// Label printed in the "Reset demo — preparing replacement" header.
     label: &'static str,
@@ -121,7 +122,7 @@ const DEMO_IMPORT_SOURCES: [DemoImportSource; 3] = [
     },
 ];
 
-/// Print the "preparing replacement" header both reset transports share.
+/// Print the "preparing replacement" header every demo build prints.
 fn print_reset_header(account_id: i64, prepared: &PreparedBundle, db: &dyn std::fmt::Display) {
     println!("Reset demo — preparing replacement");
     println!("  account:      {account_id}");
@@ -1115,7 +1116,8 @@ async fn seed_demo_account_on_conn(
         .execute(&mut *conn)
         .await?;
     }
-    // Demo has no Import API token until the user generates one in Settings.
+    // The seed creates no API token. A token the Demo Account creates cannot
+    // import either, because a token's grant is narrowed to the account's.
 
     // Phone and email identities that mark messages as from "you" live in
     // `handles`, linked through `account_handles`.

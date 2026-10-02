@@ -61,10 +61,11 @@ struct RawRow {
 /// Export's count statements carry the same joins, because a search filter can
 /// name a conversation column and would not compile against `messages` alone.
 /// The conversation read route's count is `FROM messages m` with no joins: its
-/// filter is a conversation id and a timestamp range, both on `m`. The two
-/// still count the same rows, because `conversations.chat_handle_id` is
-/// `NOT NULL` with a foreign key to `handles`, so the one inner join here
-/// never drops a row (`hs` is a `LEFT JOIN` and cannot drop one either).
+/// filter is a conversation id, an account id, and `duplicate_of`, all on
+/// `m`. The two still count the same rows, because
+/// `conversations.chat_handle_id` is `NOT NULL` with a foreign key to
+/// `handles`, so the one inner join here never drops a row (`hs` is a
+/// `LEFT JOIN` and cannot drop one either).
 pub(crate) fn messages_from_sql() -> String {
     format!("FROM messages m\n{}", conversation_join_sql())
 }
@@ -394,11 +395,12 @@ fn conversation_messages_where(conversation_id: i64, account_id: i64) -> (String
     )
 }
 
-/// One page of a conversation's messages, ascending by timestamp then
-/// `sort_order`. `None` when the conversation does not exist or belongs to
-/// another account — checked before the message query runs, so an unknown id
-/// and another account's conversation id are indistinguishable from the
-/// outside, the same guarantee [`get_conversation_summary`](crate::db::conversations::get_conversation_summary) gives.
+/// One page of a conversation's messages, in the order `order` names. `None`
+/// when the conversation does not exist or belongs to another account —
+/// checked before the message query runs, so an unknown id and another
+/// account's conversation id are indistinguishable from the outside, the same
+/// guarantee [`get_conversation_summary`](crate::db::conversations::get_conversation_summary)
+/// gives.
 ///
 /// # Errors
 ///

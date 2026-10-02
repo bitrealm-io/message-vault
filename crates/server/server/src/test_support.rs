@@ -590,8 +590,8 @@ pub async fn patch_status(
     .0
 }
 
-/// PATCH a JSON body expecting a failure: the status and the `{error}`
-/// sentence the server answered with.
+/// PATCH a JSON body expecting a failure: the status and the sentence of the
+/// problem document the server answered with.
 ///
 /// A route test asserting only a status cannot tell a refusal the person can
 /// act on from a different refusal with the same status, so a route that
@@ -614,7 +614,7 @@ pub async fn patch_failure(
 }
 
 /// Store an attachment size limit directly, the way a test lowers the body
-/// cap below the part size, which the owner's route refuses.
+/// cap below the part size.
 pub async fn store_asset_max_bytes(state: &AppState, bytes: u64) {
     let mut conn = state.db.acquire().await.unwrap();
     crate::db::server_settings::set_asset_max_bytes(&mut conn, bytes)
@@ -721,7 +721,7 @@ pub async fn get_raw(state: &AppState, path: &str, token: &str) -> (StatusCode, 
 
 /// DELETE a path with a Bearer token, returning the status and the raw
 /// response text. For asserting on the body of a fallback response, such as
-/// the JSON `{error}` a wrong method produces.
+/// the problem document a wrong method produces.
 pub async fn delete_raw(state: &AppState, path: &str, token: &str) -> (StatusCode, String) {
     request(state, reqwest::Method::DELETE, path, Some(token), None).await
 }

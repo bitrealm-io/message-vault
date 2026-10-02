@@ -70,7 +70,7 @@ pub struct UploadManifest {
     /// MIME type of the file, when the client provided one.
     #[serde(default)]
     pub mime: Option<String>,
-    /// Part numbers received so far (0-based).
+    /// Part numbers received so far (1-based).
     #[serde(default)]
     pub received: BTreeSet<u32>,
 }
@@ -448,7 +448,7 @@ mod tests {
     }
 
     #[test]
-    fn complete_rejects_hash_mismatch_even_above_threshold() {
+    fn complete_rejects_a_made_up_fingerprint() {
         let dir = tempdir().unwrap();
         let root = dir.path();
         let data = b"large-enough-to-skip";

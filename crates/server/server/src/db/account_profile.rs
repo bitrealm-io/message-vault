@@ -54,7 +54,9 @@ async fn query_account_strings(
 
 /// Ensure an `accounts` row exists at `account_id`, with the id as its stub
 /// username. The demo reset and the tests use it to place a row at a chosen
-/// id; every other account is made by [`insert_account`].
+/// id, and the import and export paths call it before they write for an
+/// account; new accounts are made by [`insert_account`] and
+/// [`insert_account_at`].
 pub async fn ensure_account_row(conn: &mut SqliteConnection, account_id: i64) -> Result<()> {
     sqlx::query(
         "INSERT INTO accounts (id, username) VALUES ($1, $2)
@@ -172,8 +174,8 @@ pub async fn username_for_account(
 
 /// Load the argon2 password hash for an account id, if set.
 ///
-/// Outer `Option` is "row missing"; inner is the nullable `password_hash`
-/// column (NULL/empty means passwordless login).
+/// `None` when the row is missing or its `password_hash` is NULL (NULL or
+/// empty means passwordless login).
 pub async fn load_password_hash(
     conn: &mut SqliteConnection,
     account_id: i64,
@@ -520,7 +522,8 @@ pub async fn account_ids_page(
     .await?)
 }
 
-/// Insert a new account row. All fields except id and username are optional.
+/// Insert a new account row at the next generated id. All fields except
+/// username are optional.
 /// The new account gets every permission (`Permissions::all()`); narrow it
 /// afterward if needed.
 pub async fn insert_account(
@@ -551,8 +554,8 @@ pub async fn insert_account(
 /// [`DEMO_ACCOUNT_ID`].
 pub const FIRST_GENERATED_ACCOUNT_ID: i64 = 100;
 
-/// Insert an account at a fixed id: the owner at [`OWNER_ACCOUNT_ID`],
-/// the demo account at [`DEMO_ACCOUNT_ID`], and a test's chosen row.
+/// Insert an account at a fixed id: the owner at [`OWNER_ACCOUNT_ID`], and a
+/// test's chosen row.
 pub async fn insert_account_at(
     conn: &mut SqliteConnection,
     id: i64,

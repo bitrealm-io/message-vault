@@ -46,11 +46,12 @@ pub fn bind_all<'q>(
     sqlx::query_with(sql, bind_args(params))
 }
 
-/// Max ids per `IN (...)` bind list (SQLite's default variable limit is 999).
+/// Max ids per `IN (...)` bind list, under the bound in [`SQLITE_MAX_VARIABLES`].
 pub const SQLITE_IN_CHUNK: usize = 400;
 
-/// SQLite default `SQLITE_MAX_VARIABLE_NUMBER`. Multi-row `INSERT` chunks
-/// must keep `columns × rows` at or below this.
+/// `SQLITE_MAX_VARIABLE_NUMBER` as SQLite defaulted it before 3.32.0, which
+/// raised the default to 32766; the server keeps the lower bound. Multi-row
+/// `INSERT` chunks must keep `columns × rows` at or below this.
 pub const SQLITE_MAX_VARIABLES: usize = 999;
 
 /// Largest row count whose binds fit in one statement:

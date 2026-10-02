@@ -130,7 +130,7 @@ async fn complete_import_rejects_invalid_issue_kind() {
 }
 
 #[tokio::test]
-async fn require_reusable_import_rejects_completed_and_mismatched() {
+async fn require_running_import_rejects_a_completed_import_and_returns_a_running_one() {
     let (pool, _dir) = setup_accounts_only().await;
     let mut conn = pool.acquire().await.unwrap();
     let import_id = start_import(&mut conn, &default_start_args(ACCOUNT_ID))

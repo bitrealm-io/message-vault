@@ -232,8 +232,8 @@ async fn any_query_string_is_stored_verbatim() {
     let fixture = crate::test_support::test_fixture().await;
     let account = fixture.account_with_id(101, "alice").await;
     let mut conn = fixture.conn().await;
-    // Nonsense in both grammars. The server stores it anyway: the two
-    // parsers disagree about what is legal, so nothing validates here.
+    // Nonsense in the search language. The server stores it anyway: each
+    // list accepts its own subset of the language, so nothing validates here.
     let made = create(
         &mut conn,
         account,

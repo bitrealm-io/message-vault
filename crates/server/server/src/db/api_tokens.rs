@@ -1,4 +1,4 @@
-//! Named CLI API tokens (`mc-api-…`); many per account, with per-token permissions.
+//! Named API tokens (`mc-api-…`); many per account, with per-token permissions.
 
 use anyhow::{Context, Result};
 use sqlx::SqliteConnection;

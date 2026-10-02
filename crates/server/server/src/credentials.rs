@@ -25,7 +25,7 @@ pub(crate) const AUTH_RATE_MAX: usize = 20;
 static DUMMY_PASSWORD_HASH: OnceLock<String> = OnceLock::new();
 
 /// Sliding-window hit counts for the unauthenticated credential routes, keyed
-/// by bucket (`register:<username>`, `session:<username>`, `claim`).
+/// by bucket (`register`, `session:<username>`, `claim`).
 ///
 /// This lives on `AppState` rather than in a process-global static: a running
 /// server builds exactly one state, so the limiter still spans the whole server,

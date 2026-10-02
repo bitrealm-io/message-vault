@@ -10,7 +10,8 @@ pub struct Permissions {
     pub import: bool,
     /// May call the export endpoints.
     pub export: bool,
-    /// May destroy message data: trash, purge, delete-messages, attachments.
+    /// May destroy message data for good: delete from the trash, empty it,
+    /// and delete the account's messages.
     pub delete: bool,
 }
 

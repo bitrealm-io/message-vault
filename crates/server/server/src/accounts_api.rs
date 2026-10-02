@@ -298,13 +298,12 @@ pub struct CreateAccountResponse {
 
 /// Create an account.
 ///
-/// The owner may always: the owner picks the first password and the
-/// account holder replaces it at first login, so the owner's choice survives
-/// one session and no longer. A stranger with no credential may while
-/// registration is open, and is logged in on creation. Registering is the
-/// only self-service door, shut unless the owner has opened it; an unclaimed
-/// Message Crate is shut too, because its first act is being claimed, not
-/// being joined.
+/// The owner may always: the owner picks the first password, and the
+/// account holder keeps it until they change it under Settings. A stranger
+/// with no credential may while registration is open, and is logged in on
+/// creation. Registering is the only self-service door, shut unless the
+/// owner has opened it; an unclaimed Message Crate is shut too, because its
+/// first act is being claimed, not being joined.
 #[utoipa::path(
     post,
     path = "/v1/accounts",
@@ -354,13 +353,12 @@ pub async fn create_account(
         ));
     }
 
-    // The insert and the marks on the row land together: a failure between
-    // them would leave an account whose holder keeps the password the owner
-    // chose, which is the one thing the forced change exists to prevent. The
-    // transaction takes the write lock before the username check
-    // (`BEGIN_IMMEDIATE_SQL`, as imports and exports begin), so two
-    // registrations of one name cannot both pass the check and then race to
-    // the insert.
+    // The insert, the phone, and the profile-setup mark land together: a
+    // failure between them would leave an account that owes profile setup
+    // without being marked for it. The transaction takes the write lock
+    // before the username check (`BEGIN_IMMEDIATE_SQL`, as imports and
+    // exports begin), so two registrations of one name cannot both pass the
+    // check and then race to the insert.
     let mut tx = conn.begin_with(BEGIN_IMMEDIATE_SQL).await?;
     require_username_free(&mut tx, &username).await?;
     let account_id = account_profile::insert_account(

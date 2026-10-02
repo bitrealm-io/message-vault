@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS participants (
 -- A participant is one person's seat in one conversation. A participant
 -- with an identity is that identity; one without is its contact. The two
 -- indexes say so, because a UNIQUE over all three columns never matches a
--- row holding a NULL on either engine: a re-import added the name-only
+-- row holding a NULL in SQLite: a re-import added the name-only
 -- participant again, and one whose contact an import replaced (ADR-0013)
 -- got a second row for the same identity. `contact_id` stays out of the
 -- first index because a handle's contact is read through `contact_handles`.
@@ -108,8 +108,8 @@ CREATE INDEX IF NOT EXISTS ix_messages_conversation_timestamp
 CREATE INDEX IF NOT EXISTS ix_messages_conversation_source_timestamp
     ON messages (conversation_id, source, timestamp);
 CREATE INDEX IF NOT EXISTS ix_messages_account_id ON messages (account_id);
--- `GET /v1/messages` and `GET /v1/export/messages` page an account's
--- messages by time; this serves the default sort without a scan.
+-- `GET /v1/messages` pages an account's messages by time; this serves the
+-- default sort without a scan.
 CREATE INDEX IF NOT EXISTS ix_messages_account_timestamp
     ON messages (account_id, timestamp, id);
 -- `GET /v1/contacts` computes when the account last heard from each contact:

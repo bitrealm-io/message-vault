@@ -1,5 +1,7 @@
-//! Read-only conversation list used by `GET /v1/conversations`. The queries
-//! are in `db::conversations` and `db::conversation_messages`.
+//! The `/v1/conversations` routes: the list, one conversation, its sources
+//! and messages, and moving it to the trash, restoring it, and deleting it
+//! for good. The queries are in `db::conversations`,
+//! `db::conversation_messages`, and `db::trash`.
 
 use std::sync::Arc;
 

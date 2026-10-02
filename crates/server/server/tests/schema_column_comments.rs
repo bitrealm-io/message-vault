@@ -1,7 +1,8 @@
 //! Every column in `schema/sql/*.sql` carries a `--` comment on the line
-//! above it. The developer reference at `docs/docs/developer/reference/database.md`
-//! is written from those comments, so a column without one is a column the
-//! documentation cannot describe.
+//! above it. The developer reference at
+//! `docs/src/content/docs/docs/developer/reference/database.md` is written from
+//! those comments, so a column without one is a column the documentation
+//! cannot describe.
 //!
 //! The test walks the directory rather than a fixed list, so a new SQL file is
 //! covered the day it is added. It looks only inside `CREATE TABLE` and

@@ -127,7 +127,7 @@
           "Accounts"
         ],
         "summary": "Create an account.",
-        "description": "The owner may always: the owner picks the first password and the\naccount holder replaces it at first login, so the owner's choice survives\none session and no longer. A stranger with no credential may while\nregistration is open, and is logged in on creation. Registering is the\nonly self-service door, shut unless the owner has opened it; an unclaimed\nMessage Crate is shut too, because its first act is being claimed, not\nbeing joined.",
+        "description": "The owner may always: the owner picks the first password, and the\naccount holder keeps it until they change it under Settings. A stranger\nwith no credential may while registration is open, and is logged in on\ncreation. Registering is the only self-service door, shut unless the\nowner has opened it; an unclaimed Message Crate is shut too, because its\nfirst act is being claimed, not being joined.",
         "operationId": "create_account",
         "requestBody": {
           "content": {

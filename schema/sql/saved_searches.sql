@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS saved_searches (
     -- Display name, unique per account.
     name TEXT NOT NULL,
     -- Query string, run against the conversation list. Stored verbatim and
-    -- never validated; the two search grammars disagree about what is legal.
+    -- never validated; each list accepts its own subset of the search
+    -- language, so a query legal on one list can be refused on another.
     query TEXT NOT NULL,
     -- How the row was born: 'manual' when a person wrote it, 'import' when
     -- the server created it at the end of an import run.

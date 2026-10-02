@@ -164,12 +164,13 @@ async fn rebuild_schema(conn: &mut SqliteConnection) -> Result<()> {
 }
 
 /// Apply the current embedded DDL: accounts, contacts, messages, staging,
-/// then the FTS index and its sync triggers.
+/// saved searches, then the FTS index and its sync triggers.
 async fn apply_ddl(conn: &mut SqliteConnection) -> Result<()> {
     execute_batch(conn, ACCOUNTS_DDL).await?;
     // Contacts DDL defines `handles`, the FK target of conversations, participants,
     // messages, and tapbacks (messages.sql) plus account_handles (accounts.sql).
-    // Apply it before the tables that reference handles.
+    // accounts.sql still goes first: SQLite checks a foreign key when a row is
+    // written, not when the table is created.
     execute_batch(conn, CONTACTS_TABLES_DDL).await?;
     execute_batch(conn, MESSAGE_TABLES_DDL).await?;
     execute_batch(conn, STAGING_TABLES_DDL).await?;
@@ -415,8 +416,10 @@ pub async fn ensure_accounts_schema(conn: &mut SqliteConnection) -> Result<()> {
     Ok(())
 }
 
-/// True when `table` exists. Used by [`crate::process_assets::run`] to skip
-/// the account sweep on a database that has no schema yet.
+/// True when `table` exists. [`crate::process_assets::run`] uses it to fall
+/// back to the account folders on a database with no `accounts` table, and
+/// [`crate::reset_demo::database_is_new`] to tell a new database from one
+/// that was ever started.
 pub async fn table_exists(conn: &mut SqliteConnection, name: &str) -> Result<bool> {
     let found: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = $1")

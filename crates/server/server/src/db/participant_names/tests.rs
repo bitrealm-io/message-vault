@@ -225,8 +225,8 @@ async fn a_participant_contact_id_does_not_name_anyone() {
 /// to a contact with `handle_id IS NULL`; the `INNER JOIN handles` this
 /// module used to have dropped that row from every conversation it
 /// belongs to. This pins that a `LEFT JOIN` brings it back, carrying the
-/// name from `p.name_alias` (the naming rule's second clause — no handle
-/// means no `h.raw` fallback and no contact to consult via
+/// name of the contact found through `p.contact_id`, else `p.name_alias`
+/// (no handle means no `h.raw` fallback and no link in
 /// `contact_handles`), no handle, no service, and the contact bound
 /// directly on the participant row, since that is the only place an
 /// address-less participant's contact link is recorded.

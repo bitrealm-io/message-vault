@@ -157,8 +157,8 @@ pub async fn vacuum_import_tables(conn: &mut SqliteConnection) {
     let _ = io::stdout().flush();
 }
 
-/// Aggregate many values into one column with U+001F separators (the format
-/// the export pipeline expects).
+/// Aggregate many values into one column with U+001F separators, which the
+/// contact list splits apart again.
 pub fn group_concat_unit_separator(col: &str) -> String {
     format!("GROUP_CONCAT({col}, char(31))")
 }

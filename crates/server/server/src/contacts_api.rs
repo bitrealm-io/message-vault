@@ -1,7 +1,7 @@
 //! Contact list/detail used by `GET /v1/contacts`,
 //! `GET /v1/contacts/{id}` and `PATCH /v1/contacts/{id}`, `POST /v1/contacts/summaries`,
-//! and `POST /v1/contacts/match`. Loading an address book is in
-//! `address_book`, the edits a `PATCH` makes in `edit`, and the queries in
+//! and `POST /v1/contacts/unmatched-identities`. Loading an address book is
+//! in `address_book`, the edits a `PATCH` makes in `edit`, and the queries in
 //! `db::contacts`.
 
 use crate::extract::{Json, Path as AxumPath, Query};
@@ -157,7 +157,8 @@ pub async fn get_contact_detail(
     }))
 }
 
-/// Most identifiers one request to `POST /v1/contacts/match` may ask about.
+/// Most identifiers one request to `POST /v1/contacts/unmatched-identities`
+/// may ask about.
 ///
 /// A staged folder can reference thousands of participants; the client
 /// batches. The query runs as a single statement with no chunking, so the

@@ -94,11 +94,13 @@ impl AuthIdentity {
     }
 }
 
-/// Reject API tokens on routes that require a GUI session.
+/// Reject API tokens and the owner's session on routes that require a
+/// logged-in session on an ordinary account.
 ///
 /// # Errors
 ///
-/// Returns forbidden when the credential is a named API token.
+/// Returns `403 Forbidden` when the credential is a named API token or the
+/// owner's session.
 pub fn require_full_access(auth: &AuthIdentity) -> Result<(), ApiError> {
     if auth.is_session() {
         return Ok(());
@@ -288,7 +290,8 @@ macro_rules! auth_guard {
 }
 
 auth_guard!(
-    /// Logged-in session (API tokens rejected); wraps [`require_full_access`].
+    /// Logged-in session on an ordinary account (API tokens and the owner
+    /// rejected); wraps [`require_full_access`].
     FullAccess,
     require_full_access
 );
@@ -383,9 +386,6 @@ impl AppState {
         }
     }
 
-    /// The attachment size limit as the Server Settings hold it at this
-    /// moment, in bytes. Read on every request that needs it, so a change the
-    /// owner makes holds for the next upload with no restart.
     /// The upload limits in force at this moment: the attachment size limit,
     /// and the part size the server uses and tells a client, which is the
     /// configured one or the limit, whichever is smaller. Worked out on each
@@ -397,6 +397,9 @@ impl AppState {
         ))
     }
 
+    /// The attachment size limit as the Server Settings hold it at this
+    /// moment, in bytes. Read on every request that needs it, so a change the
+    /// owner makes holds for the next upload with no restart.
     pub(crate) async fn asset_max_bytes(&self) -> anyhow::Result<u64> {
         let mut conn = self.db.acquire().await?;
         Ok(crate::db::server_settings::load(&mut conn)
@@ -965,8 +968,9 @@ pub(crate) fn http_app(state: AppState) -> Router {
         // before CORS sees it, so the response a browser gets is both JSON and
         // CORS-clean.
         .layer(axum::middleware::map_response(json_body_limit_response))
-        // Outermost: every response, including one the limit layer answered
-        // itself, carries the CORS headers a browser needs to show it.
+        // Outside the limit layer: every response, including one the limit
+        // layer answered itself, carries the CORS headers a browser needs to
+        // show it.
         .layer(build_cors_layer(&cors_origins))
         // One `info` line per response (method, path, status, latency), and an
         // `error` line for a 5xx. Runs outside CORS so the status it logs is

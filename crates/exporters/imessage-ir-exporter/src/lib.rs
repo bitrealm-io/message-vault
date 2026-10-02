@@ -17,6 +17,7 @@ mod convert;
 mod helper;
 mod identity;
 mod run;
+mod scratch;
 
 pub use backup::ios_backup_encrypted_flag;
 pub use backup_domain::{DecryptedDomain, decrypt_ios_backup_domain};

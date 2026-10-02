@@ -18,7 +18,11 @@
  * document, and forgetting to update this module fails here.
  *
  * `EXERCISED` must name every exported function, which the last test enforces,
- * so a new route cannot be added without being covered.
+ * so a new route cannot be added without being covered. A function that takes
+ * query parameters is called with every one its type offers, through `every`,
+ * so a parameter the type offers and the server does not declare fails here
+ * too. `every` takes the type with nothing optional, so a parameter added to
+ * the type and not to the call fails the type check.
  */
 
 import { readFileSync } from "node:fs";
@@ -94,6 +98,15 @@ function calledRoute(): { method: string; path: string; query: string[] } {
   return { method, path: bare, query: [...new URLSearchParams(search).keys()] };
 }
 
+/**
+ * Query parameters with every key the type offers set, for a function whose
+ * keys are all optional. `query` in `serverApi.ts` leaves out an empty
+ * string, so each value here must be one it sends.
+ */
+function every<P extends object>(params: Required<P>): P {
+  return params;
+}
+
 /** Plausible arguments for every route function, one call each. */
 const EXERCISED: Record<string, () => unknown> = {
   // Session and server
@@ -131,9 +144,15 @@ const EXERCISED: Record<string, () => unknown> = {
     serverApi.deleteAccount({ confirm: true, current_password: "hunter2hunter2" }),
   getAccountStorage: () => serverApi.getAccountStorage(),
   listAccountIdentities: () => serverApi.listAccountIdentities(undefined, 3),
-  listAccountImports: () => serverApi.listAccountImports({ limit: 50, offset: 50 }, undefined, 3),
+  listAccountImports: () =>
+    serverApi.listAccountImports(
+      every<serverApi.AccountRunListParams>({ limit: 50, offset: 50 }),
+      undefined,
+      3,
+    ),
   getAccountImport: () => serverApi.getAccountImport(2, undefined, 3),
-  listAccountExports: () => serverApi.listAccountExports({ limit: 50, offset: 50 }),
+  listAccountExports: () =>
+    serverApi.listAccountExports(every<serverApi.AccountRunListParams>({ limit: 50, offset: 50 })),
   deleteAllMessages: () => serverApi.deleteAllMessages({ confirm: true }),
 
   // API tokens
@@ -148,10 +167,25 @@ const EXERCISED: Record<string, () => unknown> = {
   deleteApiToken: () => serverApi.deleteApiToken(3),
 
   // Browse
-  listConversations: () => serverApi.listConversations({ q: "", limit: 40, offset: 0 }),
+  listConversations: () =>
+    serverApi.listConversations(
+      every<serverApi.ConversationListParams>({
+        q: "from:me",
+        limit: 40,
+        offset: 0,
+        sort: "-date",
+      }),
+    ),
   getConversation: () => serverApi.getConversation(12),
-  listConversationMessages: () => serverApi.listConversationMessages(12, { offset: 0, limit: 50 }),
-  listMessages: () => serverApi.listMessages({ q: "", limit: 40, offset: 0 }),
+  listConversationMessages: () =>
+    serverApi.listConversationMessages(
+      12,
+      every<serverApi.ConversationMessagesParams>({ offset: 0, limit: 50 }),
+    ),
+  listMessages: () =>
+    serverApi.listMessages(
+      every<serverApi.MessagesListParams>({ q: "receipt", limit: 40, offset: 0 }),
+    ),
   getConversationSources: () => serverApi.getConversationSources(12),
   trashConversation: () => serverApi.trashConversation(12),
   restoreConversation: () => serverApi.restoreConversation(12),
@@ -159,7 +193,8 @@ const EXERCISED: Record<string, () => unknown> = {
   emptyTrash: () => serverApi.emptyTrash(),
 
   // Contacts
-  listContacts: () => serverApi.listContacts({ q: "" }),
+  listContacts: () =>
+    serverApi.listContacts(every<serverApi.ContactListParams>({ q: "sam", limit: 40, offset: 0 })),
   getContact: () => serverApi.getContact(42),
   updateContact: () => serverApi.updateContact(42, { name: "Sam" }),
   getContactSummaries: () => serverApi.getContactSummaries({ ids: [1, 2] }),
@@ -201,7 +236,10 @@ const EXERCISED: Record<string, () => unknown> = {
   cancelExport: () => serverApi.cancelExport(2),
 
   // Imports
-  listImports: () => serverApi.listImports(),
+  listImports: () =>
+    serverApi.listImports(
+      every<serverApi.ImportListParams>({ status: "completed", limit: 50, offset: 0 }),
+    ),
   getImport: () => serverApi.getImport(4),
   createImport: () => serverApi.createImport({ source: "iPhone" }),
   setImportStage: () => serverApi.setImportStage(4, { stage: "staged" }),

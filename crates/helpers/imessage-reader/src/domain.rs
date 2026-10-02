@@ -47,11 +47,16 @@ pub(crate) struct Written {
 /// Returns an error when the folder is not an iPhone backup, the backup is
 /// not encrypted, or the password is wrong.
 pub(crate) fn open(request: &BackupDomainRequest) -> Result<Backup, RuntimeError> {
-    let options = ReaderOptions::from_source(Source {
-        db_path: request.backup_path.clone(),
-        platform: Platform::Ios,
-        backup_password: Some(request.backup_password.clone()),
-    });
+    // Opening the backup writes nothing; the folder the app named is the
+    // only one this request may write to, so it is the scratch folder too.
+    let options = ReaderOptions::from_source(
+        Source {
+            db_path: request.backup_path.clone(),
+            platform: Platform::Ios,
+            backup_password: Some(request.backup_password.clone()),
+        },
+        request.out_dir.clone(),
+    );
     decrypt_backup(&options)?
         .ok_or_else(|| RuntimeError::InvalidOptions(UNENCRYPTED_BACKUP_CLEAR_PASSWORD.to_string()))
 }

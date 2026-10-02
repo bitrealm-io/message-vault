@@ -339,6 +339,41 @@ mod tests {
         opened.close().await;
     }
 
+    /// Issue #1173: an Apple Messages export and an SMS export in one folder,
+    /// each with a chat with `PHONE`, import as one conversation holding both
+    /// exports' messages. Both services resolve to the one phone handle.
+    #[tokio::test]
+    async fn two_exports_of_a_chat_with_one_number_import_as_one_conversation() {
+        let dir = TempDir::new().unwrap();
+        let (opened, opts) = fixture_with_export(dir.path()).await;
+        let apple = conversation_with(PHONE)
+            .replace("sms-backup-restore", "imessage")
+            .replace("g-contacts-1", "g-apple-1");
+        fs::write(opts.input_dir.join("apple.jsonl"), apple).unwrap();
+
+        let stats = run(&opened, &opts).await.unwrap();
+
+        assert_eq!(stats.import.messages, 2);
+        assert_eq!(
+            count(
+                &opened,
+                "SELECT COUNT(*) FROM conversations WHERE account_id = $1"
+            )
+            .await,
+            1
+        );
+        assert_eq!(
+            count(
+                &opened,
+                "SELECT COUNT(DISTINCT conversation_id) FROM messages WHERE account_id = $1"
+            )
+            .await,
+            1,
+            "both messages are in the one conversation"
+        );
+        opened.close().await;
+    }
+
     /// Issue #1166: an entry of the folder that cannot be read fails the
     /// listing, naming the folder, instead of being skipped.
     #[test]

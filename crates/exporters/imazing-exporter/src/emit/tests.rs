@@ -706,3 +706,150 @@ Alice Example & Bob Example,2020-01-01 12:01:00,iMessage,Outgoing,,,Sent,,,Hey,,
         ]
     );
 }
+
+/// What one converted chat folder gave: the report, its one conversation,
+/// and the output folder (kept alive by the temporary directory).
+struct ChatFolderExport {
+    report: ExportReport,
+    doc: message_ir::ConversationDocument,
+    out: PathBuf,
+    _dir: tempfile::TempDir,
+}
+
+impl ChatFolderExport {
+    /// The contents of each copied attachment of the message with `text`, in order.
+    fn attachment_bodies(&self, text: &str) -> Vec<String> {
+        let message = self
+            .doc
+            .messages
+            .iter()
+            .find(|m| m.text == text)
+            .unwrap_or_else(|| panic!("no message {text:?}"));
+        message
+            .attachments
+            .iter()
+            .map(|a| {
+                let path = a.path.as_deref().expect("the attachment was copied");
+                fs::read_to_string(self.out.join(path)).unwrap()
+            })
+            .collect()
+    }
+}
+
+/// Convert one chat folder holding `Messages.csv` with `rows` and the named
+/// `files` to JSON.
+fn convert_chat_folder(rows: &str, files: &[(&str, &str)]) -> ChatFolderExport {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("in");
+    let chat = input.join("2020-01-01 12 00 00 - Bob");
+    fs::create_dir_all(&chat).unwrap();
+    fs::write(
+        chat.join("Messages.csv"),
+        format!("{MESSAGES_HEADER}{rows}"),
+    )
+    .unwrap();
+    for (name, body) in files {
+        fs::write(chat.join(name), body).unwrap();
+    }
+    let out = dir.path().join("out");
+    let report = convert_export(ConvertExportArgs {
+        input: &input,
+        output: &out,
+        timezone: Some("UTC"),
+        transforms: ExportTransforms::none(),
+        output_format: OutputFormat::Json,
+        cancel: None,
+        resume: false,
+    })
+    .unwrap();
+    let doc = message_ir_format::read_conversation_json(&out.join("+15555550100.json")).unwrap();
+    ChatFolderExport {
+        report,
+        doc,
+        out,
+        _dir: dir,
+    }
+}
+
+/// iMazing writes a Live Photo's video beside its picture, under the
+/// picture's name with `.mov`, and no row names it. It is the second
+/// attachment of the picture's message. A link preview (`.url`) holds only
+/// an address its message already shows, so it is counted and not imported.
+/// Any other file no row names is counted.
+#[test]
+fn a_live_photo_video_joins_its_picture_and_a_link_preview_is_counted() {
+    let export = convert_chat_folder(
+        "Bob,2020-01-01 12:00:00,iMessage,Incoming,+15555550100,Bob,Read,,,photo,,IMG_0001.jpg,Image\n\
+Bob,2020-01-01 12:01:00,iMessage,Incoming,+15555550100,Bob,Read,,,See https://example.com/page,,,\n",
+        &[
+            ("2020-01-01 12 00 00 - Bob - IMG_0001.jpg", "picture"),
+            ("2020-01-01 12 00 00 - Bob - IMG_0001.mov", "video"),
+            (
+                "2020-01-01 12 01 00 - Bob - Web link.url",
+                "[InternetShortcut]\r\nURL=https://example.com/page\r\n",
+            ),
+            ("2020-01-01 12 02 00 - Bob - stray.bin", "stray"),
+        ],
+    );
+    assert_eq!(export.doc.messages.len(), 2);
+    assert_eq!(export.attachment_bodies("photo"), vec!["picture", "video"]);
+    assert_eq!(
+        export.doc.messages[0].attachments[1]
+            .original_name
+            .as_deref(),
+        Some("IMG_0001.mov")
+    );
+    assert!(
+        export
+            .attachment_bodies("See https://example.com/page")
+            .is_empty()
+    );
+    let report = &export.report;
+    assert_eq!(report.attachments_saved, 2);
+    assert_eq!(report.extra("live_photo_videos"), 1);
+    assert_eq!(report.extra("link_previews_already_in_message"), 1);
+    assert_eq!(report.extra("files_named_by_no_row"), 1);
+}
+
+/// A link preview whose address no message of its second shows holds
+/// something the messages do not, so it is counted with the other files no
+/// row names rather than as a link preview.
+#[test]
+fn a_link_preview_whose_address_no_message_shows_is_counted_as_unnamed() {
+    let export = convert_chat_folder(
+        "Bob,2020-01-01 12:01:00,iMessage,Incoming,+15555550100,Bob,Read,,,See https://example.com/other,,,\n\
+Bob,2020-01-01 12:02:00,iMessage,Incoming,+15555550100,Bob,Read,,,See https://example.com/page,,,\n",
+        &[(
+            "2020-01-01 12 01 00 - Bob - Web link.url",
+            "[InternetShortcut]\nURL=https://example.com/page\n",
+        )],
+    );
+    assert_eq!(export.report.extra("link_previews_already_in_message"), 0);
+    assert_eq!(export.report.extra("files_named_by_no_row"), 1);
+}
+
+/// When two rows name one picture, its Live Photo video goes to the first of
+/// them in CSV order, and the report names the picture.
+#[test]
+fn a_live_photo_video_of_a_picture_two_rows_name_goes_to_the_first_row() {
+    let export = convert_chat_folder(
+        "Bob,2020-01-01 12:05:00,iMessage,Incoming,+15555550100,Bob,Read,,,first,,IMG_0002.jpg,Image\n\
+Bob,2020-01-01 12:00:00,iMessage,Incoming,+15555550100,Bob,Read,,,second,,IMG_0002.jpg,Image\n",
+        &[
+            ("2020-01-01 12 05 00 - Bob - IMG_0002.jpg", "picture"),
+            ("2020-01-01 12 05 00 - Bob - IMG_0002.MOV", "video"),
+        ],
+    );
+    assert_eq!(export.attachment_bodies("first"), vec!["picture", "video"]);
+    assert_eq!(export.attachment_bodies("second"), vec!["picture"]);
+    assert_eq!(export.report.extra("live_photo_videos"), 1);
+    assert!(
+        export
+            .report
+            .errors
+            .iter()
+            .any(|e| e.contains("2020-01-01 12 05 00 - Bob - IMG_0002.jpg")),
+        "{:?}",
+        export.report.errors
+    );
+}

@@ -30,6 +30,15 @@ Discovery walks the selected path recursively without following directory symbol
 - Deduplication key includes attachment identity so same-time/text with different media are kept.
 - When the Import form's **Attachments** choice copies media (and always for mail / Xml), attachments are resolved by basename or
   suffix-match against files beside the source CSV and copied under `output/attachments/`.
+- When media is copied, the files beside a CSV that no row names are sorted after every CSV is read.
+  A Live Photo's video (`.mov` beside a `.jpg` or `.jpeg` an Image row names) becomes the second
+  attachment of that row's message, named as the row's picture with the video's extension. When two
+  rows name the picture, the first in CSV order takes the video and the report names the picture.
+  The report counts the videos as `live_photo_videos`.
+- A link preview (`.url`) whose `URL=` address appears in the text of a row at the second the file
+  name starts with is not imported, because it holds nothing the message does not already show. The
+  report counts it as `link_previews_already_in_message`. Every other file no row names, a `.url`
+  whose address no row shows included, is counted as `files_named_by_no_row`.
 - Untitled group files are `group_+A_+B_….csv` (max 10 phones; if more, append a 16-hex hash of
   the full roster). WhatsApp adds `__whatsapp` before `.csv`. The `chat_identifier` cell is unchanged.
 

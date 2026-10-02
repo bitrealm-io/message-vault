@@ -1887,8 +1887,8 @@ async fn a_database_created_empty_is_not_new() {
 }
 
 /// Seeding that fails partway leaves no half-built Demo Account: the first
-/// source is imported, the second cannot be read, and the Message Crate
-/// starts empty and unclaimed.
+/// source is imported, the second cannot be read, the unfinished database is
+/// removed, and the Message Crate starts empty and unclaimed.
 #[tokio::test]
 async fn a_first_start_seed_that_fails_partway_leaves_no_demo_account() {
     let temp = tempfile::tempdir().expect("create test directory");
@@ -1906,6 +1906,13 @@ async fn a_first_start_seed_that_fails_partway_leaves_no_demo_account() {
     .await;
 
     assert_eq!(seeded, None);
+    assert!(!seeding_path(&cfg.paths.db).exists());
+    // `serve` then creates the database empty.
+    OpenDb::open(cfg.clone())
+        .await
+        .expect("create the empty database")
+        .close()
+        .await;
     let (accounts, conversations) = accounts_and_demo_conversations(&cfg).await;
     assert_eq!((accounts, conversations), (0, 0));
     assert!(
@@ -1915,6 +1922,105 @@ async fn a_first_start_seed_that_fails_partway_leaves_no_demo_account() {
             .exists(),
         "the demo account's files are removed with it"
     );
+}
+
+/// A first start that is stopped after the Demo Account's row is written,
+/// the way the desktop app kills a server that is still starting, leaves no
+/// database at the configured path. The next start finds the database new
+/// again and seeds a whole Demo Account, the same as a start that was never
+/// stopped (#1215).
+#[tokio::test]
+async fn a_first_start_stopped_after_the_account_row_is_seeded_whole_by_the_next() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let cfg = crate::open_db::fresh_config(&temp.path().join("stopped"));
+    let (written, row_is_written) = tokio::sync::oneshot::channel();
+    let seeding = seed_into_place(&cfg, async move |_seeding: &Config, db: &SqlitePool| {
+        let bundle = tempfile::tempdir().expect("create bundle directory");
+        write_tiny_reset_bundle(bundle.path());
+        let prepared = validate_prepared_bundle(bundle.path())?;
+        seed_demo_account(db, DEMO_ACCOUNT_ID, &prepared.seed).await?;
+        let _ = written.send(());
+        // The process is killed here: nothing after this line runs.
+        std::future::pending::<Result<u64>>().await
+    });
+    tokio::select! {
+        _ = seeding => panic!("the stopped seed never finishes"),
+        _ = row_is_written => {}
+    }
+
+    assert!(
+        !cfg.paths.db.exists(),
+        "a seed that did not finish leaves no database at the configured path"
+    );
+    assert!(database_is_new(&cfg).await.expect("read the database"));
+    let tiny = |bundle: &Path| {
+        write_tiny_reset_bundle(bundle);
+        Ok(())
+    };
+    let messages = seed_new_database_with(&cfg, tiny)
+        .await
+        .expect("the next start seeds the Demo Account");
+
+    let reference = crate::open_db::fresh_config(&temp.path().join("reference"));
+    let reference_messages = seed_new_database_with(&reference, tiny)
+        .await
+        .expect("a start that was never stopped seeds the Demo Account");
+    assert_eq!(messages, reference_messages);
+    assert_eq!(
+        accounts_and_demo_conversations(&cfg).await,
+        accounts_and_demo_conversations(&reference).await,
+        "the Demo Account is whole: one account, every conversation"
+    );
+}
+
+/// A build that did not finish leaves its record in the database, and the
+/// next start removes the Demo Account it left, files and all, and the
+/// record with it. A whole build leaves no record, so the next start keeps
+/// its Demo Account (#1215).
+#[tokio::test]
+async fn the_next_start_removes_a_demo_account_whose_build_did_not_finish() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let cfg = crate::open_db::fresh_config(temp.path());
+    let opened = OpenDb::open(cfg.clone()).await.expect("open the database");
+    build_demo_account_with(&cfg, &opened.db, |bundle| {
+        write_tiny_reset_bundle(bundle);
+        Ok(())
+    })
+    .await
+    .expect("build the Demo Account");
+    assert!(
+        !remove_stopped_demo_build(&cfg, &opened.db)
+            .await
+            .expect("check the build record"),
+        "a whole build is kept"
+    );
+    let (accounts, conversations) = accounts_and_demo_conversations(&cfg).await;
+    assert_eq!(accounts, 1);
+    assert!(conversations >= 1);
+
+    // What a build stopped part-way leaves: its record, and what it wrote.
+    let mut conn = opened.db.acquire().await.expect("acquire");
+    crate::db::demo_account_build::begin(&mut conn)
+        .await
+        .expect("write the build record");
+    drop(conn);
+    let account_dir = cfg.paths.data_dir.join(DEMO_ACCOUNT_ID.to_string());
+    fs::create_dir_all(&account_dir).expect("create the account folder");
+
+    assert!(
+        remove_stopped_demo_build(&cfg, &opened.db)
+            .await
+            .expect("remove the stopped build")
+    );
+    assert_eq!(accounts_and_demo_conversations(&cfg).await, (0, 0));
+    assert!(!account_dir.exists(), "the account's files go with it");
+    assert!(
+        !remove_stopped_demo_build(&cfg, &opened.db)
+            .await
+            .expect("check the build record again"),
+        "the record went with the account"
+    );
+    opened.close().await;
 }
 
 /// Files go into a batch in order until the next would take it past the

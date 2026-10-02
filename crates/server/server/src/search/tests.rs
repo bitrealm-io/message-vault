@@ -2867,7 +2867,7 @@ mod docs {
             .collect()
     }
 
-    /// The tour page names its search words in prose rather than in a table,
+    /// The Browse messages page names its search words in prose rather than in a table,
     /// so `the_page_lists_every_word_and_nothing_else` never read it. It told
     /// people to search `is:group` for years — an operator the language has
     /// never had. This is the check that would have caught it.
@@ -2876,13 +2876,13 @@ mod docs {
         let words = prose_words(BROWSE_PAGE);
         assert!(
             !words.is_empty(),
-            "browse-your-messages.md names no search word at all, so this test \
+            "browse.md names no search word at all, so this test \
              is no longer reading what it thinks it is"
         );
         for word in &words {
             assert!(
                 lookup(word).is_some(),
-                "browse-your-messages.md tells people to search {word}:, which \
+                "browse.md tells people to search {word}:, which \
                  the language does not have"
             );
         }

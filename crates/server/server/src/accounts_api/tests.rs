@@ -231,7 +231,7 @@ async fn a_created_account_logs_in_with_the_password_the_owner_chose() {
     assert_eq!(
         login_status(&state, "carol", "hunter2hunter2").await,
         StatusCode::CREATED,
-        "the owner's password logs in once"
+        "the owner's password logs in"
     );
 }
 

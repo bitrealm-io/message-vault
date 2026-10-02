@@ -34,7 +34,7 @@ pub enum ProblemType {
     AuthenticationRequired,
     /// The auth rate limiter refused the attempt.
     RateLimited,
-    /// Registration or a rename collides with an existing username.
+    /// A new account's username collides with an existing one.
     UsernameTaken,
     /// A Contact Group, Message Tag, or Saved Search name collides.
     NameTaken,

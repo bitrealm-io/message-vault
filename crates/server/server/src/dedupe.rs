@@ -18,7 +18,7 @@ const CONTENT_KEY_WRITE_LOG_EVERY: usize = 50_000;
 
 /// One production message that still needs a content fingerprint.
 ///
-/// Column order matches the SELECT in [`recompute_content_keys`]:
+/// Column order matches the SELECT in [`ContentKeyInputs::load`]:
 /// `id`, `conversation_id`, `chat_id` (chat handle `normalized`),
 /// `conversation_type`, `is_from_me`, `timestamp`, `body`,
 /// `sender_normalized`. Two SQL columns are both named `normalized`, so
@@ -195,8 +195,9 @@ pub async fn source_priority_from_db(
 /// Refresh the content keys, clear prior flags, then soft-hide cross-source
 /// duplicates, all in one transaction.
 ///
-/// Survivor preference: source imported first (min message id), then source name.
-/// Optional `source_priority` overrides (tests); `None` loads order from the DB.
+/// Survivor preference: most attachments, then the source imported first (min
+/// message id, then source name), then the lowest message id. Optional
+/// `source_priority` overrides (tests); `None` loads order from the DB.
 pub async fn dedupe_cross_source(
     conn: &mut SqliteConnection,
     account_id: i64,
@@ -603,7 +604,7 @@ fn pick_winner(cands: &[Cand], prio: &HashMap<&str, usize>) -> i64 {
 /// Parse an RFC3339 timestamp into Unix UTC seconds, honoring Z / ±HH:MM offsets.
 ///
 /// Strict RFC3339 is sufficient: `messages.timestamp`
-/// are only ever written by `models::format_timestamps` (chrono's
+/// are only ever written by `models::format_utc_timestamp` (chrono's
 /// `to_rfc3339_opts(SecondsFormat::Secs, true)`), so no lenient spellings reach
 /// this path. Unparseable input yields `None`.
 fn parse_rfc3339_utc_secs(ts: &str) -> Option<i64> {
@@ -647,8 +648,8 @@ impl NearRow {
     }
 }
 
-/// Flag messages that match another within `window_secs` on chat, direction, and body but
-/// not on the exact second. Returns how many were flagged.
+/// Flag messages that match one from another source within `window_secs` on chat,
+/// direction, sender, and body or attachments. Returns how many were flagged.
 async fn flag_near_time_dupes(
     conn: &mut SqliteConnection,
     account_id: i64,

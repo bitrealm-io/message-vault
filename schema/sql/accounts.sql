@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS accounts (
     can_import INTEGER NOT NULL DEFAULT 1,
     -- 1 = may call the export endpoints.
     can_export INTEGER NOT NULL DEFAULT 1,
-    -- 1 = may destroy message data (trash, purge, delete-messages, attachments).
+    -- 1 = may destroy message data for good (delete from the trash, empty it,
+    -- and delete the account's messages).
     can_delete INTEGER NOT NULL DEFAULT 1,
     -- RFC 3339 UTC instant of the last successful login (login, claiming
     -- Message Crate, or registering); NULL until the account has logged in once.
@@ -72,7 +73,7 @@ CREATE TABLE IF NOT EXISTS account_session_tokens (
     PRIMARY KEY (account_id)
 );
 
--- Named CLI API tokens (many per account). Prefix: mc-api-
+-- Named API tokens (many per account). Prefix: mc-api-
 CREATE TABLE IF NOT EXISTS account_api_tokens (
     -- Token id.
     id INTEGER PRIMARY KEY,
@@ -173,9 +174,8 @@ CREATE TABLE IF NOT EXISTS imports (
     -- JSON blob with a human-readable run summary for Import History.
     summary_json TEXT,
     -- Where a live session is: parse, write, awaiting_gate_1, transcode,
-    -- awaiting_gate_2, or pushing. NULL once the run is over, and on rows
-    -- written before sessions existed. `status` says how a run ended;
-    -- `stage` says where it is.
+    -- awaiting_gate_2, or pushing. NULL once the run is over. `status` says
+    -- how a run ended; `stage` says where it is.
     stage TEXT,
     -- Absolute path to this session's staging folder on the client. The
     -- database holds the pointer so resuming means asking the server where
@@ -252,13 +252,13 @@ CREATE TABLE IF NOT EXISTS exports (
 CREATE INDEX IF NOT EXISTS ix_exports_account_started
     ON exports(account_id, started_at DESC);
 
--- Per-item warning or error recorded during an import run.
+-- Per-item error or skip recorded during an import run.
 CREATE TABLE IF NOT EXISTS import_issues (
     -- Surrogate primary key for this issue row.
     id INTEGER PRIMARY KEY,
     -- Parent import run (`imports.id`).
     import_id INTEGER NOT NULL REFERENCES imports(id) ON DELETE CASCADE,
-    -- Issue class (for example warning or error).
+    -- Issue class: 'error' or 'skip'.
     kind TEXT NOT NULL,
     -- Pipeline step where the issue happened.
     step TEXT NOT NULL,

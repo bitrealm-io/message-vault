@@ -2,10 +2,11 @@
 //!
 //! A saved search collects nothing. It stores a query string verbatim and is
 //! never validated: each list accepts its own subset of the search language,
-//! so a query legal for one list can be a 400 on another (see `search`).
+//! so a query legal for one list can be a `422 Unprocessable Entity` on
+//! another (see `search`).
 //!
-//! Rows are addressed by `id` rather than by name, unlike contact groups and
-//! message tags: an edit changes the name and the query together, so a
+//! Rows are addressed by `id` rather than by name, as Contact Groups and
+//! Message Tags are: an edit changes the name and the query together, so a
 //! name-addressed update would use the changing field as its key.
 
 use serde::Serialize;

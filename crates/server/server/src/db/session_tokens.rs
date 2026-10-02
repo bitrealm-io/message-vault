@@ -107,7 +107,7 @@ pub async fn lookup_session(conn: &mut SqliteConnection, token: &str) -> Result<
     };
     let expires = expires_at.parse::<u64>().unwrap_or(0);
     let now = now_unix_secs();
-    // Legacy rows migrated with expires_at='0' are treated as expired; rotate via login.
+    // An `expires_at` of 0, or one that does not parse, counts as expired.
     if expires == 0 || expires <= now {
         let _ = sqlx::query("DELETE FROM account_session_tokens WHERE token_hash = $1")
             .bind(token_hash.as_str())

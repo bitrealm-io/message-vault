@@ -104,7 +104,8 @@ CREATE TABLE IF NOT EXISTS trashed_conversations (
     PRIMARY KEY (account_id, conversation_id)
 );
 
--- Soft-delete marker for a contact; contact row stays until purge.
+-- Soft-delete marker for a contact. Deleting a trashed contact blanks its
+-- name and removes this marker; the contact row and its handles stay.
 CREATE TABLE IF NOT EXISTS trashed_contacts (
     -- Owning account (`accounts.id`).
     account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,

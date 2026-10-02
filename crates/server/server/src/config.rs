@@ -330,7 +330,7 @@ impl Config {
     }
 }
 
-/// A configured path made absolute against the config file's folder, unless it already is.
+/// A configured path made absolute against `base`, unless it already is.
 fn resolve_path(base: &Path, configured: &Path) -> PathBuf {
     if configured.is_absolute() {
         configured.to_path_buf()

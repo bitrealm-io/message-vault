@@ -83,8 +83,9 @@ impl AssetRow {
 ///
 /// # Errors
 ///
-/// Returns an error when the database has no accounts, a conversion tool fails,
-/// or a derived file cannot be written.
+/// Returns an error when the database has no accounts, a query fails, or a
+/// source's asset folders cannot be prepared. A conversion that fails for one
+/// attachment is counted in `errors` and printed, and the run goes on.
 pub async fn run(opened: &OpenDb, opts: &ProcessAssetsOptions) -> Result<ProcessAssetsStats> {
     let cfg = &opened.cfg;
     let mut conn = opened.conn().await?;

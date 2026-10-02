@@ -1,7 +1,7 @@
 //! Saved searches stored in `saved_searches`.
 //!
-//! Rows are addressed by id in the path rather than by name in the body, which
-//! is how contact groups and message tags work. A saved search carries a name
+//! Rows are addressed by id in the path rather than by name in the body, the
+//! same way Contact Groups and Message Tags are. A saved search carries a name
 //! and a query that are edited together, so name-addressing would use the
 //! changing field as the key.
 

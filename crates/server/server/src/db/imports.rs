@@ -14,10 +14,6 @@ use crate::paging::{Direction, SortKey};
 /// `status` records how a run ended; this records where it is. Both are
 /// needed: a session can sit at `Write` while running, and at `Write`
 /// having failed.
-///
-/// All six stages exist because they are the design's vocabulary, but the
-/// gates and the media pass are not built yet — only `Parse`, `Write`, and
-/// `Pushing` are reachable today.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportStage {
     /// Reading the backup. Nothing durable exists yet.
@@ -216,7 +212,7 @@ impl CompleteImportArgs {
 /// One problem to record against an import session.
 #[derive(Debug, Clone)]
 pub struct ImportIssueInput {
-    /// Issue category, e.g. `file_missing`.
+    /// Issue category: `error` or `skip`.
     pub kind: String,
     /// Pipeline stage that reported it.
     pub step: String,
@@ -233,7 +229,7 @@ pub struct ImportIssueRow {
     pub id: i64,
     /// Session the issue belongs to.
     pub import_id: i64,
-    /// Issue category, e.g. `file_missing`.
+    /// Issue category: `error` or `skip`.
     pub kind: String,
     /// Pipeline stage that reported it.
     pub step: String,

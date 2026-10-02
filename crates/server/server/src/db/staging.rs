@@ -603,8 +603,8 @@ const WITH_GUID_IN_ID_RANGE: &str =
     " AND sm.guid IS NOT NULL AND sm.guid != '' AND sm.id > $2 AND sm.id <= $3 ORDER BY sm.id";
 const WITHOUT_GUID: &str = " AND (sm.guid IS NULL OR sm.guid = '') ORDER BY sm.id";
 
-/// Insert every staged message with an id in `lo..=hi` (replace mode: each
-/// is new). Returns how many were inserted.
+/// Insert every staged message with an id in `lo + 1..=hi` (replace mode:
+/// each is new). Returns how many were inserted.
 ///
 /// # Errors
 ///
@@ -625,8 +625,8 @@ pub async fn promote_messages_in_range(
         .rows_affected())
 }
 
-/// Insert the staged messages with a guid and an id in `lo..=hi`, skipping
-/// any production already holds through the partial unique index
+/// Insert the staged messages with a guid and an id in `lo + 1..=hi`,
+/// skipping any production already holds through the partial unique index
 /// `ix_messages_account_source_guid` with `ON CONFLICT DO NOTHING`.
 /// (Correlated NOT EXISTS / JOIN anti-joins mis-plan onto
 /// `ix_messages_source` and scan the whole source, 10s+ at 50k rows.)
@@ -670,7 +670,7 @@ pub async fn promote_messages_without_guid(
         .rows_affected())
 }
 
-/// The staged message ids in `lo..=hi`, in id order: the rows
+/// The staged message ids in `lo + 1..=hi`, in id order: the rows
 /// [`promote_messages_in_range`] inserted, in the order it inserted them.
 ///
 /// # Errors

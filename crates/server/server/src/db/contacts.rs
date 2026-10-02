@@ -468,8 +468,5 @@ pub async fn unlink_handle(
     Ok(())
 }
 
-/// Contacts are now resolved through the `handles` table during import (Task 10 of the
-/// handle-identity-model plan); backfilling unknown contacts from conversation data and
-/// filling empty names from participant hints happen there, not here.
 #[cfg(test)]
 mod tests;

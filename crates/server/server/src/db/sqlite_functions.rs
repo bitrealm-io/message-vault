@@ -13,8 +13,9 @@
 //! the one hook that reaches the raw `sqlite3*` of a pool connection: the
 //! pool is an sqlx `SqlitePool`, whose `after_connect` hands out an
 //! `SqliteConnection` with no way to the SQLite handle behind it, and whose
-//! connect options come from a URL that carries no function or collation
-//! list. The vendored sqlx-sqlite source stays unedited (VENDORING.md).
+//! connect options, built from a filename, can add a collation but not a
+//! scalar function. The vendored sqlx-sqlite source stays unedited
+//! (VENDORING.md).
 //!
 //! No index depends on the function: the schema has no index on a `lower()`
 //! expression, so replacing it changes what a query compares, never what a

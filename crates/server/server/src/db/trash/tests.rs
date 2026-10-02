@@ -2,10 +2,10 @@ use super::*;
 const ACCOUNT_A: i64 = 7;
 const ACCOUNT_B: i64 = 8;
 
-/// Insert a conversation owned by `account_id`, returning its id. Each
-/// call creates its own chat handle so repeat calls for the same
-/// account don't collide on `conversations`' `(account_id,
-/// chat_handle_id)` uniqueness.
+/// Insert a conversation owned by `account_id`, returning its id. The chat
+/// handle is always `+15555550100`, so this makes one conversation per
+/// account: a second call for the same account fails on the `handles`
+/// uniqueness.
 async fn insert_conversation(conn: &mut SqliteConnection, account_id: i64) -> i64 {
     sqlx::query(
         "INSERT INTO handles (account_id, raw, normalized, handle_type, service)

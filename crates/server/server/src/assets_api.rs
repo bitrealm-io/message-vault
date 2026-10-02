@@ -310,7 +310,7 @@ fn copy_to_verified_temp(
     Ok(temporary)
 }
 
-/// Hash `source` and store it under `assets_root/<sha[0:2]>/<sha><ext>`.
+/// Hash `source` and store it under `assets_root/<sha[0:2]>/<sha>`.
 /// If the file already exists, skip the copy and count it as reused.
 ///
 /// # Errors
@@ -389,7 +389,8 @@ pub fn gc_stale_incoming(assets_root: &Path, max_age_secs: u64) -> Result<u64> {
     Ok(removed)
 }
 
-/// Accept a 64-character lowercase hex SHA-256 fingerprint, or return `None`.
+/// Accept a 64-character hex SHA-256 fingerprint in either case and return it
+/// lowercased, or return `None`.
 pub(crate) fn normalize_sha256(sha: &str) -> Option<String> {
     let s = sha.trim().to_ascii_lowercase();
     if s.len() != 64 || !s.chars().all(|c| c.is_ascii_hexdigit()) {
@@ -402,7 +403,7 @@ pub(crate) fn normalize_sha256(sha: &str) -> Option<String> {
 ///
 /// # Errors
 ///
-/// Returns an error when `sha` is not 64 lowercase hex digits.
+/// Returns an error when `sha` is not 64 hex digits.
 pub(crate) fn require_sha256(sha: &str) -> Result<String> {
     match normalize_sha256(sha) {
         Some(normalized) => Ok(normalized),
@@ -829,8 +830,8 @@ pub(crate) async fn replace_asset(
         return Ok(Asset::stored(stored, true).into_response());
     }
 
-    // Write the upload into the account assets tree so verify can rename into place
-    // instead of copying across filesystems (tempfile often lives on another mount).
+    // Write the upload into the account assets tree. Storing it copies it into
+    // place and then removes it (`consume_source`).
     let assets_dir = state.cfg.paths.assets_dir_for_account(account, &source_id);
     let incoming_dir = assets_dir.join(".incoming");
     tokio::fs::create_dir_all(&incoming_dir)
@@ -876,7 +877,8 @@ pub(crate) async fn replace_asset(
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("asset upload task: {e}")))?
     .map_err(|e| ApiError::AssetUploadInvalid(e.to_string()))?;
 
-    // Rename consumes the temp file; remove leftovers after errors / already_present races.
+    // Storing consumes the upload file; remove leftovers after errors /
+    // already_present races.
     let _ = tokio::fs::remove_file(&tmp_path).await;
     // A racing upload of the same bytes may have stored them first; then
     // this request made nothing.

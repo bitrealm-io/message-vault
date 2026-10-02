@@ -21,8 +21,8 @@ use crate::server::{ApiError, AppState, FullAccess};
 ///
 /// # Errors
 ///
-/// Returns a bad-request error when the query does not parse or uses a word
-/// the Messages list does not have.
+/// Returns a `422 Unprocessable Entity` search-query-invalid problem when the
+/// query does not parse or uses a word the Messages list does not have.
 pub(crate) fn message_filter(
     account_id: i64,
     query: &str,

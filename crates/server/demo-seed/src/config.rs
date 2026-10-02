@@ -225,15 +225,18 @@ impl SeedConfig {
     }
 
     /// Check that `labels.names` has four entries, that the name-shape shares
-    /// sum to at most 1.0, and that the large-group size range sits inside the
-    /// overall group size range.
+    /// sum to at most 1.0, that `one_to_one.newest_days` is at most 30, that
+    /// each `typical_min` and `groups.per_contact_min` is no larger than its
+    /// maximum, and that the large-group size range sits inside the overall
+    /// group size range. The generator draws from each of these ranges, and an
+    /// empty or upside-down one makes it panic.
     ///
     /// # Errors
     ///
     /// Returns an error if `labels.names` does not have exactly four entries,
-    /// if the name-shape shares sum to more than 1.0, if the minimum is larger
-    /// than the maximum, or if the large-group range sticks out past the
-    /// overall min or max.
+    /// if the name-shape shares sum to more than 1.0, if `newest_days` is over
+    /// 30, if a minimum is larger than its maximum, or if the large-group range
+    /// sticks out past the overall min or max.
     pub fn validate(&self) -> Result<()> {
         if self.labels.names.len() != 4 {
             anyhow::bail!(
@@ -254,7 +257,35 @@ impl SeedConfig {
                     + self.contacts.first_last
             );
         }
+        let one = &self.one_to_one;
+        if one.newest_days > 30 {
+            anyhow::bail!(
+                "one_to_one.newest_days must be in 0 to 30, found {}",
+                one.newest_days
+            );
+        }
+        if one.typical_min > one.typical_max {
+            anyhow::bail!(
+                "one_to_one.typical_min ({}) > typical_max ({})",
+                one.typical_min,
+                one.typical_max
+            );
+        }
         let g = &self.groups;
+        if g.typical_min > g.typical_max {
+            anyhow::bail!(
+                "groups.typical_min ({}) > typical_max ({})",
+                g.typical_min,
+                g.typical_max
+            );
+        }
+        if g.per_contact_min > g.per_contact_max {
+            anyhow::bail!(
+                "groups.per_contact_min ({}) > per_contact_max ({})",
+                g.per_contact_min,
+                g.per_contact_max
+            );
+        }
         if g.large_min_count == 0 {
             return Ok(());
         }
@@ -347,6 +378,40 @@ mod tests {
         let text = format!("{:#}", SeedConfig::load(&path).unwrap_err());
         assert!(text.contains("demo_seed.toml"), "{text}");
         assert!(text.contains("`friends`"), "{text}");
+    }
+
+    /// The span sampler draws some conversations from between `newest_days`
+    /// and 30 days old, a range that is empty past 30 and made the generator
+    /// panic.
+    #[test]
+    fn settings_with_newest_days_over_30_are_refused_naming_the_key_and_its_range() {
+        let text = refusal_of_medium_with("newest_days = 7", "newest_days = 45");
+        assert!(text.contains("one_to_one.newest_days"), "{text}");
+        assert!(text.contains("0 to 30"), "{text}");
+        assert!(text.contains("45"), "{text}");
+    }
+
+    /// Both sections draw a typical rate from `typical_min..=typical_max`,
+    /// which panics when the range is upside down.
+    #[test]
+    fn settings_with_typical_min_over_typical_max_are_refused_naming_the_keys() {
+        for (find, replace, section) in [
+            ("typical_min = 80", "typical_min = 130", "one_to_one"),
+            ("typical_min = 60", "typical_min = 160", "groups"),
+        ] {
+            let text = refusal_of_medium_with(find, replace);
+            assert!(text.contains(&format!("{section}.typical_min")), "{text}");
+            assert!(text.contains("typical_max"), "{text}");
+        }
+    }
+
+    /// The groups-per-contact count is clamped to this range, and `clamp`
+    /// panics when the minimum is over the maximum.
+    #[test]
+    fn settings_with_per_contact_min_over_per_contact_max_are_refused_naming_the_keys() {
+        let text = refusal_of_medium_with("per_contact_min = 0", "per_contact_min = 25");
+        assert!(text.contains("groups.per_contact_min"), "{text}");
+        assert!(text.contains("per_contact_max"), "{text}");
     }
 
     #[test]

@@ -49,6 +49,15 @@
 //! transcoded and deleted the shared original, in which case this one is
 //! repointed at the existing derivative rather than failing or re-encoding.
 //!
+//! A shared original whose derivative comes out over the size limit is
+//! deleted together with the derivative (decision 45), so a later attachment
+//! recording the same path finds neither. Before deleting, the pass writes a
+//! note beside the original's name, `{original_name}.too_large`, holding the
+//! derivative's size. A recorded path that is gone, has no committed
+//! derivative, and has that note records `too_large` with the size, in this
+//! run or a resumed one. Only a path with none of the three records
+//! `file_missing`.
+//!
 //! ## Tool availability and failure
 //!
 //! ffmpeg/ffprobe are probed once, before any document is touched — parity
@@ -76,6 +85,11 @@ use message_ir_format::write_conversation_jsonl_to;
 /// Named so it survives the media crate's ffmpeg-scratch sweep, which matches
 /// `.msgmedia.tmp.` — deleting this file would delete the resume signal.
 const IN_PROGRESS_SUFFIX: &str = ".in_progress";
+
+/// Suffix on the note left beside a dropped original's name: the original
+/// converted over the size limit, and the note holds the derivative's size in
+/// bytes as decimal text. See the module docs on aliasing.
+const TOO_LARGE_SUFFIX: &str = ".too_large";
 
 /// Suffix on a committed derivative's stem, marking it as already converted.
 ///
@@ -116,7 +130,8 @@ pub struct TranscodeReport {
     pub converted: usize,
     /// Attachments the media step left alone.
     pub skipped: usize,
-    /// Derivatives that came out over the size limit and were dropped.
+    /// Attachments dropped because their derivative came out over the size
+    /// limit, counted once per conversation that records the dropped file.
     pub too_large: usize,
     /// Attachments ffmpeg could not process.
     pub failed: usize,
@@ -213,6 +228,9 @@ pub fn transcode_staged(
                 } => {
                     apply_repoint(jsonl, &mut doc, &recorded_rel, &derivative, &mut report)?;
                 }
+                PendingWork::DroppedTooLarge { recorded_rel, size } => {
+                    apply_too_large(jsonl, &mut doc, &recorded_rel, size, &mut report)?;
+                }
                 PendingWork::Unrecoverable { recorded_rel } => {
                     apply_unrecoverable(jsonl, &mut doc, &recorded_rel, &mut report)?;
                 }
@@ -267,6 +285,10 @@ enum PendingWork {
         recorded_rel: String,
         derivative: PathBuf,
     },
+    /// The recorded path is gone because an earlier attachment sharing it
+    /// converted over the size limit; `size` is that derivative's size, read
+    /// from the note the drop left.
+    DroppedTooLarge { recorded_rel: String, size: u64 },
     /// Nothing recoverable survived.
     Unrecoverable { recorded_rel: String },
 }
@@ -332,7 +354,8 @@ fn pending_in(
             // the same bytes (this document or another) already converted
             // it and deleted the shared original — or the shared original
             // was dropped for good (too_large deletes both the derivative
-            // and the original; decision 45). The recorded file has no
+            // and the original, decision 45, and leaves a note saying so).
+            // The recorded file has no
             // bytes to measure, so the candidate name is derived stat-free:
             // the size floors exist to skip a small *live* file, and are
             // meaningless against a file that is not there. When
@@ -346,8 +369,13 @@ fn pending_in(
                         recorded_rel: rel.to_string(),
                         derivative,
                     });
+                } else if let Some(size) = read_too_large_note(&abs) {
+                    out.push(PendingWork::DroppedTooLarge {
+                        recorded_rel: rel.to_string(),
+                        size,
+                    });
                 } else {
-                    // No committed derivative exists either: nothing
+                    // No committed derivative and no too-large note: nothing
                     // recoverable survived, so the attachment is settled
                     // rather than left dangling with no `missing_reason`.
                     out.push(PendingWork::Unrecoverable {
@@ -419,6 +447,24 @@ fn committed_name_from(src: &Path, forecast: Option<String>) -> Option<String> {
         .unwrap_or("bin");
     let orig_stem = src.file_stem().and_then(|s| s.to_str())?;
     Some(format!("{orig_stem}{COMMITTED_SUFFIX}.{target_ext}"))
+}
+
+/// Where the note for a dropped `original` goes: `{original_name}.too_large`
+/// beside it.
+fn too_large_note(original: &Path) -> PathBuf {
+    let mut name = original.file_name().unwrap_or_default().to_os_string();
+    name.push(TOO_LARGE_SUFFIX);
+    original.with_file_name(name)
+}
+
+/// The derivative size the note beside `original` records, or `None` when
+/// there is no note or it does not hold a number.
+fn read_too_large_note(original: &Path) -> Option<u64> {
+    std::fs::read_to_string(too_large_note(original))
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
 }
 
 /// `attachments/{file name of path}` — the doc-relative form every patch
@@ -571,7 +617,13 @@ fn apply_transcode(
                 .len();
             if produced_len > options.asset_max_bytes {
                 // Decision 45: skipped, not reverted. Both the derivative and
-                // the original go, so nothing survives to point at.
+                // the original go, so nothing survives to point at. The note
+                // is written first, while the original is still on disk: a
+                // stop before the delete leaves the original, and the next
+                // run converts it again and rewrites the note.
+                let note = too_large_note(src);
+                std::fs::write(&note, produced_len.to_string())
+                    .with_context(|| format!("write {}", note.display()))?;
                 patch_all_matching(doc, recorded_rel, |att| {
                     att.path = None;
                     att.digest_sha256 = None;
@@ -610,6 +662,9 @@ fn apply_transcode(
             std::fs::rename(&marker, &final_path)
                 .with_context(|| format!("commit {}", final_path.display()))?;
             let _ = std::fs::remove_file(src);
+            // A note from an earlier run under a lower limit no longer
+            // describes this file: the committed derivative replaces it.
+            let _ = std::fs::remove_file(too_large_note(src));
             report.converted += 1;
             report.bytes_before += original_len;
             report.bytes_after += produced_len;
@@ -638,6 +693,27 @@ fn apply_repoint(
     });
     write_conversation_jsonl_to(jsonl, doc)?;
     report.repointed += 1;
+    Ok(())
+}
+
+/// Mark every attachment recorded at `recorded_rel` `too_large` with the
+/// derivative size `size`: an earlier attachment sharing the path converted
+/// over the limit and the pass dropped the shared original.
+fn apply_too_large(
+    jsonl: &Path,
+    doc: &mut ConversationDocument,
+    recorded_rel: &str,
+    size: u64,
+    report: &mut TranscodeReport,
+) -> Result<()> {
+    patch_all_matching(doc, recorded_rel, |att| {
+        att.path = None;
+        att.digest_sha256 = None;
+        att.missing_reason = Some("too_large".to_string());
+        att.size_bytes = Some(size);
+    });
+    write_conversation_jsonl_to(jsonl, doc)?;
+    report.too_large += 1;
     Ok(())
 }
 

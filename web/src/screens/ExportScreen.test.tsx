@@ -25,7 +25,8 @@ vi.mock("../lib/tauri", async (importOriginal) => {
     invokeFormat: (...args: unknown[]) => invokeFormat(...args),
     invokeDeleteStaging: (...args: unknown[]) => invokeDeleteStaging(...args),
     invokeCancel: (...args: unknown[]) => invokeCancel(...args),
-    awaitTauriJob: (...args: unknown[]) => awaitTauriJob(...args),
+    // The job's name comes first; the mocks below take what follows it.
+    awaitTauriJob: (_job: string, ...args: unknown[]) => awaitTauriJob(...args),
     onExtractEvents: vi.fn(async () => () => {}),
   };
 });
@@ -154,8 +155,8 @@ describe("ExportScreen", () => {
   });
 
   it("does not start the conversion when Cancel is pressed after the pull finished", async () => {
-    // Every job command clears the shared cancel flag when it starts, so a
-    // Cancel sent before invokeFormat would be erased by invokeFormat itself.
+    // A Cancel sent while no job runs stops nothing, and invokeFormat starts
+    // its job with a cancel flag of its own, so the screen must not start it.
     const staging = "/home/demo/message-crate/staging-export-260831-120000";
     let releaseFormat: () => void = () => {};
     const formatHeld = new Promise<void>((resolve) => {
@@ -297,6 +298,52 @@ describe("ExportScreen", () => {
     await exportTo("/home/demo/out");
 
     expect(await screen.findByText("API key is required")).toBeTruthy();
+    expect(screen.queryByText(/Export complete/)).toBeNull();
+  });
+
+  it("names the folder and format the export wrote to after the form changes", async () => {
+    const user = await exportTo("/a");
+    await screen.findByText(/Export complete/);
+    const field = screen.getByPlaceholderText("Choose folder…");
+    await user.clear(field);
+    await user.type(field, "/b");
+    await user.click(screen.getByRole("button", { name: /Format/ }));
+    await user.click(await screen.findByRole("option", { name: "CSV (.csv)" }));
+
+    expect(screen.getByText(/Export complete/)).toHaveTextContent(
+      "Export complete. JSON Lines (.jsonl) saved to /a.",
+    );
+  });
+
+  it("locks the folder field while an export runs", async () => {
+    let releasePull: () => void = () => {};
+    const pullHeld = new Promise<void>((resolve) => {
+      releasePull = resolve;
+    });
+    awaitTauriJob.mockImplementationOnce(async (invokeFn: () => Promise<void>) => {
+      await pullHeld;
+      await invokeFn();
+      return { summary: "pulled" };
+    });
+
+    await exportTo("/a");
+    expect(screen.getByPlaceholderText("Choose folder…")).toBeDisabled();
+    releasePull();
+    await screen.findByText(/Export complete/);
+    expect(screen.getByPlaceholderText("Choose folder…")).toBeEnabled();
+  });
+
+  it("clears the last export's message as soon as the next export starts", async () => {
+    // A format other than JSON Lines resolves the staging folder before the
+    // job starts; the earlier message must not stay up through that wait.
+    const user = await exportTo("/a");
+    await screen.findByText(/Export complete/);
+    resolveExportStagingDir.mockImplementation(() => new Promise<string>(() => {}));
+    await user.click(screen.getByRole("button", { name: /Format/ }));
+    await user.click(await screen.findByRole("option", { name: "CSV (.csv)" }));
+    await user.click(screen.getByRole("button", { name: "Export" }));
+
+    await waitFor(() => expect(resolveExportStagingDir).toHaveBeenCalledTimes(1));
     expect(screen.queryByText(/Export complete/)).toBeNull();
   });
 });

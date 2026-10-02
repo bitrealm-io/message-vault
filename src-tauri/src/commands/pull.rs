@@ -9,7 +9,7 @@ use message_crate_pull::{
 };
 
 use super::events;
-use super::jobs::{reset_and_clone_cancel, spawn_job};
+use super::jobs::{spawn_job, start_job};
 use crate::state::AppState;
 
 /// User-facing parameters for the `pull` command.
@@ -43,18 +43,20 @@ pub struct PullArgs {
 ///
 /// # Errors
 ///
-/// Returns an error if another thread panicked while holding the shared
-/// state lock. Failures during the download are sent as `extract:error`.
+/// Returns an error if another job is running, or if another thread panicked
+/// while holding the shared state lock. Failures during the download are
+/// sent as `extract:error`.
 #[tauri::command(async)]
 pub fn pull(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
     app: tauri::AppHandle,
     args: PullArgs,
 ) -> Result<(), String> {
-    let cancel = reset_and_clone_cancel(&state)?;
+    let job = start_job(&state, "a download from the server")?;
+    let cancel = job.cancel_flag();
 
     let app_handle = app.clone();
-    spawn_job(app, move || {
+    spawn_job(app, job, move || {
         let cfg = PullConfig {
             out_dir: PathBuf::from(&args.out_dir),
             base_url: args.base_url,
@@ -86,17 +88,11 @@ pub fn pull(
             ProgressEvent::Done(_) => {}
         };
 
-        match run_pull(&cfg, Some(&mut progress)) {
-            Ok(report) => {
-                let summary = format!(
-                    "Pull complete: {} messages, {} conversations",
-                    report.messages, report.conversations,
-                );
-                events::emit(&app_handle, events::FINISHED, summary);
-            }
-            Err(err) => return Err(err),
-        }
-        Ok(())
+        let report = run_pull(&cfg, Some(&mut progress))?;
+        Ok(format!(
+            "Pull complete: {} messages, {} conversations",
+            report.messages, report.conversations,
+        ))
     });
 
     Ok(())

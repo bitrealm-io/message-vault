@@ -11,13 +11,14 @@ export const CANCELLED_MESSAGE = "cancelled";
  * The Cancel of one run of desktop jobs: an Import Run, or an export's pull
  * and conversion.
  *
- * The desktop side keeps one cancel flag, and every job command clears it
- * when it starts (`src-tauri/src/commands/jobs.rs`). A Cancel pressed while
- * the run is between jobs, or while a job command is starting, would be
- * erased by the next job command. So the run remembers its Cancel here:
- * `guard` refuses to start a job once the run is cancelled, and sends the
- * Cancel again after a job command returns, when the run was cancelled while
- * that command was starting.
+ * The desktop side stops only the job that is running, and each job command
+ * starts its job with a cancel flag of its own
+ * (`src-tauri/src/commands/jobs.rs`). A Cancel pressed while the run is
+ * between jobs, or while a job command is starting, finds no job to stop and
+ * would be lost. So the run remembers its Cancel here: `guard` refuses to
+ * start a job once the run is cancelled, and sends the Cancel again after a
+ * job command returns, when the run was cancelled while that command was
+ * starting.
  */
 export type RunCancel = {
   /** Record the Cancel for this run and stop the job that is running. */

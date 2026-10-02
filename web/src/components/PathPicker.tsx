@@ -12,6 +12,8 @@ interface PathPickerProps {
   /** Forwarded to the text field so a wrapping label can focus the input. */
   id?: string;
   filters?: { name: string; extensions: string[] }[];
+  /** Locks both the text field and Browse, as while a job writes to the path. */
+  isDisabled?: boolean;
 }
 
 export default function PathPicker({
@@ -22,6 +24,7 @@ export default function PathPicker({
   placeholder,
   id,
   filters,
+  isDisabled,
 }: PathPickerProps) {
   const browse = async () => {
     const result = directory
@@ -42,9 +45,10 @@ export default function PathPicker({
         placeholder={placeholder}
         spellCheck={false}
         autoComplete="off"
+        disabled={isDisabled}
         className={`flex-1 ${textInputClassName}`}
       />
-      <Button onClick={browse} size="xs">
+      <Button onClick={browse} size="xs" disabled={isDisabled}>
         Browse
       </Button>
     </div>

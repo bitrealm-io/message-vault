@@ -2088,6 +2088,95 @@ async fn conversation_messages_page_and_total_is_the_whole_count() {
     assert_eq!(texts, vec!["msg2", "msg3"]);
 }
 
+/// Seed `count` messages into one conversation in a single statement, body
+/// `msg{n}` and `sort_order` `n` from 0, all at one timestamp, so the
+/// conversation's order is `n`.
+async fn insert_many_messages(
+    conn: &mut SqliteConnection,
+    conversation_id: i64,
+    account_id: i64,
+    count: i64,
+) {
+    sqlx::query(
+        "WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i + 1 < $3)
+         INSERT INTO messages (
+            conversation_id, account_id, source, timestamp, is_from_me, sort_order, body
+         )
+         SELECT $1, $2, 'imessage', '2024-01-01T00:00:00Z', 1, i, 'msg' || i FROM n",
+    )
+    .bind(conversation_id)
+    .bind(account_id)
+    .bind(count)
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+}
+
+/// The conversation page reads a thread by stepping `offset` forward. The
+/// browse lists cap `offset` at 50 000; reading one conversation is not
+/// browsing, and a cap there left every message past the 50 000th of a long
+/// thread out of reach (#1199). `GET /v1/messages` keeps the cap.
+#[tokio::test]
+async fn a_conversation_reads_past_the_browse_offset_cap() {
+    let (fixture, user, conversation_id) = conversation_messages_fixture().await;
+    let past_cap = i64::try_from(crate::paging::MAX_LIST_OFFSET).unwrap() + 1;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
+    insert_many_messages(&mut conn, conversation_id, user.account_id, past_cap + 2).await;
+    drop(conn);
+
+    let page: serde_json::Value = crate::test_support::get_json(
+        &fixture.state,
+        &format!("/v1/conversations/{conversation_id}/messages?limit=2&offset={past_cap}"),
+        &user.token,
+    )
+    .await;
+    let texts: Vec<&str> = page["items"]
+        .as_array()
+        .unwrap_or_else(|| panic!("a page: {page}"))
+        .iter()
+        .map(|m| m["text"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        texts,
+        vec![format!("msg{past_cap}"), format!("msg{}", past_cap + 1)],
+        "the rows at that position: {page}"
+    );
+    assert_eq!(page["offset"], past_cap);
+
+    let (status, text) = crate::test_support::get_raw(
+        &fixture.state,
+        &format!("/v1/messages?offset={past_cap}"),
+        &user.token,
+    )
+    .await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+}
+
+/// With no cap, an `offset` past `u32::MAX` must not wrap to a small number
+/// and answer a page from the start of the thread: it is past the end, so
+/// the page is empty.
+#[tokio::test]
+async fn an_offset_past_u32_reads_an_empty_page_not_the_first() {
+    let (fixture, user, conversation_id) = conversation_messages_fixture().await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
+    insert_many_messages(&mut conn, conversation_id, user.account_id, 3).await;
+    drop(conn);
+
+    let offset = u64::from(u32::MAX) + 1;
+    let page: serde_json::Value = crate::test_support::get_json(
+        &fixture.state,
+        &format!("/v1/conversations/{conversation_id}/messages?offset={offset}"),
+        &user.token,
+    )
+    .await;
+    assert_eq!(page["items"], serde_json::json!([]), "{page}");
+    assert_eq!(page["total"], 3);
+}
+
 /// Opening a conversation takes no filter; narrowing one to a year is the
 /// search `in:#{id} date:{year}`, which the web app's year jump sends. A
 /// `year=` on the read by id is refused, not ignored, so a client still

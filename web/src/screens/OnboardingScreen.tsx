@@ -18,8 +18,10 @@ import {
   handleValidationError,
 } from "../lib/handleService";
 import { newId } from "../lib/newId";
+import { keys } from "../lib/queryKeys";
+import { useRouteQuery } from "../lib/routeQuery";
 import { parseSelectKey } from "../lib/selectKey";
-import { updateAccountProfile } from "../lib/serverApi";
+import { listAccountIdentities, updateAccountProfile } from "../lib/serverApi";
 import { browserTimeZone } from "../lib/timeZone";
 import { authCard, authCardBody, authCardFooter, authTitle, pageCenter } from "../lib/uiStyles";
 import { useAccountProfile } from "../lib/useAccountProfile";
@@ -127,28 +129,41 @@ export default function OnboardingScreen() {
   // What the owner set is shown for the holder to check and correct, once, and
   // never over something the holder has already typed. A new account's zone is
   // UTC until someone chooses one, so only another zone is the owner's choice.
-  // Identities the owner added go into the rows themselves, as many as the card
-  // has room for; any beyond that are left as they are, for Settings.
   const { profile } = useAccountProfile();
-  const seeded = useRef(false);
+  const profileSeeded = useRef(false);
+  useEffect(() => {
+    if (!profile || profileSeeded.current) return;
+    profileSeeded.current = true;
+    if (profile.preferred_name) setDisplayName((typed) => typed || (profile.preferred_name ?? ""));
+    if (profile.time_zone !== DEFAULT_TIME_ZONE) setTimeZone(profile.time_zone);
+  }, [profile]);
+
+  // Identities the owner added go into the rows themselves, each on its own
+  // service, as many as the card has room for; any beyond that are left as they
+  // are, for Settings. They come from the account's identity list rather than
+  // the profile's `phones`, which holds a number once per service and names no
+  // service, so a number on Text message and WhatsApp would read as one repeated.
+  const identities = useRouteQuery(keys.accountProfile.identities, (signal) =>
+    listAccountIdentities({ signal }),
+  );
+  const identitiesSeeded = useRef(false);
   const [seededRows, setSeededRows] = useState<HandleInput[]>([]);
   const [hiddenIdentities, setHiddenIdentities] = useState(0);
   useEffect(() => {
-    if (!profile || seeded.current) return;
-    seeded.current = true;
-    if (profile.preferred_name) setDisplayName((typed) => typed || (profile.preferred_name ?? ""));
-    if (profile.time_zone !== DEFAULT_TIME_ZONE) setTimeZone(profile.time_zone);
+    const listed = identities.data;
+    if (!listed || identitiesSeeded.current) return;
+    identitiesSeeded.current = true;
 
-    const existing = [
-      ...profile.phones.map((phone) => newHandleRow(phone, "phone")),
-      ...profile.emails.map((email) => newHandleRow(email, "email")),
-    ];
-    if (existing.length === 0) return;
-    const shown = existing.slice(0, MAX_ACCOUNT_ROWS);
-    setHiddenIdentities(existing.length - shown.length);
+    const shown = listed.items
+      .slice(0, MAX_ACCOUNT_ROWS)
+      .map(({ address, service }) =>
+        newHandleRow(address, parseSelectKey(service, HANDLE_SERVICES) ?? "phone"),
+      );
+    if (shown.length === 0) return;
+    setHiddenIdentities(listed.total - shown.length);
     setSeededRows(shown);
     setHandles((rows) => (rows.some((row) => row.handle.trim()) ? rows : shown));
-  }, [profile]);
+  }, [identities.data]);
 
   const blinkTimer = useRef<number | null>(null);
   const lastAsked = useRef<{ message: string; at: number }>({ message: "", at: 0 });

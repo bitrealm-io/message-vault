@@ -525,6 +525,8 @@ impl Ingest<'_> {
             .bump("skipped_unknown_type", stats.skipped_unknown_type);
         self.report
             .bump("skipped_unknown_address", stats.skipped_unknown_address);
+        self.report
+            .bump("skipped_unreadable_text", stats.skipped_unreadable_text);
         self.skips.invalid_address_more += stats.skipped_unknown_address_details_more;
         for detail in stats.skipped_unknown_address_details {
             push_skip_detail(

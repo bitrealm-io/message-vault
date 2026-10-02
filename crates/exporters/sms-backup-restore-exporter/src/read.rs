@@ -53,6 +53,8 @@ pub struct ReadReport {
     pub skipped_empty_participants: u64,
     /// Parts with undecodable base64.
     pub skipped_bad_attachment: u64,
+    /// Character references dropped because they are not a character.
+    pub dropped_character_references: u64,
     /// Per-file error messages from parsing/staging.
     pub errors: Vec<String>,
 }
@@ -146,6 +148,7 @@ fn merge_stats(report: &mut ReadReport, stats: ParseStats) {
     report.skipped_draft_or_outbox += stats.skipped_draft_or_outbox;
     report.skipped_empty_participants += stats.skipped_empty_participants;
     report.skipped_bad_attachment += stats.skipped_bad_attachment;
+    report.dropped_character_references += stats.dropped_character_references;
 }
 
 /// Pending attachments for a message's decoded parts, carrying bytes only when the caller keeps them.

@@ -204,9 +204,9 @@ function RacVirtualList<T extends object>({
       <ListBox
         aria-label={ariaLabel}
         items={items}
-        selectionMode="single"
-        selectionBehavior="replace"
-        selectedKeys={selectedId ? new Set([selectedId]) : new Set()}
+        // No selection mode: with one, React Aria runs a row's onAction only on a
+        // double click or Enter, so one click would not open the row (#1245).
+        // The open row is drawn from selectedId instead, as the browser path does.
         onScroll={onScroll}
         className={`min-h-0 flex-1 overflow-auto outline-none ${resizeHandleGutter}`}
         style={{
@@ -224,12 +224,12 @@ function RacVirtualList<T extends object>({
               id={id}
               textValue={getTextValue?.(item) ?? id}
               onAction={() => onSelect(item)}
-              className={({ isSelected, isHovered }) =>
-                rowClass(isRowHighlighted?.(item) ?? isSelected, isHovered)
+              className={({ isHovered }) =>
+                rowClass(isRowHighlighted?.(item) ?? id === selectedId, isHovered)
               }
               style={dynamicSize ? { minHeight: estimateSize } : { height: "100%", minHeight: 0 }}
             >
-              {/* A row checkbox inside a listbox option is RAC's own selection pattern. */}
+              {/* The lead (a row checkbox) is the caller's checked state, not listbox selection. */}
               {renderRowLead?.(item)}
               {renderRow(item)}
             </ListBoxItem>

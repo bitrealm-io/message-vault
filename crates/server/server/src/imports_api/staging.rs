@@ -548,15 +548,17 @@ async fn insert_participant(
         let (Some(contact_id), Some(name_alias)) = (contact_id, name_alias) else {
             return Ok(());
         };
-        db_staging::insert_participant(
+        if db_staging::insert_participant(
             tx,
             conversation_id,
             None,
             Some(contact_id),
             Some(&name_alias),
         )
-        .await?;
-        stats.participants += 1;
+        .await?
+        {
+            stats.participants += 1;
+        }
         return Ok(());
     };
     // Prefer the source-provided type; fall back to shape inference.
@@ -586,15 +588,17 @@ async fn insert_participant(
     // `participants.name_alias` keeps what this backup called them in this
     // conversation. It is the second clause of the naming rule, never the
     // first.
-    db_staging::insert_participant(
+    if db_staging::insert_participant(
         tx,
         conversation_id,
         Some(handle_id),
         Some(contact_id),
         backup_name.as_deref(),
     )
-    .await?;
-    stats.participants += 1;
+    .await?
+    {
+        stats.participants += 1;
+    }
     Ok(())
 }
 

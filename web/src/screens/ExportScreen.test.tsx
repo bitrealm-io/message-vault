@@ -153,6 +153,33 @@ describe("ExportScreen", () => {
     expect(await screen.findByText("unsupported output format")).toBeTruthy();
   });
 
+  it("does not start the conversion when Cancel is pressed after the pull finished", async () => {
+    // Every job command clears the shared cancel flag when it starts, so a
+    // Cancel sent before invokeFormat would be erased by invokeFormat itself.
+    const staging = "/home/demo/message-crate/staging-export-260831-120000";
+    let releaseFormat: () => void = () => {};
+    const formatHeld = new Promise<void>((resolve) => {
+      releaseFormat = resolve;
+    });
+    awaitTauriJob.mockImplementationOnce(async (invokeFn: () => Promise<void>) => {
+      await invokeFn();
+      return { summary: "pulled" };
+    });
+    awaitTauriJob.mockImplementationOnce(async (invokeFn: () => Promise<void>) => {
+      await formatHeld;
+      await invokeFn();
+      return { summary: "converted" };
+    });
+
+    const user = await exportAs("/home/demo/out", "CSV (.csv)");
+    await waitFor(() => expect(awaitTauriJob).toHaveBeenCalledTimes(2));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    releaseFormat();
+
+    await waitFor(() => expect(invokeDeleteStaging).toHaveBeenCalledWith({ staging_dir: staging }));
+    expect(invokeFormat).not.toHaveBeenCalled();
+  });
+
   it("ignores a second Export while one is already under way", async () => {
     // The desktop backend runs one job at a time (src-tauri/src/commands/jobs.rs).
     // Two exports started in the same second would also resolve to the same

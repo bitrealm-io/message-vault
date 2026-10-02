@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { ListBoxItem } from "react-aria-components";
 import { useSearchParams } from "react-router-dom";
 import FormRow from "../components/FormRow";
@@ -9,6 +9,7 @@ import TextField from "../components/TextField";
 import { useTauriJob } from "../hooks/useTauriJob";
 import { getBaseUrl } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { createRunCancel, type RunCancel } from "../lib/runCancel";
 import { parseSelectKey } from "../lib/selectKey";
 import { resolveExportStagingDir } from "../lib/system-settings";
 import {
@@ -105,7 +106,11 @@ export default function ExportScreen() {
   // begun in the same second would share a staging folder, so the first
   // cleanup would delete the second's files. This covers the whole run.
   const [busy, setBusy] = useState(false);
-  const { running, finished, run, cancel } = useTauriJob();
+  const { running, finished, run } = useTauriJob();
+  // The Cancel of the export under way. A Cancel pressed after the pull and
+  // before the conversion starts must stop the conversion, and the shared
+  // cancel flag alone would not: `format` clears it when it starts.
+  const runCancel = useRef<RunCancel>(createRunCancel());
 
   const appendLog = useCallback((line: string) => {
     setLog((prev) => [...prev, line]);
@@ -120,10 +125,12 @@ export default function ExportScreen() {
     setBusy(true);
     setError("");
     setLog([]);
+    const exportCancel = createRunCancel();
+    runCancel.current = exportCancel;
 
     const pullInto = (outDir: string) =>
       run(
-        () =>
+        exportCancel.guard(() =>
           invokePull({
             base_url: getBaseUrl(),
             username: "",
@@ -133,6 +140,7 @@ export default function ExportScreen() {
             list,
             skip_attachments: false,
           }),
+        ),
         { onLog: appendLog },
       );
 
@@ -146,12 +154,13 @@ export default function ExportScreen() {
         try {
           await pullInto(stagingDir);
           await run(
-            () =>
+            exportCancel.guard(() =>
               invokeFormat({
                 input_dir: stagingDir,
                 output_dir: savePath,
                 output_format: format,
               }),
+            ),
             { onLog: appendLog },
           );
         } finally {
@@ -187,7 +196,7 @@ export default function ExportScreen() {
       log={log}
       startDisabled={!savePath || busy || (scope === "search" && query.trim() === "")}
       onStart={startExport}
-      onCancel={cancel}
+      onCancel={() => void runCancel.current.cancel()}
       error={error}
       intro={
         <p className="mb-6 text-[0.875rem] text-muted">

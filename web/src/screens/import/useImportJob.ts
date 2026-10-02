@@ -19,13 +19,13 @@ import {
   setImportStage,
 } from "../../lib/importSession";
 import { importSessionCreateBody } from "../../lib/importSource";
+import { CANCELLED_MESSAGE, createRunCancel, type RunCancel } from "../../lib/runCancel";
 import { mediaExtractFields, sbrExtractFields } from "../../lib/sbrExtractFields";
 import { completeImport, createImport, getServerState } from "../../lib/serverApi";
 import { resolveImportStagingDir } from "../../lib/system-settings";
 import {
   type AttachmentForecast,
   awaitTauriJob,
-  invokeCancel,
   invokeDeleteStaging,
   invokeExtract,
   invokeImessageBackupIdentities,
@@ -96,13 +96,6 @@ function mediaVerb(mode: AttachmentMediaMode): string {
 function mediaDoneDetail(mode: AttachmentMediaMode): string {
   return mode === "compress" ? "Compression complete" : "Conversion complete";
 }
-
-/**
- * The text a cancelled desktop job's `extract:error` carries: the one word
- * every stage of the Rust side returns for a cancel (`message-crate-core`'s
- * `check_cancel`).
- */
-const CANCELLED_MESSAGE = "cancelled";
 
 /**
  * Extract stages originals regardless of the chosen media mode (ffmpeg is
@@ -371,6 +364,12 @@ type RunScratch = {
   /** Guards approve and cancel against a double click doing the work twice. */
   reviewAction: boolean;
   /**
+   * The Cancel of the stages running now. A new one starts with each run and
+   * each approve, so a Cancel never carries into a stage the person started
+   * after it.
+   */
+  runCancel: RunCancel;
+  /**
    * Guards startImport the same way: the identity probe awaits two network
    * calls before runImport ever sets `running`, so a double-click on Import
    * while that probe is in flight would otherwise start two runs.
@@ -393,6 +392,7 @@ function freshScratch(): RunScratch {
     lastAttachmentProgress: null,
     stagingLines: {},
     reviewAction: false,
+    runCancel: createRunCancel(),
     startImport: false,
   };
 }
@@ -459,6 +459,7 @@ function beginRun(form: ImportJobFormValues, firstStep: ImportIssue["step"]): vo
   scratch.attachmentMode = form.attachmentMedia;
   scratch.extractMediaMode = extractAttachmentMedia(form.attachmentMedia);
   scratch.form = form;
+  scratch.runCancel = createRunCancel();
 }
 
 function applyProgress(event: ImportProgressEvent): void {
@@ -563,9 +564,13 @@ function recordError(step: ImportIssue["step"], message: string): void {
   scratch.issues = [...scratch.issues, { kind: "error", step, item: "Import", reason: message }];
 }
 
-/** Run one desktop job to its end, feeding its progress and issues into the run. */
+/**
+ * Run one desktop job to its end, feeding its progress and issues into the
+ * run. A job that a Cancel came before is never started, and fails with
+ * `CANCELLED_MESSAGE` the way a job cancelled while it runs does.
+ */
 function runJob(invokeFn: () => Promise<void>): Promise<TauriJobResult> {
-  return awaitTauriJob(invokeFn, undefined, applyProgress, recordIssue);
+  return awaitTauriJob(scratch.runCancel.guard(invokeFn), undefined, applyProgress, recordIssue);
 }
 
 /**
@@ -1174,7 +1179,7 @@ async function cancelRun(): Promise<void> {
 
 /** Stop the stage that is running. The run stays where it got to. */
 async function cancel(): Promise<void> {
-  await invokeCancel();
+  await scratch.runCancel.cancel();
 }
 
 /**
@@ -1271,6 +1276,7 @@ export function useImportJob() {
     if (!form || sessionId == null || outputDir == null || approvedSummary == null) return;
 
     scratch.reviewAction = true;
+    scratch.runCancel = createRunCancel();
     try {
       if (phase === "staging_review" && mediaJobVerb(form.attachmentMedia) !== null) {
         await runMediaPass(form, sessionId, outputDir, approvedSummary);

@@ -1,6 +1,8 @@
-# Container defaults for Docker Compose (dev + release profiles).
-# The entrypoint copies this to config/config.toml on every start, and again
-# after `reset-demo` (which otherwise installs the demo config without [server]).
+# Container defaults for the Docker image (docker/compose.yml and
+# docker/compose.release.yml). The entrypoint copies this to
+# config/config.toml on every start, before `serve` or any other command.
+# `reset-demo` replaces config/config.toml with the demo config, which has no
+# [server], so the next start puts this file back.
 
 [paths]
 db = "data/messagecrate.db"

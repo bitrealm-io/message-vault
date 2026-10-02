@@ -5,9 +5,9 @@
 # HTTP import server. Web accounts (user ID + optional password) and identity
 # (preferred name / phones / optional email handles) live in SQLite. Create an
 # account in the web UI, then import with `--account <username>` (CLI) or your
-# Import API token (Message Exporters).
+# Import API token (the desktop app).
 #
-# Message Exporters writes JSONL + attachments and uploads with a source name.
+# The desktop app writes JSONL + attachments and uploads with a source name.
 # Source folders are not listed here — each import registers its own source for
 # that account under data/<account_id>/<source_id>/.
 #
@@ -21,7 +21,7 @@ data_dir = "data"
 assets_dir = "assets"
 assets_converted_dir = "assets_converted"
 
-# HTTP JSONL import API (`cargo run --release -- serve`).
+# HTTP JSONL import API (`cargo run --release -p message-crate-server -- serve`).
 # Auth uses per-account Import API tokens from the web Settings UI (not a host secret).
 [server]
 bind = "127.0.0.1:8080"

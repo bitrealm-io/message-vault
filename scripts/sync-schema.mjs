@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Copy schema/sql/*.sql into web-next/src/lib/vaultSchema.generated.ts.
+ * Copy the schema/sql/*.sql files listed in PARTS (all but saved_searches.sql)
+ * into web-next/src/lib/vaultSchema.generated.ts.
  * Optionally refresh tests/fixtures/schema/current-schema.json from a fresh apply.
  *
  * Usage:

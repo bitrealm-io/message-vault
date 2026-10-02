@@ -4,7 +4,7 @@
 #   ./scripts/check-license.sh
 #
 # Read-only. Checks LICENSE.md, every tracked Cargo.toml, web/package.json (and
-# its lockfile), and the committed OpenAPI spec. Runs in CI and in check-pr.sh.
+# its lockfile), and the committed OpenAPI spec. Runs in CI and in check-all.sh.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

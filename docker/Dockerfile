@@ -7,8 +7,8 @@
 # BUILD_METADATA is the part of the Build after the "+", normally the commit:
 #   docker build --build-arg BUILD_METADATA="$(git rev-parse --short=8 HEAD)" ...
 # .git is not in the build context, so neither stage can ask git for it. Left
-# out, the server and the website report 0.9.0+unknown. Passed empty, as the
-# release job does, they report the Product Version alone.
+# out, the server and the website report <version>+unknown. Passed empty, as
+# the release job does, they report the Product Version alone.
 
 # -----------------------------------------------------------------------------
 # Stage 1: Vite SPA frontend

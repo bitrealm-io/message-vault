@@ -8,8 +8,5 @@
 # Restored Next.js browse UI. Product UI is web/.
 web-next/
 
-# Legacy Slint desktop GUI. Product desktop app is src-tauri/ + web/.
-crates/message-crate-gui/
-
 # Vendored sqlx-sqlite fork. Open only when changing that driver.
 vendor/

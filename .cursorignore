@@ -1,7 +1,7 @@
 # Always skip: generated output, dependencies, local data, and tool caches.
 # These are not product source. Cursor should not index or read them.
 #
-# Skip-unless trees (legacy UIs and the vendored SQLite driver) live in
+# Skip-unless trees (web-next/ and the vendored SQLite driver) live in
 # .cursorindexingignore. That file only drops them from the codebase index.
 # Agent Grep and Glob still walk those trees so a task about them can open
 # a file without editing this list.

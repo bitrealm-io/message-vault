@@ -37,9 +37,8 @@ config/contacts.vcf
 # Local machine config (copy .env.example to .env)
 .env
 
-# Converter output trees (directory kept via .gitkeep)
+# Local server data: the database and per-account files
 /data/*
-!/data/.gitkeep
 
 # Starlight documentation output
 /docs/.astro/
@@ -47,7 +46,7 @@ config/contacts.vcf
 /docs/node_modules
 /docs/public/docs/developer/rustdoc/
 
-# PlantUML extension default dump (workspace export goes to docs/maintainers/architecture/puml/img)
+# PlantUML extension default dump
 /out/
 
 # Local release packaging output

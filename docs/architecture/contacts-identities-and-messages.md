@@ -80,6 +80,16 @@ is a person's address, and only that one gets a contact. Why: the id reaches
 nobody, and a contact made from it shows up in Contacts as a nameless person
 who never existed.
 
+**A chat handle's type comes from the header, not its shape.** A group's chat
+handle is stored with the type `other`, whatever it looks like. A one-to-one
+chat handle takes the type the header gives the participant with the same
+address, and so does a message sender that is a participant; the address's
+shape decides only when no participant has it. Why: the exporter knows what
+its source's ids are, and the shape does not. A WhatsApp group id
+(`120363042@g.us`) and an internal WhatsApp id (`123456@lid`) both hold an
+`@`, and typed by shape each became an email identity that reaches nobody
+([#1141](https://github.com/messagecrate/message-crate/issues/1141)).
+
 **One number is one person on every service.** iMessage, SMS, MMS and RCS are
 all text messages, so a phone number that arrives over any of them is one
 `handles` row with the service `phone`. The same number on WhatsApp is a

@@ -383,14 +383,32 @@ impl FileStaging<'_> {
             self.media_work,
         )?;
 
-        // Conversation identity: the chat handle, typed from its shape (Phone for
-        // SMS/iMessage/WhatsApp numbers, Email for `@`, Other for group ids).
+        // What the header says each participant's address is. The exporter
+        // knows its source's ids, and the shape of an address does not: a
+        // WhatsApp `123456@lid` has an `@` and is no email address.
+        let header_types = header_handle_types(&conversation.participants);
+        let individual = conversation
+            .conversation_type
+            .eq_ignore_ascii_case("individual");
+        // Conversation identity: the chat handle. A group's id is the group's
+        // key and nobody's address, so it is `Other` whatever its shape (a
+        // WhatsApp `…@g.us` has an `@`). A one-to-one chat's id takes the type
+        // the header gives the participant with the same address, and its
+        // shape only when no participant has it.
+        let chat_handle_type = if individual {
+            header_types
+                .get(conversation.chat_identifier.trim())
+                .copied()
+                .unwrap_or_else(|| infer_handle_type(&conversation.chat_identifier))
+        } else {
+            HandleType::Other
+        };
         let (chat_handle_id, flagged, _cached) = upsert_handle_row_cached(
             self.tx,
             &mut self.stmts.handles,
             self.stmts.account_id,
             &conversation.chat_identifier,
-            infer_handle_type(&conversation.chat_identifier),
+            chat_handle_type,
             Some(platform.as_str()),
         )
         .await?;
@@ -404,10 +422,7 @@ impl FileStaging<'_> {
         // name, not the type, says it is the orphaned conversation. The handle
         // cache is no guide here: it says this run has seen the handle, not
         // that anything gave it a contact.
-        let chat_is_a_person = conversation
-            .conversation_type
-            .eq_ignore_ascii_case("individual")
-            && !is_orphaned_export(Path::new(&self.source_file));
+        let chat_is_a_person = individual && !is_orphaned_export(Path::new(&self.source_file));
         if chat_is_a_person {
             let _ = ensure_contact_for_handle(
                 self.tx,
@@ -453,6 +468,7 @@ impl FileStaging<'_> {
             prepared_messages,
             first_sort_order,
             platform,
+            &header_types,
             &mut stats,
         )
         .await?;
@@ -472,6 +488,17 @@ impl FileStaging<'_> {
         self.stats.merge_file(&stats);
         Ok(())
     }
+}
+
+/// The type the header gives each participant address that has one, keyed by
+/// the trimmed address.
+fn header_handle_types(participants: &[StagedParticipant]) -> HashMap<String, HandleType> {
+    participants
+        .iter()
+        .filter_map(|(handle, _, handle_type)| {
+            Some((handle.as_deref()?.trim().to_string(), (*handle_type)?))
+        })
+        .collect()
 }
 
 /// Platform for chat and participant handles: the conversation's own hint,
@@ -600,7 +627,10 @@ async fn insert_participant(
 
 /// Resolve each message's body text and sender handle into a row ready for
 /// the bulk staging insert. The messages take `sort_order` in the source's
-/// order, counting up from `first_sort_order`.
+/// order, counting up from `first_sort_order`. A sender the header names as a
+/// participant takes the type the header gives it, so the sender and the
+/// participant are one identity; any other sender keeps the type its message
+/// record carries.
 ///
 /// # Errors
 ///
@@ -611,6 +641,7 @@ async fn resolve_message_rows(
     prepared: Vec<(MessageRecord, Vec<PreparedAttachment>)>,
     first_sort_order: i64,
     platform: HandleService,
+    header_types: &HashMap<String, HandleType>,
     stats: &mut ImportStats,
 ) -> Result<Vec<PendingStagingMessage>> {
     let mut rows = Vec::with_capacity(prepared.len());
@@ -632,7 +663,12 @@ async fn resolve_message_rows(
             IncomingSender {
                 is_from_me: msg.is_from_me,
                 address: msg.sender.as_deref(),
-                handle_type: msg.sender_handle_type,
+                handle_type: msg
+                    .sender
+                    .as_deref()
+                    .and_then(|address| header_types.get(address.trim()))
+                    .copied()
+                    .or(msg.sender_handle_type),
                 platform: sender_platform.as_str(),
             },
             stats,

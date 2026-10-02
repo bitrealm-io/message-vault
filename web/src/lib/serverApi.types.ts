@@ -88,12 +88,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List the account's named API tokens with their permissions and masked secrets. */
+        /**
+         * List the account's named API tokens with their permissions and masked secrets.
+         * @description Each token's permissions are capped by the account's as they are now.
+         */
         get: operations["list_api_tokens"];
         put?: never;
         /**
          * Create a named API token.
-         * @description Returns the plaintext secret once, at creation; it is never returned again.
+         * @description Returns the plaintext secret once, at creation; it is never returned again. The token's permissions are those the request asks for and the account holds.
          */
         post: operations["create_api_token"];
         delete?: never;

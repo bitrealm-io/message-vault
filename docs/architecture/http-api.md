@@ -326,7 +326,9 @@ scheme with its scopes, so every route says which it accepts.
   messages.
 - An **API token** is a named credential an account makes for a program, with
   the scopes the person chose from `import` and `export`, capped by the
-  account's own. A token never carries `delete`: permanent deletion is a
+  account's own. The cap holds on every request, when the token is made, and
+  when it is listed, so the list shows what the token may do now: a scope the
+  owner turns off later shows as off. A token never carries `delete`: permanent deletion is a
   person's act, and a leaked or faulty program must not be able to empty an
   archive. A token never signs in and never browses. It is ended by the person
   revoking it (`DELETE /v1/accounts/{id}/api-tokens/{token_id}`, with a

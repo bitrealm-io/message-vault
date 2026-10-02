@@ -828,7 +828,10 @@ pub(crate) const MAX_REQUEST_BODY_BYTES: usize = 512 * 1024 * 1024;
 /// [`MAX_REQUEST_BODY_BYTES`]. A `Content-Length` over the cap is refused
 /// before any handler runs; a body with no declared length is cut off once it
 /// passes the cap. A request with a safe method carries no body the server
-/// reads, so it skips the check.
+/// reads, so it skips the check. A part of a multipart upload
+/// ([`is_upload_part`]) skips it too, because its route holds the body to the
+/// part size the upload started with, and the limit as it is now would refuse
+/// every remaining part of an upload the owner lowered the limit under.
 async fn limit_request_body(
     axum::extract::State(state): axum::extract::State<AppState>,
     request: axum::extract::Request,
@@ -838,7 +841,8 @@ async fn limit_request_body(
     if matches!(
         *request.method(),
         Method::GET | Method::HEAD | Method::OPTIONS
-    ) {
+    ) || is_upload_part(&request)
+    {
         return next.run(request).await;
     }
     let limit = if is_attachment_upload(&request) {
@@ -909,25 +913,34 @@ fn is_asset_download(request: &axum::extract::Request) -> bool {
             })
 }
 
-/// `PUT /v1/assets/{sha256}` and
-/// `PUT /v1/assets/{sha256}/uploads/{upload_id}/parts/{part}`: the two
-/// requests whose body is an attachment's bytes, and the only ones the
-/// attachment size limit holds.
-fn is_attachment_upload(request: &axum::extract::Request) -> bool {
+/// The path segments after `/v1/assets/` of a `PUT`, or `None` for any other
+/// request.
+fn asset_put_segments(request: &axum::extract::Request) -> Option<Vec<&str>> {
     if request.method() != axum::http::Method::PUT {
-        return false;
+        return None;
     }
-    let Some(rest) = request.uri().path().strip_prefix("/v1/assets/") else {
-        return false;
-    };
-    let segments: Vec<&str> = rest.split('/').collect();
-    match segments.as_slice() {
-        [sha256] => !sha256.is_empty(),
-        [sha256, "uploads", upload_id, "parts", part] => {
-            !sha256.is_empty() && !upload_id.is_empty() && !part.is_empty()
-        }
-        _ => false,
-    }
+    let rest = request.uri().path().strip_prefix("/v1/assets/")?;
+    Some(rest.split('/').collect())
+}
+
+/// `PUT /v1/assets/{sha256}`: the one request the attachment size limit, as
+/// the Server Settings have it when the request arrives, holds.
+fn is_attachment_upload(request: &axum::extract::Request) -> bool {
+    asset_put_segments(request)
+        .is_some_and(|segments| matches!(segments.as_slice(), [sha256] if !sha256.is_empty()))
+}
+
+/// `PUT /v1/assets/{sha256}/uploads/{upload_id}/parts/{part}`: one part of a
+/// multipart upload, which its route holds to the part size in the upload's
+/// manifest.
+fn is_upload_part(request: &axum::extract::Request) -> bool {
+    asset_put_segments(request).is_some_and(|segments| {
+        matches!(
+            segments.as_slice(),
+            [sha256, "uploads", upload_id, "parts", part]
+                if !sha256.is_empty() && !upload_id.is_empty() && !part.is_empty()
+        )
+    })
 }
 
 /// `POST /v1/contacts/address-book`: the address book as `text/csv`.
@@ -1072,6 +1085,11 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
         opened.cfg.paths.db.display()
     );
     let state = AppState::new(opened, server.asset_part_size);
+    if crate::server_api::recover_stopped_demo_build(&state).await? {
+        eprintln!(
+            "  demo: the server stopped during a Demo Account build; the part-built Demo Account was removed"
+        );
+    }
     // Reported as they stand now; each upload reads them again. Any stored
     // limit starts the server: a part is never larger than the limit.
     let upload_limits = state.upload_limits().await?;
@@ -1081,13 +1099,18 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
         upload_limits.part_size as u64 / message_ir::MIB
     );
 
+    let demo_build = state.demo_build.clone();
     let app = http_app(state);
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     eprintln!("message-crate-server serve listening on http://{bind}");
     eprintln!(
         "  routes: `message-crate-server dump-openapi` lists them all; set [server] openapi_ui = true for /docs"
     );
-    serve_until_shutdown(listener, app).await?;
+    let served = serve_until_shutdown(listener, app).await;
+    // A Demo Account build the owner started would otherwise end part-way
+    // when the process exits (#1215).
+    demo_build.stop().await;
+    served?;
     Ok(())
 }
 

@@ -85,6 +85,15 @@ fn store_claimed_or_path(
     assets_dir: &Path,
     asset_stats: &mut AssetStats,
 ) -> Result<Option<StoredAsset>> {
+    // Checked before the stored-fingerprint lookup, which never reads the
+    // file: `attachments.path` keeps the path as sent, and an Export writes
+    // the file there, so a path the check refuses is never stored.
+    let checked = att
+        .path
+        .as_deref()
+        .and_then(trimmed)
+        .map(|rel| message_ir::safe_attachment_path(export_dir, rel))
+        .transpose()?;
     if let Some(sha) = att.sha256.as_deref().and_then(trimmed) {
         if let Some(found) = assets_api::lookup_by_sha256(assets_dir, sha) {
             asset_stats.deduped += 1;
@@ -93,8 +102,7 @@ fn store_claimed_or_path(
                 ..found
             }));
         }
-        if let Some(rel) = att.path.as_deref().and_then(trimmed) {
-            let source = message_ir::safe_attachment_path(export_dir, rel)?;
+        if let Some(source) = checked {
             return match assets_api::store_verified(
                 &source,
                 sha,

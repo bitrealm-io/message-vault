@@ -1573,6 +1573,61 @@ async fn an_api_token_records_no_app() {
     );
 }
 
+/// Make every UPDATE of `table` fail, as it does when another connection
+/// holds SQLite's write lock past `busy_timeout`. Reads still succeed.
+async fn fail_updates_of(conn: &mut SqliteConnection, table: &str) {
+    sqlx::query(&format!(
+        "CREATE TEMP TRIGGER fail_update_{table} BEFORE UPDATE ON main.{table}
+         BEGIN SELECT RAISE(ABORT, 'database is locked'); END"
+    ))
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+}
+
+/// A failed `last_accessed_at` write does not fail the request (#1189).
+#[tokio::test]
+async fn an_api_token_works_when_its_last_used_time_cannot_be_written() {
+    let (_dir, mut conn) = test_conn().await;
+    account_profile::insert_account_at(&mut conn, TEST_ACCOUNT, "alice", None, None)
+        .await
+        .unwrap();
+    let created =
+        api_tokens::create_api_token(&mut conn, TEST_ACCOUNT, "tool", Permissions::all(), None)
+            .await
+            .unwrap();
+    fail_updates_of(&mut conn, "account_api_tokens").await;
+
+    let identity = resolve_auth_on_conn(&mut conn, &created.token, None)
+        .await
+        .expect("the token is still accepted");
+
+    assert_eq!(identity.account_id, TEST_ACCOUNT);
+}
+
+/// A failed write of the connecting app does not fail the request (#1189).
+#[tokio::test]
+async fn a_session_works_when_its_connecting_app_cannot_be_written() {
+    let (_dir, mut conn) = test_conn().await;
+    account_profile::insert_account_at(&mut conn, TEST_ACCOUNT, "alice", None, None)
+        .await
+        .unwrap();
+    let token = session_tokens::insert_account_session_token(&mut conn, TEST_ACCOUNT)
+        .await
+        .unwrap();
+    fail_updates_of(&mut conn, "account_session_tokens").await;
+    let desktop = session_tokens::ConnectingApp {
+        kind: session_tokens::AppKind::Desktop,
+        build: "0.10.0".into(),
+    };
+
+    let identity = resolve_auth_on_conn(&mut conn, &token, Some(&desktop))
+        .await
+        .expect("the session is still accepted");
+
+    assert_eq!(identity.account_id, TEST_ACCOUNT);
+}
+
 /// The website is served from the folder the config names, so a server
 /// started somewhere other than beside a `static` folder, as the desktop
 /// app's is (#970), still has its website.

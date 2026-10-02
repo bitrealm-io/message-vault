@@ -347,6 +347,52 @@ fn the_same_seed_writes_the_same_bundle_twice() {
     );
 }
 
+/// The first group opened with "Demo User named the conversation “Weekend
+/// Trip”" whatever its title was, so a group with no title (as in the large
+/// set) showed a rename to a name it never had. Across a run of seeds the
+/// first group comes out both with and without a title; the rename line must
+/// be there only when it has one, and must name it.
+#[test]
+fn the_first_group_has_a_rename_line_only_when_it_has_a_title_and_names_that_title() {
+    let mut seen_titled = false;
+    let mut seen_untitled = false;
+    for seed in 0..12 {
+        let temp = tempfile::tempdir().expect("create test directory");
+        let mut cfg = small_config(temp.path());
+        cfg.seed = seed;
+        generate(&cfg).expect("generate the bundle");
+        let path = Path::new(&cfg.out)
+            .join("staging")
+            .join(IMESSAGE_SOURCE)
+            .join("group-000.jsonl");
+        if !path.exists() {
+            continue;
+        }
+        let document = read_document(&path);
+        let renames: Vec<&str> = document
+            .messages
+            .iter()
+            .filter_map(|message| message.imessage.as_ref()?.announcement.as_deref())
+            .filter(|announcement| announcement.contains("named the conversation"))
+            .collect();
+        match &document.conversation.group_title {
+            Some(title) => {
+                seen_titled = true;
+                assert_eq!(
+                    renames,
+                    [format!("Demo User named the conversation “{title}”.")],
+                    "seed {seed}"
+                );
+            }
+            None => {
+                seen_untitled = true;
+                assert!(renames.is_empty(), "seed {seed}: {renames:?}");
+            }
+        }
+    }
+    assert!(seen_titled && seen_untitled, "the seeds cover both cases");
+}
+
 #[test]
 fn generate_replaces_an_earlier_bundle_and_removes_its_backup() {
     let temp = tempfile::tempdir().expect("create test directory");
@@ -495,14 +541,19 @@ fn replace_generated_paths_installs_when_every_rename_crosses_devices() {
     write_bundle_paths(&active, b"old");
     write_bundle_paths(&prepared, b"new");
 
-    replace_generated_paths_with(&active, &prepared, |source, destination| {
-        move_path_with(source, destination, |_source, _destination| {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::CrossesDevices,
-                "Invalid cross-device link",
-            ))
-        })
-    })
+    replace_generated_paths_with(
+        &active,
+        &prepared,
+        |source, destination| {
+            move_path_with(source, destination, |_source, _destination| {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::CrossesDevices,
+                    "Invalid cross-device link",
+                ))
+            })
+        },
+        |backup| fs::remove_dir_all(backup),
+    )
     .expect("install after cross-device renames");
 
     assert_bundle_paths(&active, b"new");
@@ -518,15 +569,20 @@ fn replacement_failure_at_each_generated_path_restores_all_old_paths() {
         write_bundle_paths(&prepared, b"new");
         let mut installs = 0;
 
-        let result = replace_generated_paths_with(&active, &prepared, |source, destination| {
-            if source.starts_with(&prepared) && destination.starts_with(&active) {
-                installs += 1;
-                if installs == failing_install {
-                    anyhow::bail!("install failed on purpose {failing_install}");
+        let result = replace_generated_paths_with(
+            &active,
+            &prepared,
+            |source, destination| {
+                if source.starts_with(&prepared) && destination.starts_with(&active) {
+                    installs += 1;
+                    if installs == failing_install {
+                        anyhow::bail!("install failed on purpose {failing_install}");
+                    }
                 }
-            }
-            fs::rename(source, destination).map_err(Into::into)
-        });
+                fs::rename(source, destination).map_err(Into::into)
+            },
+            |backup| fs::remove_dir_all(backup),
+        );
 
         assert!(result.is_err(), "install {failing_install} must fail");
         assert_bundle_paths(&active, b"old");
@@ -543,21 +599,26 @@ fn restore_attempts_all_paths_after_one_restore_fails() {
     let mut installs = 0;
     let mut restored_staging = false;
 
-    let result = replace_generated_paths_with(&active, &prepared, |source, destination| {
-        if source.starts_with(&prepared) && destination.starts_with(&active) {
-            installs += 1;
-            if installs == 3 {
-                anyhow::bail!("README install failed on purpose");
+    let result = replace_generated_paths_with(
+        &active,
+        &prepared,
+        |source, destination| {
+            if source.starts_with(&prepared) && destination.starts_with(&active) {
+                installs += 1;
+                if installs == 3 {
+                    anyhow::bail!("README install failed on purpose");
+                }
             }
-        }
-        if source.ends_with(".previous-active/config") {
-            anyhow::bail!("config restore failed on purpose");
-        }
-        if source.ends_with(".previous-active/staging") {
-            restored_staging = true;
-        }
-        fs::rename(source, destination).map_err(Into::into)
-    });
+            if source.ends_with(".previous-active/config") {
+                anyhow::bail!("config restore failed on purpose");
+            }
+            if source.ends_with(".previous-active/staging") {
+                restored_staging = true;
+            }
+            fs::rename(source, destination).map_err(Into::into)
+        },
+        |backup| fs::remove_dir_all(backup),
+    );
 
     let error = result.expect_err("replacement must fail").to_string();
     assert!(
@@ -566,6 +627,44 @@ fn restore_attempts_all_paths_after_one_restore_fails() {
     );
     assert!(error.contains("config restore failed on purpose"));
     assert!(prepared.join(".previous-active/config").exists());
+}
+
+/// When the install fails and every previous path is moved back, but the
+/// emptied backup folder cannot be removed, the previous files are in place.
+/// The message said "Could not restore the previous demo files", because it
+/// took the backup folder still being there as the sign the restore failed.
+#[test]
+fn a_restore_that_worked_says_so_when_its_backup_cannot_be_removed() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let active = temp.path().join("active");
+    let prepared = tempfile::tempdir_in(temp.path()).expect("create prepared directory");
+    write_bundle_paths(&active, b"old");
+    write_bundle_paths(prepared.path(), b"new");
+    let backup = prepared.path().join(".previous-active");
+    let mut installs = 0;
+
+    let error = replace_generated_paths_with(
+        &active,
+        prepared.path(),
+        |source, destination| {
+            if source.starts_with(prepared.path()) && destination.starts_with(&active) {
+                installs += 1;
+                if installs == 2 {
+                    anyhow::bail!("config install failed on purpose");
+                }
+            }
+            fs::rename(source, destination).map_err(Into::into)
+        },
+        |_backup| Err(io::Error::from(io::ErrorKind::PermissionDenied)),
+    )
+    .expect_err("replacement must fail");
+
+    assert_bundle_paths(&active, b"old");
+    assert!(backup.exists(), "the backup folder was not removed");
+    let text = format!("{:#}", keep_prepared_if_restore_failed(prepared, error));
+    assert!(!text.contains("Could not restore"), "{text}");
+    assert!(text.contains("previous demo files were restored"), "{text}");
+    assert!(text.contains(&backup.display().to_string()), "{text}");
 }
 
 /// Write `staging/marker`, `config/marker`, and `README.md` with the same bytes.

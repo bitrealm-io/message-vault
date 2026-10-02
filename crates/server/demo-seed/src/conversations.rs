@@ -621,7 +621,8 @@ impl<R: Rng> Seeder<'_, R> {
         Ok(())
     }
 
-    /// Write one group conversation. The first group starts with a rename announcement.
+    /// Write one group conversation. The first group, when it has a title, starts
+    /// with an announcement that names it.
     ///
     /// # Errors
     ///
@@ -647,7 +648,10 @@ impl<R: Rng> Seeder<'_, R> {
         let msg_count = ((group.msgs_per_year * group.span_years).round() as isize).max(1) as usize;
         let timestamps = self.timestamps(msg_count, group.span_years, sample_group_day_burst);
         let mut file = open_jsonl(&staging.join(format!("group-{:03}.jsonl", group.index)))?;
-        let header_message_count = if group.index == 0 {
+        // The first group starts with a rename announcement so the UI has one to
+        // show, when it has a title to have been named.
+        let rename_title = group.title.as_deref().filter(|_| group.index == 0);
+        let header_message_count = if rename_title.is_some() {
             msg_count + 1
         } else {
             msg_count
@@ -662,8 +666,7 @@ impl<R: Rng> Seeder<'_, R> {
             export_meta(IMESSAGE_SOURCE, OWNER_PHONE),
         )?;
 
-        // The first group starts with a rename announcement so the UI has one to show.
-        if group.index == 0 {
+        if let Some(title) = rename_title {
             let first_message_ts = timestamps
                 .first()
                 .copied()
@@ -678,7 +681,7 @@ impl<R: Rng> Seeder<'_, R> {
             ann.text.clear();
             ann.message_kind = IrMessageKind::Announcement;
             let im = ann.imessage.get_or_insert_with(IrImessage::default);
-            im.announcement = Some("Demo User named the conversation “Weekend Trip”.".into());
+            im.announcement = Some(format!("Demo User named the conversation “{title}”."));
             self.emit(&mut file, ann)?;
         }
 

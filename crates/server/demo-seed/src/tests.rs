@@ -824,3 +824,41 @@ fn the_output_parent_is_the_folder_the_bundle_lands_beside() {
     assert_eq!(output_parent_dir(Path::new("demo")), Path::new("."));
     assert_eq!(output_parent_dir(Path::new("")), Path::new("."));
 }
+
+/// The Demo Account's time zone is UTC, so a message outside 08:00-23:00 UTC
+/// reads as a message sent overnight.
+#[test]
+fn every_message_of_the_medium_set_falls_between_8am_and_11pm_utc_and_not_after_the_reference_time()
+{
+    use chrono::{TimeZone, Timelike, Utc};
+
+    let temp = tempfile::tempdir().expect("create test directory");
+    let out = temp.path().join("demo");
+    generate_size_to(DemoSize::Medium, &out).expect("generate the medium bundle");
+    let reference_ms = SeedConfig::for_size(DemoSize::Medium)
+        .expect("medium settings")
+        .reference_time
+        .timestamp_millis();
+
+    let mut outside = Vec::new();
+    for (source, doc) in read_bundle(&out) {
+        for message in &doc.messages {
+            let ms = message.timestamp_unix_ms;
+            let time = Utc
+                .timestamp_millis_opt(ms)
+                .single()
+                .expect("a valid timestamp")
+                .time();
+            let seconds = time.num_seconds_from_midnight();
+            if ms > reference_ms || !(8 * 3600..=23 * 3600).contains(&seconds) {
+                outside.push(format!("{source} {}: {time}", message.guid));
+            }
+        }
+    }
+    assert!(
+        outside.is_empty(),
+        "{} messages fall outside 08:00-23:00 UTC or after the reference time, first: {:?}",
+        outside.len(),
+        outside.iter().take(5).collect::<Vec<_>>()
+    );
+}

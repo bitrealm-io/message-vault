@@ -202,7 +202,7 @@ pub async fn page(
     )
     .bind(import_id)
     .bind(limit as i64)
-    .bind(offset as i64)
+    .bind(i64::try_from(offset)?)
     .fetch_all(&mut *conn)
     .await?;
     let items = rows

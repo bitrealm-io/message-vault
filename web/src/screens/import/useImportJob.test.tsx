@@ -847,6 +847,101 @@ describe("useImportJob wiring", () => {
     expect(completeImportMock.mock.calls.some(([id]) => id === 1)).toBe(false);
   });
 
+  it("does not start the extract when Cancel is pressed while the run is being created", async () => {
+    // Every job command clears the shared cancel flag when it starts, so a
+    // Cancel sent before invokeExtract would be erased by invokeExtract itself.
+    let releaseCreate: (value: { id: number }) => void = () => {};
+    createImportMock.mockReset();
+    createImportMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          releaseCreate = resolve;
+        }),
+    );
+    const { result } = renderHook(() => useImportJob());
+    let started: Promise<void> = Promise.resolve();
+    act(() => {
+      started = result.current.startImport(form({ attachmentMedia: "copy" }));
+    });
+    await waitFor(() => expect(createImportMock).toHaveBeenCalled());
+    await act(() => result.current.cancel());
+    releaseCreate({ id: 1 });
+    await act(() => started);
+
+    expect(invokeExtractMock).not.toHaveBeenCalled();
+    expect(result.current.summaryView?.status).toBe("cancelled");
+    expect(completeImportMock.mock.calls.some(([id]) => id === 1)).toBe(false);
+  });
+
+  it("does not start the upload when Cancel is pressed while the pushing stage is written", async () => {
+    let releaseStage: () => void = () => {};
+    const { result } = renderHook(() => useImportJob());
+    await act(() => result.current.startImport(form({ attachmentMedia: "copy" })));
+    setImportStageMock.mockImplementation((_id: number, stage: string) =>
+      stage === "pushing"
+        ? new Promise<void>((resolve) => {
+            releaseStage = resolve;
+          })
+        : Promise.resolve(),
+    );
+    runMock.mockImplementationOnce(runResult({ summary: "Push finished.", report: okReport() }));
+    let approved: Promise<void> = Promise.resolve();
+    act(() => {
+      approved = result.current.approve();
+    });
+    await waitFor(() =>
+      expect(setImportStageMock).toHaveBeenCalledWith(1, "pushing", expect.anything()),
+    );
+    await act(() => result.current.cancel());
+    releaseStage();
+    await act(() => approved);
+
+    expect(invokePushMock).not.toHaveBeenCalled();
+  });
+
+  it("sends Cancel again once a job has started, when it was pressed while the job was starting", async () => {
+    // The job command clears the shared flag when it starts, so a Cancel that
+    // reached the desktop side before that is gone, and has to be sent again.
+    let releasePush: () => void = () => {};
+    const { result } = renderHook(() => useImportJob());
+    await act(() => result.current.startImport(form({ attachmentMedia: "copy" })));
+    invokePushMock.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releasePush = resolve;
+        }),
+    );
+    runMock.mockImplementationOnce(runResult({ summary: "Push finished.", report: okReport() }));
+    let approved: Promise<void> = Promise.resolve();
+    act(() => {
+      approved = result.current.approve();
+    });
+    await waitFor(() => expect(invokePushMock).toHaveBeenCalled());
+    await act(() => result.current.cancel());
+    expect(cancelMock).toHaveBeenCalledTimes(1);
+    releasePush();
+    await act(() => approved);
+
+    expect(cancelMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not carry a Cancel from one run into the next", async () => {
+    runMock.mockReset();
+    runMock.mockImplementationOnce(async (fn: () => Promise<unknown>) => {
+      await fn();
+      throw new Error("cancelled");
+    });
+    const { result } = renderHook(() => useImportJob());
+    await act(() => result.current.startImport(form({ attachmentMedia: "copy" })));
+    await act(() => result.current.cancel());
+    expect(result.current.summaryView?.status).toBe("cancelled");
+
+    invokeExtractMock.mockClear();
+    runMock.mockImplementationOnce(runResult(EXTRACT_RESULT));
+    await act(() => result.current.startImport(form({ attachmentMedia: "copy" })));
+    expect(invokeExtractMock).toHaveBeenCalledTimes(1);
+  });
+
   it("still completes the session as failed when the extract genuinely fails", async () => {
     // A real failure must not lock the account out of importing: the run
     // completes and frees the slot, and restart-with-settings covers it.

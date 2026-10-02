@@ -307,6 +307,64 @@ mod tests {
     use super::*;
     use std::fs;
 
+    #[cfg(unix)]
+    #[test]
+    fn a_missing_folder_under_a_symlinked_root_is_inside_the_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("real");
+        fs::create_dir(&real).unwrap();
+        let link = dir.path().join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let candidate = link.join("staging-not-made-yet");
+
+        let resolved = resolve_openable_path(candidate.to_str().unwrap(), link.to_str().unwrap());
+
+        assert!(resolved.is_ok(), "{resolved:?}");
+    }
+
+    /// A Staging Directory not made yet, under a folder reached through a
+    /// symbolic link, resolves in the same form as a folder inside it.
+    #[cfg(unix)]
+    #[test]
+    fn a_missing_folder_under_a_missing_root_behind_a_symlink_is_inside_the_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("real");
+        fs::create_dir(&real).unwrap();
+        let link = dir.path().join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let root = link.join("message-crate");
+        let candidate = root.join("staging-not-made-yet");
+
+        let resolved =
+            resolve_openable_path(candidate.to_str().unwrap(), root.to_str().unwrap()).unwrap();
+
+        assert_eq!(
+            resolved,
+            real.canonicalize()
+                .unwrap()
+                .join("message-crate")
+                .join("staging-not-made-yet")
+        );
+    }
+
+    /// A missing path that leaves the root through `..` is still refused
+    /// when the root is reached through a symbolic link.
+    #[cfg(unix)]
+    #[test]
+    fn a_missing_path_outside_a_symlinked_root_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("real");
+        fs::create_dir(&real).unwrap();
+        let link = dir.path().join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let candidate = link.join("..").join("elsewhere").join("not-made-yet");
+
+        let err =
+            resolve_openable_path(candidate.to_str().unwrap(), link.to_str().unwrap()).unwrap_err();
+
+        assert_eq!(err, "Path is outside the staging folder");
+    }
+
     #[test]
     fn save_text_file_writes_the_text_and_replaces_what_was_there() {
         let dir = tempfile::tempdir().unwrap();

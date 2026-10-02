@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
-import { renderHook } from "@testing-library/react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import { act, renderHook } from "@testing-library/react";
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { measureColumnWidth, useColumnResize } from "./useColumnResize";
 
@@ -36,7 +36,48 @@ describe("measureColumnWidth", () => {
   });
 });
 
+/** A handle inside a column the browser has painted at `painted` px wide. */
+function handleInColumn(painted: number): HTMLDivElement {
+  const parent = document.createElement("div");
+  const handle = document.createElement("div");
+  parent.appendChild(handle);
+  vi.spyOn(parent, "getBoundingClientRect").mockReturnValue({
+    width: painted,
+    height: 100,
+    top: 0,
+    left: 0,
+    bottom: 100,
+    right: painted,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+  });
+  return handle;
+}
+
 describe("useColumnResize", () => {
+  it("narrows a squeezed column from its painted width on one arrow key", () => {
+    const { result } = renderHook(() =>
+      useColumnResize({
+        storageKey: "testCol:v1",
+        defaultWidth: 400,
+        minWidth: 160,
+        maxWidth: 520,
+      }),
+    );
+
+    act(() => {
+      result.current.handleProps.onKeyDown({
+        key: "ArrowLeft",
+        shiftKey: false,
+        preventDefault: () => {},
+        currentTarget: handleInColumn(250),
+      } as unknown as ReactKeyboardEvent<HTMLDivElement>);
+    });
+
+    expect(result.current.width).toBe(242);
+  });
+
   it("clears body drag styles and reports false when unmounted mid-drag", () => {
     const onDraggingChange = vi.fn();
     const { result, unmount } = renderHook(() =>

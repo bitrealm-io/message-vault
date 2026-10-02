@@ -34,8 +34,11 @@ export default function GroupNameDialog({
     <ModalShell
       open
       onOpenChange={(o) => {
-        if (!o) onCancel();
+        // While the save is in flight the dialog stays, so its answer (a
+        // navigation, or an error to show) lands on a dialog that is still open.
+        if (!o && !busy) onCancel();
       }}
+      dismissable={!busy}
       label={title}
       maxWidth="22rem"
     >

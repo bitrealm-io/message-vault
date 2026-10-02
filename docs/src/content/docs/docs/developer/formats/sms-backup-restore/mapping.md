@@ -45,7 +45,7 @@ Apple-only columns (`parts_json`, tapbacks, balloons, …) stay empty.
 - `type` `1` / `2` → `direction` incoming / outgoing; `3` (draft) and `4` (outbox) are skipped and counted as `skipped_draft_or_outbox`; other types are skipped and counted as `skipped_unknown_type`; raw value in `android_type`
 - `body` → `text` (character references and HTML entities decoded; a surrogate pair written as two references, such as `&#55357;&#56832;`, becomes one character; a reference that is not a character, such as `&#0;` or a lone surrogate, is dropped and counted as `dropped_character_references`)
 - `subject` → `subject` when present
-- `contact_name` → `sender_display_name` for incoming (not a separate CSV column)
+- `contact_name` → `sender_display_name` for incoming and the peer's participant name (not a separate CSV column). The app writes `null` or `(Unknown)` where the phone has no contact, so an empty value, `null` and `(Unknown)`, compared without case, give no name and the peer stays Unknown
 - **Every** `<sms>` attribute → `source_fields_json.attrs`
 
 Example: `<sms address="+15555550101" date="1400773261000" type="1" body="hello &amp; hi" contact_name="Sam" />` becomes an incoming row with `chat_identifier=+15555550101` and text `hello & hi`.
@@ -56,6 +56,7 @@ Example: `<sms address="+15555550101" date="1400773261000" type="1" body="hello 
 - `msg_box` `2` → outgoing; `1` → incoming. The From addr (`type="137"`) is the sender, wherever that number sits in the `address` list. Without one, a 1:1 message is from its one peer and a group message has no sender: the app writes a From addr on every MMS, and guessing a group's sender from the address order would be wrong more often than right. Raw `msg_box` in `android_type`
 - `msg_box` `3` (draft) and `4` (outbox) are skipped and counted as `skipped_draft_or_outbox` (not `skipped_unknown_type`, which is for unknown SMS `type` only)
 - `sub` → `subject`
+- `contact_name` names the peer and the sender of a 1:1 MMS, read as on an `<sms>`. On a group MMS it is the members' names joined by a comma and a space (such as `Ana, Lee`), which names the group rather than the sender, so a group message takes no name from it
 - `address` plus `<addr>` list → participants; one other person is a 1:1 chat, more than one is a group
 - `text/plain` parts → `text`; SMIL (`application/smil`) controls text/image order when present
 - Non-text `data` → files under `attachments/` and `attachments_json`; in `source_fields_json.parts`, `data` is replaced with `data_len` + `data_sha256`

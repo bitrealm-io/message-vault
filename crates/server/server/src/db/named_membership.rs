@@ -13,7 +13,7 @@ use std::future::Future;
 use std::pin::Pin;
 
 use anyhow::Result as AnyResult;
-use sqlx::SqliteConnection;
+use sqlx::{Connection, SqliteConnection};
 
 use crate::db::dialect::{name_eq_ci, order_by_name_ci};
 
@@ -518,7 +518,9 @@ pub async fn rename_set(
     Ok(new_name)
 }
 
-/// Delete a set by id, and its memberships.
+/// Delete a set by id, and its memberships, in one transaction. The
+/// `on_change` hook runs once for each member, as it does when
+/// `patch_members` takes a member out, because each member's sets changed.
 pub async fn delete_set(
     spec: &MembershipSpec,
     conn: &mut SqliteConnection,
@@ -526,14 +528,16 @@ pub async fn delete_set(
     id: i64,
 ) -> Result<(), MembershipError> {
     get_set(spec, conn, account_id, id).await?;
+    let mut tx = conn.begin().await?;
     let members_sql = format!(
-        "DELETE FROM {mt} WHERE {nc} = $1",
+        "DELETE FROM {mt} WHERE {nc} = $1 RETURNING {mc}",
         mt = spec.members_table,
-        nc = spec.name_column
+        nc = spec.name_column,
+        mc = spec.member_column,
     );
-    sqlx::query(&members_sql)
+    let members = sqlx::query_scalar::<_, i64>(&members_sql)
         .bind(id)
-        .execute(&mut *conn)
+        .fetch_all(&mut *tx)
         .await?;
     let sql = format!(
         "DELETE FROM {table} WHERE id = $1 AND account_id = $2",
@@ -542,8 +546,16 @@ pub async fn delete_set(
     sqlx::query(&sql)
         .bind(id)
         .bind(account_id)
-        .execute(&mut *conn)
+        .execute(&mut *tx)
         .await?;
+    if let Some(hook) = spec.on_change {
+        for member in members {
+            hook(&mut tx, account_id, member)
+                .await
+                .map_err(MembershipError::Internal)?;
+        }
+    }
+    tx.commit().await?;
     Ok(())
 }
 

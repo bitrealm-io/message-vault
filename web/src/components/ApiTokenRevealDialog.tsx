@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
+import { type ApiTokenReveal, ApiTokenRevealContext } from "./apiTokenRevealState";
 import Button from "./Button";
 import ModalShell from "./ModalShell";
 
@@ -64,6 +65,10 @@ export default function ApiTokenRevealDialog({
       }}
       label="API Token created"
       maxWidth="32rem"
+      // The secret can't be shown again, so a stray click or Escape must not
+      // close the dialog before it is copied. Only its own two buttons do.
+      dismissable={false}
+      keyboardDismissable={false}
     >
       <button
         type="button"
@@ -119,5 +124,27 @@ export default function ApiTokenRevealDialog({
         </Button>
       </div>
     </ModalShell>
+  );
+}
+
+/**
+ * Holds the secret of a token just created, and shows it.
+ *
+ * It sits above the Settings screen rather than inside it. The server can
+ * answer after the person has moved to another Settings tab or left Settings,
+ * and the secret still has to be shown, on whatever screen is open then.
+ */
+export function ApiTokenRevealProvider({ children }: { children: ReactNode }) {
+  const [reveal, setReveal] = useState<ApiTokenReveal | null>(null);
+  return (
+    <ApiTokenRevealContext.Provider value={setReveal}>
+      {children}
+      <ApiTokenRevealDialog
+        open={reveal !== null}
+        label={reveal?.label ?? ""}
+        token={reveal?.token ?? ""}
+        onClose={() => setReveal(null)}
+      />
+    </ApiTokenRevealContext.Provider>
   );
 }

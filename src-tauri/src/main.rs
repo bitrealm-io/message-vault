@@ -52,6 +52,7 @@ fn main() {
             commands::paths::save_text_file,
             commands::local_server::start_local_server,
             commands::local_server::local_server_status,
+            commands::local_server::set_open_to_network,
             commands::local_server::open_data_folder,
             commands::push::push,
             commands::pull::pull,

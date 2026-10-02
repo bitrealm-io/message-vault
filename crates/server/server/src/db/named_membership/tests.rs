@@ -280,6 +280,46 @@ async fn delete_set_drops_its_memberships_and_refuses_an_unknown_id() {
     assert!(matches!(err, MembershipError::NotFound(_)));
 }
 
+// Deleting a Contact Group changes each member's groups, so it touches each
+// member as taking the member out by hand does, and leaves other contacts be.
+#[tokio::test]
+async fn delete_set_touches_each_member_and_no_other_contact() {
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
+    let ada = insert_contact(&mut conn, account, "Ada").await;
+    let ben = insert_contact(&mut conn, account, "Ben").await;
+    let cy = insert_contact(&mut conn, account, "Cy").await;
+    let (id, _) = create_set(group_spec(), &mut conn, account, "Family")
+        .await
+        .unwrap();
+    patch_members(group_spec(), &mut conn, account, id, &[ada, ben], &[])
+        .await
+        .unwrap();
+    sqlx::query("UPDATE contacts SET last_modified = '2000-01-01 00:00:00' WHERE account_id = $1")
+        .bind(account)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+
+    delete_set(group_spec(), &mut conn, account, id)
+        .await
+        .unwrap();
+
+    for (name, contact, moved) in [("Ada", ada, true), ("Ben", ben, true), ("Cy", cy, false)] {
+        let after: String = sqlx::query_scalar("SELECT last_modified FROM contacts WHERE id = $1")
+            .bind(contact)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+        assert_eq!(
+            after != "2000-01-01 00:00:00",
+            moved,
+            "{name}: last_modified is {after}"
+        );
+    }
+}
+
 #[tokio::test]
 async fn patch_members_adds_and_removes_in_one_call() {
     let fixture = crate::test_support::test_fixture().await;

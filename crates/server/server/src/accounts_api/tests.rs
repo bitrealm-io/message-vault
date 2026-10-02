@@ -2205,3 +2205,79 @@ async fn an_import_run_is_a_404_under_another_account() {
         "an account that does not exist has no history"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Guessing the current password
+// ---------------------------------------------------------------------------
+
+/// A wrong current password on the owner's own password change counts like a
+/// failed login, and past the login's limit the change is refused before the
+/// guess is checked: even the right password is then `429`.
+#[tokio::test]
+async fn guessing_the_owners_current_password_is_rate_limited() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
+    let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+    // Logging in to open the session counted against the same limit; start
+    // the count from nothing so the loop below counts only the guesses.
+    state.auth_rate_limits.lock().unwrap().clear();
+    let path = format!("{}/password", member(owner.account_id));
+    let change = |current: &str| {
+        serde_json::json!({
+            "password": "keeperschoice",
+            "password_confirmation": "keeperschoice",
+            "current_password": current,
+        })
+    };
+
+    for attempt in 1..=crate::credentials::AUTH_RATE_MAX {
+        assert_eq!(
+            put_status(&state, &path, &owner.token, change("notthisone")).await,
+            StatusCode::UNAUTHORIZED,
+            "attempt {attempt}"
+        );
+    }
+    assert_eq!(
+        put_status(&state, &path, &owner.token, change("notthisone")).await,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    assert_eq!(
+        put_status(&state, &path, &owner.token, change("hunter2hunter2")).await,
+        StatusCode::TOO_MANY_REQUESTS,
+        "past the limit the guess is not checked"
+    );
+}
+
+/// A wrong current password on an account deleting itself counts like a
+/// failed login, and past the login's limit the delete is refused before the
+/// guess is checked, so the account survives even the right password.
+#[tokio::test]
+async fn guessing_the_current_password_to_delete_an_account_is_rate_limited() {
+    let (fixture, alice) = fixture_with_account().await;
+    let state = fixture.state.clone();
+    let path = member(alice.account_id);
+    let delete =
+        |current: &str| serde_json::json!({ "confirm": true, "current_password": current });
+
+    for attempt in 1..=crate::credentials::AUTH_RATE_MAX {
+        assert_eq!(
+            delete_status_with_body(&state, &path, &alice.token, delete("not-it")).await,
+            StatusCode::UNAUTHORIZED,
+            "attempt {attempt}"
+        );
+    }
+    assert_eq!(
+        delete_status_with_body(&state, &path, &alice.token, delete("not-it")).await,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    assert_eq!(
+        delete_status_with_body(&state, &path, &alice.token, delete("hunter2hunter2")).await,
+        StatusCode::TOO_MANY_REQUESTS,
+        "past the limit the guess is not checked"
+    );
+    assert_eq!(
+        get_status(&state, &path, &alice.token).await,
+        StatusCode::OK,
+        "the account is still there"
+    );
+}

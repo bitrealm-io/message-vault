@@ -23,10 +23,11 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 
 use message_crate_core::CancelFlag;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 use super::events;
 use super::events::ExtractErrorEvent;
+use crate::local_server::LocalServer;
 use crate::state::{AppState, RunningJob};
 
 /// The desktop job that is running. Dropping it ends the job, so a command
@@ -98,13 +99,21 @@ pub(crate) fn cancel_running_job(state: &Arc<Mutex<AppState>>) -> Result<(), Str
 
 /// Run `job` on a worker thread, end it, and report its outcome: the summary
 /// it returns as `extract:finished`, or its failure as `extract:error`.
+///
+/// The app's own Message Crate is not restarted for the network setting
+/// while the job runs, since the job may be an import into it.
 pub(crate) fn spawn_job<F>(app: AppHandle, job: Job, run: F)
 where
     F: FnOnce() -> Result<String, ExtractErrorEvent> + Send + 'static,
 {
-    thread::spawn(move || match run_job(job, run) {
-        Ok(summary) => events::emit(&app, events::FINISHED, summary),
-        Err(error) => events::emit(&app, events::ERROR, error),
+    let local_server_job = app.state::<LocalServer>().job_started();
+    thread::spawn(move || {
+        let outcome = run_job(job, run);
+        drop(local_server_job);
+        match outcome {
+            Ok(summary) => events::emit(&app, events::FINISHED, summary),
+            Err(error) => events::emit(&app, events::ERROR, error),
+        }
     });
 }
 

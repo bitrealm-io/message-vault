@@ -154,9 +154,12 @@ add would leave a wrongly linked address unfixable from the sheet.
 
 **A load is strict, and refuses whole.** A phone is keyed by the one rule
 above, an email is lowercased and must be one `@` with text on both sides,
-and an unknown `service` or `handle_type` is an error. Any bad row refuses
-the whole load, naming each row and its reason, and nothing is stored as
-"needs a look". Why: the file is edited before it is loaded, so a refused row
+an unknown `service` or `handle_type` is an error, and so is a row with more
+fields than the header, whose cells cannot be matched to the columns. A row
+with fewer fields reads its missing trailing cells as blank, because a
+spreadsheet can drop empty cells at the end of a row and no column moves.
+Any bad row refuses the whole load, naming each row and its reason, and
+nothing is stored as "needs a look". Why: the file is edited before it is loaded, so a refused row
 is a fix made in the sheet in seconds, while a stored bad key is a contact
 that matches no message and has to be found later. A partial load would leave
 the person unsure which rows went in, and a load is cheap to repeat.

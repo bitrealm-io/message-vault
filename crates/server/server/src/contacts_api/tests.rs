@@ -2813,3 +2813,25 @@ async fn contact_restore_404s_for_another_accounts_contact() {
         "Bob's request must not restore Alice's contact"
     );
 }
+
+/// A long comma list is refused as a search with too many parts before any SQL
+/// is built, because SQLite refuses the `OR` chain it would become and the
+/// request would answer 500.
+#[tokio::test]
+async fn a_long_comma_list_is_refused_as_too_many_parts() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let values = vec!["0"; 1020].join(",");
+    let q = format!("groups:{values}");
+    assert!(q.len() <= 2048, "{}", q.len());
+    let server = crate::test_support::serve(&fixture.state).await;
+    let response = reqwest::Client::new()
+        .get(format!("{}/v1/contacts", server.base()))
+        .query(&[("q", q.as_str())])
+        .bearer_auth(&user.token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), reqwest::StatusCode::UNPROCESSABLE_ENTITY);
+    let body: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(body["detail"], "The search has too many parts.", "{body}");
+}

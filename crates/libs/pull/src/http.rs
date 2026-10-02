@@ -10,13 +10,14 @@
 //! notice.
 
 use std::fs::File;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::Path;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use message_crate_http::{HttpError, error_sentence, ok_json, trim_base_url};
 use reqwest::Method;
+use sha2::{Digest, Sha256};
 
 use message_crate_api_types::{ExportRun, ExportScope, Message, Page};
 
@@ -119,13 +120,17 @@ pub fn close_export(
 
 /// Download one attachment by SHA-256 fingerprint to `dest`.
 ///
-/// Bytes are written to a `.part` file first, then renamed, so a crash does
-/// not leave a truncated file at the destination.
+/// Bytes are written to a `.part` file first and hashed as they are written.
+/// The file is renamed into place only when their SHA-256 is `sha256`, so
+/// neither a crash nor an answer that is not the attachment leaves a file at
+/// the destination.
 ///
 /// # Errors
 ///
 /// Returns an error when the fingerprint is not 64 hex characters, the server
-/// returns 404 or another failure, or the file cannot be written.
+/// returns 404 or another failure, the bytes' SHA-256 is not `sha256`, or the
+/// file cannot be written. The `.part` file is removed on every error after
+/// it was created.
 pub fn download_asset(
     http: &HttpSession,
     base_url: &str,
@@ -176,12 +181,65 @@ pub fn download_asset(
     // Write to a temp file then rename, so a partial download (crash, cancel,
     // network drop) never leaves a truncated file at the destination path.
     let tmp = dest.with_extension("part");
-    let mut file = File::create(&tmp).with_context(|| format!("create {}", tmp.display()))?;
-    std::io::copy(&mut response, &mut file).with_context(|| format!("write {}", tmp.display()))?;
-    file.flush()?;
+    let written = write_part_file(&mut response, &tmp);
+    let digest = match written {
+        Ok(digest) => digest,
+        Err(error) => {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(error);
+        }
+    };
+    // A `200 OK` is not proof of the attachment: an access proxy whose
+    // session has expired redirects to its login page, which answers `200 OK`
+    // with HTML. Only bytes whose SHA-256 is the one asked for are kept, so a
+    // later Export fetches the attachment again instead of skipping it.
+    if !digest.eq_ignore_ascii_case(sha_clean) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(HttpError::new(
+            status.as_u16(),
+            format!(
+                "asset {sha_clean} (source={source}) was answered with bytes whose SHA-256 is {digest}"
+            ),
+        )
+        .into());
+    }
     std::fs::rename(&tmp, dest)
         .with_context(|| format!("rename {} -> {}", tmp.display(), dest.display()))?;
     Ok(())
+}
+
+/// Copy `body` into a new file at `tmp` and return the lowercase hex SHA-256
+/// of the bytes written.
+fn write_part_file(body: &mut impl Read, tmp: &Path) -> Result<String> {
+    let file = File::create(tmp).with_context(|| format!("create {}", tmp.display()))?;
+    let mut writer = HashingWriter {
+        inner: file,
+        hasher: Sha256::new(),
+    };
+    std::io::copy(body, &mut writer).with_context(|| format!("write {}", tmp.display()))?;
+    writer
+        .inner
+        .flush()
+        .with_context(|| format!("write {}", tmp.display()))?;
+    Ok(hex::encode(writer.hasher.finalize()))
+}
+
+/// A writer that hashes every byte it passes on to `inner`.
+struct HashingWriter<W> {
+    inner: W,
+    hasher: Sha256,
+}
+
+impl<W: Write> Write for HashingWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let n = self.inner.write(buf)?;
+        self.hasher.update(&buf[..n]);
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
 }
 
 #[cfg(test)]

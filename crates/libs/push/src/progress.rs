@@ -39,7 +39,8 @@ pub enum ProgressEvent {
     FileDone {
         /// File name relative to the input folder.
         file: String,
-        /// `ok`, `failed`, or `skipped`.
+        /// `ok`, `failed`, or `skipped`. A conversation a stop left unsent
+        /// gets no `FileDone`; its `cancelled` row is in the report.
         status: String,
     },
     /// Structured skip/error for Import Errors (e.g. oversized attachment).
@@ -319,8 +320,9 @@ impl<'p, 'f> Reporter<'p, 'f> {
         }
     }
 
-    /// Send one Import Errors row per conversation that failed or was
-    /// skipped, so any consumer can list them without reading the report.
+    /// Send one Import Errors row per conversation that failed, was
+    /// skipped, or was left unsent by a stop, so any consumer can list them
+    /// without reading the report.
     /// The log already carries the `fail` line for each failure, so this
     /// goes to the callback only.
     pub(crate) fn conversation_issues(&mut self, results: &[FileResult]) {
@@ -328,6 +330,10 @@ impl<'p, 'f> Reporter<'p, 'f> {
             let (kind, fallback) = match result.status.as_str() {
                 "failed" => ("error", "upload failed"),
                 "skipped" => ("skip", "already imported or skipped"),
+                "cancelled" => (
+                    "skip",
+                    "the Upload was stopped before this conversation was sent",
+                ),
                 _ => continue,
             };
             self.event(ProgressEvent::Issue {
@@ -407,7 +413,7 @@ mod tests {
     }
 
     #[test]
-    fn conversation_issues_cover_failed_and_skipped_files_only() {
+    fn conversation_issues_cover_failed_skipped_and_cancelled_files_only() {
         let dir = tempfile::tempdir().unwrap();
         let log_path = dir.path().join("push.log");
         let mut seen = Vec::new();
@@ -425,6 +431,7 @@ mod tests {
                 },
                 FileResult::failed("bad.jsonl", "attachment exceeds limit"),
                 FileResult::skipped("done.jsonl"),
+                FileResult::cancelled("unsent.jsonl"),
                 FileResult {
                     file: "silent.jsonl".into(),
                     status: "failed".into(),
@@ -456,6 +463,11 @@ mod tests {
                     "skip".to_string(),
                     "done.jsonl".to_string(),
                     "already imported or skipped".to_string()
+                ),
+                (
+                    "skip".to_string(),
+                    "unsent.jsonl".to_string(),
+                    "the Upload was stopped before this conversation was sent".to_string()
                 ),
                 (
                     "error".to_string(),

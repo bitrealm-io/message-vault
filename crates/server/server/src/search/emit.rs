@@ -887,7 +887,7 @@ fn emit_kind_word(
         }
         ("service", Value::Choice(s)) => {
             let s = s.to_string();
-            ctx.message(out, |o| {
+            ctx.conversation_message(out, |o| {
                 o.push("lower(coalesce(m.service, '')) = ");
                 o.bind_text(s);
             });

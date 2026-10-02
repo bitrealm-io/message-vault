@@ -929,8 +929,13 @@ fn joined(output: &Output) -> String {
 /// The folder inside the app's own data folder that the server keeps its
 /// database and attachments in. It is the whole Message Crate: copying it is
 /// the backup.
-pub fn data_dir_in(app_data_dir: &Path) -> PathBuf {
-    app_data_dir.join("data")
+///
+/// A dev build (`cargo tauri dev`) uses `data-dev` beside it. Both builds
+/// share one app-data folder, because `tauri.conf.json` has one identifier,
+/// and a dev build on a branch with another Schema Fingerprint would
+/// otherwise rebuild the installed app's database empty.
+pub fn data_dir_in(app_data_dir: &Path, dev: bool) -> PathBuf {
+    app_data_dir.join(if dev { "data-dev" } else { "data" })
 }
 
 #[cfg(test)]

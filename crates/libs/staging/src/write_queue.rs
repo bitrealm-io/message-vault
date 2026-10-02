@@ -227,7 +227,7 @@ pub fn drain_write_queue_with_loader(
     cancel: Option<&CancelFlag>,
 ) -> Result<WriteQueueReport> {
     give_each_unit_its_own_file(&mut units)?;
-    check_headroom(output_dir, &units)?;
+    check_headroom(output_dir, &units, options.media)?;
     let attachments_dir = output_dir.join("attachments");
     let mut report = WriteQueueReport::default();
 
@@ -341,7 +341,7 @@ pub fn drain_write_queue(
     cancel: Option<&CancelFlag>,
 ) -> Result<WriteQueueReport> {
     give_each_unit_its_own_file(&mut units)?;
-    check_headroom(output_dir, &units)?;
+    check_headroom(output_dir, &units, options.media)?;
 
     let attachments_dir = output_dir.join("attachments");
     // Idempotent, but doing it once here keeps every worker's first write
@@ -550,16 +550,24 @@ const DISK_HEADROOM_SLACK: u64 = 64 * 1024 * 1024;
 
 /// Refuse a drain the staging disk plainly cannot hold.
 ///
-/// `needed` counts the originals the units name. Peak usage is those plus one
-/// in-flight derivative, since the media pass commits per file, so the sum
-/// plus a fixed slack is the honest requirement.
-fn check_headroom(output_dir: &Path, units: &[ConversationUnit]) -> Result<()> {
+/// `needed` counts the originals the run will copy. Peak usage is those plus
+/// one in-flight derivative, since the media pass commits per file, so the
+/// sum plus a fixed slack is the honest requirement.
+///
+/// With media turned off nothing is copied, so nothing is counted. A
+/// `Missing` source is never copied either, though an exporter can still
+/// size it: SMS Backup & Restore takes the size from the XML.
+fn check_headroom(output_dir: &Path, units: &[ConversationUnit], media: MediaMode) -> Result<()> {
+    if media == MediaMode::Disabled {
+        return Ok(());
+    }
     // Summed before any resume skip: over-asking on a resumed run is the
     // conservative direction, and such a run usually has most of those bytes
     // on disk already.
     let needed: u64 = units
         .iter()
         .flat_map(|u| u.attachments.iter())
+        .filter(|a| !matches!(a.source, AttachmentSource::Missing))
         .filter_map(|a| a.size_hint)
         .sum();
     // A filesystem that cannot answer must not block an export.

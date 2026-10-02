@@ -512,6 +512,7 @@ impl EmlIngest {
                 self.add_parsed(*msg);
             }
             ParsedEmlKind::FlatNone => self.report.bump("skipped_parse_error", 1),
+            ParsedEmlKind::CallLog => self.report.bump("skipped_call_log", 1),
             ParsedEmlKind::NotSms => self.report.bump("skipped_not_sms_backup_plus", 1),
             ParsedEmlKind::IoError(msg) => self.report.errors.push(msg),
             ParsedEmlKind::ParseError(msg) => {
@@ -544,10 +545,11 @@ impl EmlIngest {
     /// One line of parse counters for the verbose log.
     fn parse_summary(&self) -> String {
         format!(
-            "parsed: flat_eml={} messages={} unknown_chat={} skipped_not_sms_backup_plus={} skipped_parse_error={}",
+            "parsed: flat_eml={} messages={} unknown_chat={} skipped_call_log={} skipped_not_sms_backup_plus={} skipped_parse_error={}",
             self.report.extra("flat_eml"),
             self.report.extra("messages_before_dedupe"),
             self.report.extra("unknown_chat_messages"),
+            self.report.extra("skipped_call_log"),
             self.report.extra("skipped_not_sms_backup_plus"),
             self.report.extra("skipped_parse_error"),
         )

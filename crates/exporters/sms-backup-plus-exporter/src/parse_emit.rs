@@ -78,6 +78,8 @@ pub(super) enum ParsedEmlKind {
         msg: Box<ParsedMessage>,
     },
     FlatNone,
+    /// A call from the phone's call log; Message Crate has no model for a call.
+    CallLog,
     NotSms,
     IoError(String),
     ParseError(String),
@@ -106,7 +108,9 @@ pub(super) fn parse_one_eml(
     };
     let headers = MailHeaders::from_mail(&mail);
 
-    if is_flat_sms_eml(&headers) {
+    if headers.is_call_log() {
+        ParsedEmlKind::CallLog
+    } else if is_flat_sms_eml(&headers) {
         match parse_flat_eml_mail(eml_path, &mail, &headers, owner_digits, owner_emails_lc) {
             Some(mut msg) => {
                 msg.eml_path = rel_path;

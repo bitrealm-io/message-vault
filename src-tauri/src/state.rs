@@ -1,31 +1,32 @@
 //! Shared state for the desktop process.
 //!
-//! The UI can start a long export and later press Cancel. Those are separate
-//! commands, so they share a cancel flag here.
+//! The UI starts a long job and may later press Cancel. Those are separate
+//! commands, so the job that is running, and its cancel flag, live here.
 
 use message_crate_core::CancelFlag;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
 
 /// Data every command can reach through Tauri's managed state.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct AppState {
-    /// Shared switch the background job checks. The `cancel` command sets it
-    /// to true. The exporter reads it between steps and stops when it is true.
-    pub cancel_flag: CancelFlag,
+    /// The desktop job that is running, if any. One runs at a time: a job
+    /// command refuses to start while this is set (`commands::jobs`).
+    pub job: Option<RunningJob>,
+}
+
+/// The one desktop job that is running.
+#[derive(Debug)]
+pub struct RunningJob {
+    /// What the job is, in words for the error that refuses a second job.
+    pub name: &'static str,
+    /// This job's own cancel flag. The `cancel` command sets it, and the job
+    /// reads it between steps and stops when it is true. A new flag is made
+    /// for each job, so a Cancel never reaches a job started after it.
+    pub cancel: CancelFlag,
 }
 
 impl AppState {
-    /// Create state with cancel turned off.
+    /// Create state with no job running.
     pub fn new() -> Self {
-        Self {
-            cancel_flag: Arc::new(AtomicBool::new(false)),
-        }
-    }
-}
-
-impl Default for AppState {
-    fn default() -> Self {
-        Self::new()
+        Self::default()
     }
 }

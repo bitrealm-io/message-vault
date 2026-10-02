@@ -33,7 +33,7 @@ export function ConvertSection() {
   const [format, setFormat] = useState<ExportFormat>("jsonl");
   const [error, setError] = useState("");
   const [log, setLog] = useState<string[]>([]);
-  const { running, finished, run, cancel } = useTauriJob();
+  const { running, finished, run, cancel } = useTauriJob({ job: "Convert" });
 
   const appendLog = useCallback((line: string) => {
     setLog((prev) => [...prev, line]);
@@ -76,6 +76,7 @@ export function ConvertSection() {
   return (
     <TauriJobFormShell
       className="max-w-[700px]"
+      job="Convert"
       startLabel="Convert"
       runningLabel="Converting…"
       running={running}

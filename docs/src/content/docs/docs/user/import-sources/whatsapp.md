@@ -87,5 +87,7 @@ When the backup doesn't hold it, Import uses **WhatsApp phone number** under **P
 
 - A run can't be cancelled while `wtsexporter` is working, or while an encrypted iPhone backup is being decrypted. It ends when that step finishes.
 - Using files from two different backups together fails, because a key decrypts only the backup it was made with.
+- Status updates aren't imported, because a Status is a post to many people that expires after 24 hours, not a conversation. The run summary counts them as `skipped_status_updates`. A reply to someone's Status is a message in the chat with that person and is imported.
+- Channel posts aren't imported, because a Channel is a one-way feed from a publisher that nobody can write back to. The run summary counts them as `skipped_channel_posts`.
 
 The run itself is the same as in [Import your backup](/docs/user/your-messages/import-your-backup/#start-the-import).

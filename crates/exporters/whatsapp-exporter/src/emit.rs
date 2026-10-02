@@ -1,7 +1,7 @@
 //! Convert wtsexporter JSON into the shared conversation structure, then write
 //! the chosen output format via [`ExportWriter`].
 
-use crate::jid::{chat_id_from_jid, is_group_jid, jid_to_e164};
+use crate::jid::{chat_id_from_jid, is_channel_jid, is_group_jid, is_status_jid, jid_to_e164};
 use crate::parse::{
     ChatJson, MessageJson, load_chat_store, media_path, message_text, timestamp_ms, timestamp_secs,
 };
@@ -80,6 +80,10 @@ pub(crate) fn convert_json(request: ConvertRequest<'_>) -> Result<ExportReport> 
             // Reserved / system keys if any.
             continue;
         }
+        if let Some(counter) = skipped_chat_counter(&jid) {
+            report.bump(counter, chat.messages.len() as u64);
+            continue;
+        }
         if let Some((chat_id, convo)) = ingest_chat(
             &jid,
             &chat,
@@ -126,6 +130,25 @@ pub(crate) fn convert_json(request: ConvertRequest<'_>) -> Result<ExportReport> 
     )?;
 
     Ok(report)
+}
+
+/// The run-summary counter for a chat that is not a conversation, or `None`
+/// for one that is.
+///
+/// Status updates (`status@broadcast`) are posts to many people that expire
+/// after 24 hours, and a Channel (`@newsletter`) is a one-way feed from a
+/// publisher. Neither has anyone in it to make a contact for, so neither is
+/// written, and each of its messages is counted so none is dropped silently.
+/// A reply to someone's Status is a message in the one-to-one chat with that
+/// person and is written as usual.
+fn skipped_chat_counter(jid: &str) -> Option<&'static str> {
+    if is_status_jid(jid) {
+        Some("skipped_status_updates")
+    } else if is_channel_jid(jid) {
+        Some("skipped_channel_posts")
+    } else {
+        None
+    }
 }
 
 /// Ingest one WhatsApp chat JSON into a pending conversation (messages + media).
@@ -437,11 +460,13 @@ impl ProjectionHooks for WhatsappProjection {
         }
     }
 
-    /// The raw E.164 roster, without display names and without the
-    /// single-peer chat-id fallback: WhatsApp chat ids are not always phone
-    /// handles, and peer names live on the messages instead.
-    fn participants(&self, _chat_id: &str, convo: &PendingConversation) -> Vec<IrParticipant> {
-        convo
+    /// The raw E.164 roster, without display names: peer names live on the
+    /// messages instead. A one-to-one chat whose JID is not a phone number,
+    /// such as an internal `@lid` id, has its raw id as its one participant,
+    /// typed `other`. The `@` in the id would otherwise make the server read
+    /// it as an email address, and no WhatsApp id is one.
+    fn participants(&self, chat_id: &str, convo: &PendingConversation) -> Vec<IrParticipant> {
+        let mut participants: Vec<IrParticipant> = convo
             .participant_e164s
             .iter()
             .filter(|h| !h.is_empty())
@@ -450,7 +475,15 @@ impl ProjectionHooks for WhatsappProjection {
                 display_name: None,
                 handle_type: Some(HandleType::Phone),
             })
-            .collect()
+            .collect();
+        if !convo.is_group && jid_to_e164(convo.extra_str("whatsapp_jid")).is_none() {
+            participants.push(IrParticipant {
+                handle: Some(chat_id.to_string()),
+                display_name: None,
+                handle_type: Some(HandleType::Other),
+            });
+        }
+        participants
     }
 
     fn group_title(&self, convo: &PendingConversation) -> Option<String> {

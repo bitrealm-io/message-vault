@@ -675,7 +675,9 @@ function waitAtReview(phase: "staging_review" | "media_review"): void {
  * completion or failed all complete normally.
  *
  * `cancelled` overrides `importOutcome`'s verdict outright: the person asked
- * for this, so it is never read as a failure.
+ * for this, so it is never read as a failure. `paused` does the same for an
+ * Upload stopped by Pause, and also skips `/complete`: the run stays at
+ * `pushing` with its folder, and the next visit offers to resume it.
  *
  * `skipComplete` is that one exception. A cancellation mid Media is routed
  * to the same recovery as a crash at that stage, and only an explicit
@@ -692,6 +694,7 @@ async function finishImport(args: {
   sessionId: number | null;
   threw: boolean;
   cancelled?: boolean;
+  paused?: boolean;
   pushReport: PushFinishedReport | null;
   uploadMs: number | null;
   skipComplete?: boolean;
@@ -704,17 +707,20 @@ async function finishImport(args: {
    */
   approved?: StagingSummary;
 }): Promise<void> {
-  const { sessionId, threw, cancelled, pushReport, uploadMs, skipComplete, approved } = args;
+  const { sessionId, threw, cancelled, paused, pushReport, uploadMs, skipComplete, approved } =
+    args;
   const { parseMs, attachmentsMs, prepareMs } = scratch.durations;
   const durationMs = performance.now() - scratch.importStartedAt;
-  const outcome: ImportSummaryView["status"] = cancelled
-    ? "cancelled"
-    : importOutcome({
-        report: pushReport ?? undefined,
-        threw,
-        issues: scratch.issues,
-        approved,
-      });
+  const outcome: ImportSummaryView["status"] = paused
+    ? "paused"
+    : cancelled
+      ? "cancelled"
+      : importOutcome({
+          report: pushReport ?? undefined,
+          threw,
+          issues: scratch.issues,
+          approved,
+        });
   const finalSummary: ImportSummaryView = {
     status: outcome,
     ...scratch.counts,
@@ -751,8 +757,8 @@ async function finishImport(args: {
       return { ...step, durationMs: duration };
     }),
   );
-  const ok = outcome !== "failed" && outcome !== "cancelled";
-  if (sessionId && !skipComplete) {
+  const ok = outcome === "completed" || outcome === "completed_with_issues";
+  if (sessionId && !skipComplete && !paused) {
     try {
       await completeImport(sessionId, {
         status: outcome,
@@ -784,8 +790,8 @@ async function finishImport(args: {
   // Once the server holds the import, the staging directory is a second,
   // unprotected copy of the person's messages in a temp folder, so it goes:
   // the push log, journal and report with it. The server's own import record
-  // (counts, timings, issues) is what stays. A failed or cancelled run keeps
-  // its folder, since the staged files are what a retry would read.
+  // (counts, timings, issues) is what stays. A failed, cancelled or paused
+  // run keeps its folder, since the staged files are what a resume reads.
   const stagingDir = ok ? await deleteStagingAfterSuccess() : store.get().stagingDir;
   // The server writes this run's saved search and Contact Group when the run
   // completes, so a window closed mid-import still gets them.
@@ -848,6 +854,8 @@ async function runPush(
   const uploadStartedAt = performance.now();
   let pushResult: TauriJobResult | null = null;
   let threw = false;
+  // A Pause that came before the push started: the guard refused the job.
+  let pausedBeforeStart = false;
   try {
     const baseUrl = getBaseUrl();
     if (!token) throw new Error("Not authenticated");
@@ -867,12 +875,23 @@ async function runPush(
       }),
     );
   } catch (e: unknown) {
-    threw = true;
-    recordError(scratch.activeStep, e instanceof Error ? e.message : String(e));
-    failActiveStep();
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg === CANCELLED_MESSAGE) {
+      // The person asked for this: not an error, so no issue row for it.
+      pausedBeforeStart = true;
+    } else {
+      threw = true;
+      recordError(scratch.activeStep, msg);
+      failActiveStep();
+    }
   }
   const uploadMs = performance.now() - uploadStartedAt;
-  if (!threw) {
+  // A paused Upload is not completed: the run stays at `pushing` with its
+  // folder, and resuming it sends only what the push journal does not list.
+  const paused = pausedBeforeStart || pushResult?.report?.cancelled === true;
+  if (paused) {
+    setRowByLabel(UPLOAD_LABEL, { status: "error", detail: "Paused", durationMs: uploadMs });
+  } else if (!threw) {
     setRowByLabel(UPLOAD_LABEL, {
       status: "done",
       detail: "Upload complete",
@@ -883,6 +902,7 @@ async function runPush(
   await finishImport({
     sessionId,
     threw,
+    paused,
     pushReport: pushResult?.report ?? null,
     uploadMs,
     approved: approvedPlan,

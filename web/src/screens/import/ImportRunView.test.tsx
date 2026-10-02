@@ -265,6 +265,19 @@ describe("ImportRunView", () => {
     expect(within(stageRow("Staging")).getByRole("button", { name: "Cancel" })).toBeDisabled();
   });
 
+  it("offers Pause, not Cancel, inside a running Upload", async () => {
+    const onCancel = vi.fn();
+    const user = userEvent.setup();
+    renderView({
+      steps: stepsAt("copy", { Staging: "done", Upload: "active" }),
+      onCancel,
+    });
+    const upload = within(stageRow("Upload"));
+    expect(upload.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+    await user.click(upload.getByRole("button", { name: "Pause" }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps Cancel on screen while running with no stage active", () => {
     renderView({ steps: stepsAt("convert", { Staging: "done" }), cancelDisabled: true });
     expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();

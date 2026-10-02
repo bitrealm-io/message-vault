@@ -155,6 +155,49 @@ describe("AuthProvider logout", () => {
     expect(result.current.isAuthenticated).toBe(false);
   });
 
+  it("does not offer one account's recent searches to the next account", async () => {
+    seedSession();
+    getProfile.mockImplementation(async (id: number) => ({
+      id,
+      preferred_name: `Account ${id}`,
+      phones: [],
+      emails: [],
+    }));
+    const { pushRecentSearch, loadRecentSearches } = await import("./recentSearches");
+    const { AuthProvider, useAuth } = await import("./auth");
+    const { result } = renderHook(() => useAuth(), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <Providers>
+          <AuthProvider>{children}</AuthProvider>
+        </Providers>
+      ),
+    });
+    expect(result.current.accountId).toBe(7);
+    // Account 7 searches.
+    pushRecentSearch("message", "divorce lawyer");
+
+    await act(async () => {
+      await result.current.logout();
+    });
+    await act(async () => {
+      await result.current.login("http://127.0.0.1:8080", "other-token", 8);
+    });
+
+    expect(result.current.accountId).toBe(8);
+    // What the message search bar loads for account 8 when it opens.
+    expect(loadRecentSearches("message")).toEqual([]);
+
+    await act(async () => {
+      await result.current.logout();
+    });
+    await act(async () => {
+      await result.current.login("http://127.0.0.1:8080", "session-token", 7);
+    });
+
+    // Account 7 still has its own history.
+    expect(loadRecentSearches("message")).toEqual(["divorce lawyer"]);
+  });
+
   it("skips the server logout request when there is no session token", async () => {
     const { AuthProvider, useAuth } = await import("./auth");
     const { result } = renderHook(() => useAuth(), {

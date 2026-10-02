@@ -1983,6 +1983,7 @@ dependencies = [
  "message-crate-core",
  "message-ir",
  "message-ir-format",
+ "message-staging",
  "serde_json",
  "sms-backup-restore-exporter",
  "tempfile",
@@ -1994,6 +1995,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "fs2",
+ "hex",
  "media",
  "message-crate-core",
  "message-ir",

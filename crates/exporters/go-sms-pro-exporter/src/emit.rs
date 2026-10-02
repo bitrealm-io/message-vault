@@ -14,7 +14,7 @@ use message_ir::{
     PendingConversation, PendingMessage, ProjectionHooks, default_participants,
     ensure_conversation, parse_android_type,
 };
-use message_staging::{AttachmentSource, ExportWriter};
+use message_staging::{AttachmentSource, AttachmentSpool, ExportWriter};
 use phone::{Handle, OwnerHandleSet};
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -341,12 +341,11 @@ fn is_pdu_file(p: &Path) -> bool {
 }
 
 /// GO SMS Pro deltas of the shared [`message_ir::pending_to_document`] projection.
-struct GoSmsProjection<'a> {
+struct GoSmsProjection {
     export: ExportMeta,
-    blob_bytes: &'a HashMap<String, Vec<u8>>,
 }
 
-impl ProjectionHooks for GoSmsProjection<'_> {
+impl ProjectionHooks for GoSmsProjection {
     fn export(&self) -> ExportMeta {
         self.export.clone()
     }
@@ -373,7 +372,7 @@ impl ProjectionHooks for GoSmsProjection<'_> {
     }
 
     fn attachment_to_ir(&self, att: &PendingAttachment, _msg: &PendingMessage) -> IrAttachment {
-        att.to_ir(self.blob_bytes)
+        att.to_ir()
     }
 
     fn source(&self, convo: &PendingConversation, msg: &PendingMessage) -> IrSource {
@@ -464,8 +463,7 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
     let writer = ExportWriter::open(&output_dir, output_format, transforms, resume)?;
     let mut ingest = Ingest {
         owners: &owners,
-        copy_attachments: writer.copies_attachments(),
-        blob_bytes: HashMap::new(),
+        spool: writer.copies_attachments().then(|| writer.spool()),
         conversations: BTreeMap::new(),
         report: ExportReport::default(),
         skips: SkipDetails::default(),
@@ -476,11 +474,10 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
     }
     for pdu_path in sorted_files(input_dir, &is_pdu_file)? {
         message_crate_core::check_cancel(cancel)?;
-        ingest.ingest_pdu(&pdu_path);
+        ingest.ingest_pdu(&pdu_path)?;
     }
     message_crate_core::check_cancel(cancel)?;
     let Ingest {
-        blob_bytes,
         conversations,
         mut report,
         skips,
@@ -495,7 +492,6 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
             Some(owner_handle),
             None,
         ),
-        blob_bytes: &blob_bytes,
     };
     let mut documents = Vec::new();
     for (chat_id, mut convo) in conversations {
@@ -537,9 +533,9 @@ fn sorted_files(dir: &Path, predicate: &dyn Fn(&Path) -> bool) -> Result<Vec<Pat
 /// Parse-time state shared across every XML and PDU file in one backup.
 struct Ingest<'a> {
     owners: &'a OwnerHandleSet,
-    copy_attachments: bool,
-    /// Attachment bytes by digest, kept until the writer asks for them.
-    blob_bytes: HashMap<String, Vec<u8>>,
+    /// Where attachment payloads are written as they are parsed; `None`
+    /// when the run does not copy attachments.
+    spool: Option<&'a AttachmentSpool>,
     conversations: BTreeMap<String, PendingConversation>,
     report: ExportReport,
     skips: SkipDetails,
@@ -581,7 +577,11 @@ impl Ingest<'_> {
     /// writes for an MMS it never downloaded) is counted and listed; a file
     /// that breaks the MMS rules is counted, and the first twenty are named
     /// in the report.
-    fn ingest_pdu(&mut self, pdu_path: &Path) {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when an attachment cannot be written to the spool.
+    fn ingest_pdu(&mut self, pdu_path: &Path) -> Result<()> {
         let parsed = match parse_pdu_file(pdu_path) {
             Ok(parsed) => parsed,
             Err(PduError::Stub) => {
@@ -597,7 +597,7 @@ impl Ingest<'_> {
                             .to_string(),
                     },
                 );
-                return;
+                return Ok(());
             }
             Err(err) => {
                 self.report.bump("skipped_unparseable_pdu", 1);
@@ -606,11 +606,11 @@ impl Ingest<'_> {
                         .errors
                         .push(format!("{}: {err}", pdu_path.display()));
                 }
-                return;
+                return Ok(());
             }
         };
         let addresses = PduAddresses::of(&parsed);
-        let atts = queue_pdu_attachments(&parsed, self.copy_attachments, &mut self.blob_bytes);
+        let atts = queue_pdu_attachments(&parsed, self.spool)?;
         add_pdu_message(
             &mut self.conversations,
             parsed,
@@ -620,6 +620,7 @@ impl Ingest<'_> {
             &mut self.report,
             &mut self.skips,
         );
+        Ok(())
     }
 }
 

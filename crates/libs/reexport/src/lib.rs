@@ -13,6 +13,7 @@ use message_ir_format::{
     read_conversation_eml_dir, read_conversation_json, read_conversation_jsonl,
     read_conversation_mbox,
 };
+use message_staging::AttachmentSpool;
 use sms_backup_restore_exporter::{ReadOptions, SbrArchive, read_backup};
 use std::collections::HashSet;
 use std::fs::{self, File};
@@ -164,12 +165,20 @@ fn load_documents(
 ) -> Result<Vec<ConversationDocument>> {
     if detected.format == OutputFormat::Xml {
         let attachments_dir = config.output.join("attachments");
+        // Each payload goes to disk as its record is read, so the backup's
+        // attachments are never all in memory; the spool is removed when
+        // the read has staged them.
+        let spool = if copy_attachments {
+            Some(AttachmentSpool::open(&config.output)?)
+        } else {
+            None
+        };
         let (documents, report) = read_backup(
             input_dir,
             ReadOptions {
                 owner_phones: &[],
                 attachments_dir: Some(&attachments_dir),
-                copy_attachments,
+                spool: spool.as_ref(),
                 stage_attachments: true,
                 media: if copy_attachments {
                     MediaMode::Clone

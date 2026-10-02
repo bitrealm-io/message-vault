@@ -984,23 +984,21 @@ impl PendingAttachment {
         (!self.content_type.is_empty()).then(|| self.content_type.clone())
     }
 
-    /// The IR attachment for a queued one, carrying its bytes when
-    /// `blob_bytes` holds them under its digest. No path: the runner that
-    /// writes the file fills that in.
-    pub fn to_ir(&self, blob_bytes: &HashMap<String, Vec<u8>>) -> IrAttachment {
-        let digest = self.digest_sha256.clone();
-        let bytes = digest.as_ref().and_then(|d| blob_bytes.get(d).cloned());
+    /// The IR attachment for a queued one, with neither a path nor bytes:
+    /// the runner that writes the file reads the payload by its digest and
+    /// fills both the path and the size in.
+    pub fn to_ir(&self) -> IrAttachment {
         IrAttachment {
             path: None,
             original_name: self.name_hint.clone(),
             mime_type: self.mime_type(),
-            digest_sha256: digest,
+            digest_sha256: self.digest_sha256.clone(),
             is_sticker: false,
             transcription: None,
             sticker_effect: None,
-            size_bytes: bytes.as_ref().map(|b| b.len() as u64),
+            size_bytes: None,
             missing_reason: None,
-            bytes,
+            bytes: None,
         }
     }
 }

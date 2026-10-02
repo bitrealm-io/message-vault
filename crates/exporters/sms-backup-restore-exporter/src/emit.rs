@@ -88,9 +88,10 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
         ReadOptions {
             owner_phones: args.owner_phones,
             attachments_dir: Some(writer.attachments_dir()),
-            copy_attachments: writer.copies_attachments(),
-            // The bytes ride into the shared write tail, which stages them
-            // itself (a conversation at a time on the queue arm).
+            spool: writer.copies_attachments().then(|| writer.spool()),
+            // The payloads wait in the writer's spool for the shared write
+            // tail, which stages them itself (a conversation at a time on
+            // the queue arm).
             stage_attachments: false,
             media: writer.media_mode(),
             compress,

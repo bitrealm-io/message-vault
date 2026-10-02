@@ -893,3 +893,125 @@ async fn a_failed_demo_build_reports_why_and_leaves_no_account() {
     let demo = demo_account_after_build(&state, &owner.token).await;
     assert_eq!(demo.status, DemoAccountStatus::Ready, "{:?}", demo.error);
 }
+
+/// While the Demo Account is built it cannot be entered: the login card
+/// does not offer it, a login as `demo` is refused, and a Session made
+/// before the build ended when the build started. Otherwise a visitor would
+/// see conversations still arriving, and lose the account under them when
+/// the build failed (#1220).
+#[tokio::test(flavor = "multi_thread")]
+async fn the_demo_account_cannot_be_entered_while_it_is_built() {
+    let fixture = test_fixture().await;
+    let mut state = fixture.state.clone();
+    state.demo_bundle_generator = slow_tiny_bundle;
+    fixture
+        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
+        .await;
+    let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let visitor = crate::test_support::log_in(&state, "demo", "").await;
+    let visitor_token = visitor["token"].as_str().unwrap().to_string();
+    assert_eq!(
+        get_status(&state, "/v1/session", &visitor_token).await,
+        StatusCode::OK
+    );
+
+    let (status, body) = start_demo_build(&state, &owner.token).await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+
+    let info: ServerInfo = get_json(&state, "/v1/server", "").await;
+    assert!(!info.demo_account, "the login card offers no Demo Account");
+    assert_eq!(
+        crate::test_support::login_status(&state, "demo", "").await,
+        StatusCode::UNAUTHORIZED,
+        "a login as demo is refused while the build runs"
+    );
+    assert_eq!(
+        get_status(&state, "/v1/session", &visitor_token).await,
+        StatusCode::UNAUTHORIZED,
+        "the Session made before the build ended when the build started"
+    );
+
+    let demo = demo_account_after_build(&state, &owner.token).await;
+    assert_eq!(demo.status, DemoAccountStatus::Ready, "{:?}", demo.error);
+    let info: ServerInfo = get_json(&state, "/v1/server", "").await;
+    assert!(info.demo_account);
+    assert_eq!(
+        crate::test_support::login_status(&state, "demo", "").await,
+        StatusCode::CREATED,
+        "the built Demo Account is entered as before"
+    );
+}
+
+/// The media pass at the end of a Demo Account build converts the Demo
+/// Account's attachments and nothing else. Another account's Upload in
+/// progress keeps its `.part` file, and that account's attachment with no
+/// preview yet is left for its own pass (#1220).
+#[test]
+fn a_demo_build_converts_no_other_accounts_attachments() {
+    // Taken outside the runtime: holding the guard across an await is what
+    // Clippy's `await_holding_lock` refuses.
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
+        return;
+    };
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            let fixture = test_fixture().await;
+            let mut state = fixture.state.clone();
+            state.demo_bundle_generator = tiny_bundle;
+            let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+            let other = fixture.account("someone").await;
+            crate::test_support::seed_one_message(&state, other).await;
+
+            let assets = state.cfg.paths.assets_dir_for_account(other, "imessage");
+            let sha = crate::test_support::fake_sha256('c');
+            let blob = assets.join(&sha[..2]).join(format!("{sha}.png"));
+            std::fs::create_dir_all(blob.parent().unwrap()).unwrap();
+            std::fs::write(&blob, crate::process_assets::tests::PNG_1X1_RGB).unwrap();
+            let part = assets.join(".incoming").join(format!("{sha}-upload.part"));
+            std::fs::create_dir_all(part.parent().unwrap()).unwrap();
+            std::fs::write(&part, b"half an attachment").unwrap();
+            let attachment: i64 = {
+                let mut conn = fixture.conn().await;
+                sqlx::query_scalar(
+                    "INSERT INTO attachments (message_id, sha256, assets_path)
+                     SELECT id, $2, $3 FROM messages WHERE account_id = $1
+                     RETURNING id",
+                )
+                .bind(other)
+                .bind(&sha)
+                .bind(format!("{}/{sha}.png", &sha[..2]))
+                .fetch_one(&mut *conn)
+                .await
+                .unwrap()
+            };
+
+            let (status, body) = start_demo_build(&state, &owner.token).await;
+            assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+            let demo = demo_account_after_build(&state, &owner.token).await;
+            assert_eq!(demo.status, DemoAccountStatus::Ready, "{:?}", demo.error);
+
+            assert!(part.is_file(), "the other account's Upload keeps its .part");
+            let mut conn = fixture.conn().await;
+            let derived: Option<String> =
+                sqlx::query_scalar("SELECT derived_assets_path FROM attachments WHERE id = $1")
+                    .bind(attachment)
+                    .fetch_one(&mut *conn)
+                    .await
+                    .unwrap();
+            assert_eq!(
+                derived, None,
+                "the other account's attachment is not converted"
+            );
+            assert!(
+                !state
+                    .cfg
+                    .paths
+                    .assets_converted_dir_for_account(other, "imessage")
+                    .exists(),
+                "the pass never opened the other account's source"
+            );
+        });
+}

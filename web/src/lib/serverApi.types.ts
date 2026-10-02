@@ -1179,10 +1179,15 @@ export interface paths {
         /**
          * Add the Demo Account, or reset it.
          * @description The Demo Account is removed, with everything a visitor changed in it, and
-         *     built again with Demo Data of the size given. No other account is touched.
+         *     built again with Demo Data of the size given. No other account is touched:
+         *     only the Demo Account's attachments are converted, and each source is
+         *     imported in batches no larger than an Upload sends, so another account's
+         *     write waits for one batch at most.
          *     The build runs after the answer is sent, while the server keeps serving:
          *     the answer is `202` with `status` `building`, and `GET` reports when it
-         *     ends. A second request while one build runs is refused.
+         *     ends. Every Session of the Demo Account ends when the build starts, and
+         *     the account cannot be entered until the build ends. A second request
+         *     while one build runs is refused.
          */
         put: operations["replace_demo_account"];
         post?: never;
@@ -3256,9 +3261,11 @@ export interface components {
              */
             asset_max_bytes: number;
             /**
-             * @description Whether the Demo Account exists. While it does, the screen offers a
-             *     way into it beside whatever `state` shows: it has no password, so
-             *     there is nothing to type.
+             * @description Whether the Demo Account exists and is not being built. While it
+             *     does, the screen offers a way into it beside whatever `state` shows:
+             *     it has no password, so there is nothing to type. During a build it
+             *     reads `false`, because the account cannot be entered until the build
+             *     ends.
              */
             demo_account: boolean;
             /**

@@ -1406,6 +1406,37 @@ async fn conversation_detail_returns_the_owned_conversation() {
     );
 }
 
+/// A group header with the chat id `chat1000000005` and an empty
+/// `participants` list stores no participants rows. The chat id names the
+/// group, not a person, so the conversation has no participants.
+#[tokio::test]
+async fn conversation_detail_shows_no_chat_id_as_a_group_participant() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let state = fixture.state.clone();
+    let id = crate::test_support::seed_conversation(
+        &state,
+        &crate::test_support::SeedConversation {
+            account_id: user.account_id,
+            handle: "chat1000000005",
+            conversation_type: "group",
+            group_title: None,
+            source_file: "_import.jsonl",
+            messages: &[crate::test_support::SeedMessage {
+                source: "imessage",
+                timestamp: "2024-02-01T10:00:00Z",
+                is_from_me: false,
+                body: "hello all",
+            }],
+        },
+    )
+    .await;
+
+    let body: serde_json::Value =
+        crate::test_support::get_json(&state, &format!("/v1/conversations/{id}"), &user.token)
+            .await;
+    assert_eq!(body["participants"], serde_json::json!([]), "{body}");
+}
+
 #[tokio::test]
 async fn conversation_detail_404s_for_an_id_this_account_does_not_own() {
     let (fixture, user) = crate::test_support::fixture_with_account().await;

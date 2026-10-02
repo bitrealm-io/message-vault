@@ -36,6 +36,33 @@ pub fn error_sentence(body: &str) -> String {
     }
 }
 
+/// Read a response's status and body, for [`ok_json`] to judge.
+///
+/// A body that cannot be read after a 2xx status is a [`HttpError`] with that
+/// status, which [`crate::classify_retry`] treats as permanent: the server
+/// committed the work before the connection dropped, and sending the request
+/// again would repeat it. A body that cannot be read after any other status
+/// keeps the transport error, which stays transient.
+///
+/// # Errors
+///
+/// Returns an error when the body cannot be read.
+pub fn read_body(
+    what: &str,
+    response: reqwest::blocking::Response,
+) -> Result<(reqwest::StatusCode, String)> {
+    let status = response.status();
+    match response.text() {
+        Ok(body) => Ok((status, body)),
+        Err(e) if status.is_success() => Err(HttpError::new(
+            status.as_u16(),
+            format!("could not read the server's answer to {what} ({e})"),
+        )
+        .into()),
+        Err(e) => Err(anyhow::Error::from(e).context(format!("read the answer to {what}"))),
+    }
+}
+
 /// Parse a server JSON response body, or fail with what the server said went
 /// wrong.
 ///

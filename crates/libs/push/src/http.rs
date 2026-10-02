@@ -12,7 +12,9 @@ use std::path::Path;
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow};
-use message_crate_http::{HttpError, error_sentence, looks_like_html, ok_json, trim_base_url};
+use message_crate_http::{
+    HttpError, error_sentence, looks_like_html, ok_json, read_body, trim_base_url,
+};
 use reqwest::Method;
 use serde::Deserialize;
 
@@ -196,8 +198,7 @@ impl Session {
             .body(bytes)
             .send()
             .with_context(|| format!("PUT {url}"))?;
-        let status = response.status();
-        let text = response.text().context("read asset response")?;
+        let (status, text) = read_body("asset upload", response)?;
         if looks_like_payload_too_large(status, &text) {
             return Err(HttpError::new(
                 413,
@@ -267,8 +268,7 @@ impl Session {
             .body(ndjson)
             .send()
             .with_context(|| format!("POST {path}"))?;
-        let status = response.status();
-        let text = response.text().context("read import response")?;
+        let (status, text) = read_body("import batch", response)?;
         if looks_like_payload_too_large(status, &text) {
             return Err(
                 HttpError::new(413, payload_too_large_message("import", Some(body_len))).into(),
@@ -305,8 +305,7 @@ impl Session {
             .json(&body)
             .send()
             .context("POST /v1/imports")?;
-        let status = response.status();
-        let text = response.text().context("read start-import response")?;
+        let (status, text) = read_body("import run", response)?;
         let parsed: CreateImportResponse = ok_json("import run", status, &text)?;
         Ok(parsed.id)
     }
@@ -340,8 +339,7 @@ impl Session {
             .json(&body)
             .send()
             .with_context(|| format!("POST /v1/imports/{import_id}/complete"))?;
-        let status = response.status();
-        let text = response.text().context("read complete-import response")?;
+        let (status, text) = read_body("import run complete", response)?;
         let closed: CompleteImportResponse = ok_json("import run complete", status, &text)?;
         if closed.id != import_id {
             return Err(anyhow!(
@@ -384,8 +382,7 @@ impl<'a> MultipartUpload<'a> {
             .json(&start_body)
             .send()
             .with_context(|| format!("POST {start_url}"))?;
-        let status = response.status();
-        let text = response.text().context("read upload start response")?;
+        let (status, text) = read_body("asset upload start", response)?;
         if looks_like_payload_too_large(status, &text) {
             return Err(
                 HttpError::new(413, payload_too_large_message("asset upload start", None)).into(),
@@ -468,8 +465,7 @@ impl<'a> MultipartUpload<'a> {
             .timeout(Duration::from_secs(600))
             .send()
             .with_context(|| format!("POST {complete_url}"))?;
-        let status = response.status();
-        let text = response.text().context("read upload complete response")?;
+        let (status, text) = read_body("asset upload complete", response)?;
         ok_json::<Asset>("asset upload complete", status, &text)
     }
 

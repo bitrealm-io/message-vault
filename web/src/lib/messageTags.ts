@@ -33,6 +33,9 @@ export const RESERVED_TAG_NAMES = new Set(
     "group",
     "labels",
     "label",
+    // `tag:none` means "no tag", quoted or not, so a tag under this name
+    // would list the untagged conversations.
+    "none",
   ].map((s) => s.toLowerCase()),
 );
 

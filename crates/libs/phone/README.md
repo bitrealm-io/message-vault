@@ -2,7 +2,7 @@
 
 Parse phone numbers and apply guarded E.164-style rules used by the backup converters.
 
-Exporters and `message-contacts` use this crate.
+Exporters, `sbr`, `go-sms-mms`, and the server use this crate.
 
 ## Build and test
 

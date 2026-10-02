@@ -50,7 +50,7 @@ struct ReexportReport {
 }
 
 impl ReexportReport {
-    /// Lines for CLI / GUI logs.
+    /// Lines for the run's log.
     fn log_lines(&self) -> Vec<String> {
         let mut lines = vec![
             format!("Detected input format: {}", self.detected_format),
@@ -356,7 +356,8 @@ fn looks_like_smses(path: &Path) -> bool {
     first_line.to_ascii_lowercase().contains("<smses")
 }
 
-/// True when `path` is a schema-version-3 conversation JSON file.
+/// True when `path` is a conversation JSON file at the current
+/// [`message_ir::SCHEMA_VERSION`].
 fn looks_like_ir_json(path: &Path) -> Result<bool> {
     let raw = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
     let value: serde_json::Value = match serde_json::from_str(&raw) {
@@ -370,7 +371,8 @@ fn looks_like_ir_json(path: &Path) -> Result<bool> {
         && value.get("messages").is_some())
 }
 
-/// True when `path` is a schema-version-3 JSON Lines conversation file.
+/// True when `path` is a JSON Lines conversation file at the current
+/// [`message_ir::SCHEMA_VERSION`].
 fn looks_like_ir_jsonl(path: &Path) -> Result<bool> {
     let file = File::open(path).with_context(|| format!("open {}", path.display()))?;
     let Some(Ok(first_line)) = BufReader::new(file).lines().next() else {

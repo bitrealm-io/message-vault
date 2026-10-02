@@ -226,8 +226,8 @@ fn a_derivative_over_the_limit_becomes_too_large_and_keeps_the_message() {
 fn a_conversion_failure_becomes_a_per_item_reason_carrying_the_detail() {
     // Needs ffmpeg present and failing on this specific input: after the
     // ffmpeg preflight check, an *absent* ffmpeg now fails the whole
-    // pass (see ffmpeg_unavailable_fails_the_whole_pass_up_front) rather
-    // than reaching this per-item path.
+    // pass (see without_ffmpeg_the_whole_pass_fails_and_touches_nothing)
+    // rather than reaching this per-item path.
     let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
         return;
     };
@@ -332,7 +332,7 @@ fn cancelling_stops_the_pass_without_corrupting_the_folder() {
 #[test]
 fn progress_counts_the_work_it_actually_has() {
     // Convert mode still probes for ffmpeg up front (parity with
-    // process_attachments_dir) even though a PDF alone needs no
+    // process_attachment_files) even though a PDF alone needs no
     // transcode, so this needs the tools present to reach that far.
     let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
         return;
@@ -535,7 +535,7 @@ fn a_crash_that_lost_both_the_marker_and_the_original_is_unrecoverable() {
         let att = &mut doc.messages[0].attachments[0];
         att.path = Some("attachments/photo-mv.jpg".into());
         // Seed non-None digest/size so the clearing assertions below can
-        // actually fail if `set_missing` stops clearing them.
+        // actually fail if `apply_unrecoverable` stops clearing them.
         att.digest_sha256 = Some("cafebabe".repeat(8));
         att.size_bytes = Some(999);
     }

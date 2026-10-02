@@ -355,7 +355,7 @@ impl IrMessageKind {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IrMessage {
     /// Stable message id; derived from content when the source has no id
-    /// (see message-csv's `stable_guid`).
+    /// (see [`stable_guid`]).
     pub guid: String,
     /// Unix milliseconds; the chronological sort key.
     pub timestamp_unix_ms: i64,
@@ -675,7 +675,7 @@ fn with_suffix(stem: &str, suffix: Option<&str>) -> String {
 /// Standard per-conversation filename stem (no extension — callers append
 /// `.csv`, `.jsonl`, …).
 ///
-/// - Individual → `safe_filename(chat_id)` (+ optional suffix)
+/// - Individual → `sanitize_stem(chat_id)` (+ optional suffix)
 /// - Group with a real `group_title` → sanitized title
 /// - Untitled group → `group_+A_+B_…` (sorted unique E.164, max 10);
 ///   if more than 10 peers, append `_<16 hex>` of SHA-256 over the full roster

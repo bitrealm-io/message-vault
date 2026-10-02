@@ -1,8 +1,8 @@
 //! The export folder on disk: which files in it are conversations, and how
 //! attachment paths inside those files map back to real files.
 //!
-//! Nothing here talks to the network. It is the read-only view of the folder
-//! that both the desktop app (to label an import) and the push run share.
+//! Nothing here talks to the network. It is the push run's read-only view of
+//! the folder.
 
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
@@ -94,7 +94,7 @@ pub(crate) fn file_label(path: &Path) -> String {
 
 /// Read the first conversation file's header and return its `export.source` string.
 ///
-/// The GUI uses this to label the import session (for example `imessage`).
+/// The push run labels the Import Run with it (for example `imessage`).
 ///
 /// # Errors
 ///

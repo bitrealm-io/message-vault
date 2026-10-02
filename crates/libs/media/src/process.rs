@@ -603,7 +603,7 @@ fn sibling_with_ext(path: &Path, ext: &str) -> PathBuf {
     if !dest.exists() {
         return dest;
     }
-    // collision: stem_converted.ext
+    // collision: stem_{n}.ext, counting up from 1
     let mut n = 1u32;
     loop {
         let name = format!("{}_{n}.{ext}", stem.to_string_lossy());

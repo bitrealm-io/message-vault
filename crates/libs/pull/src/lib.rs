@@ -3,8 +3,7 @@
 //! and `complete` or `cancel` closes the run. The messages are written as
 //! chat files.
 //!
-//! The `message-crate-pull` command and the desktop app's Export screen both call
-//! this crate.
+//! The desktop app's Export screen calls this crate.
 
 mod http;
 pub mod journal;

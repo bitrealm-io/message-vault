@@ -1,4 +1,5 @@
-//! Stable, non-reversible obfuscation for exporter CSV output.
+//! Stable, non-reversible obfuscation for exported conversations, in every
+//! output format.
 //!
 //! Fake identities are derived with HMAC-SHA256 over a secret key. The same
 //! key always yields the same remaps; fakes do not embed or encrypt the
@@ -544,7 +545,7 @@ fn key_from_seed_bytes(bytes: &[u8]) -> [u8; 32] {
     key
 }
 
-/// Parse `--obfuscate-seed` hex or generate a random seed; print seed to stderr when generated.
+/// Parse the `seed_hex` obfuscation seed or generate a random seed; print seed to stderr when generated.
 ///
 /// # Errors
 ///

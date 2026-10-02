@@ -286,7 +286,7 @@ fn only_files_worth_reporting_get_a_forecast_row() {
 }
 
 #[test]
-fn copy_and_skip_modes_forecast_nothing_because_nothing_will_change() {
+fn clone_mode_forecasts_each_file_at_the_size_it_already_has() {
     // There is no media step under these modes, so every file is judged on
     // the size it already has and no probing happens at all.
     let dir = staged_fixture_with_sizes(&[("huge.png", 900 * 1024 * 1024)]);

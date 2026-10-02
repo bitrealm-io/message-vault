@@ -116,7 +116,8 @@ where
     }
 }
 
-/// Deterministic pseudo-random factor in [0.0, 1.0) for retry jitter.
+/// Clock-derived factor in [0.0, 1.0) for retry jitter: the sub-second
+/// nanoseconds of the current time, modulo 1000.
 fn rand_factor() -> f64 {
     use std::time::SystemTime;
     let nanos = SystemTime::now()

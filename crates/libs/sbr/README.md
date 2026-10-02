@@ -2,7 +2,7 @@
 
 Read and write SyncTech SMS Backup & Restore XML (`smses.xml`).
 
-`message-ir-format` and `sms-backup-restore-exporter` use this crate.
+`sms-backup-restore-exporter` uses this crate.
 
 ## Build and test
 

@@ -22,9 +22,10 @@ pub struct FileResult {
     pub error: Option<String>,
     /// Messages sent to the server from this file.
     pub messages: u64,
-    /// Attachments uploaded for this file.
+    /// Attachments this file refers to, uploaded or not.
     pub attachments: u64,
-    /// Timings and sizes, when profiling was on for the run.
+    /// Timings and sizes, for a file that was read and prepared. Absent for a
+    /// file the journal skipped or one that failed before preparing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile: Option<UploadProfile>,
 }
@@ -114,11 +115,13 @@ pub struct PushReport {
     /// Messages in HTTP requests that failed after all retries.
     #[serde(default)]
     pub messages_failed: u64,
-    /// Legacy successful-request count. Equal to attempted minus failed.
+    /// Legacy count: the `messages` of every `ok` row in `results`, summed.
     pub messages: u64,
     /// Attachments whose bytes went up this run.
     pub assets_uploaded: u64,
-    /// Attachments the server already had, by fingerprint.
+    /// Attachments whose bytes did not go up this run: the server or another
+    /// conversation already had the fingerprint, the file was left out (no
+    /// path, missing, too large), or the push was text-only.
     pub assets_skipped: u64,
     /// Bytes uploaded.
     pub assets_bytes: u64,

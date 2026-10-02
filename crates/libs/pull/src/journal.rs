@@ -37,7 +37,8 @@ pub enum PullJournalEvent {
         conversations: u64,
         /// Messages written.
         messages: u64,
-        /// Attachments downloaded.
+        /// Attachments downloaded, plus those already on disk according to
+        /// the journal.
         assets: u64,
     },
 }

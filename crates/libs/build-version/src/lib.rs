@@ -114,7 +114,7 @@ pub fn emit() {
 mod tests {
     use super::format_build;
 
-    // The same cases are asserted in `web/src/lib/build.test.ts`.
+    // The same cases are asserted in `web/src/lib/buildFormat.test.ts`.
     #[test]
     fn a_build_is_the_version_plus_its_metadata() {
         assert_eq!(format_build("0.9.0", "343fe0d8"), "0.9.0+343fe0d8");

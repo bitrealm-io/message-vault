@@ -14,7 +14,7 @@ Deployment_Node(workstation, "Developer workstation", "Linux, macOS, or Windows"
     }
 
     Deployment_Node(tauri, "Desktop process", "cargo tauri dev") {
-        Container(desktop, "Desktop App", "Tauri v2 native window", "Import and Export. UI from Vite, data from the API.")
+        Container(desktop, "Desktop App", "Tauri v2 native window", "Extract and Format. UI from Vite, data from the API.")
         Container(vite, "Vite", "Node.js, localhost:5173", "Dev server for the Tauri WebView. Serves web/ live.")
     }
 
@@ -32,7 +32,7 @@ Deployment_Node(workstation, "Developer workstation", "Linux, macOS, or Windows"
     }
 }
 
-System_Ext(backups, "Phone backup files", "Anywhere on local disk. Desktop reads them during Import. Import uploads into Message Crate.")
+System_Ext(backups, "Phone backup files", "Anywhere on local disk. Desktop reads them during Extract. Import uploads into Message Crate.")
 
 Rel(spa, web, "GET /", $tags="web")
 Rel(spa, api, "API", $tags="api")
@@ -40,9 +40,9 @@ Rel(desktop, vite, "Loads UI")
 Rel(desktop, api, "API", $tags="api")
 Rel(vite, web_src, "Serves live")
 Rel(web, web_src, "Built copy in static/")
-Rel(api, db, "sqlx")
+Rel(api, db, "rusqlite")
 Rel(api, data, "Reads and writes assets")
-Rel(desktop, backups, "Reads during Import")
+Rel(desktop, backups, "Reads during Extract")
 
 SHOW_LEGEND()
 @enduml

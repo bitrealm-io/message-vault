@@ -149,6 +149,9 @@ old year wherever the server runs. A midnight that falls in a
 daylight-saving gap starts the day at the first instant after the gap.
 A day the zone skipped whole, such as 30 December 2011 in Pacific/Apia,
 starts where the next day starts, so it holds no message.
+An edge after year 9999 has no four-digit text form, and every stored time
+comes before it, so `date:>9999` matches no message and `date:<=9999` every
+message, without comparing text.
 
 Case and accents:
 

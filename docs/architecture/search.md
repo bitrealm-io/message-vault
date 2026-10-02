@@ -161,6 +161,9 @@ Case and accents:
   `LIKE` and `NOCASE` collation fold no more, so the server replaces
   `lower()` on every connection with one that folds Unicode
   (`db/sqlite_functions.rs`, registered through `sqlite3_auto_extension`).
+  It lowers each letter on its own, never by its neighbours, so a word's
+  start lowers the same as the word: `name:ΚΩΣ*` finds "ΚΩΣΤΑΣ", and `İ`
+  lowers to a plain `i`, so `name:istanbul` finds "İstanbul".
   Message text, which goes through the full-text index, folds case too.
 - Accents matter, except in message text, whose full-text index folds them:
   `cafe` finds "café" there.

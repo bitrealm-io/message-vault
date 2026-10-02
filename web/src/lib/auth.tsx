@@ -1,4 +1,4 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   createContext,
@@ -11,6 +11,7 @@ import {
 } from "react";
 import { ApiError, getToken, setAccountId, setBaseUrl, setToken } from "./api";
 import { parsePersistedAuth } from "./authGuards";
+import { createQueryClient } from "./routeQuery";
 import { getSession, logout as serverLogout } from "./serverApi";
 import { readPref, removePref, writePref } from "./storage";
 import { isTauri } from "./tauri-check";
@@ -86,10 +87,36 @@ function clearPersisted() {
   removePref(STORAGE_KEY);
 }
 
-/** Holds login state for the app and restores a saved session on startup. */
+/**
+ * Holds login state for the app and restores a saved session on startup.
+ *
+ * It also builds the query client every screen fetches through. A query or
+ * mutation the server refuses because the session has ended has to log the
+ * person out, and the client only learns how at construction, so the provider
+ * that owns the logout owns the client too.
+ */
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // Talking to the client directly rather than through `routeQuery`, which
-  // imports `useAuth` from this module: importing it back would be a cycle.
+  const sessionEnded = useRef<() => void>(() => {});
+  const [queryClient] = useState(() =>
+    createQueryClient({ onUnauthorized: () => sessionEnded.current() }),
+  );
+  return (
+    <QueryClientProvider client={queryClient}>
+      <SessionProvider sessionEnded={sessionEnded}>{children}</SessionProvider>
+    </QueryClientProvider>
+  );
+}
+
+function SessionProvider({
+  children,
+  sessionEnded,
+}: {
+  children: ReactNode;
+  /** Set here to what the query client calls when the server ends the session. */
+  sessionEnded: { current: () => void };
+}) {
+  // Talking to the client directly rather than through `routeQuery`'s hooks,
+  // which read `useAuth` from this provider.
   const queryClient = useQueryClient();
   const resetRouteCache = useCallback(() => {
     queryClient.clear();
@@ -242,17 +269,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const logout = useCallback(async () => {
+  /** Forget the login on this side: token, cached data, and the saved login. */
+  const clearSession = useCallback(() => {
     authEpoch.current++;
-    // Tell the server to end the session while the token is still set on the API client.
-    // Await so close-to-quit can finish (or time out) before the WebView dies.
-    if (getToken()) {
-      try {
-        await serverLogout({ signal: logoutTimeoutSignal() });
-      } catch {
-        // Server unreachable, 401, or timeout — still clear the local session.
-      }
-    }
     setToken(null);
     setAccountId(null);
     resetRouteCache();
@@ -264,6 +283,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: false,
     }));
   }, [resetRouteCache]);
+
+  const logout = useCallback(async () => {
+    authEpoch.current++;
+    // Tell the server to end the session while the token is still set on the API client.
+    // Await so close-to-quit can finish (or time out) before the WebView dies.
+    if (getToken()) {
+      try {
+        await serverLogout({ signal: logoutTimeoutSignal() });
+      } catch {
+        // Server unreachable, 401, or timeout — still clear the local session.
+      }
+    }
+    clearSession();
+  }, [clearSession]);
+
+  // The server has refused the token, so the session is already over there
+  // and there is nothing to tell it. With no token set, the 401 came from a
+  // request made before login, and there is no session here to end either.
+  useEffect(() => {
+    sessionEnded.current = () => {
+      if (getToken()) clearSession();
+    };
+  }, [sessionEnded, clearSession]);
 
   // Desktop only: on window close, revoke the session then quit.
   const closingRef = useRef(false);

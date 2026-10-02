@@ -252,6 +252,13 @@ any letter case, or leave the cell blank. Names are separated by `;`. A name
 Message Crate would not let a person create refuses the load. A name that
 matches no Contact Group, ignoring letter case, creates one.
 
+A Contact Group's name can't hold `;`, because the `groups` cell separates
+names with it. Creating or renaming a Contact Group to such a name is
+refused. The cell is therefore never escaped: the address book is meant to be
+edited by hand in a spreadsheet, and an escape such as `\;` would be a trap
+there. An export loaded straight back lists the same Contact Groups.
+Message Tags are not in the address book and may hold `;`.
+
 Append only adds. Edit makes each contact in the file hold exactly the
 identities and memberships its rows list. In Edit, a contact whose `groups`
 cell is blank on every row loses all its memberships.

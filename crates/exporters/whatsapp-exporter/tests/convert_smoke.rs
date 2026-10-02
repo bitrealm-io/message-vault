@@ -407,3 +407,61 @@ fn a_media_file_not_found_is_kept_as_file_missing_and_the_guid_does_not_change()
     assert_eq!(found.attachments[0].missing_reason, None);
     assert_eq!(found.guid, missing.guid);
 }
+
+/// A one-to-one chat keyed by an internal `@lid` id has no phone number to
+/// write. Its one participant is the raw id typed `other`, so the server
+/// does not read the `@` in it as an email address (#1141).
+#[test]
+fn a_lid_chat_has_its_id_as_an_other_participant() {
+    let json = serde_json::json!({
+        "123456@lid": {
+            "name": "Lid Peer",
+            "messages": { "L1": row("L1", 1_609_459_200.into(), "Hello".into()) }
+        }
+    });
+
+    let (_, documents) = convert_to_documents(&json);
+    let doc = &documents["123456@lid"];
+    let participants: Vec<_> = doc
+        .conversation
+        .participants
+        .iter()
+        .map(|p| (p.handle.as_deref(), p.handle_type))
+        .collect();
+    assert_eq!(
+        participants,
+        vec![(Some("123456@lid"), Some(message_ir::HandleType::Other))]
+    );
+    assert_eq!(doc.messages[0].sender_handle.as_deref(), Some("123456@lid"));
+}
+
+/// Status updates (`status@broadcast`) and Channel posts (`@newsletter`) are
+/// not conversations, so neither is written. Each skipped message is counted
+/// in the run summary, so none is dropped silently (#1141).
+#[test]
+fn status_updates_and_channel_posts_are_skipped_and_counted() {
+    let json = serde_json::json!({
+        "status@broadcast": {
+            "name": null,
+            "messages": {
+                "S1": row("S1", 1_609_459_200.into(), "my status".into()),
+                "S2": row("S2", 1_609_459_201.into(), "another status".into()),
+            }
+        },
+        "120363000000000001@newsletter": {
+            "name": "A Channel",
+            "messages": { "N1": row("N1", 1_609_459_200.into(), "a post".into()) }
+        },
+        "15555550122@s.whatsapp.net": {
+            "name": "Sam Example",
+            "messages": { "K1": row("K1", 1_609_459_200.into(), "Hello".into()) }
+        }
+    });
+
+    let (report, documents) = convert_to_documents(&json);
+    assert_eq!(documents.keys().collect::<Vec<_>>(), vec!["+15555550122"]);
+    assert_eq!(report.conversations, 1);
+    assert_eq!(report.messages, 1);
+    assert_eq!(report.extra("skipped_status_updates"), 2);
+    assert_eq!(report.extra("skipped_channel_posts"), 1);
+}

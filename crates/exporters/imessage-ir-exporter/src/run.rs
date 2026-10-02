@@ -14,6 +14,7 @@ use imessage_reader_protocol::{ExportRequest, Platform, Request, Source};
 use message_crate_core::{
     AppleConfig, ApplePlatform, CancelFlag, ExportTransforms, ExporterConfig, LogSink,
     OutputFormat, ProgressEvent, ProgressSink, RunResult, SourceConfig, emit_progress,
+    prepare_outputs,
 };
 
 use crate::{backup::ios_backup_encrypted_flag, convert, helper::Helper};
@@ -175,9 +176,16 @@ fn options_from_export_config(
 
     let attachment_embed = attachment_embed_from_copy_method(&source.copy_method)?;
 
-    // Create the output directory; prior IR artifacts are removed in `convert`
-    // via ExportWriter::open.
-    std::fs::create_dir_all(&config.output)?;
+    // Create the output directory, refused when it is or holds the database,
+    // the backup or the attachment folder a Mac export reads, because
+    // `convert` cleans it through ExportWriter::open.
+    let mut inputs = vec![db_path.clone()];
+    if platform == Platform::MacOs
+        && let Some(root) = &source.attachment_root
+    {
+        inputs.push(PathBuf::from(root));
+    }
+    prepare_outputs(&inputs, &config.output)?;
 
     Ok(ExportOptions {
         request: ExportRequest {
@@ -453,6 +461,53 @@ mod tests {
         .unwrap();
         assert_eq!(options.request.source.platform, Platform::Ios);
         assert_eq!(options.request.source.db_path, dir.path());
+    }
+
+    /// The writer cleans its output folder before it writes, so an output
+    /// that is or holds the backup or `chat.db` would delete what is being
+    /// read.
+    #[test]
+    fn an_output_that_is_or_contains_the_input_is_refused() {
+        let tmp = tempfile::tempdir().unwrap();
+        let backup = tmp.path().join("backup");
+        fs::create_dir_all(&backup).unwrap();
+        fs::write(
+            backup.join("Manifest.plist"),
+            br#"<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict><key>IsEncrypted</key><false/></dict></plist>"#,
+        )
+        .unwrap();
+        let hashed = backup.join(MESSAGES_DB_IN_IOS_BACKUP);
+        fs::create_dir_all(hashed.parent().unwrap()).unwrap();
+        fs::write(&hashed, b"sqlite").unwrap();
+        let mac = tmp.path().join("mac");
+        fs::create_dir_all(&mac).unwrap();
+        let chat = mac.join("chat.db");
+        fs::write(&chat, b"sqlite").unwrap();
+
+        for (input, platform, output) in [
+            (&backup, ApplePlatform::Ios, backup.clone()),
+            (&backup, ApplePlatform::Ios, tmp.path().to_path_buf()),
+            (&chat, ApplePlatform::MacOs, mac.clone()),
+        ] {
+            let mut config = apple_cfg(
+                input,
+                AppleConfig {
+                    platform: Some(platform),
+                    ..AppleConfig::default()
+                },
+            );
+            config.output = output;
+            let Err(err) = options_for(&config) else {
+                panic!("{} was accepted", config.output.display());
+            };
+            assert!(
+                err.to_string()
+                    .contains("must not be the same as, or contain, the input"),
+                "{}: {err}",
+                config.output.display()
+            );
+        }
     }
 
     #[test]

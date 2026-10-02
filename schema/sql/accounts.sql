@@ -129,6 +129,17 @@ CREATE TABLE IF NOT EXISTS server_settings (
     asset_max_bytes BIGINT NOT NULL DEFAULT 536870912
 );
 
+-- A Demo Account build that has not finished. A build writes this row before
+-- it writes anything else and removes it after its last write, so a row found
+-- when the server starts is a build the server stopped part-way: the server
+-- removes the Demo Account the build left and reports the build as failed.
+CREATE TABLE IF NOT EXISTS demo_account_build (
+    -- Always 1: one Demo Account build runs at a time.
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    -- When the build started, in Unix seconds as text.
+    started_at TEXT NOT NULL
+);
+
 -- Process-wide schema markers (for example FTS trigger install flag).
 CREATE TABLE IF NOT EXISTS schema_meta (
     -- Marker name (for example messages_fts_triggers_v1).

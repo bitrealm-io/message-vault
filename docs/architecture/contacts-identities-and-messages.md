@@ -80,11 +80,12 @@ is a person's address, and only that one gets a contact. Why: the id reaches
 nobody, and a contact made from it shows up in Contacts as a nameless person
 who never existed.
 
-**One number is one person on every service.** A phone number that arrives as
-an iMessage address and again as an SMS address is two `handles` rows. When
-one of them is on a contact, the other joins the same contact
-(`contact_id_of_sibling_handle`). Why: the rows differ only by transport, and
-splitting them would show one person twice.
+**One number is one person on every service.** iMessage, SMS, MMS and RCS are
+all text messages, so a phone number that arrives over any of them is one
+`handles` row with the service `phone`. The same number on WhatsApp is a
+second row with the service `whatsapp`. When one of the two is on a contact,
+the other joins the same contact (`contact_id_of_sibling_handle`). Why: the
+rows differ only by service, and splitting them would show one person twice.
 
 **A phone number has one key everywhere.** `phone::normalize_typed_handle`
 gives a number its key, and the same key is used by the `handles` row, by the
@@ -159,8 +160,8 @@ too. Why: naming the Unknowns is the job the file exists for, so that move
 must be free; a silent move off a named person is the one outcome the person
 cannot see happen, and asking for both contacts in the file makes it
 deliberate. Rejected: refusing whenever the holder has other identities. An
-Unknown holder often has two handles for one number (iMessage and SMS), and
-that rule would refuse the commonest cleanup.
+Unknown holder can have two handles for one number (text messages and
+WhatsApp), and that rule would refuse the commonest cleanup.
 
 **Export writes the current Contacts list; load lives under Settings.** The
 export is on the Contacts screen and writes the rows the person is looking

@@ -7,9 +7,10 @@ CREATE TABLE IF NOT EXISTS contacts (
     -- Display name shown in the UI. Empty until something supplies a name;
     -- a contact with identities and no preferred name is Unknown.
     preferred_name TEXT NOT NULL,
-    -- Where this row came from: 'address_book', 'import', or 'user'. Loading
-    -- an address book updates the rows it owns in place, keeping their ids,
-    -- and deletes only the ones the file no longer lists.
+    -- What made this row: 'address_book' (an address book load), 'import',
+    -- or 'user'. It becomes 'user' when the person types the name. A load
+    -- renames a contact of any origin without changing this, and leaves
+    -- contacts its file does not list alone.
     origin TEXT NOT NULL DEFAULT 'user',
     -- When the row was first recorded. Stored and queryable; not displayed.
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -35,7 +36,9 @@ CREATE TABLE IF NOT EXISTS handles (
     handle_type TEXT NOT NULL,
     -- Platform identity: 'phone' | 'whatsapp' (not per-message SMS/iMessage/RCS).
     service TEXT NOT NULL,
-    -- Where this row came from: 'address_book', 'import', or 'user'.
+    -- What made this row: 'address_book' (an address book load), 'import',
+    -- or 'user'. One a load made is deleted once no contact holds it and
+    -- nothing else refers to it.
     origin TEXT NOT NULL DEFAULT 'import',
     -- When the identity was first recorded. Queryable; not displayed.
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -55,7 +58,8 @@ CREATE TABLE IF NOT EXISTS contact_handles (
     handle_id INTEGER NOT NULL REFERENCES handles(id) ON DELETE CASCADE,
     -- Address-book person that owns this handle (`contacts.id`).
     contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
-    -- Where this link came from: 'address_book', 'import', or 'user'.
+    -- What made or last moved this link: 'address_book' (an address book
+    -- load), 'import', or 'user'.
     origin TEXT NOT NULL DEFAULT 'import',
     PRIMARY KEY (account_id, handle_id)
 );

@@ -216,9 +216,10 @@ pub async fn link_sibling_handles_to_contact(
 /// The contact a sibling of `handle_id` is on, if any: the same normalized
 /// value and handle type on a different platform service, already linked.
 ///
-/// One person's phone number arrives once as an iMessage address and again as
-/// an SMS one; they are two `handles` rows and one person, so a link made for
-/// either is the answer for both.
+/// One person's phone number arrives once as a text-message address
+/// (iMessage and SMS share the service `phone`) and again as a WhatsApp one;
+/// they are two `handles` rows and one person, so a link made for either is
+/// the answer for both.
 ///
 /// # Errors
 ///

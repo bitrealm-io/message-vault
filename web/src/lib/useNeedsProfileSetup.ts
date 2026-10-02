@@ -10,9 +10,14 @@ import { useAccountProfile } from "./useAccountProfile";
  *
  * `loading` matters to the caller: a guard that read "not loaded yet" as
  * "nothing owed" would let the account into the app for one render and then
- * pull it back out.
+ * pull it back out. `error` matters for the same reason: a profile that failed
+ * to load does not say that nothing is owed.
  */
-export function useNeedsProfileSetup(): { needsSetup: boolean; loading: boolean } {
-  const { profile, loading } = useAccountProfile();
-  return { needsSetup: profile?.must_set_up_profile === true, loading };
+export function useNeedsProfileSetup(): {
+  needsSetup: boolean;
+  loading: boolean;
+  error: string;
+} {
+  const { profile, loading, error } = useAccountProfile();
+  return { needsSetup: profile?.must_set_up_profile === true, loading, error };
 }

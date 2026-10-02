@@ -3,7 +3,6 @@
 //! [`normalize_typed_handle`] is the one key a handle is stored and matched
 //! under: by the server, by the contacts book, and by [`OwnerHandleSet`].
 
-use std::collections::HashSet;
 use std::fmt;
 
 use anyhow::{Context, Result, bail};
@@ -106,6 +105,50 @@ pub fn sanitize_phone_shaped(value: &str) -> Option<String> {
     }
     let digits = sanitize_number(value)?;
     (digits.len() <= MAX_PHONE_DIGITS).then_some(digits)
+}
+
+/// ITU-T E.164 country calling codes, longest-first for greedy prefix match.
+const COUNTRY_CALLING_CODES: &[&str] = &[
+    "211", "212", "213", "216", "218", "220", "221", "222", "223", "224", "225", "226", "227",
+    "228", "229", "230", "231", "232", "233", "234", "235", "236", "237", "238", "239", "240",
+    "241", "242", "243", "244", "245", "246", "248", "249", "250", "251", "252", "253", "254",
+    "255", "256", "257", "258", "260", "261", "262", "263", "264", "265", "266", "267", "268",
+    "269", "290", "291", "297", "298", "299", "350", "351", "352", "353", "354", "355", "356",
+    "357", "358", "359", "370", "371", "372", "373", "374", "375", "376", "377", "378", "380",
+    "381", "382", "383", "385", "386", "387", "389", "420", "421", "423", "500", "501", "502",
+    "503", "504", "505", "506", "507", "508", "509", "590", "591", "592", "593", "594", "595",
+    "596", "597", "598", "599", "670", "672", "673", "674", "675", "676", "677", "678", "679",
+    "680", "681", "682", "683", "685", "686", "687", "688", "689", "690", "691", "692", "850",
+    "852", "853", "855", "856", "880", "886", "960", "961", "962", "963", "964", "965", "966",
+    "967", "968", "970", "971", "972", "973", "974", "975", "976", "977", "992", "993", "994",
+    "995", "996", "998", "20", "27", "30", "31", "32", "33", "34", "36", "39", "40", "41", "43",
+    "44", "45", "46", "47", "48", "49", "51", "52", "53", "54", "55", "56", "57", "58", "60", "61",
+    "62", "63", "64", "65", "66", "81", "82", "84", "86", "90", "91", "92", "93", "94", "95", "98",
+    "1", "7",
+];
+
+/// Minimum national-number digits required after peeling a country calling code.
+/// Keeps short codes (4–6 digits) from being misread as country + stub.
+const MIN_NATIONAL_DIGITS: usize = 7;
+
+/// Split digits into `(country_calling_code, national_number)`.
+///
+/// When `had_plus` is true, uses longest-match ITU calling codes. Without `+`, only
+/// recognizes the NANP leading `1` on 11-digit numbers. Returns `("", digits)` when
+/// no country code can be identified safely.
+pub fn split_country_calling_code(digits: &str, had_plus: bool) -> (&str, &str) {
+    if had_plus {
+        for cc in COUNTRY_CALLING_CODES {
+            if digits.starts_with(cc) && digits.len() - cc.len() >= MIN_NATIONAL_DIGITS {
+                return (cc, &digits[cc.len()..]);
+            }
+        }
+        return ("", digits);
+    }
+    if digits.len() == 11 && digits.starts_with('1') {
+        return ("1", &digits[1..]);
+    }
+    ("", digits)
 }
 
 /// E.164 when the parse is unambiguous for `region`, else the human-readable
@@ -236,19 +279,21 @@ pub fn normalize_typed_handle(raw: &str, handle_type: HandleType) -> (String, Op
     }
 }
 
-/// All configured owner handles, each stored under its handle key.
+/// All configured owner handles, each stored under its handle key, in the
+/// order they were given.
 ///
 /// The key is [`normalize_typed_handle`], the same function the server uses
 /// for its `handles` rows and the contacts book uses for its entries, so an
 /// owner phone written `+44 7700 900123` is `+447700900123` here too.
 #[derive(Debug, Clone)]
 pub struct OwnerHandleSet {
-    handles: HashSet<(String, HandleType)>,
+    handles: Vec<(String, HandleType)>,
 }
 
 impl OwnerHandleSet {
     /// Build the set from raw `(value, HandleType)` pairs; errors when the list
-    /// is empty or a phone has no usable digits.
+    /// is empty or a phone has no usable digits. The order is kept, and a
+    /// handle given twice is kept once.
     ///
     /// # Errors
     ///
@@ -258,45 +303,50 @@ impl OwnerHandleSet {
         if handles.is_empty() {
             bail!("owner handle required: pass --owner-phone or --owner-handle");
         }
-        let mut set = HashSet::new();
+        let mut keyed: Vec<(String, HandleType)> = Vec::new();
         for (raw, handle_type) in handles {
             if *handle_type == HandleType::Phone {
                 sanitize_number(raw)
                     .with_context(|| format!("owner phone has no usable digits: {raw}"))?;
             }
-            set.insert((normalize_typed_handle(raw, *handle_type).0, *handle_type));
+            let entry = (normalize_typed_handle(raw, *handle_type).0, *handle_type);
+            if !keyed.contains(&entry) {
+                keyed.push(entry);
+            }
         }
-        Ok(Self { handles: set })
+        Ok(Self { handles: keyed })
     }
 
-    /// Whether a raw handle value plus type is one of the owner's, compared
-    /// by handle key.
+    /// Whether a raw handle value plus type is one of the owner's.
     ///
-    /// A value whose `+` has already been stripped is a different key: use
-    /// [`OwnerHandleSet::is_owner_digits`] for those.
+    /// Every handle matches by handle key. A phone also matches by its
+    /// [`sanitize_number`] digits, for sources that record numbers with the
+    /// `+` already gone, such as the addresses in a Go SMS Pro MMS PDU.
+    /// Without the `+`, `6591234567` could be Singapore or the US; the
+    /// source has already thrown that information away.
+    ///
+    /// A value written without `+` also matches an owner number given with
+    /// `+` when it is that number in national form: the national number
+    /// alone, or the trunk prefix `0` followed by it. A carrier often lists
+    /// the owner that way in an MMS, so `07700900123` is the owner
+    /// `+447700900123`.
     pub fn is_owner(&self, raw: &str, handle_type: HandleType) -> bool {
-        if handle_type == HandleType::Phone && sanitize_number(raw).is_none() {
-            return false;
+        let key = normalize_typed_handle(raw, handle_type).0;
+        if handle_type != HandleType::Phone {
+            return self
+                .handles
+                .iter()
+                .any(|(v, t)| *t == handle_type && *v == key);
         }
-        self.handles
-            .contains(&(normalize_typed_handle(raw, handle_type).0, handle_type))
-    }
-
-    /// Whether a digit string is one of the owner's phones, compared by
-    /// [`sanitize_number`] digits.
-    ///
-    /// For sources that record numbers as bare digits with the `+` already
-    /// gone, such as the addresses in a Go SMS Pro MMS PDU. The comparison is
-    /// weaker than [`OwnerHandleSet::is_owner`], because without the `+`
-    /// `6591234567` could be Singapore or the US; the source has already
-    /// thrown that information away.
-    pub fn is_owner_digits(&self, digits: &str) -> bool {
-        let Some(digits) = sanitize_number(digits) else {
+        let Some(digits) = sanitize_number(raw) else {
             return false;
         };
-        self.handles
-            .iter()
-            .any(|(v, t)| phone_digits_if_phone(v, *t).is_some_and(|d| d == digits))
+        let national_form = !raw.contains('+');
+        self.phone_keys().any(|owner| {
+            owner == key
+                || sanitize_number(owner).is_some_and(|d| d == digits)
+                || (national_form && is_national_form_of(&digits, owner))
+        })
     }
 
     /// Convenience for exporters that only know about phone numbers.
@@ -308,38 +358,34 @@ impl OwnerHandleSet {
         Self::new(&handles)
     }
 
-    /// All sanitized phone digits in the set. Other handle types are skipped.
-    ///
-    /// The values are raw digit strings (no `+` prefix, no formatting) so they
-    /// compare correctly against `sanitize_number` output in callers such as
-    /// `sbr::parse_mms`.
-    pub fn all_phone_digits(&self) -> HashSet<String> {
-        self.handles
-            .iter()
-            .filter_map(|(v, t)| phone_digits_if_phone(v, *t))
-            .collect()
-    }
-
-    /// One owner phone's handle key, for callers that need a single
-    /// representative owner value (e.g. `owner_handle` in export metadata).
+    /// The handle key of the first owner phone given, for callers that need
+    /// a single owner value (e.g. `owner_handle` in export metadata).
     ///
     /// `None` only when the set holds no phone-typed handles. A set built
     /// with [`OwnerHandleSet::from_phones`] always returns `Some`: that
     /// constructor rejects an empty list and types every entry as a phone.
     pub fn primary_owner_handle(&self) -> Option<String> {
+        self.phone_keys().next().map(str::to_string)
+    }
+
+    /// The handle keys of the owner's phones, in the order given.
+    fn phone_keys(&self) -> impl Iterator<Item = &str> {
         self.handles
             .iter()
-            .find(|(_, t)| *t == HandleType::Phone)
-            .map(|(v, _)| v.clone())
+            .filter(|(_, t)| *t == HandleType::Phone)
+            .map(|(v, _)| v.as_str())
     }
 }
 
-/// Strip a stored phone handle back to digits for comparison with [`sanitize_number`].
-fn phone_digits_if_phone(value: &str, handle_type: HandleType) -> Option<String> {
-    if handle_type != HandleType::Phone {
-        return None;
-    }
-    Some(sanitize_number(value).unwrap_or_else(|| value.to_string()))
+/// Whether `digits` are the national form of the E.164 key `owner`: its
+/// national number, alone or after the trunk prefix `0`. An owner key
+/// without `+` has no country to strip, so nothing is its national form.
+fn is_national_form_of(digits: &str, owner: &str) -> bool {
+    let Some(owner_digits) = owner.strip_prefix('+') else {
+        return false;
+    };
+    let (country, national) = split_country_calling_code(owner_digits, true);
+    !country.is_empty() && (digits == national || digits.strip_prefix('0') == Some(national))
 }
 
 /// A group chat's id and display title from the digits of its non-owner
@@ -680,14 +726,35 @@ mod tests {
         // A phone-shaped handle is not treated as an email or username handle.
         assert!(!owners.is_owner("(555) 555-0100", HandleType::Email));
         assert!(!owners.is_owner("Person@Example.COM", HandleType::Username));
-        // all_phone_digits returns sanitized (digits-only) form so callers
-        // that compare against sanitize_number output match consistently.
-        let digits = owners.all_phone_digits();
-        assert!(digits.contains("5555550100"));
-        assert!(
-            !digits.contains("+15555550100"),
-            "must be digits-only, not E.164"
+    }
+
+    #[test]
+    fn the_first_owner_phone_given_is_the_primary_owner_handle() {
+        // Nine numbers: a set's order would pick the first given only by chance.
+        let phones: Vec<String> = [9, 0, 1, 2, 3, 4, 5, 6, 7]
+            .iter()
+            .map(|i| format!("+1555555010{i}"))
+            .collect();
+        let owners = OwnerHandleSet::from_phones(&phones).unwrap();
+        assert_eq!(
+            owners.primary_owner_handle().as_deref(),
+            Some("+15555550109")
         );
+    }
+
+    #[test]
+    fn an_owner_given_with_plus_matches_its_national_form() {
+        let owners = OwnerHandleSet::from_phones(&["+447700900123".into()]).unwrap();
+        assert!(owners.is_owner("07700900123", HandleType::Phone));
+        assert!(owners.is_owner("07700 900123", HandleType::Phone));
+        assert!(owners.is_owner("7700900123", HandleType::Phone));
+        assert!(!owners.is_owner("07700900124", HandleType::Phone));
+        assert!(!owners.is_owner("0447700900123", HandleType::Phone));
+        // A value with `+` is in international form and names its country.
+        assert!(!owners.is_owner("+7700900123", HandleType::Phone));
+        // An owner given without `+` has no country to strip.
+        let local = OwnerHandleSet::from_phones(&["020 7946 0000".into()]).unwrap();
+        assert!(!local.is_owner("2079460000", HandleType::Phone));
     }
 
     #[test]
@@ -698,12 +765,10 @@ mod tests {
             Some("+447700900123")
         );
         assert!(owners.is_owner("+447700900123", HandleType::Phone));
-        // Without the `+` the server keys it as different digits.
-        assert!(!owners.is_owner("447700900123", HandleType::Phone));
-        // A source that has already dropped the `+` compares digits instead.
-        assert!(owners.is_owner_digits("447700900123"));
-        assert!(!owners.is_owner_digits("447700900999"));
-        assert!(!owners.is_owner_digits("06"));
+        // A source that has already dropped the `+` matches by digits.
+        assert!(owners.is_owner("447700900123", HandleType::Phone));
+        assert!(!owners.is_owner("447700900999", HandleType::Phone));
+        assert!(!owners.is_owner("06", HandleType::Phone));
     }
 
     #[test]

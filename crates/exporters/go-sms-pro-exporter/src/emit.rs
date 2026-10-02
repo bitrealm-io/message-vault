@@ -11,8 +11,8 @@ use message_crate_core::{
     CancelFlag, ExportReport, ExportTransforms, OutputFormat, prepare_outputs, project_conversation,
 };
 use message_ir::{
-    ExportMeta, IrAttachment, IrService, IrSource, PendingAttachment, PendingConversation,
-    PendingMessage, ProjectionHooks, ensure_conversation, parse_android_type,
+    ExportMeta, HandleType, IrAttachment, IrService, IrSource, PendingAttachment,
+    PendingConversation, PendingMessage, ProjectionHooks, ensure_conversation, parse_android_type,
 };
 use message_staging::{AttachmentSource, ExportWriter};
 use phone::{OwnerHandleSet, sanitize_number};
@@ -172,7 +172,7 @@ fn pdu_target(
     let participants = pdu_participants(parsed);
     let others: Vec<_> = participants
         .iter()
-        .filter(|p| !owners.is_owner_digits(p))
+        .filter(|p| !owners.is_owner(p, HandleType::Phone))
         .cloned()
         .collect();
     if others.is_empty() {

@@ -108,9 +108,9 @@ export function contactPreviewFromThreadParticipants(
   };
 }
 
-/** Format an API ISO timestamp as YYYY-MM-DD for the handles table. */
-export function formatHandleDate(iso: string | null | undefined): string | null {
-  return formatIsoDateOnly(iso);
+/** Format an API ISO timestamp as YYYY-MM-DD in `zone` for the handles table. */
+export function formatHandleDate(iso: string | null | undefined, zone: string): string | null {
+  return formatIsoDateOnly(iso, zone);
 }
 
 export function emptyHandleRow(address: string): ContactHandle {

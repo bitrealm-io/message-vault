@@ -1,5 +1,6 @@
 //! Chat-id helpers: E.164-guarded phone formatting and group chat ids.
 
+use message_ir::HandleType;
 use phone::OwnerHandleSet;
 
 /// Format as E.164 (the international phone-number format that starts with +)
@@ -22,7 +23,7 @@ pub(super) fn chat_id_group(
 ) -> (String, String) {
     let others: Vec<String> = participant_digits
         .iter()
-        .filter(|d| !d.is_empty() && !owners.is_owner_digits(d))
+        .filter(|d| !d.is_empty() && !owners.is_owner(d, HandleType::Phone))
         .cloned()
         .collect();
     if others.is_empty() {

@@ -14,9 +14,9 @@
 use std::{collections::HashSet, fs::File, path::Path};
 
 use anyhow::bail;
-use imessage_reader_protocol::{Event, Platform, Request, Source};
+use imessage_reader_protocol::{Event, IdentitiesRequest, Platform, Request, Source};
 
-use crate::helper::Helper;
+use crate::{helper::Helper, scratch::ScratchDir};
 
 /// `Info.plist` → `Phone Number` from an iOS backup folder.
 ///
@@ -36,23 +36,50 @@ pub fn ios_backup_phone_number(backup_root: &Path) -> Option<String> {
 /// `chat.account_login`, `message.destination_caller_id`, and (for iOS
 /// backups) `Info.plist` → `Phone Number`, deduplicated.
 ///
+/// An encrypted backup's databases are decrypted into a folder of this
+/// request's own under `scratch_root`, a folder the app owns. The folder is
+/// deleted when the request ends, and what a killed request left under
+/// `scratch_root` is deleted before this one starts ([`ScratchDir`]).
+///
 /// # Errors
 ///
 /// Returns an error when the source cannot be opened: missing database,
 /// missing or wrong backup password, not an iPhone backup, or no
-/// `imessage-reader` program to open it with.
+/// `imessage-reader` program to open it with. Also when the scratch folder
+/// cannot be made.
 pub fn backup_identities(
     db_path: &Path,
     ios: bool,
     backup_password: Option<&str>,
+    scratch_root: &Path,
 ) -> anyhow::Result<Vec<String>> {
-    let request = Request::Identities(Source {
-        db_path: db_path.to_path_buf(),
-        platform: if ios { Platform::Ios } else { Platform::MacOs },
-        backup_password: backup_password.map(str::to_string),
+    identities_with(db_path, ios, backup_password, scratch_root, |request| {
+        Helper::spawn(request, None, None)
+    })
+}
+
+/// [`backup_identities`], starting the program with `spawn`. Tests pass a
+/// fake program.
+fn identities_with(
+    db_path: &Path,
+    ios: bool,
+    backup_password: Option<&str>,
+    scratch_root: &Path,
+    spawn: impl FnOnce(&Request) -> anyhow::Result<Helper>,
+) -> anyhow::Result<Vec<String>> {
+    let scratch = ScratchDir::create(scratch_root)?;
+    let request = Request::Identities(IdentitiesRequest {
+        source: Source {
+            db_path: db_path.to_path_buf(),
+            platform: if ios { Platform::Ios } else { Platform::MacOs },
+            backup_password: backup_password.map(str::to_string),
+        },
+        scratch_dir: scratch.path().to_path_buf(),
     });
-    let helper = Helper::spawn(&request, None, None)?;
-    let mut values = read_identities(helper)?;
+    // The program is stopped (by `finish`, or by its drop on an error)
+    // before the scratch folder is deleted.
+    let mut values = read_identities(spawn(&request)?)?;
+    drop(scratch);
     if ios {
         values.extend(ios_backup_phone_number(db_path));
     }
@@ -159,20 +186,138 @@ mod tests {
 
     #[cfg(unix)]
     mod through_a_fake_helper {
-        use imessage_reader_protocol::{PROTOCOL_VERSION, Platform, Request, Source};
+        use std::{fs, path::Path};
 
-        use super::super::read_identities;
+        use imessage_reader_protocol::{
+            IdentitiesRequest, PROTOCOL_VERSION, Platform, Request, Source,
+        };
+
+        use super::super::{identities_with, read_identities};
         use crate::helper::tests::{fake_helper, source_line, spawn_fake};
 
         fn request() -> Request {
-            Request::Identities(Source {
-                db_path: "/nowhere/chat.db".into(),
-                platform: Platform::MacOs,
-                backup_password: None,
+            Request::Identities(IdentitiesRequest {
+                source: Source {
+                    db_path: "/nowhere/chat.db".into(),
+                    platform: Platform::MacOs,
+                    backup_password: None,
+                },
+                scratch_dir: "/nowhere/scratch".into(),
             })
         }
 
         const ANSWER: &str = r#"echo '{"event":"identities","values":["+15550001111"]}'"#;
+
+        /// Shell lines that keep the request in `<dir>/request.json` and
+        /// write a decrypted database into the scratch folder it names, as
+        /// the real program does for an encrypted backup.
+        fn decrypt_into_scratch(dir: &Path) -> String {
+            format!(
+                r#"printf '%s' "$request" > '{}/request.json'
+scratch=$(printf '%s' "$request" | sed 's/.*"scratch_dir":"\([^"]*\)".*/\1/')
+echo decrypted > "$scratch/crabapple-sms-x.db""#,
+                dir.display()
+            )
+        }
+
+        /// The names under `root`, sorted, without the root's lock file.
+        fn left_in(root: &Path) -> Vec<String> {
+            let mut names: Vec<String> = fs::read_dir(root)
+                .unwrap()
+                .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+                .filter(|name| name != ".lock")
+                .collect();
+            names.sort();
+            names
+        }
+
+        /// The identities request names a scratch folder of its own under
+        /// the root the app gave, and once the answer is in, nothing the
+        /// program decrypted is left there (#1135).
+        #[test]
+        fn the_request_carries_a_scratch_folder_that_is_deleted_after() {
+            let dir = tempfile::tempdir().unwrap();
+            let root = tempfile::tempdir().unwrap();
+            let body = format!(
+                "{}\n{}\n{ANSWER}",
+                decrypt_into_scratch(dir.path()),
+                source_line(PROTOCOL_VERSION)
+            );
+            let script = fake_helper(dir.path(), &body);
+
+            let values = identities_with(
+                Path::new("/nowhere/chat.db"),
+                false,
+                None,
+                root.path(),
+                |request| Ok(spawn_fake(&script, request)),
+            )
+            .unwrap();
+            assert_eq!(values, vec!["+15550001111"]);
+
+            let sent = fs::read_to_string(dir.path().join("request.json")).unwrap();
+            let Ok(Request::Identities(sent)) = serde_json::from_str::<Request>(&sent) else {
+                panic!("the program was sent an identities request: {sent}");
+            };
+            assert_eq!(sent.scratch_dir.parent(), Some(root.path()));
+            assert!(
+                left_in(root.path()).is_empty(),
+                "{:?}",
+                left_in(root.path())
+            );
+        }
+
+        /// A program killed while it decrypts leaves its database in the
+        /// scratch folder, and the app deletes the folder all the same.
+        #[test]
+        fn a_killed_program_leaves_no_decrypted_database() {
+            let dir = tempfile::tempdir().unwrap();
+            let root = tempfile::tempdir().unwrap();
+            let body = format!("{}\nkill -9 $$", decrypt_into_scratch(dir.path()));
+            let script = fake_helper(dir.path(), &body);
+
+            identities_with(
+                Path::new("/nowhere/chat.db"),
+                false,
+                None,
+                root.path(),
+                |request| Ok(spawn_fake(&script, request)),
+            )
+            .unwrap_err();
+            assert!(
+                left_in(root.path()).is_empty(),
+                "{:?}",
+                left_in(root.path())
+            );
+        }
+
+        /// A decrypted database left by a request whose app was killed is
+        /// deleted when the next request starts.
+        #[test]
+        fn a_leftover_database_is_deleted_at_the_next_request() {
+            let dir = tempfile::tempdir().unwrap();
+            let root = tempfile::tempdir().unwrap();
+            let earlier = root.path().join("request-earlier");
+            fs::create_dir(&earlier).unwrap();
+            fs::write(earlier.join(".lock"), b"").unwrap();
+            fs::write(earlier.join("crabapple-sms-x.db"), b"decrypted").unwrap();
+            let body = format!("{}\n{ANSWER}", source_line(PROTOCOL_VERSION));
+            let script = fake_helper(dir.path(), &body);
+
+            identities_with(
+                Path::new("/nowhere/chat.db"),
+                false,
+                None,
+                root.path(),
+                |request| Ok(spawn_fake(&script, request)),
+            )
+            .unwrap();
+            assert!(
+                left_in(root.path()).is_empty(),
+                "{:?}",
+                left_in(root.path())
+            );
+        }
 
         #[test]
         fn the_answer_follows_the_source_event() {

@@ -18,7 +18,7 @@ Source EML → `ConversationDocument` → [`message_ir_format::FormatSink`](http
 
 The desktop app's Import screen always writes JSON Lines, one file per conversation, because Import and Push read conversation files in that form. Every other format (JSON, CSV, EML, MBOX, SMS Backup & Restore XML) is a rewrite of that output through [Convert](/docs/developer/formats/convert/), which Export and **Settings → Convert** run.
 
-In CSV form: one file per conversation (header + one row per message after dedupe). MIME attachments under `attachments/` when copying/embedding. Filenames: 1:1 → `+E164.csv`; untitled groups → `group_+A_+B_….csv` (max 10 phones, then a hash). A mail with no `X-smssync-address` is keyed by a stem of the name in its subject. The XML form is a single SyncTech `smses.xml`.
+In CSV form: one file per conversation (header + one row per message after dedupe). MIME attachments under `attachments/` when copying/embedding. Filenames: 1:1 → `+E164.csv`; untitled groups → `group_+A_+B_….csv` (max 10 phones, then a hash). A mail with no `X-smssync-address` is keyed by the name in its subject, trimmed and otherwise unchanged, so "José" and "Josè" are two conversations; its file name is made from that name like any other, with a short suffix when two names give the same file name. The XML form is a single SyncTech `smses.xml`.
 
 ## Source → shared fields
 

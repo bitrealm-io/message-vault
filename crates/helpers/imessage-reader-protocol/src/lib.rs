@@ -44,7 +44,9 @@ use serde_json::Value;
 /// 3: [`Event::Identities`] values and [`Message::owner_handle`] are bare
 /// addresses ([`bare_address`]); the app no longer strips prefixes itself.
 /// 4: [`Request::BackupDomain`] and [`Event::BackupDomainDone`].
-pub const PROTOCOL_VERSION: u32 = 4;
+/// 5: [`Request::Identities`] carries a scratch folder
+/// ([`IdentitiesRequest`]), and [`ExportRequest::scratch_dir`] is required.
+pub const PROTOCOL_VERSION: u32 = 5;
 
 /// The owner address behind a raw `chat.account_login` or
 /// `message.destination_caller_id` value, or `None` when nothing is left.
@@ -104,7 +106,7 @@ pub enum Request {
     /// Read every message and stream it back as [`Event`] lines.
     Export(ExportRequest),
     /// Report the bare addresses the backup's device sent from.
-    Identities(Source),
+    Identities(IdentitiesRequest),
     /// Decrypt one attachment of the export just streamed into a file the
     /// app can read. Only meaningful after [`Event::Source`] reported
     /// `encrypted: true`; a plain file needs no help.
@@ -116,6 +118,16 @@ pub enum Request {
     /// folder. This is how another app's data (WhatsApp) comes out of an
     /// encrypted backup: the program that reads it cannot take the password.
     BackupDomain(BackupDomainRequest),
+}
+
+/// What reading a backup's identities needs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IdentitiesRequest {
+    /// The Messages data to read.
+    pub source: Source,
+    /// A folder the helper writes decrypted files into, as
+    /// [`ExportRequest::scratch_dir`].
+    pub scratch_dir: PathBuf,
 }
 
 /// What decrypting one domain of an encrypted iPhone backup needs.
@@ -145,10 +157,13 @@ pub struct ExportRequest {
     pub contacts_path: Option<PathBuf>,
     /// Name the owner by the destination caller id instead of `Me`.
     pub use_caller_id: bool,
-    /// A folder the helper may write decrypted files into. The app owns it
-    /// and deletes it when the run ends, so a killed helper leaves nothing
-    /// behind. The system temp folder is used when this is `None`.
-    pub scratch_dir: Option<PathBuf>,
+    /// A folder the helper writes decrypted files into: an encrypted
+    /// backup's message and contacts databases, and each attachment the app
+    /// asks for. The app owns it and deletes it when the request ends, so a
+    /// killed helper leaves nothing behind. A request without one is refused,
+    /// because the system's temporary folder is no place for a decrypted
+    /// database that a killed helper never deletes.
+    pub scratch_dir: PathBuf,
 }
 
 /// One event line on the helper's stdout.
@@ -393,7 +408,7 @@ mod tests {
             attachment_root: None,
             contacts_path: None,
             use_caller_id: true,
-            scratch_dir: None,
+            scratch_dir: "/tmp/scratch".into(),
         });
         let line = serde_json::to_string(&request).unwrap();
         assert!(line.starts_with(r#"{"op":"export""#), "{line}");
@@ -443,5 +458,36 @@ mod tests {
         assert_eq!(bare_address("E:"), None);
         assert_eq!(bare_address("tel: "), None);
         assert_eq!(bare_address("  "), None);
+    }
+
+    /// The reader decrypts an encrypted backup's databases into the
+    /// request's scratch folder, so a request that names none is refused
+    /// rather than sent to the system's temporary folder, where a killed
+    /// reader left the decrypted message database behind (#1135).
+    #[test]
+    fn a_request_without_a_scratch_folder_is_refused() {
+        let source = r#""source":{"db_path":"/backup","platform":"ios","backup_password":"pw"}"#;
+        for line in [
+            r#"{"op":"identities","db_path":"/backup","platform":"ios","backup_password":"pw"}"#
+                .to_string(),
+            format!(r#"{{"op":"identities",{source}}}"#),
+            format!(
+                r#"{{"op":"export",{source},"attachment_root":null,"contacts_path":null,"use_caller_id":true}}"#
+            ),
+            format!(
+                r#"{{"op":"export",{source},"attachment_root":null,"contacts_path":null,"use_caller_id":true,"scratch_dir":null}}"#
+            ),
+        ] {
+            assert!(
+                serde_json::from_str::<Request>(&line).is_err(),
+                "accepted without a scratch folder: {line}"
+            );
+        }
+
+        let line = format!(r#"{{"op":"identities",{source},"scratch_dir":"/app/scratch/one"}}"#);
+        let Ok(Request::Identities(request)) = serde_json::from_str::<Request>(&line) else {
+            panic!("an identities request with a scratch folder is read: {line}");
+        };
+        assert_eq!(request.scratch_dir, PathBuf::from("/app/scratch/one"));
     }
 }

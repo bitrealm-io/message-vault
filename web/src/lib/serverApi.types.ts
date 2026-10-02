@@ -1345,7 +1345,7 @@ export interface components {
             preferred_name?: string | null;
             /**
              * Format: int64
-             * @description Attachment bytes this account owns.
+             * @description Attachment bytes this account stores, each stored file counted once.
              */
             storage_bytes: number;
             /**
@@ -1406,7 +1406,7 @@ export interface components {
             top_attachments: components["schemas"]["TopAttachment"][];
             /**
              * Format: int64
-             * @description Attachment bytes, by original file size.
+             * @description Attachment bytes, by original file size, each stored file counted once.
              */
             total_bytes: number;
         };
@@ -2488,7 +2488,7 @@ export interface components {
                 preferred_name?: string | null;
                 /**
                  * Format: int64
-                 * @description Attachment bytes this account owns.
+                 * @description Attachment bytes this account stores, each stored file counted once.
                  */
                 storage_bytes: number;
                 /**
@@ -3334,7 +3334,8 @@ export interface components {
             messages_bytes: number;
             /**
              * Format: int64
-             * @description Attachment bytes across every account, by original file size.
+             * @description Attachment bytes across every account, by original file size, each
+             *     stored file counted once.
              */
             total_bytes: number;
         };

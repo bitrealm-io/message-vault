@@ -2,33 +2,38 @@
 //! parse, and merge attachment lists by content digest.
 
 use crate::types::AttachmentBlob;
+use anyhow::Result;
 use message_ir::PendingAttachment;
-use std::collections::{HashMap, HashSet};
+use message_staging::AttachmentSpool;
+use std::collections::HashSet;
 
-/// Queue attachment blobs as metadata. Bytes stay in `blob_bytes` (keyed by
-/// digest) until the shared runner writes them.
+/// Queue attachment blobs as metadata. With a `spool`, each payload is
+/// written to it here, so no attachment's bytes stay in memory until the
+/// shared runner writes them.
+///
+/// # Errors
+///
+/// Returns an error when a payload cannot be written to the spool.
 pub(super) fn queue_attachments(
     blobs: &[AttachmentBlob],
-    copy_attachments: bool,
-    blob_bytes: &mut HashMap<String, Vec<u8>>,
-) -> Vec<PendingAttachment> {
+    spool: Option<&AttachmentSpool>,
+) -> Result<Vec<PendingAttachment>> {
     blobs
         .iter()
         .map(|blob| {
-            if copy_attachments && !blob.data.is_empty() {
-                blob_bytes
-                    .entry(blob.digest_hex.clone())
-                    .or_insert_with(|| blob.data.clone());
-            }
-            PendingAttachment {
+            let digest = match spool {
+                Some(spool) if !blob.data.is_empty() => spool.put(&blob.data)?,
+                _ => blob.digest_hex.clone(),
+            };
+            Ok(PendingAttachment {
                 rel_path: String::new(),
                 content_type: blob.mime_type.clone().unwrap_or_default(),
-                digest_sha256: Some(blob.digest_hex.clone()),
+                digest_sha256: Some(digest),
                 name_hint: blob
                     .original_name
                     .clone()
                     .or_else(|| Some(blob.filename.clone())),
-            }
+            })
         })
         .collect()
 }

@@ -203,16 +203,21 @@ mod locating {
 
 #[cfg(unix)]
 mod faults {
-    use imessage_reader_protocol::{Event, PROTOCOL_VERSION, Platform, Request, Source};
+    use imessage_reader_protocol::{
+        Event, IdentitiesRequest, PROTOCOL_VERSION, Platform, Request, Source,
+    };
 
     use super::fake::{fake_helper, source_line, spawn_fake};
 
     /// A request that expects a `source` event first.
     fn identities_request() -> Request {
-        Request::Identities(Source {
-            db_path: "/nowhere/chat.db".into(),
-            platform: Platform::MacOs,
-            backup_password: None,
+        Request::Identities(IdentitiesRequest {
+            source: Source {
+                db_path: "/nowhere/chat.db".into(),
+                platform: Platform::MacOs,
+                backup_password: None,
+            },
+            scratch_dir: "/nowhere/scratch".into(),
         })
     }
 

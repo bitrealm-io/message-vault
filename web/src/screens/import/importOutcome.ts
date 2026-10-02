@@ -6,7 +6,7 @@ import type {
   StagingSummary,
 } from "../../lib/tauri";
 
-export type ImportOutcome = "completed" | "completed_with_issues" | "failed";
+export type ImportOutcome = "completed" | "completed_with_issues" | "failed" | "cancelled";
 
 /**
  * The stable identity of a staged attachment across Media.
@@ -72,8 +72,11 @@ function isApprovedOmission(
 }
 
 /**
- * Three-way verdict for a finished import, read from the push report rather
- * than from whether the push call returned (spec decisions 21–22).
+ * Verdict for a finished push, read from the push report rather than from
+ * whether the push call returned (spec decisions 21–22).
+ *
+ * `cancelled` is a push the cancel flag stopped: the caller pauses the run
+ * rather than ending it.
  *
  * `failed` has a zero floor: interrupted, threw, or nothing landed at all.
  * A re-push where every conversation dedupes to a skip is a no-op, not a
@@ -93,6 +96,11 @@ export function importOutcome(args: {
 }): ImportOutcome {
   const { report, threw, issues, approved } = args;
   if (threw || !report) return "failed";
+  // A push the cancel flag stopped did not reach every conversation, and a
+  // push that is not ok with no failed conversation stopped short some other
+  // way. Neither is a finished import.
+  if (report.cancelled) return "cancelled";
+  if (!report.ok && report.conversations_failed === 0) return "failed";
   const nothingLanded =
     report.conversations_total > 0 &&
     report.conversations_ok === 0 &&

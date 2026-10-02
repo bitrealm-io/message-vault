@@ -294,11 +294,87 @@ describe("InfiniteOffsetList asking for more", () => {
 
     expect(requestMore).not.toHaveBeenCalled();
   });
-
-  // Only the sectioned path is exercised here. The desktop app's virtualized
-  // path, used for a contact search and the "Last heard" sort, has its own
-  // tests under "InfiniteOffsetList in the desktop app".
 });
+
+/**
+ * The list takes one of three paths. The Contacts list sorted by name, with
+ * no search, passes `getSectionLetter` and takes the sectioned path above. A
+ * contact search, and a sort by date such as "Last heard", pass none, and the
+ * list is virtualized: by React Aria's Virtualizer in the desktop app, and by
+ * TanStack Virtual in the browser. The Contacts list is the only screen that
+ * uses this component.
+ */
+describe("InfiniteOffsetList asking for more without sections", () => {
+  it("asks for the next page in the desktop app once the last rows are scrolled into view", async () => {
+    tauriMock.current = true;
+    const requestMore = vi.fn();
+    const restore = layOutDrawnRows(49);
+    try {
+      renderList(manyItems(), { sectioned: false, hasMore: true, requestMore, total: 90 });
+      const pill = screen.getByTestId("contact-list-range-pill");
+      await waitFor(() => expect(pill).toHaveTextContent("1–8 of 90"));
+      expect(requestMore).not.toHaveBeenCalled();
+
+      const listbox = screen.getByRole("listbox", { name: "Contacts" });
+      Object.defineProperty(listbox, "scrollTop", { value: 42 * 49, configurable: true });
+      fireEvent.scroll(listbox);
+
+      await waitFor(() => expect(requestMore).toHaveBeenCalled());
+    } finally {
+      restore();
+    }
+  });
+
+  it("asks for the next page in the browser once the last rows are scrolled into view", async () => {
+    const requestMore = vi.fn();
+    const restore = layOutViewport();
+    try {
+      const { container } = renderList(manyItems(), {
+        sectioned: false,
+        hasMore: true,
+        requestMore,
+        total: 90,
+      });
+      const pill = screen.getByTestId("contact-list-range-pill");
+      await waitFor(() => expect(pill).toHaveTextContent(/^1–\d+ of 90/));
+      expect(requestMore).not.toHaveBeenCalled();
+
+      const root = scroller(container);
+      Object.defineProperty(root, "scrollTop", { value: 42 * 49, configurable: true });
+      fireEvent.scroll(root);
+
+      await waitFor(() => expect(requestMore).toHaveBeenCalled());
+    } finally {
+      restore();
+    }
+  });
+});
+
+/**
+ * jsdom lays out nothing. This gives every element a 400px viewport, which
+ * is all TanStack Virtual reads: it places the rows itself from their
+ * estimated height and the scroller's `scrollTop`.
+ */
+function layOutViewport() {
+  const viewport = 400;
+  const heights = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(viewport);
+  const widths = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(300);
+  const offsets = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(viewport);
+  const rects = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+    top: 0,
+    bottom: viewport,
+    left: 0,
+    right: 300,
+    width: 300,
+    height: viewport,
+  } as DOMRect);
+  return () => {
+    heights.mockRestore();
+    widths.mockRestore();
+    offsets.mockRestore();
+    rects.mockRestore();
+  };
+}
 
 describe("InfiniteOffsetList choosing a row", () => {
   it("hands the item back when its row is clicked", async () => {

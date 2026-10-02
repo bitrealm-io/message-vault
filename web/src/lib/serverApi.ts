@@ -374,7 +374,6 @@ export type ConversationListParams = {
   offset?: number;
   /** `sort=-field,field`: `date` or `messages`, a leading `-` for descending. */
   sort?: string;
-  count_only?: boolean;
 };
 
 export function listConversations(

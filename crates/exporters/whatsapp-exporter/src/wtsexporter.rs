@@ -1,5 +1,6 @@
 //! Locate and run the external `wtsexporter` CLI.
 
+use crate::ios_backup::DecryptedWhatsapp;
 use anyhow::{Context, Result, bail};
 use std::env;
 use std::io::Write;
@@ -38,6 +39,19 @@ pub(crate) struct WtsexporterArgs {
     pub media: Option<PathBuf>,
     pub db: Option<PathBuf>,
     pub business: bool,
+}
+
+impl WtsexporterArgs {
+    /// Read WhatsApp's decrypted files instead of the iPhone backup they
+    /// came from. No backup is passed: given an encrypted backup,
+    /// wtsexporter asks for its password on a terminal the app does not
+    /// have. Contacts chosen on the form still win over the backup's own.
+    pub fn read_decrypted(&mut self, decrypted: DecryptedWhatsapp) {
+        self.backup = None;
+        self.input = decrypted.domain_dir.clone();
+        self.db = Some(decrypted.database);
+        self.media.get_or_insert(decrypted.domain_dir);
+    }
 }
 
 /// Locate `wtsexporter` (the Python WhatsApp export tool this crate shells out to):
@@ -404,6 +418,7 @@ mod tests {
         Platform, WtsexporterArgs, android_crypt_backup, input_search_root,
         resolve_forwarded_paths, wtsexporter_command,
     };
+    use crate::ios_backup::DecryptedWhatsapp;
     use std::fs;
     use std::path::Path;
     use tempfile::tempdir;
@@ -618,6 +633,54 @@ mod tests {
         };
         let paths = resolve_forwarded_paths(&args).unwrap();
         assert!(paths.backup.is_none());
+    }
+
+    /// An encrypted iPhone backup is never passed to wtsexporter: the
+    /// command names the decrypted database, contacts and media, and has
+    /// no `-b`.
+    #[test]
+    fn a_decrypted_iphone_backup_is_read_from_its_files_with_no_backup_flag() {
+        let backup = tempdir().unwrap();
+        let work = tempdir().unwrap();
+        let domain = work
+            .path()
+            .join("AppDomainGroup-group.net.whatsapp.WhatsApp.shared");
+        fs::create_dir(&domain).unwrap();
+        let db = domain.join("ChatStorage.sqlite");
+        fs::write(&db, b"db").unwrap();
+        let contacts = domain.join("ContactsV2.sqlite");
+        fs::write(&contacts, b"contacts").unwrap();
+        let out = work.path().join("out");
+        let json = out.join("result.json");
+        let mut args = WtsexporterArgs {
+            platform: Platform::Ios,
+            backup: Some(backup.path().to_path_buf()),
+            work_dir: work.path().to_path_buf(),
+            ..android_args(backup.path(), None)
+        };
+        args.read_decrypted(DecryptedWhatsapp {
+            domain_dir: domain.clone(),
+            database: db.clone(),
+        });
+
+        assert_eq!(
+            command_args(&args, &out, &json),
+            [
+                "-i".to_string(),
+                "--no-html".to_string(),
+                "--no-banner".to_string(),
+                "-o".to_string(),
+                text(&out),
+                "-j".to_string(),
+                text(&json),
+                "-d".to_string(),
+                text(&db),
+                "-w".to_string(),
+                text(&contacts),
+                "-m".to_string(),
+                text(&domain),
+            ]
+        );
     }
 
     /// An iOS backup forwards its database, contacts and media found under

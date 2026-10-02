@@ -581,6 +581,14 @@ export default function ImportScreen() {
             }),
           ),
         ]);
+        let backupEncrypted: boolean | null = null;
+        if (source === "whatsapp-ios" && root !== "") {
+          try {
+            backupEncrypted = await invokeIosBackupEncrypted(root);
+          } catch {
+            backupEncrypted = null;
+          }
+        }
         if (cancelled) return;
         const cryptName = cryptHits.find((name) => name !== null) ?? null;
         setWhatsappStats({
@@ -590,6 +598,7 @@ export default function ImportScreen() {
           db,
           hasMsgstoreDb: Boolean(msgstore?.exists && msgstore.isFile),
           cryptName,
+          backupEncrypted,
         });
       })();
     }, PATH_PROBE_DEBOUNCE_MS);

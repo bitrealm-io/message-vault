@@ -128,6 +128,14 @@ decrypter), all GPL-3.0-or-later, so its own manifest says
 `license = "GPL-3.0-or-later"` and its `LICENSE` file is the GPL text. It
 builds a binary and nothing else.
 
+Because `crabapple` is the only code in the repository that can decrypt an
+iPhone backup, the program also serves one request that is not about Apple
+Messages: decrypt every file of one backup domain into a folder the app
+names (#941). The WhatsApp importer uses it for an encrypted iPhone backup,
+because wtsexporter asks for the backup password on a terminal and takes it
+no other way. The decrypting stays on the GPL side of the boundary; the
+WhatsApp importer only starts the program and reads the files it wrote.
+
 `crates/helpers/imessage-reader-protocol` is the interface: the serde types
 for the request the app writes and the events the reader answers with, one
 JSON object per line. Both sides link it, so it is `MIT OR Apache-2.0`; an FCL

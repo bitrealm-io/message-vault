@@ -344,6 +344,23 @@ fn whatsapp_android_refuses_an_empty_owner_phone() {
     );
 }
 
+/// An encrypted iPhone backup's password reaches the WhatsApp exporter, which
+/// decrypts WhatsApp's files with it. Android has no such password.
+#[test]
+fn whatsapp_ios_forwards_the_backup_password() {
+    let backup = tempfile::tempdir().unwrap();
+    let path = backup.path().to_str().unwrap();
+    let mut options = test_options(vec!["+15555550100".into()]);
+    options.backup_password = "pw".into();
+    for (source, expected) in [("whatsapp-ios", Some("pw")), ("whatsapp-android", None)] {
+        let config = build_exporter_config(source, path, "/tmp/out", &options).unwrap();
+        let SourceConfig::Whatsapp(wa) = config.source else {
+            panic!("{:?}", config.source);
+        };
+        assert_eq!(wa.backup_password.as_deref(), expected, "{source}");
+    }
+}
+
 /// iPhone reads the number from the backup, so the field may be empty; when
 /// filled it reaches the exporter as the fallback.
 #[test]

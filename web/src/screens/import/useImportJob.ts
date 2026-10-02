@@ -946,6 +946,7 @@ function extractFieldsFor(form: ImportJobFormValues) {
       source: form.source,
       ...media,
       key: form.whatsappKey,
+      backupPassword: form.backupPassword,
       wa: form.whatsappWa,
       media: form.whatsappMedia,
       db: form.whatsappDb,

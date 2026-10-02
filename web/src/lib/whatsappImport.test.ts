@@ -3,6 +3,7 @@ import {
   isWhatsappMethod,
   WHATSAPP_DEFAULT_METHOD,
   WHATSAPP_ERR_CRYPT_KEY,
+  WHATSAPP_ERR_ENCRYPTED_PASSWORD,
   WHATSAPP_ERR_FOLDER_IS_FILE,
   WHATSAPP_ERR_MUST_BE_FILE,
   WHATSAPP_ERR_MUST_BE_FOLDER,
@@ -41,6 +42,7 @@ describe("whatsappImport", () => {
       method: "whatsapp-android",
       backupPath: "/tmp/missing-wa",
       key: "",
+      backupPassword: "",
       contactsDb: "",
       media: "",
       db: "",
@@ -52,6 +54,7 @@ describe("whatsappImport", () => {
         db: null,
         hasMsgstoreDb: false,
         cryptName: null,
+        backupEncrypted: null,
       },
     });
     expect(result.enabled).toBe(false);
@@ -64,6 +67,7 @@ describe("whatsappImport", () => {
       method: "whatsapp-android",
       backupPath: "/tmp/wa",
       key: "",
+      backupPassword: "",
       contactsDb: "/tmp/missing-wa.db",
       media: "",
       db: "",
@@ -75,6 +79,7 @@ describe("whatsappImport", () => {
         db: null,
         hasMsgstoreDb: true,
         cryptName: null,
+        backupEncrypted: null,
       },
     });
     expect(result.enabled).toBe(false);
@@ -92,6 +97,7 @@ describe("whatsappImport", () => {
       method: "whatsapp-android",
       backupPath: "  ",
       key: "",
+      backupPassword: "",
       contactsDb: "",
       media: "",
       db: "",
@@ -103,6 +109,7 @@ describe("whatsappImport", () => {
         db: null,
         hasMsgstoreDb: false,
         cryptName: null,
+        backupEncrypted: null,
       },
     });
     expect(result.enabled).toBe(false);
@@ -114,6 +121,7 @@ describe("whatsappImport", () => {
       method: "whatsapp-android",
       backupPath: "/tmp/msgstore.db",
       key: "",
+      backupPassword: "",
       contactsDb: "",
       media: "",
       db: "",
@@ -125,6 +133,7 @@ describe("whatsappImport", () => {
         db: null,
         hasMsgstoreDb: true,
         cryptName: null,
+        backupEncrypted: null,
       },
     });
     expect(result.enabled).toBe(false);
@@ -136,6 +145,7 @@ describe("whatsappImport", () => {
       method: "whatsapp-android",
       backupPath: "/tmp/wa",
       key: "",
+      backupPassword: "",
       contactsDb: "",
       media: "",
       db: "",
@@ -147,6 +157,7 @@ describe("whatsappImport", () => {
         db: null,
         hasMsgstoreDb: false,
         cryptName: "msgstore.db.crypt15",
+        backupEncrypted: null,
       },
     });
     expect(result.enabled).toBe(false);
@@ -158,6 +169,7 @@ describe("whatsappImport", () => {
       method: "whatsapp-android",
       backupPath: "/tmp/wa",
       key: "",
+      backupPassword: "",
       contactsDb: "",
       media: "",
       db: "",
@@ -169,6 +181,7 @@ describe("whatsappImport", () => {
         db: null,
         hasMsgstoreDb: true,
         cryptName: "msgstore.db.crypt15",
+        backupEncrypted: null,
       },
     });
     expect(result.enabled).toBe(true);
@@ -180,6 +193,7 @@ describe("whatsappImport", () => {
       method: "whatsapp-android",
       backupPath: "/tmp/wa",
       key: "",
+      backupPassword: "",
       contactsDb: "/tmp/wa.db",
       media: "",
       db: "",
@@ -191,6 +205,7 @@ describe("whatsappImport", () => {
         db: null,
         hasMsgstoreDb: true,
         cryptName: null,
+        backupEncrypted: null,
       },
     });
     expect(result.enabled).toBe(false);
@@ -202,6 +217,7 @@ describe("whatsappImport", () => {
       method: "whatsapp-android",
       backupPath: "/tmp/wa",
       key: "",
+      backupPassword: "",
       contactsDb: "",
       media: "/tmp/media.txt",
       db: "",
@@ -213,6 +229,7 @@ describe("whatsappImport", () => {
         db: null,
         hasMsgstoreDb: true,
         cryptName: null,
+        backupEncrypted: null,
       },
     });
     expect(result.enabled).toBe(false);
@@ -222,6 +239,32 @@ describe("whatsappImport", () => {
   it("enables iPhone Import for a backup folder with no key", () => {
     const result = whatsappCanImport({
       method: "whatsapp-ios",
+      backupPath: "/backups/iphone",
+      key: "",
+      backupPassword: "",
+      contactsDb: "",
+      media: "",
+      db: "",
+      ownerPhone: "+15555550100",
+      stats: {
+        backup: dir,
+        contactsDb: null,
+        media: null,
+        db: null,
+        hasMsgstoreDb: false,
+        cryptName: null,
+        backupEncrypted: null,
+      },
+    });
+    expect(result.enabled).toBe(true);
+    expect(result.errors).toEqual({});
+  });
+
+  // wtsexporter cannot be given an iPhone backup password, so the app
+  // decrypts WhatsApp's files itself and needs the password before the run
+  // starts. Android has no such password, whatever the probe says.
+  it("requires the password for an encrypted iPhone backup", () => {
+    const args = {
       backupPath: "/backups/iphone",
       key: "",
       contactsDb: "",
@@ -235,10 +278,19 @@ describe("whatsappImport", () => {
         db: null,
         hasMsgstoreDb: false,
         cryptName: null,
+        backupEncrypted: true,
       },
-    });
-    expect(result.enabled).toBe(true);
-    expect(result.errors).toEqual({});
+    };
+    const empty = whatsappCanImport({ ...args, method: "whatsapp-ios", backupPassword: " " });
+    expect(empty.enabled).toBe(false);
+    expect(empty.errors.backupPassword).toBe(WHATSAPP_ERR_ENCRYPTED_PASSWORD);
+
+    const filled = whatsappCanImport({ ...args, method: "whatsapp-ios", backupPassword: "pw" });
+    expect(filled.enabled).toBe(true);
+    expect(filled.errors).toEqual({});
+
+    const android = whatsappCanImport({ ...args, method: "whatsapp-android", backupPassword: "" });
+    expect(android.errors.backupPassword).toBeUndefined();
   });
 
   // An Android crypt backup carries no owner number, so the form's number
@@ -252,11 +304,13 @@ describe("whatsappImport", () => {
       db: null,
       hasMsgstoreDb: true,
       cryptName: null,
+      backupEncrypted: null,
     };
     const android = whatsappCanImport({
       method: "whatsapp-android",
       backupPath: "/tmp/wa",
       key: "",
+      backupPassword: "",
       contactsDb: "",
       media: "",
       db: "",
@@ -270,6 +324,7 @@ describe("whatsappImport", () => {
       method: "whatsapp-ios",
       backupPath: "/backups/iphone",
       key: "",
+      backupPassword: "",
       contactsDb: "",
       media: "",
       db: "",

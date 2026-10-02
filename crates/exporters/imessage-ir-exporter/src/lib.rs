@@ -12,11 +12,13 @@
 //! `imessage-reader-protocol`; how the program is found is in [`helper`].
 
 mod backup;
+mod backup_domain;
 mod convert;
 mod helper;
 mod identity;
 mod run;
 
 pub use backup::ios_backup_encrypted_flag;
+pub use backup_domain::{DecryptedDomain, decrypt_ios_backup_domain};
 pub use identity::{backup_identities, ios_backup_phone_number};
 pub use run::run;

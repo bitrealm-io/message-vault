@@ -496,6 +496,7 @@ fn build_exporter_config(
             form.owner_phones = options.owner_phones.join("\n");
             form.whatsapp_platform = WhatsappPlatform::Ios;
             form.whatsapp_backup = path.to_string();
+            form.backup_password.clone_from(&options.backup_password);
             form.whatsapp_wa.clone_from(&options.whatsapp_wa);
             form.whatsapp_business = options.whatsapp_business;
             Exporter::Whatsapp

@@ -280,6 +280,9 @@ pub struct WhatsappConfig {
     pub key: Option<String>,
     /// Encrypted backup or iOS backup path.
     pub backup: Option<PathBuf>,
+    /// iPhone backup decryption password, for an encrypted iPhone backup
+    /// (never written to `export.ini`).
+    pub backup_password: Option<String>,
     /// Contacts database (`wa.db` / `ContactsV2.sqlite`) path.
     pub wa: Option<PathBuf>,
     /// WhatsApp media folder path.

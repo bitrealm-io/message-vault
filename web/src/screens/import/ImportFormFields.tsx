@@ -43,6 +43,7 @@ import {
   whatsappShowsDb,
   whatsappShowsKey,
   whatsappShowsMedia,
+  whatsappShowsPassword,
 } from "../../lib/whatsappImport";
 import {
   ATTACHMENT_OPTIONS,
@@ -261,6 +262,7 @@ export default function ImportFormFields(props: ImportFormFieldsProps) {
         method: whatsappMethod,
         backupPath: props.backupPath,
         key: props.whatsappKey,
+        backupPassword: props.backupPassword,
         contactsDb: props.whatsappWa,
         media: props.whatsappMedia,
         db: props.whatsappDb,
@@ -542,6 +544,28 @@ export default function ImportFormFields(props: ImportFormFieldsProps) {
                 />
                 <p className={hintStyle}>{WHATSAPP_KEY_HINT}</p>
                 <FieldStatus message={whatsappErrors.key} />
+              </StackedField>
+            ) : null}
+
+            {whatsappShowsPassword(whatsappMethod) ? (
+              <StackedField
+                label="Encryption password"
+                required={props.whatsappStats.backupEncrypted === true}
+                optional={props.whatsappStats.backupEncrypted !== true}
+              >
+                <PasswordField
+                  aria-label={
+                    props.whatsappStats.backupEncrypted === true
+                      ? "Encryption password"
+                      : "Encryption password (Optional)"
+                  }
+                  value={props.backupPassword}
+                  onChange={props.onBackupPasswordChange}
+                  autoComplete="new-password"
+                  showPassword={props.showBackupPassword}
+                  onToggle={props.onToggleBackupPassword}
+                />
+                <FieldStatus message={whatsappErrors.backupPassword} />
               </StackedField>
             ) : null}
 

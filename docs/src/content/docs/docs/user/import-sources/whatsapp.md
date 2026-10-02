@@ -6,11 +6,10 @@ description: Import WhatsApp from an Android phone or an iPhone backup. Advanced
 WhatsApp is the hardest source to import.
 It belongs after a first import of [iPhone](/docs/user/your-messages/back-up-an-iphone/) or [Android](/docs/user/your-messages/back-up-an-android-phone/) messages has worked, not before.
 
-Three things make it hard:
+Two things make it hard:
 
 - The desktop app doesn't include the program that reads WhatsApp data. It must be installed separately ([issue 940](https://github.com/messagecrate/message-crate/issues/940)).
 - On Android, WhatsApp's backup file is encrypted, and Import needs the key.
-- On iPhone, Import can't read WhatsApp from an encrypted iPhone backup ([issue 941](https://github.com/messagecrate/message-crate/issues/941)).
 
 ## Install wtsexporter
 
@@ -68,23 +67,25 @@ The [WhatsApp Chat Exporter documentation](https://github.com/KnugiHK/WhatsApp-C
 
 WhatsApp's data is inside the iPhone backup made in [Back up an iPhone](/docs/user/your-messages/back-up-an-iphone/).
 
-The backup must be made **without** encryption.
-The Import form has no password field for WhatsApp, so it can't open an encrypted backup.
-A backup that was encrypted for importing iPhone messages can't be reused here. A second, unencrypted backup is needed.
+The backup can be encrypted or not.
+A backup that was encrypted for importing iPhone messages is used here as it is, with the same password.
 
 ### Fill in the Import form
 
 1. Open **Import** and choose **WhatsApp** as the source.
 2. **Platform**: **iPhone**.
 3. **Backup folder**: the device folder, the one that contains `Manifest.plist`.
-4. **WhatsApp Business** is turned on only for a WhatsApp Business backup.
+4. **Encryption password**: the backup's password. It is required when the backup is encrypted, and stays empty when it is not. The app never saves it.
+5. **WhatsApp Business** is turned on only for a WhatsApp Business backup.
+
+For an encrypted backup, Import first decrypts WhatsApp's files into the import's working folder, which takes longer when the backup holds a lot of WhatsApp media. The decrypted files are deleted when the import finishes reading them.
 
 The phone number is read from the backup.
 When the backup doesn't hold it, Import uses **WhatsApp phone number** under **Processing Options (Advanced)**.
 
 ## Limits
 
-- A run can't be cancelled while `wtsexporter` is working. It ends when the program finishes.
+- A run can't be cancelled while `wtsexporter` is working, or while an encrypted iPhone backup is being decrypted. It ends when that step finishes.
 - Using files from two different backups together fails, because a key decrypts only the backup it was made with.
 
 The run itself is the same as in [Import your backup](/docs/user/your-messages/import-your-backup/#start-the-import).

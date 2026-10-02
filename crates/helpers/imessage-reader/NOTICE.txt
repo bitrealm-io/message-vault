@@ -2,7 +2,8 @@ Apple Messages reader (imessage-reader)
 =======================================
 
 This program reads Apple Messages, from a Mac's Messages database or from an
-iPhone backup, for the Message Crate desktop app. The app starts it as a
+iPhone backup, for the Message Crate desktop app. It also decrypts WhatsApp's
+files out of an encrypted iPhone backup for the same app. The app starts it as a
 separate program and reads its answers over a pipe. Nothing else in Message
 Crate is part of this program.
 

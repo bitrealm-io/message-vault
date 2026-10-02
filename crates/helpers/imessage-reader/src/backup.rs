@@ -68,7 +68,7 @@ fn unique_suffix() -> String {
 ///
 /// Returns an error when permissions cannot be set.
 #[cfg(unix)]
-fn restrict_permissions(file: &File) -> Result<(), RuntimeError> {
+pub(crate) fn restrict_permissions(file: &File) -> Result<(), RuntimeError> {
     use std::{fs, os::unix::fs::PermissionsExt};
     file.set_permissions(fs::Permissions::from_mode(0o600))?;
     Ok(())
@@ -76,7 +76,7 @@ fn restrict_permissions(file: &File) -> Result<(), RuntimeError> {
 
 /// No-op off Unix; the Unix version narrows the decrypted backup's file mode.
 #[cfg(not(unix))]
-fn restrict_permissions(_file: &File) -> Result<(), RuntimeError> {
+pub(crate) fn restrict_permissions(_file: &File) -> Result<(), RuntimeError> {
     Ok(())
 }
 

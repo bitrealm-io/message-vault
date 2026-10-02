@@ -21,6 +21,12 @@ released versions carry their date on the heading.
 
 ### Features
 
+- **WhatsApp imports from an encrypted iPhone backup.** WhatsApp → iPhone
+  on the Import form now has an **Encryption password** field, the same one
+  iMessage has. The app sees that a backup is encrypted and asks for the
+  password before the import starts. The encrypted backup you made for your
+  iPhone messages now serves for WhatsApp too; a second, unencrypted backup
+  is no longer needed.
 - **A WhatsApp import knows which number is yours.** Every
   imported WhatsApp message now records the phone number your WhatsApp
   account is registered to, so its conversations count toward that identity

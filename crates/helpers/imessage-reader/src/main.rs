@@ -16,7 +16,10 @@
 //!
 //! What it does: opens `chat.db` (or decrypts an iPhone backup), caches
 //! chats, handles, contacts and tapbacks, then streams every message as an
-//! already-classified record. Turning those records into the shared
+//! already-classified record. It also decrypts one domain of an encrypted
+//! iPhone backup into a folder (`domain.rs`), which is how WhatsApp's files
+//! come out of one: `crabapple` is the only code here that can decrypt a
+//! backup, and it is on this side of the boundary. Turning those records into the shared
 //! conversation structure, writing files, media handling and everything else
 //! the product does stays in the app.
 
@@ -26,6 +29,7 @@ mod backup;
 mod body;
 mod contacts;
 mod data_source;
+mod domain;
 mod emit;
 mod error;
 mod fields;
@@ -93,6 +97,18 @@ fn main() {
                     Err(e) => fail(format!("the request is not valid JSON: {e}")),
                 }
             }
+        }
+        Request::BackupDomain(request) => {
+            let backup = domain::open(&request).unwrap_or_else(|e| fail(e));
+            emit(&Event::Source {
+                protocol_version: PROTOCOL_VERSION,
+                encrypted: true,
+            });
+            let written = domain::decrypt_domain(&backup, &request).unwrap_or_else(|e| fail(e));
+            emit(&Event::BackupDomainDone {
+                files: written.files,
+                failures: written.failures,
+            });
         }
         Request::Attachment { .. } => fail("an attachment request needs an export first"),
     }

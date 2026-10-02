@@ -300,6 +300,7 @@ describe("ImportFormFields WhatsApp methods", () => {
         db: null,
         hasMsgstoreDb: false,
         cryptName: "msgstore.db.crypt15",
+        backupEncrypted: null,
       },
     });
     expect(screen.getByText(WHATSAPP_ERR_CRYPT_KEY)).toBeTruthy();
@@ -316,6 +317,7 @@ describe("ImportFormFields WhatsApp methods", () => {
       db: null,
       hasMsgstoreDb: true,
       cryptName: null,
+      backupEncrypted: null,
     };
     renderForm({
       source: "whatsapp-android",
@@ -355,6 +357,7 @@ describe("ImportFormFields WhatsApp methods", () => {
         db: null,
         hasMsgstoreDb: false,
         cryptName: null,
+        backupEncrypted: null,
       },
       processingOpen: true,
     });
@@ -378,6 +381,7 @@ describe("ImportFormFields WhatsApp methods", () => {
         db: null,
         hasMsgstoreDb: true,
         cryptName: null,
+        backupEncrypted: null,
       },
     });
     expect(screen.getByText(WHATSAPP_ERR_FOLDER_IS_FILE)).toBeTruthy();
@@ -534,6 +538,7 @@ const filledWhatsappStats = {
   db: presentFile,
   hasMsgstoreDb: true,
   cryptName: null,
+  backupEncrypted: null,
 };
 const whatsappAndroidProps: Partial<ImportFormFieldsProps> = {
   source: "whatsapp-android",
@@ -552,6 +557,21 @@ const whatsappAndroidFields: FormCase["fields"] = [
   { label: "Contacts database", empty: { whatsappWa: "" } },
   { label: "Media folder", empty: { whatsappMedia: "" } },
   { label: "Message database", empty: { whatsappDb: "" } },
+];
+const whatsappIphoneProps: Partial<ImportFormFieldsProps> = {
+  source: "whatsapp-ios",
+  backupPath: "/backups/iphone",
+  backupPassword: "secret",
+  whatsappOwnerPhone: "+15555550100",
+  whatsappWa: "/backups/ContactsV2.sqlite",
+  whatsappStats: filledWhatsappStats,
+  processingOpen: true,
+};
+const whatsappIphoneFields: FormCase["fields"] = [
+  { label: "Backup folder", empty: { backupPath: "" } },
+  { label: "Encryption password", empty: { backupPassword: "" } },
+  { label: "Contacts database", empty: { whatsappWa: "" } },
+  { label: "WhatsApp phone number", empty: { whatsappOwnerPhone: "" } },
 ];
 const iphoneBackupStats = {
   backup: presentDir,
@@ -624,25 +644,23 @@ const FORM_CASES: FormCase[] = [
         ...filledWhatsappStats,
         hasMsgstoreDb: false,
         cryptName: "msgstore.db.crypt15",
+        backupEncrypted: null,
       },
     },
     fields: whatsappAndroidFields,
   },
   {
     name: "WhatsApp, iPhone",
+    props: whatsappIphoneProps,
+    fields: whatsappIphoneFields,
+  },
+  {
+    name: "WhatsApp, encrypted iPhone backup",
     props: {
-      source: "whatsapp-ios",
-      backupPath: "/backups/iphone",
-      whatsappOwnerPhone: "+15555550100",
-      whatsappWa: "/backups/ContactsV2.sqlite",
-      whatsappStats: filledWhatsappStats,
-      processingOpen: true,
+      ...whatsappIphoneProps,
+      whatsappStats: { ...filledWhatsappStats, backupEncrypted: true },
     },
-    fields: [
-      { label: "Backup folder", empty: { backupPath: "" } },
-      { label: "Contacts database", empty: { whatsappWa: "" } },
-      { label: "WhatsApp phone number", empty: { whatsappOwnerPhone: "" } },
-    ],
+    fields: whatsappIphoneFields,
   },
   {
     name: "SMS Backup & Restore",

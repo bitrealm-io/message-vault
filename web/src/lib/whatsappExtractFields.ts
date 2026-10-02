@@ -12,7 +12,7 @@ import type { WhatsappMethodId } from "./whatsappImport";
  * is on. The owner's number goes on both platforms when non-empty, as the
  * one-entry `owner_phones` the desktop already reads for Android SMS:
  * Android's only source, iPhone's fallback when the backup carries no owner
- * key. Never sets `backup_password`.
+ * key. The iPhone backup password is sent only for iPhone when non-empty.
  */
 export function whatsappExtractFields(args: {
   source: WhatsappMethodId;
@@ -21,6 +21,7 @@ export function whatsappExtractFields(args: {
   maxFps: string;
   minSizeMb: string;
   key: string;
+  backupPassword: string;
   wa: string;
   media: string;
   db: string;
@@ -33,6 +34,7 @@ export function whatsappExtractFields(args: {
   | "media_max_fps"
   | "media_min_size"
   | "whatsapp_key"
+  | "backup_password"
   | "whatsapp_wa"
   | "whatsapp_media"
   | "whatsapp_db"
@@ -68,8 +70,14 @@ export function whatsappExtractFields(args: {
     fields.whatsapp_wa = wa;
   }
 
-  if (args.source === "whatsapp-ios" && args.business) {
-    fields.whatsapp_business = true;
+  if (args.source === "whatsapp-ios") {
+    if (args.business) {
+      fields.whatsapp_business = true;
+    }
+    const password = args.backupPassword.trim();
+    if (password) {
+      fields.backup_password = password;
+    }
   }
 
   return fields;

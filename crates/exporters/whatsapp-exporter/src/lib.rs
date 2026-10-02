@@ -5,6 +5,7 @@
 //! The `whatsapp-exporter` binary is a thin CLI over [`run`].
 
 mod emit;
+mod ios_backup;
 mod jid;
 mod owner;
 mod parse;

@@ -1,19 +1,14 @@
 //! Parse GO SMS Pro `gosms_sys*.xml` SMS backups.
 
 use crate::emit::MAX_SKIP_DETAILS;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use go_sms_mms::decode_gosms_emojis;
 use phone::sanitize_number;
-use serde::Deserialize;
+use quick_xml::Reader;
+use quick_xml::escape::resolve_predefined_entity;
+use quick_xml::events::{BytesRef, Event};
 use std::collections::BTreeMap;
 use std::path::Path;
-
-#[derive(Debug, Deserialize)]
-#[serde(rename = "GoSms")]
-struct GoSmsFile {
-    #[serde(rename = "SMS", default)]
-    sms: Vec<BTreeMap<String, String>>,
-}
 
 #[derive(Debug, Clone)]
 pub(crate) struct XmlMessage {
@@ -57,6 +52,9 @@ pub(crate) struct XmlParseStats {
     /// Capped at [`MAX_SKIP_DETAILS`] entries; overflow counted here.
     pub skipped_unknown_address_details: Vec<SkippedBadAddrDetail>,
     pub skipped_unknown_address_details_more: u64,
+    /// Messages dropped because a reference in one of their fields, such
+    /// as `&#55357;`, is not a character.
+    pub skipped_unreadable_text: u64,
 }
 
 /// The last millisecond of the year 9999, the latest `<date>` read as real.
@@ -101,12 +99,10 @@ pub(crate) fn parse_xml_file(path: &Path) -> Result<(Vec<XmlMessage>, XmlParseSt
 ///
 /// Returns an error when the XML cannot be parsed.
 pub(crate) fn parse_xml_str(text: &str) -> Result<(Vec<XmlMessage>, XmlParseStats)> {
-    let file: GoSmsFile = quick_xml::de::from_str(text).context("failed to parse GoSms XML")?;
     let mut stats = XmlParseStats::default();
     let mut out = Vec::new();
 
-    for fields in file.sms {
-        stats.messages += 1;
+    for fields in read_sms_elements(text, &mut stats)? {
         let addr = sanitize_number(fields.get("address").map_or("", String::as_str));
         let contact = fields.get("contactName").cloned().unwrap_or_default();
         let body_raw = fields.get("body").map_or("", String::as_str);
@@ -180,6 +176,111 @@ pub(crate) fn parse_xml_str(text: &str) -> Result<(Vec<XmlMessage>, XmlParseStat
     }
 
     Ok((out, stats))
+}
+
+/// Every `<SMS>` element under the root as a map of child element name to
+/// its text, with leading and trailing whitespace trimmed.
+///
+/// Each `<SMS>` is counted in `stats.messages`. One whose fields hold a
+/// reference that is not a character or a predefined XML entity, such as
+/// `&#55357;` or `&nbsp;`, is left out and counted in
+/// `stats.skipped_unreadable_text`, so the reference costs that message
+/// and not the file.
+///
+/// # Errors
+///
+/// Returns an error when the XML is not well formed.
+fn read_sms_elements(
+    text: &str,
+    stats: &mut XmlParseStats,
+) -> Result<Vec<BTreeMap<String, String>>> {
+    let mut reader = Reader::from_str(text);
+    let mut all = Vec::new();
+    let mut depth = 0usize;
+    // The `<SMS>` being read, and whether every reference in it resolved.
+    let mut sms: Option<(BTreeMap<String, String>, bool)> = None;
+    // The child element of `<SMS>` being read: its name and text so far.
+    let mut field: Option<(String, String)> = None;
+    loop {
+        let event = reader.read_event().context("failed to parse GoSms XML")?;
+        match event {
+            Event::Start(e) => {
+                depth += 1;
+                let name = e.name().as_ref().to_string();
+                match depth {
+                    2 if name == "SMS" => sms = Some((BTreeMap::new(), true)),
+                    3 if sms.is_some() => field = Some((name, String::new())),
+                    _ => {}
+                }
+            }
+            Event::Empty(e) => {
+                let name = e.name().as_ref().to_string();
+                match (depth, &mut sms) {
+                    (1, _) if name == "SMS" => {
+                        stats.messages += 1;
+                        all.push(BTreeMap::new());
+                    }
+                    (2, Some((fields, _))) => {
+                        fields.insert(name, String::new());
+                    }
+                    _ => {}
+                }
+            }
+            Event::Text(t) if depth == 3 => {
+                if let Some((_, value)) = &mut field {
+                    value.push_str(&t.xml10_content());
+                }
+            }
+            Event::CData(c) if depth == 3 => {
+                if let Some((_, value)) = &mut field {
+                    value.push_str(&c);
+                }
+            }
+            Event::GeneralRef(r) if depth == 3 => {
+                if let (Some((_, value)), Some((_, readable))) = (&mut field, &mut sms) {
+                    match resolve_reference(&r) {
+                        Some(resolved) => value.push_str(&resolved),
+                        None => *readable = false,
+                    }
+                }
+            }
+            Event::End(_) => {
+                match depth {
+                    3 => {
+                        if let (Some((name, value)), Some((fields, _))) = (field.take(), &mut sms) {
+                            let trimmed = value.trim_matches([' ', '\t', '\r', '\n']);
+                            fields.insert(name, trimmed.to_string());
+                        }
+                    }
+                    2 => {
+                        if let Some((fields, readable)) = sms.take() {
+                            stats.messages += 1;
+                            if readable {
+                                all.push(fields);
+                            } else {
+                                stats.skipped_unreadable_text += 1;
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+                depth = depth.saturating_sub(1);
+            }
+            Event::Eof if depth == 0 => break,
+            Event::Eof => bail!("failed to parse GoSms XML: the file ends inside an element"),
+            _ => {}
+        }
+    }
+    Ok(all)
+}
+
+/// The text a reference stands for: a character reference, or one of the
+/// five predefined XML entities. `None` for anything else.
+fn resolve_reference(r: &BytesRef<'_>) -> Option<String> {
+    if r.is_char_ref() {
+        return r.resolve_char_ref().ok().flatten().map(String::from);
+    }
+    resolve_predefined_entity(r).map(String::from)
 }
 
 /// Record an XML SMS whose `<address>` had no usable digits.
@@ -343,5 +444,18 @@ mod tests {
             assert_eq!(msgs[0].timestamp_secs, secs, "date {date:?}");
             assert_eq!(msgs[0].date_ms, date);
         }
+    }
+
+    #[test]
+    fn a_refused_reference_costs_only_its_own_message() {
+        let xml = "<GoSms>\
+            <SMS><address>+14075550101</address><date>1400773261000</date><type>1</type><body>On my way &#55357;&#56832;</body></SMS>\
+            <SMS><address>+14075550101</address><date>1400773321000</date><type>2</type><body>a &amp; b &lt;c&gt;</body></SMS>\
+            </GoSms>";
+        let (msgs, stats) = parse_xml_str(xml).unwrap();
+        assert_eq!(stats.messages, 2);
+        assert_eq!(stats.skipped_unreadable_text, 1);
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].text, "a & b <c>");
     }
 }

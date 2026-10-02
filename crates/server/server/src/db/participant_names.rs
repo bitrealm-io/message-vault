@@ -39,6 +39,14 @@ pub use message_crate_api_types::Participant;
 
 use crate::db::sql::group_rows_by_id;
 
+/// Join condition that leaves a trashed contact `c` out. A trashed contact is
+/// not one of a conversation's contacts (CONTEXT.md, "Trash"), and
+/// `GET /v1/contacts/{id}` answers 404 for it, so its participant is named and
+/// linked as if no contact held the identity. Search does the same unless the
+/// query carries `trashed:`.
+const NOT_TRASHED: &str = "NOT EXISTS (SELECT 1 FROM trashed_contacts t
+                         WHERE t.account_id = c.account_id AND t.contact_id = c.id)";
+
 /// Participants of each conversation in `conversation_ids`, ordered by
 /// participant id within a conversation.
 ///
@@ -84,11 +92,12 @@ async fn load_participant_rows(
                         -- A handle-less participant's Contact link lives on
                         -- p.contact_id (contact_handles has no handle to key
                         -- on for them); a handle-bearing one's link is always
-                        -- ch.contact_id, never p.contact_id. Same rule below
-                        -- for joining contacts, so a renamed Contact reaches
-                        -- a handle-less participant's name too.
-                        CASE WHEN p.handle_id IS NULL THEN p.contact_id ELSE ch.contact_id END
-                          AS contact_id
+                        -- ch.contact_id, never p.contact_id. The contacts
+                        -- join below follows that rule, so a renamed Contact
+                        -- reaches a handle-less participant's name too, and
+                        -- the id is the joined contact's, so a trashed one
+                        -- leaves no link behind.
+                        c.id AS contact_id
                  FROM participants p
                  LEFT JOIN handles h ON h.id = p.handle_id
                  JOIN conversations conv ON conv.id = p.conversation_id
@@ -97,6 +106,7 @@ async fn load_participant_rows(
                  LEFT JOIN contacts c
                    ON c.id = CASE WHEN p.handle_id IS NULL THEN p.contact_id ELSE ch.contact_id END
                   AND c.account_id = conv.account_id
+                  AND {NOT_TRASHED}
                  WHERE p.conversation_id IN ({placeholders})
                  ORDER BY p.conversation_id, p.id"
             )
@@ -133,13 +143,14 @@ async fn load_from_chat_handle(
                         COALESCE(NULLIF(trim(c.preferred_name), ''), h.raw) AS name,
                         h.raw AS handle,
                         COALESCE(NULLIF(trim(h.service), ''), h.handle_type) AS service,
-                        ch.contact_id
+                        c.id AS contact_id
                  FROM conversations conv
                  JOIN handles h ON h.id = conv.chat_handle_id
                  LEFT JOIN contact_handles ch
                    ON ch.handle_id = h.id AND ch.account_id = conv.account_id
                  LEFT JOIN contacts c
                    ON c.id = ch.contact_id AND c.account_id = conv.account_id
+                  AND {NOT_TRASHED}
                  WHERE conv.id IN ({placeholders})"
             )
         },

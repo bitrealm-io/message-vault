@@ -24,13 +24,19 @@ All converters build a **common message** per conversation (`ConversationDocumen
 | **Output** | Per-chat CSV / EML / MBOX / JSON(+L) / **XML** | Per-chat CSV / EML / MBOX / JSON(+L) / **XML** | Per-chat CSV / EML / MBOX / JSON(+L) / **XML** | Per-chat CSV / EML / MBOX / JSON(+L) / **XML** | Per-chat CSV / EML / MBOX / JSON(+L) / **XML** (`__whatsapp` for WA) | Per-chat CSV / EML / MBOX / JSON(+L) / **XML** (`__whatsapp`) | Per-chat CSV / EML / MBOX / JSON(+L) / **XML** |
 | **Peer phone** (`chat_identifier`) | yes | yes | yes (or `unknown`) | partial (name stem if unresolved) | partial (name stem if unresolved) | yes (JID → E.164) | yes (Apple chat id) |
 | **Sender phone** (`sender_handle`, incoming) | yes | yes | yes | yes | yes | yes (groups via sender JID) | yes |
-| **Names** | yes (XML + contacts) | yes (XML + contacts) | yes (contacts + name-mapping) | partial (contacts critical) | yes (vCard CSV) | yes (`wa.db` via wtsexporter) | yes (AddressBook / backup) |
+| **Names** | yes (`<contactName>` in the XML) | yes (`contact_name` in the XML) | yes (mail headers) | partial (the rows; a name-only chat has no address) | yes (`Sender Name` on the rows) | yes (`wa.db` via wtsexporter) | yes (AddressBook) |
 | **Direction** | yes | yes | yes | yes (`Is From Me` / Direction) | yes (`Type`) | yes (`from_me`) | yes (`is_from_me` in DB) |
 | **Groups** | partial (PDU MMS) | yes (MMS) | partial (flat multi-address) | no | partial (WhatsApp roster weak) | yes (title + sender phones) | yes (full DB roster) |
 | **Attachments** | partial (PDU only; XML none) | yes (MMS) | yes (archive pairing heuristic) | no (flag only) | yes | yes (media paths via wtsexporter) | yes |
 | **Media modes** (`clone`/`convert`/`compress`) | yes | yes | yes | no | yes | yes | yes (`clone`/`basic`/`full`/`disabled`) |
-| **Contacts** | optional | optional | optional | recommended | recommended | via the `wa.db` path / wtsexporter | optional |
+| **Contacts** | no | no | no | no | no | optional (`wa.db` / `ContactsV2.sqlite`) | optional (AddressBook database) |
 | **Owner phone** (Import form) | required | required | required (+ owner email) | no | no | required (Android); optional (iPhone) | no |
+
+Every converter takes names from the backup itself.
+The **Contacts** row lists the only contacts files a converter reads: the WhatsApp contacts database and the Apple Messages AddressBook.
+No converter reads a vCard (`.vcf`) or a vendor's contacts CSV.
+Names from outside the backup come from the address book, Message Crate's own CSV that the server loads.
+The rule "The address book is a file for editing contacts, not a source of them" in [contacts, identities and messages](https://github.com/messagecrate/message-crate/blob/main/docs/architecture/contacts-identities-and-messages.md#rules) gives the reason.
 
 ## Deficiencies
 
@@ -39,7 +45,7 @@ All converters build a **common message** per conversation (`ConversationDocumen
 | **GO SMS Pro** | MMS as WAP-209 `.pdu` files; many empty stub PDUs; SMS attachments not in XML |
 | **SMS Backup & Restore** | Call logs ignored; drafts / failed / queued skipped; encrypted ZIP not supported (unlock first) |
 | **SMS Backup+** | Offline `.eml` only (no IMAP); archive attachment→message pairing is guesswork; unresolved peers → `unknown.csv` |
-| **OpenExtract** | No media extraction; no groups; thin source format; name-only chats common without a good VCF |
+| **OpenExtract** | No media extraction; no groups; thin source format; a chat the export names by a person's name only is matched to a contact by that name on import, or stays Unknown |
 | **iMazing** | Reactions/replies are free text; WhatsApp groups lack full roster; naive dates are read in the zone chosen in the Import form's **Time zone of the messages** field |
 | **WhatsApp** | Requires external `wtsexporter` (pip or bundled binary); LID / non-phone JIDs stay raw; full group roster depends on upstream JSON |
 | **iMessage** (`imessage-ir-exporter`) | No WhatsApp; reads the database through the separate `imessage-reader` program (GPL, shipped beside the app) because `imessage-database` is GPL and the app is not; needs Mac/`chat.db` or iOS backup; no TXT/HTML |

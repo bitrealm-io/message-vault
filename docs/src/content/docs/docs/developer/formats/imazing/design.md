@@ -37,8 +37,9 @@ Discovery walks the selected path recursively without following directory symbol
 
 ### Individual chats
 
-Prefer `Sender ID` phones/emails; else normalize a phone-like `Chat Session`; else Contacts
-name→phone; else a sanitized name stem (reported as unresolved).
+Prefer `Sender ID` phones/emails; else normalize a phone-like `Chat Session`; else a sanitized
+name stem (reported as unresolved). The name stays on the conversation, and the server matches it
+to a contact by that name on import.
 
 ### Messages groups
 
@@ -46,7 +47,7 @@ name→phone; else a sanitized name stem (reported as unresolved).
 
 1. Collect phones/emails from sender rows and `+digits` in the session string.
 2. Split roster labels on ` & `.
-3. Resolve name-only labels through Contacts.
+3. Resolve a name-only label through the rows: a row whose `Sender Name` matches the label gives its `Sender ID`. A label no row matches is counted as unresolved.
 4. Group `chat_identifier` = sorted, comma-joined resolved handles when any exist.
 
 ### WhatsApp groups
@@ -69,5 +70,4 @@ Non-senders are invisible in the CSV.
 ## Related docs
 
 - Input format and source limitations: [iMazing input format](/docs/developer/formats/imazing/input/)
-- Contacts helper: [`crates/libs/contacts`](https://github.com/messagecrate/message-crate/tree/main/crates/libs/contacts)
 - Shared model and output contracts: [message-ir architecture](/docs/developer/architecture/common-message/), [export structure](/docs/developer/reference/export-structure/), [CSV columns](/docs/developer/reference/csv-columns/)

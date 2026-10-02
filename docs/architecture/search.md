@@ -113,6 +113,9 @@ The parser refuses a query with more than 32 free-text terms, more than 64
 nodes in its tree, or parentheses and `not` nested deeper than 32. An
 unclosed quote or parenthesis, an `or` or `and` with nothing on one side, and
 a `word:` with no value are refused with the span of the text at fault.
+An empty quoted phrase, `""` or one holding only spaces, is refused with the
+same empty-value error as `body:""`, because a phrase that contains nothing
+would match every row.
 
 ## Values
 

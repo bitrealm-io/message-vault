@@ -28,6 +28,9 @@ on the same computer gets the Message Crate they already have.
 The data is in the operating system's app-data folder, under `data`, and the
 app has a button that opens it. A folder under Documents is often synced by
 OneDrive or iCloud, which can corrupt a database that is in use.
+A dev build (`cargo tauri dev`) uses `data-dev` beside it instead, because
+both builds share one app-data folder and a branch with another Schema
+Fingerprint would rebuild the installed app's database empty.
 
 The server listens on this computer only. A setting in the app opens it to
 the network, for a person who wants to read from a phone while the app is

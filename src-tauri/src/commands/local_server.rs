@@ -9,13 +9,14 @@ use tauri::{AppHandle, Manager, State};
 /// matches the `bundle.resources` target in `tauri.conf.json`.
 const WEBSITE_RESOURCE: &str = "website";
 
-/// The server's data folder for this app.
+/// The server's data folder for this app. A dev build has its own, so it
+/// never opens the installed app's database.
 fn data_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let app_data = app
         .path()
         .app_data_dir()
         .map_err(|e| format!("Could not find the app's data folder: {e}"))?;
-    Ok(local_server::data_dir_in(&app_data))
+    Ok(local_server::data_dir_in(&app_data, tauri::is_dev()))
 }
 
 /// The origin `cargo tauri dev` loads the screens from, which the server has

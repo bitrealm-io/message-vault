@@ -445,9 +445,17 @@ impl FileStaging<'_> {
             .await?;
         }
 
-        let pending_rows =
-            resolve_message_rows(self.tx, self.stmts, prepared_messages, platform, &mut stats)
-                .await?;
+        let first_sort_order =
+            db_staging::first_sort_order(self.tx, self.stmts.account_id, chat_handle_id).await?;
+        let pending_rows = resolve_message_rows(
+            self.tx,
+            self.stmts,
+            prepared_messages,
+            first_sort_order,
+            platform,
+            &mut stats,
+        )
+        .await?;
         let msg_chunk = db_staging::message_chunk_rows();
         for chunk in pending_rows.chunks(msg_chunk) {
             flush_staging_message_chunk(
@@ -540,15 +548,17 @@ async fn insert_participant(
         let (Some(contact_id), Some(name_alias)) = (contact_id, name_alias) else {
             return Ok(());
         };
-        db_staging::insert_participant(
+        if db_staging::insert_participant(
             tx,
             conversation_id,
             None,
             Some(contact_id),
             Some(&name_alias),
         )
-        .await?;
-        stats.participants += 1;
+        .await?
+        {
+            stats.participants += 1;
+        }
         return Ok(());
     };
     // Prefer the source-provided type; fall back to shape inference.
@@ -578,20 +588,23 @@ async fn insert_participant(
     // `participants.name_alias` keeps what this backup called them in this
     // conversation. It is the second clause of the naming rule, never the
     // first.
-    db_staging::insert_participant(
+    if db_staging::insert_participant(
         tx,
         conversation_id,
         Some(handle_id),
         Some(contact_id),
         backup_name.as_deref(),
     )
-    .await?;
-    stats.participants += 1;
+    .await?
+    {
+        stats.participants += 1;
+    }
     Ok(())
 }
 
 /// Resolve each message's body text and sender handle into a row ready for
-/// the bulk staging insert.
+/// the bulk staging insert. The messages take `sort_order` in the source's
+/// order, counting up from `first_sort_order`.
 ///
 /// # Errors
 ///
@@ -600,11 +613,12 @@ async fn resolve_message_rows(
     tx: &mut SqliteConnection,
     stmts: &mut StagingInserts,
     prepared: Vec<(MessageRecord, Vec<PreparedAttachment>)>,
+    first_sort_order: i64,
     platform: HandleService,
     stats: &mut ImportStats,
 ) -> Result<Vec<PendingStagingMessage>> {
     let mut rows = Vec::with_capacity(prepared.len());
-    for (sort_order, (msg, attachments)) in prepared.into_iter().enumerate() {
+    for (sort_order, (msg, attachments)) in (first_sort_order..).zip(prepared) {
         let body = if msg.is_announcement {
             clean_body(msg.announcement.as_deref()).or_else(|| clean_body(msg.text.as_deref()))
         } else {
@@ -637,7 +651,7 @@ async fn resolve_message_rows(
             owner_handle_id,
             sender_platform: sender_platform.as_str().to_string(),
             body,
-            sort_order: sort_order as i64,
+            sort_order,
         });
     }
     Ok(rows)

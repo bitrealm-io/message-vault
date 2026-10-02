@@ -52,12 +52,18 @@ pub struct StagingConversation<'a> {
     pub source_file: &'a str,
 }
 
-/// Insert one staged conversation and return its staging id.
+/// Stage one conversation and return its staging id.
+///
+/// Two chat ids that differ as written can normalise to one handle, such as
+/// `+15551234567` and `5551234567`. A conversation on a handle the account
+/// has already staged in this import merges into that row, the way promote
+/// merges into `conversations` on the same key: the id returned is the
+/// staged row's, and that row keeps its title and export time unless it
+/// has none.
 ///
 /// # Errors
 ///
-/// Returns an error when the insert fails, including when the account
-/// already staged a conversation on the same handle.
+/// Returns an error when the insert fails.
 pub async fn insert_conversation(
     conn: &mut SqliteConnection,
     row: &StagingConversation<'_>,
@@ -67,6 +73,9 @@ pub async fn insert_conversation(
         INSERT INTO staging_conversations (
             account_id, chat_handle_id, conversation_type, group_title, exported_at, source_file
         ) VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT(account_id, chat_handle_id) DO UPDATE SET
+            group_title = COALESCE(staging_conversations.group_title, excluded.group_title),
+            exported_at = COALESCE(staging_conversations.exported_at, excluded.exported_at)
         RETURNING id
         ",
     )
@@ -80,9 +89,56 @@ pub async fn insert_conversation(
     .await?)
 }
 
-/// Insert one staged participant. `handle_id` is `None` for a person the
-/// source named and recorded no address for; `name_alias` is what this
-/// backup called them in this conversation.
+/// The `sort_order` the next staged message of the conversation on
+/// `chat_handle_id` takes: one past the largest that the account's
+/// production conversation and its staged conversation on that handle hold,
+/// or 0 when they hold none.
+///
+/// `sort_order` is a message's place in its conversation, not in the batch
+/// that carried it. The push splits a long conversation across batches and an
+/// append adds to one already stored, and the conversation is read back by
+/// timestamp then `sort_order`, so a message staged later has to sort after
+/// every stored message that shares its timestamp. The staged conversation
+/// counts too, because a second conversation on the same handle in one
+/// import merges into it ([`insert_conversation`]).
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn first_sort_order(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    chat_handle_id: i64,
+) -> Result<i64> {
+    Ok(sqlx::query_scalar(
+        r"
+        SELECT COALESCE(MAX(sort_order) + 1, 0) FROM (
+            SELECT m.sort_order
+            FROM conversations c
+            JOIN messages m ON m.conversation_id = c.id
+            WHERE c.account_id = $1 AND c.chat_handle_id = $2
+            UNION ALL
+            SELECT m.sort_order
+            FROM staging_conversations c
+            JOIN staging_messages m ON m.conversation_id = c.id
+            WHERE c.account_id = $1 AND c.chat_handle_id = $2
+        )
+        ",
+    )
+    .bind(account_id)
+    .bind(chat_handle_id)
+    .fetch_one(&mut *conn)
+    .await?)
+}
+
+/// Insert one staged participant, and say whether a row was added.
+/// `handle_id` is `None` for a person the source named and recorded no
+/// address for; `name_alias` is what this backup called them in this
+/// conversation.
+///
+/// A participant the conversation already holds adds nothing, the way
+/// promote skips one on the same key. Two conversations that merge on one
+/// handle ([`insert_conversation`]) both list the person they are with.
 ///
 /// # Errors
 ///
@@ -93,11 +149,12 @@ pub async fn insert_participant(
     handle_id: Option<i64>,
     contact_id: Option<i64>,
     name_alias: Option<&str>,
-) -> Result<()> {
-    sqlx::query(
+) -> Result<bool> {
+    let done = sqlx::query(
         r"
         INSERT INTO staging_participants (conversation_id, handle_id, contact_id, name_alias)
         VALUES ($1, $2, $3, $4)
+        ON CONFLICT(conversation_id, handle_id, contact_id) DO NOTHING
         ",
     )
     .bind(conversation_id)
@@ -106,7 +163,7 @@ pub async fn insert_participant(
     .bind(name_alias)
     .execute(&mut *conn)
     .await?;
-    Ok(())
+    Ok(done.rows_affected() == 1)
 }
 
 /// One message row as the import stages it, its sender and owner already

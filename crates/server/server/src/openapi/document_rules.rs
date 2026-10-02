@@ -4,23 +4,30 @@
 //! routes someone remembered).
 //!
 //! Part of it reads the document: the page shape and paging parameters of
-//! every list, a `Location` on every `201`, a problem response on every
-//! failure, the shared failures each operation's shape brings, one-sentence
-//! summaries, declared tags, kebab-case paths and the nesting depth. The rest
-//! calls every operation through the router, on the credential matrix's
-//! fixture: with no credential it must answer `401`, with a query parameter
-//! it does not declare `422`, and a list with `limit`, or an `offset` past
-//! the ceiling its description states, out of range `422`,
-//! each as a problem document carrying its `request_id`. Like the matrix,
-//! it walks the in-process document, so a new route is covered the moment
-//! it is registered.
+//! every list, a `Location` on every `201`, a `404` on every path with an id,
+//! one-sentence summaries, declared tags, kebab-case paths and the nesting
+//! depth. The rest calls every operation through the router, on the
+//! credential matrix's fixture: with no credential it must answer `401`,
+//! with a query parameter it does not declare `422`, with a body that has no
+//! `Content-Type` or one the route does not take `415`, with a JSON body
+//! that is not JSON `400`, and a list with
+//! `limit`, or an `offset` past the ceiling its description states, out of
+//! range `422`. Each answer must be a problem document carrying its
+//! `request_id`, of a status and type the operation's document lists.
+//!
+//! The failures an operation's shape brings are written into the document
+//! by `shared_parts`, so a check that reads them back from the document
+//! passes whatever `shared_parts` does. Calling the operation is what shows
+//! the document says what the server answers. Like the matrix, it walks the
+//! in-process document, so a new route is covered the moment it is
+//! registered.
 
 use std::collections::BTreeSet;
 
 use axum::http::StatusCode;
 use serde_json::Value;
 
-use super::credential_matrix::{self, Credential, Operation, Shared, World};
+use super::credential_matrix::{self, Operation, Shared, World};
 use super::dump_openapi_json;
 use super::shared_parts::{PROBLEM_TYPES, split_first_sentence};
 use crate::paging::MAX_LIST_OFFSET;
@@ -45,9 +52,12 @@ async fn every_operation_keeps_the_rules_the_document_can_show() {
         }
     }
 
+    // Each operation gets accounts and rows of its own, so a call the server
+    // wrongly accepts (a delete, a logout) cannot change what the next
+    // operation sees.
     let shared = Shared::build().await;
-    let world = World::build(&shared, 0).await;
-    for op in &operations {
+    for (n, op) in operations.iter().enumerate() {
+        let world = World::build(&shared, n).await;
         let spec = &doc["paths"][&op.path][&op.method];
         for rule in called_rules(&world, op, spec).await {
             broken.push(format!("{}: {rule}", op.label()));
@@ -105,34 +115,12 @@ fn read_rules(doc: &Value, op: &Operation, spec: &Value) -> Vec<String> {
     if responses.contains_key("201") && spec["responses"]["201"]["headers"]["Location"].is_null() {
         broken.push("201 without a Location header".to_string());
     }
-    for (status, response) in &responses {
-        let Ok(code) = status.parse::<u16>() else {
-            broken.push(format!("response {status} is not a status"));
-            continue;
-        };
-        if code >= 400 {
-            broken.extend(failure_rules(code, response));
-        }
-    }
-
-    let has = |status: &str| responses.contains_key(status);
-    let mut needs: Vec<(&str, &str)> = Vec::new();
-    if takes_a_credential_only(op) {
-        needs.push(("401", "a credential"));
-    }
-    if op.path.starts_with("/v1/") {
-        needs.push(("422", "a query parameter it does not declare"));
-    }
-    if !spec["requestBody"].is_null() {
-        needs.extend([("415", "a body"), ("422", "a body")]);
-    }
-    if op.path.contains('{') {
-        needs.extend([("404", "an id in the path"), ("422", "an id in the path")]);
-    }
-    for (status, why) in needs {
-        if !has(status) {
-            broken.push(format!("no {status}, which {why} brings"));
-        }
+    // `shared_parts` gives `404` to an operation that declares a path
+    // parameter, so a handler that leaves its id out of `params(...)` gets
+    // none, though the server answers `404` for an id that is not there.
+    // This reads the path itself, which `shared_parts` does not.
+    if op.path.contains('{') && !responses.contains_key("404") {
+        broken.push("no 404, which an id in the path brings".to_string());
     }
 
     if let Some(page) = page_schema(doc, spec) {
@@ -161,53 +149,11 @@ fn read_rules(doc: &Value, op: &Operation, spec: &Value) -> Vec<String> {
     broken
 }
 
-/// The rules one failure response breaks: a problem document, named types
-/// registered for this status, and a description.
-fn failure_rules(code: u16, response: &Value) -> Vec<String> {
-    let mut broken = Vec::new();
-    let content: Vec<&String> = response["content"]
-        .as_object()
-        .map(|c| c.keys().collect())
-        .unwrap_or_default();
-    if content != [Problem::CONTENT_TYPE] {
-        broken.push(format!("{code} is served as {content:?}, not a problem"));
-    }
-    if response["content"][Problem::CONTENT_TYPE]["schema"]["$ref"]
-        != "#/components/schemas/Problem"
-    {
-        broken.push(format!("{code} does not describe its body as Problem"));
-    }
-    if response["description"]
-        .as_str()
-        .unwrap_or_default()
-        .is_empty()
-    {
-        broken.push(format!("{code} has no description"));
-    }
-    let types: Vec<&str> = response[PROBLEM_TYPES]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .collect();
-    if types.is_empty() {
-        broken.push(format!("{code} names no problem type"));
-    }
-    for url in types {
-        match ProblemType::ALL.into_iter().find(|t| t.url() == url) {
-            None => broken.push(format!("{code} names an unregistered type {url}")),
-            Some(kind) if kind.status().as_u16() != code => broken.push(format!(
-                "{code} names {}, which answers {}",
-                kind.slug(),
-                kind.status().as_u16()
-            )),
-            Some(_) => {}
-        }
-    }
-    broken
-}
-
-/// The rules one operation breaks when called.
+/// The rules one operation breaks when called. Each call puts the operation
+/// in a condition the shared parts claim a failure for, and the status and
+/// problem type the server answers must be ones the document lists for the
+/// operation. Reading the document alone cannot show that, because the
+/// document and any reading of it come from the same code in `shared_parts`.
 async fn called_rules(world: &World<'_>, op: &Operation, spec: &Value) -> Vec<String> {
     let mut broken = Vec::new();
     if !op.path.starts_with("/v1/") {
@@ -218,26 +164,73 @@ async fn called_rules(world: &World<'_>, op: &Operation, spec: &Value) -> Vec<St
         let joiner = if path.contains('?') { '&' } else { '?' };
         format!("{path}{joiner}{query}")
     };
+    let fixture_body = credential_matrix::body_for(op, 0);
+    let sent = || {
+        fixture_body
+            .clone()
+            .map(|(content_type, body)| (Some(content_type), body))
+    };
 
-    let answer = call(world, op, &with("no_such_parameter=1"), None).await;
-    broken.extend(answer.problem_rule(op, ProblemType::ValidationFailed, "an unknown parameter"));
+    let answer = call(world, op, &with("no_such_parameter=1"), None, sent()).await;
+    broken.extend(answer.problem_rule(
+        op,
+        spec,
+        ProblemType::ValidationFailed,
+        "an unknown parameter",
+    ));
 
     if takes_a_credential_only(op) {
-        let answer = call(world, op, &path, None).await;
+        let answer = call(world, op, &path, None, sent()).await;
         broken.extend(answer.problem_rule(
             op,
+            spec,
             ProblemType::AuthenticationRequired,
             "no credential",
         ));
     }
 
-    if op.method == "get" && page_schema_named(spec).is_some() {
-        let credential = if op.names_owner() {
-            Credential::Owner
-        } else {
-            Credential::Session
+    // Every call below carries a credential the operation admits, so the
+    // guard lets it through to the body and the query.
+    let token = op.admitted().map(|c| world.token(c).to_string());
+    let token = token.as_deref();
+    if !spec["requestBody"].is_null() {
+        let Some((content_type, body)) = &fixture_body else {
+            broken.push("takes a body, and credential_matrix::body_for has none for it".into());
+            return broken;
         };
-        let token = world.token(credential).to_string();
+        // An asset's bytes are sent with the asset's own media type, so only
+        // a missing one is wrong there. Elsewhere `text/plain` is wrong, and
+        // so is a missing type, unless the body is optional: there a body
+        // with no type is read as no body.
+        let wrong_types = if *content_type == "application/octet-stream" {
+            vec![None]
+        } else if spec["requestBody"]["required"] == true {
+            vec![None, Some("text/plain")]
+        } else {
+            vec![Some("text/plain")]
+        };
+        for wrong in wrong_types {
+            let answer = call(world, op, &path, token, Some((wrong, body.clone()))).await;
+            let asked = match wrong {
+                None => "a body with no Content-Type".to_string(),
+                Some(wrong) => format!("a body sent as {wrong}"),
+            };
+            broken.extend(answer.problem_rule(op, spec, ProblemType::UnsupportedMediaType, &asked));
+        }
+        // A JSON body, or an import's JSON Lines, that is not JSON.
+        if ["application/json", "application/x-ndjson"].contains(content_type) {
+            let not_json = (Some(*content_type), b"not json\n".to_vec());
+            let answer = call(world, op, &path, token, Some(not_json)).await;
+            broken.extend(answer.problem_rule(
+                op,
+                spec,
+                ProblemType::MalformedBody,
+                "a body that is not JSON",
+            ));
+        }
+    }
+
+    if op.method == "get" && page_schema_named(spec).is_some() {
         let mut out_of_range = vec!["limit=0", "limit=501"];
         // A browse list says its offset ceiling in the parameter's own
         // description, and must keep to it.
@@ -245,8 +238,8 @@ async fn called_rules(world: &World<'_>, op: &Operation, spec: &Value) -> Vec<St
             out_of_range.push("offset=50001");
         }
         for query in out_of_range {
-            let answer = call(world, op, &with(query), Some(&token)).await;
-            broken.extend(answer.problem_rule(op, ProblemType::ValidationFailed, query));
+            let answer = call(world, op, &with(query), token, None).await;
+            broken.extend(answer.problem_rule(op, spec, ProblemType::ValidationFailed, query));
         }
     }
     broken
@@ -260,8 +253,16 @@ struct Answer {
 }
 
 impl Answer {
-    /// What is wrong with this answer as the problem `kind`, if anything.
-    fn problem_rule(&self, op: &Operation, kind: ProblemType, asked: &str) -> Option<String> {
+    /// What is wrong with this answer as the problem `kind`, if anything:
+    /// another status or type, a body that is not a problem document, or a
+    /// status and type the operation's document does not list.
+    fn problem_rule(
+        &self,
+        op: &Operation,
+        spec: &Value,
+        kind: ProblemType,
+        asked: &str,
+    ) -> Option<String> {
         if self.status != kind.status() {
             return Some(format!(
                 "{asked} answered {}, not {} {}: {}",
@@ -272,39 +273,65 @@ impl Answer {
             ));
         }
         // A HEAD answer has no body to be a problem document.
-        if op.method == "head" {
-            return None;
-        }
-        if self.content_type != Problem::CONTENT_TYPE {
-            return Some(format!("{asked} answered as {}", self.content_type));
-        }
-        match serde_json::from_str::<Problem>(&self.text) {
-            Err(e) => Some(format!(
-                "{asked} answered a body that is not a problem ({e})"
-            )),
-            Ok(problem) if problem.kind != kind.url() => {
-                Some(format!("{asked} answered the type {}", problem.kind))
+        if op.method != "head" {
+            if self.content_type != Problem::CONTENT_TYPE {
+                return Some(format!("{asked} answered as {}", self.content_type));
             }
-            Ok(problem) if problem.request_id.is_none() => {
-                Some(format!("{asked} answered a problem with no request_id"))
+            match serde_json::from_str::<Problem>(&self.text) {
+                Err(e) => {
+                    return Some(format!(
+                        "{asked} answered a body that is not a problem ({e})"
+                    ));
+                }
+                Ok(problem) if problem.kind != kind.url() => {
+                    return Some(format!("{asked} answered the type {}", problem.kind));
+                }
+                Ok(problem) if problem.request_id.is_none() => {
+                    return Some(format!("{asked} answered a problem with no request_id"));
+                }
+                Ok(_) => {}
             }
-            Ok(_) => None,
         }
+        let status = kind.status().as_u16().to_string();
+        let response = &spec["responses"][&status];
+        if response.is_null() {
+            return Some(format!(
+                "{asked} answered {status} {}, a status the document does not list",
+                kind.slug()
+            ));
+        }
+        let listed = response[PROBLEM_TYPES]
+            .as_array()
+            .is_some_and(|types| types.iter().any(|t| *t == kind.url()));
+        if !listed {
+            return Some(format!(
+                "{asked} answered {status} {}, a type the document does not list under {status}",
+                kind.slug()
+            ));
+        }
+        None
     }
 }
 
-/// Call `op` at `path` with `token`, or no credential, sending the body
-/// that gets it past its own validation.
-async fn call(world: &World<'_>, op: &Operation, path: &str, token: Option<&str>) -> Answer {
+/// Call `op` at `path` with `token`, or no credential, sending `body` with
+/// its `Content-Type`, or with none, or no body.
+async fn call(
+    world: &World<'_>,
+    op: &Operation,
+    path: &str,
+    token: Option<&str>,
+    body: Option<(Option<&str>, Vec<u8>)>,
+) -> Answer {
     let method = reqwest::Method::from_bytes(op.method.to_uppercase().as_bytes()).unwrap();
     let mut request = reqwest::Client::new().request(method, world.url(path));
     if let Some(token) = token {
         request = request.bearer_auth(token);
     }
-    if let Some((content_type, body)) = credential_matrix::body_for(op, 0) {
-        request = request
-            .header(reqwest::header::CONTENT_TYPE, content_type)
-            .body(body);
+    if let Some((content_type, body)) = body {
+        if let Some(content_type) = content_type {
+            request = request.header(reqwest::header::CONTENT_TYPE, content_type);
+        }
+        request = request.body(body);
     }
     let response = request.send().await.unwrap();
     let status = response.status();

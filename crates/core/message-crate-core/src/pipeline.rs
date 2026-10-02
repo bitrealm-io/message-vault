@@ -57,11 +57,27 @@ fn discover_files_into(
     Ok(())
 }
 
-/// Result of a successful exporter `run`: human-readable log lines.
+/// Result of a successful exporter `run`: human-readable log lines and the
+/// counts from the run's [`ExportReport`].
 #[derive(Debug, Default)]
 pub struct RunResult {
     /// Human-readable log lines (summary lines plus mid-run notes).
     pub messages: Vec<String>,
+    /// Conversations exported, as [`ExportReport::conversations`] counted them.
+    pub conversations: u64,
+    /// Messages exported, as [`ExportReport::messages`] counted them.
+    pub message_count: u64,
+}
+
+impl RunResult {
+    /// The log lines `messages` with the counts of `report`.
+    pub fn new(messages: Vec<String>, report: &ExportReport) -> Self {
+        Self {
+            messages,
+            conversations: report.conversations,
+            message_count: report.messages,
+        }
+    }
 }
 
 /// Export run statistics: what was counted while parsing and what the

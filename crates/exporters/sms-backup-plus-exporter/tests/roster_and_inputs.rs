@@ -162,6 +162,49 @@ fn a_named_peer_with_no_address_gets_a_conversation_of_their_own() {
     assert_eq!(roster, vec![(None, Some("Alice"))]);
 }
 
+/// Two people known only by names that share no ASCII letter get two
+/// conversations, and each is written to a file of its own even though both
+/// names reduce to the same file-name stem.
+#[test]
+fn people_known_only_by_non_ascii_names_get_a_conversation_each() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let input = tmp.path().join("in");
+    fs::create_dir_all(&input).expect("input dir");
+    for (file, name, text) in [
+        ("a.eml", "张伟", "From the first"),
+        ("b.eml", "李娜", "From the second"),
+    ] {
+        fs::write(
+            input.join(file),
+            format!(
+                "From: someone@unknown.email\r\n\
+                 To: me@example.com\r\n\
+                 Subject: SMS with {name}\r\n\
+                 X-smssync-type: 1\r\n\
+                 X-smssync-address: \r\n\
+                 X-smssync-date: 1609459200000\r\n\
+                 Content-Type: text/plain; charset=utf-8\r\n\
+                 \r\n\
+                 {text}\r\n"
+            ),
+        )
+        .expect("write");
+    }
+    let out = tmp.path().join("out");
+
+    convert(&input, &out);
+
+    let docs = documents(&out);
+    let texts: Vec<(&str, &str)> = docs
+        .iter()
+        .map(|(id, doc)| (id.as_str(), doc.messages[0].text.trim()))
+        .collect();
+    assert_eq!(
+        texts,
+        vec![("张伟", "From the first"), ("李娜", "From the second")]
+    );
+}
+
 /// Ordinary mail in the same mailbox is not a message, even when its subject
 /// happens to read `SMS with Alice`.
 ///

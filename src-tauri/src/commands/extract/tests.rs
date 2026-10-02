@@ -1,7 +1,6 @@
 use super::*;
 use media::MediaMode;
 use std::fs;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 fn test_options(owner_phones: Vec<String>) -> ExtractOptions {
     ExtractOptions {
@@ -171,33 +170,6 @@ fn macos_forwards_optional_attachment_root() {
         }
         other => panic!("expected Apple, got {other:?}"),
     }
-}
-
-#[test]
-fn counts_exact_messages_written_to_jsonl_output() {
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let root = std::env::temp_dir().join(format!("message-crate-extract-count-{unique}"));
-    fs::create_dir_all(root.join("nested")).unwrap();
-    fs::write(
-        root.join("one.jsonl"),
-        "{\"conversation\":{}}\n{\"guid\":\"one\"}\n{\"guid\":\"two\"}\n",
-    )
-    .unwrap();
-    fs::write(
-        root.join("nested/two.jsonl"),
-        "{\"conversation\":{}}\n{\"guid\":\"three\"}\n",
-    )
-    .unwrap();
-    fs::write(root.join("ignored.txt"), "not jsonl\n").unwrap();
-
-    let counts = count_jsonl_output(&root).unwrap();
-
-    assert_eq!(counts.files, 2);
-    assert_eq!(counts.messages, 3);
-    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -469,4 +441,71 @@ fn imazing_with_no_zone_leaves_the_exporter_its_fallback() {
     )
     .unwrap();
     assert_eq!(config.timezone, None);
+}
+
+/// Run the SMS Backup & Restore exporter on one MMS that carries an
+/// attachment named `log.jsonl` whose bytes are the base64 `data`, and return
+/// the conversation and message counts of the `extract:finished` payload.
+fn counts_for_a_jsonl_attachment(data: &str) -> (u64, u64) {
+    let tmp = tempfile::tempdir().unwrap();
+    let xml = format!(
+        r#"<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<smses count="1">
+  <mms date="1400773400000" msg_box="1" address="+15555550101">
+    <parts>
+      <part seq="0" ct="text/plain" text="the log" />
+      <part seq="1" ct="application/octet-stream" name="log.jsonl" cl="log.jsonl" data="{data}" />
+    </parts>
+    <addrs>
+      <addr address="+15555550101" type="137" charset="106" />
+      <addr address="+15555550100" type="151" charset="106" />
+    </addrs>
+  </mms>
+</smses>
+"#
+    );
+    let input = tmp.path().join("sms.xml");
+    fs::write(&input, xml).unwrap();
+    let output = tmp.path().join("out");
+    let config = build_exporter_config(
+        "sms-backup-restore",
+        input.to_str().unwrap(),
+        output.to_str().unwrap(),
+        &test_options(vec!["+15555550100".into()]),
+    )
+    .unwrap();
+
+    let result = run_exporter(&config).unwrap();
+    let staged: Vec<_> = fs::read_dir(output.join("attachments"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .collect();
+    assert!(
+        staged
+            .iter()
+            .any(|path| path.extension().is_some_and(|ext| ext == "jsonl")),
+        "the attachment is staged with its .jsonl extension: {staged:?}"
+    );
+
+    let payload: serde_json::Value = serde_json::from_str(&finished_payload(&result)).unwrap();
+    (
+        payload["files_parsed"].as_u64().unwrap(),
+        payload["messages_parsed"].as_u64().unwrap(),
+    )
+}
+
+#[test]
+fn a_staged_jsonl_attachment_is_not_counted_as_a_conversation() {
+    // Three JSON lines: {"a":1}, {"a":2}, {"a":3}.
+    let counts = counts_for_a_jsonl_attachment("eyJhIjoxfQp7ImEiOjJ9CnsiYSI6M30K");
+
+    assert_eq!(counts, (1, 1));
+}
+
+#[test]
+fn a_staged_jsonl_attachment_that_is_not_utf8_does_not_fail_the_count() {
+    // The bytes 0xff 0xfe and a newline, which are not UTF-8.
+    let counts = counts_for_a_jsonl_attachment("//4K");
+
+    assert_eq!(counts, (1, 1));
 }

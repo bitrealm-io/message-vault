@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  IMESSAGE_DEFAULT_METHOD,
   IMESSAGE_ERR_ATTACHMENT_IS_FILE,
   IMESSAGE_ERR_CONTACTS_IS_DIR,
   IMESSAGE_ERR_ENCRYPTED_PASSWORD,
@@ -9,7 +8,6 @@ import {
   IMESSAGE_ERR_MAC_PATH_IS_DIR,
   IMESSAGE_ERR_PATH_MISSING,
   IMESSAGE_METHODS,
-  IMESSAGE_SOURCE_ID,
   imessageApplePlatform,
   imessageAttachmentRootRequired,
   imessageCanImport,
@@ -40,9 +38,7 @@ const missing: { exists: false; isFile: false; isDirectory: false } = {
 };
 
 describe("iMessage methods", () => {
-  it("lists three methods and defaults to iPhone backup", () => {
-    expect(IMESSAGE_SOURCE_ID).toBe("imessage");
-    expect(IMESSAGE_DEFAULT_METHOD).toBe("imessage-ios");
+  it("lists three methods", () => {
     expect(IMESSAGE_METHODS.map((m) => m.id)).toEqual([
       "imessage-macos",
       "imessage-ios",
@@ -96,10 +92,6 @@ describe("iMessage methods", () => {
       "imessage-ios",
       "imessage-jailbreak",
     ]);
-  });
-
-  it("does not tell the user to switch to a hidden jailbreak method", () => {
-    expect(IMESSAGE_ERR_IPHONE_PATH_IS_FILE).toBe("Pick the backup folder.");
   });
 });
 
@@ -190,6 +182,9 @@ describe("imessageCanImport", () => {
     });
     expect(result.enabled).toBe(false);
     expect(result.errors.backupPath).toBe(IMESSAGE_ERR_IPHONE_PATH_IS_FILE);
+    // The platform list hides the jailbreak method, so the error must not
+    // send the person to it.
+    expect(result.errors.backupPath).not.toMatch(/jailbr/i);
   });
 
   it("enables Mac Messages when chat.db exists", () => {

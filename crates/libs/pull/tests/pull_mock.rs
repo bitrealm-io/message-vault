@@ -21,11 +21,11 @@ use message_ir_format::{EXPORT_SENTINEL, read_conversation_jsonl};
 use serde_json::{Value, json};
 use tempfile::tempdir;
 
-/// Fingerprint of the menu attachment. The pull never hashes what it
-/// downloads, so any 64 hex characters name an asset.
-const MENU_SHA: &str = "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a";
-/// Fingerprint of the photo attachment, which the server sends without a path.
-const PHOTO_SHA: &str = "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b";
+/// SHA-256 of [`MENU_BYTES`], the menu attachment's fingerprint.
+const MENU_SHA: &str = "9170c75b5d7058e5075b811f12e88ef3e7b0bd9018ff8b52bead945b6b1219f7";
+/// SHA-256 of [`PHOTO_BYTES`], the fingerprint of the photo attachment, which
+/// the server sends without a path.
+const PHOTO_SHA: &str = "be04c407026cf352d54a051993ef2fec8153cc554f8ff7c697b225c87a6e5e03";
 /// 13 bytes.
 const MENU_BYTES: &[u8] = b"%PDF-1.4 menu";
 /// 9 bytes.
@@ -764,6 +764,59 @@ fn an_asset_the_server_does_not_have_fails_the_run_and_cancels_it_on_the_server(
     assert!(!out.join("attachments/menu.pdf").exists());
     assert!(!out.join(CONVERSATION_FILE).exists());
     let state = journal::load(&journal::journal_path(&out), &server.base_url(), "alice").unwrap();
+    assert!(!state.backup_complete);
+}
+
+/// An access proxy whose session has expired answers the asset request with
+/// its login page and `200 OK`. Those bytes are not the photo, so the run
+/// fails naming the photo's fingerprint, and nothing at the photo's path or in
+/// the journal lets a later run skip it.
+#[test]
+fn bytes_whose_sha256_is_not_the_one_asked_for_fail_the_run_and_are_not_kept() {
+    let server = MockServer::start();
+    let _auth = mock_auth(&server);
+    let (create, complete) = mock_run(&server);
+    let cancel = mock_cancel(&server);
+    let _pages = mock_pages(&server, "sms-backup-restore");
+    let _menu = mock_asset(&server, MENU_SHA, "sms-backup-restore", MENU_BYTES);
+    let photo = mock_asset(
+        &server,
+        PHOTO_SHA,
+        "sms-backup-restore",
+        b"<html><body>Sign in to continue</body></html>",
+    );
+    let dir = tempdir().unwrap();
+    let out = dir.path().join("pulled");
+
+    let error = run(&config(&out, server.base_url()), None).unwrap_err();
+
+    let message = error.to_string();
+    assert!(
+        message.starts_with("asset download failed: ") && message.contains(PHOTO_SHA),
+        "{message}"
+    );
+    assert_eq!(
+        photo.calls(),
+        1,
+        "the same answer would come back, so it is not retried"
+    );
+    create.assert();
+    cancel.assert();
+    assert_eq!(complete.calls(), 0);
+    let photo_path = out.join("attachments").join(PHOTO_SHA);
+    assert!(
+        !photo_path.exists(),
+        "the login page is not kept as the photo"
+    );
+    assert!(
+        !photo_path.with_extension("part").exists(),
+        "the .part file is removed"
+    );
+    let state = journal::load(&journal::journal_path(&out), &server.base_url(), "alice").unwrap();
+    assert!(
+        !state.assets.contains(PHOTO_SHA),
+        "the photo is not journalled"
+    );
     assert!(!state.backup_complete);
 }
 

@@ -3,6 +3,10 @@
 The people model: who Message Crate knows, how they are reached, and how
 conversations and messages attach to them.
 
+[How contacts are made and changed](how-contacts-are-made-and-changed.md)
+follows an import and an address book load step by step, with a diagram for
+each decision.
+
 ## Two words for one thing
 
 An **identity** is one address a person is reached at: a phone number, an

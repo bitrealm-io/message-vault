@@ -194,12 +194,14 @@ enum Derived {
 }
 
 impl<'a> SourcePass<'a> {
-    /// Find the folders, clean leftover upload temps, and make the converted
-    /// folder. `None` when the source has no assets folder to process.
+    /// Find the folders, remove abandoned upload temps, and make the
+    /// converted folder. `None` when the source has no assets folder to
+    /// process.
     ///
     /// # Errors
     ///
-    /// Returns an error when the leftover cleanup or the folder creation fails.
+    /// Returns an error when the converted folder cannot be made. A failed
+    /// removal of an upload temp is logged and does not stop the pass.
     fn open(
         cfg: &Config,
         opts: &'a ProcessAssetsOptions,
@@ -219,9 +221,9 @@ impl<'a> SourcePass<'a> {
             eprintln!("  skip — assets dir missing");
             return Ok(None);
         }
-        let cleaned = cleanup_incoming_parts(&assets_dir, opts.dry_run)?;
+        let cleaned = cleanup_incoming_parts(&assets_dir, opts.dry_run);
         if cleaned > 0 {
-            println!("  cleaned {cleaned} leftover .part upload temp(s) under .incoming/");
+            println!("  cleaned {cleaned} abandoned upload temp(s) under .incoming/");
         }
         fs::create_dir_all(&converted_dir)
             .with_context(|| format!("create converted dir {}", converted_dir.display()))?;
@@ -511,84 +513,162 @@ fn has_part_extension(path: &Path) -> bool {
     ext.eq_ignore_ascii_case("part")
 }
 
-/// Max age for abandoned multipart upload sessions under `.incoming/{sha}/{upload_id}/`.
-const STALE_UPLOAD_SESSION_SECS: u64 = 24 * 60 * 60;
+/// Age after which an upload temp under `.incoming/` counts as abandoned: a
+/// `{sha}-*.part` file or a multipart session folder `{sha}/{upload_id}/`.
+/// A live `PUT /v1/assets/{sha256}` keeps writing its `.part` file while
+/// this sweep runs, so only a temp left untouched this long is removed.
+const STALE_UPLOAD_SECS: u64 = 24 * 60 * 60;
 
-/// Remove stale `{sha}-*.part` temps and abandoned multipart session dirs under `.incoming/`.
-fn cleanup_incoming_parts(assets_dir: &Path, dry_run: bool) -> Result<u64> {
+/// Remove abandoned `{sha}-*.part` temps and multipart session folders under
+/// `.incoming/`, and return how many it removed (or would remove, in a dry
+/// run).
+///
+/// The server writes and removes these files while the sweep runs, so a
+/// file that is gone by the time the sweep reaches it is passed over, and
+/// any other failure is logged and the sweep goes on.
+fn cleanup_incoming_parts(assets_dir: &Path, dry_run: bool) -> u64 {
     let incoming = assets_dir.join(".incoming");
-    if !incoming.is_dir() {
-        return Ok(0);
+    let entries = match fs::read_dir(&incoming) {
+        Ok(entries) => entries,
+        Err(err) => {
+            log_sweep_error("read", &incoming, &err);
+            return 0;
+        }
+    };
+    let mut parts = Vec::new();
+    let mut sha_dirs = Vec::new();
+    for entry in entries {
+        let path = match entry {
+            Ok(entry) => entry.path(),
+            Err(err) => {
+                log_sweep_error("read", &incoming, &err);
+                continue;
+            }
+        };
+        if path.is_file() && has_part_extension(&path) {
+            parts.push(path);
+        } else if path.is_dir() {
+            sha_dirs.push(path);
+        }
     }
-    let mut removed = 0u64;
     let now = std::time::SystemTime::now();
-    for entry in fs::read_dir(&incoming).with_context(|| format!("read {}", incoming.display()))? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_file() {
-            if !has_part_extension(&path) {
-                continue;
-            }
-            if dry_run {
-                println!("[dry-run] would remove {}", path.display());
-                removed += 1;
-                continue;
-            }
-            fs::remove_file(&path)
-                .with_context(|| format!("remove leftover {}", path.display()))?;
-            removed += 1;
-            continue;
-        }
-        if !path.is_dir() {
-            continue;
-        }
-        // Multipart staging: `.incoming/{sha256}/{upload_id}/`
-        for session_ent in
-            fs::read_dir(&path).with_context(|| format!("read {}", path.display()))?
-        {
-            let session_ent = session_ent?;
-            let session = session_ent.path();
-            if !session.is_dir() {
-                continue;
-            }
-            if !upload_session_is_stale(&session, now)? {
-                continue;
-            }
-            if dry_run {
-                println!(
-                    "[dry-run] would remove stale upload session {}",
-                    session.display()
-                );
-                removed += 1;
-                continue;
-            }
-            fs::remove_dir_all(&session)
-                .with_context(|| format!("remove stale upload session {}", session.display()))?;
-            removed += 1;
-        }
-        // Drop empty sha parent dirs.
-        if path.is_dir() && fs::read_dir(&path)?.next().is_none() {
-            if dry_run {
-                println!("[dry-run] would remove empty {}", path.display());
-            } else {
-                let _ = fs::remove_dir(&path);
-            }
-        }
+    let mut removed = remove_stale_parts(&parts, now, dry_run);
+    for sha_dir in &sha_dirs {
+        removed += remove_stale_sessions(sha_dir, now, dry_run);
     }
-    Ok(removed)
+    removed
 }
 
-/// True when a multipart upload session's manifest (or, failing that, its folder) is older than the abandoned-session limit.
-fn upload_session_is_stale(session: &Path, now: std::time::SystemTime) -> Result<bool> {
-    let manifest = session.join("manifest.json");
-    let meta = if manifest.is_file() {
-        fs::metadata(&manifest)?
-    } else {
-        fs::metadata(session)?
+/// Remove each listed `.part` file older than [`STALE_UPLOAD_SECS`] at
+/// `now`, and return how many it removed (or would remove, in a dry run).
+fn remove_stale_parts(parts: &[PathBuf], now: std::time::SystemTime, dry_run: bool) -> u64 {
+    let mut removed = 0u64;
+    for part in parts {
+        match modified_before_limit(part, now) {
+            Ok(true) => {}
+            Ok(false) => continue,
+            Err(err) => {
+                log_sweep_error("read", part, &err);
+                continue;
+            }
+        }
+        if dry_run {
+            println!("[dry-run] would remove {}", part.display());
+            removed += 1;
+            continue;
+        }
+        match fs::remove_file(part) {
+            Ok(()) => removed += 1,
+            Err(err) => log_sweep_error("remove leftover", part, &err),
+        }
+    }
+    removed
+}
+
+/// Remove each multipart session folder under `sha_dir`
+/// (`.incoming/{sha256}/{upload_id}/`) that is stale at `now`, then
+/// `sha_dir` itself once it is empty. Returns how many sessions it removed
+/// (or would remove, in a dry run).
+fn remove_stale_sessions(sha_dir: &Path, now: std::time::SystemTime, dry_run: bool) -> u64 {
+    let entries = match fs::read_dir(sha_dir) {
+        Ok(entries) => entries,
+        Err(err) => {
+            log_sweep_error("read", sha_dir, &err);
+            return 0;
+        }
     };
-    let modified = meta.modified().unwrap_or(std::time::UNIX_EPOCH);
+    let mut removed = 0u64;
+    for entry in entries {
+        let session = match entry {
+            Ok(entry) => entry.path(),
+            Err(err) => {
+                log_sweep_error("read", sha_dir, &err);
+                continue;
+            }
+        };
+        if !session.is_dir() {
+            continue;
+        }
+        match upload_session_is_stale(&session, now) {
+            Ok(true) => {}
+            Ok(false) => continue,
+            Err(err) => {
+                log_sweep_error("read", &session, &err);
+                continue;
+            }
+        }
+        if dry_run {
+            println!(
+                "[dry-run] would remove stale upload session {}",
+                session.display()
+            );
+            removed += 1;
+            continue;
+        }
+        match fs::remove_dir_all(&session) {
+            Ok(()) => removed += 1,
+            Err(err) => log_sweep_error("remove stale upload session", &session, &err),
+        }
+    }
+    let is_empty = fs::read_dir(sha_dir).is_ok_and(|mut rest| rest.next().is_none());
+    if is_empty {
+        if dry_run {
+            println!("[dry-run] would remove empty {}", sha_dir.display());
+        } else {
+            // A new upload for this fingerprint may have made a session in
+            // the meantime, and then the folder stays.
+            let _ = fs::remove_dir(sha_dir);
+        }
+    }
+    removed
+}
+
+/// True when a multipart upload session's manifest (or, failing that, its folder) is older than the abandoned-upload limit.
+fn upload_session_is_stale(session: &Path, now: std::time::SystemTime) -> std::io::Result<bool> {
+    let manifest = session.join("manifest.json");
+    if manifest.is_file() {
+        modified_before_limit(&manifest, now)
+    } else {
+        modified_before_limit(session, now)
+    }
+}
+
+/// True when `path` was last modified [`STALE_UPLOAD_SECS`] or more before `now`.
+fn modified_before_limit(path: &Path, now: std::time::SystemTime) -> std::io::Result<bool> {
+    let modified = fs::metadata(path)?
+        .modified()
+        .unwrap_or(std::time::UNIX_EPOCH);
     let age = now.duration_since(modified).unwrap_or_default();
-    Ok(age.as_secs() >= STALE_UPLOAD_SESSION_SECS)
+    Ok(age.as_secs() >= STALE_UPLOAD_SECS)
+}
+
+/// Log a failed step of the `.incoming/` sweep. A path that no longer
+/// exists is not logged, because the server removes its own temps when an
+/// upload finishes, and that is the outcome the sweep wanted.
+fn log_sweep_error(action: &str, path: &Path, err: &std::io::Error) {
+    if err.kind() != std::io::ErrorKind::NotFound {
+        eprintln!("  could not {action} {}: {err}", path.display());
+    }
 }
 
 /// What one stored blob needs, decided before any file is touched.

@@ -2931,3 +2931,128 @@ async fn a_name_only_participant_binds_to_the_live_contact_when_a_trashed_one_sh
             .unwrap();
     assert_eq!(sarahs, 2, "no third Sarah Vale is made");
 }
+
+/// One incoming message of the one-to-one chat with +15551234567, whose text
+/// is its guid.
+fn same_second_message(guid: &str, ms: i64) -> String {
+    format!(
+        r#"{{"guid":"{guid}","timestamp_unix_ms":{ms},"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15551234567","sender_display_name":null,"subject":null,"text":"{guid}","attachments":[],"imessage":null,"source":null}}"#
+    )
+}
+
+/// The header of the one-to-one chat with +15551234567.
+const SAME_SECOND_HEADER: &str = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15551234567","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15551234567","display_name":"Bob"}],"stats":{"message_count":3,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462900}}}"#;
+
+/// The account's message guids in the order the conversation page and every
+/// export read them.
+async fn guids_in_conversation_order(state: &crate::server::AppState) -> Vec<String> {
+    let mut conn = state.db.acquire().await.unwrap();
+    sqlx::query_scalar("SELECT guid FROM messages ORDER BY timestamp, sort_order, id")
+        .fetch_all(&mut *conn)
+        .await
+        .unwrap()
+}
+
+/// Post each body as one batch of a single Import Run.
+async fn post_batches_of_one_run(
+    state: &crate::server::AppState,
+    token: &str,
+    bodies: Vec<String>,
+) {
+    let path = batches_path(state, token, "imessage").await;
+    for body in bodies {
+        let (status, text) =
+            crate::test_support::post_raw(state, &path, token, "application/jsonl", body).await;
+        assert_eq!(status, axum::http::StatusCode::OK, "{text}");
+    }
+}
+
+/// #1168: a conversation split across two batches keeps its order where the
+/// split falls inside one second.
+#[tokio::test]
+async fn a_conversation_split_across_batches_keeps_its_order_within_a_second() {
+    let (state, _fixture, token) = importer().await;
+    post_batches_of_one_run(
+        &state,
+        &token,
+        vec![
+            format!(
+                "{SAME_SECOND_HEADER}\n{}\n{}\n",
+                same_second_message("m1", 1_426_183_462_100),
+                same_second_message("m2", 1_426_183_462_200)
+            ),
+            format!(
+                "{SAME_SECOND_HEADER}\n{}\n",
+                same_second_message("m3", 1_426_183_462_300)
+            ),
+        ],
+    )
+    .await;
+    assert_eq!(
+        guids_in_conversation_order(&state).await,
+        ["m1", "m2", "m3"]
+    );
+}
+
+/// #1168: three messages with one whole-second time, split across two
+/// batches, read back in the source's order. Sources that record whole
+/// seconds (iMazing, OpenExtract, GO SMS Pro) leave nothing but the source's
+/// order to tell them apart.
+#[tokio::test]
+async fn messages_of_one_whole_second_split_across_batches_keep_the_source_order() {
+    let (state, _fixture, token) = importer().await;
+    post_batches_of_one_run(
+        &state,
+        &token,
+        vec![
+            format!(
+                "{SAME_SECOND_HEADER}\n{}\n{}\n",
+                same_second_message("m1", 1_426_183_462_000),
+                same_second_message("m2", 1_426_183_462_000)
+            ),
+            format!(
+                "{SAME_SECOND_HEADER}\n{}\n",
+                same_second_message("m3", 1_426_183_462_000)
+            ),
+        ],
+    )
+    .await;
+    assert_eq!(
+        guids_in_conversation_order(&state).await,
+        ["m1", "m2", "m3"]
+    );
+}
+
+/// #1168: a later append that adds a message in a second the conversation
+/// already holds reads it back after the stored ones.
+#[tokio::test]
+async fn an_append_in_a_second_already_held_sorts_after_the_stored_messages() {
+    let (state, _fixture, token) = importer().await;
+    import_one_batch(
+        &state,
+        &token,
+        "imessage",
+        "append",
+        format!(
+            "{SAME_SECOND_HEADER}\n{}\n{}\n",
+            same_second_message("m1", 1_426_183_462_000),
+            same_second_message("m2", 1_426_183_462_000)
+        ),
+    )
+    .await;
+    import_one_batch(
+        &state,
+        &token,
+        "imessage",
+        "append",
+        format!(
+            "{SAME_SECOND_HEADER}\n{}\n",
+            same_second_message("m3", 1_426_183_462_000)
+        ),
+    )
+    .await;
+    assert_eq!(
+        guids_in_conversation_order(&state).await,
+        ["m1", "m2", "m3"]
+    );
+}

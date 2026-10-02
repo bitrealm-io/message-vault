@@ -188,6 +188,32 @@ impl ListCtx {
         }
     }
 
+    /// Wrap `inner`, written against message alias `m` (a non-duplicate
+    /// message; conversation alias `c` is also in scope), so it is true of the
+    /// base row. The same as [`Self::message`] on Messages and Conversations;
+    /// on Contacts it is a message of one of the contact's conversations,
+    /// whoever sent it, so a contact who only ever received is reached
+    /// (#1210). `service:` reads it.
+    ///
+    /// Never nest one wrapper inside another on the same list: two of them
+    /// each open their own `FROM conversations c`, and the inner one would
+    /// shadow the outer alias.
+    pub fn conversation_message(&self, out: &mut Sql, inner: impl FnOnce(&mut Sql)) {
+        match self.list {
+            ListKind::Messages | ListKind::Conversations => self.message(out, inner),
+            ListKind::Contacts => {
+                out.push(&format!(
+                    "EXISTS (SELECT 1 FROM conversations c \
+                       JOIN messages m ON m.conversation_id = c.id AND m.duplicate_of IS NULL \
+                       WHERE {} AND (",
+                    self.contact_conversations_link("c")
+                ));
+                inner(out);
+                out.push("))");
+            }
+        }
+    }
+
     /// Wrap `inner`, written against contact alias `ct`, so it is true of the
     /// base row: the contact itself, or some contact linked to a participant.
     /// A contact in the trash is reached only when the query carries

@@ -196,6 +196,48 @@ describe("IdentitiesSection", () => {
       remove_identities: [{ address: "+15555550100", service: "phone" }],
     });
   });
+
+  // One number on Text message and on WhatsApp: the profile's `phones` lists it
+  // twice with no service, so only the identities say which one went.
+  const both = { ...profile, phones: ["+15555550100", "+15555550100"] } as AccountProfile;
+  const whatsapp: Identity = { ...identities[0], service: "whatsapp" };
+  const listed = (items: Identity[]) => ({ items, total: items.length, limit: 40, offset: 0 });
+
+  it("closes the dialog when the WhatsApp identity of a number also on Text message is gone", async () => {
+    const user = userEvent.setup({ delay: null });
+    listAccountIdentities
+      .mockResolvedValueOnce(listed([identities[0], whatsapp]))
+      .mockResolvedValue(listed([identities[0]]));
+    mutateAsync.mockResolvedValue({ ...profile, phones: ["+15555550100"] });
+    render(<IdentitiesSection profile={both} />);
+
+    await user.click(await screen.findByRole("button", { name: "Remove +15555550100 (WhatsApp)" }));
+    const dialog = await screen.findByRole("dialog", { name: "Remove identity?" });
+    await user.click(within(dialog).getByRole("button", { name: "Remove" }));
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      remove_identities: [{ address: "+15555550100", service: "whatsapp" }],
+    });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.queryByText("The server did not remove that identity.")).not.toBeInTheDocument();
+  });
+
+  it("keeps the dialog open when the server still lists the WhatsApp identity", async () => {
+    const user = userEvent.setup({ delay: null });
+    listAccountIdentities
+      .mockResolvedValueOnce(listed([identities[0], whatsapp]))
+      .mockResolvedValue(listed([whatsapp]));
+    mutateAsync.mockResolvedValue({ ...profile, phones: ["+15555550100"] });
+    render(<IdentitiesSection profile={both} />);
+
+    await user.click(await screen.findByRole("button", { name: "Remove +15555550100 (WhatsApp)" }));
+    const dialog = await screen.findByRole("dialog", { name: "Remove identity?" });
+    await user.click(within(dialog).getByRole("button", { name: "Remove" }));
+
+    expect(
+      await within(dialog).findByText("The server did not remove that identity."),
+    ).toBeInTheDocument();
+  });
 });
 
 describe("removeBody", () => {

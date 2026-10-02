@@ -250,6 +250,7 @@ pub fn run(cfg: &PushConfig, progress: Option<&mut ProgressFn<'_>>) -> Result<Pu
 
     let aborted = drive(&ctx, &files, &mut pipeline, &mut assets, &mut out)?;
     let aborted = settle(cfg, &mut pipeline, aborted, &mut out)?;
+    pipeline.record_cancelled(&files, &mut out);
     out.flush_file_counter();
 
     let (results, accounting) = pipeline.into_results();
@@ -271,6 +272,7 @@ pub fn run(cfg: &PushConfig, progress: Option<&mut ProgressFn<'_>>) -> Result<Pu
         conversations_ok: counted.ok,
         conversations_failed: counted.failed,
         conversations_skipped: counted.skipped,
+        conversations_cancelled: counted.cancelled,
         messages_attempted: accounting.attempted,
         messages_inserted: accounting.inserted,
         messages_deduped: accounting.deduped,

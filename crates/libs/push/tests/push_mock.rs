@@ -2067,6 +2067,147 @@ fn a_cancelled_push_sends_no_further_batch_and_resumes_later() {
     assert_eq!(resumed_import.calls(), 2);
 }
 
+/// Every conversation of a cancelled push is in one category of the report:
+/// `ok + failed + skipped + cancelled = total`, with one result row per file.
+///
+/// Guards the report of a stopped Upload. Without a result for each file the
+/// stop left unsent, the counts add up to less than the total and nothing in
+/// the report names those files.
+#[test]
+fn a_cancelled_push_reports_every_conversation_in_one_category() {
+    let server = MockServer::start();
+    let _auth = mock_session(&server);
+    let _run = mock_import_run(&server, 7);
+    let _import = server.mock(|when, then| {
+        when.method(POST).path("/v1/imports/7/batches");
+        then.status(200).json_body(json!({
+            "messages": 1,
+            "messages_appended": 1,
+            "conversations": 1
+        }));
+    });
+
+    let dir = tempdir().unwrap();
+    write_jsonl(dir.path(), &sample_doc());
+    write_jsonl(dir.path(), &sample_doc_for("+15555550102", "guid-2"));
+    write_jsonl(dir.path(), &sample_doc_for("+15555550103", "guid-3"));
+    write_jsonl(dir.path(), &sample_doc_for("+15555550104", "guid-4"));
+    let cancel = Arc::new(AtomicBool::new(false));
+    let cfg = PushConfig {
+        batch_size: 1,
+        prepare_ahead: 1,
+        prepare_workers: 1,
+        cancel: Some(cancel.clone()),
+        ..text_only_config(dir.path(), server.base_url())
+    };
+
+    let flag = cancel.clone();
+    let mut on_progress = move |event: ProgressEvent| {
+        if let ProgressEvent::FileDone { status, .. } = event
+            && status == "ok"
+        {
+            flag.store(true, Ordering::SeqCst);
+        }
+    };
+    let report = run(&cfg, Some(&mut on_progress)).unwrap();
+
+    assert_eq!(report.conversations_total, 4);
+    assert_eq!(report.conversations_ok, 1);
+    assert_eq!(report.conversations_cancelled, 3);
+    assert_eq!(
+        report.conversations_ok
+            + report.conversations_failed
+            + report.conversations_skipped
+            + report.conversations_cancelled,
+        report.conversations_total
+    );
+    assert_eq!(report.results.len(), 4, "{:?}", report.results);
+    let cancelled: Vec<&str> = report
+        .results
+        .iter()
+        .filter(|row| row.status == "cancelled")
+        .map(|row| row.file.as_str())
+        .collect();
+    assert_eq!(cancelled.len(), 3, "{:?}", report.results);
+    assert!(
+        cancelled.iter().all(|file| file.ends_with(".jsonl")),
+        "each cancelled row names its file: {cancelled:?}"
+    );
+    assert_eq!(journal_events(dir.path(), "file_ok").len(), 1);
+}
+
+/// A conversation whose messages were partly queued when the stop came is
+/// counted as cancelled, and the journal does not mark it done, so a resumed
+/// push sends the rest of it.
+///
+/// Guards the `Abort` path in `consume_result`, which returns before the
+/// file's result is written: without a result the file falls out of every
+/// count, and journalling it as done would lose its unsent messages.
+#[test]
+fn a_conversation_cut_off_mid_way_by_a_cancel_is_counted_as_cancelled() {
+    let server = MockServer::start();
+    let _auth = mock_session(&server);
+    let _run = mock_import_run(&server, 7);
+    // The delay keeps the first batch in flight long enough to cancel while
+    // the second message of the same conversation waits to be sent.
+    let first_batch = server.mock(|when, then| {
+        when.method(POST).path("/v1/imports/7/batches");
+        then.status(200)
+            .delay(std::time::Duration::from_millis(1_000))
+            .json_body(json!({
+                "messages": 1,
+                "messages_appended": 1,
+                "conversations": 1
+            }));
+    });
+
+    let dir = tempdir().unwrap();
+    let mut doc = sample_doc();
+    let mut second = doc.messages[0].clone();
+    second.guid = "guid-1b".into();
+    let mut third = doc.messages[0].clone();
+    third.guid = "guid-1c".into();
+    doc.messages.extend([second, third]);
+    write_jsonl(dir.path(), &doc);
+    let cancel = Arc::new(AtomicBool::new(false));
+    let cfg = PushConfig {
+        batch_size: 1,
+        prepare_ahead: 1,
+        prepare_workers: 1,
+        cancel: Some(cancel.clone()),
+        ..text_only_config(dir.path(), server.base_url())
+    };
+
+    let report = std::thread::scope(|scope| {
+        let pusher = scope.spawn(|| run(&cfg, None).unwrap());
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while first_batch.calls() == 0 {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the first batch was never posted"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        cancel.store(true, Ordering::SeqCst);
+        pusher.join().unwrap()
+    });
+
+    assert_eq!(first_batch.calls(), 1, "no batch is sent after the cancel");
+    assert_eq!(report.conversations_total, 1);
+    assert_eq!(report.conversations_cancelled, 1, "{:?}", report.results);
+    assert_eq!(report.results.len(), 1);
+    assert_eq!(report.results[0].status, "cancelled");
+    assert_eq!(
+        report.results[0].messages, 1,
+        "the row counts the message that reached the server"
+    );
+    assert_eq!(journaled_guids(dir.path()), vec!["guid-1".to_string()]);
+    assert!(
+        journal_events(dir.path(), "file_ok").is_empty(),
+        "a conversation cut off mid way is not journalled as done"
+    );
+}
+
 /// After one batch fails, a second push on the same folder sends only the
 /// failed conversation's messages, and the journal then has every file ok.
 ///

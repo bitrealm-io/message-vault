@@ -156,19 +156,21 @@ describe("IdentityTable", () => {
     expect(screen.queryByRole("button", { name: /Open 0/ })).not.toBeInTheDocument();
   });
 
-  it("adds a Summary row only when asked, with the earliest, latest and the sums", () => {
+  it("adds a Summary row only when asked, with the earliest, latest, message sums and the conversations it is given", () => {
     const { unmount } = render(<IdentityTable {...dates} rows={rows} onRemove={() => {}} />);
     expect(screen.queryByText("Summary")).not.toBeInTheDocument();
     unmount();
 
-    render(<IdentityTable {...dates} rows={rows} totals onRemove={() => {}} />);
+    // The rows' conversations add up to 3; two identities share one, so the
+    // contact has 2.
+    render(<IdentityTable {...dates} rows={rows} totalConversations={2} onRemove={() => {}} />);
     const summary = screen.getByText("Summary").closest("[role=row]");
     const cells = within(summary as HTMLElement).getAllByRole("gridcell");
     expect(cells.map((c) => c.textContent)).toEqual([
       "Summary",
       "2020-01-01",
       "2021-05-06",
-      "3",
+      "2",
       "15",
       "30",
       "",

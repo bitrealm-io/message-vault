@@ -44,7 +44,7 @@ The rule "The address book is a file for editing contacts, not a source of them"
 |---|---|
 | **GO SMS Pro** | MMS as WAP-209 `.pdu` files; many empty stub PDUs; SMS attachments not in XML |
 | **SMS Backup & Restore** | Call logs ignored; drafts / failed / queued skipped; encrypted ZIP not supported (unlock first) |
-| **SMS Backup+** | Offline `.eml` only (no IMAP); archive attachment→message pairing is guesswork; unresolved peers → `unknown.csv` |
+| **SMS Backup+** | Offline `.eml` only (no IMAP); call-log mails skipped; archive attachment→message pairing is guesswork; unresolved peers → `unknown.csv` |
 | **OpenExtract** | No media extraction; no groups; thin source format; a chat the export names by a person's name only is matched to a contact by that name on import, or stays Unknown |
 | **iMazing** | Reactions/replies are free text; WhatsApp groups lack full roster; naive dates are read in the zone chosen in the Import form's **Time zone of the messages** field |
 | **WhatsApp** | Requires external `wtsexporter` (pip or bundled binary); LID / non-phone JIDs stay raw; full group roster depends on upstream JSON |

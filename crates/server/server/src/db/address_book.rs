@@ -297,7 +297,11 @@ fn parse_handle_type(text: &str) -> Option<HandleType> {
 }
 
 /// Read the CSV into rows. A row whose every field is blank is skipped, the
-/// way a spreadsheet's trailing empty rows are.
+/// way a spreadsheet's trailing empty rows are. A row with fewer fields than
+/// the header reads its missing trailing cells as blank, since a spreadsheet
+/// can drop empty cells at the end of a row and no column moves. A row with
+/// more fields than the header is an error: its cells cannot be matched to
+/// the columns, most often because a cell holding a comma lacks quotes.
 fn read_rows(csv_text: &str) -> Result<Vec<FileRow>, Vec<String>> {
     let text = csv_text.strip_prefix('\u{feff}').unwrap_or(csv_text);
     let mut reader = csv::ReaderBuilder::new()
@@ -335,6 +339,15 @@ fn read_rows(csv_text: &str) -> Result<Vec<FileRow>, Vec<String>> {
                 continue;
             }
         };
+        if record.len() > headers.len() && !record.iter().all(str::is_empty) {
+            errors.push(format!(
+                "row {number}: has {} fields where the header has {}; \
+                 put a cell that holds a comma in double quotes",
+                record.len(),
+                headers.len()
+            ));
+            continue;
+        }
         let field = |slot: usize| record.get(index[slot]).unwrap_or("").trim().to_string();
         let row = FileRow {
             number,

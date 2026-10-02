@@ -111,6 +111,40 @@ fn a_reused_blob_takes_the_export_mime_type_when_the_record_has_one() {
     assert_eq!(stats.missing, 0);
 }
 
+/// An attachment path that climbs out of the export folder is refused even
+/// when its fingerprint is already stored and the file is never read, because
+/// `attachments.path` keeps the path as sent and an Export later writes the
+/// file there. The refusal is the one a new fingerprint gets.
+#[test]
+fn a_path_that_leaves_the_export_folder_is_refused_whether_or_not_its_fingerprint_is_stored() {
+    let tmp = TempDir::new().unwrap();
+    let export_dir = tmp.path().join("export");
+    let assets_dir = tmp.path().join("assets");
+    std::fs::create_dir_all(&export_dir).unwrap();
+    let source = export_dir.join("photo.png");
+    std::fs::write(&source, b"stored bytes").unwrap();
+    let stored_sha = assets_api::hash_file(&source).unwrap();
+    assets_api::store_verified(&source, &stored_sha, &assets_dir, None, false, false).unwrap();
+    let new_sha = assets_api::sha256_hex(b"bytes the store has never seen");
+
+    for sha in [&stored_sha, &new_sha] {
+        let att = AttachmentRecord {
+            path: Some("../escape.txt".to_string()),
+            ..claimed(sha, None)
+        };
+        let mut stats = AssetStats::default();
+
+        let err = store_claimed_or_path(&att, &export_dir, &assets_dir, &mut stats)
+            .expect_err("the path is refused");
+
+        assert_eq!(
+            err.to_string(),
+            format!("{}: ../escape.txt", message_ir::UNSAFE_ATTACHMENT_PATH)
+        );
+        assert_eq!(stats.deduped, 0);
+    }
+}
+
 /// The export says the attachment's bytes hash to one value and the file on
 /// disk hashes to another. That is a damaged or swapped file, so the import
 /// stops: it neither stores the file under either fingerprint nor records the

@@ -246,6 +246,7 @@ Row 1 is the header.
 
 A load refuses:
 
+- A row with more cells than the header, most often a name with a comma that is not in double quotes. A row with fewer cells reads the missing ones at its end as blank.
 - A phone number that is not 4 to 15 digits, or holds anything but digits, spaces, and `+ - ( ) .`
 - An email address without exactly one `@` and text on both sides of it.
 - A `service` or `handle_type` that is not one of the values in the table above.

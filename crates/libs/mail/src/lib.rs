@@ -12,7 +12,7 @@ mod parse;
 use anyhow::{Context, Result, bail};
 use chrono::{Local, TimeZone, Utc};
 use mail_builder::MessageBuilder;
-use mail_builder::encoders::QuotedPrintableEncoder;
+use mail_builder::encoders::{Base64Encoder, QuotedPrintableEncoder};
 use mail_builder::headers::address::Address;
 use mail_builder::headers::content_type::ContentType;
 use mail_builder::headers::date::Date;
@@ -69,8 +69,8 @@ impl From<&MailAttachment> for message_ir::IrAttachment {
             is_sticker: a.is_sticker,
             transcription: a.transcription.clone(),
             sticker_effect: a.sticker_effect.clone(),
-            size_bytes: None,
-            missing_reason: None,
+            size_bytes: a.meta.size_bytes,
+            missing_reason: a.meta.missing_reason.clone(),
             bytes: None,
         }
     }
@@ -192,6 +192,10 @@ struct AttachmentMetaCell<'a> {
     transcription: Option<&'a str>,
     sticker_effect: Option<&'a str>,
     digest_sha256: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    size_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    missing_reason: Option<&'a str>,
 }
 
 /// Conversation directory stem (shared per-conversation filename stem).
@@ -602,7 +606,7 @@ fn build_eml(msg: &MailMessage) -> Result<Vec<u8>> {
                 .original_name
                 .clone()
                 .unwrap_or_else(|| format!("attachment-{i}"));
-            parts.push(MimePart::new(mime.to_string(), att.bytes.clone()).attachment(filename));
+            parts.push(attachment_part(mime, filename, &att.bytes));
         }
         MimePart::new("multipart/mixed", parts)
     };
@@ -632,6 +636,25 @@ fn text_body_part(text: &str) -> MimePart<'static> {
         encoded,
     )
     .transfer_encoding("quoted-printable")
+}
+
+/// One attachment as a base64 MIME part, so its bytes come back unchanged.
+///
+/// mail-builder 1.0 writes a text attachment that is plain ASCII as raw
+/// `7bit` lines, and the line ends of those lines are the file's own. The
+/// mbox writer turns every CRLF of a record into LF, so a `text/vcard` file
+/// (whose lines must end in CRLF, RFC 6350 section 3.2) or a Windows `.txt`
+/// file would lose its CRs and no longer match its `digest_sha256`. Base64
+/// lines carry no bytes of the file in their line ends, so every attachment,
+/// text or not, is encoded here rather than by mail-builder.
+fn attachment_part(mime: &str, filename: String, bytes: &[u8]) -> MimePart<'static> {
+    let encoded = Base64Encoder::new()
+        .wrap_lines()
+        .encode(bytes)
+        .unwrap_or_default();
+    MimePart::new(mime.to_string(), encoded)
+        .attachment(filename)
+        .transfer_encoding("base64")
 }
 
 /// Who the mail is from and to.
@@ -741,6 +764,10 @@ fn conversation_headers<'m>(builder: MessageBuilder<'m>, msg: &MailMessage) -> M
                 Some(msg.owner_handle.trim().to_string()),
             ),
             (headers::OWNER_DISPLAY_NAME, msg.owner_display_name.clone()),
+            (
+                headers::MESSAGE_OWNER_HANDLE,
+                msg.message.owner_handle.clone(),
+            ),
             (headers::SUBJECT, msg.message.subject.clone()),
             (
                 headers::ANDROID_TYPE,
@@ -826,6 +853,8 @@ fn attachment_meta_header<'m>(
             transcription: a.transcription.as_deref(),
             sticker_effect: a.sticker_effect.as_deref(),
             digest_sha256: a.meta.digest_sha256.as_deref(),
+            size_bytes: a.meta.size_bytes,
+            missing_reason: a.meta.missing_reason.as_deref(),
         })
         .collect();
     let meta_json = serde_json::to_string(&meta).unwrap_or_else(|_| "[]".into());

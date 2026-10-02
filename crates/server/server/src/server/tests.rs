@@ -1573,3 +1573,39 @@ async fn the_website_is_served_from_the_configured_folder() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, "<title>the site</title>");
 }
+
+/// The `Bearer` scheme matches in any case, because RFC 7235, section 2.1,
+/// makes authentication schemes case-insensitive (#1211).
+#[tokio::test]
+async fn a_lower_case_bearer_scheme_is_accepted() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let server = crate::test_support::serve(&fixture.state).await;
+    let response = reqwest::Client::new()
+        .get(format!("{}/v1/session", server.base()))
+        .header(
+            reqwest::header::AUTHORIZATION,
+            format!("bearer {}", user.token),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status().as_u16(), 200);
+}
+
+/// A valid token under another scheme is still refused, so matching the
+/// scheme without regard to case does not accept any word before the token.
+#[tokio::test]
+async fn a_valid_token_under_another_scheme_answers_401() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let server = crate::test_support::serve(&fixture.state).await;
+    let response = reqwest::Client::new()
+        .get(format!("{}/v1/session", server.base()))
+        .header(
+            reqwest::header::AUTHORIZATION,
+            format!("Basic {}", user.token),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status().as_u16(), 401);
+}

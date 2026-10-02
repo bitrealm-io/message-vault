@@ -46,17 +46,18 @@ export function DemoAccountCard() {
       cache.set(keys.demoAccount.all, started);
       setConfirmOpen(false);
     },
+    onSettled: () => cache.invalidateAccount(),
   });
 
   // When a build ends, the account list, the storage counts and the login
-  // card's button all changed with it.
+  // card's button all changed with it. The build is a write the server
+  // finishes on its own, so its end marks the account's cache stale as a
+  // write's settling does.
   const status = demo.data?.status;
   const wasBuilding = useRef(false);
   useEffect(() => {
     if (wasBuilding.current && status !== undefined && status !== "building") {
-      cache.invalidate(keys.ownerAccounts.all);
-      cache.invalidate(keys.serverStorage.all);
-      cache.invalidate(keys.serverInfo.all);
+      cache.invalidateAccount();
     }
     wasBuilding.current = status === "building";
   }, [status, cache]);

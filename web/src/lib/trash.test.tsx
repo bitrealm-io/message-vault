@@ -1,18 +1,20 @@
 /** @vitest-environment jsdom */
 
 /**
- * What each trash mutation marks stale — not whether the server
- * route was called, which proves nothing about what the app does next. Each
- * case asserts the exact set of query-key prefixes `invalidateQueries` was
- * called with, so a prefix that should stay fresh (a false positive here
- * would show up as an unwanted extra call) is checked as directly as one
- * that should go stale.
+ * What each trash mutation sends, and what it leaves marked stale.
+ *
+ * Every write marks the whole account's cache stale. The entries each case
+ * names are the ones a screen showed out of date when a write left them out,
+ * so a regression names the screen it breaks.
  */
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { testQueryClient } from "../test/providers";
+import { freshEntries, seedEntries } from "../test/staleEntries";
+import { keys } from "./queryKeys";
 import {
   deleteContact as deleteContactRoute,
   deleteConversation as deleteConversationRoute,
@@ -53,204 +55,145 @@ const restoreContact = vi.mocked(restoreContactRoute);
 const deleteContact = vi.mocked(deleteContactRoute);
 const emptyTrash = vi.mocked(emptyTrashRoute);
 
-let client: QueryClient;
+let client = testQueryClient();
 
 function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
-/** The prefixes `invalidateQueries` was asked to mark stale, account included. */
-function invalidatedKeys(spy: ReturnType<typeof vi.spyOn>): unknown[] {
-  return spy.mock.calls.map((call: unknown[]) => (call[0] as { queryKey?: unknown })?.queryKey);
-}
-
 beforeEach(() => {
   vi.clearAllMocks();
-  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client = testQueryClient();
 });
 
-describe("useTrashConversation / useRestoreConversation", () => {
-  it("marks the conversation list, the trash count, and open contact details stale", async () => {
-    trashConversation.mockResolvedValue(undefined);
-    const invalidate = vi.spyOn(client, "invalidateQueries");
+/** Run `write` with every entry in `shown` seeded, and answer which stayed fresh. */
+async function freshAfter(
+  shown: readonly (readonly unknown[])[],
+  write: () => Promise<unknown>,
+): Promise<unknown[]> {
+  seedEntries(client, 7, shown);
+  await write();
+  return freshEntries(client, 7, shown);
+}
 
+/** The conversation list, a find, the Trash count, and an open contact's counts. */
+const conversationTrashState = [
+  keys.conversations.lists,
+  keys.conversations.find(42, "year:2020", 0, 50),
+  keys.trash.all,
+  keys.contacts.details,
+];
+
+/** The account's message count and storage, and each identity's message count. */
+const accountCounts = [keys.accountProfile.all, keys.accountProfile.identities];
+
+describe("useTrashConversation / useRestoreConversation", () => {
+  it("trash marks every list and count that shows trash state stale", async () => {
+    trashConversation.mockResolvedValue(undefined);
     const { result } = renderHook(() => useTrashConversation(), { wrapper });
-    await result.current.mutateAsync(42);
+
+    const fresh = await freshAfter(conversationTrashState, () => result.current.mutateAsync(42));
 
     expect(trashConversation).toHaveBeenCalledWith(42, expect.anything());
-    expect(invalidatedKeys(invalidate)).toEqual(
-      expect.arrayContaining([
-        ["server", 7, "conversations", "list"],
-        ["server", 7, "trash"],
-        ["server", 7, "contacts", "detail"],
-      ]),
-    );
+    expect(fresh).toEqual([]);
   });
 
-  it("leaves the conversation's own detail, its messages, and the contacts list alone", async () => {
-    trashConversation.mockResolvedValue(undefined);
-    const invalidate = vi.spyOn(client, "invalidateQueries");
-
-    const { result } = renderHook(() => useTrashConversation(), { wrapper });
-    await result.current.mutateAsync(42);
-
-    const keys = invalidatedKeys(invalidate);
-    expect(keys).not.toContainEqual(["server", 7, "conversations", "detail"]);
-    expect(keys).not.toContainEqual(["server", 7, "conversations", "messages"]);
-    expect(keys).not.toContainEqual(["server", 7, "contacts", "list"]);
-  });
-
-  it("restore marks the same prefixes trash does", async () => {
+  it("restore marks the same entries stale", async () => {
     restoreConversation.mockResolvedValue(undefined);
-    const invalidate = vi.spyOn(client, "invalidateQueries");
-
     const { result } = renderHook(() => useRestoreConversation(), { wrapper });
-    await result.current.mutateAsync(7);
+
+    const fresh = await freshAfter(conversationTrashState, () => result.current.mutateAsync(7));
 
     expect(restoreConversation).toHaveBeenCalledWith(7, expect.anything());
-    expect(invalidatedKeys(invalidate)).toEqual(
-      expect.arrayContaining([
-        ["server", 7, "conversations", "list"],
-        ["server", 7, "trash"],
-        ["server", 7, "contacts", "detail"],
-      ]),
-    );
+    expect(fresh).toEqual([]);
   });
 });
 
 describe("useTrashContact / useRestoreContact", () => {
-  it("marks the contacts list and the trashed contact's own detail stale", async () => {
-    trashContact.mockResolvedValue(undefined);
-    const invalidate = vi.spyOn(client, "invalidateQueries");
+  const shown = [keys.contacts.lists, keys.contacts.detail(9)];
 
+  it("trash marks the contacts list and the contact's own detail stale", async () => {
+    trashContact.mockResolvedValue(undefined);
     const { result } = renderHook(() => useTrashContact(), { wrapper });
-    await result.current.mutateAsync(9);
+
+    const fresh = await freshAfter(shown, () => result.current.mutateAsync(9));
 
     expect(trashContact).toHaveBeenCalledWith(9, expect.anything());
-    expect(invalidatedKeys(invalidate)).toEqual(
-      expect.arrayContaining([
-        ["server", 7, "contacts", "list"],
-        ["server", 7, "contacts", "detail", "9"],
-      ]),
-    );
+    expect(fresh).toEqual([]);
   });
 
-  it("leaves every conversation query and the trash count alone", async () => {
-    trashContact.mockResolvedValue(undefined);
-    const invalidate = vi.spyOn(client, "invalidateQueries");
-
-    const { result } = renderHook(() => useTrashContact(), { wrapper });
-    await result.current.mutateAsync(9);
-
-    const keys = invalidatedKeys(invalidate);
-    expect(keys.every((key) => (key as string[])[2] !== "conversations")).toBe(true);
-    expect(keys).not.toContainEqual(["server", 7, "trash"]);
-    // Only this contact's own detail is stale, not every open drawer.
-    expect(keys).not.toContainEqual(["server", 7, "contacts", "detail"]);
-  });
-
-  it("restore addresses and invalidates the same contact it was called with", async () => {
+  it("restore addresses the contact it was called with", async () => {
     restoreContact.mockResolvedValue(undefined);
-    const invalidate = vi.spyOn(client, "invalidateQueries");
-
     const { result } = renderHook(() => useRestoreContact(), { wrapper });
-    await result.current.mutateAsync("9");
+
+    const fresh = await freshAfter(shown, () => result.current.mutateAsync("9"));
 
     expect(restoreContact).toHaveBeenCalledWith("9", expect.anything());
-    expect(invalidatedKeys(invalidate)).toEqual(
-      expect.arrayContaining([
-        ["server", 7, "contacts", "list"],
-        ["server", 7, "contacts", "detail", "9"],
-      ]),
-    );
+    expect(fresh).toEqual([]);
   });
 });
 
 describe("useDeleteConversation", () => {
-  it("marks everything about conversations stale, plus the trash count, contact details and storage", async () => {
+  it("marks the conversation, the Trash, storage and the account's counts stale", async () => {
     deleteConversation.mockResolvedValue(undefined);
-    const invalidate = vi.spyOn(client, "invalidateQueries");
-
     const { result } = renderHook(() => useDeleteConversation(), { wrapper });
-    await result.current.mutateAsync(42);
+
+    // The account's message count and storage, and each identity's count,
+    // kept their old figures when only the conversation entries were marked.
+    const fresh = await freshAfter(
+      [
+        keys.conversations.all,
+        keys.trash.all,
+        keys.contacts.details,
+        keys.storage.all,
+        ...accountCounts,
+      ],
+      () => result.current.mutateAsync(42),
+    );
 
     expect(deleteConversation).toHaveBeenCalledWith(42, expect.anything());
-    // The whole `conversations` prefix, not only the list: the row is gone,
-    // so its detail, message pages and Sources panel all describe a 404 now.
-    expect(invalidatedKeys(invalidate)).toEqual(
-      expect.arrayContaining([
-        ["server", 7, "conversations"],
-        ["server", 7, "trash"],
-        ["server", 7, "contacts", "detail"],
-        ["server", 7, "storage"],
-      ]),
-    );
-  });
-
-  it("leaves the contacts list alone", async () => {
-    deleteConversation.mockResolvedValue(undefined);
-    const invalidate = vi.spyOn(client, "invalidateQueries");
-
-    const { result } = renderHook(() => useDeleteConversation(), { wrapper });
-    await result.current.mutateAsync(42);
-
-    const keys = invalidatedKeys(invalidate);
-    expect(keys).not.toContainEqual(["server", 7, "contacts", "list"]);
-    expect(keys).not.toContainEqual(["server", 7, "contacts"]);
+    expect(fresh).toEqual([]);
   });
 });
 
 describe("useDeleteContact", () => {
-  it("marks the contact's list and detail, every conversation, and the contact groups stale", async () => {
+  it("marks the contact, every conversation that named it, and the Contact Groups stale", async () => {
     deleteContact.mockResolvedValue(undefined);
-    const invalidate = vi.spyOn(client, "invalidateQueries");
-
     const { result } = renderHook(() => useDeleteContact(), { wrapper });
-    await result.current.mutateAsync(9);
+
+    const fresh = await freshAfter(
+      [
+        keys.contacts.lists,
+        keys.contacts.detail(9),
+        keys.conversations.all,
+        keys.contactGroups.all,
+      ],
+      () => result.current.mutateAsync(9),
+    );
 
     expect(deleteContact).toHaveBeenCalledWith(9, expect.anything());
-    // Conversations are marked because every one the person was in now
-    // shows their handle in place of the name.
-    expect(invalidatedKeys(invalidate)).toEqual(
-      expect.arrayContaining([
-        ["server", 7, "contacts", "list"],
-        ["server", 7, "contacts", "detail", "9"],
-        ["server", 7, "conversations"],
-        ["server", 7, "contact-groups"],
-      ]),
-    );
-  });
-
-  it("leaves the trash count and storage alone: no conversation or file is deleted with a contact", async () => {
-    deleteContact.mockResolvedValue(undefined);
-    const invalidate = vi.spyOn(client, "invalidateQueries");
-
-    const { result } = renderHook(() => useDeleteContact(), { wrapper });
-    await result.current.mutateAsync(9);
-
-    const keys = invalidatedKeys(invalidate);
-    expect(keys).not.toContainEqual(["server", 7, "trash"]);
-    expect(keys).not.toContainEqual(["server", 7, "storage"]);
+    expect(fresh).toEqual([]);
   });
 });
 
 describe("useEmptyTrash", () => {
-  it("marks the union of what deleting a conversation and deleting a contact mark", async () => {
+  it("marks what deleting a conversation and a contact mark, and the account's counts, stale", async () => {
     emptyTrash.mockResolvedValue(undefined);
-    const invalidate = vi.spyOn(client, "invalidateQueries");
-
     const { result } = renderHook(() => useEmptyTrash(), { wrapper });
-    await result.current.mutateAsync();
+
+    const fresh = await freshAfter(
+      [
+        keys.conversations.all,
+        keys.contacts.all,
+        keys.trash.all,
+        keys.contactGroups.all,
+        keys.storage.all,
+        ...accountCounts,
+      ],
+      () => result.current.mutateAsync(),
+    );
 
     expect(emptyTrash).toHaveBeenCalledTimes(1);
-    expect(invalidatedKeys(invalidate)).toEqual(
-      expect.arrayContaining([
-        ["server", 7, "conversations"],
-        ["server", 7, "contacts"],
-        ["server", 7, "trash"],
-        ["server", 7, "contact-groups"],
-        ["server", 7, "storage"],
-      ]),
-    );
+    expect(fresh).toEqual([]);
   });
 });

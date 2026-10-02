@@ -373,7 +373,7 @@ export default function ImportScreen() {
       setResume(NO_RESUME);
       // The run is gone, or the server still has it; either way the badge
       // asks again rather than keep saying "waiting".
-      void cache.invalidate(keys.imports.running);
+      cache.invalidateAccount();
     }
   }
 
@@ -466,7 +466,7 @@ export default function ImportScreen() {
         // Best effort -- if the server is unreachable the create call below
         // surfaces its own error the same as any other failed import start.
       }
-      void cache.invalidate(keys.imports.running);
+      cache.invalidateAccount();
       setResume(NO_RESUME);
       await startImport(restoredForm);
     } finally {

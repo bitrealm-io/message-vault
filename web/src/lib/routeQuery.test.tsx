@@ -12,6 +12,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { freshEntries, seedEntries } from "../test/staleEntries";
 import type { OffsetPage } from "./routeQuery";
 import { useRouteCache, useRoutePagedList, useRouteQuery } from "./routeQuery";
 
@@ -309,13 +310,15 @@ describe("useRouteCache", () => {
     });
   });
 
-  it("marks several prefixes stale in one call", async () => {
-    const invalidate = vi.spyOn(client, "invalidateQueries");
+  it("marks every entry of the logged-in account stale, and no other account's", async () => {
+    const entries = [["contacts", "list", ""], ["account-profile"], ["api-tokens"]];
+    seedEntries(client, 7, entries);
+    seedEntries(client, 8, entries);
     const { result } = renderHook(() => useRouteCache(), { wrapper });
-    await result.current.invalidate(["message-tags"], ["conversations"]);
-    expect(invalidate.mock.calls.map((call) => call[0]?.queryKey)).toEqual([
-      ["server", 7, "message-tags"],
-      ["server", 7, "conversations"],
-    ]);
+
+    result.current.invalidateAccount();
+
+    expect(freshEntries(client, 7, entries)).toEqual([]);
+    expect(freshEntries(client, 8, entries)).toEqual(entries);
   });
 });

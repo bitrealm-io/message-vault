@@ -21,14 +21,14 @@ export type ManagedAccountChanges = Partial<
 const fetchAccounts = (signal: AbortSignal) =>
   listAccounts({ signal }).then((res) => res.items ?? []);
 
-/** Every write but a password change shows on the account list. */
+/** A deletion from one account changes the account list, the Dashboard and the Demo Account. */
 function useOwnerWrite<V>(
   write: (vars: V) => Promise<unknown>,
 ): UseMutationResult<unknown, Error, V> {
   const cache = useRouteCache();
   return useMutation<unknown, Error, V>({
     mutationFn: write,
-    onSettled: () => cache.invalidate(keys.ownerAccounts.all),
+    onSettled: () => cache.invalidateAccount(),
   });
 }
 
@@ -47,8 +47,8 @@ export function useUpdateAccount(): UseMutationResult<
     mutationFn: ({ id, changes }) => updateAccount(id, changes),
     onSuccess: (account) => {
       cache.set(keys.ownerAccounts.member(account.account_id), account);
-      void cache.invalidate(keys.ownerAccounts.all);
     },
+    onSettled: () => cache.invalidateAccount(),
   });
 }
 

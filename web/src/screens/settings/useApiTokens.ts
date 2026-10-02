@@ -12,12 +12,12 @@ const fetchTokens = (signal: AbortSignal) =>
 type NewToken = Parameters<typeof createApiToken>[0];
 type CreatedToken = Awaited<ReturnType<typeof createApiToken>>;
 
-/** Every token write marks the list stale, and the list refetches itself. */
+/** Every token write marks the account's cache stale, and the list refetches itself. */
 function useApiTokenWrite<T, V>(write: (vars: V) => Promise<T>): UseMutationResult<T, Error, V> {
   const cache = useRouteCache();
   return useMutation<T, Error, V>({
     mutationFn: write,
-    onSettled: () => cache.invalidate(keys.apiTokens.all),
+    onSettled: () => cache.invalidateAccount(),
   });
 }
 

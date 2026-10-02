@@ -35,8 +35,8 @@ export function useSettingsAccount(managedAccountId?: number): {
  * is about: the logged-in one, or one the owner opened.
  *
  * The server answers with the account as it now stands, which goes into the
- * entry the screen reads. The owner's list shows an account's name, so a
- * managed change refreshes it.
+ * entry the screen reads, and the account's cache is marked stale once the
+ * write settles.
  */
 export function useUpdateSettingsProfile(
   managedAccountId?: number,
@@ -47,8 +47,8 @@ export function useUpdateSettingsProfile(
     mutationFn: (body) => updateAccount(managedAccountId ?? 0, body),
     onSuccess: (profile) => {
       cache.set(keys.ownerAccounts.member(profile.account_id), profile);
-      void cache.invalidate(keys.ownerAccounts.all);
     },
+    onSettled: () => cache.invalidateAccount(),
   });
   return managedAccountId === undefined ? own : managed;
 }

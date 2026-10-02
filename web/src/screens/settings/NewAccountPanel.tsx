@@ -39,7 +39,7 @@ export function NewAccountPanel() {
       // redrawing when the fetch lands. The session token is not the row's.
       const { token: _token, ...account } = created;
       cache.set(keys.ownerAccounts.member(account.account_id), account);
-      await cache.invalidate(keys.ownerAccounts.all);
+      cache.invalidateAccount();
       // `replace`, so Back from the account's Settings is User Accounts, not this form.
       navigate(`/owner/accounts/${created.account_id}`, { replace: true });
     },

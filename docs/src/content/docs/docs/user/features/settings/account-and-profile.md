@@ -46,12 +46,13 @@ A password has no minimum length.
 The longest password the server accepts is 1,024 bytes.
 
 **Reset password** clears the password, so the account then logs in with an empty one.
-The screen confirms with "Password reset. This account now has no password."
+The screen confirms with "Password reset. This account now has no password, and its API Tokens were revoked."
+A changed password is confirmed with "Password changed. This account's API Tokens were revoked."
 
 Changing or resetting the password does two more things:
 
 - It replaces the account's Session. The screen that made the change stays logged in, and any other browser or desktop app logged in to the account must log in again.
-- It deletes every API Token the account holds, so each program using one needs a new token.
+- It deletes every API Token the account holds, so each program using one needs a new token. The API Tokens table on the same tab empties at once.
 
 The Owner's form differs in three ways, because the Owner's account reaches every other account.
 It asks for **Current password** first.

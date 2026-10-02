@@ -49,8 +49,6 @@ export const messageTags = createNameCollection({
     updateMembers: updateMessageTagMembers,
   },
   key: keys.messageTags.all,
-  // Conversation rows and the Trash count show tag names.
-  invalidates: [keys.conversations.all, keys.trash.all],
   chips: [{ key: keys.conversations.lists, field: "tags", shape: "pages" }],
   label: "tag",
   forName: forTag,

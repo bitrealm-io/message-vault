@@ -343,8 +343,8 @@ describe("ImportScreen entering Import", () => {
   });
 
   it("also deletes the staging folder when discarding a this-device session", async () => {
-    // W7: declineGate already deletes the staging folder on decline
-    // (decision 16) -- a panel discard is the same operation reached
+    // W7: cancelRun already deletes the staging folder when a review is
+    // cancelled (decision 16) -- a panel discard is the same operation reached
     // through a different button, and used to only call
     // discardImportSession, orphaning a potentially multi-GB folder.
     const user = userEvent.setup();

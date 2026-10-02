@@ -79,7 +79,7 @@ function ToolStatusRow({ name, path }: { name: "ffmpeg" | "ffprobe"; path: strin
   );
 }
 
-/** This app's own Build, shown to every account, in the browser and the desktop app alike. */
+/** This app's own Build, shown on the System tab in the browser and the desktop app alike. */
 function AppVersion() {
   return (
     <div>

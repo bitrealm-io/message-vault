@@ -8,8 +8,8 @@
  * the code they covered — that is TanStack Query's job now, and
  * `routeQuery.test.tsx` covers the part of it that is ours. What remains is
  * this module's own behaviour: the shape it reads out of a response, the ids it
- * addresses mutations by, and putting a mutation's answer where the sidebar
- * reads it.
+ * addresses mutations by, and re-reading the list the sidebar shows after a
+ * mutation.
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";

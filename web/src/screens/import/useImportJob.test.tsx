@@ -120,7 +120,7 @@ vi.mock("../../lib/importSession", async (importOriginal) => {
 const { useImportJob, parseStoredStagingSummary, resetImportRun } = await import("./useImportJob");
 
 /**
- * `runMock` stands in for `useTauriJob().run`, which always calls the
+ * `runMock` stands in for `awaitTauriJob`, which always calls the
  * invoke function it is given before resolving. Tests that assert on
  * `invokeExtract`/`invokeTranscodeStaging`/`invokePush` args need that same
  * behaviour, so every canned result below goes through this instead of
@@ -907,7 +907,7 @@ describe("useImportJob wiring", () => {
     // The first summarize call is `startImport`'s own, on the way to Gate 1
     // — that one must succeed so this pins the *media pass's* recompute
     // failure specifically (W8 gave the Gate-1-bound call its own, milder
-    // failure path: see the "does not strand the folder" test below).
+    // failure path: see the "does not strand the folder" test above).
     invokeSummarizeStagingMock.mockResolvedValueOnce(stagingSummary());
     invokeSummarizeStagingMock.mockRejectedValueOnce(new Error("disk full"));
     const { result } = renderHook(() => useImportJob());
@@ -1079,7 +1079,7 @@ describe("useImportJob wiring", () => {
     expect(stageCall?.[0]).toBe(1);
   });
 
-  it("assembles a 4-row step list in convert mode, stopping at the gate with the media row still pending", async () => {
+  it("assembles a 3-row step list in convert mode, stopping at the gate with the media row still pending", async () => {
     // Pins the mode-dependent assembly stepsFor/stepIndexFor exist for: this
     // hook does not run the media pass until Gate 1 is approved, so the row
     // must sit pending, not silently vanish or get marked done.
@@ -1114,7 +1114,7 @@ describe("useImportJob wiring", () => {
   it("says the staging row was Copied under convert, since extract only stages originals now", async () => {
     // Important 5: extract stages originals under convert/compress too
     // (ruling 3) — the staging row must say what extract actually did, not
-    // what the user ultimately asked for. The media row (index 2) still
+    // what the user ultimately asked for. The media row (index 1) still
     // tells the convert/compress story once the pass itself runs.
     resolveImportStagingDirMock.mockResolvedValue("/tmp/staging");
     const { result } = renderHook(() => useImportJob());

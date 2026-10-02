@@ -14,8 +14,9 @@ type MessagesResult = { items: Message[]; total: number };
 
 /**
  * Calendar years covered by a conversation's first and last message instants,
- * read in the account's `zone`: the same rule `date:2024` uses, so every chip
- * names a year that has messages in it.
+ * read in the account's `zone`: the same rule `date:2024` uses, so the first
+ * and last chips name years that have messages in them. A year between them
+ * gets a chip whether or not it has messages.
  */
 export function conversationYears(
   startIso: string | null | undefined,
@@ -33,7 +34,7 @@ export function conversationYears(
   return years;
 }
 
-/** Short label for a backup source shown in the message footer. */
+/** Short label for a backup source shown in the conversation header. */
 export function displaySourceLabel(source: string): string {
   const token = source.trim().toLowerCase();
   if (token === "sms-backup-restore") return "SMS/MMS";

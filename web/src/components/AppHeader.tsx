@@ -21,7 +21,7 @@ export type HeaderSearchTarget = "accounts" | "contacts" | "messages" | "trash";
  * Every target uses the same bar; only the wording, the recents bucket, the
  * advanced form, and the list whose words it suggests differ. Trash sends one
  * query to the conversations list and the contacts list at once, so its
- * advanced form offers only the words both accept (`trash` mode); the
+ * advanced form offers only the words both accept (`contacts` mode); the
  * TrashScreen explains any typed word that one of the two lists refuses.
  */
 const SEARCH_TARGETS: Record<

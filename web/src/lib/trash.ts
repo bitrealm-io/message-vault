@@ -31,6 +31,8 @@ function useConversationTrashWrite(
   return useMutation<void, Error, number>({
     mutationFn: write,
     // - conversations.lists: the row leaves or rejoins the (non-)trashed list.
+    // - conversations.finds: a find runs on GET /v1/messages, whose list
+    //   leaves out messages in trashed conversations.
     // - trash.all: the Trash screen's count is `listConversations` under its
     //   own key, not a child of conversations.lists, so it needs naming here
     //   too.
@@ -39,7 +41,7 @@ function useConversationTrashWrite(
     //   `crates/server/server/src/db/participant_names.rs` and
     //   `get_contact_detail`'s comment), and the 204 response names no
     //   participant to narrow this to, so every open detail is marked.
-    // Nothing under conversations beyond the list needs marking: GET
+    // Nothing else under conversations needs marking: GET
     // /v1/conversations/{id} answers the same ConversationSummary whether or
     // not it is trashed ("trash is a property the list applies, not a gate
     // on reading"), and trashing a conversation does not touch its own

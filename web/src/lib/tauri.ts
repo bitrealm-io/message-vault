@@ -133,7 +133,7 @@ export async function invokeSummarizeStaging(config: StagingConfig): Promise<Sta
 /**
  * Run the convert/compress pass over a staged folder, after the first gate
  * approves it. Reports through the `extract:*` events like every other long
- * job, so `runTauriJob` drives it exactly as it drives extract and push.
+ * job, so `awaitTauriJob` drives it exactly as it drives extract and push.
  */
 export async function invokeTranscodeStaging(config: StagingConfig): Promise<void> {
   const stagingRoot = await resolveStagingRoot();
@@ -202,7 +202,7 @@ export interface PushFinishedReport {
 
 /**
  * What `transcode_staging`'s job did, from its `extract:finished` payload.
- * `TranscodeReport` (`ir-format`) has no serde derive: `transcode_staging`
+ * `TranscodeReport` (`message-staging`) has no serde derive: `transcode_staging`
  * (`src-tauri/src/commands/staging.rs`) hand-builds the payload with these
  * fields flat at the top level, alongside `summary` — not nested under a
  * `report` key — so this mirrors the wire shape exactly, snake_case included.
@@ -520,7 +520,7 @@ export function parseTauriJobResult(summary: string): TauriJobResult {
       };
     }
   } catch {
-    // Extract jobs send a plain sentence, not JSON.
+    // Format and pull jobs send a plain sentence, not JSON.
   }
   return { summary };
 }

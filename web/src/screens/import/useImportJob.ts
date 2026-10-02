@@ -245,7 +245,6 @@ export type ImportJobFormValues = {
   assetMaxBytes?: number;
 };
 
-/** Pick up a session whose staging folder is already complete. */
 /** A session whose copy was interrupted, and the folder it was writing into. */
 export type ResumeWrite = {
   sessionId: number;
@@ -257,6 +256,7 @@ export type ResumeWrite = {
   identities?: string[] | null;
 };
 
+/** Pick up a session whose staging folder is already complete. */
 export type ResumePush = {
   sessionId: number;
   stagingDir: string;
@@ -1299,8 +1299,8 @@ export function useImportJob() {
    *
    * The folder is the truth. Every landing recomputes the summary fresh
    * from the staging folder; the run's stored `summary` is read only as the
-   * approved baseline for the Media Review's delta and the Media stage's
-   * own bookkeeping, never as something restored and shown directly.
+   * approved plan, for the Staging row on the Media Review and the Media
+   * stage's own bookkeeping.
    *
    * A recompute failing here is a transient read of the staging folder, not
    * a run that failed: only an explicit cancel ends a waiting run, so this

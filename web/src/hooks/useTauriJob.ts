@@ -13,8 +13,8 @@ export type TauriJobRunCallbacks = {
  * Shared start/cancel/log state for long-running desktop jobs
  * (extract, push, pull, and similar).
  *
- * Use `start` when the UI only needs a log (Export).
- * Use `run` when the caller must wait for a result (Import extract then push).
+ * Export and Settings → Convert use `run`, which waits for the job's result.
+ * `start` only collects a log; no screen calls it.
  */
 export function useTauriJob(options?: {
   onError?: (msg: string) => void;

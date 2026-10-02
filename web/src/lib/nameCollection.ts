@@ -18,7 +18,7 @@ import {
  * hold names. The lookup from one to the other lives here and nowhere else:
  * the id comes from the cached list, or from the server once when the cached
  * list does not hold the name, and a name the server does not know is an error
- * before any request is sent. See `docs/architecture/http-api.md`, Identifiers.
+ * before any write is sent. See `docs/architecture/http-api.md`, Identifiers.
  */
 
 /** One set as the server answers it. */

@@ -337,7 +337,7 @@ function buildFixtureLines(): string[] {
   // Tagged "conversations", not "messages": the Advanced Search messages form
   // and the messages-mode search bar both run on the Conversations list.
   // AppHeader gives that bar `list: "conversations"`, and AppLayout's
-  // handleSearch sends what it builds to `/?q=`, which conversations_api.rs
+  // handleSearch sends what it builds to `/?q=`, which db/conversations.rs
   // reads as ListKind::Conversations. Every word this form emits today is
   // valid on both lists, so tagging it "messages" would pass while proving
   // nothing; add a Messages-only word to the form (`attachments:>0`,

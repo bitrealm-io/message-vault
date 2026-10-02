@@ -183,9 +183,9 @@ describe("InfiniteOffsetList asking for more", () => {
   // Only the sectioned path is exercised here. The virtualized path builds its
   // range from `rangeFromScroll`, and React Aria's Virtualizer does not lay
   // out or forward scroll in jsdom, so a test of it would assert that the
-  // harness is wired rather than that the list asks for more. The contact and
-  // conversation lists both pass `getSectionLetter`, so the path covered above
-  // is the one that runs.
+  // harness is wired rather than that the list asks for more. Only the contact
+  // list passes `getSectionLetter`, and only while no filter is active; the
+  // conversation list and a filtered contact list run the virtualized path.
 });
 
 describe("InfiniteOffsetList choosing a row", () => {

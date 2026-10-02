@@ -151,7 +151,7 @@ describe("ContactList", () => {
     expect(exportMock).toHaveBeenLastCalledWith({ ids: [1] });
   });
 
-  it("checks every contact between a shift-click and the furthest checked contact", async () => {
+  it("checks every contact between a shift-click and the last clicked contact", async () => {
     const names = ["Alice", "Bob", "Carol", "Dave", "Erin"];
     listContactsMock.mockResolvedValue({
       items: names.map((name, i) => ({

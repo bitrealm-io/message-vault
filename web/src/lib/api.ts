@@ -57,8 +57,8 @@ export type Problem = {
 
 /**
  * A raw-text fallback longer than this is someone else's page, not a message
- * — clamped so it cannot overrun the fixed-height auth card, which never
- * scrolls.
+ * — clamped so it cannot stretch the auth card, which grows to fit its
+ * content and never scrolls.
  */
 const RAW_BODY_FALLBACK_LIMIT = 200;
 

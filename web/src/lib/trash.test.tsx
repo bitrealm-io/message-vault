@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 /**
- * What each of the four trash mutations marks stale — not whether the server
+ * What each trash mutation marks stale — not whether the server
  * route was called, which proves nothing about what the app does next. Each
  * case asserts the exact set of query-key prefixes `invalidateQueries` was
  * called with, so a prefix that should stay fresh (a false positive here

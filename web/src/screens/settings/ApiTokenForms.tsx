@@ -18,7 +18,7 @@ function PermissionCheckbox({
   allowed: boolean;
   children: string;
 }) {
-  // An admin can now switch an account's own permissions off, so `checked`
+  // The owner can switch an account's own permissions off, so `checked`
   // can arrive `true` for a permission the account no longer holds. Force it
   // unchecked — both the display and the value the form would submit —
   // rather than showing it checked-but-disabled, which reads as a token

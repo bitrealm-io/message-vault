@@ -3,7 +3,7 @@
 //! These back the two reviews a staged import stops at (Decision 16):
 //! `summarize_staging` recomputes what a staged folder holds so the first
 //! review can show it, `transcode_staging` runs the convert/compress pass the
-//! exporter deferred (see `extract::exporter_media_mode`), and
+//! exporter deferred (see `extract::exporter_attachment_media`), and
 //! `delete_staging` removes the staging folder — when a review is closed
 //! without approving, when a resumable run is discarded, and when an import
 //! finishes successfully, since the server then holds everything the folder
@@ -45,7 +45,7 @@ use super::paths::{resolve_openable_path, resolve_staging_root};
 use crate::state::AppState;
 
 /// Form fields shared by `summarize_staging` and `transcode_staging` — the
-/// same media fields the Extract form parses, addressed at an already-staged
+/// same media fields `extract` parses, addressed at an already-staged
 /// folder instead of a fresh backup.
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -57,11 +57,11 @@ pub struct StagingArgs {
     pub staging_root: String,
     /// Attachment handling choice: `copy`, `convert`, `compress`, or `skip`.
     pub attachment_media: Option<String>,
-    /// Video/image size cap for convert and compress: `720p`, `1080p`, or `4k`.
+    /// Long-edge cap for compressed video: `720p`, `1080p`, or `4k`.
     pub media_max_resolution: Option<String>,
     /// Frame-rate cap for compressed video, for example `30`.
     pub media_max_fps: Option<String>,
-    /// Smallest media file size that still counts as an attachment, for example `20M`.
+    /// Size below which a video is not compressed, for example `20M`.
     pub media_min_size: Option<String>,
     /// The server's attachment size limit, in bytes, as the app read it from
     /// `GET /v1/server` when the Import Run was created. The Staging Review's
@@ -116,7 +116,7 @@ fn resolve_staging_child(
 }
 
 /// Build the [`TranscodeOptions`] a summary or media pass runs with, from the
-/// same fields the Extract form parses.
+/// same fields `extract` parses.
 ///
 /// # Errors
 ///

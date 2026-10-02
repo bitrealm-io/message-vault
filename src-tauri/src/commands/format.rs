@@ -56,7 +56,7 @@ pub fn format(
             log: Some(LogSink::new(move |line: &str| {
                 events::emit(&log_app, events::LOG, line.to_string());
             })),
-            // The Format screen shows a log, not a progress bar.
+            // Settings → Convert shows a log, not a progress bar.
             progress: None,
             output_format: fmt,
             resume: false,

@@ -1,5 +1,5 @@
 //! Shared scaffolding for the background job commands (`extract`, `format`,
-//! `pull`, `push`).
+//! `pull`, `push`, `transcode_staging`).
 //!
 //! Every job command clears a leftover cancel flag, shares a clone of the
 //! flag with its worker thread, spawns the worker, and reports a failed or

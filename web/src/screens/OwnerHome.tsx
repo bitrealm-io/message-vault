@@ -45,8 +45,8 @@ function sectionLinkClass(active: boolean): string {
  * a search bar and the account button, over a side panel and a content pane.
  * What fills it is the owner's own. The owner has no conversations, no
  * contacts, no import, no export and no trash, so the side panel lists
- * Dashboard, Settings, User Accounts, Activity and Logs, and the search bar
- * filters the accounts table. Dashboard shows what the whole database holds.
+ * Dashboard, Server Settings, User Accounts, Activity and Logs, and the search
+ * bar filters the accounts table. Dashboard shows what the whole database holds.
  * Activity and Logs show only their name: nothing is built behind them yet.
  *
  * `/owner/accounts/{id}` is one account's Settings, the screen its holder

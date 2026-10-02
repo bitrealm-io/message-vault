@@ -240,7 +240,7 @@ export default function LoginScreen() {
   const settingsStatus: ServerConnection =
     tested ?? (trimmedDraft === address ? state : "untested");
 
-  // Change server address applies an address. An empty field names no address,
+  // Use this address applies an address. An empty field names no address,
   // and the one already connected is not a change: applying it would drop the
   // card back to "connecting", re-probe the same server, and land where it
   // started. Either way there is nothing to apply, so the button is disabled
@@ -323,7 +323,7 @@ export default function LoginScreen() {
                 // Login is the one every claimed Message Crate has, and it is shown
                 // disabled: a placeholder here would read as "still loading"
                 // for as long as the server stays down. The way on is Change
-                // server settings, below.
+                // server address, below.
                 <LocalAuthTabs serverUrl={address} serverState="closed" disabled />
               ) : (
                 <FormSkeleton />

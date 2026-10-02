@@ -1,7 +1,7 @@
 /** Shared theme-aware Tailwind class strings using the tokens from theme.css. */
 
 /**
- * The card itself never scrolls or resizes — but at 560px tall, a viewport
+ * The card itself never scrolls — but at 608px tall or more, a viewport
  * shorter than that (phone in landscape, a small desktop window) cannot fit a
  * vertically-centered flex container without its top overflowing off-screen
  * and unreachable. `overflow-y-auto` keeps the card centered on a normal

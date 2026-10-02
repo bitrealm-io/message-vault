@@ -113,9 +113,9 @@ pub fn push(
     Ok(())
 }
 
-/// The push settings the desktop app uses. They differ from the command-line
-/// defaults because desktop imports are many small files over a local
-/// network; each number says why.
+/// The push settings the desktop app uses. They differ from the
+/// `message_crate_push::DEFAULT_*` constants because desktop imports are many
+/// small files over a local network; each number says why.
 fn push_config(args: PushArgs) -> PushConfig {
     PushConfig {
         input: PathBuf::from(&args.input_dir),
@@ -132,13 +132,13 @@ fn push_config(args: PushArgs) -> PushConfig {
         max_retries: 3,
         // Pack until message_crate_push::MAX_IMPORT_BODY_BYTES (64 MiB); do not stop at a message count.
         batch_size: message_crate_push::NO_MESSAGE_COUNT_LIMIT,
-        // Above the CLI default (8): desktop imports are often many small files.
+        // Above DEFAULT_ASSET_UPLOAD_WORKERS (8): desktop imports are often many small files.
         asset_upload_workers: 16,
-        // Above the CLI default (3): hide more hashing behind in-flight imports.
+        // Above DEFAULT_PREPARE_AHEAD (3): hide more hashing behind in-flight imports.
         prepare_ahead: 8,
-        // Above the CLI default (2): more of the prepare-ahead queue runs at once.
+        // Above DEFAULT_PREPARE_WORKERS (2): more of the prepare-ahead queue runs at once.
         prepare_workers: 4,
-        // Below the CLI default (message_crate_push::MAX_PROXY_BODY_BYTES, 90 MiB):
+        // Below message_crate_push::MAX_PROXY_BODY_BYTES (90 MiB):
         // desktop uploads switch to multipart sooner so a large attachment
         // moves in small parts instead of one long PUT.
         asset_multipart_threshold: 5 * 1024 * 1024,

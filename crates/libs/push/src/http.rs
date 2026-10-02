@@ -129,12 +129,16 @@ impl Session {
 
     /// Whether the server already holds the attachment with this digest:
     /// `true` for a 2xx, `false` for a 404. A HEAD reply carries no body, so
-    /// the status is the whole answer.
+    /// the status is the whole answer: the problem type the server chose
+    /// cannot be read, and each error message names every cause the
+    /// reference lists for its status.
     ///
     /// # Errors
     ///
-    /// Returns an error for a bad key (401), a key the server refuses for
-    /// this route (403), or any other failure.
+    /// Returns an error when the server does not accept the credential
+    /// (`401 Unauthorized`: unknown or expired), refuses the account
+    /// (`403 Forbidden`: disabled, or neither import nor export), or the
+    /// request fails in any other way.
     pub(crate) fn head_asset(&self, source: &str, sha256: &str) -> Result<bool> {
         let url = self.asset_url(source, &[sha256])?;
         let response = self
@@ -146,9 +150,21 @@ impl Session {
         let status = response.status();
         match status.as_u16() {
             404 => return Ok(false),
-            401 => return Err(HttpError::new(401, "invalid API key").into()),
+            401 => {
+                return Err(HttpError::new(
+                    401,
+                    "The server did not accept this credential (401 Unauthorized): \
+                     it is unknown or has expired.",
+                )
+                .into());
+            }
             403 => {
-                return Err(HttpError::new(403, "username does not match API key").into());
+                return Err(HttpError::new(
+                    403,
+                    "The server refused this account access to attachments (403 Forbidden): \
+                     the account is disabled, or it may neither import nor export.",
+                )
+                .into());
             }
             _ => {}
         }
@@ -491,6 +507,56 @@ impl<'a> MultipartUpload<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use httpmock::prelude::*;
+    use message_crate_http::AuthInfo;
+
+    const DIGEST: &str = "aa11";
+
+    fn session(url: String) -> Session {
+        Session {
+            http: HttpSession::new().unwrap(),
+            url,
+            key: "mc-user-test".into(),
+            username: "alice".into(),
+            auth: AuthInfo {
+                account_id: 1,
+                username: Some("alice".into()),
+            },
+        }
+    }
+
+    /// The message `head_asset` gives when the server answers `HEAD` with `status`.
+    fn head_asset_error(status: u16) -> String {
+        let server = MockServer::start();
+        let _head = server.mock(|when, then| {
+            when.method("HEAD").path(format!("/v1/assets/{DIGEST}"));
+            then.status(status);
+        });
+        session(server.base_url())
+            .head_asset("sms-backup-restore", DIGEST)
+            .unwrap_err()
+            .to_string()
+    }
+
+    #[test]
+    fn head_asset_403_names_the_documented_causes_and_no_username() {
+        let message = head_asset_error(403);
+        assert!(message.contains("403 Forbidden"), "got {message}");
+        assert!(message.contains("disabled"), "got {message}");
+        assert!(
+            message.contains("neither import nor export"),
+            "got {message}"
+        );
+        assert!(!message.contains("username"), "got {message}");
+        assert!(!message.contains("API key"), "got {message}");
+    }
+
+    #[test]
+    fn head_asset_401_does_not_name_an_api_key() {
+        let message = head_asset_error(401);
+        assert!(message.contains("401 Unauthorized"), "got {message}");
+        assert!(!message.contains("API key"), "got {message}");
+    }
 
     #[test]
     fn payload_too_large_mentions_64_mib_import_chunks() {

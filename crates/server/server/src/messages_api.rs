@@ -78,8 +78,8 @@ pub(crate) async fn list_messages(
         filter.where_sql(),
         filter.params(),
         &list.order,
-        list.page.limit as u32,
-        list.page.offset as u32,
+        list.page.limit,
+        list.page.offset,
     )
     .await?;
     Ok(Json(Page {

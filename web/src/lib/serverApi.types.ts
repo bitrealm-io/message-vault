@@ -660,7 +660,7 @@ export interface paths {
         };
         /**
          * A conversation's messages, ascending by timestamp then `sort_order`.
-         * @description The read path a screen uses to open a conversation: no search query to compose, just the conversation id.
+         * @description The read path a screen uses to open a conversation: no search query to compose, just the conversation id. `offset` has no cap: the conversation page reads a thread by stepping it forward, and every message must be reachable.
          */
         get: operations["list_conversation_messages"];
         put?: never;
@@ -6941,7 +6941,7 @@ export interface operations {
             query?: {
                 /** @description Page size, default 40, max 500 */
                 limit?: number;
-                /** @description Page offset, max 50000 */
+                /** @description Page offset, no maximum */
                 offset?: number;
                 /** @description `date` or `-date`. Default `date`, oldest first. */
                 sort?: string;

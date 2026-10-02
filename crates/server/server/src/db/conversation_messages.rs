@@ -114,8 +114,8 @@ pub async fn load_messages(
     where_sql: &str,
     params: &[SqlParam],
     order: &[SortKey<MessageSort>],
-    limit: u32,
-    offset: u32,
+    limit: usize,
+    offset: usize,
 ) -> Result<Vec<Message>, ApiError> {
     let direction = order
         .iter()
@@ -149,8 +149,8 @@ pub(crate) async fn load_messages_from(
     where_sql: &str,
     params: &[SqlParam],
     order_by: &str,
-    limit: u32,
-    offset: u32,
+    limit: usize,
+    offset: usize,
 ) -> Result<Vec<Message>, ApiError> {
     let sql = format!(
         "SELECT m.id, m.conversation_id, m.source, m.service, m.guid, m.timestamp,
@@ -163,8 +163,10 @@ pub(crate) async fn load_messages_from(
          ORDER BY {order_by} LIMIT ? OFFSET ?"
     );
     let mut params = params.to_vec();
-    params.push(SqlParam::Int(limit as i64));
-    params.push(SqlParam::Int(offset as i64));
+    // An `offset` too large for SQLite's `i64` is past the end of any table,
+    // so it reads as the largest one rather than wrapping to the first page.
+    params.push(SqlParam::Int(i64::try_from(limit).unwrap_or(i64::MAX)));
+    params.push(SqlParam::Int(i64::try_from(offset).unwrap_or(i64::MAX)));
 
     let rows = (&mut *conn).fetch_all(bind_all(&sql, &params)).await?;
     let page_rows: Vec<RawRow> = rows
@@ -425,15 +427,7 @@ pub async fn get_conversation_messages(
         .await?;
     let total = total.max(0) as u64;
 
-    let items = load_messages(
-        conn,
-        &where_sql,
-        &params,
-        order,
-        limit as u32,
-        offset as u32,
-    )
-    .await?;
+    let items = load_messages(conn, &where_sql, &params, order, limit, offset).await?;
 
     Ok(Some(Page {
         items,

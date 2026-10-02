@@ -16,7 +16,7 @@ export default function MessageAttachments({
   return (
     <div>
       {message.attachments.map((att, i) =>
-        !att.missing_reason && shownMimeType(att)?.startsWith("video/") ? (
+        att.sha256 && !att.missing_reason && shownMimeType(att)?.startsWith("video/") ? (
           <VideoPlayer key={att.sha256 ?? att.path ?? i} attachment={att} source={message.source} />
         ) : (
           <AttachmentThumbnail

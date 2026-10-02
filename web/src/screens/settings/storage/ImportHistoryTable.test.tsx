@@ -10,6 +10,7 @@ const getAccountProfile = vi.hoisted(() => vi.fn());
 const getAccountStorage = vi.hoisted(() => vi.fn());
 const listAccountImports = vi.hoisted(() => vi.fn());
 const listAccountExports = vi.hoisted(() => vi.fn());
+const getAccountImport = vi.hoisted(() => vi.fn());
 
 vi.mock("../../../lib/auth", () => ({
   useAuth: () => ({ accountId: 7 }),
@@ -21,6 +22,7 @@ vi.mock("../../../lib/serverApi", async (importOriginal) => ({
   getAccountStorage: (...a: unknown[]) => getAccountStorage(...a),
   listAccountImports: (...a: unknown[]) => listAccountImports(...a),
   listAccountExports: (...a: unknown[]) => listAccountExports(...a),
+  getAccountImport: (...a: unknown[]) => getAccountImport(...a),
 }));
 
 /** One Import Run, told apart on screen by its source. */
@@ -90,5 +92,30 @@ describe("Import history", () => {
     await user.click(next());
     expect(await section.findByText("Page 3 of 3")).toBeInTheDocument();
     await waitFor(() => expect(next()).toBeDisabled());
+  });
+
+  it("says a run that has not finished has not finished, in place of a finish time", async () => {
+    const running = {
+      ...anImport(1),
+      status: "running",
+      stage: "awaiting_gate_1",
+      started_at: "2024-01-01T00:00:00Z",
+      finished_at: null,
+      summary: null,
+      issues: [],
+    };
+    listAccountImports.mockResolvedValue({ items: [running], total: 1, limit: 50, offset: 0 });
+    getAccountImport.mockResolvedValue(running);
+    const user = userEvent.setup({ delay: null });
+    renderWithProviders(<StorageSection />);
+    const heading = await screen.findByRole("heading", { name: "Import history" });
+    const section = within(heading.parentElement as HTMLElement);
+    await user.click(await section.findByRole("button", { expanded: false }));
+    const finished = await screen.findByText("Finished");
+    const started = screen.getByText("Started");
+    expect(finished.nextElementSibling?.textContent).not.toBe(
+      started.nextElementSibling?.textContent,
+    );
+    expect(finished.nextElementSibling?.textContent).toBe("Not finished");
   });
 });

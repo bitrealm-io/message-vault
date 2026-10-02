@@ -104,4 +104,35 @@ describe("ColumnResizeHandle", () => {
     expect(handle).toHaveAttribute("aria-valuemax", "520");
     expect(handle).toHaveAttribute("aria-orientation", "vertical");
   });
+
+  it("reports the width on screen when the window squeezes the column below its stored width", () => {
+    const column = document.createElement("div");
+    document.body.appendChild(column);
+    vi.spyOn(column, "getBoundingClientRect").mockReturnValue({
+      width: 250,
+      height: 100,
+      top: 0,
+      left: 0,
+      bottom: 100,
+      right: 250,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    const { getByRole } = render(
+      <ColumnResizeHandle
+        ariaLabel="Resize list"
+        width={400}
+        minWidth={160}
+        maxWidth={520}
+        dragging={false}
+        handleHover={false}
+        handleProps={props}
+      />,
+      { container: column },
+    );
+
+    expect(getByRole("separator", { name: "Resize list" })).toHaveAttribute("aria-valuenow", "250");
+    column.remove();
+  });
 });

@@ -11,17 +11,23 @@ import { shouldIgnoreOutsideDismiss } from "./portaledOverlay";
  * event before a portaled menu can stop it, which is what
  * `shouldIgnoreOutsideDismiss` needs to decide whether the click landed inside
  * an overlay belonging to this popup.
+ *
+ * A press on `triggerRef` is left to the trigger's own click, which toggles
+ * the popup. Closing here as well would let that click open it again.
  */
 export function useDismissable(
   open: boolean,
   rootRef: RefObject<HTMLElement | null>,
   onDismiss: () => void,
+  triggerRef?: RefObject<HTMLElement | null>,
 ): void {
   useEffect(() => {
     if (!open) return;
 
     const onPointerDown = (e: MouseEvent) => {
       if (shouldIgnoreOutsideDismiss(e, rootRef.current)) return;
+      const trigger = triggerRef?.current;
+      if (trigger && e.target instanceof Node && trigger.contains(e.target)) return;
       onDismiss();
     };
     const onKeyDown = (e: KeyboardEvent) => {
@@ -34,5 +40,5 @@ export function useDismissable(
       document.removeEventListener("mousedown", onPointerDown, true);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [open, rootRef, onDismiss]);
+  }, [open, rootRef, onDismiss, triggerRef]);
 }

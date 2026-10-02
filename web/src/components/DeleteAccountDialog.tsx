@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Button from "./Button";
 import ModalShell, { DialogError } from "./ModalShell";
 
@@ -7,6 +7,9 @@ import ModalShell, { DialogError } from "./ModalShell";
  * `has_password`: the server checks the current password only when one is
  * set, so the dialog asks for it only then and confirms with none otherwise.
  * `error` is why the last confirm failed; the dialog stays open to retry.
+ *
+ * The typed username and password live in `DeleteAccountForm`, which exists
+ * only while the dialog is open, so closing the dialog discards them.
  */
 export default function DeleteAccountDialog({
   open,
@@ -25,20 +28,6 @@ export default function DeleteAccountDialog({
   onClose: () => void;
   onConfirm: (currentPassword?: string) => void;
 }) {
-  const [typedUsername, setTypedUsername] = useState("");
-  const [password, setPassword] = useState("");
-
-  useEffect(() => {
-    if (open) {
-      setTypedUsername("");
-      setPassword("");
-    }
-  }, [open]);
-
-  const expected = username.trim();
-  const matches =
-    expected.length > 0 && typedUsername === expected && (!hasPassword || password.length > 0);
-
   return (
     <ModalShell
       open={open}
@@ -48,6 +37,42 @@ export default function DeleteAccountDialog({
       dismissable={!deleting}
       label="Delete your account?"
     >
+      <DeleteAccountForm
+        username={username}
+        hasPassword={hasPassword}
+        deleting={deleting}
+        error={error}
+        onClose={onClose}
+        onConfirm={onConfirm}
+      />
+    </ModalShell>
+  );
+}
+
+function DeleteAccountForm({
+  username,
+  hasPassword,
+  deleting,
+  error,
+  onClose,
+  onConfirm,
+}: {
+  username: string;
+  hasPassword: boolean;
+  deleting: boolean;
+  error: string;
+  onClose: () => void;
+  onConfirm: (currentPassword?: string) => void;
+}) {
+  const [typedUsername, setTypedUsername] = useState("");
+  const [password, setPassword] = useState("");
+
+  const expected = username.trim();
+  const matches =
+    expected.length > 0 && typedUsername === expected && (!hasPassword || password.length > 0);
+
+  return (
+    <>
       <button
         type="button"
         aria-label="Close"
@@ -106,6 +131,6 @@ export default function DeleteAccountDialog({
           {deleting ? "Deleting…" : "Permanently delete my account"}
         </Button>
       </div>
-    </ModalShell>
+    </>
   );
 }

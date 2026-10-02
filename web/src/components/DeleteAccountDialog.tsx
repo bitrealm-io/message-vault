@@ -1,17 +1,19 @@
 import { useEffect, useState } from "react";
 import Button from "./Button";
-import ModalShell from "./ModalShell";
+import ModalShell, { DialogError } from "./ModalShell";
 
 /**
  * Confirms an account deleting itself. `hasPassword` is the account's
  * `has_password`: the server checks the current password only when one is
  * set, so the dialog asks for it only then and confirms with none otherwise.
+ * `error` is why the last confirm failed; the dialog stays open to retry.
  */
 export default function DeleteAccountDialog({
   open,
   username,
   hasPassword,
   deleting = false,
+  error = "",
   onClose,
   onConfirm,
 }: {
@@ -19,6 +21,7 @@ export default function DeleteAccountDialog({
   username: string;
   hasPassword: boolean;
   deleting?: boolean;
+  error?: string;
   onClose: () => void;
   onConfirm: (currentPassword?: string) => void;
 }) {
@@ -90,6 +93,8 @@ export default function DeleteAccountDialog({
           />
         </label>
       ) : null}
+
+      <DialogError message={error} />
 
       <div className="mt-5 flex justify-end">
         <Button

@@ -151,7 +151,10 @@ export function ProfileDangerZone({
                 <Button
                   variant="danger"
                   disabled={busy || demoLocked}
-                  onClick={() => setDeleteDialogOpen(true)}
+                  onClick={() => {
+                    setDangerError("");
+                    setDeleteDialogOpen(true);
+                  }}
                   className={dangerButton}
                   title={demoLocked ? "Unavailable on the demo account" : undefined}
                 >
@@ -189,6 +192,7 @@ export function ProfileDangerZone({
           username={username}
           hasPassword={hasPassword}
           deleting={deleting}
+          error={dangerError}
           onClose={() => {
             if (!deleting) setDeleteDialogOpen(false);
           }}

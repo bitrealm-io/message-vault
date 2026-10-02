@@ -645,4 +645,68 @@ mod tests {
             Some("file_missing")
         );
     }
+
+    /// The desktop app's Staging counts are the run result's counts, so a
+    /// JSON Lines export reports the messages it wrote, not zero.
+    #[cfg(unix)]
+    #[test]
+    fn a_jsonl_run_reports_its_conversations_and_messages() {
+        use crate::helper::tests::{fake_helper, source_line, spawn_fake};
+        use imessage_reader_protocol::{Conversation, Event, Message, PROTOCOL_VERSION};
+
+        let message = |guid: &str, timestamp_unix_ms| {
+            Event::Message(Box::new(Message {
+                chat_identifier: "+15555550122".into(),
+                guid: guid.into(),
+                timestamp_unix_ms,
+                outgoing: false,
+                service: "iMessage".into(),
+                message_kind: "imessage".into(),
+                sender_handle: Some("+15555550122".into()),
+                sender_display_name: None,
+                subject: None,
+                text: "hello".into(),
+                owner_handle: "+15555550100".into(),
+                owner_display_name: None,
+                imessage: None,
+                attachments: Vec::new(),
+            }))
+        };
+        let events = [
+            Event::Conversation(Conversation {
+                chat_identifier: "+15555550122".into(),
+                conversation_type: "individual".into(),
+                group_title: None,
+                participants: Vec::new(),
+            }),
+            message("g1", 1_609_459_200_000),
+            message("g2", 1_609_459_260_000),
+            Event::ExportDone {
+                messages_seen: 2,
+                failures: 0,
+            },
+        ];
+        let mut body = source_line(PROTOCOL_VERSION);
+        for event in &events {
+            body.push_str(&format!(
+                "\necho '{}'",
+                serde_json::to_string(event).unwrap()
+            ));
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let chat = dir.path().join("chat.db");
+        fs::write(&chat, b"sqlite").unwrap();
+        let program = fake_helper(dir.path(), &body);
+        let config = apple_cfg(
+            &chat,
+            AppleConfig {
+                platform: Some(ApplePlatform::MacOs),
+                ..AppleConfig::default()
+            },
+        );
+
+        let result = run_with(&config, |request, _, _| Ok(spawn_fake(&program, request))).unwrap();
+        assert_eq!((result.conversations, result.message_count), (1, 2));
+    }
 }

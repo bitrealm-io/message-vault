@@ -164,6 +164,21 @@ is a fix made in the sheet in seconds, while a stored bad key is a contact
 that matches no message and has to be found later. A partial load would leave
 the person unsure which rows went in, and a load is cheap to repeat.
 
+**A phone number without `+` names the `+` identity its own contact holds.**
+When a phone value written without `+` matches no key as written, and `+`
+followed by its digits is the key of an identity the row's contact already
+holds, the row names that identity. A contact that holds both readings
+(`+6591234567` and `+16591234567`) refuses the load, naming both keys.
+Otherwise the value is keyed by the phone rule above. The load's `notes` name
+each row read with its `+` back, and each value without `+` that became a new
+identity. Why: a spreadsheet that opens an exported file can save
+`+6591234567` as the number `6591234567` without showing it, and keying that
+value as written made a new identity, which Edit then put on the contact in
+place of the real one (#1196). Only the row's own contact is looked at, so a
+dropped `+` never attaches another person's number to this contact. The notes
+exist because the person cannot see the `+` go, so a wrong reading has to be
+shown before it matters.
+
 **An identity moves only from a contact the load may change.** When a row
 puts an identity on one contact and the database has it on another, it moves to
 the file's contact if the current holder is nameless (an Unknown an import
@@ -182,7 +197,8 @@ export is on the Contacts screen and writes the rows the person is looking
 at: the search words and the checked contacts pick what goes in the file, and
 an empty search is everything, nameless contacts included. The load answers
 how many contacts it created, updated and deleted, how many identities it
-added, moved and removed, and how many groups it created. Why: the job is
+added, moved and removed, and how many groups it created, and it lists the
+phone numbers without `+` it read as the rule above says. Why: the job is
 nearly always "the Unknown ones", "this group" or "these ten", which the
 Contacts screen already expresses and a Settings button cannot. A durable
 record of each load, in the Settings table beside message imports, is

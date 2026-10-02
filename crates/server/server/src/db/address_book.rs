@@ -50,7 +50,7 @@ pub enum LoadMode {
 }
 
 /// What a load changed.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, utoipa::ToSchema)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, utoipa::ToSchema)]
 pub struct LoadCounts {
     /// Contacts the load created.
     pub contacts_created: u64,
@@ -68,6 +68,12 @@ pub struct LoadCounts {
     pub identities_removed: u64,
     /// Contact Groups the load created.
     pub groups_created: u64,
+    /// One sentence for each phone number the file wrote without `+` that
+    /// the load matched to the `+` key its contact holds, or that became a
+    /// new identity. Each starts with its row number. A spreadsheet can drop
+    /// the `+` from a number without showing it, so the load says how it
+    /// read the number.
+    pub notes: Vec<String>,
 }
 
 /// Why a load did not happen.
@@ -140,6 +146,9 @@ struct FileIdentity {
     key: IdentityKey,
     /// The identity as the file wrote it, kept as the `raw` of a new row.
     written: String,
+    /// What the load says about how it read this row, for
+    /// [`LoadCounts::notes`].
+    note: Option<String>,
 }
 
 /// The rows of one contact, gathered.
@@ -272,6 +281,21 @@ impl Snapshot {
             .or_else(|| self.trashed.get(&contact_id))
             .map_or("", String::as_str)
     }
+
+    /// How a sentence names a contact the account holds.
+    fn describe(&self, contact_id: i64) -> String {
+        match self.name_of(contact_id) {
+            "" => format!("the contact with no name (contact {contact_id})"),
+            name => format!("\"{name}\" (contact {contact_id})"),
+        }
+    }
+
+    /// Whether `contact_id` holds the identity `key`.
+    fn holds(&self, contact_id: i64, key: &IdentityKey) -> bool {
+        self.handles
+            .get(key)
+            .is_some_and(|&(_, holder)| holder == Some(contact_id))
+    }
 }
 
 /// The `service` value the `handles` table stores, or `None` for any other
@@ -379,7 +403,18 @@ fn read_rows(csv_text: &str) -> Result<Vec<FileRow>, Vec<String>> {
 /// `Ok(None)` for a row that lists no identity: one that leaves `service`,
 /// `handle_type` and `identity` all blank, which is how a contact with no
 /// identity is written.
-fn row_identity(row: &FileRow, snapshot: &Snapshot) -> Result<Option<FileIdentity>, String> {
+///
+/// `contact` is the contact the row names, when the account holds it. A
+/// phone number written without `+` that no key matches as written is read
+/// as `+` and its digits when that contact holds that key, because a
+/// spreadsheet that opens the file can save `+6591234567` as the number
+/// `6591234567`. Other contacts' identities are not looked at, so a dropped
+/// `+` never attaches another person's number to this one.
+fn row_identity(
+    row: &FileRow,
+    contact: Option<i64>,
+    snapshot: &Snapshot,
+) -> Result<Option<FileIdentity>, String> {
     let n = row.number;
     if row.service.is_empty() && row.handle_type.is_empty() && row.identity.is_empty() {
         return Ok(None);
@@ -408,6 +443,7 @@ fn row_identity(row: &FileRow, snapshot: &Snapshot) -> Result<Option<FileIdentit
     // wrote, so it is accepted as it stands: a file loaded straight back must
     // never be refused over a key an import stored.
     let verbatim = key(row.identity.clone());
+    let mut note = None;
     let normalized = if snapshot.handles.contains_key(&verbatim) {
         row.identity.clone()
     } else {
@@ -420,7 +456,41 @@ fn row_identity(row: &FileRow, snapshot: &Snapshot) -> Result<Option<FileIdentit
                         row.identity
                     ));
                 }
-                phone::normalize_typed_handle(&row.identity, HandleType::Phone).0
+                let keyed = phone::normalize_typed_handle(&row.identity, HandleType::Phone).0;
+                if row.identity.contains('+') {
+                    keyed
+                } else {
+                    let digits: String =
+                        row.identity.chars().filter(char::is_ascii_digit).collect();
+                    let with_plus = format!("+{digits}");
+                    let holder = contact.filter(|&id| {
+                        with_plus != keyed && snapshot.holds(id, &key(with_plus.clone()))
+                    });
+                    if let Some(id) = holder {
+                        if snapshot.holds(id, &key(keyed.clone())) {
+                            return Err(format!(
+                                "row {n}: {} has no +, and {} holds both {with_plus} and {keyed}; \
+                                 write the number with its + to say which",
+                                row.identity,
+                                snapshot.describe(id)
+                            ));
+                        }
+                        note = Some(format!(
+                            "row {n}: {} has no +, so it was read as {with_plus}, which {} holds",
+                            row.identity,
+                            snapshot.describe(id)
+                        ));
+                        with_plus
+                    } else {
+                        if !snapshot.handles.contains_key(&key(keyed.clone())) {
+                            note = Some(format!(
+                                "row {n}: {} has no +, so it became the new identity {keyed}",
+                                row.identity
+                            ));
+                        }
+                        keyed
+                    }
+                }
             }
             HandleType::Email => {
                 let lowered = row.identity.to_lowercase();
@@ -444,6 +514,7 @@ fn row_identity(row: &FileRow, snapshot: &Snapshot) -> Result<Option<FileIdentit
         row: n,
         key: key(normalized),
         written: row.identity.clone(),
+        note,
     }))
 }
 
@@ -549,7 +620,7 @@ fn plan(rows: &[FileRow], snapshot: &Snapshot) -> Result<Vec<FileContact>, Vec<S
             }
         }
 
-        match row_identity(row, snapshot) {
+        match row_identity(row, known, snapshot) {
             Err(reason) => errors.push(reason),
             Ok(None) => {}
             Ok(Some(identity)) => match listed.get(&identity.key) {
@@ -862,6 +933,16 @@ async fn apply(
     }
 
     remove_unused_book_handles(conn, account_id).await?;
+
+    // The notes in the order of the file's rows, which a contact's rows need
+    // not be.
+    let mut notes: Vec<(usize, &String)> = file
+        .iter()
+        .flat_map(|contact| &contact.identities)
+        .filter_map(|identity| identity.note.as_ref().map(|note| (identity.row, note)))
+        .collect();
+    notes.sort_by_key(|&(row, _)| row);
+    counts.notes = notes.into_iter().map(|(_, note)| note.clone()).collect();
     Ok(counts)
 }
 

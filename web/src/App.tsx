@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
+import { ApiTokenRevealProvider } from "./components/ApiTokenRevealDialog";
 import AppLayout from "./components/AppLayout";
 import { AuthGuard } from "./components/AuthGuard";
 import ImportExportRoute from "./components/ImportExportRoute";
@@ -62,7 +63,11 @@ function AppRoutes() {
         <Route
           element={
             <TimeZoneProvider>
-              <AppLayout />
+              {/* Above Settings, so a new token's secret is shown even after
+                  Settings is left; below the AuthGuard, so logging out drops it. */}
+              <ApiTokenRevealProvider>
+                <AppLayout />
+              </ApiTokenRevealProvider>
             </TimeZoneProvider>
           }
         >

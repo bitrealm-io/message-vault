@@ -9,9 +9,10 @@
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiTokenRevealProvider } from "../../components/ApiTokenRevealDialog";
 import { createApiToken, deleteApiToken, listApiTokens, renameApiToken } from "../../lib/serverApi";
 import type { ApiTokenItem } from "./apiTokensUtils";
 import { useApiTokens } from "./useApiTokens";
@@ -34,7 +35,11 @@ const revoke = vi.mocked(deleteApiToken);
 let client: QueryClient;
 
 function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <ApiTokenRevealProvider>{children}</ApiTokenRevealProvider>
+    </QueryClientProvider>
+  );
 }
 
 const token: ApiTokenItem = {
@@ -80,7 +85,7 @@ describe("useApiTokens", () => {
       }),
     );
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(result.current.reveal?.token).toBe("mc-api-secret"));
+    expect(await screen.findByText("mc-api-secret")).toBeInTheDocument();
   });
 
   it("asks for the list again after a token is revoked, and closes the dialog either way", async () => {

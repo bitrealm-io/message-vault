@@ -1,4 +1,3 @@
-import ApiTokenRevealDialog from "../../components/ApiTokenRevealDialog";
 import Button from "../../components/Button";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { ApiTokenCreateForm, ApiTokenRenameDialog } from "./ApiTokenForms";
@@ -27,8 +26,6 @@ export function ApiTokensSection({
     canExport,
     setCanExport,
     actionError,
-    reveal,
-    setReveal,
     revokeTarget,
     setRevokeTarget,
     renameTarget,
@@ -93,13 +90,6 @@ export function ApiTokensSection({
         API Tokens give secure, programmatic access so other tools can import and export message
         data. Treat them like passwords: keep them private and never share them publicly.
       </p>
-
-      <ApiTokenRevealDialog
-        open={reveal !== null}
-        label={reveal?.label ?? ""}
-        token={reveal?.token ?? ""}
-        onClose={() => setReveal(null)}
-      />
 
       <ApiTokenRenameDialog
         open={renameTarget !== null}

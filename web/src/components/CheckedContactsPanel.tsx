@@ -17,7 +17,7 @@ import { getContactSummaries } from "../lib/serverApi";
 import { useTimeZone } from "../lib/timeZone";
 import Button from "./Button";
 import ContactLabel from "./ContactLabel";
-import { type ContactPreview, sumHandleTotals } from "./contactDrawer/contactDrawerTypes";
+import { type ContactPreview, contactTotals } from "./contactDrawer/contactDrawerTypes";
 import { CountCell, SortableColumn } from "./contactDrawer/handleTableHelpers";
 import { handleDateCell } from "./contactDrawer/handleTableLogic";
 import {
@@ -29,7 +29,7 @@ import {
 } from "./contactDrawer/handleTableStyles";
 import DataCard, { dataCardHeaderRowClass } from "./DataCard";
 
-type ContactTotals = ReturnType<typeof sumHandleTotals>;
+type ContactTotals = ReturnType<typeof contactTotals>;
 
 /** Matches `MAX_CONTACT_SUMMARY_IDS` on `POST /v1/contacts/summaries`. */
 const SUMMARY_BATCH_SIZE = 500;
@@ -158,7 +158,7 @@ export default function CheckedContactsPanel({
     for (const id of ids) {
       const cached = cache.read<ContactDetail>(keys.contacts.detail(id));
       if (cached) {
-        merged[id] = { name: cached.name, totals: sumHandleTotals(cached.identities) };
+        merged[id] = { name: cached.name, totals: contactTotals(cached) };
       }
     }
     return { ...merged, ...summaries.data };

@@ -54,7 +54,8 @@ fn launch(app: &AppHandle, open_to_network: bool) -> Result<Launch, String> {
 
 /// Make sure the app's own Message Crate is running, and report its state.
 /// The screens call this when the server address is the app's own; a start
-/// already under way, or a Message Crate already answering, is left alone.
+/// already under way, or the app's own ready server, is left alone, and a
+/// Message Crate the app found is asked again whether it still answers.
 /// `open_to_network` is the person's setting; the app's own server is
 /// restarted when it was started the other way.
 ///
@@ -70,6 +71,15 @@ pub fn start_local_server(
 ) -> Result<Status, String> {
     server.ensure_started(launch(&app, open_to_network)?);
     Ok(server.status())
+}
+
+/// Take the person's "Let other devices on this network connect" setting.
+/// It starts nothing: the app's own server is restarted to match it, and
+/// while a desktop job runs only once the job has ended. A Message Crate the
+/// app only found is not changed.
+#[tauri::command]
+pub fn set_open_to_network(server: State<'_, LocalServer>, open_to_network: bool) -> Status {
+    server.set_open_to_network(open_to_network)
 }
 
 /// Report the state of the app's own Message Crate without starting it.

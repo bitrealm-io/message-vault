@@ -8,7 +8,7 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use chrono::{Duration, FixedOffset, TimeZone, Utc};
+use chrono::{Duration, Utc};
 use message_ir::{
     ConversationHeader, ConversationMeta, ConversationStats, ExportMeta, IrAttachment,
     IrConversationType, IrDirection, IrImessage, IrMessage, IrMessageKind, IrParticipant,
@@ -525,9 +525,9 @@ impl<R: Rng> Seeder<'_, R> {
             );
             self.emit(&mut file, msg)?;
         }
-        let base_ts = overlap.android_base_timestamp(self.cfg);
+        let mut timestamp = overlap.android_base_timestamp(self.cfg);
         for j in 0..overlap.extra_n {
-            let timestamp = base_ts + ((j as i64) + 1) * 60_000;
+            timestamp = next_daytime_minute(timestamp);
             let from_me = j % 4 == 0;
             let guid = format!("sbr-extra-{chat_id}-{j}");
             let mut msg = self.text_message(
@@ -1060,8 +1060,10 @@ fn bursty_timestamps<R: Rng, F: FnMut(&mut R) -> usize>(
         return Vec::new();
     }
     let span_days = ((span_years * 365.25).round() as i64).max(1);
-    let start = reference_time - Duration::days(span_days);
-    let offset = FixedOffset::west_opt(4 * 3600).unwrap();
+    // Day 0 starts at midnight UTC `span_days` before the reference day, so
+    // the last day is the day before it and every message is earlier than
+    // the reference time.
+    let start = midnight_utc(reference_time) - Duration::days(span_days);
 
     let per_day = assign_messages_to_days(total, span_days, &mut sample_burst, rng);
     let mut days: Vec<(i64, usize)> = per_day.into_iter().collect();
@@ -1070,7 +1072,7 @@ fn bursty_timestamps<R: Rng, F: FnMut(&mut R) -> usize>(
     let mut out = Vec::with_capacity(total);
     for (day, count) in days {
         let day_start = start + Duration::days(day);
-        append_day_timestamps(&mut out, day_start, count, offset, reference_time, rng);
+        append_day_timestamps(&mut out, day_start, count, rng);
     }
     out.sort_unstable();
     out
@@ -1097,39 +1099,69 @@ fn assign_messages_to_days<R: Rng, F: FnMut(&mut R) -> usize>(
     per_day
 }
 
-/// Place a day's messages between 8am and 11pm, a few seconds apart.
+/// The first second of a day's message window: 08:00 UTC.
+const DAY_WINDOW_START_SECS: i64 = 8 * 3600;
+/// The last second of a day's message window: 23:00 UTC.
+const DAY_WINDOW_END_SECS: i64 = 23 * 3600;
+
+/// Midnight UTC at the start of `time`'s day.
+fn midnight_utc(time: chrono::DateTime<Utc>) -> chrono::DateTime<Utc> {
+    time.date_naive()
+        .and_hms_opt(0, 0, 0)
+        .expect("midnight exists")
+        .and_utc()
+}
+
+/// One minute after `timestamp_ms`, or 8am UTC the next day when that minute
+/// falls after 11pm UTC.
+fn next_daytime_minute(timestamp_ms: i64) -> i64 {
+    let next = timestamp_ms + 60_000;
+    let ms_per_day = 24 * 3600 * 1000;
+    if next.rem_euclid(ms_per_day) <= DAY_WINDOW_END_SECS * 1000 {
+        return next;
+    }
+    next.div_euclid(ms_per_day) * ms_per_day + ms_per_day + DAY_WINDOW_START_SECS * 1000
+}
+
+/// Place a day's messages between 8am and 11pm UTC, a few seconds apart.
+///
+/// `day_start` is midnight UTC. The Demo Account's time zone is UTC, so the
+/// messages read as sent during the day.
 fn append_day_timestamps<R: Rng>(
     out: &mut Vec<i64>,
     day_start: chrono::DateTime<Utc>,
     count: usize,
-    offset: FixedOffset,
-    reference_time: chrono::DateTime<Utc>,
     rng: &mut R,
 ) {
     let mut seconds = Vec::with_capacity(count);
     for _ in 0..count {
-        seconds.push(rng.random_range(8 * 3600..23 * 3600));
+        seconds.push(rng.random_range(DAY_WINDOW_START_SECS..DAY_WINDOW_END_SECS));
     }
     seconds.sort_unstable();
+    let mut placed: Vec<i64> = Vec::with_capacity(count);
     for (i, secs) in seconds.into_iter().enumerate() {
         // Nudge messages a few seconds apart so a burst is not one identical timestamp.
         let spacing = (i as i64) * rng.random_range(8..45);
-        let spaced = secs + spacing;
-        let latest_second = 23 * 3600 + 3599;
-        let mut dt = day_start + Duration::seconds(spaced.min(latest_second));
-        if let Some(&prev) = out.last()
-            && dt.timestamp_millis() <= prev
+        let mut spaced = (secs + spacing).min(DAY_WINDOW_END_SECS);
+        if let Some(&prev) = placed.last()
+            && spaced <= prev
         {
-            let prev_time = Utc
-                .timestamp_millis_opt(prev)
-                .single()
-                .unwrap_or(reference_time);
-            let gap = Duration::seconds(rng.random_range(12..90));
-            dt = prev_time + gap;
+            spaced = prev + rng.random_range(12..90);
         }
-        let local = offset.from_utc_datetime(&dt.naive_utc());
-        out.push(local.timestamp_millis());
+        placed.push(spaced);
     }
+    // Pull any message the nudging pushed past 11pm back inside the window,
+    // still one second or more after the message before it.
+    let mut latest = DAY_WINDOW_END_SECS;
+    for secs in placed.iter_mut().rev() {
+        *secs = (*secs).min(latest);
+        latest = *secs - 1;
+    }
+    out.extend(
+        placed
+            .into_iter()
+            .map(|secs| (day_start + Duration::seconds(secs)).timestamp_millis()),
+    );
 }
 
 /// How many messages land on one active day in a one-to-one conversation.

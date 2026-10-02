@@ -3,6 +3,7 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setBaseUrl } from "../../lib/api";
 import { APP_BUILD } from "../../lib/build";
 import { getOpenToNetwork } from "../../lib/localServer";
 import { getStagingDir } from "../../lib/system-settings";
@@ -16,11 +17,13 @@ const getHomeDir = vi.hoisted(() => vi.fn());
 const openDataFolder = vi.hoisted(() => vi.fn());
 
 const startLocalServer = vi.hoisted(() => vi.fn());
+const setLocalServerOpenToNetwork = vi.hoisted(() => vi.fn());
 
 vi.mock("../../lib/localServer", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../lib/localServer")>()),
   openDataFolder: () => openDataFolder(),
   startLocalServer: () => startLocalServer(),
+  setLocalServerOpenToNetwork: (on: boolean) => setLocalServerOpenToNetwork(on),
 }));
 
 vi.mock("../../lib/tauri-check", () => ({
@@ -46,6 +49,7 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 
 afterEach(() => {
   cleanup();
+  setBaseUrl("");
 });
 
 beforeEach(() => {
@@ -110,8 +114,10 @@ describe("SystemSection", () => {
   });
 
   it("keeps the app's own Message Crate closed to the network until asked", async () => {
+    setBaseUrl("http://127.0.0.1:8080");
     startLocalServer.mockReset();
-    startLocalServer.mockResolvedValue({ status: "starting", first_time: false });
+    setLocalServerOpenToNetwork.mockReset();
+    setLocalServerOpenToNetwork.mockResolvedValue({ status: "starting", first_time: false });
     render(<SystemSection />);
     const box = await screen.findByRole("checkbox", {
       name: /Let other devices on this network connect/,
@@ -123,16 +129,34 @@ describe("SystemSection", () => {
     await userEvent.click(box);
 
     expect(getOpenToNetwork()).toBe(true);
-    expect(startLocalServer).toHaveBeenCalledTimes(1);
+    expect(setLocalServerOpenToNetwork).toHaveBeenLastCalledWith(true);
 
     await userEvent.click(box);
     expect(getOpenToNetwork()).toBe(false);
-    expect(startLocalServer).toHaveBeenCalledTimes(2);
+    expect(setLocalServerOpenToNetwork).toHaveBeenLastCalledWith(false);
+    // The setting restarts a server the app runs; it never starts one.
+    expect(startLocalServer).not.toHaveBeenCalled();
+  });
+
+  it("changes no server while the app uses another Message Crate", async () => {
+    setBaseUrl("https://crate.example");
+    startLocalServer.mockReset();
+    setLocalServerOpenToNetwork.mockReset();
+    render(<SystemSection />);
+
+    await userEvent.click(
+      await screen.findByRole("checkbox", { name: /Let other devices on this network connect/ }),
+    );
+
+    expect(getOpenToNetwork()).toBe(true);
+    expect(setLocalServerOpenToNetwork).not.toHaveBeenCalled();
+    expect(startLocalServer).not.toHaveBeenCalled();
   });
 
   it("says the setting does not change a Message Crate the app did not start", async () => {
-    startLocalServer.mockReset();
-    startLocalServer.mockResolvedValue({ status: "ready", started_by_app: false });
+    setBaseUrl("http://127.0.0.1:8080");
+    setLocalServerOpenToNetwork.mockReset();
+    setLocalServerOpenToNetwork.mockResolvedValue({ status: "ready", started_by_app: false });
     render(<SystemSection />);
     await userEvent.click(
       await screen.findByRole("checkbox", { name: /Let other devices on this network connect/ }),

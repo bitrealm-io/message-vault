@@ -3443,7 +3443,11 @@ export interface components {
             address: string;
             /** @description The address currently linked. */
             previous_address: string;
-            /** @description Platform service for the new address. */
+            /**
+             * @description Platform service of both addresses. When omitted, the previous address
+             *     is looked up on the phone service first and WhatsApp second, and the
+             *     new address takes the service of the previous one.
+             */
             service?: string | null;
         };
         /** @description Body for `PATCH /v1/contacts/{id}`. Exactly one mutation field should be set. */

@@ -57,12 +57,15 @@ impl Expr {
         }
     }
 
-    /// Total nodes in the tree, for the complexity limit.
+    /// Total nodes in the tree, for the complexity limit. Each comma value of
+    /// a field counts as one node, because each becomes one more `OR` in the
+    /// SQL and SQLite refuses an expression tree deeper than 1,000.
     fn nodes(&self) -> usize {
         match self {
             Self::And(v) | Self::Or(v) => 1 + v.iter().map(Expr::nodes).sum::<usize>(),
             Self::Not(e) => 1 + e.nodes(),
-            Self::Field(_) | Self::Text(_) => 1,
+            Self::Field(t) => t.values.len(),
+            Self::Text(_) => 1,
         }
     }
 
@@ -493,6 +496,20 @@ mod tests {
         // 32 negated terms and the `and` are 65.
         let one_over = "-service:sms ".repeat(32);
         let e = parse_err(ListKind::Messages, &one_over);
+        assert_eq!(e.kind, QueryErrorKind::TooComplex);
+        assert_eq!(e.message, "The search has too many parts.");
+    }
+
+    /// Each comma value is one more `OR` in the SQL, so each counts as a part.
+    #[test]
+    fn each_comma_value_counts_as_one_part() {
+        let values = |n: usize| vec!["sms"; n].join(",");
+        assert!(matches!(
+            parse_ok(ListKind::Messages, &format!("service:{}", values(64))),
+            Expr::Field(_)
+        ));
+
+        let e = parse_err(ListKind::Messages, &format!("service:{}", values(65)));
         assert_eq!(e.kind, QueryErrorKind::TooComplex);
         assert_eq!(e.message, "The search has too many parts.");
     }

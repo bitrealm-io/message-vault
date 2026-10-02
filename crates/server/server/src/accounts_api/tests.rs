@@ -1391,6 +1391,31 @@ async fn the_owner_deletes_any_account_outright() {
     );
 }
 
+/// A data folder that cannot be removed does not turn a delete that happened
+/// into a failure: the row is gone, so the delete answers `204 No Content`.
+#[tokio::test]
+async fn a_folder_that_cannot_be_removed_still_answers_no_content() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
+    let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let victim = register_via_api(&state, "bob", "hunter2hunter2").await;
+    // A file where the account's folder belongs makes `remove_dir_all` fail
+    // whoever runs the test, root included.
+    let data_dir = &state.cfg.paths.data_dir;
+    std::fs::create_dir_all(data_dir).unwrap();
+    std::fs::write(data_dir.join(victim.account_id.to_string()), b"stuck").unwrap();
+
+    assert_eq!(
+        delete_status(&state, &member(victim.account_id), &owner.token).await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        get_status(&state, &member(victim.account_id), &owner.token).await,
+        StatusCode::NOT_FOUND,
+        "the account is gone"
+    );
+}
+
 /// An account deletes itself with its confirmation and its current password
 /// in the body, and nothing stands above it to refuse; the demo account is
 /// the one that refuses its own.
@@ -1968,6 +1993,114 @@ async fn apply_profile_update_removes_handles() {
     let loaded = require_account(&mut conn, account_id).await.unwrap();
     assert!(loaded.phones.is_empty());
     assert!(loaded.emails.is_empty());
+}
+
+fn identity(address: &str, service: &str) -> AccountIdentityRequest {
+    AccountIdentityRequest {
+        address: address.into(),
+        service: service.into(),
+    }
+}
+
+/// The services on which `number` is linked to the account, in order.
+async fn linked_services(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    number: &str,
+) -> Vec<String> {
+    sqlx::query_scalar(
+        "SELECT h.service FROM handles h
+         JOIN account_handles ah ON ah.handle_id = h.id
+         WHERE ah.account_id = $1 AND h.normalized = $2
+         ORDER BY h.service",
+    )
+    .bind(account_id)
+    .bind(number)
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap()
+}
+
+/// One number linked as a Text message identity and as a WhatsApp identity:
+/// removing either one leaves the other.
+#[tokio::test]
+async fn removing_one_service_of_a_number_leaves_the_other() {
+    let fixture = test_fixture().await;
+    let account_id = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
+    let both = [
+        identity("+15555550100", "phone"),
+        identity("+15555550100", "whatsapp"),
+    ];
+
+    apply_profile_update(&mut conn, account_id, None, None, &both, &[])
+        .await
+        .unwrap();
+    apply_profile_update(
+        &mut conn,
+        account_id,
+        None,
+        None,
+        &[],
+        &[identity("+15555550100", "whatsapp")],
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        linked_services(&mut conn, account_id, "+15555550100").await,
+        ["phone"]
+    );
+
+    apply_profile_update(&mut conn, account_id, None, None, &both, &[])
+        .await
+        .unwrap();
+    apply_profile_update(
+        &mut conn,
+        account_id,
+        None,
+        None,
+        &[],
+        &[identity("+15555550100", "phone")],
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        linked_services(&mut conn, account_id, "+15555550100").await,
+        ["whatsapp"]
+    );
+}
+
+/// An import can leave a Text message `handles` row for a number the account
+/// holds only on WhatsApp. Removing the WhatsApp identity removes it all the
+/// same, and does not stop at the unlinked Text message row.
+#[tokio::test]
+async fn removing_a_whatsapp_identity_ignores_an_unlinked_text_message_row() {
+    let fixture = test_fixture().await;
+    let account_id = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
+    crate::db::handles::upsert_handle_row(
+        &mut conn,
+        account_id,
+        "+15555550100",
+        HandleType::Phone,
+        Some("phone"),
+    )
+    .await
+    .unwrap();
+    let whatsapp = [identity("+15555550100", "whatsapp")];
+    apply_profile_update(&mut conn, account_id, None, None, &whatsapp, &[])
+        .await
+        .unwrap();
+
+    apply_profile_update(&mut conn, account_id, None, None, &[], &whatsapp)
+        .await
+        .unwrap();
+
+    assert!(
+        linked_services(&mut conn, account_id, "+15555550100")
+            .await
+            .is_empty()
+    );
 }
 
 #[tokio::test]

@@ -3,7 +3,7 @@
 //! `db::handles`; this module decides which to run and what to refuse.
 
 use anyhow::Result as AnyResult;
-use message_ir::HandleType;
+use message_ir::{HandleService, HandleType};
 use sqlx::SqliteConnection;
 
 use super::{
@@ -196,7 +196,9 @@ impl ContactEditor<'_> {
         if raw.is_empty() {
             refuse!("address must not be empty");
         }
-        let handle_id = self.handle_row(raw, add.service.as_deref()).await?;
+        let handle_id = self
+            .handle_row(raw, add.service.as_deref(), HandleService::Phone)
+            .await?;
         if self.claim(handle_id).await? {
             // Already linked: no address-book change.
             return Ok(true);
@@ -225,10 +227,13 @@ impl ContactEditor<'_> {
             refuse!("previous_address and address must not be empty");
         }
         let service = upd.service.as_deref();
-        let Some(old_id) = self.linked_handle(prev, service).await? else {
+        let Some((old_id, old_service)) = self.linked_handle(prev, service).await? else {
             refuse!("previous address not found on contact");
         };
-        let new_id = self.handle_row(next, service).await?;
+        // With no service named, the new identity stays on the replaced
+        // one's service: a WhatsApp number swapped for another is still on
+        // WhatsApp, and its conversations still find the contact.
+        let new_id = self.handle_row(next, service, old_service).await?;
         if old_id == new_id {
             // Both lookups keyed the row on the same platform, so the edit
             // names the handle the contact already has: nothing changes.
@@ -260,15 +265,20 @@ impl ContactEditor<'_> {
         if raw.is_empty() {
             refuse!("address must not be empty");
         }
-        let Some(handle_id) = self.linked_handle(raw, rem.service.as_deref()).await? else {
+        let Some((handle_id, _)) = self.linked_handle(raw, rem.service.as_deref()).await? else {
             refuse!("identity not found on contact");
         };
         self.unlink(handle_id).await?;
         self.touched().await
     }
 
-    /// Id of the handle row for `raw` that is linked to this contact, if any.
-    async fn linked_handle(&mut self, raw: &str, service: Option<&str>) -> AnyResult<Option<i64>> {
+    /// Id and service of the handle row for `raw` that is linked to this
+    /// contact, if any.
+    async fn linked_handle(
+        &mut self,
+        raw: &str,
+        service: Option<&str>,
+    ) -> AnyResult<Option<(i64, HandleService)>> {
         contacts::linked_handle_id(
             &mut *self.conn,
             self.account_id,
@@ -281,15 +291,24 @@ impl ContactEditor<'_> {
 
     /// Insert or find the handle row for `raw`, typed by `service`, without
     /// linking it to the account owner: contact-owned handles must never
-    /// become owner identities.
-    async fn handle_row(&mut self, raw: &str, service: Option<&str>) -> AnyResult<i64> {
+    /// become owner identities. The row is on `service`'s platform, or on
+    /// `unnamed` when the caller named no service.
+    async fn handle_row(
+        &mut self,
+        raw: &str,
+        service: Option<&str>,
+        unnamed: HandleService,
+    ) -> AnyResult<i64> {
         let handle_type = infer_handle_type(raw, service);
+        let platform = service
+            .and_then(message_ir::trimmed)
+            .map_or(unnamed, HandleService::parse);
         let (id, _) = handles::upsert_handle_row(
             &mut *self.conn,
             self.account_id,
             raw.trim(),
             handle_type,
-            service.and_then(message_ir::trimmed),
+            Some(platform.as_str()),
         )
         .await?;
         Ok(id)

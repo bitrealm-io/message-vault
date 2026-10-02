@@ -306,21 +306,43 @@ async fn members_patch_adds_and_removes_in_one_call() {
     }
 }
 
+// Bob's contact and Bob's conversation exist, so only the account condition
+// keeps Alice from putting them in her set.
 #[tokio::test]
 async fn members_patch_with_a_foreign_member_writes_nothing() {
     for kind in [Kind::Groups, Kind::Tags] {
         let fixture = test_fixture().await;
         let state = &fixture.state;
         let user = alice(state).await;
+        let bob = register_via_api(state, "bob", "hunter2hunter2").await;
         let a = kind.member(state, user.account_id).await;
+        let bobs = kind.member(state, bob.account_id).await;
         let id = create(state, kind, &user.token, "Family").await;
+        let bob_set = create(state, kind, &bob.token, "Family").await;
         let members = format!("{}/{id}/members", kind.base());
         assert_eq!(
-            patch_status(state, &members, &user.token, json!({ "add": [a, 999999] })).await,
+            patch_status(state, &members, &user.token, json!({ "add": [a, bobs] })).await,
             StatusCode::UNPROCESSABLE_ENTITY,
-            "an id to add that names no row is a body that broke a rule"
+            "an id to add that names another account's row is a body that broke a rule"
         );
         assert!(member_ids(state, kind, &user.token, id).await.is_empty());
+        assert!(
+            member_ids(state, kind, &bob.token, bob_set)
+                .await
+                .is_empty()
+        );
+        let mut conn = state.db.acquire().await.unwrap();
+        let rows: i64 = sqlx::query_scalar(match kind {
+            Kind::Groups => "SELECT COUNT(*) FROM contact_group_members",
+            Kind::Tags => "SELECT COUNT(*) FROM message_tag_members",
+        })
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+        assert_eq!(
+            rows, 0,
+            "no membership row may be written for either account"
+        );
     }
 }
 

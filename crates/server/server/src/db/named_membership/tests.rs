@@ -11,6 +11,77 @@ async fn insert_contact(conn: &mut SqliteConnection, account: i64, name: &str) -
     .unwrap()
 }
 
+/// Insert a one-to-one conversation for `account`, answering its id.
+async fn insert_conversation(conn: &mut SqliteConnection, account: i64, phone: &str) -> i64 {
+    let handle: i64 = sqlx::query_scalar(
+        "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
+         VALUES ($1, $2, $2, 'phone', 'phone') RETURNING id",
+    )
+    .bind(account)
+    .bind(phone)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    sqlx::query_scalar(
+        "INSERT INTO conversations (account_id, chat_handle_id, conversation_type, source_file)
+         VALUES ($1, $2, 'individual', 'seed.jsonl') RETURNING id",
+    )
+    .bind(account)
+    .bind(handle)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap()
+}
+
+/// Insert one row a set of `spec`'s kind can hold, answering its id.
+async fn insert_member(
+    spec: &MembershipSpec,
+    conn: &mut SqliteConnection,
+    account: i64,
+    name: &str,
+) -> i64 {
+    if spec.member_table == "contacts" {
+        insert_contact(conn, account, name).await
+    } else {
+        insert_conversation(conn, account, &format!("+1555{account}{name}")).await
+    }
+}
+
+/// Every membership row of `spec`'s kind, across all accounts.
+async fn all_membership_rows(spec: &MembershipSpec, conn: &mut SqliteConnection) -> Vec<i64> {
+    let sql = format!(
+        "SELECT {mc} FROM {mt} ORDER BY {mc}",
+        mc = spec.member_column,
+        mt = spec.members_table,
+    );
+    sqlx::query_scalar(&sql)
+        .fetch_all(&mut *conn)
+        .await
+        .unwrap()
+}
+
+/// The contact's `last_modified`.
+async fn last_modified(conn: &mut SqliteConnection, contact: i64) -> String {
+    sqlx::query_scalar("SELECT last_modified FROM contacts WHERE id = $1")
+        .bind(contact)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap()
+}
+
+/// A `last_modified` no hook writes, so a change from it shows a touch.
+const OLD: &str = "2000-01-01 00:00:00";
+
+/// Set every contact of `account` to [`OLD`].
+async fn age_contacts(conn: &mut SqliteConnection, account: i64) {
+    sqlx::query("UPDATE contacts SET last_modified = $1 WHERE account_id = $2")
+        .bind(OLD)
+        .bind(account)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+}
+
 #[tokio::test]
 async fn reserved_names_rejected_with_exact_messages() {
     let fixture = crate::test_support::test_fixture().await;
@@ -156,50 +227,43 @@ async fn rename_set_refuses_an_empty_or_over_long_name() {
     assert!(matches!(err, MembershipError::BadRequest(_)));
 }
 
+// The routes change a Contact Group's members through `patch_members`, so the
+// hook that touches the member contact is checked on that path, after an add
+// and after a remove.
 #[tokio::test]
-async fn on_change_hook_runs_on_membership_change() {
+async fn patch_members_touches_the_member_contact_on_add_and_on_remove() {
     let fixture = crate::test_support::test_fixture().await;
     let account = fixture.account_with_id(101, "alice").await;
     let mut conn = fixture.conn().await;
-    sqlx::query("INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Ada')")
-        .bind(account)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-    let contact_id: i64 = sqlx::query_scalar(
-        "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Ada') RETURNING id",
-    )
-    .bind(account)
-    .fetch_one(&mut *conn)
-    .await
-    .unwrap();
-    sqlx::query("UPDATE contacts SET last_modified = '2000-01-01 00:00:00' WHERE id = $1")
-        .bind(contact_id)
-        .execute(&mut *conn)
+    let ada = insert_contact(&mut conn, account, "Ada").await;
+    let (id, _) = create_set(group_spec(), &mut conn, account, "Family")
         .await
         .unwrap();
 
+    age_contacts(&mut conn, account).await;
     assert_eq!(
-        set_membership(
-            group_spec(),
-            &mut conn,
-            account,
-            &[contact_id],
-            "Family",
-            true
-        )
-        .await
-        .unwrap(),
-        1
+        patch_members(group_spec(), &mut conn, account, id, &[ada], &[])
+            .await
+            .unwrap(),
+        (1, 0)
     );
-    let after: String = sqlx::query_scalar("SELECT last_modified FROM contacts WHERE id = $1")
-        .bind(contact_id)
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
     assert_ne!(
-        after, "2000-01-01 00:00:00",
-        "group change must touch the contact"
+        last_modified(&mut conn, ada).await,
+        OLD,
+        "adding a contact to a group must touch the contact"
+    );
+
+    age_contacts(&mut conn, account).await;
+    assert_eq!(
+        patch_members(group_spec(), &mut conn, account, id, &[], &[ada])
+            .await
+            .unwrap(),
+        (0, 1)
+    );
+    assert_ne!(
+        last_modified(&mut conn, ada).await,
+        OLD,
+        "taking a contact out of a group must touch the contact"
     );
 }
 
@@ -325,27 +389,15 @@ async fn delete_set_touches_each_member_and_no_other_contact() {
     patch_members(group_spec(), &mut conn, account, id, &[ada, ben], &[])
         .await
         .unwrap();
-    sqlx::query("UPDATE contacts SET last_modified = '2000-01-01 00:00:00' WHERE account_id = $1")
-        .bind(account)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
+    age_contacts(&mut conn, account).await;
 
     delete_set(group_spec(), &mut conn, account, id)
         .await
         .unwrap();
 
     for (name, contact, moved) in [("Ada", ada, true), ("Ben", ben, true), ("Cy", cy, false)] {
-        let after: String = sqlx::query_scalar("SELECT last_modified FROM contacts WHERE id = $1")
-            .bind(contact)
-            .fetch_one(&mut *conn)
-            .await
-            .unwrap();
-        assert_eq!(
-            after != "2000-01-01 00:00:00",
-            moved,
-            "{name}: last_modified is {after}"
-        );
+        let after = last_modified(&mut conn, contact).await;
+        assert_eq!(after != OLD, moved, "{name}: last_modified is {after}");
     }
 }
 
@@ -389,25 +441,52 @@ async fn patch_members_adds_and_removes_in_one_call() {
     assert!(matches!(err, MembershipError::BadRequest(_)));
 }
 
+// Bob's contact and Bob's conversation exist, so only the account condition
+// in `member_exists` keeps Alice from putting them in her set. One bad id in
+// `add` refuses the whole call, so Alice's own member is not written either.
 #[tokio::test]
 async fn patch_members_with_a_foreign_member_writes_nothing() {
-    let fixture = crate::test_support::test_fixture().await;
-    let account = fixture.account_with_id(101, "alice").await;
-    let mut conn = fixture.conn().await;
-    let a = insert_contact(&mut conn, account, "Ada").await;
-    let (id, _) = create_set(group_spec(), &mut conn, account, "Family")
-        .await
-        .unwrap();
-    let err = patch_members(group_spec(), &mut conn, account, id, &[a, 999_999], &[])
-        .await
-        .unwrap_err();
-    assert!(matches!(err, MembershipError::BadRequest(_)));
-    assert!(
-        list_member_ids_of(group_spec(), &mut conn, account, id)
+    for spec in [group_spec(), tag_spec()] {
+        let fixture = crate::test_support::test_fixture().await;
+        let alice = fixture.account_with_id(101, "alice").await;
+        let bob = fixture.account_with_id(102, "bob").await;
+        let mut conn = fixture.conn().await;
+        let alices = insert_member(spec, &mut conn, alice, "Ada").await;
+        let bobs = insert_member(spec, &mut conn, bob, "Ben").await;
+        let (alice_set, _) = create_set(spec, &mut conn, alice, "Family").await.unwrap();
+        let (bob_set, _) = create_set(spec, &mut conn, bob, "Family").await.unwrap();
+
+        let err = patch_members(spec, &mut conn, alice, alice_set, &[alices, bobs], &[])
             .await
-            .unwrap()
-            .is_empty()
-    );
+            .unwrap_err();
+        match err {
+            MembershipError::BadRequest(msg) => {
+                assert_eq!(msg, format!("{} {bobs} not found", spec.member_label));
+            }
+            other => panic!("{}: expected BadRequest, got {other:?}", spec.label),
+        }
+        assert!(
+            list_member_ids_of(spec, &mut conn, alice, alice_set)
+                .await
+                .unwrap()
+                .is_empty(),
+            "{}: Alice's set must stay empty",
+            spec.label
+        );
+        assert!(
+            list_member_ids_of(spec, &mut conn, bob, bob_set)
+                .await
+                .unwrap()
+                .is_empty(),
+            "{}: Bob's set must stay empty",
+            spec.label
+        );
+        assert!(
+            all_membership_rows(spec, &mut conn).await.is_empty(),
+            "{}: no membership row may be written for either account",
+            spec.label
+        );
+    }
 }
 
 /// An id to remove that names no member is ignored: the set is already in
@@ -501,44 +580,83 @@ async fn get_set_does_not_find_a_reserved_name_leftover() {
     assert!(matches!(err, MembershipError::NotFound(_)));
 }
 
+thread_local! {
+    /// The member ids [`record_hook`] was called with on this thread.
+    static HOOK_CALLS: std::cell::RefCell<Vec<i64>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// A change hook that records each call, so a test can count them. A second
+/// `touch_contact` writes the `last_modified` the first one wrote, so that
+/// column cannot show a hook that ran twice.
+fn record_hook<'a>(
+    _conn: &'a mut SqliteConnection,
+    _account_id: i64,
+    member_id: i64,
+) -> Pin<Box<dyn Future<Output = AnyResult<()>> + Send + 'a>> {
+    HOOK_CALLS.with_borrow_mut(|calls| calls.push(member_id));
+    Box::pin(async { Ok(()) })
+}
+
+/// The calls [`record_hook`] recorded since the last take, emptying the record.
+fn take_hook_calls() -> Vec<i64> {
+    HOOK_CALLS.with_borrow_mut(std::mem::take)
+}
+
 #[tokio::test]
 async fn patch_members_an_id_in_both_add_and_remove_nets_to_removed() {
     let fixture = crate::test_support::test_fixture().await;
     let account = fixture.account_with_id(101, "alice").await;
     let mut conn = fixture.conn().await;
+    let spec = MembershipSpec {
+        on_change: Some(record_hook),
+        ..*group_spec()
+    };
     let a = insert_contact(&mut conn, account, "Ada").await;
-    let (id, _) = create_set(group_spec(), &mut conn, account, "Family")
+    let (id, _) = create_set(&spec, &mut conn, account, "Family")
         .await
         .unwrap();
+    take_hook_calls();
+
+    assert_eq!(
+        patch_members(&spec, &mut conn, account, id, &[a], &[])
+            .await
+            .unwrap(),
+        (1, 0)
+    );
+    assert_eq!(take_hook_calls(), vec![a], "an add runs the hook once");
 
     // Already a member: add and remove the same id nets to "removed",
     // and the change hook fires once, not twice.
-    patch_members(group_spec(), &mut conn, account, id, &[a], &[])
-        .await
-        .unwrap();
     assert_eq!(
-        patch_members(group_spec(), &mut conn, account, id, &[a], &[a])
+        patch_members(&spec, &mut conn, account, id, &[a], &[a])
             .await
             .unwrap(),
         (0, 1)
     );
+    assert_eq!(
+        take_hook_calls(),
+        vec![a],
+        "a net remove runs the hook once"
+    );
     assert!(
-        list_member_ids_of(group_spec(), &mut conn, account, id)
+        list_member_ids_of(&spec, &mut conn, account, id)
             .await
             .unwrap()
             .is_empty()
     );
 
-    // Never a member: add and remove the same id changes nothing.
+    // Never a member: add and remove the same id changes nothing, so the
+    // hook does not run.
     let b = insert_contact(&mut conn, account, "Ben").await;
     assert_eq!(
-        patch_members(group_spec(), &mut conn, account, id, &[b], &[b])
+        patch_members(&spec, &mut conn, account, id, &[b], &[b])
             .await
             .unwrap(),
         (0, 0)
     );
+    assert_eq!(take_hook_calls(), Vec::<i64>::new(), "no change, no hook");
     assert!(
-        list_member_ids_of(group_spec(), &mut conn, account, id)
+        list_member_ids_of(&spec, &mut conn, account, id)
             .await
             .unwrap()
             .is_empty()

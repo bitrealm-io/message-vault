@@ -1335,6 +1335,113 @@ async fn naming_a_handle_again_under_another_transport_keeps_one_row() {
     assert_eq!(rows, [("phone".to_string(), Some("phone".to_string()))]);
 }
 
+/// A contact holding only `+15555550100` on WhatsApp.
+async fn contact_on_whatsapp(conn: &mut SqliteConnection, account: i64) -> i64 {
+    let contact_id: i64 = sqlx::query_scalar(
+        "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Sam') RETURNING id",
+    )
+    .bind(account)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    add_identity(conn, account, contact_id, "+15555550100", Some("whatsapp")).await;
+    contact_id
+}
+
+/// Replace the contact's `+15555550100` with `+15555550101`, under `service`.
+async fn replace_identity(
+    conn: &mut SqliteConnection,
+    account: i64,
+    contact_id: i64,
+    service: Option<&str>,
+) {
+    assert!(
+        mutate_contact(
+            conn,
+            account,
+            contact_id,
+            &UpdateContactRequest {
+                name: None,
+                add_identity: None,
+                update_identity: Some(UpdateContactIdentityRequest {
+                    previous_address: "+15555550100".into(),
+                    address: "+15555550101".into(),
+                    service: service.map(Into::into),
+                }),
+                remove_identity: None,
+            },
+        )
+        .await
+        .unwrap()
+    );
+}
+
+/// The `(raw, service)` of every identity on the contact.
+async fn contact_identities(
+    conn: &mut SqliteConnection,
+    account: i64,
+    contact_id: i64,
+) -> Vec<(String, String)> {
+    sqlx::query_as(
+        "SELECT h.raw, h.service FROM contact_handles ch
+         JOIN handles h ON h.id = ch.handle_id
+         WHERE ch.account_id = $1 AND ch.contact_id = $2
+         ORDER BY h.raw",
+    )
+    .bind(account)
+    .bind(contact_id)
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap()
+}
+
+/// With no service in the request, the new identity takes the service of the
+/// one it replaces: a WhatsApp contact stays on WhatsApp rather than moving
+/// onto the phone service and leaving its WhatsApp conversations Unknown.
+#[tokio::test]
+async fn replacing_an_identity_with_no_service_keeps_its_service() {
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
+    let contact_id = contact_on_whatsapp(&mut conn, account).await;
+
+    replace_identity(&mut conn, account, contact_id, None).await;
+
+    assert_eq!(
+        contact_identities(&mut conn, account, contact_id).await,
+        [("+15555550101".to_string(), "whatsapp".to_string())]
+    );
+}
+
+/// A request that names a service replaces the identity on that service and
+/// puts the new one there, even when the contact holds the same number on
+/// the phone service, which a request with no service would pick first.
+#[tokio::test]
+async fn replacing_an_identity_under_a_service_uses_that_service() {
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
+    let contact_id = contact_on_whatsapp(&mut conn, account).await;
+    add_identity(
+        &mut conn,
+        account,
+        contact_id,
+        "+15555550100",
+        Some("phone"),
+    )
+    .await;
+
+    replace_identity(&mut conn, account, contact_id, Some("whatsapp")).await;
+
+    assert_eq!(
+        contact_identities(&mut conn, account, contact_id).await,
+        [
+            ("+15555550100".to_string(), "phone".to_string()),
+            ("+15555550101".to_string(), "whatsapp".to_string()),
+        ]
+    );
+}
+
 #[tokio::test]
 async fn mutate_contact_rejects_trashed_contact() {
     let fixture = test_fixture().await;
@@ -2897,4 +3004,26 @@ async fn contact_restore_404s_for_another_accounts_contact() {
         1,
         "Bob's request must not restore Alice's contact"
     );
+}
+
+/// A long comma list is refused as a search with too many parts before any SQL
+/// is built, because SQLite refuses the `OR` chain it would become and the
+/// request would answer 500.
+#[tokio::test]
+async fn a_long_comma_list_is_refused_as_too_many_parts() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let values = vec!["0"; 1020].join(",");
+    let q = format!("groups:{values}");
+    assert!(q.len() <= 2048, "{}", q.len());
+    let server = crate::test_support::serve(&fixture.state).await;
+    let response = reqwest::Client::new()
+        .get(format!("{}/v1/contacts", server.base()))
+        .query(&[("q", q.as_str())])
+        .bearer_auth(&user.token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), reqwest::StatusCode::UNPROCESSABLE_ENTITY);
+    let body: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(body["detail"], "The search has too many parts.", "{body}");
 }

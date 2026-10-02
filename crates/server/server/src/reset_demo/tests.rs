@@ -157,6 +157,40 @@ async fn the_demo_account_may_export_and_not_import_or_delete() {
     close_test_db(pool, conn).await;
 }
 
+/// On a database where another account already holds `demo`, the build
+/// cannot write the Demo Account, and the failure names that account rather
+/// than passing on SQLite's constraint error (#1226).
+#[tokio::test]
+async fn a_build_refused_by_another_account_named_demo_names_that_account() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let db = temp.path().join("messagecrate.db");
+    let (pool, mut conn) = test_db(&db).await;
+    account_profile::insert_account_at(&mut conn, 7, "Demo", None, None)
+        .await
+        .expect("an account holds the name");
+    let seed = DemoSeed {
+        owner: DemoOwner {
+            display_name: "Demo User".into(),
+            handle_specs: Vec::new(),
+            emails: Vec::new(),
+        },
+        account: DemoAccount {
+            username: "demo".into(),
+        },
+    };
+
+    let error = seed_demo_account_on_conn(&mut conn, DEMO_ACCOUNT_ID, &seed)
+        .await
+        .expect_err("the username is taken");
+
+    assert_eq!(
+        error.to_string(),
+        "account 7 (Demo) already has the username demo, which belongs to the Demo Account; delete that account to add the Demo Account"
+    );
+
+    close_test_db(pool, conn).await;
+}
+
 #[tokio::test]
 async fn failed_reset_preserves_existing_demo_account() {
     let temp = tempfile::tempdir().expect("create test directory");

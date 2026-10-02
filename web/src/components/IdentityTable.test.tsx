@@ -3,6 +3,7 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { TimeZoneContext } from "../lib/timeZone";
 import IdentityTable, { type IdentityRow } from "./IdentityTable";
 
 afterEach(cleanup);
@@ -11,8 +12,8 @@ const rows: IdentityRow[] = [
   {
     address: "+15555550100",
     service: "phone",
-    start_date: "2020-01-01T00:00:00Z",
-    end_date: "2020-02-03T00:00:00Z",
+    start_date: "2020-01-01T12:00:00Z",
+    end_date: "2020-02-03T12:00:00Z",
     conversations: 2,
     direct_messages: 12,
     group_messages: 30,
@@ -29,8 +30,8 @@ const rows: IdentityRow[] = [
   {
     address: "+15555550100",
     service: "whatsapp",
-    start_date: "2021-05-05T00:00:00Z",
-    end_date: "2021-05-06T00:00:00Z",
+    start_date: "2021-05-05T12:00:00Z",
+    end_date: "2021-05-06T12:00:00Z",
     conversations: 1,
     direct_messages: 3,
     group_messages: 0,
@@ -190,5 +191,26 @@ describe("IdentityTable", () => {
     );
     expect(screen.queryByRole("grid")).not.toBeInTheDocument();
     expect(screen.getByText("No identities yet.")).toBeInTheDocument();
+  });
+});
+
+describe("IdentityTable dates", () => {
+  it("shows the day in the account's time zone, as the contact list does", () => {
+    // 20:00 on 31 December 2024 in Los Angeles.
+    const late: IdentityRow = {
+      address: "+15555550100",
+      service: "phone",
+      start_date: "2025-01-01T04:00:00Z",
+      end_date: "2025-01-01T04:00:00Z",
+      conversations: 1,
+      direct_messages: 1,
+      group_messages: 0,
+    };
+    render(
+      <TimeZoneContext.Provider value="America/Los_Angeles">
+        <IdentityTable {...dates} rows={[late]} onRemove={() => {}} />
+      </TimeZoneContext.Provider>,
+    );
+    expect(screen.getAllByText("2024-12-31")).toHaveLength(2);
   });
 });

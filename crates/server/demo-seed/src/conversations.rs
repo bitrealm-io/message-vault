@@ -23,9 +23,10 @@ use crate::assets::{JPG_PHOTOS, OTHER_ATTACHMENTS};
 use crate::config::SeedConfig;
 use crate::corpus::Corpus;
 use crate::personas::{
-    Contact, EMPTY_GROUP_HANDLE, EMPTY_THREAD_HANDLE, ORPHAN_SENDER, OWNER_EMAIL, OWNER_PHONE,
-    Roster, Unassigned,
+    Contact, EMPTY_GROUP_HANDLE, EMPTY_GROUP_MEMBERS, EMPTY_THREAD_HANDLE, ORPHAN_SENDER,
+    OWNER_EMAIL, OWNER_PHONE, Roster, Unassigned,
 };
+use crate::phones;
 
 const IMESSAGE_SOURCE: &str = "imessage";
 const SBR_SOURCE: &str = "sms-backup-restore";
@@ -189,7 +190,7 @@ impl<R: Rng> Seeder<'_, R> {
                 staging.imessage,
                 EMPTY_GROUP_HANDLE,
                 IrConversationType::Group,
-                &["+12125554503", "+13035555604"],
+                &EMPTY_GROUP_MEMBERS,
                 IMESSAGE_SOURCE,
             )?;
             self.stats.conversation_files += 1;
@@ -1188,13 +1189,14 @@ fn sample_group_day_burst(rng: &mut impl Rng) -> usize {
     }
 }
 
-/// Chat identifier for a group: a mix of `chat…` IDs and phone-looking IDs.
+/// Chat identifier for a group: a mix of `chat…` IDs and phone-number IDs.
+///
+/// A group past the last phone-number ID gets a `chat…` ID instead.
 fn group_chat_id(index: usize) -> String {
     match index % 5 {
         0 => format!("chat{:010}", 1_000_000_000u64 + index as u64),
-        1 => format!("+1800555{:04}", 1000 + (index % 9000)),
-        2 => format!("+4477009{:05}", 10000 + (index % 80000)),
-        3 => format!("+1212555{:04}", 2000 + (index % 7000)),
+        1..=3 => phones::group_chat_phone(index)
+            .unwrap_or_else(|| format!("chat{:010}", 3_000_000_000u64 + index as u64)),
         _ => format!("chat{:010}", 2_000_000_000u64 + index as u64),
     }
 }

@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthGuard } from "./AuthGuard";
@@ -11,14 +12,17 @@ const profileState = vi.hoisted(() => ({
     is_owner?: boolean;
   } | null,
   loading: false,
+  error: "",
 }));
+const retry = vi.hoisted(() => vi.fn());
 const authState = vi.hoisted(() => ({ isAuthenticated: true }));
 
 vi.mock("../lib/useAccountProfile", () => ({
   useAccountProfile: () => ({
     profile: profileState.profile,
     loading: profileState.loading,
-    error: "",
+    error: profileState.error,
+    retry,
   }),
 }));
 
@@ -30,6 +34,8 @@ afterEach(() => {
   cleanup();
   profileState.profile = null;
   profileState.loading = false;
+  profileState.error = "";
+  retry.mockReset();
   authState.isAuthenticated = true;
 });
 
@@ -62,6 +68,26 @@ describe("AuthGuard", () => {
 
     expect(screen.getByText("owner home")).toBeInTheDocument();
     expect(screen.queryByText("the messages")).not.toBeInTheDocument();
+  });
+
+  it("does not let an account in whose profile could not be loaded", () => {
+    // What useAccountProfile reports once GET /v1/account/profile has failed.
+    profileState.profile = null;
+    profileState.loading = false;
+    profileState.error = "Internal Server Error";
+    renderGuard();
+
+    expect(screen.queryByText("the messages")).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Internal Server Error");
+  });
+
+  it("asks for the profile again from the error screen", async () => {
+    profileState.error = "Internal Server Error";
+    renderGuard();
+
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(retry).toHaveBeenCalledTimes(1);
   });
 
   it("lets an account that owes nothing through", () => {

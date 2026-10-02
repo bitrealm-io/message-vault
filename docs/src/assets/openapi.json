@@ -8177,8 +8177,8 @@
         "tags": [
           "Messages"
         ],
-        "summary": "One message by id: the row the Messages list would show, looked up directly.",
-        "description": "Read-only. A message is never written through this route: an import\nwrites messages, and trashing is a conversation operation\n(`docs/architecture/http-api.md`, \"Methods\"). The lookup carries the\nlist's own defaults — the caller's account, no trashed conversation, no\nduplicate — so a row the list hides is `404` here too, and a link out of\na search result never reaches further than the search did.",
+        "summary": "One message by id, in the shape the Messages list gives each row.",
+        "description": "Read-only. A message is never written through this route: an import\nwrites messages, and trashing is a conversation operation\n(`docs/architecture/http-api.md`, \"Methods\"). The id is enough: an id\nnames one message, and a lookup by id does not depend on how it was\nfound, so the route returns any message of the caller's account, one in\na trashed conversation and a duplicate included, and takes no `q`.\nAnother account's message is `404`.",
         "operationId": "get_message",
         "parameters": [
           {

@@ -423,6 +423,58 @@ async fn one_message_is_read_by_id_and_only_by_the_account_that_owns_it() {
     expect_problem(status, &text, ProblemType::ValidationFailed);
 }
 
+/// An id names one message, so a lookup by id does not depend on how the
+/// message was found: a message in a trashed conversation and a duplicate
+/// are each returned, as `GET /v1/messages` lists them with `trashed:yes`
+/// and `source:imessage` (#1201).
+#[tokio::test]
+async fn a_message_in_a_trashed_conversation_or_a_duplicate_is_read_by_id() {
+    let (fixture, alice, direct, group) = seeded().await;
+    {
+        let mut conn = fixture.conn().await;
+        sqlx::query(
+            "INSERT INTO trashed_conversations (account_id, conversation_id) VALUES ($1, $2)",
+        )
+        .bind(alice.account_id)
+        .bind(group)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+        // The second message of the direct thread becomes a copy of the first.
+        sqlx::query(
+            "UPDATE messages SET duplicate_of = (
+                 SELECT MIN(id) FROM messages WHERE conversation_id = $1
+             )
+             WHERE id = (SELECT MAX(id) FROM messages WHERE conversation_id = $1)",
+        )
+        .bind(direct)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    }
+
+    let trashed: serde_json::Value =
+        get_json(&fixture.state, "/v1/messages?q=trashed%3Ayes", &alice.token).await;
+    let trashed = &trashed["items"][0];
+    assert_eq!(trashed["text"], "the dentist called again", "{trashed}");
+
+    let duplicate: serde_json::Value = get_json(
+        &fixture.state,
+        "/v1/messages?q=source%3Aimessage%20there",
+        &alice.token,
+    )
+    .await;
+    let duplicate = &duplicate["items"][0];
+    assert_eq!(duplicate["text"], "see you there", "{duplicate}");
+
+    for listed in [trashed, duplicate] {
+        let id = listed["id"].as_i64().unwrap();
+        let message: serde_json::Value =
+            get_json(&fixture.state, &format!("/v1/messages/{id}"), &alice.token).await;
+        assert_eq!(&message, listed);
+    }
+}
+
 /// `date:today` means today on the account's clock, not UTC's. The account
 /// is on Kiritimati, 14 hours ahead of UTC, so the local day starts at 10:00
 /// UTC the day before. A message half an hour into the local day is today; one

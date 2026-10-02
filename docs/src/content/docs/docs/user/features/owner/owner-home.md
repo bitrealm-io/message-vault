@@ -77,6 +77,7 @@ Every new Message Crate starts with it.
 The sizes are **Medium**, about 54,000 messages, and **Large**, about 613,000 messages.
 Medium takes a few seconds. Large takes about a minute.
 The card shows **Building the Demo Account** until the build ends, and the server keeps working meanwhile.
+Nobody can be in the Demo Account during a build: the build logs out anyone already in it, and the login screen offers **Explore Demo Account** again once the build ends.
 
 The Demo Account is removed under **User Accounts**, as any account is.
 Its page there shows its status, permissions, and identities, and none of them can be changed.

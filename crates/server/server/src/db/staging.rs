@@ -547,6 +547,20 @@ pub async fn max_message_id(conn: &mut SqliteConnection) -> Result<i64> {
     )
 }
 
+/// The highest `attachments.id`, or 0 in an empty table: the watermark new
+/// rows land above.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn max_attachment_id(conn: &mut SqliteConnection) -> Result<i64> {
+    Ok(
+        sqlx::query_scalar("SELECT COALESCE(MAX(id), 0) FROM attachments")
+            .fetch_one(&mut *conn)
+            .await?,
+    )
+}
+
 /// The lowest and highest staged message id under a mapped conversation,
 /// or `(None, None)` when nothing is staged.
 ///

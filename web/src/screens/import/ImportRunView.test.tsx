@@ -487,7 +487,7 @@ describe("ImportRunView", () => {
     await user.click(screen.getByRole("button", { name: "View imported conversations" }));
     expect(navigateMock).toHaveBeenCalledWith("/?q=import%3A%2342");
     await user.click(screen.getByRole("button", { name: "View modified contacts" }));
-    expect(navigateMock).toHaveBeenCalledWith("/group/imessage-import-2026-09-09");
+    expect(navigateMock).toHaveBeenCalledWith("/group/imessage%20import%202026-09-09");
 
     await user.click(screen.getByRole("button", { name: "← Back" }));
     expect(onBack).toHaveBeenCalledTimes(1);

@@ -31,8 +31,11 @@ pub(crate) const PARTICIPANTS: &str = "X-ME-Participants";
 pub(crate) const SENDER_HANDLE: &str = "X-ME-Sender-Handle";
 /// Sender display name.
 pub(crate) const SENDER_DISPLAY_NAME: &str = "X-ME-Sender-Display-Name";
-/// Owner handle.
+/// The conversation's owner handle.
 pub(crate) const OWNER_HANDLE: &str = "X-ME-Owner-Handle";
+/// The owner handle this one message was sent from or received at, when the
+/// source records one per message (Apple Messages does).
+pub(crate) const MESSAGE_OWNER_HANDLE: &str = "X-ME-Message-Owner-Handle";
 /// Owner display name.
 pub(crate) const OWNER_DISPLAY_NAME: &str = "X-ME-Owner-Display-Name";
 /// SMS/MMS subject.

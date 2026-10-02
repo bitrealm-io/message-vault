@@ -13,18 +13,27 @@ import {
 import { UNKNOWN_GROUP } from "./unknownGroup";
 
 describe("groupSlug", () => {
-  it("turns spaces and punctuation into dashes and keeps letter case", () => {
-    expect(groupSlug("Work Friends")).toBe("Work-Friends");
+  it("is the whole name, trimmed, with its spaces, punctuation and letter case", () => {
+    expect(groupSlug("Work Friends")).toBe("Work Friends");
     expect(groupSlug("  Family  ")).toBe("Family");
     expect(groupSlug("reGroup")).toBe("reGroup");
   });
 });
 
 describe("groupFromSlug", () => {
-  it("prefers an exact slug match, then ignores case", () => {
-    expect(groupFromSlug("Work-Friends", ["Work Friends", "Family"])).toBe("Work Friends");
+  it("prefers an exact name match, then ignores case", () => {
+    expect(groupFromSlug("Work Friends", ["Work Friends", "Family"])).toBe("Work Friends");
     expect(groupFromSlug("family", ["Family"])).toBe("Family");
+    expect(groupFromSlug("reGroup", ["Regroup", "reGroup"])).toBe("reGroup");
     expect(groupFromSlug("missing", ["Family"])).toBeNull();
+  });
+
+  it("gives a name with no ASCII letter or digit a link that opens it", () => {
+    expect(groupFromSlug(groupSlug("家族"), ["家族"])).toBe("家族");
+  });
+
+  it("opens the group whose link was followed when two names differ only in punctuation", () => {
+    expect(groupFromSlug(groupSlug("A B"), ["A&B", "A B"])).toBe("A B");
   });
 });
 

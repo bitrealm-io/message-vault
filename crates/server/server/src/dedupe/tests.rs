@@ -1280,13 +1280,14 @@ struct GenRow {
 
 impl GenRow {
     /// The near-time twin rule, written out again: same conversation,
-    /// direction and sender, another source, and the same body or the same
-    /// attachments. Time is checked by the caller.
+    /// direction and sender, another source, another content key, and the
+    /// same body or the same attachments. Time is checked by the caller.
     fn is_near_twin_of(&self, other: &GenRow) -> bool {
         self.conversation_id == other.conversation_id
             && self.is_from_me == other.is_from_me
             && self.sender == other.sender
             && self.source != other.source
+            && self.content_key != other.content_key
             && ((!self.body.is_empty() && self.body == other.body)
                 || (!self.attachments.is_empty() && self.attachments == other.attachments))
     }
@@ -1381,10 +1382,11 @@ fn survivor(rows: &HashMap<i64, GenRow>, id: i64, ctx: &str) -> i64 {
 ///   earlier-or-equal message within the window, or are that message. The
 ///   near-time pass clusters around a first message, so the two ends of a
 ///   link need not share a body or attachments with each other.
-/// - A content key shared by two or more sources ends in one shown message:
-///   at most one of its messages is shown, and all of them lead to the same
-///   one. That one may be outside the group, when the near-time pass hid the
-///   group's own survivor.
+/// - A content key shared by two or more sources ends in no more shown
+///   messages than the one source that holds it most often: at most that
+///   many of its messages are shown, and they all lead to at most that many.
+///   A survivor may be outside the group, when the near-time pass hid one of
+///   the group's own.
 async fn assert_dedupe_invariants(conn: &mut SqliteConnection, ctx: &str) {
     let rows = load_gen_rows(conn).await;
 
@@ -1437,21 +1439,27 @@ async fn assert_dedupe_invariants(conn: &mut SqliteConnection, ctx: &str) {
         if sources.len() < 2 {
             continue;
         }
+        let mut per_source: HashMap<&str, usize> = HashMap::new();
+        for id in &ids {
+            *per_source.entry(rows[id].source.as_str()).or_default() += 1;
+        }
+        let most = per_source.values().copied().max().unwrap_or(0);
         let shown: Vec<i64> = ids
             .iter()
             .copied()
             .filter(|id| rows[id].duplicate_of.is_none())
             .collect();
         assert!(
-            shown.len() <= 1,
-            "{ctx}: content key {key} is shown {} times: {shown:?}",
+            shown.len() <= most,
+            "{ctx}: content key {key} is shown {} times, and no source holds it more than \
+             {most}: {shown:?}",
             shown.len()
         );
         let survivors: HashSet<i64> = ids.iter().map(|&id| survivor(&rows, id, ctx)).collect();
-        assert_eq!(
-            survivors.len(),
-            1,
-            "{ctx}: the messages of content key {key} ({ids:?}) lead to {survivors:?}"
+        assert!(
+            survivors.len() <= most,
+            "{ctx}: the messages of content key {key} ({ids:?}) lead to {survivors:?}, and no \
+             source holds it more than {most} times"
         );
     }
 }
@@ -1529,4 +1537,97 @@ async fn dedupe_invariants_hold_over_generated_databases() {
         exact > 0 && near > 0 && rewritten > 0,
         "exact={exact} near={near} rewritten={rewritten}"
     );
+}
+
+/// Inserts one "ok" sent from me at 18:04:22 for each `(guid, source)`.
+async fn insert_oks(conn: &mut SqliteConnection, copies: &[(&str, &str)]) -> Vec<i64> {
+    let mut ids = Vec::new();
+    for &(guid, source) in copies {
+        ids.push(
+            insert_msg(
+                conn,
+                InsertMsgArgs {
+                    source,
+                    guid,
+                    timestamp: "2015-03-12T18:04:22Z",
+                    from_me: 1,
+                    body: "ok",
+                    sort_order: 0,
+                },
+            )
+            .await,
+        );
+    }
+    ids
+}
+
+/// The ids of the messages left shown, in id order.
+async fn shown_ids(conn: &mut SqliteConnection) -> Vec<i64> {
+    sqlx::query_scalar("SELECT id FROM messages WHERE duplicate_of IS NULL ORDER BY id")
+        .fetch_all(&mut *conn)
+        .await
+        .unwrap()
+}
+
+/// A message sent twice in one second, held twice by each of two sources,
+/// is two messages: the preferred source's two copies stay shown, and the
+/// other source's two are hidden.
+#[tokio::test]
+async fn a_message_sent_twice_held_by_two_sources_keeps_two() {
+    let (pool, _dir) = engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    setup_db(&mut conn).await;
+    let ids = insert_oks(
+        &mut conn,
+        &[
+            ("a1", "go-sms-pro"),
+            ("a2", "go-sms-pro"),
+            ("b1", "sms-backup-plus"),
+            ("b2", "sms-backup-plus"),
+        ],
+    )
+    .await;
+
+    let stats = dedupe_cross_source(&mut conn, TEST_ACCOUNT_ID, None, 2)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        shown_ids(&mut conn).await,
+        ids[..2],
+        "two \"ok\" were sent, so the first source's two stay shown"
+    );
+    assert_eq!((stats.exact_groups, stats.exact_flagged), (1, 2));
+    assert_eq!(stats.near_flagged, 0);
+}
+
+/// The preferred source holds the message once and another source holds it
+/// twice: two stay shown, the preferred source's copy and the first copy
+/// of the other source. The near-time pass leaves the pair alone, because
+/// the exact pass already chose between rows of one content key.
+#[tokio::test]
+async fn the_source_that_holds_a_message_most_often_sets_how_many_stay() {
+    let (pool, _dir) = engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    setup_db(&mut conn).await;
+    let ids = insert_oks(
+        &mut conn,
+        &[
+            ("a1", "go-sms-pro"),
+            ("b1", "sms-backup-plus"),
+            ("b2", "sms-backup-plus"),
+            ("c1", "sms-backup-restore"),
+        ],
+    )
+    .await;
+
+    let stats = dedupe_cross_source(&mut conn, TEST_ACCOUNT_ID, None, 2)
+        .await
+        .unwrap();
+
+    assert_eq!(shown_ids(&mut conn).await, ids[..2]);
+    assert_eq!(duplicate_of(&mut conn, ids[2]).await, Some(ids[0]));
+    assert_eq!(duplicate_of(&mut conn, ids[3]).await, Some(ids[0]));
+    assert_eq!((stats.exact_groups, stats.exact_flagged), (1, 2));
+    assert_eq!(stats.near_flagged, 0);
 }

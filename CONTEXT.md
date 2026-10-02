@@ -238,8 +238,8 @@ The screen the owner lands on at login and works from, the way any
 other account lands in Messages. It has the frame every account sees: the
 product name, a search bar, the username and the account button across the top, over a
 side panel and a content pane. The side panel lists Dashboard, Server Settings,
-User Accounts, Activity and Logs; Dashboard shows what the whole Message Crate
-holds, and Activity and Logs are named and hold nothing yet. The search bar narrows User Accounts by username or
+User Accounts, Audit Trail and Logs; Dashboard shows what the whole Message Crate
+holds, and Audit Trail and Logs are named and hold nothing yet. The search bar narrows User Accounts by username or
 preferred name. User Accounts lists every account, the owner's own first,
 each by username with its preferred name, its status and its last login. There the owner adds
 accounts. An account's name opens that account's Settings, the screen its
@@ -255,6 +255,16 @@ which is also where the account button's Settings goes. An owner's password
 reset sets the password and nothing more: it does not end the person's
 session and does not make them choose a new one.
 _Avoid_: Console, Dashboard, Admin, Admin panel
+
+**Audit Trail**:
+The permanent record of what each user did on a Message Crate, and when:
+logging in, sessions ending, logins refused, Import Runs, Export Runs, and the
+owner's changes to accounts. It records that something happened and how much,
+never what the messages said. Nobody edits or deletes it, the owner included,
+and deleting an account does not remove its entries. The owner reads it for
+every account on Owner Home. It is not the server's log output, which is Logs.
+Why it outlives the account: `docs/adr/0020`.
+_Avoid_: Activity, Audit log, Event log, History
 
 **Claiming**:
 Making a Message Crate's owner. One with no owner is unclaimed and offers only

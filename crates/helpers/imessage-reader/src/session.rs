@@ -1,25 +1,36 @@
 //! Session caches (chats, handles, contacts, tapbacks).
+//!
+//! Addresses and chat members come from the reader's own reads of
+//! `handle(ROWID, id)` and `chat_handle_join`, never from the handle cache of
+//! `imessage-database`. That cache is built for exports a person reads: it
+//! joins every address of one person into one string, maps handle 0 to "Me",
+//! and has no entry for a chat with no handle rows. The library still reads
+//! the chats, the message bodies and the attachments.
 
-use std::{
-    cell::RefCell,
-    collections::{BTreeSet, HashMap, HashSet},
-};
+use std::collections::{BTreeSet, HashMap};
 
 use imessage_database::{
     tables::{
         chat::Chat,
-        chat_handle::ChatToHandle,
-        handle::Handle,
         messages::Message,
         table::{Cacheable, ME, UNKNOWN},
     },
-    util::dates::get_offset,
+    util::{dates::get_offset, platform::Platform},
 };
+use rusqlite::Connection;
 
-use crate::{contacts::Name, data_source::DataSource, error::RuntimeError, options::ReaderOptions};
+use crate::{
+    data_source::DataSource, error::RuntimeError, identities::OwnerAddresses,
+    options::ReaderOptions,
+};
 
 /// Setup steps `MailSession::new` runs before any message is read.
 const CACHE_STEPS: u64 = 4;
+
+/// Apple's `chat.style` for a group chat.
+const STYLE_GROUP: i64 = 43;
+/// Apple's `chat.style` for a one-to-one chat.
+const STYLE_ONE_TO_ONE: i64 = 45;
 
 /// Cached chats, handles, contacts, and tapbacks for one conversion run.
 pub(crate) struct MailSession {
@@ -27,14 +38,18 @@ pub(crate) struct MailSession {
     pub offset: i64,
     pub data_source: DataSource,
     pub chatrooms: HashMap<i32, Chat>,
-    pub real_chatrooms: HashMap<i32, i32>,
-    pub chatroom_participants: HashMap<i32, BTreeSet<i32>>,
-    pub participants: HashMap<i32, Name>,
-    pub real_participants: HashMap<i32, i32>,
+    /// Apple's `chat.style` by chat rowid; empty when the column is absent.
+    chat_styles: HashMap<i32, i64>,
+    /// The handle rowids `chat_handle_join` lists for each chat.
+    pub chat_members: HashMap<i32, BTreeSet<i32>>,
+    /// One address per handle rowid: that row's `id`.
+    handles: HashMap<i32, String>,
+    /// The contact name for each handle whose address the contacts know.
+    handle_names: HashMap<i32, String>,
+    /// The addresses the backup names as the owner's.
+    owner: OwnerAddresses,
     /// Tapbacks keyed by target message GUID → part index → reactions.
     pub tapbacks: HashMap<String, HashMap<usize, Vec<Message>>>,
-    /// Chat IDs already reported as having no handle rows (avoids log spam).
-    logged_handleless_chats: RefCell<HashSet<i32>>,
 }
 
 impl MailSession {
@@ -46,72 +61,89 @@ impl MailSession {
     /// fails.
     pub fn new(options: ReaderOptions) -> Result<Self, RuntimeError> {
         let data_source = DataSource::from(&options)?;
+        let db = data_source.db();
 
         options.emit_log("Building cache...");
         options.setup_step(1, CACHE_STEPS, "Caching chats");
-        let chatrooms = Chat::cache(data_source.db())?;
+        let chatrooms = Chat::cache(db)?;
+        let chat_styles = chat_styles(db);
 
         options.setup_step(2, CACHE_STEPS, "Caching chatrooms");
-        let chatroom_participants = ChatToHandle::cache(data_source.db())?;
-        let chat_handle_lookup = ChatToHandle::get_chat_lookup_map(data_source.db())?;
-        let real_chatrooms = ChatToHandle::dedupe(&chatroom_participants, &chat_handle_lookup)?;
+        let chat_members = chat_members(db)?;
 
         options.setup_step(3, CACHE_STEPS, "Caching participants");
-        let participants = Handle::cache(data_source.db())?;
-        let real_participants = Handle::dedupe(&participants);
-        let participants_map = data_source
-            .contacts_index
-            .build_participants_map(&participants, &real_participants);
+        let handles = handles(db)?;
+        let handle_names = handles
+            .iter()
+            .filter_map(|(&rowid, address)| {
+                contact_name(&data_source, address).map(|name| (rowid, name))
+            })
+            .collect();
+        let backup_root = matches!(options.platform, Platform::iOS).then_some(&options.db_path);
+        let owner = OwnerAddresses::read(db, backup_root.map(|p| p.as_path()));
 
         options.setup_step(4, CACHE_STEPS, "Caching tapbacks");
-        let tapbacks = Message::cache(data_source.db())?;
+        let tapbacks = Message::cache(db)?;
         options.emit_log("Cache built!");
 
         Ok(Self {
             chatrooms,
-            real_chatrooms,
-            chatroom_participants,
-            real_participants,
-            participants: participants_map,
+            chat_styles,
+            chat_members,
+            handles,
+            handle_names,
+            owner,
             tapbacks,
-            logged_handleless_chats: RefCell::new(HashSet::new()),
             options,
             offset: get_offset(),
             data_source,
         })
     }
 
-    /// Chat row and deduped chat id for a message, if the chat has participants.
-    pub fn conversation(&self, message: &Message) -> Option<(&Chat, &i32)> {
-        match message.chat_id.or(message.deleted_from) {
-            Some(chat_id) => {
-                if let Some(chatroom) = self.chatrooms.get(&chat_id) {
-                    match self.real_chatrooms.get(&chat_id) {
-                        Some(real_id) => Some((chatroom, real_id)),
-                        // Chat row exists but has no handle rows: no chat
-                        // context is available, so messages land in ORPHANED.
-                        // Report it once per chat so users can see why.
-                        None => {
-                            if self.logged_handleless_chats.borrow_mut().insert(chat_id) {
-                                self.options.emit_log(format!(
-                                    "Chat ID {chat_id} has no participant handles; \
-                                     its messages will be exported under ORPHANED"
-                                ));
-                            }
-                            None
-                        }
-                    }
-                } else {
-                    self.options
-                        .emit_log(format!("Chat ID {chat_id} does not exist in chat table!"));
-                    None
-                }
-            }
-            None => None,
+    /// The chat row a message belongs to, or `None` for a message in no chat.
+    pub fn conversation(&self, message: &Message) -> Option<&Chat> {
+        let chat_id = message.chat_id.or(message.deleted_from)?;
+        let chat = self.chatrooms.get(&chat_id);
+        if chat.is_none() {
+            self.options
+                .emit_log(format!("Chat ID {chat_id} does not exist in chat table!"));
+        }
+        chat
+    }
+
+    /// Whether a chat is a group. Apple's `chat.style` decides; where the
+    /// column is absent or holds another value, a group id (`chat` and
+    /// digits) makes a group. Members and title decide nothing.
+    pub fn is_group(&self, chat: &Chat) -> bool {
+        match self.chat_styles.get(&chat.rowid) {
+            Some(&STYLE_GROUP) => true,
+            Some(&STYLE_ONE_TO_ONE) => false,
+            _ => is_group_id(&chat.chat_identifier),
         }
     }
 
-    /// Display name for the sender: Me / caller id, a contact name, or Unknown.
+    /// The address of a handle: its row's `id`. Handle 0 is no handle.
+    pub fn handle_address(&self, handle_id: i32) -> Option<&str> {
+        self.handles.get(&handle_id).map(String::as_str)
+    }
+
+    /// The contact name of a handle, when the contacts know its address.
+    pub fn handle_name(&self, handle_id: i32) -> Option<&str> {
+        self.handle_names.get(&handle_id).map(String::as_str)
+    }
+
+    /// The contact name of an address, when the contacts know it.
+    pub fn address_name(&self, address: &str) -> Option<String> {
+        contact_name(&self.data_source, address)
+    }
+
+    /// Whether an address is one of the owner's.
+    pub fn is_owner(&self, address: &str) -> bool {
+        self.owner.contains(address)
+    }
+
+    /// Display name for the sender: Me / caller id, a contact name, the
+    /// handle's address, or Unknown.
     pub fn who<'a, 'b: 'a>(
         &'a self,
         handle_id: Option<i32>,
@@ -123,96 +155,159 @@ impl MailSession {
                 return destination_caller_id.unwrap_or(ME);
             }
             return ME;
-        } else if let Some(handle_id) = handle_id {
-            return match self.resolve_participant(handle_id) {
-                Some(contact) => contact.get_display_name(),
-                None => UNKNOWN,
-            };
         }
-        UNKNOWN
+        handle_id
+            .and_then(|id| self.handle_name(id).or_else(|| self.handle_address(id)))
+            .unwrap_or(UNKNOWN)
     }
+}
 
-    /// Contact name for a handle id after merging duplicate handles.
-    pub fn resolve_participant(&self, handle_id: i32) -> Option<&Name> {
-        self.real_participants
-            .get(&handle_id)
-            .and_then(|internal_id| self.participants.get(internal_id))
+/// Whether a `chat_identifier` is Apple's group id: `chat` followed by
+/// digits.
+fn is_group_id(identifier: &str) -> bool {
+    identifier
+        .strip_prefix("chat")
+        .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// The contact's full name for one address, if the contacts have one.
+fn contact_name(data_source: &DataSource, address: &str) -> Option<String> {
+    data_source
+        .contacts_index
+        .lookup(address)
+        .map(|name| name.full)
+        .filter(|full| !full.is_empty())
+}
+
+/// Every handle row's address, by rowid. A row with no `id` is left out.
+fn handles(db: &Connection) -> Result<HashMap<i32, String>, RuntimeError> {
+    let mut statement = db.prepare("SELECT ROWID, id FROM handle")?;
+    let rows = statement.query_map([], |row| {
+        Ok((row.get::<_, i32>(0)?, row.get::<_, Option<String>>(1)?))
+    })?;
+    let mut out = HashMap::new();
+    for row in rows {
+        if let (rowid, Some(id)) = row?
+            && !id.trim().is_empty()
+        {
+            out.insert(rowid, id);
+        }
     }
+    Ok(out)
+}
+
+/// The handle rowids `chat_handle_join` lists for each chat.
+fn chat_members(db: &Connection) -> Result<HashMap<i32, BTreeSet<i32>>, RuntimeError> {
+    let mut statement = db.prepare("SELECT chat_id, handle_id FROM chat_handle_join")?;
+    let rows = statement.query_map([], |row| Ok((row.get::<_, i32>(0)?, row.get::<_, i32>(1)?)))?;
+    let mut out: HashMap<i32, BTreeSet<i32>> = HashMap::new();
+    for row in rows {
+        let (chat_id, handle_id) = row?;
+        out.entry(chat_id).or_default().insert(handle_id);
+    }
+    Ok(out)
+}
+
+/// Apple's `chat.style` by chat rowid. An older database without the
+/// column gives an empty map, and the identifier decides instead.
+fn chat_styles(db: &Connection) -> HashMap<i32, i64> {
+    let Ok(mut statement) = db.prepare("SELECT ROWID, style FROM chat") else {
+        return HashMap::new();
+    };
+    let Ok(rows) = statement.query_map([], |row| {
+        Ok((row.get::<_, i32>(0)?, row.get::<_, Option<i64>>(1)?))
+    }) else {
+        return HashMap::new();
+    };
+    rows.flatten()
+        .filter_map(|(rowid, style)| style.map(|style| (rowid, style)))
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::test_support::FixtureDb;
-    use chat_db_fixture::{FRIEND_EMAIL, FRIEND_PHONE, GROUP_CHAT_IDENTIFIER, OWNER};
+    use chat_db_fixture::{
+        FRIEND_EMAIL, FRIEND_PHONE, FRIEND_PHONE_EMAIL, GROUP_CHAT_IDENTIFIER, OWNER, OWNER_EMAIL,
+    };
 
-    /// The caches hold what the fixture wrote: three chats, each deduped to
-    /// itself, two handles each carrying its raw address as its details. The
-    /// owner's own addresses are never handles: the chat the owner runs from
-    /// the email account has the friend as its one participant.
+    /// The caches hold what the fixture wrote: six chats with their styles,
+    /// the join rows as written, and each handle with its own address, not
+    /// the joined string `imessage-database` makes of one person's two
+    /// addresses. Handle 0 is no handle.
     #[test]
     fn a_session_caches_the_chats_and_handles() {
         let fixture = FixtureDb::write();
         let session = fixture.session();
 
-        assert_eq!(session.chatrooms.len(), 3);
+        assert_eq!(session.chatrooms.len(), 6);
         assert_eq!(session.chatrooms[&2].chat_identifier, GROUP_CHAT_IDENTIFIER);
-        assert_eq!(session.real_chatrooms.len(), 3);
-        assert_eq!(session.chatroom_participants[&1], BTreeSet::from([1]));
-        assert_eq!(session.chatroom_participants[&2], BTreeSet::from([1, 2]));
-        assert_eq!(session.chatroom_participants[&3], BTreeSet::from([2]));
+        assert_eq!(session.chat_members[&1], BTreeSet::from([1]));
+        assert_eq!(session.chat_members[&2], BTreeSet::from([1, 2, 4]));
+        assert!(!session.chat_members.contains_key(&5));
 
-        let phone = session.resolve_participant(1).expect("handle 1");
-        assert_eq!(phone.details, FRIEND_PHONE);
-        assert_eq!(phone.full, "", "no contacts file, so no name");
-        assert_eq!(
-            session.resolve_participant(2).unwrap().details,
-            FRIEND_EMAIL
-        );
-        assert_eq!(session.resolve_participant(99), None);
+        assert_eq!(session.handle_address(1), Some(FRIEND_PHONE));
+        assert_eq!(session.handle_address(2), Some(FRIEND_EMAIL));
+        assert_eq!(session.handle_address(3), Some(FRIEND_PHONE_EMAIL));
+        assert_eq!(session.handle_address(0), None);
+        assert_eq!(session.handle_address(99), None);
+        assert_eq!(session.handle_name(1), None, "no contacts file, so no name");
         assert!(session.tapbacks.is_empty());
     }
 
+    /// Every address the backup names as the owner's counts, from either
+    /// column, and nobody else's does.
+    #[test]
+    fn the_owner_is_known_by_every_address_the_backup_names() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session();
+        assert!(session.is_owner(OWNER));
+        assert!(session.is_owner(OWNER_EMAIL));
+        assert!(!session.is_owner(FRIEND_PHONE));
+    }
+
     /// A message finds its chat by `chat_id`; a message whose chat id names
-    /// no chat row lands nowhere. The deduped id is what the two chats with
-    /// one participant set share, numbered from zero.
+    /// no chat row lands nowhere, and so does a message with no chat id. A
+    /// chat with no handle rows is still found.
     #[test]
     fn a_message_resolves_to_its_conversation() {
         let fixture = FixtureDb::write();
         let session = fixture.session();
         let messages = FixtureDb::messages(&session);
-        assert_eq!(messages.len(), 6);
+        assert_eq!(messages.len(), 12);
 
-        let (chat, real_id) = session.conversation(&messages[2]).expect("the group chat");
-        assert_eq!(chat.rowid, 2);
-        // Deduped chat ids are sequential in chat id order, not chat rowids.
-        assert_eq!(*real_id, 1);
+        let rowid = |index: usize| session.conversation(&messages[index]).map(|c| c.rowid);
+        assert_eq!(rowid(0), Some(1));
+        assert_eq!(rowid(2), Some(2));
+        assert_eq!(rowid(3), Some(3), "the chat on the owner's email account");
         assert_eq!(
-            session.conversation(&messages[0]).map(|(_, id)| *id),
-            Some(0)
-        );
-        let (email_chat, _) = session
-            .conversation(&messages[3])
-            .expect("the chat on the owner's email account");
-        assert_eq!(email_chat.rowid, 3);
-        assert_eq!(
-            session
-                .conversation(&messages[4])
-                .map(|(chat, _)| chat.rowid),
+            rowid(4),
             Some(1),
             "a row with no caller id still finds its chat by chat_id"
         );
+        assert_eq!(rowid(6), Some(5), "a chat with no handle rows");
+        assert_eq!(rowid(11), None, "a message in no chat");
 
         let mut orphan = FixtureDb::messages(&session).remove(0);
         orphan.chat_id = Some(42);
         orphan.deleted_from = None;
         assert!(session.conversation(&orphan).is_none());
-        orphan.chat_id = None;
-        assert!(session.conversation(&orphan).is_none());
+    }
+
+    /// Style 43 is a group and 45 one-to-one. Without a style, only a group
+    /// id makes a group: an address that starts with "chat" does not.
+    #[test]
+    fn a_group_id_is_chat_and_digits() {
+        assert!(is_group_id("chat100"));
+        assert!(!is_group_id("chat"));
+        assert!(!is_group_id("chatty@example.com"));
+        assert!(!is_group_id(FRIEND_PHONE));
     }
 
     /// The sender's name: the owner by caller id, a contact by name, a bare
-    /// handle when the book has no name for it, and Unknown for nobody.
+    /// handle when the book has no name for it, and Unknown for nobody,
+    /// handle 0 included.
     #[test]
     fn who_names_the_owner_a_contact_or_unknown() {
         let fixture = FixtureDb::write();
@@ -223,6 +318,7 @@ mod tests {
         assert_eq!(session.who(Some(1), false, None), "Sam Example");
         assert_eq!(session.who(Some(2), false, None), "Robin");
         assert_eq!(session.who(Some(99), false, None), UNKNOWN);
+        assert_eq!(session.who(Some(0), false, None), UNKNOWN);
         assert_eq!(session.who(None, false, None), UNKNOWN);
 
         // Without the caller id option the owner is always Me.

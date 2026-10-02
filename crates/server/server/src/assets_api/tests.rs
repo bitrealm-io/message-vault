@@ -582,7 +582,7 @@ async fn an_asset_get_for_an_unknown_sha_is_a_json_404() {
     crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
 }
 
-/// A part body past `asset_part_size` is a 413. The body cap is the
+/// A part body past `asset_part_size` is a 413. The layer holds a part to the
 /// attachment size limit (512 MiB by default) and the part limit is far
 /// smaller, so the handler's own check is what answers. `docs/architecture/http-api.md`: the status carries the meaning.
 #[tokio::test]

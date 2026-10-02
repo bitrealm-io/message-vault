@@ -815,13 +815,20 @@ async fn json_body_limit_response(response: Response) -> Response {
     ApiError::PayloadTooLarge("the request body is too large".to_string()).into_response()
 }
 
-/// Hold a request body to the attachment size limit, as the Server Settings
-/// have it when the request arrives. The limit is the body cap for every
-/// route, because the largest body the server takes is one attachment sent as
-/// a single `PUT`. A `Content-Length` over the limit is refused before any
-/// handler runs; a body with no declared length is cut off once it passes the
-/// limit. A request with a safe method carries no body the server reads, so
-/// it skips the read of the settings.
+/// The body cap of every route but the attachment uploads: 512 MiB, the
+/// attachment size limit a new Message Crate starts with. It is fixed in the
+/// code because the owner's limit must never reach the login or the settings
+/// change that would raise it again. Routes that read a body of their own
+/// hold it to a smaller figure first.
+pub(crate) const MAX_REQUEST_BODY_BYTES: usize = 512 * 1024 * 1024;
+
+/// Hold a request body to its cap. An attachment upload
+/// ([`is_attachment_upload`]) is held to the attachment size limit, as the
+/// Server Settings have it when the request arrives; every other request to
+/// [`MAX_REQUEST_BODY_BYTES`]. A `Content-Length` over the cap is refused
+/// before any handler runs; a body with no declared length is cut off once it
+/// passes the cap. A request with a safe method carries no body the server
+/// reads, so it skips the check.
 async fn limit_request_body(
     axum::extract::State(state): axum::extract::State<AppState>,
     request: axum::extract::Request,
@@ -834,9 +841,13 @@ async fn limit_request_body(
     ) {
         return next.run(request).await;
     }
-    let limit = match state.asset_max_bytes().await {
-        Ok(limit) => usize::try_from(limit).unwrap_or(usize::MAX),
-        Err(error) => return ApiError::Internal(error).into_response(),
+    let limit = if is_attachment_upload(&request) {
+        match state.asset_max_bytes().await {
+            Ok(limit) => usize::try_from(limit).unwrap_or(usize::MAX),
+            Err(error) => return ApiError::Internal(error).into_response(),
+        }
+    } else {
+        MAX_REQUEST_BODY_BYTES
     };
     let declared = request
         .headers()
@@ -896,6 +907,27 @@ fn is_asset_download(request: &axum::extract::Request) -> bool {
                 let sha256 = rest.strip_suffix("/preview").unwrap_or(rest);
                 !sha256.is_empty() && !sha256.contains('/')
             })
+}
+
+/// `PUT /v1/assets/{sha256}` and
+/// `PUT /v1/assets/{sha256}/uploads/{upload_id}/parts/{part}`: the two
+/// requests whose body is an attachment's bytes, and the only ones the
+/// attachment size limit holds.
+fn is_attachment_upload(request: &axum::extract::Request) -> bool {
+    if request.method() != axum::http::Method::PUT {
+        return false;
+    }
+    let Some(rest) = request.uri().path().strip_prefix("/v1/assets/") else {
+        return false;
+    };
+    let segments: Vec<&str> = rest.split('/').collect();
+    match segments.as_slice() {
+        [sha256] => !sha256.is_empty(),
+        [sha256, "uploads", upload_id, "parts", part] => {
+            !sha256.is_empty() && !upload_id.is_empty() && !part.is_empty()
+        }
+        _ => false,
+    }
 }
 
 /// `POST /v1/contacts/address-book`: the address book as `text/csv`.

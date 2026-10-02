@@ -320,6 +320,46 @@ fn parse_handle_type(text: &str) -> Option<HandleType> {
     .find(|t| t.as_str().eq_ignore_ascii_case(text))
 }
 
+/// What a spreadsheet reads as the start of a formula when a cell begins
+/// with it.
+const FORMULA_STARTS: [char; 6] = ['=', '+', '-', '@', '\t', '\r'];
+
+/// The `'` a spreadsheet reads as "this cell is text".
+const TEXT_MARK: char = '\'';
+
+/// A cell as Export writes it: with a `'` in front when a spreadsheet would
+/// otherwise run it as a formula, or, for a phone number, drop its `+`. A
+/// cell that already starts with `'`s and then one of those characters gets
+/// one more `'`, so the one [`read_cell`] takes off leaves the cell as it
+/// was.
+fn written_cell(cell: &str) -> std::borrow::Cow<'_, str> {
+    if cell
+        .trim_start_matches(TEXT_MARK)
+        .starts_with(FORMULA_STARTS)
+    {
+        format!("{TEXT_MARK}{cell}").into()
+    } else {
+        cell.into()
+    }
+}
+
+/// A cell as the load reads it: one `'` taken off when one of the characters
+/// a spreadsheet reads as a formula follows it, which undoes
+/// [`written_cell`]. A spreadsheet can keep that `'` when it saves or drop
+/// it, and both read the same.
+fn read_cell(cell: &str) -> &str {
+    match cell.strip_prefix(TEXT_MARK) {
+        Some(rest)
+            if rest
+                .trim_start_matches(TEXT_MARK)
+                .starts_with(FORMULA_STARTS) =>
+        {
+            rest
+        }
+        _ => cell,
+    }
+}
+
 /// Read the CSV into rows. A row whose every field is blank is skipped, the
 /// way a spreadsheet's trailing empty rows are. A row with fewer fields than
 /// the header reads its missing trailing cells as blank, since a spreadsheet
@@ -372,7 +412,8 @@ fn read_rows(csv_text: &str) -> Result<Vec<FileRow>, Vec<String>> {
             ));
             continue;
         }
-        let field = |slot: usize| record.get(index[slot]).unwrap_or("").trim().to_string();
+        let field =
+            |slot: usize| read_cell(record.get(index[slot]).unwrap_or("").trim()).to_string();
         let row = FileRow {
             number,
             contact_id: field(0),
@@ -1032,14 +1073,17 @@ pub async fn export_csv(
             .get(&id)
             .map(|names| names.join(&GROUP_SEPARATOR.to_string()))
             .unwrap_or_default();
-        writer.write_record([
-            id.to_string().as_str(),
+        let id = id.to_string();
+        let cells = [
+            id.as_str(),
             name.as_str(),
             group_names.as_str(),
             service.as_deref().unwrap_or(""),
             handle_type.as_deref().unwrap_or(""),
             normalized.as_deref().unwrap_or(""),
-        ])?;
+        ]
+        .map(written_cell);
+        writer.write_record(cells.iter().map(|cell| cell.as_bytes()))?;
     }
     let bytes = writer
         .into_inner()

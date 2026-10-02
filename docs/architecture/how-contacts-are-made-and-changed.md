@@ -90,6 +90,27 @@ The file has one row per identity and six columns: `contact_id`,
 `display_name`, `groups`, `service`, `handle_type`, `identity`. A load runs
 in Append mode, the default, or in Edit mode.
 
+### A cell a spreadsheet would run
+
+A spreadsheet reads a cell that starts with `=`, `+`, `-`, `@`, a tab or a
+carriage return as a formula, and runs it.
+A name can come from a backup, and on WhatsApp the other person chooses their
+own, so Export writes a `'` before every such cell, in every column.
+A contact named `=HYPERLINK(…)` is written `'=HYPERLINK(…)`, and a phone
+number `+6591234567` is written `'+6591234567`.
+CSV quoting does not prevent this, because a spreadsheet removes the quotes
+and then reads the cell as typed.
+The code is `written_cell` and `read_cell` in the same file.
+
+The load takes off one `'` that comes before one of those characters, in any
+column.
+A spreadsheet can keep that `'` when it saves the file or drop it, and both
+load the same, so a file loaded straight back changes nothing.
+A cell that already starts with `'` and then one of those characters, such
+as the name `'=1+1`, is written with one more `'` so that it loads back as it
+was.
+A `'` before any other text is part of the cell.
+
 ### 1. The whole load
 
 Every row is checked before anything is written. Every broken rule is
@@ -161,8 +182,8 @@ it stands, so an exported file always loads back.
 
 A phone number written without `+` that matches no key as written may be one
 whose `+` a spreadsheet dropped.
-Export writes `+6591234567`, and a spreadsheet can save that cell as the
-number `6591234567`.
+Export writes `'+6591234567`, and a spreadsheet that drops the `'` can save
+that cell as the number `6591234567`.
 So the load first asks whether the contact the row names already holds `+`
 followed by the value's digits.
 If it does, the row names that identity.

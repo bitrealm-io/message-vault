@@ -2291,11 +2291,11 @@ async fn the_address_book_export_answers_a_csv_attachment() {
         assert_eq!(lines[0], ADDRESS_BOOK_HEADER);
         assert_eq!(lines.len(), 3, "{text}");
         assert!(
-            lines[1].ends_with(",Contact 0,,phone,phone,+15555550100"),
+            lines[1].ends_with(",Contact 0,,phone,phone,'+15555550100"),
             "{text}"
         );
         assert!(
-            lines[2].ends_with(",Contact 1,,phone,phone,+15555550101"),
+            lines[2].ends_with(",Contact 1,,phone,phone,'+15555550101"),
             "{text}"
         );
     }

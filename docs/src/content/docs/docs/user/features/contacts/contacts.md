@@ -199,13 +199,19 @@ A contact with no identity is one row with the last three columns blank.
 
 ```csv title="address-book.csv"
 contact_id,display_name,groups,service,handle_type,identity
-12,Ada Lovelace,Family;Work,phone,phone,+15555550100
-12,Ada Lovelace,Family;Work,whatsapp,phone,+15555550100
+12,Ada Lovelace,Family;Work,phone,phone,'+15555550100
+12,Ada Lovelace,Family;Work,whatsapp,phone,'+15555550100
 12,Ada Lovelace,Family;Work,phone,email,ada@example.com
-31,,,phone,phone,+15555550142
+31,,,phone,phone,'+15555550142
 ```
 
 Contact 31 above is Unknown: it has an identity and no name.
+
+A cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return is written with a `'` in front, in every column.
+A spreadsheet runs such a cell as a formula otherwise, and a name can come from a backup or, on WhatsApp, from the other person.
+The `'` keeps the cell as text, so a phone number keeps its `+`.
+Loading the file takes that `'` off again, whether the spreadsheet kept it or dropped it when it saved.
+LibreOffice Calc shows the `'` in the cell, and it can stay there: the load reads the cell the same with it or without it.
 
 ### Edit the file
 

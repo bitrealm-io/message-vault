@@ -51,7 +51,7 @@ The server only reads this current layout (schema version 4). A version-3 file i
 
 Use these when a complete backup can still be made.
 
-| Source | Command | More detail |
+| Source | Crate | More detail |
 |--------|---------|-------------|
 | iMessage or an iPhone backup | `imessage-ir-exporter` | [Converter capabilities](/docs/developer/formats/) |
 | SMS Backup & Restore | `sms-backup-restore-exporter` | [Input files](/docs/developer/formats/sms-backup-restore/input/) · [Field mapping](/docs/developer/formats/sms-backup-restore/mapping/) |
@@ -61,7 +61,7 @@ Use these when a complete backup can still be made.
 
 Some files come from tools that were not built for this project, or that drop messages and attachments. These converters can still try. Prefer a full backup from Apple, SMS Backup & Restore, or WhatsApp when that is still possible. The User Guide calls these [rescue imports](/docs/user/import-sources/old-backups/).
 
-| Source | Command | More detail |
+| Source | Crate | More detail |
 |--------|---------|-------------|
 | GO SMS Pro | `go-sms-pro-exporter` | [Field mapping](/docs/developer/formats/go-sms-pro/mapping/) |
 | iMazing | `imazing-exporter` | [Input files](/docs/developer/formats/imazing/input/) · [Design notes](/docs/developer/formats/imazing/design/) |

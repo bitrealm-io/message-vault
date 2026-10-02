@@ -25,7 +25,7 @@ In CSV form: one file per conversation. Decoded MMS media under `attachments/` w
 | `guid` | Deterministic SHA-256 fingerprint |
 | `timestamp` / `timestamp_utc` / `timestamp_display` / `timestamp_unix_ms` | From `date` (Unix epoch milliseconds, UTC) |
 | `direction` | `incoming` / `outgoing` from SMS `type` or MMS `msg_box` / From addr |
-| `service` | Always `SMS` |
+| `service` | Always `sms` |
 | `sender_handle` / `sender_display_name` | Incoming peer; outgoing uses export owner (`owner_*`) |
 | `subject` | SMS `subject`, or MMS `sub` |
 | `text` | SMS `body`, or MMS text/plain parts (HTML entities decoded) |

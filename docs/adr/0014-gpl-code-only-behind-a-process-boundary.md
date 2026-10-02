@@ -168,7 +168,7 @@ that:
   filled in) and the crate's `LICENSE` (the GPL text) into
   `src-tauri/resources/imessage-reader-LICENSE.txt`, which `tauri.conf.json`
   lists under `bundle.resources`. The file is generated, not committed.
-- **A notice in the app.** Settings → About shows a "Third-party software"
+- **A notice in the app.** Settings → System shows a "Third-party software"
   block in the desktop app only (the website ships no reader), naming the
   Apple Messages reader (imessage-reader), its licence, and two links built
   from the app's own Build: the reader's folder at the release tag

@@ -25,7 +25,7 @@ CSV output contains one row per message. Conversation and export identity are re
 | `timestamp_display` | Human-readable time. |
 | `timestamp_unix_ms` | Unix time in milliseconds. |
 | `direction` | `incoming` or `outgoing`. |
-| `service` | `sms`, `imessage`, `whatsapp`, `rcs`, or `unknown`. |
+| `service` | `sms`, `imessage`, `whatsapp`, `rcs`, `discord`, `signal`, `telegram`, `slack`, or `unknown`. |
 | `sender_handle` | Sender phone number, email, or other handle. Outgoing rows use the export owner when known. |
 | `sender_display_name` | Sender name. Outgoing rows default to `Me` when an owner handle is known. |
 | `subject` | Message subject when present. |

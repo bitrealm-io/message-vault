@@ -32,8 +32,7 @@ in is still shown beside it.
 - A message's owner identity may be an address the account has not added. The
   import records it and never adds it to the account; linking it later shows
   its counts without a re-import.
-- A backup that names no owner, such as a WhatsApp import today, leaves every
-  message's owner identity empty, and its conversations count toward no
-  identity.
+- A backup that names no owner leaves every message's owner identity empty,
+  and its conversations count toward no identity.
 - An owner identity is a `handles` row with no contact. It is the holder, not a
   person the import met.

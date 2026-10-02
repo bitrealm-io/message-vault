@@ -60,11 +60,11 @@ Each `<SMS>` becomes one message in a shared conversation. `chat_identifier` hol
 | `group_title` | Derived for PDU groups; empty for XML |
 | `participants_json` | Peer handles for the conversation |
 | `guid` | SHA-256 of chat id + local timestamp + direction + text + attachment digests |
-| `service` | Always `SMS` |
+| `service` | Always `sms` |
 | `sender_handle` / `sender_display_name` | Outgoing uses export owner; incoming from address / contactName |
 | `attachments_json` | `[]` for XML; media paths for PDU |
 | `message_kind` | `sms` or `mms` (PDU with attachments → `mms`) |
-| `export_source` / `export_tool` / `export_tool_version` | `go-sms-pro` / `GO SMS Pro` / (empty until pinned) |
+| `export_source` / `export_tool` / `export_tool_version` | `go-sms-pro` / `GO SMS Pro` / the `go-sms-pro-exporter` crate version |
 | `owner_handle` / `owner_display_name` | Export owner |
 | `android_type` | Raw `<type>` (`1`/`2`); empty for PDU |
 | `source_fields_json` | Vendor bag (below) |

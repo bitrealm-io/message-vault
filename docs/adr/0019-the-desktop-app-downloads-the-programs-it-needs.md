@@ -9,6 +9,9 @@ release and one checksum, and a file that doesn't match is refused.
 wtsexporter is always the app's own copy. ffmpeg is not downloaded when it is
 on `PATH`.
 
+Decided, not built yet: #1053 tracks the work, and until it lands the app
+downloads nothing.
+
 ## Why
 
 The conversions Message Crate runs ask ffmpeg for `libx264` and `libx265`,

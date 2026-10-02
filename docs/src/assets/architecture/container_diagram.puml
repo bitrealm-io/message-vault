@@ -45,7 +45,7 @@ Rel_R(backend, data, "Imports messages", "json, https")
 
 Rel(web, ui, "Delivers")
 Rel(ui, backend, "Makes API request", "json, https")
-Rel(backend, db, "Reads and writes", "rusqlite")
+Rel(backend, db, "Reads and writes", "sqlx")
 Rel(backend, attachments, "Reads and writes", "file")
 
 ' new C4-Plantuml version details (incl. PlantUML version) as table

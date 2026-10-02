@@ -2,12 +2,12 @@
 /**
  * A search query shown as it would sit in the search box.
  *
- * Field names (`from:`, `-tag:`, `last-contact:`) are picked out in the
+ * Field names (`from:`, `-tag:`, `last-message:`) are picked out in the
  * accent colour so a reader can see where each field starts. Everything
  * else is the value, in the text colour.
  *
  *   <TypedQuery query='from:me to:"Jane Doe" avocado' />
- *   <TypedQuery query="last-contact:<2022" note="on Contacts" />
+ *   <TypedQuery query="last-message:<2022" note="on Contacts" />
  */
 interface Props {
   /** The query, exactly as a person would type it. */

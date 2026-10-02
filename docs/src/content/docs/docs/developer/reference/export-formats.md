@@ -36,4 +36,4 @@ Every export is written as JSON Lines first, then rewritten into the format you 
 
 The intermediate copy goes in the staging directory, `~/message-crate` by default and changeable in [Settings → System](/docs/user/features/settings/system/). It is deleted when the export finishes, including when the conversion fails, so a folder with room for one extra copy of the exported messages is enough.
 
-Reading an existing export back in is a separate operation with no screen yet — see [issue 275](https://github.com/messagecrate/message-crate/issues/275). The `message-reexport` library still reads all six formats and converts between them; nothing in the app calls it that way today.
+Reading an existing export back in is a separate operation, on [Settings → Convert](/docs/user/features/settings/convert/). The `message-reexport` library reads all six formats and converts between them, and Settings → Convert calls it that way.

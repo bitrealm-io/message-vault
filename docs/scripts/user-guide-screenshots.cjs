@@ -40,7 +40,7 @@ async function capture(browser) {
     await p.waitForTimeout(1000);
   };
 
-  // Steps 2 and 3: the first screen, then the Demo Account.
+  // Try Message Crate, steps 2 and 3: the first screen, then the Demo Account.
   const demo = await open(CRATE);
   await shot(demo, 'login');
   await demo.getByRole('button', { name: 'Explore Demo Account' }).click();
@@ -57,7 +57,7 @@ async function capture(browser) {
   await shot(demo, 'demo-search');
   await demo.context().close();
 
-  // Step 4: the same Message Crate, claimed.
+  // Your own messages, step 1: the same Message Crate, claimed.
   const own = await open(CRATE);
   await own.getByLabel('Username').fill('owner');
   await own.getByLabel('Password', { exact: true }).fill('a long owner password');
@@ -86,8 +86,9 @@ async function capture(browser) {
   const state = await own.context().storageState();
   await own.context().close();
 
-  // Step 7: the Import form. The desktop app is what shows it, so the page is
-  // told it is the desktop app. Nothing behind the form works in a browser.
+  // Your own messages, step 3: the Import form. The desktop app is what shows
+  // it, so the page is told it is the desktop app. Nothing behind the form
+  // works in a browser.
   const context = await browser.newContext({
     viewport: { width: 1280, height: 1100 },
     deviceScaleFactor: 2,

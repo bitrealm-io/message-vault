@@ -13,9 +13,10 @@ one holds a single job.
 - **`sms-backup-restore-exporter`** owns the SMS Backup & Restore wire shape in
   both directions, reading `smses.xml` and writing it.
 
-The dependencies run in one direction: `io-core` at the bottom, then
-`ir-format`, then `message-staging`, with the vendor exporters on top. No crate
-in the pipeline names a vendor format except the crate that owns that format.
+The dependencies run in one direction: `message-crate-core` at the bottom,
+then `ir-format`, then `message-staging`, with the vendor exporters on top. No
+crate in the pipeline names a vendor format except the crate that owns that
+format.
 
 ## Why
 
@@ -128,17 +129,17 @@ case into Convert would have to be undone.
   `crates/libs/reexport/src/tests.rs:128`, and it moves to the SBR crate behind
   the new trait rather than being deleted or left where it was.
 - The three copies of the assemble-jobs, run-jobs, clear-bytes sequence collapse
-  onto `io-core`'s `stage_conversation_attachments`. The copy in
+  onto `message-crate-core`'s `stage_conversation_attachments`. The copy in
   `message-reexport` had already diverged: it passed no cancel flag, no log sink
   and an empty progress closure, and never counted staged attachments or cleared
   the in-memory bytes. Convert regains cancellation and progress reporting as a
   consequence of the unification rather than as a separate fix.
 - `ExportWriter` moves to `message-staging` even though it does not always use
   the queue. The queue path is taken when the format is JSON Lines and
-  obfuscation is off; every other run stages through `io-core` and writes through
-  the sink. Both arms are live — turning obfuscation on during an extract takes
-  the non-queue arm today — so neither can be deleted, and `ExportWriter` sits
-  above both.
+  obfuscation is off; every other run stages through `message-crate-core` and
+  writes through the sink. Both arms are live — turning obfuscation on during
+  an extract takes the non-queue arm today — so neither can be deleted, and
+  `ExportWriter` sits above both.
 - The `contacts` dependency is removed from `message-ir-format`. It was declared
   in the manifest and referenced nowhere in the crate's sources.
 - The work lands as six pull requests, split for reviewability and for clean
@@ -159,7 +160,7 @@ case into Convert would have to be undone.
   `ReadOptions`, `ReadReport` and `SbrArchive`; `message-reexport` depends on
   that crate for them, and `message-ir-format` no longer depends on `sbr` or
   `contacts`, PR #641. (5) `ExportTransforms`, `run_pipeline` and
-  `finish_run` live in `io-core`, and `FormatSinkResult` is gone: its media
+  `finish_run` live in `message-crate-core`, and `FormatSinkResult` is gone: its media
   report and obfuscated count are fields of `ExportReport`, so a run has one
   report and every write tail folds into it, PR #642. (6) `message-staging`
   exists at `crates/libs/staging` with `ExportWriter`, the write queue, the

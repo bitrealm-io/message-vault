@@ -17,7 +17,7 @@ use anyhow::Context;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use message_ir::HandleType;
+use message_ir::{HandleService, HandleType};
 use serde::{Deserialize, Serialize};
 use sqlx::{Connection, SqliteConnection};
 
@@ -571,16 +571,12 @@ async fn apply_profile_update(
         if raw.is_empty() {
             continue;
         }
-        match parse_profile_service(&entry.service)? {
-            ProfileHandleKind::Phone | ProfileHandleKind::Whatsapp => {
-                account_profile::unlink_account_handle(conn, account_id, raw, HandleType::Phone)
-                    .await?;
-            }
-            ProfileHandleKind::Email => {
-                account_profile::unlink_account_handle(conn, account_id, raw, HandleType::Email)
-                    .await?;
-            }
-        }
+        let (handle_type, service) = match parse_profile_service(&entry.service)? {
+            ProfileHandleKind::Phone => (HandleType::Phone, HandleService::Phone),
+            ProfileHandleKind::Whatsapp => (HandleType::Phone, HandleService::Whatsapp),
+            ProfileHandleKind::Email => (HandleType::Email, HandleService::Phone),
+        };
+        account_profile::unlink_account_handle(conn, account_id, raw, handle_type, service).await?;
     }
 
     for entry in identities {

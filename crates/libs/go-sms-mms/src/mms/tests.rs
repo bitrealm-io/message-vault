@@ -82,14 +82,25 @@ fn the_first_header_must_be_the_message_type() {
 
 #[test]
 fn an_unknown_header_code_is_an_error_at_its_byte() {
-    // 0x22 is past the codes WAP-209 1.3 assigns, so the walk cannot know
-    // its value's shape.
+    // 0x40 is past the codes OMA MMS 1.3 table 25 assigns, so the walk
+    // cannot know its value's shape.
     let bytes = PduBuilder::received("+14075551234")
-        .raw_header(&[0xa2, 0x80])
+        .raw_header(&[0xc0, 0x80])
         .build();
     let err = decode(&bytes).unwrap_err();
     assert_eq!(err.what, "unknown header field code");
-    assert_eq!(bytes[err.at], 0xa2);
+    assert_eq!(bytes[err.at], 0xc0);
+    // Content (0x2E) and Additional-headers (0x30) are assigned, but only
+    // as names inside an X-Mms-Attributes list; as a header they have no
+    // value shape.
+    for code in [0xae, 0xb0] {
+        let bytes = PduBuilder::received("+14075551234")
+            .raw_header(&[code, 0x80])
+            .build();
+        let err = decode(&bytes).unwrap_err();
+        assert_eq!(err.what, "unknown header field code");
+        assert_eq!(bytes[err.at], code);
+    }
     // A text byte where a code should be is the same error, at that byte.
     let err = decode(&[0x8c, 0x84, b'x', 0x00]).unwrap_err();
     assert_eq!(
@@ -202,6 +213,37 @@ fn every_other_header_code_decodes_under_its_name() {
             "previously-sent-date",
             "1:1614914432",
         ),
+        // The codes MMS 1.2 and 1.3 add (OMA MMS 1.3 table 25), each in the
+        // value shape section 7.3 gives it.
+        (b"\xa2\x80", "store", "yes"),
+        (b"\xa3\x83", "mm-state", "Retrieved"),
+        (b"\xa4\x06\x80work\0", "mm-flags", "Add:work"),
+        (b"\xa5\x80", "store-status", "0"),
+        (b"\xa6stored\0", "store-status-text", "stored"),
+        (b"\xa7\x81", "stored", "no"),
+        (b"\xa8\x96", "attributes", "0x16"),
+        (b"\xa9\x80", "totals", "yes"),
+        (b"\xaa\x03\x81\x01\x64", "mbox-totals", "Size:100"),
+        (b"\xab\x81", "quotas", "no"),
+        (b"\xac\x02\x80\x85", "mbox-quotas", "Message:5"),
+        (b"\xad\x87", "message-count", "7"),
+        (b"\xaf\x82", "start", "2"),
+        (b"\xb1\x81", "distribution-indicator", "no"),
+        // A content reference and one parameter (Type, image/jpeg).
+        (b"\xb2\x06pic\0\x82\x9e", "element-descriptor", "pic"),
+        (b"\xb3\x8a", "limit", "10"),
+        (b"\xb4\x80", "recommended-retrieval-mode", "Manual"),
+        (b"\xb5big\0", "recommended-retrieval-mode-text", "big"),
+        (b"\xb6done\0", "status-text", "done"),
+        (b"\xb7app\0", "applic-id", "app"),
+        (b"\xb8rapp\0", "reply-applic-id", "rapp"),
+        (b"\xb9aux\0", "aux-applic-info", "aux"),
+        (b"\xba\x81", "content-class", "image-basic"),
+        (b"\xbb\x80", "drm-content", "yes"),
+        (b"\xbc\x81", "adaptation-allowed", "no"),
+        (b"\xbdold\0", "replace-id", "old"),
+        (b"\xbecan\0", "cancel-id", "can"),
+        (b"\xbf\x81", "cancel-status", "Cancel Request corrupted"),
     ];
     for (raw, name, value) in cases {
         let bytes = PduBuilder::sent().raw_header(raw).build();
@@ -223,5 +265,37 @@ fn every_other_header_code_decodes_under_its_name() {
     assert_eq!(
         decode(&bytes).unwrap_err().what,
         "previously-sent length does not match"
+    );
+}
+
+#[test]
+fn an_mms_1_3_content_class_header_does_not_drop_the_message() {
+    // X-Mms-Content-Class (0x3A, 0xBA on the wire) = text (0x80), an
+    // optional header of M-Retrieve.conf in OMA MMS 1.3 table 5.
+    let bytes = PduBuilder::received("+14075551234")
+        .raw_header(&[0xba, 0x80])
+        .text("hello")
+        .build();
+    let msg = decode(&bytes).expect("a 1.3 header is known");
+    assert_eq!(msg.from.as_deref(), Some("+14075551234/TYPE=PLMN"));
+    assert_eq!(msg.headers["content-class"], "text");
+    assert_eq!(msg.parts[1].data, b"hello");
+}
+
+#[test]
+fn a_length_prefixed_1_3_value_must_fill_its_length() {
+    // MM-Flags declaring 7 bytes but holding 6.
+    let bytes = PduBuilder::sent()
+        .raw_header(b"\xa4\x07\x80work\0\x80")
+        .build();
+    assert_eq!(
+        decode(&bytes).unwrap_err().what,
+        "mm-flags length does not match"
+    );
+    // An element descriptor whose length runs past the end of the file.
+    let bytes = [0x8c, 0x84, 0xb2, 0x1f, 0x40, b'p', 0x00];
+    assert_eq!(
+        decode(&bytes).unwrap_err().what,
+        "element-descriptor length past the end"
     );
 }

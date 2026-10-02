@@ -121,6 +121,13 @@ pub(crate) fn export(helper: &mut Helper, options: &ExportOptions) -> Result<Exp
     let mut collected = collect(helper, options)?;
     options.check_cancel()?;
     let failures = collected.failures;
+    // Both arms below write every message collected: a conversation with no
+    // messages adds none here and is not written.
+    let messages: u64 = collected
+        .conversations
+        .values()
+        .map(|convo| convo.messages.len() as u64)
+        .sum();
 
     if format.is_mail_archive() && options.attachment_embed == AttachmentEmbed::Embed {
         embed_attachment_bytes(helper, options, &mut collected)?;
@@ -142,6 +149,7 @@ pub(crate) fn export(helper: &mut Helper, options: &ExportOptions) -> Result<Exp
             .map_err(|e| anyhow!("finish export sink: {e:#}"))?;
         report
     };
+    report.messages = messages;
     // The program logs each row it skips as it goes; the count belongs in
     // the result too, beside the other exporters' skipped rows.
     if failures > 0 {

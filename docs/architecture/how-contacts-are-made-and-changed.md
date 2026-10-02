@@ -64,7 +64,7 @@ flowchart TD
 flowchart TD
   A["A participant with no address"] --> B{"Does the backup give a name?"}
   B -- no --> B1["Nothing is created"]
-  B -- yes --> C{"Does exactly one contact have that name, ignoring letter case?"}
+  B -- yes --> C{"Does exactly one contact outside the Trash have that name, ignoring letter case?"}
   C -- yes --> C1["That contact is used"]
   C -- "no, or more than one" --> C2["New contact with origin import, the name, and no identity"]
 ```
@@ -266,7 +266,7 @@ flowchart TD
 | Identity already on another contact | Never moved. The import uses that contact | Moved if the holder is nameless or in the file. Otherwise the load is refused |
 | Removing things | Never removes an identity, a membership, or a contact outside the Trash | Edit removes unlisted identities and memberships. An emptied nameless contact is deleted |
 | Contact in the Trash | Discarded with all its identities and made new from the backup | Cannot be addressed. Its id is treated as unknown text |
-| Person named with no address | Uses the contact with that name when exactly one has it, else makes a contact with a name and no identity | A row with a name and blank identity columns makes the same kind of contact, and never matches by name |
+| Person named with no address | Uses the contact with that name when exactly one outside the Trash has it, else makes a contact with a name and no identity | A row with a name and blank identity columns makes the same kind of contact, and never matches by name |
 | Contact Groups | One group per Import Run, holding the contacts the run touched | The groups the `groups` column lists |
 | Bad data | No refusal for contact reasons. An odd phone number is stored and flagged | Any broken rule refuses the whole file |
 | `origin` written | `import` | `address_book` |

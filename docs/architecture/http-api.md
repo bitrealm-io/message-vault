@@ -362,9 +362,16 @@ What each reaches:
   can only push may ask whether an asset exists, and may not read it.
 - Permanent deletion (`DELETE /v1/conversations/{id}`,
   `DELETE /v1/contacts/{id}`, `DELETE /v1/trash`,
-  `DELETE /v1/accounts/{id}/messages`) needs a session: the account's own with
-  the `delete` permission, or, for an account's messages, the owner's. A token
-  is refused whatever its scopes.
+  `DELETE /v1/accounts/{id}/messages`, `DELETE /v1/accounts/{id}`) needs a
+  session: the account's own with the `delete` permission, or, for an
+  account's messages and for the account itself, the owner's. A token is
+  refused whatever its scopes.
+- An account may do everything with its own messages, deleting them and
+  itself included, unless the owner limits it. Deleting an account deletes
+  every message it owns, so an account whose `delete` permission is off
+  cannot delete itself either: it is refused with `403 Forbidden` and asks the
+  owner, who can. No separate permission for closing an account exists,
+  because one that allowed it without `delete` would undo the owner's limit.
 - `/v1/accounts/{id}` and everything under it is read and written by the owner
   or by that account; a `Location` handed to a newly registered account names a
   row it may read.

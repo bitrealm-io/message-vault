@@ -765,13 +765,18 @@ pub struct DeleteAccountRequest {
 /// itself with a body carrying the confirmation and its current password: a
 /// credential belongs in a body, not in a URL or a header of the server's own
 /// invention, and a DELETE body has no defined meaning in RFC 9110 but is not
-/// forbidden. The demo account refuses its own deletion, and nobody deletes
-/// the owner.
+/// forbidden. Deleting an account deletes its messages, so an account needs
+/// the `delete` permission to delete itself, and one without it asks the
+/// owner. The demo account refuses its own deletion, and nobody deletes the
+/// owner.
 #[utoipa::path(
     delete,
     path = "/v1/accounts/{id}",
     tag = "Accounts",
-    security(("session" = [])),
+    security(
+        ("session" = ["owner"]),
+        ("session" = ["delete"])
+    ),
     params(("id" = i64, Path, description = "Account id to delete")),
     request_body(content = Option<DeleteAccountRequest>, description = "Sent by an account deleting itself; the owner sends no body"),
     responses(
@@ -806,6 +811,16 @@ pub async fn delete_account(
         if account_profile::is_demo_account(target) {
             return Err(ApiError::DemoAccountProtected(
                 "the demo account cannot be deleted; use reset-demo to restore it".into(),
+            ));
+        }
+        // Deleting the account deletes every message it owns, so an account
+        // the owner barred from deleting messages may not delete itself
+        // either. The owner's delete is untouched: it is how such an account
+        // is closed.
+        if !auth.permissions().delete {
+            return Err(ApiError::InsufficientScope(
+                "this account may not delete messages, so it may not delete itself; the owner can delete it"
+                    .into(),
             ));
         }
         let Some(Json(req)) = body else {

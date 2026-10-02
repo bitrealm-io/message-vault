@@ -20,10 +20,10 @@ describe("contactBrowseQuery", () => {
     expect(contactBrowseQuery("42", "all", "   ")).toBe("with:#42");
   });
 
-  it("appends kind:direct or kind:group, and leaves 'all' as the base query", () => {
-    expect(contactBrowseQuery("42", "direct")).toBe("with:#42 kind:direct");
-    expect(contactBrowseQuery("42", "group")).toBe("with:#42 kind:group");
+  it("narrows to kind:direct or kind:group, and leaves 'all' as the base query", () => {
+    expect(contactBrowseQuery("42", "direct")).toBe("kind:direct (with:#42)");
+    expect(contactBrowseQuery("42", "group")).toBe("kind:group (with:#42)");
     expect(contactBrowseQuery("42", "all")).toBe("with:#42");
-    expect(contactBrowseQuery("42", "direct", "Ann Lee")).toBe('handle:"Ann Lee" kind:direct');
+    expect(contactBrowseQuery("42", "direct", "Ann Lee")).toBe('kind:direct (handle:"Ann Lee")');
   });
 });

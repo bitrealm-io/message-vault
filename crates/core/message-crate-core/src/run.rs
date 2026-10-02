@@ -40,7 +40,7 @@ pub fn finish_run(
     report.check_media(needs_tools)?;
     let mut messages = report.media_lines();
     report.summary_lines(config.output_format, &config.output, &mut messages);
-    Ok(RunResult { messages })
+    Ok(RunResult::new(messages, report))
 }
 
 #[cfg(test)]
@@ -79,6 +79,7 @@ mod tests {
             assert_eq!(t.media, MediaMode::Convert);
             Ok(ExportReport {
                 conversations: 1,
+                messages: 3,
                 attachments_saved: 2,
                 ..ExportReport::default()
             })
@@ -89,6 +90,7 @@ mod tests {
             result.messages,
             ["Wrote jsonl export under out", "  saved 2 attachments"]
         );
+        assert_eq!((result.conversations, result.message_count), (1, 3));
     }
 
     #[test]

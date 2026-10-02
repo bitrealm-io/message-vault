@@ -439,11 +439,13 @@ pub fn placeholder_rel_path(class: MediaClass) -> &'static str {
     }
 }
 
-/// Write the three shared placeholder files under `output_dir/attachments/`.
+/// Delete every real file under `output_dir/attachments/` and write the three
+/// shared placeholder files there.
 ///
 /// # Errors
 ///
-/// Returns an error when the directory cannot be created or a file cannot be written.
+/// Returns an error when the directory cannot be created, a real file cannot
+/// be removed (the error names that file), or a placeholder cannot be written.
 pub fn materialize_placeholders(output_dir: &Path) -> Result<()> {
     let dir = output_dir.join("attachments");
     fs::create_dir_all(&dir)?;
@@ -458,7 +460,14 @@ pub fn materialize_placeholders(output_dir: &Path) -> Result<()> {
                     && name != "placeholder.mp4"
                     && name != "placeholder.bin"
                 {
-                    let _ = fs::remove_file(&path);
+                    // A real file left behind is the content the obfuscated
+                    // export exists to leave out, so a failed delete fails the pass.
+                    fs::remove_file(&path).with_context(|| {
+                        format!(
+                            "could not remove real attachment {} from the obfuscated export",
+                            path.display()
+                        )
+                    })?;
                 }
             }
         }
@@ -760,6 +769,46 @@ mod tests {
         assert!(attachments.join("placeholder.jpg").is_file());
         assert!(attachments.join("placeholder.mp4").is_file());
         assert!(attachments.join("placeholder.bin").is_file());
+    }
+
+    /// A real attachment the pass cannot delete stays in the obfuscated
+    /// export, and that export exists to be shared without the real content.
+    /// The pass must fail and name the file, not report success (#1139).
+    /// A read-only `attachments/` folder makes the delete fail on Unix.
+    #[cfg(unix)]
+    #[test]
+    fn a_real_attachment_that_cannot_be_removed_fails_the_pass_and_names_the_file() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let attachments = dir.path().join("attachments");
+        fs::create_dir_all(&attachments).expect("attachments dir");
+        let photo = attachments.join("IMG_0001.jpg");
+        fs::write(&photo, b"real photo bytes").expect("write");
+        fs::set_permissions(&attachments, fs::Permissions::from_mode(0o555)).expect("read-only");
+
+        // A user who can delete from a read-only folder (root) cannot
+        // exercise the failure, so the test has nothing to check there.
+        let probe = attachments.join("probe");
+        if fs::write(&probe, b"").is_ok() {
+            let _ = fs::remove_file(&probe);
+            fs::set_permissions(&attachments, fs::Permissions::from_mode(0o755)).expect("restore");
+            return;
+        }
+
+        let result = materialize_placeholders(dir.path());
+        fs::set_permissions(&attachments, fs::Permissions::from_mode(0o755)).expect("restore");
+
+        let err = result.expect_err("a file that cannot be removed must fail the pass");
+        let message = format!("{err:#}");
+        assert!(
+            message.contains(&photo.display().to_string()),
+            "the error must name the file it could not remove: {message}"
+        );
+        assert!(
+            photo.is_file(),
+            "the test's premise: the file is still there"
+        );
     }
 
     /// The filler's own arithmetic, pinned.

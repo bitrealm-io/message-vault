@@ -11,15 +11,12 @@
 //! `commands::jobs`). The exporter checks it between steps through
 //! `ExporterConfig.cancel`.
 
-use std::fs::{self, File};
-use std::io::{BufRead, BufReader};
-use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use media::{CompressOptions, MaxResolution};
 use message_crate_core::{
     ApplePlatform, AttachmentMedia, Exporter, ExporterConfig, Form, LogSink, OutputFormat,
-    ProgressSink, SourceConfig, WhatsappPlatform,
+    ProgressSink, RunResult, SourceConfig, WhatsappPlatform,
 };
 
 // Short names so the match in `run_exporter` stays easy to read.
@@ -32,7 +29,7 @@ use sms_backup_restore_exporter::run as run_sms_restore;
 use whatsapp_exporter::run as run_whatsapp;
 
 use super::events;
-use super::events::{ExtractErrorEvent, ExtractProgressEvent};
+use super::events::ExtractProgressEvent;
 use super::jobs::{cancel_running_job, spawn_job, start_job};
 use super::last_log_line_or;
 use crate::state::AppState;
@@ -52,75 +49,19 @@ pub fn cancel(state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<(), Strin
     cancel_running_job(&state)
 }
 
-/// How many conversation files and messages an extract wrote.
+/// The `extract:finished` payload: the run's last log line as the summary,
+/// and the conversation and message counts the exporter reported.
 ///
-/// Each JSON Lines file (one JSON object per line) starts with a conversation
-/// header. That header is not counted as a message.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct JsonlOutputCounts {
-    files: usize,
-    messages: usize,
-}
-
-/// True when `path` looks like a JSON Lines file (one JSON object per line).
-fn is_json_lines_file(path: &Path) -> bool {
-    let Some(extension) = path.extension() else {
-        return false;
-    };
-    let Some(extension) = extension.to_str() else {
-        return false;
-    };
-    extension == "jsonl"
-}
-
-/// Walk `root` and count JSON Lines conversation files and the messages in them.
-///
-/// The first non-empty line of each file is the conversation header, so it is
-/// subtracted from the message total.
-///
-/// # Errors
-///
-/// Returns an error if a directory cannot be listed or a file cannot be opened.
-fn count_jsonl_output(root: &Path) -> anyhow::Result<JsonlOutputCounts> {
-    let mut counts = JsonlOutputCounts {
-        files: 0,
-        messages: 0,
-    };
-    let mut directories = vec![root.to_path_buf()];
-
-    while let Some(directory) = directories.pop() {
-        for entry in fs::read_dir(&directory)? {
-            let entry = entry?;
-            let file_type = entry.file_type()?;
-            if file_type.is_dir() {
-                directories.push(entry.path());
-                continue;
-            }
-            if !file_type.is_file() {
-                continue;
-            }
-            if !is_json_lines_file(&entry.path()) {
-                continue;
-            }
-
-            let mut reader = BufReader::new(File::open(entry.path())?);
-            let mut line = String::new();
-            let mut nonempty_lines = 0usize;
-            while reader.read_line(&mut line)? != 0 {
-                if !line.trim().is_empty() {
-                    nonempty_lines = nonempty_lines.saturating_add(1);
-                }
-                line.clear();
-            }
-            if nonempty_lines > 0 {
-                counts.files = counts.files.saturating_add(1);
-                let message_lines = nonempty_lines.saturating_sub(1);
-                counts.messages = counts.messages.saturating_add(message_lines);
-            }
-        }
-    }
-
-    Ok(counts)
+/// The counts come from the exporter rather than from reading the output
+/// folder again, because that folder also holds the staged attachments, and
+/// an attachment can be named `*.jsonl` and hold any bytes at all.
+fn finished_payload(run_result: &RunResult) -> String {
+    serde_json::json!({
+        "summary": last_log_line_or(&run_result.messages, "Export complete."),
+        "files_parsed": run_result.conversations,
+        "messages_parsed": run_result.message_count,
+    })
+    .to_string()
 }
 
 /// User-facing parameters for the `extract` command (before defaults/parsing).
@@ -239,24 +180,11 @@ pub fn extract(
 
     spawn_job(app, job, move || {
         let run_result = run_exporter(&config)?;
-        let summary = last_log_line_or(&run_result.messages, "Export complete.");
+        let payload = finished_payload(&run_result);
         for line in run_result.messages {
             events::emit(&app_handle, events::LOG, line);
         }
-        let counts =
-            count_jsonl_output(Path::new(&output_dir)).map_err(|err| ExtractErrorEvent {
-                detail: format!("count extracted JSON Lines records in {output_dir}: {err:#}"),
-                user_message: Some(
-                    "Extraction completed, but the generated message count could not be verified."
-                        .into(),
-                ),
-            })?;
-        let payload = serde_json::json!({
-            "summary": summary,
-            "files_parsed": counts.files,
-            "messages_parsed": counts.messages,
-        });
-        Ok(payload.to_string())
+        Ok(payload)
     });
 
     Ok(())
@@ -496,7 +424,7 @@ fn build_exporter_config(
 ///
 /// Returns an error if the exporter fails, or if the source is format
 /// conversion (that job uses the `format` command instead).
-fn run_exporter(config: &ExporterConfig) -> anyhow::Result<message_crate_core::RunResult> {
+fn run_exporter(config: &ExporterConfig) -> anyhow::Result<RunResult> {
     match &config.source {
         SourceConfig::GoSmsPro(_) => run_go_sms_pro(config),
         SourceConfig::SmsBackupRestore(_) => run_sms_restore(config),

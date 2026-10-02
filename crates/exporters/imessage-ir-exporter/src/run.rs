@@ -120,15 +120,13 @@ fn run_with(
     config: &ExporterConfig,
     spawn: impl FnOnce(&Request, Option<LogSink>, Option<ProgressSink>) -> Result<Helper>,
 ) -> Result<RunResult> {
-    let mut options = options_from_export_config(config)?;
-    options.check_cancel()?;
-
     // The program writes decrypted files here and this run deletes the
     // folder when it ends, whichever way it ends.
     let scratch = tempfile::Builder::new()
         .prefix("imessage-reader-")
         .tempdir()?;
-    options.request.scratch_dir = Some(scratch.path().to_path_buf());
+    let options = options_from_export_config(config, scratch.path().to_path_buf())?;
+    options.check_cancel()?;
 
     let mut helper = spawn(
         &Request::Export(options.request.clone()),
@@ -144,7 +142,11 @@ fn run_with(
 }
 
 /// Translate the shared exporter config into this exporter's options, rejecting non-Apple sources.
-fn options_from_export_config(config: &ExporterConfig) -> Result<ExportOptions> {
+/// The program is told to decrypt into `scratch_dir`.
+fn options_from_export_config(
+    config: &ExporterConfig,
+    scratch_dir: PathBuf,
+) -> Result<ExportOptions> {
     let SourceConfig::Apple(source) = &config.source else {
         bail!("imessage-ir-exporter requires SourceConfig::Apple");
     };
@@ -187,7 +189,7 @@ fn options_from_export_config(config: &ExporterConfig) -> Result<ExportOptions> 
             attachment_root: source.attachment_root.clone(),
             contacts_path: source.apple_contacts.clone(),
             use_caller_id: source.use_caller_id,
-            scratch_dir: None,
+            scratch_dir,
         },
         export_path: config.output.clone(),
         attachment_embed,
@@ -287,6 +289,11 @@ mod tests {
     use message_crate_core::{AppleConfig, MediaConfig, OutputFormat};
     use std::{fs, path::Path};
 
+    /// [`options_from_export_config`] with `/scratch` as the scratch folder.
+    fn options_for(config: &ExporterConfig) -> Result<ExportOptions> {
+        options_from_export_config(config, PathBuf::from("/scratch"))
+    }
+
     fn apple_cfg(input: &Path, apple: AppleConfig) -> ExporterConfig {
         ExporterConfig {
             inputs: vec![input.to_path_buf()],
@@ -310,7 +317,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let chat = dir.path().join("chat.db");
         fs::write(&chat, b"sqlite").unwrap();
-        let err = options_from_export_config(&apple_cfg(
+        let err = options_for(&apple_cfg(
             &chat,
             AppleConfig {
                 platform: Some(ApplePlatform::MacOs),
@@ -340,7 +347,7 @@ mod tests {
     fn missing_chat_db_uses_locked_copy() {
         let dir = tempfile::tempdir().unwrap();
         let missing = dir.path().join("chat.db");
-        let err = options_from_export_config(&apple_cfg(
+        let err = options_for(&apple_cfg(
             &missing,
             AppleConfig {
                 platform: Some(ApplePlatform::MacOs),
@@ -356,7 +363,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let chat = dir.path().join("chat.db");
         fs::write(&chat, b"sqlite").unwrap();
-        let err = options_from_export_config(&apple_cfg(
+        let err = options_for(&apple_cfg(
             &chat,
             AppleConfig {
                 platform: Some(ApplePlatform::MacOs),
@@ -373,7 +380,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let chat = dir.path().join("chat.db");
         fs::write(&chat, b"sqlite").unwrap();
-        let err = options_from_export_config(&apple_cfg(
+        let err = options_for(&apple_cfg(
             &chat,
             AppleConfig {
                 platform: Some(ApplePlatform::MacOs),
@@ -388,7 +395,7 @@ mod tests {
     #[test]
     fn empty_folder_is_not_an_iphone_backup() {
         let dir = tempfile::tempdir().unwrap();
-        let err = options_from_export_config(&apple_cfg(
+        let err = options_for(&apple_cfg(
             dir.path(),
             AppleConfig {
                 platform: Some(ApplePlatform::Ios),
@@ -410,7 +417,7 @@ mod tests {
 <plist version="1.0"><dict><key>IsEncrypted</key><false/></dict></plist>"#,
         )
         .unwrap();
-        let err = options_from_export_config(&apple_cfg(
+        let err = options_for(&apple_cfg(
             dir.path(),
             AppleConfig {
                 platform: Some(ApplePlatform::Ios),
@@ -436,7 +443,7 @@ mod tests {
         let hashed = dir.path().join(MESSAGES_DB_IN_IOS_BACKUP);
         fs::create_dir_all(hashed.parent().unwrap()).unwrap();
         fs::write(&hashed, b"sqlite").unwrap();
-        let options = options_from_export_config(&apple_cfg(
+        let options = options_for(&apple_cfg(
             dir.path(),
             AppleConfig {
                 platform: Some(ApplePlatform::Ios),
@@ -470,7 +477,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let chat = dir.path().join("chat.db");
         fs::write(&chat, b"sqlite").unwrap();
-        let options = options_from_export_config(&apple_cfg(
+        let options = options_for(&apple_cfg(
             &chat,
             AppleConfig {
                 platform: None,
@@ -483,7 +490,7 @@ mod tests {
         assert_eq!(options.request.source.platform, Platform::MacOs);
         assert_eq!(options.request.source.db_path, chat);
         assert!(!options.request.use_caller_id);
-        assert!(options.request.scratch_dir.is_none());
+        assert_eq!(options.request.scratch_dir, Path::new("/scratch"));
         assert_eq!(options.attachment_embed, AttachmentEmbed::Disabled);
         assert!(options.export_path.ends_with("chat.export_out"));
     }
@@ -644,5 +651,69 @@ mod tests {
             attachments[1].missing_reason.as_deref(),
             Some("file_missing")
         );
+    }
+
+    /// The desktop app's Staging counts are the run result's counts, so a
+    /// JSON Lines export reports the messages it wrote, not zero.
+    #[cfg(unix)]
+    #[test]
+    fn a_jsonl_run_reports_its_conversations_and_messages() {
+        use crate::helper::tests::{fake_helper, source_line, spawn_fake};
+        use imessage_reader_protocol::{Conversation, Event, Message, PROTOCOL_VERSION};
+
+        let message = |guid: &str, timestamp_unix_ms| {
+            Event::Message(Box::new(Message {
+                chat_identifier: "+15555550122".into(),
+                guid: guid.into(),
+                timestamp_unix_ms,
+                outgoing: false,
+                service: "iMessage".into(),
+                message_kind: "imessage".into(),
+                sender_handle: Some("+15555550122".into()),
+                sender_display_name: None,
+                subject: None,
+                text: "hello".into(),
+                owner_handle: "+15555550100".into(),
+                owner_display_name: None,
+                imessage: None,
+                attachments: Vec::new(),
+            }))
+        };
+        let events = [
+            Event::Conversation(Conversation {
+                chat_identifier: "+15555550122".into(),
+                conversation_type: "individual".into(),
+                group_title: None,
+                participants: Vec::new(),
+            }),
+            message("g1", 1_609_459_200_000),
+            message("g2", 1_609_459_260_000),
+            Event::ExportDone {
+                messages_seen: 2,
+                failures: 0,
+            },
+        ];
+        let mut body = source_line(PROTOCOL_VERSION);
+        for event in &events {
+            body.push_str(&format!(
+                "\necho '{}'",
+                serde_json::to_string(event).unwrap()
+            ));
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let chat = dir.path().join("chat.db");
+        fs::write(&chat, b"sqlite").unwrap();
+        let program = fake_helper(dir.path(), &body);
+        let config = apple_cfg(
+            &chat,
+            AppleConfig {
+                platform: Some(ApplePlatform::MacOs),
+                ..AppleConfig::default()
+            },
+        );
+
+        let result = run_with(&config, |request, _, _| Ok(spawn_fake(&program, request))).unwrap();
+        assert_eq!((result.conversations, result.message_count), (1, 2));
     }
 }

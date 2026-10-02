@@ -97,8 +97,20 @@ fn identities_come_back_cleaned_from_the_helper_process() {
     helper_binary();
     let dir = tempfile::tempdir().unwrap();
     let db_path = write_chat_db(dir.path());
+    let scratch_root = tempfile::tempdir().unwrap();
 
-    let mut identities = imessage_ir_exporter::backup_identities(&db_path, false, None).unwrap();
+    let mut identities =
+        imessage_ir_exporter::backup_identities(&db_path, false, None, scratch_root.path())
+            .unwrap();
+    let left: Vec<_> = fs::read_dir(scratch_root.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .filter(|name| name != ".lock")
+        .collect();
+    assert!(
+        left.is_empty(),
+        "the request's scratch folder stays: {left:?}"
+    );
     identities.sort();
     assert_eq!(
         identities,

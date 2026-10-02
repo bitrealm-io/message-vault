@@ -1,7 +1,7 @@
 //! Account rows, profile fields, and message deletion.
 
 use anyhow::{Context, Result, bail};
-use message_ir::HandleType;
+use message_ir::{HandleService, HandleType};
 use sqlx::SqliteConnection;
 
 use crate::db::handles::{normalize_handle, upsert_handle_row};
@@ -613,54 +613,46 @@ pub async fn upsert_account_email(
     Ok(())
 }
 
-/// Unlink a handle from the account profile (`account_handles`).
+/// Unlink one of the account's identities (`account_handles`): the linked
+/// handle with this address and, for a phone number, this `service`. One
+/// number can be linked twice, as a Text message identity and as a WhatsApp
+/// identity, and removing one leaves the other.
 ///
-/// For emails, also removes the matching `account_emails` row. The underlying
-/// `handles` row is left in place so conversation history stays intact.
+/// An email address is one identity whatever service its `handles` row
+/// records, so `service` is ignored for one; the matching `account_emails`
+/// row goes too. The `handles` row itself stays, so conversation history
+/// stays intact. True when anything was unlinked.
 pub async fn unlink_account_handle(
     conn: &mut SqliteConnection,
     account_id: i64,
     raw: &str,
     handle_type: HandleType,
+    service: HandleService,
 ) -> Result<bool> {
     let (normalized, _) = normalize_handle(raw, handle_type);
-    let handle_id: Option<i64> = sqlx::query_scalar(
-        "SELECT id FROM handles
-         WHERE account_id = $1 AND normalized = $2 AND handle_type = $3
-         ORDER BY CASE service WHEN 'phone' THEN 0 WHEN 'whatsapp' THEN 1 ELSE 2 END
-         LIMIT 1",
+    let is_email = matches!(handle_type, HandleType::Email);
+    let service = (!is_email).then_some(service.as_str());
+    let mut removed = sqlx::query(
+        "DELETE FROM account_handles
+         WHERE account_id = $1 AND handle_id IN (
+             SELECT id FROM handles
+             WHERE account_id = $1 AND normalized = $2 AND handle_type = $3
+               AND ($4 IS NULL OR service = $4))",
     )
     .bind(account_id)
     .bind(normalized.as_str())
     .bind(handle_type.as_str())
-    .fetch_optional(&mut *conn)
-    .await?;
-    let Some(handle_id) = handle_id else {
-        if matches!(handle_type, HandleType::Email) {
-            let n = sqlx::query("DELETE FROM account_emails WHERE account_id = $1 AND email = $2")
-                .bind(account_id)
-                .bind(normalized.as_str())
-                .execute(&mut *conn)
-                .await?
-                .rows_affected();
-            return Ok(n > 0);
-        }
-        return Ok(false);
-    };
-
-    let removed =
-        sqlx::query("DELETE FROM account_handles WHERE account_id = $1 AND handle_id = $2")
-            .bind(account_id)
-            .bind(handle_id)
-            .execute(&mut *conn)
-            .await?
-            .rows_affected();
-    if matches!(handle_type, HandleType::Email) {
-        sqlx::query("DELETE FROM account_emails WHERE account_id = $1 AND email = $2")
+    .bind(service)
+    .execute(&mut *conn)
+    .await?
+    .rows_affected();
+    if is_email {
+        removed += sqlx::query("DELETE FROM account_emails WHERE account_id = $1 AND email = $2")
             .bind(account_id)
             .bind(normalized.as_str())
             .execute(&mut *conn)
-            .await?;
+            .await?
+            .rows_affected();
     }
     Ok(removed > 0)
 }

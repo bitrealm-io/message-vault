@@ -2,6 +2,11 @@
 
 use serde::Serialize;
 use std::path::{Component, Path, PathBuf};
+use tauri::{AppHandle, Manager};
+
+/// The folder under the app's cache folder that `imessage-reader` decrypts
+/// an encrypted backup into while the Import form reads its identities.
+const IMESSAGE_READER_SCRATCH: &str = "imessage-reader";
 
 /// The logged-in user's home folder, plus which OS this process is running on.
 #[derive(Debug, Clone, Serialize)]
@@ -94,17 +99,29 @@ pub fn ios_backup_encrypted(path: String) -> Option<bool> {
 /// identity check.
 ///
 /// Runs on a blocking-pool thread: for an encrypted backup, answering this
-/// decrypts `chat.db` to a temp file.
+/// decrypts `chat.db` into a folder under the app's cache folder, which the
+/// next request cleans if this one is killed.
 #[tauri::command]
 pub async fn imessage_backup_identities(
+    app: AppHandle,
     path: String,
     ios: bool,
     backup_password: Option<String>,
 ) -> Result<Vec<String>, String> {
+    let scratch_root = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| format!("Could not find the app's cache folder: {e}"))?
+        .join(IMESSAGE_READER_SCRATCH);
     tauri::async_runtime::spawn_blocking(move || {
         let password = backup_password.as_deref().and_then(message_ir::trimmed);
-        imessage_ir_exporter::backup_identities(Path::new(path.trim()), ios, password)
-            .map_err(|e| format!("{e:#}"))
+        imessage_ir_exporter::backup_identities(
+            Path::new(path.trim()),
+            ios,
+            password,
+            &scratch_root,
+        )
+        .map_err(|e| format!("{e:#}"))
     })
     .await
     .map_err(|e| e.to_string())?

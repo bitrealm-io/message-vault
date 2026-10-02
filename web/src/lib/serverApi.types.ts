@@ -1504,11 +1504,11 @@ export interface components {
         };
         /**
          * @description Final stats and issues for a running Import Run. The outcome is stated
-         *     once, as `status`.
+         *     once, as `status`. The run's message and attachment counts are not part
+         *     of it: the server counts what the run holds, since a resumed Upload's
+         *     client knows only what the resume sent.
          */
         CompleteImportRequest: {
-            /** Format: int64 */
-            attachment_count?: number | null;
             /** Format: int64 */
             attachments_ms?: number | null;
             /** Format: int64 */
@@ -1516,8 +1516,6 @@ export interface components {
             /** Format: int64 */
             duration_ms?: number | null;
             issues?: components["schemas"]["CompleteImportIssueRequest"][];
-            /** Format: int64 */
-            message_count?: number | null;
             /** Format: int64 */
             parse_ms?: number | null;
             /** Format: int64 */

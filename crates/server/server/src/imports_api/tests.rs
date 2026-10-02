@@ -2210,6 +2210,45 @@ async fn completing_an_import_with_messages_creates_its_saved_search_and_contact
     assert_eq!(texts, ["g-1", "g-2"], "{page}");
 }
 
+/// The counts of a finished run are the server's own, never the client's.
+/// A resumed Upload's push report counts only what the resume sent, which
+/// is nothing when the run's first `/complete` was refused after every
+/// message landed. A count from the client would record that run as
+/// holding no messages, and give it no Saved Search.
+#[tokio::test]
+async fn completing_a_run_counts_its_messages_whatever_the_body_says() {
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+    let import_id: i64 = path
+        .trim_start_matches("/v1/imports/")
+        .trim_end_matches("/batches")
+        .parse()
+        .unwrap();
+    let (status, text) = crate::test_support::post_raw(
+        &state,
+        &path,
+        &token,
+        "application/jsonl",
+        wipe_test_batch("whatsapp", &["g-1", "g-2"]),
+    )
+    .await;
+    assert_eq!(status, axum::http::StatusCode::OK, "{text}");
+
+    let _: serde_json::Value = post_json(
+        &state,
+        &format!("/v1/imports/{import_id}/complete"),
+        &token,
+        serde_json::json!({ "status": "completed", "message_count": 0, "attachment_count": 0 }),
+    )
+    .await;
+
+    let completed: serde_json::Value =
+        get_json(&state, &format!("/v1/imports/{import_id}"), &token).await;
+    assert_eq!(completed["message_count"], 2, "{completed}");
+    let (searches, _) = shortcuts(&state, run_account(&state, import_id).await).await;
+    assert_eq!(searches.len(), 1, "the run's saved search: {searches:?}");
+}
+
 /// A run that stored nothing gets no saved search: one matching no
 /// messages would only clutter the sidebar, and the run stays visible in
 /// Import History regardless. With no contacts touched there is no Contact

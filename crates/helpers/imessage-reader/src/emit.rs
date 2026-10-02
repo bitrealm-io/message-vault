@@ -146,60 +146,58 @@ fn read_receipt_rfc3339(message: &Message, offset: i64) -> Option<String> {
     message.date_read(offset).ok().map(|d| d.to_rfc3339())
 }
 
-/// Raw handle string for a Messages `handle_id`, if the participant is known.
+/// The address of a Messages `handle_id`: that one handle row's `id`. Handle
+/// 0 is no handle, so a received row with handle 0 has no sender.
 fn raw_handle(session: &MailSession, handle_id: i32) -> Option<String> {
-    session
-        .resolve_participant(handle_id)
-        .map(|name| name.details.clone())
+    session.handle_address(handle_id).map(str::to_string)
 }
 
 /// Contact display name for a Messages `handle_id`, falling back to the handle.
 fn display_name_for(session: &MailSession, handle_id: i32) -> Option<String> {
-    session.resolve_participant(handle_id).map(|name| {
-        if name.full.is_empty() {
-            name.details.clone()
-        } else {
-            name.full.clone()
-        }
-    })
+    session
+        .handle_name(handle_id)
+        .or_else(|| session.handle_address(handle_id))
+        .map(str::to_string)
 }
 
 /// Participants and conversation type (`individual` / `group`) for one chat room.
+///
+/// The members are the chat's `chat_handle_join` rows, each one handle's
+/// own address, less any address of the owner's: Apple lists the owner's own
+/// handle among a group's members, and the account holder is never a
+/// participant. A one-to-one chat with no handle rows takes its identifier's
+/// address as its member; a group with none lists nobody.
 fn participants_for(session: &MailSession, chatroom: &Chat) -> (Vec<Participant>, &'static str) {
-    let mut records = Vec::new();
-    // Only non-empty handles are written, so only count those. A raw handle
-    // row count over-counts empty handles and misclassifies the chat.
-    let mut count = 0;
-    if let Some(handles) = session.chatroom_participants.get(&chatroom.rowid) {
-        for handle_id in handles {
-            let name = session.resolve_participant(*handle_id);
-            let (handle, display_name) = match name {
-                Some(n) => (
-                    n.details.clone(),
-                    if n.full.is_empty() {
-                        None
-                    } else {
-                        Some(n.full.clone())
-                    },
-                ),
-                None => (String::new(), None),
-            };
-            if !handle.is_empty() {
-                records.push(Participant {
-                    handle,
-                    display_name,
-                });
-                count += 1;
+    let group = session.is_group(chatroom);
+    let mut records: Vec<Participant> = Vec::new();
+    let mut add = |address: &str, display_name: Option<String>| {
+        let address = address.trim();
+        if address.is_empty()
+            || session.is_owner(address)
+            || records.iter().any(|p| p.handle == address)
+        {
+            return;
+        }
+        records.push(Participant {
+            handle: address.to_string(),
+            display_name,
+        });
+    };
+    match session.chat_members.get(&chatroom.rowid) {
+        Some(handles) => {
+            for &handle_id in handles {
+                if let Some(address) = session.handle_address(handle_id) {
+                    add(address, session.handle_name(handle_id).map(str::to_string));
+                }
             }
         }
+        None if !group => {
+            let address = chatroom.chat_identifier.as_str();
+            add(address, session.address_name(address));
+        }
+        None => {}
     }
-    // A user-named chat is a group even when it has shrunk to two members.
-    let named = chatroom.display_name().is_some();
-    let conversation_type = if count > 1 || named {
-        "group"
-    } else {
-        "individual"
-    };
+    let conversation_type = if group { "group" } else { "individual" };
     (records, conversation_type)
 }
 
@@ -369,7 +367,7 @@ struct RowContext {
 /// gone lands in the `orphaned` conversation.
 fn resolve_context(session: &MailSession, message: &Message) -> RowContext {
     let conversation = match session.conversation(message) {
-        Some((chatroom, _)) => {
+        Some(chatroom) => {
             let (participants, conversation_type) = participants_for(session, chatroom);
             ConversationRecord {
                 chat_identifier: if chatroom.chat_identifier.is_empty() {
@@ -712,10 +710,16 @@ mod tests {
     use super::*;
     use crate::test_support::FixtureDb;
     use chat_db_fixture::{
-        FRIEND_EMAIL, FRIEND_PHONE, GROUP_CHAT_IDENTIFIER, GROUP_TITLE, OWNER, OWNER_EMAIL,
+        FRIEND_EMAIL, FRIEND_PHONE, FRIEND_PHONE_EMAIL, GROUP_CHAT_IDENTIFIER, GROUP_TITLE, OWNER,
+        OWNER_EMAIL, SHRUNK_GROUP_IDENTIFIER,
     };
     use imessage_reader_protocol::AttachmentSource;
     use std::collections::HashMap;
+
+    /// The handles of a roster, in roster order.
+    fn handles_of(participants: &[Participant]) -> Vec<&str> {
+        participants.iter().map(|p| p.handle.as_str()).collect()
+    }
 
     #[test]
     fn send_effect_is_appended_once() {
@@ -920,29 +924,180 @@ mod tests {
         assert_eq!(message.sender_display_name.as_deref(), Some("Robin"));
     }
 
-    /// A chat is a group when it has more than one other member, or when
-    /// someone named it, and a one-to-one chat with no name is not.
+    /// Apple's `chat.style` says what a chat is: 43 a group, 45 one-to-one.
+    /// The number of members and the title decide nothing: a named chat
+    /// with one member is one-to-one, and the unnamed group with one member
+    /// left is a group.
     #[test]
-    fn a_chat_is_a_group_by_its_members_or_its_name() {
+    fn a_chat_is_a_group_by_its_style() {
         let fixture = FixtureDb::write();
         let session = fixture.session();
-        let chat = |rowid: i32, display_name: Option<&str>| Chat {
+        let chat = |rowid: i32, identifier: &str, display_name: Option<&str>| Chat {
             rowid,
-            chat_identifier: String::new(),
+            chat_identifier: identifier.to_string(),
             service_name: None,
             display_name: display_name.map(str::to_string),
         };
-        // Chat 1 has one other member, chat 2 has two.
-        assert_eq!(participants_for(&session, &chat(1, None)).1, "individual");
-        assert_eq!(participants_for(&session, &chat(2, None)).1, "group");
         assert_eq!(
-            participants_for(&session, &chat(1, Some("Just us"))).1,
-            "group"
-        );
-        assert_eq!(
-            participants_for(&session, &chat(1, Some(""))).1,
+            participants_for(&session, &chat(1, FRIEND_PHONE, None)).1,
             "individual"
         );
+        assert_eq!(
+            participants_for(&session, &chat(1, FRIEND_PHONE, Some("Just us"))).1,
+            "individual",
+            "a name does not make a group"
+        );
+        assert_eq!(
+            participants_for(&session, &chat(2, GROUP_CHAT_IDENTIFIER, None)).1,
+            "group"
+        );
+        let (members, kind) = participants_for(&session, &chat(4, SHRUNK_GROUP_IDENTIFIER, None));
+        assert_eq!(kind, "group", "one member left does not make it one-to-one");
+        assert_eq!(handles_of(&members), vec![FRIEND_EMAIL]);
+    }
+
+    /// An older `chat.db` has no `style` column. The identifier decides
+    /// then: a group id (`chat…`) is a group, an address is one-to-one.
+    #[test]
+    fn without_a_style_column_a_group_id_makes_a_group() {
+        let fixture = FixtureDb::write();
+        rusqlite::Connection::open(&fixture.db_path)
+            .unwrap()
+            .execute("ALTER TABLE chat DROP COLUMN style", [])
+            .unwrap();
+        let session = fixture.session();
+        let messages = FixtureDb::messages(&session);
+
+        let (shrunk, _) = build_record(&session, &messages[7]).unwrap();
+        assert_eq!(shrunk.chat_identifier, SHRUNK_GROUP_IDENTIFIER);
+        assert_eq!(shrunk.conversation_type, "group");
+        let (direct, _) = build_record(&session, &messages[0]).unwrap();
+        assert_eq!(direct.conversation_type, "individual");
+    }
+
+    /// Two handles that share a `person_centric_id` stay two addresses.
+    /// `imessage-database` joins them into one string for display; none of
+    /// that string reaches a sender, a participant or a reactor.
+    #[test]
+    fn a_phone_and_email_of_one_person_stay_two_addresses() {
+        let fixture = FixtureDb::write();
+        let mut session = fixture.session_with_contacts();
+        let messages = FixtureDb::messages(&session);
+        assert_eq!(raw_handle(&session, 1).as_deref(), Some(FRIEND_PHONE));
+        assert_eq!(raw_handle(&session, 3).as_deref(), Some(FRIEND_PHONE_EMAIL));
+
+        let (direct, photo) = build_record(&session, &messages[0]).unwrap();
+        assert_eq!(handles_of(&direct.participants), vec![FRIEND_PHONE]);
+        assert_eq!(photo.sender_handle.as_deref(), Some(FRIEND_PHONE));
+        let (_, new_address) = build_record(&session, &messages[6]).unwrap();
+        assert_eq!(
+            new_address.sender_handle.as_deref(),
+            Some(FRIEND_PHONE_EMAIL)
+        );
+
+        let mut heart = FixtureDb::messages(&session).remove(6);
+        heart.associated_message_type = Some(2000);
+        heart.associated_message_guid = Some(format!("p:0/{}", messages[1].guid));
+        session.tapbacks.insert(
+            messages[1].guid.clone(),
+            HashMap::from([(0usize, vec![heart])]),
+        );
+        let cells = build_parent_tapbacks(&session, &messages[1]).unwrap();
+        assert_eq!(cells[0]["reactor_handle"], FRIEND_PHONE_EMAIL);
+        assert_eq!(cells[0]["reactor_display_name"], "Sam Example");
+    }
+
+    /// A received row with handle 0 has no sender, in a group as in a
+    /// one-to-one chat, and nothing is named "Me".
+    #[test]
+    fn handle_zero_on_a_received_row_is_no_sender() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session();
+        assert_eq!(raw_handle(&session, 0), None);
+        let messages = FixtureDb::messages(&session);
+
+        let (_, in_group) = build_record(&session, &messages[8]).unwrap();
+        assert_eq!(in_group.text, "No sender");
+        assert!(!in_group.outgoing);
+        assert_eq!(in_group.sender_handle, None);
+        assert_eq!(in_group.sender_display_name, None);
+
+        let mut in_direct = FixtureDb::messages(&session).remove(0);
+        in_direct.handle_id = Some(0);
+        let (_, record) = build_record(&session, &in_direct).unwrap();
+        assert_eq!(record.sender_handle, None, "not inferred from the chat");
+        assert_eq!(record.sender_display_name, None);
+    }
+
+    /// Apple lists the owner's own handle among a group's members. The
+    /// owner is never a participant.
+    #[test]
+    fn the_owner_is_not_a_participant_of_a_group() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session();
+        let messages = FixtureDb::messages(&session);
+        let (group, _) = build_record(&session, &messages[2]).unwrap();
+        assert_eq!(group.chat_identifier, GROUP_CHAT_IDENTIFIER);
+        assert_eq!(
+            handles_of(&group.participants),
+            vec![FRIEND_PHONE, FRIEND_EMAIL]
+        );
+    }
+
+    /// A chat with no `chat_handle_join` rows keeps its own identifier, and
+    /// a one-to-one chat takes the identifier's address as its participant.
+    /// A message in no chat is orphaned and keeps its sender.
+    #[test]
+    fn a_chat_with_no_handle_rows_keeps_its_identifier() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session_with_contacts();
+        let messages = FixtureDb::messages(&session);
+
+        let (chat, record) = build_record(&session, &messages[6]).unwrap();
+        assert_eq!(chat.chat_identifier, FRIEND_PHONE_EMAIL);
+        assert_eq!(chat.conversation_type, "individual");
+        assert_eq!(handles_of(&chat.participants), vec![FRIEND_PHONE_EMAIL]);
+        assert_eq!(
+            chat.participants[0].display_name.as_deref(),
+            Some("Sam Example")
+        );
+        assert_eq!(record.chat_identifier, FRIEND_PHONE_EMAIL);
+
+        let (lost, record) = build_record(&session, &messages[11]).unwrap();
+        assert_eq!(lost.chat_identifier, ORPHANED);
+        assert_eq!(record.sender_handle.as_deref(), Some(FRIEND_EMAIL));
+
+        // A group with no handle rows lists nobody; its sender is still named.
+        rusqlite::Connection::open(&fixture.db_path)
+            .unwrap()
+            .execute("DELETE FROM chat_handle_join WHERE chat_id = 4", [])
+            .unwrap();
+        let session = fixture.session();
+        let (shrunk, record) = build_record(&session, &messages[7]).unwrap();
+        assert_eq!(shrunk.chat_identifier, SHRUNK_GROUP_IDENTIFIER);
+        assert_eq!(shrunk.conversation_type, "group");
+        assert!(shrunk.participants.is_empty());
+        assert_eq!(record.sender_handle.as_deref(), Some(FRIEND_EMAIL));
+    }
+
+    /// The owner's chat with the owner's own number keeps that identifier
+    /// and lists nobody. Its sent and its received row are both exported.
+    #[test]
+    fn a_chat_with_the_owners_own_address_has_no_participants() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session();
+        let messages = FixtureDb::messages(&session);
+
+        let (chat, sent) = build_record(&session, &messages[9]).unwrap();
+        assert_eq!(chat.chat_identifier, OWNER);
+        assert_eq!(chat.conversation_type, "individual");
+        assert!(chat.participants.is_empty(), "{:?}", chat.participants);
+        assert!(sent.outgoing);
+        let (chat, received) = build_record(&session, &messages[10]).unwrap();
+        assert_eq!(chat.chat_identifier, OWNER);
+        assert!(chat.participants.is_empty());
+        assert!(!received.outgoing);
+        assert_eq!(received.text, "Note to self");
     }
 
     /// Fields a row carries through to its record: the subject when it has
@@ -1193,9 +1348,11 @@ mod tests {
         assert_eq!(build_parent_tapbacks(&session, &messages[0]), None);
     }
 
-    /// The whole stream over the fixture: six rows seen, none skipped. Each
-    /// conversation is announced once, before its first message, and the
-    /// stream ends with the full parse count and the done event.
+    /// The whole stream over the fixture: twelve rows seen, none skipped.
+    /// Each conversation is announced once, before its first message, and
+    /// the stream ends with the full parse count and the done event. The
+    /// chat with no handle rows is its own conversation, apart from the
+    /// message in no chat.
     #[test]
     fn the_fixture_streams_without_a_failure() {
         let fixture = FixtureDb::write();
@@ -1222,17 +1379,27 @@ mod tests {
                 r#"message "guid-4" in "friend@example.com""#,
                 r#"message "guid-5" in "+15550000002""#,
                 r#"message "guid-6" in "+15550000002""#,
+                r#"conversation "sam@example.com""#,
+                r#"message "guid-7" in "sam@example.com""#,
+                r#"conversation "chat200""#,
+                r#"message "guid-8" in "chat200""#,
+                r#"message "guid-9" in "chat100""#,
+                r#"conversation "+15550000001""#,
+                r#"message "guid-10" in "+15550000001""#,
+                r#"message "guid-11" in "+15550000001""#,
+                r#"conversation "orphaned""#,
+                r#"message "guid-12" in "orphaned""#,
                 "progress",
                 "export_done",
             ]
         );
         assert_eq!(
-            events[9],
-            serde_json::json!({"event": "progress", "stage": "parse", "done": 6, "total": 6})
+            events[19],
+            serde_json::json!({"event": "progress", "stage": "parse", "done": 12, "total": 12})
         );
         assert_eq!(
-            events[10],
-            serde_json::json!({"event": "export_done", "messages_seen": 6, "failures": 0})
+            events[20],
+            serde_json::json!({"event": "export_done", "messages_seen": 12, "failures": 0})
         );
     }
 

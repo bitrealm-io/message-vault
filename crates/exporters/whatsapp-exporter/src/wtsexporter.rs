@@ -255,11 +255,17 @@ struct ForwardedPaths {
 }
 
 /// Absolutize user paths and fill Android/iOS defaults from `input` when missing.
+///
+/// An iPhone backup passed with `-b` fills nothing from `input`: wtsexporter
+/// takes the database, contacts and media from the backup, and WhatsApp's
+/// files at the backup folder's root are left over from an earlier extract.
 fn resolve_forwarded_paths(args: &WtsexporterArgs) -> Result<ForwardedPaths> {
     let search = input_search_root(&args.input)?;
+    let search_input = !(args.platform == Platform::Ios && args.backup.is_some());
 
     let db = match &args.db {
         Some(p) => Some(absolutize(p)?),
+        None if !search_input => None,
         None if args.input.is_file() => Some(absolutize(&args.input)?),
         None => first_existing(&[
             search.join("msgstore.db"),
@@ -269,6 +275,7 @@ fn resolve_forwarded_paths(args: &WtsexporterArgs) -> Result<ForwardedPaths> {
 
     let wa = match &args.wa {
         Some(p) => Some(absolutize(p)?),
+        None if !search_input => None,
         None => first_existing(&[
             search.join("wa.db"),
             search.join("ContactsV2.sqlite"),
@@ -279,6 +286,7 @@ fn resolve_forwarded_paths(args: &WtsexporterArgs) -> Result<ForwardedPaths> {
 
     let media = match &args.media {
         Some(p) => Some(absolutize(p)?),
+        None if !search_input => None,
         None => first_existing(&[
             search.join("WhatsApp"),
             search.join("AppDomainGroup-group.net.whatsapp.WhatsApp.shared"),
@@ -680,6 +688,45 @@ mod tests {
                 text(&contacts),
                 "-m".to_string(),
                 text(&domain),
+            ]
+        );
+    }
+
+    /// An iPhone backup is passed with `-b` alone. WhatsApp's own files at
+    /// the backup folder's root are left over from an earlier extract there
+    /// and are not passed: with the shared folder but no `ChatStorage.sqlite`
+    /// at the root, `-m` and `-w` without `-d` make wtsexporter stop with
+    /// "The message database does not exist".
+    #[test]
+    fn an_iphone_backup_is_passed_alone_without_the_files_at_its_root() {
+        let backup = tempdir().unwrap();
+        let shared = backup
+            .path()
+            .join("AppDomainGroup-group.net.whatsapp.WhatsApp.shared");
+        fs::create_dir(&shared).unwrap();
+        fs::write(shared.join("ContactsV2.sqlite"), b"contacts").unwrap();
+        let work = tempdir().unwrap();
+        let out = work.path().join("out");
+        let json = out.join("result.json");
+        let args = WtsexporterArgs {
+            platform: Platform::Ios,
+            backup: Some(backup.path().to_path_buf()),
+            work_dir: work.path().to_path_buf(),
+            ..android_args(backup.path(), None)
+        };
+
+        assert_eq!(
+            command_args(&args, &out, &json),
+            [
+                "-i".to_string(),
+                "--no-html".to_string(),
+                "--no-banner".to_string(),
+                "-o".to_string(),
+                text(&out),
+                "-j".to_string(),
+                text(&json),
+                "-b".to_string(),
+                text(backup.path()),
             ]
         );
     }

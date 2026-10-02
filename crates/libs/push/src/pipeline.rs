@@ -14,6 +14,7 @@ use std::time::Instant;
 
 use anyhow::Result;
 use message_crate_core::check_cancel;
+use message_crate_http::HttpError;
 
 use crate::http;
 use crate::journal::{JournalMessage, RunJournal};
@@ -91,11 +92,22 @@ struct BatchMessage {
     journal: JournalMessage,
 }
 
+/// Where one line of an import batch came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LineOrigin {
+    /// The conversation file index.
+    file_index: usize,
+    /// The line of that staged file, counted from 1.
+    file_line: usize,
+}
+
 /// Messages from one backup source packed into a single import HTTP body.
 struct ImportBatch {
     source: String,
     body: Vec<u8>,
     messages: Vec<BatchMessage>,
+    /// For each line of `body`, in order, where it came from.
+    lines: Vec<LineOrigin>,
     conversations: usize,
 }
 
@@ -106,6 +118,7 @@ impl ImportBatch {
             source: source.to_string(),
             body: Vec::new(),
             messages: Vec::new(),
+            lines: Vec::new(),
             conversations: 0,
         }
     }
@@ -118,7 +131,18 @@ impl ImportBatch {
                 file_index,
                 journal,
             }));
+        self.lines
+            .extend(chunk.file_lines.into_iter().map(|file_line| LineOrigin {
+                file_index,
+                file_line,
+            }));
         self.conversations += 1;
+    }
+
+    /// Where line `line` of the body (counted from 1) came from.
+    fn origin(&self, line: u64) -> Option<LineOrigin> {
+        let index = usize::try_from(line).ok()?.checked_sub(1)?;
+        self.lines.get(index).copied()
     }
 
     /// True if adding `chunk` would exceed the message count or byte size limit.
@@ -161,7 +185,26 @@ struct ImportHttpOutcome {
     mebibytes_per_second: f64,
     body_bytes: usize,
     message_count: usize,
-    response: Result<http::CreateImportBatchResponse, String>,
+    response: Result<http::CreateImportBatchResponse, BatchError>,
+}
+
+/// Why a batch failed: the sentence to show, and the line of the batch the
+/// server could not read, when it named one.
+struct BatchError {
+    message: String,
+    refused_line: Option<u64>,
+}
+
+impl BatchError {
+    fn new(error: &anyhow::Error) -> Self {
+        Self {
+            message: error.to_string(),
+            refused_line: error
+                .downcast_ref::<HttpError>()
+                .and_then(HttpError::problem)
+                .and_then(|problem| problem.line),
+        }
+    }
 }
 
 /// Owns the import-side state of one push run.
@@ -394,7 +437,7 @@ impl<'a> ImportPipeline<'a> {
             let response = message_crate_http::with_retries(max_retries, || {
                 session.post_import(import_id, batch.body.clone())
             })
-            .map_err(|error| error.to_string());
+            .map_err(|error| BatchError::new(&error));
             let request_ms = elapsed_ms(request_started);
             let seconds = request_started.elapsed().as_secs_f64().max(0.001);
             ImportHttpOutcome {
@@ -494,6 +537,7 @@ impl<'a> ImportPipeline<'a> {
                     .accounting
                     .failed
                     .saturating_add(outcome.message_count as u64);
+                let error = self.describe_batch_error(&outcome.batch, error);
                 out.log(&format!("IMPORT_REQUEST fail {stats} error={error}"));
                 for &index in &represented {
                     let Some(tracker) = self.trackers[index].as_mut() else {
@@ -516,6 +560,23 @@ impl<'a> ImportPipeline<'a> {
             self.finish_file_if_settled(index, journal, out)?;
         }
         Ok(request_ok)
+    }
+
+    /// The sentence for a failed batch. When the server named the line of
+    /// the batch it could not read, the sentence leads with the staged file
+    /// and line it came from, because the batch is not a file the person has.
+    fn describe_batch_error(&self, batch: &ImportBatch, error: BatchError) -> String {
+        let place = error
+            .refused_line
+            .and_then(|line| batch.origin(line))
+            .and_then(|origin| {
+                let tracker = self.trackers.get(origin.file_index)?.as_ref()?;
+                Some(format!("line {} of {}", origin.file_line, tracker.name))
+            });
+        match place {
+            Some(place) => format!("{place}: {}", error.message),
+            None => error.message,
+        }
     }
 
     /// Split one request's duration across the conversations it carried.
@@ -621,7 +682,25 @@ mod tests {
                     guid: format!("guid-{index}"),
                 })
                 .collect(),
+            file_lines: (1..=messages + 1).collect(),
         }
+    }
+
+    /// The lines of a batch run on across its chunks, and each maps back to
+    /// its own file's line, which starts again at the header.
+    #[test]
+    fn a_line_of_the_batch_maps_to_the_file_and_line_it_came_from() {
+        let mut batch = ImportBatch::new("imessage");
+        batch.push(0, chunk(40, 1));
+        batch.push(3, chunk(40, 2));
+
+        let origin = |line| batch.origin(line).map(|o| (o.file_index, o.file_line));
+        assert_eq!(origin(1), Some((0, 1)));
+        assert_eq!(origin(2), Some((0, 2)));
+        assert_eq!(origin(3), Some((3, 1)));
+        assert_eq!(origin(5), Some((3, 3)));
+        assert_eq!(origin(0), None);
+        assert_eq!(origin(6), None);
     }
 
     #[test]

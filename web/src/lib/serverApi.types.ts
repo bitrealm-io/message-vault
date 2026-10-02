@@ -3140,7 +3140,8 @@ export interface components {
          *     same request.
          *
          *     The extension members belong to one type each: `word` and `did_you_mean`
-         *     to `search-query-invalid`, `retry_after` to `rate-limited`.
+         *     to `search-query-invalid`, `retry_after` to `rate-limited`, `line` to
+         *     `malformed-body`.
          */
         Problem: {
             /**
@@ -3158,6 +3159,14 @@ export interface components {
              *     `validation-failed`.
              */
             errors?: string[] | null;
+            /**
+             * Format: int64
+             * @description `malformed-body` from an import batch: the line of the request body
+             *     the server could not read, counted from 1 with blank lines included.
+             *     The body is a batch the client packed, so only the client can say
+             *     which file and line of its own that line came from.
+             */
+            line?: number | null;
             /** @description The `x-request-id` of the response this came in. */
             request_id?: string | null;
             /**

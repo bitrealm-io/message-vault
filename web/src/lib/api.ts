@@ -53,6 +53,7 @@ export type Problem = {
   word?: string;
   did_you_mean?: string;
   retry_after?: number;
+  line?: number;
 };
 
 /**

@@ -1359,12 +1359,16 @@ fn import_semaphore() -> &'static tokio::sync::Semaphore {
 /// Turn an import's error into the HTTP failure a caller should see.
 ///
 /// The two failures a sender can fix by changing the file travel up the
-/// pipeline as `ImportFailure` and become `malformed-body` with their own sentence.
-/// Everything else (a disk or database error, a bug) is a 500: the message
-/// goes to stderr and the client sees "internal server error".
+/// pipeline as `ImportFailure` and become `malformed-body` with their own
+/// sentence and the line of the batch as `line`. Everything else (a disk or
+/// database error, a bug) is a 500: the message goes to stderr and the
+/// client sees "internal server error".
 fn classify_import_error(err: anyhow::Error) -> ApiError {
     match ImportFailure::in_error(&err) {
-        Some(failure) => ApiError::MalformedBody(failure.to_string()),
+        Some(failure) => ApiError::MalformedImportLine {
+            detail: failure.batch_sentence(),
+            line: failure.line(),
+        },
         None => ApiError::Internal(anyhow::anyhow!("{err:#}")),
     }
 }

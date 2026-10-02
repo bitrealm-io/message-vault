@@ -1713,27 +1713,37 @@ async fn http_import_of_a_schema_3_file_is_a_400_naming_both_versions() {
     let err: serde_json::Value = serde_json::from_str(&text).unwrap();
     assert_eq!(
         err["detail"],
-        "This file is schema version 3; Message Crate reads version 4 (line 1)."
+        "This file is schema version 3; Message Crate reads version 4 (line 1 of the batch)."
     );
+    assert_eq!(err["line"], 1, "{text}");
 }
 
+/// A batch is a request body, not a file the sender has: Upload packs it
+/// from parts of one or more staged files. The failure names the line of the
+/// batch, in the sentence and as `line`, so the client can turn it into the
+/// line of the file it came from.
 #[tokio::test]
-async fn http_import_of_a_line_that_is_not_json_is_a_400_naming_the_line() {
+async fn http_import_of_a_line_that_is_not_json_is_a_400_naming_the_line_of_the_batch() {
     let (state, _fixture, token) = importer().await;
     let path = batches_path(&state, &token, "whatsapp").await;
-    let (status, text) = crate::test_support::post_raw(
-        &state,
-        &path,
-        &token,
-        "application/jsonl",
+    let body = concat!(
+        r#"{"schema_version":4,"export":{"source":"whatsapp","tool":"t","tool_version":"1","owner_handle":"+15550000001","owner_display_name":"Me"},"#,
+        r#""conversation":{"chat_identifier":"+15550000002","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15550000002","display_name":"Sam"}],"#,
+        r#""stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1400773261000,"last_timestamp_unix_ms":1400773261000}}}"#,
+        "\n\n",
         "this is not json\n",
-    )
-    .await;
-    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST, "{text}");
-    let err: serde_json::Value = serde_json::from_str(&text).unwrap();
-    let message = err["detail"].as_str().unwrap();
+    );
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &token, "application/jsonl", body).await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::MalformedBody,
+    );
+    assert_eq!(problem.line, Some(3), "{text}");
+    let message = problem.detail.unwrap();
     assert!(
-        message.starts_with("Could not read line 1 of the file:"),
+        message.starts_with("Could not read line 3 of the batch:"),
         "{message}"
     );
 }

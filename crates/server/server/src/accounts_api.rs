@@ -26,7 +26,7 @@ use crate::credentials::{
     hash_user_password, password_bucket, passwords_match, refuse_when_rate_limited,
     require_username_free, require_valid_username,
 };
-use crate::db::dialect::BEGIN_IMMEDIATE_SQL;
+use crate::db::engine::BEGIN_IMMEDIATE_SQL;
 use crate::db::handles::{self, Identity};
 use crate::db::storage::{self, Scope};
 use crate::db::{account_profile, imports, server_settings, session_tokens};

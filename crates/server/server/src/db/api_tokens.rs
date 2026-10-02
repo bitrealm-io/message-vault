@@ -4,7 +4,6 @@ use anyhow::{Context, Result};
 use sqlx::SqliteConnection;
 
 use super::session_tokens::{generate_prefixed_token, hash_api_token, unix_secs_string};
-use crate::db::dialect::name_ci_expr;
 use crate::db::permissions::Permissions;
 
 /// Metadata for one API token (never includes plaintext or hash).
@@ -248,13 +247,12 @@ pub async fn list_api_tokens(
     conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<Vec<ApiTokenRow>> {
-    let order_by = format!("ORDER BY created_at DESC, {}", name_ci_expr("label"));
-    let rows: Vec<ApiTokenRowRaw> = sqlx::query_as(&format!(
+    let rows: Vec<ApiTokenRowRaw> = sqlx::query_as(
         "SELECT id, label, can_import, can_export, token_hint, created_at, last_accessed_at, expires_at, disabled
          FROM account_api_tokens
          WHERE account_id = $1
-         {order_by}"
-    ))
+         ORDER BY created_at DESC, lower(label)",
+    )
     .bind(account_id)
     .fetch_all(&mut *conn)
     .await?;

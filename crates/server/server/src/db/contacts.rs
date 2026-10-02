@@ -299,7 +299,7 @@ pub async fn contact_id_by_preferred_name(
 /// to, or re-marks, a group an earlier run or a person made.
 ///
 /// The insert itself claims the name, through
-/// [`crate::db::dialect::insert_under_free_name`], which the run's Saved
+/// [`crate::db::free_name::insert_under_free_name`], which the run's Saved
 /// Search goes through too.
 ///
 /// # Errors
@@ -310,7 +310,7 @@ pub async fn create_import_group(
     account_id: i64,
     base: &str,
 ) -> Result<(i64, String)> {
-    let claimed = crate::db::dialect::insert_under_free_name(
+    let claimed = crate::db::free_name::insert_under_free_name(
         conn,
         "contact_groups",
         account_id,

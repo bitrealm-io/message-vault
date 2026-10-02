@@ -6,6 +6,11 @@ use anyhow::{Context, Result};
 use sqlx::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
+/// The statement that begins a write transaction. IMMEDIATE takes the write
+/// lock at once, so overlapping writers wait on the busy timeout instead of
+/// failing at their first write.
+pub const BEGIN_IMMEDIATE_SQL: &str = "BEGIN IMMEDIATE TRANSACTION";
+
 /// The server's historical pragma set, applied to each new connection:
 /// busy timeout first (overlapping auth and UI writes wait), foreign keys on,
 /// synchronous NORMAL, `temp_store` MEMORY, `cache_size` -200000.

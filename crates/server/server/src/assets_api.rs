@@ -1021,9 +1021,30 @@ pub(crate) async fn replace_asset_upload_part(
     if part == 0 {
         return Err(ApiError::validation("part number must be >= 1"));
     }
-    let part_size = state.upload_limits().await?.part_size;
-    let body = read_body_limited(request.into_body(), part_size).await?;
     let assets_dir = state.cfg.paths.assets_dir_for_account(account, &source_id);
+    // The part size this upload started with, not the one the Server
+    // Settings give now: lowering the limit holds from the next upload.
+    let part_size = {
+        let assets_dir = assets_dir.clone();
+        let sha = sha256.clone();
+        let uid = upload_id.clone();
+        tokio::task::spawn_blocking(move || {
+            asset_uploads::session_part_size(&assets_dir, &sha, &uid)
+        })
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("upload part task: {e}")))?
+        .map_err(|e| ApiError::AssetUploadInvalid(e.to_string()))?
+    };
+    let declared = headers
+        .get(header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok());
+    if declared.is_some_and(|bytes| bytes > part_size as u64) {
+        return Err(ApiError::PayloadTooLarge(format!(
+            "a part of this upload is at most {part_size} bytes"
+        )));
+    }
+    let body = read_body_limited(request.into_body(), part_size).await?;
     let sha = sha256.clone();
     let uid = upload_id.clone();
     let written = tokio::task::spawn_blocking(move || {

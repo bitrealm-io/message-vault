@@ -228,6 +228,25 @@ pub fn start_upload(
     ))
 }
 
+/// The part size an upload started with, from its manifest. The part route
+/// caps a body at this size, not at the part size the Server Settings give
+/// now, so an upload in progress keeps the limits it started with when the
+/// owner lowers the attachment size limit.
+///
+/// # Errors
+///
+/// Returns an error when the fingerprint or upload id is invalid, or the
+/// upload session or its manifest is missing or unreadable.
+pub fn session_part_size(assets_root: &Path, sha256: &str, upload_id: &str) -> Result<usize> {
+    let sha = assets_api::require_sha256(sha256)?;
+    let upload_id = require_upload_id(upload_id)?;
+    let session = session_dir(assets_root, &sha, &upload_id);
+    if !session.is_dir() {
+        bail!("upload session not found");
+    }
+    Ok(read_manifest(&session)?.part_size)
+}
+
 /// Write (or overwrite) one part. `body` is the full part payload.
 pub fn put_part(
     assets_root: &Path,

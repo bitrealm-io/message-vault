@@ -47,7 +47,7 @@ The rule "The address book is a file for editing contacts, not a source of them"
 | **SMS Backup+** | Offline `.eml` only (no IMAP); call-log mails skipped; archive attachment→message pairing is guesswork; unresolved peers → `unknown.csv` |
 | **OpenExtract** | No media extraction; no groups; thin source format; a chat the export names by a person's name only is matched to a contact by that name on import, or stays Unknown |
 | **iMazing** | Reactions/replies are free text; WhatsApp groups lack full roster; naive dates are read in the zone chosen in the Import form's **Time zone of the messages** field |
-| **WhatsApp** | Requires external `wtsexporter` (pip or bundled binary); LID / non-phone JIDs stay raw; full group roster depends on upstream JSON |
+| **WhatsApp** | Requires external `wtsexporter` (pip or bundled binary); a one-to-one chat whose JID is not a phone number (an `@lid` id) keeps the raw id, written as its participant with `handle_type` `other`; Status updates (`status@broadcast`) and Channel posts (`@newsletter`) are skipped and counted as `skipped_status_updates` and `skipped_channel_posts`; full group roster depends on upstream JSON |
 | **iMessage** (`imessage-ir-exporter`) | No WhatsApp; reads the database through the separate `imessage-reader` program (GPL, shipped beside the app) because `imessage-database` is GPL and the app is not; needs Mac/`chat.db` or iOS backup; no TXT/HTML |
 
 ## Other dimensions

@@ -5,7 +5,7 @@
 //! which finds ffmpeg and ffprobe beside the binary, in `MESSAGE_CRATE_BIN`,
 //! or on `PATH`.
 
-use std::fs::{self, File};
+use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -756,16 +756,34 @@ fn mime_for_ext(ext: &str) -> &'static str {
 }
 
 /// Write derived bytes into the content-addressed store; the same bytes always land at the same path.
+///
+/// A file already at that path is kept only when its bytes hash to the
+/// fingerprint in its name. Anything else, such as a preview cut short by an
+/// interrupted run, is replaced. The bytes go to a synced temporary file in the
+/// same folder first and are renamed over the path, so a run killed partway
+/// never leaves a partial file under a content-addressed name.
 fn store_derived_bytes(derived_dir: &Path, buf: &[u8], ext: &str) -> Result<DerivedBlob> {
     let sha = crate::assets_api::sha256_hex(buf);
     let rel = derived_rel_path(&sha, ext);
     let dest = derived_dir.join(&rel);
-    if let Some(parent) = dest.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    if !dest.exists() {
-        let mut f = File::create(&dest).with_context(|| format!("create {}", dest.display()))?;
-        f.write_all(buf)?;
+    let parent = dest
+        .parent()
+        .with_context(|| format!("derived path {} has no folder", dest.display()))?;
+    fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+    if !crate::assets_api::hash_file(&dest).is_ok_and(|actual| actual == sha) {
+        let mut temporary = tempfile::NamedTempFile::new_in(parent)
+            .with_context(|| format!("create temporary preview in {}", parent.display()))?;
+        temporary
+            .write_all(buf)
+            .with_context(|| format!("write temporary preview in {}", parent.display()))?;
+        temporary
+            .as_file()
+            .sync_all()
+            .with_context(|| format!("sync temporary preview in {}", parent.display()))?;
+        temporary
+            .persist(&dest)
+            .map_err(|err| err.error)
+            .with_context(|| format!("install {}", dest.display()))?;
     }
     Ok(DerivedBlob {
         sha256: sha,

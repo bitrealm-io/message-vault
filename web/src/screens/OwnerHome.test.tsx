@@ -256,7 +256,7 @@ const anImportDetail = {
 };
 
 describe("OwnerHome", () => {
-  it("lists Dashboard, Settings, User Accounts, Activity and Logs in the side panel", () => {
+  it("lists Dashboard, Server Settings, User Accounts, Activity and Logs in the side panel", () => {
     renderHome();
 
     expect(sectionLinks().map((b) => b.textContent)).toEqual([

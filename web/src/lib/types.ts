@@ -45,7 +45,7 @@ export interface ExtractConfig {
   obfuscate?: boolean;
   /** Zone iMazing dates are read in (an IANA name); iMazing carries none of its own. */
   timezone?: string;
-  /** Owner phone numbers for Android SMS exporters (repeatable). */
+  /** Owner phone numbers for the Android SMS sources and WhatsApp (repeatable). */
   owner_phones?: string[];
   /** Owner email addresses for SMS Backup+ (repeatable). */
   owner_emails?: string[];

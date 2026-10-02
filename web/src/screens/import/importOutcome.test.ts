@@ -28,7 +28,7 @@ function report(overrides: Partial<PushFinishedReport> = {}): PushFinishedReport
 
 /** `n` push issues for attachments the plan flagged as too big to upload —
  * the `"{conversationFile}:{relativePath}"` shape `message-crate-push` actually
- * emits (`AttachmentSkipIssue` in `crates/cli/message-crate-push/src/run.rs`), not
+ * emits (`AttachmentSkip`, built in `crates/libs/push/src/prepare.rs`), not
  * a bare path. */
 function tooLargeIssues(n: number): { kind: string; step: string; item: string; reason: string }[] {
   return Array.from({ length: n }, (_, i) => ({

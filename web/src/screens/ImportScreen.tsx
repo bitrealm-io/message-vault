@@ -339,11 +339,11 @@ export default function ImportScreen() {
     if (!session || discardingRef.current || resumingRef.current) return;
     discardingRef.current = true;
     try {
-      // declineGate already deletes the staging folder on decline (decision
-      // 16); a panel discard is the same operation reached through a
+      // cancelRun already deletes the staging folder when a review is
+      // cancelled (decision 16); a panel discard is the same operation reached through a
       // different button, so it must not orphan a multi-GB folder. Both
       // halves run regardless of the other's outcome, the same
-      // `Promise.allSettled` shape `declineGate` uses. Never touch disk for
+      // `Promise.allSettled` shape `cancelRun` uses. Never touch disk for
       // another device's session -- its files are staged there, not here --
       // the same `device_id` check `resumeDecisionFor` uses to route to
       // `other_device` in the first place. A session with no recorded

@@ -23,7 +23,7 @@ export type SourceFingerprint = {
   path: string;
   size_bytes: number;
   modified_unix_ms: number | null;
-  /** Filled in after parse; null until then. */
+  /** Always null: nothing fills it in. */
   message_count: number | null;
 };
 
@@ -85,14 +85,13 @@ export async function discardImportSession(id: number): Promise<void> {
 /**
  * Identity of the backup this session reads.
  *
- * The message count is unknown until parse finishes, so it starts null
- * and is filled in afterwards.
+ * The message count starts null, and nothing fills it in after parse.
  *
  * The size and mtime come from a stat of the path itself, so for a
  * directory source -- an iOS backup folder, a WhatsApp folder -- they
  * describe the directory entry rather than its contents, and neither moves
- * when a file inside it grows. Nothing reads this fingerprint back yet;
- * whatever does will need its own answer for directories.
+ * when a file inside it grows. `checkSourceFingerprint` reads this
+ * fingerprint back on resume, so a change inside a directory goes unseen there.
  */
 export function buildSourceFingerprint(path: string, stat: PathStat): SourceFingerprint {
   return {

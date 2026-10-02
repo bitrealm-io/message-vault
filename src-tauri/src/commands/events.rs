@@ -32,7 +32,7 @@ pub fn emit(app: &AppHandle, event: &str, payload: impl Serialize + Clone) {
 #[derive(Debug, Clone, Serialize)]
 pub struct ExtractProgressEvent {
     /// Current pipeline stage: `setup`, `parse`, `attachments`, `prepare`,
-    /// `media`, or `upload`.
+    /// `check`, `media`, or `upload`.
     pub step: String,
     /// Number of items finished so far.
     pub done: usize,

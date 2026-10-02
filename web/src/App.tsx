@@ -40,7 +40,7 @@ function AppRoutes() {
 
   return (
     <Routes>
-      {/* Public routes — redirect to / if already authenticated */}
+      {/* Public routes — an authenticated visitor goes to loggedInDestination */}
       <Route path="/login" element={isAuthenticated ? loggedInDestination : <LoginScreen />} />
       {/* Registration is now the second tab of the login card, not its own screen. */}
       <Route path="/register" element={<Navigate to="/login" replace />} />

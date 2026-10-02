@@ -177,7 +177,7 @@ describe("useNameCollectionActions", () => {
     expect(client.getQueryData(KEY)).toEqual([{ id: 7, name: "Holiday" }]);
   });
 
-  it("throws without a request when the server has no set of that name", async () => {
+  it("throws without a write when the server has no set of that name", async () => {
     const routes = fakeRoutes();
     const { result } = renderHook(() => useNameCollectionActions(groupsOver(routes)), { wrapper });
     await expect(result.current.remove("Nope")).rejects.toThrow("group not found");

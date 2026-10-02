@@ -139,11 +139,11 @@ pub struct ExtractArgs {
     pub backup_password: Option<String>,
     /// Attachment handling choice: `copy`, `convert`, `compress`, or `skip`.
     pub attachment_media: Option<String>,
-    /// Video/image size cap for convert and compress: `720p`, `1080p`, or `4k`.
+    /// Long-edge cap for compressed video: `720p`, `1080p`, or `4k`.
     pub media_max_resolution: Option<String>,
     /// Frame-rate cap for compressed video, for example `30`.
     pub media_max_fps: Option<String>,
-    /// Smallest media file size that still counts as an attachment, for example `20M`.
+    /// Size below which a video is not compressed, for example `20M`.
     pub media_min_size: Option<String>,
     /// When true, replace names and phone numbers with fake ones.
     pub obfuscate: Option<bool>,
@@ -151,7 +151,8 @@ pub struct ExtractArgs {
     /// fixed offset (`UTC-05:00`). The screen sends the account's zone unless
     /// the person picked another in the advanced section.
     pub timezone: Option<String>,
-    /// Owner phone numbers for Android SMS exporters (SMS Backup & Restore).
+    /// Owner phone numbers for the Android SMS sources (SMS Backup & Restore,
+    /// GO SMS Pro, SMS Backup+) and both WhatsApp platforms.
     pub owner_phones: Option<Vec<String>>,
     /// Owner email addresses for SMS Backup+, whose archive is Gmail-backed
     /// and needs them to tell sent mail from received.
@@ -180,7 +181,7 @@ pub struct ExtractArgs {
 /// Returns as soon as the background thread starts. Log lines, progress, and
 /// the final summary are sent as `extract:log`, `extract:progress`,
 /// `extract:finished`, and `extract:error`. Output is JSON Lines (one JSON
-/// object per line) so the Import and Push screens can read it later.
+/// object per line) so the Import screen's upload step can read it later.
 ///
 /// # Errors
 ///
@@ -280,7 +281,7 @@ pub fn extract(
     Ok(())
 }
 
-/// Form fields from the Extract screen after defaults are filled in.
+/// Form fields from the Import screen after defaults are filled in.
 struct ExtractOptions {
     backup_password: String,
     attachment_media: AttachmentMedia,
@@ -300,7 +301,7 @@ struct ExtractOptions {
     whatsapp_business: bool,
 }
 
-/// Parse the attachment handling choice from the Extract form.
+/// Parse the attachment handling choice from the Import form.
 ///
 /// The UI says "copy" and "skip". The exporter config uses "clone" and
 /// "disabled" for those same choices.
@@ -323,7 +324,7 @@ pub(crate) fn parse_attachment_media(raw: Option<&str>) -> Result<AttachmentMedi
     })
 }
 
-/// Parse the max video/image size from the Extract form.
+/// Parse the compressed-video resolution cap from the Import form.
 ///
 /// # Errors
 ///
@@ -355,7 +356,7 @@ fn exporter_attachment_media(chosen: AttachmentMedia) -> AttachmentMedia {
 }
 
 /// Build the `CompressOptions` a media pass will use, from the same
-/// max-resolution/fps/min-size fields the Extract form parses.
+/// max-resolution/fps/min-size fields the Import form sends.
 ///
 /// `CompressOptions` only takes effect under [`media::MediaMode::Compress`],
 /// so the real options are built only when `Compress` was chosen and
@@ -387,14 +388,14 @@ pub(crate) fn parse_compress_options(
 ///
 /// Every source maps its UI key to an [`Exporter`] variant, fills the shared
 /// [`Form`], and goes through `Form::to_config` — so the Form builders in
-/// io-core are the single source of truth for field mapping and validation.
+/// message-crate-core are the single source of truth for field mapping and validation.
 /// Every path writes JSON Lines (one JSON object per line).
 ///
 /// # Errors
 ///
 /// Returns an error if the source is unknown, compress options are invalid,
 /// or `Form::to_config` rejects the form (missing input path, missing owner
-/// phones, bad date, …). Multiple validation problems are joined with `; `.
+/// phones, …). Multiple validation problems are joined with `; `.
 fn build_exporter_config(
     source: &str,
     path: &str,
@@ -445,7 +446,8 @@ fn build_exporter_config(
             form.apple_platform = ApplePlatform::MacOs;
             form.attachment_root.clone_from(&options.attachment_root);
             form.apple_contacts.clone_from(&options.apple_contacts);
-            // The Extract screen only offers obfuscation for iOS backups.
+            // The Import screen offers obfuscation for iPhone backups and the
+            // Android SMS sources, not for Mac Messages or a jailbreak copy.
             form.obfuscate = false;
             Exporter::Imessage
         }

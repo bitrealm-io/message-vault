@@ -85,7 +85,7 @@ describe("SettingsScreen has no account management", () => {
 /**
  * Convert runs `message-reexport` inside the desktop process, so the tab is a
  * desktop-only tool. In a browser the tab must not exist and `?tab=convert`
- * must fall back to Account, the same way the admin gate treats Users.
+ * must fall back to Account, like every other tab `visibleTabs` leaves out.
  */
 describe("SettingsScreen convert gate", () => {
   it("hides the Convert tab in the browser and falls ?tab=convert back to Account", () => {

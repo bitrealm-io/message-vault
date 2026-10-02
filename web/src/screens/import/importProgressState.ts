@@ -54,7 +54,7 @@ export function stepsFor(mode: AttachmentMediaMode): ImportStep[] {
  * without a row here is a compile error, not a silent runtime fallback.
  *
  * Reading the backup, copying its attachments and writing the conversation
- * files are all Staging from the person's side, so the first four steps
+ * files are all Staging from the person's side, so the first five steps
  * narrate the one Staging row rather than rows of their own.
  */
 const STEP_ROW_INDEX: Record<ImportProgressEvent["step"], (mode: AttachmentMediaMode) => number> = {

@@ -194,7 +194,7 @@ describe("remembered importer extra paths", () => {
 });
 
 describe("loadRememberedImportPaths", () => {
-  it("clears leftover storage when remembering is off", () => {
+  it("loads empty paths when remembering is off, whatever storage holds", () => {
     setImporterPath("imessage-macos", "/Users/sam/Library/Messages/chat.db");
     setImporterPath("whatsapp-android", "/tmp/wa");
     setImporterExtraPath("imessage-macos", "attachmentRoot", "/Users/sam/Library/Messages");

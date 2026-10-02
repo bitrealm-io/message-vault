@@ -40,7 +40,7 @@ const OMITTABLE_VERDICTS: ReadonlySet<SizeVerdict> = new Set([
  * attachment as `row`, an approved plan's forecast row.
  *
  * A push issue's `item` is `"{conversationFile}:{relativePath}"`
- * (`crates/cli/message-crate-push/src/run.rs`'s `AttachmentSkipIssue`), not a bare
+ * (the `AttachmentSkip` that `crates/libs/push/src/prepare.rs` builds), not a bare
  * path, so exact equality against `row.path`/`row.name` only catches the
  * simple case. `item.endsWith(...)` catches the compound form without the
  * conversation-name prefix tripping it up. `stableStem` (Task 9's helper)

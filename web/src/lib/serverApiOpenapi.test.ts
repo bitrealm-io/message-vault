@@ -5,7 +5,7 @@
  * `serverApi.ts` says at the top that its types come from
  * `docs/src/assets/openapi.json`, and a server-side test pins that document to
  * the running server. Nothing checked the *paths* against it. `serverApi.test.ts`
- * pins 25 of the 67 functions by hand, so the other 42 could ask for an address
+ * pins 42 of the 79 functions by hand, so the other 37 could ask for an address
  * the server does not serve and no test in the repository would notice — the
  * screens all fake these functions by name.
  *
@@ -212,8 +212,8 @@ const EXERCISED: Record<string, () => unknown> = {
 
 /**
  * Not a route function: it builds an asset URL and fetches it directly, so it
- * never reaches `apiClient` and has no single documented path to check. Its own
- * behaviour is covered in `serverApi.test.ts`.
+ * never reaches `apiClient` and has no single documented path to check. No test
+ * covers its own behaviour: the screen tests that use it fake it by name.
  */
 const NOT_ROUTED = new Set(["fetchAssetObjectUrl"]);
 

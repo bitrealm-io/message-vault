@@ -1,9 +1,10 @@
 /**
- * The only place in the suite that names server URLs.
+ * The route functions' server URLs, pinned by hand.
  *
- * Every other test fakes these functions by name, so nothing else notices when
- * a route is renamed. That makes this file the one thing standing between a
- * server-side rename and a screen that silently asks for the wrong address —
+ * Every screen test fakes these functions by name, so no screen test notices
+ * when a route is renamed. That makes this file, with
+ * `serverApiOpenapi.test.ts`, what stands between a server-side rename and a
+ * screen that silently asks for the wrong address —
  * which is exactly the failure the old URL-matching tests could not catch,
  * because a renamed route made their comparisons stop matching rather than
  * fail.

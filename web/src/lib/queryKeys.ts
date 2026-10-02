@@ -67,7 +67,7 @@ export const keys = {
     identities: ["account-profile", "identities"] as const,
   },
   apiTokens: { all: ["api-tokens"] as const },
-  /** The accounts the owner manages, and the server's own settings. */
+  /** The accounts the owner manages. */
   ownerAccounts: {
     all: ["owner-accounts"] as const,
     /** One account the owner has opened. Under `all`, so a write to the list refreshes it too. */

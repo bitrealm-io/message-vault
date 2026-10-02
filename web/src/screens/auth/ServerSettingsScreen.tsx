@@ -28,7 +28,7 @@ export interface ServerSettingsScreenProps {
   onSubmit: () => void;
   /**
    * Go back to the Message Crate the desktop app starts for itself. Given
-   * only in the desktop app, and only while the field holds another address:
+   * only in the desktop app, and only while the address in use is another one:
    * it is how a person returns from a Message Crate elsewhere.
    */
   onUseOwn?: () => void;

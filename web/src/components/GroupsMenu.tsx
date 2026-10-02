@@ -31,7 +31,7 @@ export default function GroupsMenu({
   isReserved = isReservedGroupName,
   reservedError = reservedGroupError,
   icon,
-  /** Show "Groups" (or ariaLabel) plus the assign-groups icon. Off for icon-only tags. */
+  /** Show `title` plus the assign-groups icon. Off for icon-only tags. */
   labeled = true,
   open: openProp,
   onOpenChange,

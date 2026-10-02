@@ -29,8 +29,8 @@ fn convert_and_compress_stage_originals_and_defer_the_media_step() {
     // The desktop runs conversion as its own pass so a gate can sit in
     // front of it. Asking the exporter to convert would spend the time
     // before the user has approved anything. Checked against the
-    // iMessage source, which routes attachment_media through `Form` —
-    // the only path that also exercises `exporter_attachment_media`.
+    // iMessage source; every source routes attachment_media through
+    // `exporter_attachment_media` before `Form` sees it.
     for chosen in [AttachmentMedia::Convert, AttachmentMedia::Compress] {
         let mut options = test_options(vec!["+15550100".into()]);
         options.attachment_media = chosen;

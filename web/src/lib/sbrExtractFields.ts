@@ -1,6 +1,6 @@
 import type { AttachmentMediaMode, ExtractConfig } from "./types";
 
-/** Build the extract payload fields shared by iPhone and SMS Backup & Restore media options. */
+/** Build the media fields shared by the iMessage, WhatsApp, and Android SMS extract payloads. */
 export function mediaExtractFields(args: {
   attachmentMedia: AttachmentMediaMode;
   maxResolution: string;

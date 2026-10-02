@@ -7,7 +7,8 @@
  *
  * Request and response types come from `serverApi.types.ts`, which is generated
  * from `docs/src/assets/openapi.json` — the document a server-side test pins to
- * the running server. Regenerate with `npm run gen:api`; `scripts/check-pr.sh`
+ * the running server. Regenerate with `npm run gen:api`;
+ * `scripts/check-generated-api-types.sh`, run by `scripts/check-all.sh` and CI,
  * fails when the checked-in file is out of date.
  *
  * These functions only talk to the server. Caching, request deduplication, and

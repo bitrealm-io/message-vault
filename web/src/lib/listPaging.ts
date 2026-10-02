@@ -13,10 +13,6 @@ export const PAGE_SIZE_FILL = 100;
 /** Contacts catalog first page — large enough for typical accounts in one request. */
 export const PAGE_SIZE_CONTACTS_FIRST = 500;
 
-/**
- * Build a "1–20 of 100" label for the rows currently on screen.
- * Uses 1-based start and end indexes. Shows "… of N" until the list reports a window.
- */
 /** Status suffix appended to a visible-range label. */
 export function listActivitySuffix(refreshing: boolean, filling: boolean): string {
   if (refreshing) return " · updating…";
@@ -24,6 +20,10 @@ export function listActivitySuffix(refreshing: boolean, filling: boolean): strin
   return "";
 }
 
+/**
+ * Build a "1–20 of 100" label for the rows currently on screen.
+ * Uses 1-based start and end indexes. Shows "… of N" until the list reports a window.
+ */
 export function formatVisibleRange(
   visibleStart: number,
   visibleEnd: number,

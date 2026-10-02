@@ -327,7 +327,7 @@ function importerSlugForSource(sourceId: string): string {
   return sourceId;
 }
 
-/** Local date and time as `YYMMDD-HHMMSS`, matching the desktop GUI. */
+/** Local date and time as `YYMMDD-HHMMSS`. */
 function formatStagingTimestamp(now: Date = new Date()): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   const yy = pad(now.getFullYear() % 100);

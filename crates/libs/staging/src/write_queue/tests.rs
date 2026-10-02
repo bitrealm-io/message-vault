@@ -807,3 +807,51 @@ fn convert_runs_as_a_pass_after_the_drain_stages_originals() {
         "the derivative the conversation names is on disk"
     );
 }
+
+/// With media turned off the run writes text only, so the size of the
+/// attachments the backup names cannot refuse it, by either drain.
+#[test]
+fn media_disabled_is_not_refused_for_attachments_it_will_not_write() {
+    let hinted = || {
+        let mut unit = unit_from(
+            doc_with("+15550000001", 1),
+            vec![AttachmentSource::Bytes(b"small".to_vec())],
+        );
+        unit.attachments[0].size_hint = Some(u64::MAX / 2);
+        vec![unit]
+    };
+    let tmp = tempfile::tempdir().unwrap();
+
+    let out = tmp.path().join("one");
+    fs::create_dir_all(&out).unwrap();
+    let result = drain(&out, hinted(), &options(MediaMode::Disabled, false));
+    assert!(result.is_ok(), "refused: {:?}", result.err());
+
+    let out = tmp.path().join("pool");
+    fs::create_dir_all(&out).unwrap();
+    let result = drain_write_queue(
+        &out,
+        hinted(),
+        &options(MediaMode::Disabled, false),
+        None,
+        None,
+        None,
+    );
+    assert!(result.is_ok(), "refused: {:?}", result.err());
+}
+
+/// SMS Backup & Restore sizes an attachment from the XML even when it holds
+/// no bytes for it (`AttachmentSource::take_bytes` returns `Missing` with
+/// that size). Nothing is copied for a missing attachment, so its size
+/// cannot refuse a run that copies media.
+#[test]
+fn a_missing_attachment_is_not_counted_against_the_disk() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut doc = doc_with("+15550000001", 1);
+    doc.messages[0].attachments[0].size_bytes = Some(u64::MAX / 2);
+    let unit = ConversationUnit::from_doc(doc, |_, att| AttachmentSource::take_bytes(att));
+    assert_eq!(unit.attachments[0].size_hint, Some(u64::MAX / 2));
+
+    let result = drain(tmp.path(), vec![unit], &options(MediaMode::Clone, false));
+    assert!(result.is_ok(), "refused: {:?}", result.err());
+}

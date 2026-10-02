@@ -1061,7 +1061,6 @@ dependencies = [
  "message-staging",
  "phone",
  "quick-xml 0.42.0",
- "serde",
  "serde_json",
  "sha2 0.11.0",
  "tempfile",
@@ -2400,7 +2399,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41b1177fdf999d2321d3fb46ff47159d9c1fb9ad66a4879f8c50a0b504615e9b"
 dependencies = [
  "memchr",
- "serde",
 ]
 
 [[package]]

@@ -16,9 +16,7 @@ message-ir-format = { path = "../../libs/ir-format" }
 message-staging = { path = "../../libs/staging" }
 media = { path = "../../libs/media" }
 phone = { path = "../../libs/phone" }
-quick-xml = { workspace = true, features = ["serialize"] }
-
-serde = { workspace = true }
+quick-xml = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 

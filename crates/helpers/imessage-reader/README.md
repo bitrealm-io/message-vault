@@ -20,24 +20,26 @@ Read every message out of a Mac's Messages database:
 
 ```bash
 cargo build -p imessage-reader
-echo '{"op":"export","source":{"db_path":"/Users/you/Library/Messages/chat.db","platform":"mac_os","backup_password":null},"attachment_root":null,"contacts_path":null,"use_caller_id":false,"scratch_dir":null}' \
+mkdir -p /tmp/imessage-reader-scratch
+echo '{"op":"export","source":{"db_path":"/Users/you/Library/Messages/chat.db","platform":"mac_os","backup_password":null},"attachment_root":null,"contacts_path":null,"use_caller_id":false,"scratch_dir":"/tmp/imessage-reader-scratch"}' \
   | target/debug/imessage-reader
 ```
 
 For an iPhone backup, `db_path` is the backup folder (the one holding
 `Manifest.plist`), `platform` is `"ios"`, and `backup_password` is the backup
 password when the backup is encrypted.
+`scratch_dir` is required: an encrypted backup's databases and attachments are decrypted into it, and the caller deletes it afterwards, because a killed program deletes nothing.
 
 What comes back, one JSON object per line, in this order:
 
-1. `{"event":"source","protocol_version":3,"encrypted":false}` once.
+1. `{"event":"source","protocol_version":5,"encrypted":false}` once.
 2. Any number of `log`, `progress`, `conversation`, and `message` lines,
    interleaved. Each `conversation` names a chat and its participants; each
    `message` is one already-classified message with its attachments listed.
 3. `{"event":"export_done","messages_seen":N,"failures":N}`, or
    `{"event":"error","message":"..."}` if the run failed.
 
-Two other requests exist. `{"op":"identities","db_path":...,"platform":...,"backup_password":...}`
+Two other requests exist. `{"op":"identities","source":{...},"scratch_dir":"..."}`
 answers with one `identities` line listing the addresses the device sent
 from. After an export of an encrypted backup, `{"op":"attachment","path":"..."}`
 decrypts one attachment the export named and answers with an `attachment` line

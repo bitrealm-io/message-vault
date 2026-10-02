@@ -42,7 +42,46 @@ describe("buildSearchSuggestions", () => {
   });
 });
 
+describe("negated terms", () => {
+  it("keeps the minus of a negated person term", () => {
+    const [first] = buildSearchSuggestions({
+      completingValue: true,
+      personOp: true,
+      lastToken: "-with:ann",
+      fields: [...fields],
+      contacts: [{ id: "42", name: "Ann Lee" }],
+    });
+    expect(applySuggestionToQuery("-with:ann", first)).toBe("-with:#42 ");
+  });
+  it("keeps the minus of a negated choice term", () => {
+    const [first] = buildSearchSuggestions({
+      completingValue: true,
+      personOp: false,
+      lastToken: "-kind:gr",
+      fields: [...fields],
+      contacts: [],
+    });
+    expect(applySuggestionToQuery("-kind:gr", first)).toBe("-kind:group ");
+  });
+  it("keeps the minus of a negated word", () => {
+    const [first] = buildSearchSuggestions({
+      completingValue: false,
+      personOp: false,
+      lastToken: "-ta",
+      fields: [...fields],
+      contacts: [],
+    });
+    expect(applySuggestionToQuery("a -ta", first)).toBe("a -tag:");
+  });
+});
+
 describe("applySuggestionToQuery", () => {
+  it("leaves the spaces inside a quoted phrase as typed", () => {
+    expect(
+      applySuggestionToQuery('subject:"a  b" wi', { id: "with", label: "with:", insert: "with:" }),
+    ).toBe('subject:"a  b" with:');
+  });
+
   it("replaces the token being typed", () => {
     expect(applySuggestionToQuery("hello ta", { id: "tag", label: "tag:", insert: "tag:" })).toBe(
       "hello tag:",

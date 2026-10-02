@@ -862,3 +862,95 @@ fn every_message_of_the_medium_set_falls_between_8am_and_11pm_utc_and_not_after_
         outside.iter().take(5).collect::<Vec<_>>()
     );
 }
+
+/// Whether `phone` is in a range set aside for fiction, so it cannot belong to
+/// anyone: a North American number at 555-0100 to 555-0199 in any area code
+/// (NANPA), or a UK mobile at 07700 900000 to 07700 900999 (Ofcom's range for
+/// drama).
+fn is_fictional_phone(phone: &str) -> bool {
+    let Some(digits) = phone.strip_prefix('+') else {
+        return false;
+    };
+    if !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return false;
+    }
+    if let Some(national) = digits.strip_prefix('1') {
+        return national.len() == 10 && national[3..].starts_with("55501");
+    }
+    if let Some(line) = digits.strip_prefix("447700900") {
+        return line.len() == 3;
+    }
+    false
+}
+
+/// Every `+` followed by digits in a text file of the bundle: the handles in
+/// the conversation files, the address book and `seed.toml`, and any number a
+/// message text happens to hold.
+fn phone_numbers_in_bundle(out: &Path) -> std::collections::BTreeSet<String> {
+    let mut numbers = std::collections::BTreeSet::new();
+    for (path, bytes) in tree_contents(out) {
+        let text_file = matches!(
+            path.extension().and_then(|extension| extension.to_str()),
+            Some("jsonl" | "csv" | "toml" | "md")
+        );
+        if !text_file {
+            continue;
+        }
+        let text = String::from_utf8(bytes).expect("a text file of the bundle is UTF-8");
+        let mut rest = text.as_str();
+        while let Some(start) = rest.find('+') {
+            let after = &rest[start + 1..];
+            let len = after.bytes().take_while(u8::is_ascii_digit).count();
+            if len > 0 {
+                numbers.insert(format!("+{}", &after[..len]));
+            }
+            rest = &after[len..];
+        }
+    }
+    numbers
+}
+
+#[test]
+fn the_fictional_ranges_are_the_ones_nanpa_and_ofcom_set_aside() {
+    assert!(is_fictional_phone("+14155550100"));
+    assert!(is_fictional_phone("+12125550199"));
+    assert!(is_fictional_phone("+447700900000"));
+    assert!(is_fictional_phone("+447700900999"));
+    assert!(!is_fictional_phone("+14155550200"));
+    assert!(!is_fictional_phone("+14155559000"));
+    assert!(!is_fictional_phone("+14155550099"));
+    assert!(!is_fictional_phone("+18007438200"));
+    assert!(!is_fictional_phone("+447700901000"));
+    assert!(!is_fictional_phone("+33123456789"));
+}
+
+/// The Demo Account ships with every Message Crate, so a number in it that
+/// could be dialled could reach a real person and show them beside made-up
+/// names and messages.
+#[test]
+fn every_phone_number_in_the_medium_and_large_sets_is_in_a_range_reserved_for_fiction() {
+    for size in [DemoSize::Medium, DemoSize::Large] {
+        let temp = tempfile::tempdir().expect("create test directory");
+        let out = temp.path().join("demo");
+        generate_size_to(size, &out).expect("generate the bundle");
+
+        let numbers = phone_numbers_in_bundle(&out);
+        assert!(
+            numbers.len() > 50,
+            "the {} set holds phone numbers",
+            size.as_str()
+        );
+        let real: Vec<&String> = numbers
+            .iter()
+            .filter(|number| !is_fictional_phone(number))
+            .collect();
+        assert!(
+            real.is_empty(),
+            "{} of {} numbers in the {} set are outside the fictional ranges, first: {:?}",
+            real.len(),
+            numbers.len(),
+            size.as_str(),
+            real.iter().take(5).collect::<Vec<_>>()
+        );
+    }
+}

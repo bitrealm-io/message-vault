@@ -3954,7 +3954,7 @@
           "Contacts"
         ],
         "summary": "Load an address book into this account.",
-        "description": "The body is the file itself: Message Crate's own CSV, one row per identity, with the columns `contact_id`, `display_name`, `groups`, `service`, `handle_type` and `identity`, as `POST /v1/contacts/address-book` writes it.\n\nRows that share a `contact_id` are one contact. An id the account holds\nnames that contact, a blank id makes a new contact for that row, and any\nother text groups its rows into one new contact. `append` creates and\nrenames contacts and adds the identities and Contact Group memberships\nthe rows list. `edit` does the same and then takes off each contact in\nthe file every identity and membership its rows do not list. A contact\nthe file does not mention is left alone in both modes.\n\nThe load is one transaction. A file that breaks a rule is refused whole\nwith `422 Unprocessable Entity`, and `errors` holds one sentence for each\nbad row, starting with its row number.",
+        "description": "The body is the file itself: Message Crate's own CSV, one row per identity, with the columns `contact_id`, `display_name`, `groups`, `service`, `handle_type` and `identity`, as `POST /v1/contacts/address-book` writes it.\n\nRows that share a `contact_id` are one contact. An id the account holds\nnames that contact, a blank id makes a new contact for that row, and any\nother text groups its rows into one new contact. `append` creates and\nrenames contacts and adds the identities and Contact Group memberships\nthe rows list. `edit` does the same and then takes off each contact in\nthe file every identity and membership its rows do not list. A contact\nthe file does not mention is left alone in both modes.\n\nA phone number written without `+`, which a spreadsheet can save in place\nof `+6591234567`, names the identity `+` and its digits when the row's\ncontact holds that key. Otherwise it is keyed as written: ten digits as a\nUS number, any other count as bare digits. `notes` names each row read\nwith its `+` back, and each such number that became a new identity.\n\nThe load is one transaction. A file that breaks a rule is refused whole\nwith `422 Unprocessable Entity`, and `errors` holds one sentence for each\nbad row, starting with its row number.",
         "operationId": "create_contacts",
         "parameters": [
           {
@@ -11923,7 +11923,8 @@
           "identities_added",
           "identities_moved",
           "identities_removed",
-          "groups_created"
+          "groups_created",
+          "notes"
         ],
         "properties": {
           "contacts_created": {
@@ -11967,6 +11968,13 @@
             "format": "int64",
             "description": "Identities taken off a contact, which only Edit does.",
             "minimum": 0
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "One sentence for each phone number the file wrote without `+` that\nthe load matched to the `+` key its contact holds, or that became a\nnew identity. Each starts with its row number. A spreadsheet can drop\nthe `+` from a number without showing it, so the load says how it\nread the number."
           }
         }
       },

@@ -44,35 +44,77 @@ vi.mock("../lib/api", async (importOriginal) => {
   };
 });
 
+// The card asks an address two things: whether it is healthy, and what state
+// its Message Crate is in. Logging in to the Demo Account is a third. Each is
+// faked by its name, as ADR 0002 says, so a renamed route is the drift test's
+// business in `serverApiOpenapi.test.ts` and not something this file passes over.
+vi.mock("../lib/serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/serverApi")>()),
+  getServerState: vi.fn(),
+  login: vi.fn(),
+}));
+
+vi.mock("../lib/serverHealth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/serverHealth")>()),
+  checkServerHealth: vi.fn(),
+}));
+
+import { getBaseUrl } from "../lib/api";
+import { getServerState, login as serverLogin } from "../lib/serverApi";
+import { checkServerHealth } from "../lib/serverHealth";
+import type { ServerState } from "../lib/useServerState";
 import { Providers } from "../test/providers";
 import LoginScreen from "./LoginScreen";
 
+const checkServerHealthMock = vi.mocked(checkServerHealth);
+const getServerStateMock = vi.mocked(getServerState);
+const serverLoginMock = vi.mocked(serverLogin);
+
 /**
- * Answer `/health` as a healthy server and `/v1/server` with the state given.
+ * What a Message Crate at one address does: answers with its state, refuses
+ * the connection, or never answers at all.
+ */
+type Answer = { state: ServerState; demoAccount?: boolean } | "down" | "silent";
+
+/**
+ * Fake every address by what `answer` says it does. The health probe names
+ * the address it asks; the server's state is asked of the address
+ * `useServerState` has just made the base URL, which `getBaseUrl` reads back.
+ */
+function serveAt(answer: (address: string) => Answer) {
+  checkServerHealthMock.mockImplementation(async (address) => {
+    const answered = answer(address);
+    if (answered === "silent") return new Promise<boolean>(() => {});
+    return answered !== "down";
+  });
+  getServerStateMock.mockImplementation(async () => {
+    const answered = answer(getBaseUrl());
+    if (answered === "silent") return new Promise<never>(() => {});
+    if (answered === "down") throw new TypeError("Failed to fetch");
+    return {
+      state: answered.state,
+      demo_account: answered.demoAccount ?? false,
+      version: "0.10.0",
+      schema_fingerprint: 1,
+      asset_max_bytes: 1024,
+    };
+  });
+}
+
+/**
+ * Every address healthy, in the state given.
  *
  * The state decides which forms the card offers, so a test that says nothing
- * about it gets `open` — the two-tab card, which is what most of these tests
- * are about. Returns the underlying fetch mock.
+ * about it gets `open`: the two-tab card, which is what most of these tests
+ * are about.
  */
-function stubServer(state: "unclaimed" | "closed" | "open" = "open", demoAccount = false) {
-  // `/health` is read with `text()`; the API client reads `status` and
-  // `json()`. Both shapes come back from the one stub so a test does not have
-  // to know which of the two a given screen used.
-  const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => ({
-    ok: true,
-    status: 200,
-    text: async () =>
-      String(url).includes("/v1/server")
-        ? JSON.stringify({ state, demo_account: demoAccount })
-        : "",
-    // A login answers with a session; everything else here is `/v1/server`.
-    json: async () =>
-      String(url).includes("/v1/session")
-        ? { token: "mc-user-demo", account_id: 2 }
-        : { state, demo_account: demoAccount },
-  }));
-  vi.stubGlobal("fetch", fetchMock);
-  return fetchMock;
+function stubServer(state: ServerState = "open", demoAccount = false) {
+  serveAt(() => ({ state, demoAccount }));
+}
+
+/** A server nothing answers at, as the app's own is while it starts. */
+function stubNoServer() {
+  serveAt(() => "down");
 }
 
 function renderScreen() {
@@ -107,11 +149,13 @@ describe("LoginScreen", () => {
     openDataFolder.mockResolvedValue(undefined);
     setBaseUrlSpy.mockReset();
     retrySavedLogin.mockReset();
+    checkServerHealthMock.mockReset();
+    getServerStateMock.mockReset();
+    serverLoginMock.mockReset();
   });
 
   afterEach(() => {
     cleanup();
-    vi.unstubAllGlobals();
   });
 
   it("logs in without a server-selection step", async () => {
@@ -127,7 +171,8 @@ describe("LoginScreen", () => {
   });
 
   it("offers the Demo Account beside Create Owner on an unclaimed Message Crate", async () => {
-    const fetchMock = stubServer("unclaimed", true);
+    stubServer("unclaimed", true);
+    serverLoginMock.mockResolvedValue({ token: "mc-user-demo", account_id: 2, username: "demo" });
     renderScreen();
 
     const explore = await screen.findByRole("button", { name: "Explore Demo Account" });
@@ -136,8 +181,7 @@ describe("LoginScreen", () => {
     await setupUser().click(explore);
 
     await waitFor(() => expect(login).toHaveBeenCalledWith("", "mc-user-demo", 2));
-    const sessionCall = fetchMock.mock.calls.find(([url]) => String(url).includes("/v1/session"));
-    expect(JSON.parse(String(sessionCall?.[1]?.body))).toEqual({ username: "demo", password: "" });
+    expect(serverLoginMock).toHaveBeenCalledWith({ username: "demo", password: "" });
   });
 
   it("keeps the Demo Account button beside the login form once claimed", async () => {
@@ -172,17 +216,6 @@ describe("LoginScreen", () => {
     await screen.findByText("Connected");
     expect(screen.queryByText(/127\.0\.0\.1/)).not.toBeInTheDocument();
     expect(screen.queryByText(/localhost/)).not.toBeInTheDocument();
-  });
-
-  it("probes /health rather than the auth mode endpoint", async () => {
-    const fetchMock = stubServer();
-    renderScreen();
-
-    await screen.findByText("Connected");
-
-    const calls = fetchMock.mock.calls.map(([url]) => String(url));
-    expect(calls.some((url) => url.endsWith("/health"))).toBe(true);
-    expect(calls.some((url) => url.endsWith("/v1/auth/mode"))).toBe(false);
   });
 
   it("keeps both tabs, Login first", async () => {
@@ -236,7 +269,7 @@ describe("LoginScreen", () => {
   });
 
   it("says Disconnected when nothing answers", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    stubNoServer();
     renderScreen();
 
     expect(await screen.findByText("Disconnected")).toBeInTheDocument();
@@ -247,7 +280,7 @@ describe("LoginScreen", () => {
   it("shows the login form, disabled, when nothing answers", async () => {
     // A skeleton reads as "still loading". A card that has its answer — no
     // server — has to look finished, or the screen seems to hang.
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    stubNoServer();
     renderScreen();
 
     await screen.findByText("Disconnected");
@@ -259,10 +292,7 @@ describe("LoginScreen", () => {
   });
 
   it("shows the placeholder form only while it is still connecting", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(() => new Promise(() => {})),
-    );
+    serveAt(() => "silent");
     renderScreen();
 
     await screen.findByText("Connecting");
@@ -274,10 +304,7 @@ describe("LoginScreen", () => {
     // A server that never answers holds the card in "connecting": a wrong
     // address is exactly when you need the settings screen most, so the way
     // to it must not wait for the probe to give up.
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(() => new Promise(() => {})),
-    );
+    serveAt(() => "silent");
     const user = setupUser();
     renderScreen();
 
@@ -290,7 +317,7 @@ describe("LoginScreen", () => {
   });
 
   it("keeps the way out of a red card live", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    stubNoServer();
     renderScreen();
 
     await screen.findByText("Disconnected");
@@ -303,20 +330,7 @@ describe("LoginScreen", () => {
     const A = "http://crate-a.example:8080";
     const B = "http://crate-b.example:8080";
     authState.serverUrl = A;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) => {
-        if (String(url).startsWith(A)) {
-          return {
-            ok: true,
-            status: 200,
-            text: async () => JSON.stringify({ state: "closed" }),
-            json: async () => ({ state: "closed" }),
-          };
-        }
-        throw new TypeError("Failed to fetch");
-      }),
-    );
+    serveAt((address) => (address.startsWith(A) ? { state: "closed" } : "down"));
     const user = setupUser();
     renderScreen();
 
@@ -344,7 +358,7 @@ describe("LoginScreen", () => {
   });
 
   it("says a disconnected card is still disconnected when the new address does not answer either", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    stubNoServer();
     const user = setupUser();
     renderScreen();
 
@@ -430,7 +444,7 @@ describe("LoginScreen", () => {
     await screen.findByRole("tab", { name: "Login" });
     await user.click(screen.getByRole("button", { name: "Change server address" }));
 
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    stubNoServer();
     const field = screen.getByRole("textbox", { name: "Address" });
     await user.clear(field);
     await user.type(field, "http://127.0.0.1:9999");
@@ -452,7 +466,7 @@ describe("LoginScreen", () => {
     // this address's and saying so is true.
     expect(screen.getByRole("status")).toHaveTextContent("Connected");
 
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    stubNoServer();
     const field = screen.getByRole("textbox", { name: "Address" });
     await user.type(field, "http://127.0.0.1:9999");
     // Typed but never tried: the card is still connected behind this screen,
@@ -469,7 +483,7 @@ describe("LoginScreen", () => {
   });
 
   it("applies a typed address and reconnects", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    stubNoServer();
     const user = setupUser();
     renderScreen();
 
@@ -482,29 +496,9 @@ describe("LoginScreen", () => {
     // below. Two hosts, two answers, so this test is about the one thing it
     // names: applying the address that was typed. Which probe wins when both
     // answer is the next test's subject.
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async (
-          url: string,
-        ): Promise<{
-          ok: boolean;
-          status?: number;
-          text: () => Promise<string>;
-          json?: () => Promise<unknown>;
-        }> => {
-          if (String(url).startsWith("http://127.0.0.1:8080")) {
-            // Healthy, and open, so the card offers the two tabs this test looks for.
-            return {
-              ok: true,
-              status: 200,
-              text: async () => JSON.stringify({ state: "open" }),
-              json: async () => ({ state: "open" }),
-            };
-          }
-          return { ok: false, status: 503, text: async () => "" };
-        },
-      ),
+    // Healthy, and open, so the card offers the two tabs this test looks for.
+    serveAt((address) =>
+      address.startsWith("http://127.0.0.1:8080") ? { state: "open" } : "down",
     );
     const field = screen.getByRole("textbox", { name: "Address" });
     await user.clear(field);
@@ -521,20 +515,19 @@ describe("LoginScreen", () => {
     // The card probes its saved address on mount. That probe is held open
     // here, so it is still in flight while a different address is typed and
     // submitted below — the two `connect()` calls the screen can have running
-    // at once. The saved address is blank (`useAuth` above), which probes the
-    // relative "/health"; the typed one is absolute, so the mock can tell them
-    // apart and answer them in the order this test needs.
+    // at once. The saved address is blank (`useAuth` above); the typed one is
+    // absolute, so the fake can tell them apart and answer them in the order
+    // this test needs.
     let answerSavedAddress: (() => void) | undefined;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string): Promise<{ ok: boolean; text: () => Promise<string> }> => {
-        if (String(url).startsWith("http://127.0.0.1:8080")) {
-          return { ok: true, text: async () => "" };
-        }
-        return new Promise((resolve) => {
-          answerSavedAddress = () => resolve({ ok: true, text: async () => "" });
-        });
-      }),
+    serveAt((address) =>
+      address.startsWith("http://127.0.0.1:8080") ? { state: "open" } : "silent",
+    );
+    checkServerHealthMock.mockImplementation((address) =>
+      address.startsWith("http://127.0.0.1:8080")
+        ? Promise.resolve(true)
+        : new Promise((resolve) => {
+            answerSavedAddress = () => resolve(true);
+          }),
     );
     const user = setupUser();
     renderScreen();
@@ -570,19 +563,7 @@ describe("LoginScreen", () => {
 
   it("reconnects on its own once a probe finds the server healthy again", async () => {
     let healthy = false;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        return healthy
-          ? {
-              ok: true,
-              status: 200,
-              text: async () => JSON.stringify({ state: "open" }),
-              json: async () => ({ state: "open" }),
-            }
-          : { ok: false, status: 503 };
-      }),
-    );
+    serveAt(() => (healthy ? { state: "open" } : "down"));
     renderScreen();
 
     await screen.findByText("Disconnected");
@@ -597,19 +578,7 @@ describe("LoginScreen", () => {
 
   it("tries the saved login again once the server is healthy again", async () => {
     let healthy = false;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        return healthy
-          ? {
-              ok: true,
-              status: 200,
-              text: async () => JSON.stringify({ state: "open" }),
-              json: async () => ({ state: "open" }),
-            }
-          : { ok: false, status: 503 };
-      }),
-    );
+    serveAt(() => (healthy ? { state: "open" } : "down"));
     retrySavedLogin.mockClear();
     renderScreen();
 
@@ -622,14 +591,12 @@ describe("LoginScreen", () => {
     expect(retrySavedLogin).toHaveBeenCalledWith("");
   });
 
-  it("carries an abort signal on the health probe", async () => {
-    const fetchMock = stubServer();
+  it("probes the health of the address it is on, with an abort signal", async () => {
+    stubServer();
     renderScreen();
 
     await screen.findByRole("tab", { name: "Login" });
-    const healthCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/health"));
-    expect(healthCall).toBeDefined();
-    expect(healthCall?.[1]).toMatchObject({ signal: expect.any(AbortSignal) });
+    expect(checkServerHealthMock).toHaveBeenCalledWith("", expect.any(AbortSignal));
   });
 
   it("puts the credentials in a real form, so a password manager can fill it", async () => {
@@ -733,16 +700,6 @@ describe("LoginScreen", () => {
     await screen.findByRole("tab", { name: "Login" });
     expect(startLocalServer).not.toHaveBeenCalled();
   });
-
-  /** A server nothing answers at, as the app's own is while it starts. */
-  function stubNoServer() {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        throw new TypeError("Failed to fetch");
-      }),
-    );
-  }
 
   it("says the app's own Message Crate is starting, in place of Connected", async () => {
     tauriState.isTauri = true;
@@ -853,19 +810,8 @@ describe("LoginScreen", () => {
       return { status: "starting", first_time: false };
     });
     localServerStatus.mockResolvedValue({ status: "ready", started_by_app: true });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) => {
-        if (ownRunning && String(url).startsWith("http://127.0.0.1:8080")) {
-          return {
-            ok: true,
-            status: 200,
-            text: async () => JSON.stringify({ state: "closed" }),
-            json: async () => ({ state: "closed" }),
-          };
-        }
-        throw new TypeError("Failed to fetch");
-      }),
+    serveAt((address) =>
+      ownRunning && address.startsWith("http://127.0.0.1:8080") ? { state: "closed" } : "down",
     );
     const user = setupUser();
     renderScreen();

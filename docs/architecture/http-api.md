@@ -516,9 +516,15 @@ A rule that can be checked by walking every operation in the document is
 checked that way, by one test, as `openapi/credential_matrix.rs` checks every
 route's reach: the page shape and paging parameters on every list, a
 `Location` on every `201`, a problem document on every failure, `401` without
-a credential, a refused unknown query parameter, kebab-case paths and the
-nesting depth. Why: a rule checked one route at a time is checked on the
-routes someone remembered.
+a credential, a refused unknown query parameter, `415` for a body without an
+accepted `Content-Type`, `400` for a JSON body that is not JSON, kebab-case
+paths and the nesting depth. Why: a rule checked one route at a time is
+checked on the routes someone remembered.
+
+The shared failures are checked by calling each operation into them, and the
+status and problem type the server answers must be ones the document lists.
+Reading them back from the document proves nothing, because the shared parts
+wrote them there from the same inputs the reading would use.
 
 ## Code
 

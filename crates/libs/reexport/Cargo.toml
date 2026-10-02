@@ -11,6 +11,7 @@ csv = { workspace = true }
 message-crate-core = { path = "../../core/message-crate-core" }
 message-ir = { path = "../ir" }
 message-ir-format = { path = "../ir-format" }
+message-staging = { path = "../staging" }
 media = { path = "../media" }
 serde_json = { workspace = true }
 sms-backup-restore-exporter = { path = "../../exporters/sms-backup-restore-exporter" }

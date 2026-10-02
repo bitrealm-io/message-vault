@@ -607,3 +607,111 @@ fn a_whatsapp_file_keeps_its_name_when_read_and_written_again() {
         assert_eq!(again.file_name(), path.file_name());
     }
 }
+
+/// One Apple Messages conversation holding the values CSV, EML and MBOX used
+/// to drop on a round trip: messages sent from two of the owner's addresses,
+/// an attachment for each missing reason with its size, and a contact card
+/// whose lines end in CRLF.
+fn document_with_hard_fields() -> ConversationDocument {
+    let mut doc = message_ir::testutil::sample_document("from my phone number");
+    doc.export.source = "imessage".into();
+    let attachment = |name: &str, mime: &str| message_ir::IrAttachment {
+        path: None,
+        original_name: Some(name.into()),
+        mime_type: Some(mime.into()),
+        digest_sha256: None,
+        is_sticker: false,
+        transcription: None,
+        sticker_effect: None,
+        size_bytes: None,
+        missing_reason: None,
+        bytes: None,
+    };
+
+    let first = &mut doc.messages[0];
+    first.service = IrService::IMessage;
+    first.message_kind = IrMessageKind::IMessage;
+    first.owner_handle = Some("+15555550100".into());
+    first.source = None;
+    first.attachments = [
+        ("movie.mov", "video/quicktime", 3_221_225_472, "too_large"),
+        ("photo.heic", "image/heic", 2_048_000, "not_copied"),
+        (
+            "voice.caf",
+            "audio/x-caf",
+            51_200,
+            "convert_failed: ffmpeg exited with status 1",
+        ),
+    ]
+    .into_iter()
+    .map(|(name, mime, size, reason)| message_ir::IrAttachment {
+        size_bytes: Some(size),
+        missing_reason: Some(reason.into()),
+        ..attachment(name, mime)
+    })
+    .collect();
+
+    let card = b"BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Sam\r\nEND:VCARD\r\n".to_vec();
+    let mut second = doc.messages[0].clone();
+    second.guid = "bbccddeeff0011223344556677889900".into();
+    second.timestamp_unix_ms += 60_000;
+    second.direction = IrDirection::Outgoing;
+    second.sender_handle = Some("me@icloud.com".into());
+    second.sender_display_name = Some("Me".into());
+    second.owner_handle = Some("me@icloud.com".into());
+    second.text = "from my Apple ID".into();
+    second.attachments = vec![message_ir::IrAttachment {
+        // The SHA-256 of `card`.
+        digest_sha256: Some(
+            "b0131e62957346f7cb488efd25f1fa6efc34e63dd49daa3a9b984668003e536c".into(),
+        ),
+        size_bytes: Some(card.len() as u64),
+        bytes: Some(card),
+        ..attachment("sam.vcf", "text/vcard")
+    }];
+    doc.messages.push(second);
+    doc.finalize_stats();
+    doc
+}
+
+/// Write [`document_with_hard_fields`] in `format`, read it back, and require
+/// the same document, and for a mail format the same attachment bytes.
+fn assert_hard_fields_survive(format: OutputFormat) {
+    let doc = document_with_hard_fields();
+    let tmp = tempfile::tempdir().unwrap();
+    let path = write_format(tmp.path(), format, doc.clone()).unwrap();
+    let back = match format {
+        OutputFormat::Csv => read_conversation_csv(&path),
+        OutputFormat::Eml => read_conversation_eml_dir(&path),
+        OutputFormat::Mbox => read_conversation_mbox(&path),
+        other => panic!("no round trip for {}", other.as_str()),
+    }
+    .unwrap();
+
+    // CSV carries attachment metadata only. EML and MBOX carry the bytes too.
+    if format != OutputFormat::Csv {
+        let bytes = |d: &ConversationDocument| -> Vec<Option<Vec<u8>>> {
+            d.messages
+                .iter()
+                .flat_map(|m| m.attachments.iter().map(|a| a.bytes.clone()))
+                .collect()
+        };
+        assert_eq!(bytes(&back), bytes(&doc), "attachment bytes");
+    }
+    assert_docs_equal_after_normalize(doc, back);
+}
+
+#[test]
+fn csv_keeps_each_messages_owner_and_each_attachments_size_and_missing_reason() {
+    assert_hard_fields_survive(OutputFormat::Csv);
+}
+
+#[test]
+fn eml_keeps_each_messages_owner_and_each_attachments_size_and_missing_reason() {
+    assert_hard_fields_survive(OutputFormat::Eml);
+}
+
+#[test]
+fn mbox_keeps_each_messages_owner_each_attachments_metadata_and_a_text_attachments_bytes() {
+    assert_hard_fields_survive(OutputFormat::Mbox);
+}

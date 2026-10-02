@@ -43,7 +43,9 @@ import { useAccountProfile } from "../lib/useAccountProfile";
  * kinds at once. A word only one list accepts (`participants:` is a
  * conversations word, `conversations:` a contacts word) is not sent to the
  * list that would refuse it; that pane says which list the word applies to
- * instead of showing the server's 422.
+ * instead of showing the server's 422 Unprocessable Entity. A word neither
+ * list accepts is named once, as a word that is not a search word, and
+ * neither list is asked.
  */
 
 /** How many trashed contacts this pane lists before it stops. */
@@ -74,6 +76,12 @@ const noteBox =
 /** Hover text on a disabled Delete when the account may not delete. */
 const CANNOT_DELETE = "Deleting is not permitted for this account";
 
+/** "re: is not a search word": the words neither list accepts. */
+function notSearchWords(words: readonly string[]): string {
+  const list = words.map((w) => `${w}:`).join(", ");
+  return words.length === 1 ? `${list} is not a search word` : `${list} are not search words`;
+}
+
 /** "participants: applies to conversations only": the words a pane cannot answer, and who can. */
 function appliesOnlyTo(words: readonly string[], list: "contacts" | "conversations"): string {
   const verb = words.length === 1 ? "applies" : "apply";
@@ -92,16 +100,24 @@ export default function TrashScreen() {
 
   // Which typed words each list refuses. The registry is fetched once per
   // session; until it arrives neither pane asks, so a refused word never
-  // reaches the server as a 422.
+  // reaches the server as a 422. A failed request leaves an empty registry,
+  // which would refuse every word, so no refusal is read from it.
   const conversationFields = useSearchFields("conversations");
   const contactFields = useSearchFields("contacts");
   const fieldsLoading = conversationFields.loading || contactFields.loading;
-  const conversationsRefuse = fieldsLoading
-    ? []
-    : unsupportedFieldWords(query, conversationFields.fields);
-  const contactsRefuse = fieldsLoading ? [] : unsupportedFieldWords(query, contactFields.fields);
-  const askConversations = !fieldsLoading && conversationsRefuse.length === 0;
-  const askContacts = !fieldsLoading && contactsRefuse.length === 0;
+  const fieldsError = conversationFields.error ?? contactFields.error;
+  const fieldsKnown = !fieldsLoading && fieldsError === null;
+  const conversationsRefuse = fieldsKnown
+    ? unsupportedFieldWords(query, conversationFields.fields)
+    : [];
+  const contactsRefuse = fieldsKnown ? unsupportedFieldWords(query, contactFields.fields) : [];
+  // A word both lists refuse belongs to neither, so no pane says it is the
+  // other list's word.
+  const unknownWords = conversationsRefuse.filter((w) => contactsRefuse.includes(w));
+  const contactsOnlyWords = conversationsRefuse.filter((w) => !unknownWords.includes(w));
+  const conversationsOnlyWords = contactsRefuse.filter((w) => !unknownWords.includes(w));
+  const askConversations = fieldsKnown && conversationsRefuse.length === 0;
+  const askContacts = fieldsKnown && contactsRefuse.length === 0;
 
   // Only `total` is read here; the rows themselves are rendered by the list
   // column, so one row is enough to read `total` off the page response.
@@ -179,8 +195,16 @@ export default function TrashScreen() {
   const total = data ?? 0;
   const contacts = contactPage?.items ?? [];
   const searching = search.trim().length > 0;
+  // Trash is empty only when both lists answered and both answers are empty:
+  // a list that was not asked, or failed, says nothing about what it holds.
   const nothingInTrash =
-    askConversations && askContacts && total === 0 && contacts.length === 0 && selectedId === null;
+    data !== undefined &&
+    error === null &&
+    contactPage !== undefined &&
+    contactsError === null &&
+    total === 0 &&
+    contacts.length === 0 &&
+    selectedId === null;
   // Empty Trash acts on all of Trash, so it is offered whenever Trash is not
   // known to be empty — a search that matches nothing says nothing about the
   // rest of it.
@@ -244,8 +268,15 @@ export default function TrashScreen() {
           </Button>
         )}
       </div>
-      {error && <div className={errorBox}>{apiErrorMessage(error, "Could not load Trash.")}</div>}
-      {nothingInTrash ? (
+      {fieldsError ? (
+        <div className={errorBox}>
+          Could not load the search words. {apiErrorMessage(fieldsError, "")}
+        </div>
+      ) : unknownWords.length > 0 ? (
+        <div className={noteBox} role="status">
+          {notSearchWords(unknownWords)}
+        </div>
+      ) : nothingInTrash ? (
         <div className="text-[0.875rem] text-muted">
           {searching ? "Nothing in Trash matches this search." : "Trash is empty."}
         </div>
@@ -253,6 +284,9 @@ export default function TrashScreen() {
         <>
           <section className="mb-8">
             <h3 className={sectionHeading}>Conversations</h3>
+            {error && (
+              <div className={errorBox}>{apiErrorMessage(error, "Could not load Trash.")}</div>
+            )}
             {selectedId !== null ? (
               selectedLoading ? (
                 <div className="text-[0.875rem] text-muted">Loading…</div>
@@ -280,11 +314,11 @@ export default function TrashScreen() {
                   {apiErrorMessage(selectedError, "Could not load this conversation.")}
                 </div>
               )
-            ) : conversationsRefuse.length > 0 ? (
+            ) : contactsOnlyWords.length > 0 ? (
               <div className={noteBox} role="status">
-                {appliesOnlyTo(conversationsRefuse, "contacts")}
+                {appliesOnlyTo(contactsOnlyWords, "contacts")}
               </div>
-            ) : total === 0 ? (
+            ) : error ? null : total === 0 ? (
               <div className="text-[0.875rem] text-muted">
                 {searching ? "No conversations match this search." : "No conversations in Trash."}
               </div>
@@ -309,11 +343,11 @@ export default function TrashScreen() {
                 {apiErrorMessage(restoreContact.error, "Could not restore this contact.")}
               </div>
             )}
-            {contactsRefuse.length > 0 ? (
+            {conversationsOnlyWords.length > 0 ? (
               <div className={noteBox} role="status">
-                {appliesOnlyTo(contactsRefuse, "conversations")}
+                {appliesOnlyTo(conversationsOnlyWords, "conversations")}
               </div>
-            ) : contacts.length === 0 ? (
+            ) : contactsError ? null : contacts.length === 0 ? (
               <div className="text-[0.875rem] text-muted">
                 {searching ? "No contacts match this search." : "No contacts in Trash."}
               </div>

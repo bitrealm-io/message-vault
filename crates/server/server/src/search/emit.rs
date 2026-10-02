@@ -612,7 +612,8 @@ impl NamedSet {
     }
 
     /// The home row is a member of the set `v` names. Handles `#id` and a
-    /// case-insensitive name; a prefix means "a name that starts with this".
+    /// case-insensitive name; a prefix means "a word in the name starts with
+    /// this", as `like_contains` matches it.
     fn contains(&self, out: &mut Sql, term: &FieldTerm, v: &Value) -> Result<(), QueryError> {
         out.push(&format!("EXISTS ({} AND ", self.membership_from()));
         let result = match v {

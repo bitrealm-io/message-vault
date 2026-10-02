@@ -1745,14 +1745,17 @@ mod people_words {
         );
     }
 
-    /// `tag:` and `group:` take `pre*` like the Text words do, matching a
-    /// name that starts with the prefix. A quoted star is text.
+    /// `tag:` and `group:` take `pre*` like the Text words do, matching the
+    /// start of the name or of any word in it: `group:Club*` finds "Book
+    /// Club". A quoted star is text.
     #[tokio::test]
-    async fn tag_and_group_prefixes_match_the_start_of_a_name() {
+    async fn tag_and_group_prefixes_match_the_start_of_any_word_in_a_name() {
         let (pool, _dir, f) = seeded().await;
         let mut conn = pool.acquire().await.unwrap();
         tag(&mut conn, ACCOUNT, "food", &[f.jane_direct]).await;
         tag(&mut conn, ACCOUNT, "bar", &[f.sam_direct]).await;
+        tag(&mut conn, ACCOUNT, "Ski Trip", &[f.bo_direct]).await;
+        group(&mut conn, ACCOUNT, "Book Club", &[f.cy]).await;
         assert_eq!(
             run(&mut conn, ListKind::Conversations, "tag:foo*").await,
             vec![f.jane_direct]
@@ -1776,6 +1779,15 @@ mod people_words {
         assert_eq!(
             run(&mut conn, ListKind::Contacts, "group:Fam*").await,
             vec![f.ana]
+        );
+        // A later word in the name matches too.
+        assert_eq!(
+            run(&mut conn, ListKind::Contacts, "group:Club*").await,
+            vec![f.cy]
+        );
+        assert_eq!(
+            run(&mut conn, ListKind::Conversations, "tag:Trip*").await,
+            vec![f.bo_direct]
         );
     }
 

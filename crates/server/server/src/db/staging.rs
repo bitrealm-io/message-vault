@@ -80,6 +80,38 @@ pub async fn insert_conversation(
     .await?)
 }
 
+/// The `sort_order` the first staged message of the conversation on
+/// `chat_handle_id` takes: one past the largest the account's production
+/// conversation on that handle holds, or 0 when it holds none.
+///
+/// `sort_order` is a message's place in its conversation, not in the batch
+/// that carried it. The push splits a long conversation across batches and an
+/// append adds to one already stored, and the conversation is read back by
+/// timestamp then `sort_order`, so a message staged later has to sort after
+/// every stored message that shares its timestamp.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn first_sort_order(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    chat_handle_id: i64,
+) -> Result<i64> {
+    Ok(sqlx::query_scalar(
+        r"
+        SELECT COALESCE(MAX(m.sort_order) + 1, 0)
+        FROM conversations c
+        JOIN messages m ON m.conversation_id = c.id
+        WHERE c.account_id = $1 AND c.chat_handle_id = $2
+        ",
+    )
+    .bind(account_id)
+    .bind(chat_handle_id)
+    .fetch_one(&mut *conn)
+    .await?)
+}
+
 /// Insert one staged participant. `handle_id` is `None` for a person the
 /// source named and recorded no address for; `name_alias` is what this
 /// backup called them in this conversation.

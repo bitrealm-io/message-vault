@@ -26,6 +26,16 @@ export function writePref(key: string, value: string): void {
   }
 }
 
+/**
+ * `key` named with the account it belongs to. A value that records what an
+ * account did, such as its recent searches, is saved under this key, so the
+ * next account on the same browser never reads it and logout has nothing to
+ * clear.
+ */
+export function accountKey(accountId: number, key: string): string {
+  return `mc-account-${accountId}:${key}`;
+}
+
 /** Remove the value saved under `key`. A blocked storage leaves nothing to remove. */
 export function removePref(key: string): void {
   try {

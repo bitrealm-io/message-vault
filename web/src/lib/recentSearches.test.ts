@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setAccountId } from "./api.ts";
 import { clearRecentSearches, loadRecentSearches, pushRecentSearch } from "./recentSearches.ts";
-
-const CONTACT_RECENT_SEARCHES_KEY = "mc-contact-recent-searches:v1";
+import { accountKey } from "./storage.ts";
 
 const mem = new Map<string, string>();
 
@@ -22,16 +22,18 @@ beforeEach(() => {
   // The node environment has no window. lib/storage.ts reads window.localStorage.
   vi.stubGlobal("localStorage", store);
   vi.stubGlobal("window", { localStorage: store });
+  setAccountId(1);
 });
 
 afterEach(() => {
+  setAccountId(null);
   vi.unstubAllGlobals();
 });
 
 describe("recentSearches", () => {
   it("returns empty for missing or corrupt JSON", () => {
     expect(loadRecentSearches("contact")).toEqual([]);
-    mem.set(CONTACT_RECENT_SEARCHES_KEY, "{not-json");
+    mem.set(accountKey(1, "contact-recent-searches"), "{not-json");
     expect(loadRecentSearches("contact")).toEqual([]);
   });
 
@@ -55,11 +57,6 @@ describe("recentSearches", () => {
     pushRecentSearch("contact", "alice");
     clearRecentSearches("contact");
     expect(loadRecentSearches("contact")).toEqual([]);
-  });
-
-  it("keeps the contacts key it shipped with so existing history survives", () => {
-    pushRecentSearch("contact", "alice");
-    expect(mem.has(CONTACT_RECENT_SEARCHES_KEY)).toBe(true);
   });
 
   it("keeps each bar's history separate", () => {

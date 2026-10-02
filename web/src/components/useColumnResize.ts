@@ -119,15 +119,16 @@ export function useColumnResize({
 
   const onResizeKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const step = e.shiftKey ? 24 : 8;
-    if (e.key === "ArrowLeft") {
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
       e.preventDefault();
-      const next = clampWidth(widthRef.current - step, minWidth, maxWidth);
-      widthRef.current = next;
-      setWidth(next);
-      saveWidth(storageKey, next);
-    } else if (e.key === "ArrowRight") {
-      e.preventDefault();
-      const next = clampWidth(widthRef.current + step, minWidth, maxWidth);
+      // Start from the painted width, as a drag does, so a flex-shrunk column
+      // moves on the first key press.
+      const from = measureColumnWidth(e.currentTarget, widthRef.current);
+      const next = clampWidth(
+        e.key === "ArrowLeft" ? from - step : from + step,
+        minWidth,
+        maxWidth,
+      );
       widthRef.current = next;
       setWidth(next);
       saveWidth(storageKey, next);

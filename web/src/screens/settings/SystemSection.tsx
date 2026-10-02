@@ -2,14 +2,16 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Checkbox from "../../components/Checkbox";
 import { CheckIcon, XIcon } from "../../components/icons";
 import PathPicker from "../../components/PathPicker";
+import { getBaseUrl } from "../../lib/api";
 import { APP_BUILD } from "../../lib/build";
 import { FFMPEG_TOOLS_STORAGE_KEY } from "../../lib/ffmpeg-tools";
 import {
   getOpenToNetwork,
+  isOwnAddress,
   type LocalServerStatus,
   openDataFolder,
+  setLocalServerOpenToNetwork,
   setOpenToNetwork,
-  startLocalServer,
 } from "../../lib/localServer";
 import { readPref, removePref, writePref } from "../../lib/storage";
 import {
@@ -138,8 +140,10 @@ function DataFolder() {
     setOpen(on);
     setOpenToNetwork(on);
     setNetworkError(null);
-    // Starting again with the new setting restarts the app's own server.
-    startLocalServer().then(setServer, (caught: unknown) => {
+    // While the app uses another Message Crate, the setting waits for the
+    // next start of its own.
+    if (!isOwnAddress(getBaseUrl())) return;
+    setLocalServerOpenToNetwork(on).then(setServer, (caught: unknown) => {
       setNetworkError(caught instanceof Error ? caught.message : String(caught));
     });
   };
@@ -182,7 +186,8 @@ function DataFolder() {
           <span className="mt-1 block max-w-prose text-[0.75rem] text-muted">
             A phone or another computer can then open this computer's address on port 8080, for as
             long as this app is open. The connection is plain HTTP, so anyone on the network can
-            read what is sent, passwords included. Changing this restarts Message Crate.
+            read what is sent, passwords included. Changing this restarts Message Crate once no
+            import is running.
           </span>
         </span>
       </Checkbox>

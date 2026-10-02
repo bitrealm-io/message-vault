@@ -4,14 +4,15 @@
  * One contact, read and written through one entry.
  *
  * The server answers a change with the contact as it now stands, so the drawer
- * should show the new name without asking again — and the list pages, which
- * show the name too, should be the only thing marked stale.
+ * shows the new name before anything is fetched again. Every other screen that
+ * shows the name is marked stale with the rest of the account's cache.
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { freshEntries, seedEntries } from "../test/staleEntries";
 import { useContactDetail, useUpdateContact } from "./contactDetail";
 import { keys } from "./queryKeys";
 import { getContact, updateContact } from "./serverApi";
@@ -54,8 +55,11 @@ beforeEach(() => {
 });
 
 describe("useUpdateContact", () => {
-  it("puts the answered contact where the drawer reads it, without asking again", async () => {
-    read.mockResolvedValue(contact("Ada"));
+  it("puts the answered contact where the drawer reads it, without waiting for a read", async () => {
+    read.mockResolvedValueOnce(contact("Ada"));
+    // The read every write starts never answers, so only the write's own
+    // answer can show the new name.
+    read.mockReturnValue(new Promise(() => {}));
     write.mockResolvedValue(contact("Ada Lovelace"));
 
     const both = renderHook(() => ({ detail: useContactDetail("7"), update: useUpdateContact() }), {
@@ -71,18 +75,17 @@ describe("useUpdateContact", () => {
 
     expect(write).toHaveBeenCalledWith("7", { name: "Ada Lovelace" });
     await waitFor(() => expect(both.result.current.detail.detail?.name).toBe("Ada Lovelace"));
-    expect(read).toHaveBeenCalledTimes(1);
   });
 
-  it("marks the contact list pages stale, and not the contact it just wrote", async () => {
-    write.mockResolvedValue(contact("Ada Lovelace"));
-    const invalidate = vi.spyOn(client, "invalidateQueries");
+  it("marks the contact list and the conversations stale, which show the contact's name", async () => {
+    // Conversation rows, an open conversation and its message pages name a
+    // participant by the contact's name, so a rename left the old one there.
+    const shown = [keys.contacts.lists, keys.conversations.all];
+    seedEntries(client, 7, shown);
+    write.mockResolvedValue(contact("Mum"));
     const { result } = renderHook(() => useUpdateContact(), { wrapper });
-    await result.current.mutateAsync({ contactId: "7", body: { name: "Ada Lovelace" } });
-    expect(invalidate.mock.calls.map((call) => call[0]?.queryKey)).toEqual([
-      ["server", 7, "contacts", "list"],
-    ]);
-    expect(client.getQueryData(["server", 7, ...keys.contacts.detail("7")])).toBeDefined();
+    await result.current.mutateAsync({ contactId: "7", body: { name: "Mum" } });
+    expect(freshEntries(client, 7, shown)).toEqual([]);
   });
 
   it("reports a refusal instead of writing anything", async () => {

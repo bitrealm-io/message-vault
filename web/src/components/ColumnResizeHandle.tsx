@@ -1,5 +1,6 @@
+import { useLayoutEffect, useRef, useState } from "react";
 import { Z_RESIZE_HANDLE } from "../lib/zLayers";
-import type { ColumnResizeHandleProps } from "./useColumnResize";
+import { type ColumnResizeHandleProps, measureColumnWidth } from "./useColumnResize";
 
 /** Vertical grip on the right edge of a resizable column. */
 export default function ColumnResizeHandle({
@@ -19,13 +20,30 @@ export default function ColumnResizeHandle({
   handleHover: boolean;
   handleProps: ColumnResizeHandleProps;
 }) {
+  const gripRef = useRef<HTMLDivElement>(null);
+  // The width on screen, which a narrow window can squeeze below `width`.
+  const [painted, setPainted] = useState(width);
+
+  useLayoutEffect(() => {
+    const grip = gripRef.current;
+    if (!grip) return;
+    const measure = () => setPainted(Math.round(measureColumnWidth(grip, width)));
+    measure();
+    const column = grip.parentElement;
+    if (!column) return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(column);
+    return () => observer.disconnect();
+  }, [width]);
+
   return (
     // biome-ignore lint/a11y/useSemanticElements: interactive column resize grip cannot use native hr
     <div
+      ref={gripRef}
       role="separator"
       aria-orientation="vertical"
       aria-label={ariaLabel}
-      aria-valuenow={width}
+      aria-valuenow={painted}
       aria-valuemin={minWidth}
       aria-valuemax={maxWidth}
       tabIndex={0}

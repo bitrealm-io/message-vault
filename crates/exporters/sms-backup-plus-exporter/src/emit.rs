@@ -11,11 +11,11 @@ use message_crate_core::{
     project_conversation,
 };
 use message_ir::{
-    ExportMeta, IrAttachment, IrService, IrSource, PendingAttachment, PendingConversation,
-    PendingMessage, ProjectionHooks, parse_android_type,
+    ExportMeta, IrAttachment, IrParticipant, IrService, IrSource, PendingAttachment,
+    PendingConversation, PendingMessage, ProjectionHooks, default_participants, parse_android_type,
 };
 use message_staging::{AttachmentSource, ExportWriter};
-use phone::OwnerHandleSet;
+use phone::{Handle, OwnerHandleSet};
 use rayon::prelude::*;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -106,7 +106,7 @@ fn pending_from_parsed(msg: ParsedMessage, pending_atts: Vec<PendingAttachment>)
     PendingMessage {
         sort_key: msg.timestamp_secs as i64,
         is_from_me: msg.is_from_me,
-        sender_handle: msg.sender_digits.unwrap_or_default(),
+        sender_handle: msg.sender.map(Handle::into_key).unwrap_or_default(),
         sender_display_name: msg.name_alias,
         text: msg.text,
         attachments: pending_atts,
@@ -135,7 +135,11 @@ fn add_message(
     let dedupe_key = cover_identity(&msg);
     let name_only = name_only_key(&msg).is_some();
 
-    let peers: Vec<String> = peer_handles_from_digits(&msg.participant_digits);
+    let peers: Vec<String> = msg
+        .participants
+        .iter()
+        .map(|p| p.key().to_string())
+        .collect();
     let convo = ensure_convo(
         conversations,
         &chat_id,
@@ -174,15 +178,6 @@ fn add_message(
     convo.messages.push(pending_from_parsed(msg, pending_atts));
 }
 
-/// Format each participant's digits as E.164 when unambiguous, dropping empties.
-fn peer_handles_from_digits(participant_digits: &[(String, Option<String>)]) -> Vec<String> {
-    participant_digits
-        .iter()
-        .map(|(d, _)| phone::normalize_lenient(d))
-        .filter(|d| !d.is_empty())
-        .collect()
-}
-
 /// True when the path has a `.eml` extension (any case).
 pub(super) fn is_eml_file(p: &Path) -> bool {
     p.extension()
@@ -205,8 +200,21 @@ impl ProjectionHooks for SbpProjection<'_> {
         IrService::Sms
     }
 
+    /// Every handle is a [`Handle`] key already.
     fn normalize_handle(&self, raw: &str) -> String {
-        phone::normalize_lenient(raw)
+        raw.to_string()
+    }
+
+    /// The default roster, with each identity's kind read from its key: an
+    /// SMS Backup+ address can be an email address or a sender name.
+    fn participants(&self, chat_id: &str, convo: &PendingConversation) -> Vec<IrParticipant> {
+        let mut participants = default_participants(chat_id, convo, &str::to_string);
+        for p in &mut participants {
+            if let Some(handle) = p.handle.as_deref().and_then(Handle::parse) {
+                p.handle_type = Some(handle.kind());
+            }
+        }
+        participants
     }
 
     fn attachment_to_ir(&self, att: &PendingAttachment, _msg: &PendingMessage) -> IrAttachment {
@@ -773,10 +781,10 @@ mod tests {
             chat_key: "+15555550101".into(),
             conversation_type: "individual".into(),
             group_title: None,
-            participant_digits: Vec::new(),
+            participants: Vec::new(),
             timestamp_secs,
             is_from_me: false,
-            sender_digits: Some("15555550101".into()),
+            sender: Handle::parse("+15555550101"),
             text: "hello".into(),
             attachments: Vec::new(),
             name_alias: None,

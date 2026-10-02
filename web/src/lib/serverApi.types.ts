@@ -1024,13 +1024,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * One message by id: the row the Messages list would show, looked up directly.
+         * One message by id, in the shape the Messages list gives each row.
          * @description Read-only. A message is never written through this route: an import
          *     writes messages, and trashing is a conversation operation
-         *     (`docs/architecture/http-api.md`, "Methods"). The lookup carries the
-         *     list's own defaults — the caller's account, no trashed conversation, no
-         *     duplicate — so a row the list hides is `404` here too, and a link out of
-         *     a search result never reaches further than the search did.
+         *     (`docs/architecture/http-api.md`, "Methods"). The id is enough: an id
+         *     names one message, and a lookup by id does not depend on how it was
+         *     found, so the route returns any message of the caller's account, one in
+         *     a trashed conversation and a duplicate included, and takes no `q`.
+         *     Another account's message is `404`.
          */
         get: operations["get_message"];
         put?: never;
@@ -3679,7 +3680,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`rate-limited`](https://messagecrate.app/docs/developer/reference/errors/rate-limited): The server refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds to log in as one username, or to register an account or claim Message Crate, which count once for the whole server. */
+            /** @description [`rate-limited`](https://messagecrate.app/docs/developer/reference/errors/rate-limited): The server refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds at one account's password, or to register an account or claim Message Crate, which count once for the whole server. */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -3856,6 +3857,15 @@ export interface operations {
             };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`rate-limited`](https://messagecrate.app/docs/developer/reference/errors/rate-limited): The server refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds at one account's password, or to register an account or claim Message Crate, which count once for the whole server. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4770,6 +4780,15 @@ export interface operations {
             };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`rate-limited`](https://messagecrate.app/docs/developer/reference/errors/rate-limited): The server refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds at one account's password, or to register an account or claim Message Crate, which count once for the whole server. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9423,7 +9442,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`rate-limited`](https://messagecrate.app/docs/developer/reference/errors/rate-limited): The server refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds to log in as one username, or to register an account or claim Message Crate, which count once for the whole server. */
+            /** @description [`rate-limited`](https://messagecrate.app/docs/developer/reference/errors/rate-limited): The server refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds at one account's password, or to register an account or claim Message Crate, which count once for the whole server. */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -9899,7 +9918,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`rate-limited`](https://messagecrate.app/docs/developer/reference/errors/rate-limited): The server refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds to log in as one username, or to register an account or claim Message Crate, which count once for the whole server. */
+            /** @description [`rate-limited`](https://messagecrate.app/docs/developer/reference/errors/rate-limited): The server refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds at one account's password, or to register an account or claim Message Crate, which count once for the whole server. */
             429: {
                 headers: {
                     [name: string]: unknown;

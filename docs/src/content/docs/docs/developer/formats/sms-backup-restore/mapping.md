@@ -18,7 +18,7 @@ In CSV form: one file per conversation. Decoded MMS media under `attachments/` w
 
 | Shared field | SMS / MMS source |
 |---------------|------------------|
-| `chat_identifier` | Peer E.164, or `chat-group-…` for groups |
+| `chat_identifier` | Peer's handle key, or `chat-group-…` for groups |
 | `conversation_type` | `individual` / `group` |
 | `group_title` | Derived for groups; empty for 1:1 |
 | `participants_json` | Peer handles from SMS address / MMS `<addr>` list |
@@ -40,7 +40,7 @@ Apple-only columns (`parts_json`, tapbacks, balloons, …) stay empty.
 
 ## How the exporter uses SMS fields
 
-- `address` → `chat_identifier` / participant handle (after phone normalization)
+- `address` → `chat_identifier` / participant handle, classified once by `phone::Handle::parse`: a number keeps the country its `+` names and is otherwise read as a US number, an address with `@` is an email address, and anything else (such as `AMAZON`) is a sender name, an identity of type `other`. Only a blank `address` is skipped, as `skipped_unknown_address`
 - `date` → `timestamp*` and `timestamp_unix_ms` (invalid or missing dates are skipped)
 - `type` `1` / `2` → `direction` incoming / outgoing; `3` (draft) and `4` (outbox) are skipped and counted as `skipped_draft_or_outbox`; other types are skipped and counted as `skipped_unknown_type`; raw value in `android_type`
 - `body` → `text` (character references and HTML entities decoded; a surrogate pair written as two references, such as `&#55357;&#56832;`, becomes one character; a reference that is not a character, such as `&#0;` or a lone surrogate, is dropped and counted as `dropped_character_references`)

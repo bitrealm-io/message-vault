@@ -13,6 +13,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
+import { freshEntries, seedEntries } from "../test/staleEntries";
 import {
   type ChipTarget,
   createNameCollection,
@@ -50,7 +51,6 @@ function groupsOver(routes: NameCollectionRoutes) {
   return createNameCollection({
     routes,
     key: keys.contactGroups.all,
-    invalidates: [keys.contacts.all],
     chips: [
       { key: keys.contacts.lists, field: "groups", shape: "pages" },
       { key: keys.contacts.details, field: "groups", shape: "row" },
@@ -134,24 +134,18 @@ describe("useNameCollection", () => {
 });
 
 describe("useNameCollectionActions", () => {
-  it("renames by the id the cache holds and invalidates the lists that show the name", async () => {
+  it("renames by the id the cache holds and marks the lists that show the name stale", async () => {
     const routes = fakeRoutes();
     routes.update.mockResolvedValue({ id: 12, name: "Fam" });
+    seedEntries(client, 7, [keys.contacts.all]);
     client.setQueryData(KEY, [{ id: 12, name: "Family" }]);
-    const invalidate = vi.spyOn(client, "invalidateQueries");
 
     const { result } = renderHook(() => useNameCollectionActions(groupsOver(routes)), { wrapper });
     await expect(result.current.rename("Family", "Fam")).resolves.toBe("Fam");
 
     expect(routes.update).toHaveBeenCalledWith(12, { name: "Fam" });
     expect(routes.list).not.toHaveBeenCalled();
-    const invalidated = invalidate.mock.calls.map((call) => call[0]?.queryKey);
-    expect(invalidated).toEqual(
-      expect.arrayContaining([
-        ["server", 7, "contact-groups"],
-        ["server", 7, "contacts"],
-      ]),
-    );
+    expect(freshEntries(client, 7, [keys.contactGroups.all, keys.contacts.all])).toEqual([]);
   });
 
   it("matches a name without regard to letter case", async () => {
@@ -192,14 +186,14 @@ describe("useNameCollectionActions", () => {
     expect(routes.create).not.toHaveBeenCalled();
   });
 
-  it("answers the created name and invalidates its own list", async () => {
+  it("answers the created name and marks its own list stale", async () => {
     const routes = fakeRoutes();
     routes.create.mockResolvedValue({ id: 3, name: "Work" });
-    const invalidate = vi.spyOn(client, "invalidateQueries");
+    seedEntries(client, 7, [keys.contactGroups.all]);
     const { result } = renderHook(() => useNameCollectionActions(groupsOver(routes)), { wrapper });
     await expect(result.current.create(" Work ")).resolves.toBe("Work");
     expect(routes.create).toHaveBeenCalledWith({ name: "Work" });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: KEY });
+    expect(freshEntries(client, 7, [keys.contactGroups.all])).toEqual([]);
   });
 
   it("reports a write in flight, so a screen needs no busy flag of its own", async () => {
@@ -308,14 +302,11 @@ describe("useSetNamedSetMembers", () => {
 
   it("marks the group list and every contact stale once it settles", async () => {
     const routes = fakeRoutes();
+    seedEntries(client, 7, [keys.contacts.all]);
     client.setQueryData(KEY, [{ id: 12, name: "Family" }]);
-    const invalidate = vi.spyOn(client, "invalidateQueries");
     const { result } = renderHook(() => useSetNamedSetMembers(groupsOver(routes)), { wrapper });
     await result.current.mutateAsync({ name: "Family", patch: { add: [1] } });
-    expect(invalidate.mock.calls.map((call) => call[0]?.queryKey)).toEqual([
-      ["server", 7, "contact-groups"],
-      ["server", 7, "contacts"],
-    ]);
+    expect(freshEntries(client, 7, [keys.contactGroups.all, keys.contacts.all])).toEqual([]);
   });
 
   it("cancels in-flight fetches before it patches, so no answer lands on top of the chip", async () => {

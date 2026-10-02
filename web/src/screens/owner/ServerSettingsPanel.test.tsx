@@ -65,6 +65,9 @@ describe("ServerSettingsPanel attachment size limit", () => {
     });
     renderPanel();
     const field = await screen.findByLabelText("Attachment size limit");
+    // The read the write starts never answers, so only the write's own answer
+    // can show the new limit.
+    getServerSettings.mockReturnValue(new Promise(() => {}));
 
     await userEvent.clear(field);
     await userEvent.type(field, "100");

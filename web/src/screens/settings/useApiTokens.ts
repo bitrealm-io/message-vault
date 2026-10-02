@@ -1,5 +1,6 @@
 import { type UseMutationResult, useMutation } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
+import { useRevealApiToken } from "../../components/apiTokenRevealState";
 import { apiErrorMessage } from "../../lib/apiErrorMessage";
 import { keys } from "../../lib/queryKeys";
 import { useRouteCache, useRouteQuery } from "../../lib/routeQuery";
@@ -12,17 +13,31 @@ const fetchTokens = (signal: AbortSignal) =>
 type NewToken = Parameters<typeof createApiToken>[0];
 type CreatedToken = Awaited<ReturnType<typeof createApiToken>>;
 
-/** Every token write marks the list stale, and the list refetches itself. */
-function useApiTokenWrite<T, V>(write: (vars: V) => Promise<T>): UseMutationResult<T, Error, V> {
+/** Every token write marks the account's cache stale, and the list refetches itself. */
+function useApiTokenWrite<T, V>(
+  write: (vars: V) => Promise<T>,
+  onSuccess?: (res: T) => void,
+): UseMutationResult<T, Error, V> {
   const cache = useRouteCache();
   return useMutation<T, Error, V>({
     mutationFn: write,
-    onSettled: () => cache.invalidate(keys.apiTokens.all),
+    onSuccess,
+    onSettled: () => cache.invalidateAccount(),
   });
 }
 
+/**
+ * The secret is revealed from the mutation's own `onSuccess`, which runs even
+ * when the screen that called `mutate` has unmounted. The `onSuccess` passed
+ * to `mutate` does not, so a secret revealed from there was lost whenever the
+ * person left Settings before the server answered.
+ */
 export function useCreateApiToken(): UseMutationResult<CreatedToken, Error, NewToken> {
-  return useApiTokenWrite((body: NewToken) => createApiToken(body));
+  const reveal = useRevealApiToken();
+  return useApiTokenWrite(
+    (body: NewToken) => createApiToken(body),
+    (res) => reveal({ label: res.label, token: res.token }),
+  );
 }
 
 export function useRenameApiToken(): UseMutationResult<
@@ -53,7 +68,6 @@ export function useApiTokens() {
   const [label, setLabel] = useState("");
   const [canImport, setCanImport] = useState(true);
   const [canExport, setCanExport] = useState(true);
-  const [reveal, setReveal] = useState<{ label: string; token: string } | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<ApiTokenItem | null>(null);
   const [renameTarget, setRenameTarget] = useState<ApiTokenItem | null>(null);
   const [renameLabel, setRenameLabel] = useState("");
@@ -121,12 +135,12 @@ export function useApiTokens() {
         can_export: canExport,
       },
       {
-        onSuccess: (res) => {
+        // Only the form is reset here; `useCreateApiToken` reveals the secret.
+        onSuccess: () => {
           setLabel("");
           setCanImport(true);
           setCanExport(true);
           setComposing(false);
-          setReveal({ label: res.label, token: res.token });
         },
       },
     );
@@ -166,8 +180,6 @@ export function useApiTokens() {
     canExport,
     setCanExport,
     actionError,
-    reveal,
-    setReveal,
     revokeTarget,
     setRevokeTarget,
     renameTarget,

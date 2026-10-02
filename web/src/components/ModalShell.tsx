@@ -32,6 +32,7 @@ export default function ModalShell({
   children,
   maxWidth = "28rem",
   dismissable = true,
+  keyboardDismissable = true,
   label,
   variant = "dialog",
   title,
@@ -43,7 +44,10 @@ export default function ModalShell({
   onOpenChange: (open: boolean) => void;
   children: ReactNode;
   maxWidth?: string;
+  /** Whether a click outside the dialog closes it. */
   dismissable?: boolean;
+  /** Whether Escape closes the dialog. React Aria lets Escape close it even when `dismissable` is false. */
+  keyboardDismissable?: boolean;
   label: string;
   /** Centered dialog (default) or right-edge drawer (Sources panel). */
   variant?: "dialog" | "drawer";
@@ -74,6 +78,7 @@ export default function ModalShell({
       <ModalOverlay
         isOpen={open}
         isDismissable={dismissable}
+        isKeyboardDismissDisabled={!keyboardDismissable}
         onOpenChange={onOpenChange}
         className={`fixed inset-0 bg-[rgba(0,0,0,0.2)] ${Z_DRAWER_SCRIM}`}
       >
@@ -98,6 +103,7 @@ export default function ModalShell({
     <ModalOverlay
       isOpen={open}
       isDismissable={dismissable}
+      isKeyboardDismissDisabled={!keyboardDismissable}
       onOpenChange={onOpenChange}
       className={`fixed inset-0 flex items-center justify-center bg-scrim p-4 ${Z_MODAL}`}
     >

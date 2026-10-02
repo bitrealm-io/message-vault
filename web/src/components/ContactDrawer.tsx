@@ -278,6 +278,9 @@ function OneContactDrawer({
       <ContactDrawerHandles
         contactId={contactId}
         handleRows={handleRows}
+        conversations={
+          detailMatches ? matchedDetail.direct_conversations + matchedDetail.group_conversations : 0
+        }
         loading={loading}
         onBrowse={onBrowseConversations ? browse : undefined}
         title={

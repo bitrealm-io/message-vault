@@ -4,6 +4,7 @@ import Button from "../../components/Button";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import DeleteAccountDialog from "../../components/DeleteAccountDialog";
 import { useAuth } from "../../lib/auth";
+import { useRouteCache } from "../../lib/routeQuery";
 import { deleteAccount, deleteAllMessages as deleteAllMessagesRoute } from "../../lib/serverApi";
 import { useDeleteAccount, useDeleteAccountMessages } from "../owner/useOwnerAccounts";
 import { dangerButtonClass } from "./profileStyles";
@@ -34,6 +35,7 @@ export function ProfileDangerZone({
 }) {
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const cache = useRouteCache();
   const removeManagedAccount = useDeleteAccount();
   const removeManagedMessages = useDeleteAccountMessages();
   const [dangerZoneOpen, setDangerZoneOpen] = useState(false);
@@ -61,6 +63,8 @@ export function ProfileDangerZone({
     } catch (e) {
       setDangerError(e instanceof Error ? e.message : String(e));
     } finally {
+      // The owner's deletion is a mutation that marks the cache stale itself.
+      if (!managed) cache.invalidateAccount();
       setDeletingMessages(false);
       setConfirmDeleteMessagesOpen(false);
     }

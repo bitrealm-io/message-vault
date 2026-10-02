@@ -42,12 +42,12 @@ export function useSavedSearches(): {
   return { savedSearches: data ?? [], loading: isPending };
 }
 
-/** Every write is followed by one fresh read of the list the sidebar shows. */
+/** Every write marks the account's cache stale, so the sidebar's list is read again. */
 function useSavedSearchWrite<T, V>(write: (vars: V) => Promise<T>): UseMutationResult<T, Error, V> {
   const cache = useRouteCache();
   return useMutation<T, Error, V>({
     mutationFn: write,
-    onSettled: () => cache.invalidate(keys.savedSearches.all),
+    onSettled: () => cache.invalidateAccount(),
   });
 }
 

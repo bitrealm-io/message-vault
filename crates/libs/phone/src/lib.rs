@@ -2,6 +2,8 @@
 //!
 //! [`normalize_typed_handle`] is the one key a handle is stored and matched
 //! under: by the server, by the contacts book, and by [`OwnerHandleSet`].
+//! [`Handle::parse`] is where an exporter classifies an address before it
+//! keys it: a phone number, an email address, or a sender name.
 
 use std::fmt;
 
@@ -34,11 +36,13 @@ impl fmt::Display for PhoneRegion {
 }
 
 impl PhoneRegion {
-    /// Region for a loader-side raw value: a `+`-prefixed value is already
-    /// unambiguous E.164 (international rules apply); anything else is treated
+    /// Region for a raw value: a value with a `+` before its first digit
+    /// names its country, so international rules apply (`+65 9123 4567`,
+    /// `(+44) 7700 900123`, `tel:+447700900123`); anything else is treated
     /// as a US national number (this crate's home region).
     pub fn for_raw(raw: &str) -> Self {
-        if raw.trim().starts_with('+') {
+        let before_first_digit = raw.split(|c: char| c.is_ascii_digit()).next();
+        if before_first_digit.is_some_and(|s| s.contains('+')) {
             Self::International
         } else {
             Self::Usa
@@ -279,6 +283,91 @@ pub fn normalize_typed_handle(raw: &str, handle_type: HandleType) -> (String, Op
     }
 }
 
+/// An address as a source wrote it, classified once: what kind of address
+/// it is and the key it is stored and matched under.
+///
+/// [`Handle::parse`] is the one place an address is classified, from its raw
+/// value with its `+` intact. The raw value travels with the handle, because
+/// [`OwnerHandleSet::is_owner`] needs to know whether the source wrote a
+/// number with its country or in national form.
+#[derive(Debug, Clone)]
+pub struct Handle {
+    kind: HandleType,
+    key: String,
+    raw: String,
+}
+
+impl Handle {
+    /// Classify an address:
+    ///
+    /// - one with `@` is an email address, keyed in lower case;
+    /// - one written as a phone number (digits and phone punctuation, after
+    ///   an optional `tel:`) is a phone number, keyed by
+    ///   [`normalize_typed_handle`]: a `+` before the first digit keeps the
+    ///   country, a number without one is read by US rules, and a short code
+    ///   keeps its digits;
+    /// - anything else is a sender name such as `AMAZON`, an identity of type
+    ///   `other` keyed by the name as written.
+    ///
+    /// `None` when the value is blank.
+    #[must_use]
+    pub fn parse(raw: &str) -> Option<Self> {
+        let value = raw.trim();
+        if value.is_empty() {
+            return None;
+        }
+        let kind = if value.contains('@') {
+            HandleType::Email
+        } else if is_written_as_a_number(value) {
+            HandleType::Phone
+        } else {
+            HandleType::Other
+        };
+        Some(Self::typed(value, kind))
+    }
+
+    /// A handle of a kind the caller already knows.
+    fn typed(raw: &str, kind: HandleType) -> Self {
+        Self {
+            kind,
+            key: normalize_typed_handle(raw, kind).0,
+            raw: raw.trim().to_string(),
+        }
+    }
+
+    /// What kind of address this is.
+    #[must_use]
+    pub fn kind(&self) -> HandleType {
+        self.kind
+    }
+
+    /// The key the address is stored and matched under.
+    #[must_use]
+    pub fn key(&self) -> &str {
+        &self.key
+    }
+
+    /// The key, taken out of the handle.
+    #[must_use]
+    pub fn into_key(self) -> String {
+        self.key
+    }
+}
+
+/// Whether a value is written as a phone number: after an optional `tel:`,
+/// at least one digit and nothing but digits and the punctuation a dialled
+/// number carries.
+fn is_written_as_a_number(value: &str) -> bool {
+    let number = value
+        .get(..4)
+        .filter(|scheme| scheme.eq_ignore_ascii_case("tel:"))
+        .map_or(value, |_| &value[4..]);
+    number.chars().any(|c| c.is_ascii_digit())
+        && number
+            .chars()
+            .all(|c| c.is_ascii_digit() || PHONE_PUNCTUATION.contains(&c) || c == '#' || c == '*')
+}
+
 /// All configured owner handles, each stored under its handle key, in the
 /// order they were given.
 ///
@@ -317,11 +406,11 @@ impl OwnerHandleSet {
         Ok(Self { handles: keyed })
     }
 
-    /// Whether a raw handle value plus type is one of the owner's.
+    /// Whether an address is one of the owner's.
     ///
     /// Every handle matches by handle key. A phone also matches by its
     /// [`sanitize_number`] digits, for sources that record numbers with the
-    /// `+` already gone, such as the addresses in a Go SMS Pro MMS PDU.
+    /// `+` already gone.
     /// Without the `+`, `6591234567` could be Singapore or the US; the
     /// source has already thrown that information away.
     ///
@@ -330,13 +419,10 @@ impl OwnerHandleSet {
     /// alone, or the trunk prefix `0` followed by it. A carrier often lists
     /// the owner that way in an MMS, so `07700900123` is the owner
     /// `+447700900123`.
-    pub fn is_owner(&self, raw: &str, handle_type: HandleType) -> bool {
-        let key = normalize_typed_handle(raw, handle_type).0;
-        if handle_type != HandleType::Phone {
-            return self
-                .handles
-                .iter()
-                .any(|(v, t)| *t == handle_type && *v == key);
+    pub fn is_owner(&self, handle: &Handle) -> bool {
+        let Handle { kind, key, raw } = handle;
+        if *kind != HandleType::Phone {
+            return self.handles.iter().any(|(v, t)| t == kind && v == key);
         }
         let Some(digits) = sanitize_number(raw) else {
             return false;
@@ -388,11 +474,11 @@ fn is_national_form_of(digits: &str, owner: &str) -> bool {
     !country.is_empty() && (digits == national || digits.strip_prefix('0') == Some(national))
 }
 
-/// A group chat's id and display title from the digits of its non-owner
-/// participants. The id is `prefix` plus a length-prefixed slug of the
-/// sorted, deduplicated numbers, so `["12","34"]` and `["123","4"]` cannot
+/// A group chat's id and display title from the [`Handle`] keys of its
+/// non-owner participants. The id is `prefix` plus a length-prefixed slug of
+/// the sorted, deduplicated keys, so `["12","34"]` and `["123","4"]` cannot
 /// collide, hashed when it would pass 180 bytes so it stays a safe file
-/// name. The title names up to four numbers in E.164 when unambiguous.
+/// name. The title names up to four of the keys.
 pub fn group_chat_id(prefix: &str, others: &[String]) -> (String, String) {
     let mut sorted = others.to_vec();
     sorted.sort();
@@ -400,11 +486,11 @@ pub fn group_chat_id(prefix: &str, others: &[String]) -> (String, String) {
     let title = if sorted.is_empty() {
         "Group".to_string()
     } else if sorted.len() <= 4 {
-        format!("Group: {}", join_e164_phones(&sorted))
+        format!("Group: {}", sorted.join(", "))
     } else {
         format!(
             "Group: {}, and {} others",
-            join_e164_phones(&sorted[..4]),
+            sorted[..4].join(", "),
             sorted.len() - 4
         )
     };
@@ -416,15 +502,6 @@ pub fn group_chat_id(prefix: &str, others: &[String]) -> (String, String) {
         id
     };
     (id, title)
-}
-
-/// Digit strings as E.164 when unambiguous, joined with `", "`.
-fn join_e164_phones(digits: &[String]) -> String {
-    digits
-        .iter()
-        .map(|d| normalize_digits_us(d).unwrap_or_default())
-        .collect::<Vec<_>>()
-        .join(", ")
 }
 
 /// Length-prefix each number so `["12","34"]` and `["123","4"]` cannot both
@@ -718,14 +795,14 @@ mod tests {
             ("Person@Example.COM".into(), HandleType::Email),
         ])
         .unwrap();
-        assert!(owners.is_owner("+15555550100", HandleType::Phone));
-        assert!(owners.is_owner("5555550100", HandleType::Phone));
-        assert!(!owners.is_owner("5555550199", HandleType::Phone));
-        assert!(owners.is_owner("person@example.com", HandleType::Email));
-        assert!(!owners.is_owner("other@example.com", HandleType::Email));
+        assert!(owners.is_owner(&Handle::typed("+15555550100", HandleType::Phone)));
+        assert!(owners.is_owner(&Handle::typed("5555550100", HandleType::Phone)));
+        assert!(!owners.is_owner(&Handle::typed("5555550199", HandleType::Phone)));
+        assert!(owners.is_owner(&Handle::typed("person@example.com", HandleType::Email)));
+        assert!(!owners.is_owner(&Handle::typed("other@example.com", HandleType::Email)));
         // A phone-shaped handle is not treated as an email or username handle.
-        assert!(!owners.is_owner("(555) 555-0100", HandleType::Email));
-        assert!(!owners.is_owner("Person@Example.COM", HandleType::Username));
+        assert!(!owners.is_owner(&Handle::typed("(555) 555-0100", HandleType::Email)));
+        assert!(!owners.is_owner(&Handle::typed("Person@Example.COM", HandleType::Username)));
     }
 
     #[test]
@@ -745,16 +822,16 @@ mod tests {
     #[test]
     fn an_owner_given_with_plus_matches_its_national_form() {
         let owners = OwnerHandleSet::from_phones(&["+447700900123".into()]).unwrap();
-        assert!(owners.is_owner("07700900123", HandleType::Phone));
-        assert!(owners.is_owner("07700 900123", HandleType::Phone));
-        assert!(owners.is_owner("7700900123", HandleType::Phone));
-        assert!(!owners.is_owner("07700900124", HandleType::Phone));
-        assert!(!owners.is_owner("0447700900123", HandleType::Phone));
+        assert!(owners.is_owner(&Handle::typed("07700900123", HandleType::Phone)));
+        assert!(owners.is_owner(&Handle::typed("07700 900123", HandleType::Phone)));
+        assert!(owners.is_owner(&Handle::typed("7700900123", HandleType::Phone)));
+        assert!(!owners.is_owner(&Handle::typed("07700900124", HandleType::Phone)));
+        assert!(!owners.is_owner(&Handle::typed("0447700900123", HandleType::Phone)));
         // A value with `+` is in international form and names its country.
-        assert!(!owners.is_owner("+7700900123", HandleType::Phone));
+        assert!(!owners.is_owner(&Handle::typed("+7700900123", HandleType::Phone)));
         // An owner given without `+` has no country to strip.
         let local = OwnerHandleSet::from_phones(&["020 7946 0000".into()]).unwrap();
-        assert!(!local.is_owner("2079460000", HandleType::Phone));
+        assert!(!local.is_owner(&Handle::typed("2079460000", HandleType::Phone)));
     }
 
     #[test]
@@ -764,23 +841,113 @@ mod tests {
             owners.primary_owner_handle().as_deref(),
             Some("+447700900123")
         );
-        assert!(owners.is_owner("+447700900123", HandleType::Phone));
+        assert!(owners.is_owner(&Handle::typed("+447700900123", HandleType::Phone)));
         // A source that has already dropped the `+` matches by digits.
-        assert!(owners.is_owner("447700900123", HandleType::Phone));
-        assert!(!owners.is_owner("447700900999", HandleType::Phone));
-        assert!(!owners.is_owner("06", HandleType::Phone));
+        assert!(owners.is_owner(&Handle::typed("447700900123", HandleType::Phone)));
+        assert!(!owners.is_owner(&Handle::typed("447700900999", HandleType::Phone)));
+        assert!(!owners.is_owner(&Handle::typed("06", HandleType::Phone)));
     }
 
     #[test]
     fn owner_handle_set_guards_trunk_zero() {
         let owners =
             OwnerHandleSet::new(&[("020 7946 0000".to_string(), HandleType::Phone)]).unwrap();
-        assert!(owners.is_owner("02079460000", HandleType::Phone));
-        assert!(owners.is_owner("020 7946 0000", HandleType::Phone));
+        assert!(owners.is_owner(&Handle::typed("02079460000", HandleType::Phone)));
+        assert!(owners.is_owner(&Handle::typed("020 7946 0000", HandleType::Phone)));
         // The digits-as-is identity is never fabricated into +02079460000, so
         // a +0… message handle matches through the same digit stripping.
-        assert!(owners.is_owner("+02079460000", HandleType::Phone));
-        assert!(!owners.is_owner("+02079469999", HandleType::Phone));
+        assert!(owners.is_owner(&Handle::typed("+02079460000", HandleType::Phone)));
+        assert!(!owners.is_owner(&Handle::typed("+02079469999", HandleType::Phone)));
+    }
+
+    #[test]
+    fn a_plus_before_the_first_digit_keeps_the_country() {
+        for raw in ["(+44) 7700 900123", "tel:+447700900123"] {
+            assert_eq!(
+                normalize_typed_handle(raw, HandleType::Phone).0,
+                "+447700900123",
+                "{raw}"
+            );
+        }
+    }
+
+    fn parsed(raw: &str) -> (HandleType, String) {
+        let handle = Handle::parse(raw).unwrap();
+        (handle.kind(), handle.key().to_string())
+    }
+
+    #[test]
+    fn a_number_written_with_plus_keeps_its_country() {
+        assert_eq!(
+            parsed("+6591234567"),
+            (HandleType::Phone, "+6591234567".into())
+        );
+        assert_eq!(
+            parsed("+447700900123"),
+            (HandleType::Phone, "+447700900123".into())
+        );
+        assert_eq!(
+            parsed("tel:+447700900123"),
+            (HandleType::Phone, "+447700900123".into())
+        );
+    }
+
+    #[test]
+    fn a_number_without_plus_is_read_as_a_us_number_and_a_short_code_keeps_its_digits() {
+        assert_eq!(
+            parsed("(555) 555-0100"),
+            (HandleType::Phone, "+15555550100".into())
+        );
+        assert_eq!(
+            parsed("15555550100"),
+            (HandleType::Phone, "+15555550100".into())
+        );
+        assert_eq!(
+            parsed("020 7946 0000"),
+            (HandleType::Phone, "02079460000".into())
+        );
+        assert_eq!(parsed("7535"), (HandleType::Phone, "7535".into()));
+    }
+
+    #[test]
+    fn an_address_with_at_is_an_email_address_not_the_digits_inside_it() {
+        assert_eq!(
+            parsed(" John1985@Example.com "),
+            (HandleType::Email, "john1985@example.com".into())
+        );
+    }
+
+    #[test]
+    fn an_address_that_is_neither_a_number_nor_an_email_is_a_sender_name() {
+        assert_eq!(parsed("AMAZON"), (HandleType::Other, "AMAZON".into()));
+        assert_eq!(parsed(" Bank 24 "), (HandleType::Other, "Bank 24".into()));
+        assert!(Handle::parse("   ").is_none());
+    }
+
+    #[test]
+    fn a_handle_key_parses_to_itself() {
+        for raw in [
+            "+6591234567",
+            "5555550100",
+            "7535",
+            "jo@example.com",
+            "AMAZON",
+        ] {
+            let (kind, key) = parsed(raw);
+            assert_eq!(parsed(&key), (kind, key.clone()), "{raw}");
+        }
+    }
+
+    #[test]
+    fn the_owner_test_takes_a_handle() {
+        let owners = OwnerHandleSet::from_phones(&["+447700900123".into()]).unwrap();
+        assert!(owners.is_owner(&Handle::parse("07700 900123").unwrap()));
+        assert!(owners.is_owner(&Handle::parse("7700900123").unwrap()));
+        assert!(!owners.is_owner(&Handle::parse("AMAZON").unwrap()));
+    }
+
+    fn keys(count: usize) -> Vec<String> {
+        (0..count).map(|i| format!("+155555501{i:02}")).collect()
     }
 
     fn numbers(count: usize) -> Vec<String> {
@@ -790,29 +957,38 @@ mod tests {
     #[test]
     fn group_chat_id_names_up_to_four_numbers() {
         let others = vec![
-            "5555550102".to_string(),
-            "5555550101".to_string(),
-            "5555550102".to_string(),
+            "+15555550102".to_string(),
+            "+15555550101".to_string(),
+            "+15555550102".to_string(),
         ];
         assert_eq!(
             group_chat_id("grp-", &others),
             (
-                "grp-10:5555550101_10:5555550102".to_string(),
+                "grp-12:+15555550101_12:+15555550102".to_string(),
                 "Group: +15555550101, +15555550102".to_string()
             ),
-            "sorted, deduplicated, length-prefixed id; E.164 title"
+            "sorted, deduplicated, length-prefixed id; the keys in the title"
         );
         assert_eq!(group_chat_id("grp-", &[]).1, "Group");
         assert_eq!(
-            group_chat_id("grp-", &numbers(4)).1,
+            group_chat_id("grp-", &keys(4)).1,
             "Group: +15555550100, +15555550101, +15555550102, +15555550103"
+        );
+    }
+
+    #[test]
+    fn a_group_title_keeps_each_number_s_country() {
+        let others = ["+6591234567".to_string(), "+447700900123".to_string()];
+        assert_eq!(
+            group_chat_id("grp-", &others).1,
+            "Group: +447700900123, +6591234567"
         );
     }
 
     #[test]
     fn group_chat_id_counts_the_numbers_past_four() {
         assert_eq!(
-            group_chat_id("grp-", &numbers(5)).1,
+            group_chat_id("grp-", &keys(5)).1,
             "Group: +15555550100, +15555550101, +15555550102, +15555550103, and 1 others"
         );
     }

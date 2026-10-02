@@ -36,6 +36,7 @@ export function ServerSettingsPanel() {
   const save = useMutation({
     mutationFn: (public_registration: boolean) => updateServerSettings({ public_registration }),
     onSuccess: (settings) => cache.set(keys.serverSettings.all, settings),
+    onSettled: () => cache.invalidateAccount(),
   });
   const saveLimit = useMutation({
     mutationFn: (asset_max_bytes: number) => updateServerSettings({ asset_max_bytes }),
@@ -43,6 +44,7 @@ export function ServerSettingsPanel() {
       cache.set(keys.serverSettings.all, settings);
       setLimitDraft(null);
     },
+    onSettled: () => cache.invalidateAccount(),
   });
   // What the owner has typed and not yet saved; null shows the limit in force.
   const [limitDraft, setLimitDraft] = useState<string | null>(null);

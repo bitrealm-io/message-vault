@@ -190,7 +190,7 @@ fn a_pdu_naming_only_the_owner_is_skipped_and_listed() {
         skipped.lines().collect::<Vec<_>>(),
         [
             "pdu_filename,sender,recipients,is_sent",
-            "I_1609459700_1_0.pdu,5555550100,5555550100,0"
+            "I_1609459700_1_0.pdu,+15555550100,+15555550100,0"
         ]
     );
 }

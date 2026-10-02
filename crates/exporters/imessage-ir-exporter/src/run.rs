@@ -498,7 +498,7 @@ mod tests {
                 },
             );
             config.output = output;
-            let Err(err) = options_from_export_config(&config) else {
+            let Err(err) = options_for(&config) else {
                 panic!("{} was accepted", config.output.display());
             };
             assert!(

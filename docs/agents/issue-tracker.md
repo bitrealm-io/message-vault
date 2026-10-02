@@ -13,6 +13,10 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
+## Labels outside triage
+
+- **`tracking`**: an issue that lists gaps or work spread over other issues, one checkbox per item linked to the issue that does it, and closes when every box is ticked. It carries no triage label: nobody picks it up as work. Example: #1274, what a WhatsApp import does not keep.
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_

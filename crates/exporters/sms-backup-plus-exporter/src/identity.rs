@@ -14,9 +14,10 @@ use crate::types::ParsedMessage;
 /// `chat-…` for groups).
 ///
 /// When the mail names the other party but records no address, the chat is
-/// keyed by a stem of that name so each person gets their own conversation.
+/// keyed by that name, trimmed, so each person gets their own conversation.
 /// Collapsing them all into one `unknown` chat would merge unrelated people;
-/// the server resolves the name against contacts on import.
+/// the server resolves the name against contacts on import. The file name is
+/// made from this key later, by `ConversationDocument::filename_stem`.
 pub(crate) fn chat_id_for(msg: &ParsedMessage) -> String {
     if msg.conversation_type == "group" {
         format!("chat-{}", msg.chat_key)
@@ -30,8 +31,11 @@ pub(crate) fn chat_id_for(msg: &ParsedMessage) -> String {
     }
 }
 
-/// A stem of the peer's name, when the mail named them and recorded no
+/// The peer's name, trimmed, when the mail named them and recorded no
 /// address. `None` when there is no usable name either.
+///
+/// The name is kept whole: a file-name stem would give "张伟" and "李娜" one
+/// key, and "José" and "Josè" another.
 pub(crate) fn name_only_key(msg: &ParsedMessage) -> Option<String> {
     if msg.conversation_type == "group" || !msg.chat_key.is_empty() {
         return None;
@@ -40,7 +44,7 @@ pub(crate) fn name_only_key(msg: &ParsedMessage) -> Option<String> {
     if name.is_empty() {
         return None;
     }
-    Some(message_crate_core::name_stem(name))
+    Some(name.to_string())
 }
 
 /// Message time as milliseconds since 1970 (for identity strings).
@@ -198,5 +202,31 @@ mod tests {
     fn unknown_chat_id_for_empty_peer() {
         let msg = sample_msg("", 1_609_459_200.0, false, "hi");
         assert_eq!(chat_id_for(&msg), "unknown");
+    }
+
+    #[test]
+    fn two_people_known_only_by_name_have_two_chats() {
+        let mut a = sample_msg("", 1.0, false, "hi");
+        a.name_alias = Some("张伟".into());
+        let mut b = a.clone();
+        b.name_alias = Some("李娜".into());
+        assert_ne!(chat_id_for(&a), chat_id_for(&b));
+        assert_ne!(chat_id_for(&a), "unknown");
+    }
+
+    #[test]
+    fn names_that_differ_only_in_an_accent_have_two_chats() {
+        let mut a = sample_msg("", 1.0, false, "hi");
+        a.name_alias = Some("José".into());
+        let mut b = a.clone();
+        b.name_alias = Some("Josè".into());
+        assert_ne!(chat_id_for(&a), chat_id_for(&b));
+    }
+
+    #[test]
+    fn a_chat_known_only_by_name_is_keyed_on_the_trimmed_name() {
+        let mut msg = sample_msg("", 1.0, false, "hi");
+        msg.name_alias = Some("  José Ramírez \t".into());
+        assert_eq!(chat_id_for(&msg), "José Ramírez");
     }
 }

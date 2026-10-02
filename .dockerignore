@@ -5,7 +5,7 @@
 .vscode
 .idea
 
-# Accidental root lockfile confuses Next.js workspace root detection
+# No build stage uses a root package.json or lockfile
 /package-lock.json
 /package.json
 
@@ -27,7 +27,6 @@ config/contacts.vcf
 target
 **/target
 web/node_modules
-web/.next
 web/tsconfig.tsbuildinfo
 docs/node_modules
 docs/.astro
@@ -37,5 +36,5 @@ docs/dist
 /staging
 /sources
 
-# Generated demo conversations (built in the rust-builder stage)
+# Generated demo conversations (cargo run -p demo-seed)
 /crates/server/demo-seed/staging

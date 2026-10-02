@@ -348,8 +348,8 @@ jobs:
         run: ./scripts/check-version-lockstep.sh ${TAG:+"$TAG"}
 
   # ── Tag only: Docker image → DockerHub ────────────────────────────────
-  # On a tag the changes job reports everything true, so every job above
-  # actually runs; nothing ships unless all of them are green.
+  # On a tag the changes job reports everything true, so every job in `needs`
+  # below actually runs; nothing ships unless all of them are green.
   docker:
     name: Docker image
     if: startsWith(github.ref, 'refs/tags/v')
@@ -411,8 +411,8 @@ jobs:
           - os: macos-latest
             label: macos
     runs-on: ${{ matrix.os }}
-    # Installers ship unsigned for now: no signing or notarization step
-    # exists in this job. Tracked in issue #144.
+    # Installers ship unsigned: no signing or notarization step exists in
+    # this job. Whether to sign them is open in issue #1019.
     steps:
       - uses: actions/checkout@v7
 

@@ -16,8 +16,6 @@ all-features = false
 # advisory still fails the gate until it is fixed or ignored here.
 
 ignore = [
-    # Unmaintained crates, transitive and unfixable today:
-    "RUSTSEC-2024-0436", # paste unmaintained (via image/exr)
     { id = "RUSTSEC-2026-0194", reason = "quick-xml quadratic duplicate-attribute scan: pinned by imessage-database =4.2.0 -> plist =1.9.0 -> quick-xml 0.39.4; parses the user's own local macOS/iOS data, never network input. Revisit when imessage-database releases." },
     { id = "RUSTSEC-2026-0195", reason = "quick-xml unbounded namespace allocation: same chain and exposure as RUSTSEC-2026-0194." },
 ]

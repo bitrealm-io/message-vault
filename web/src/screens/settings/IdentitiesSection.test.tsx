@@ -31,8 +31,8 @@ const identities: Identity[] = [
   {
     address: "+15555550100",
     service: "phone",
-    start_date: "2020-01-01T00:00:00Z",
-    end_date: "2020-02-03T00:00:00Z",
+    start_date: "2020-01-01T12:00:00Z",
+    end_date: "2020-02-03T12:00:00Z",
     conversations: 2,
     direct_messages: 12,
     group_messages: 30,
@@ -40,8 +40,8 @@ const identities: Identity[] = [
   {
     address: "bob@example.com",
     service: "email",
-    start_date: "2021-06-01T00:00:00Z",
-    end_date: "2021-06-01T00:00:00Z",
+    start_date: "2021-06-01T12:00:00Z",
+    end_date: "2021-06-01T12:00:00Z",
     conversations: 1,
     direct_messages: 1,
     group_messages: 0,

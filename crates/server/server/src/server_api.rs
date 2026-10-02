@@ -286,7 +286,8 @@ pub struct ServerStorage {
     pub contact_count: i64,
     /// Attachment rows across every account.
     pub attachment_count: i64,
-    /// Attachment bytes across every account, by original file size.
+    /// Attachment bytes across every account, by original file size, each
+    /// stored file counted once.
     pub total_bytes: i64,
     /// Bytes the database takes on disk, measured. Attachment files are not
     /// in it; `total_bytes` has those.

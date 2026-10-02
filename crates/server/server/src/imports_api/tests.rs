@@ -526,6 +526,67 @@ async fn append_with_a_found_file_fills_in_the_missing_attachment() {
     assert_eq!(missing_reason, &None);
 }
 
+/// One file attached to two messages is stored once, so the storage figure
+/// counts its size once.
+#[tokio::test]
+async fn a_file_two_messages_name_counts_once_in_storage() {
+    let tmp = TempDir::new().unwrap();
+    let db = tmp.path().join("messagecrate.db");
+    let assets = tmp.path().join("assets");
+    let bytes = b"one clip forwarded twice";
+    fs::create_dir_all(tmp.path().join("attachments")).unwrap();
+    fs::write(tmp.path().join("attachments/clip.mov"), bytes).unwrap();
+    let attachment = r#"[{"path":"attachments/clip.mov","original_name":"clip.mov","mime_type":"video/quicktime","digest_sha256":null,"is_sticker":false,"transcription":null,"sticker_effect":null}]"#;
+    let message = |guid: &str| {
+        format!(
+            r#"{{"guid":"{guid}","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550123","sender_display_name":null,"subject":null,"text":"look","attachments":{attachment},"imessage":null,"source":null}}"#
+        )
+    };
+    let path = write_jsonl(
+        tmp.path(),
+        "forwarded.jsonl",
+        &format!(
+            "{}\n{}\n{}\n",
+            r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550123","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550123","display_name":null}],"stats":{"message_count":2,"attachment_count":2,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}"#,
+            message("g-forward-1"),
+            message("g-forward-2"),
+        ),
+    );
+    let options = ImportOptions::fixed(FixedImportArgs {
+        assets_dir: &assets,
+        asset_root: tmp.path(),
+        mode: ImportMode::Append,
+        source: "imessage",
+        account_id: TEST_ACCOUNT,
+        fill_content_keys: false,
+        import_id: None,
+    });
+    import_jsonl_files(&db, std::slice::from_ref(&path), &options)
+        .await
+        .unwrap();
+
+    let (_pool, mut conn) = open_verify(&db).await;
+    let rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM attachments WHERE sha256 = $1")
+        .bind(assets_api::sha256_hex(bytes))
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(rows, 2, "both messages name the file");
+    let size = i64::try_from(bytes.len()).unwrap();
+    for scope in [
+        crate::db::storage::Scope::Account(TEST_ACCOUNT),
+        crate::db::storage::Scope::AllAccounts,
+    ] {
+        assert_eq!(
+            crate::db::storage::attachment_bytes(&mut conn, scope)
+                .await
+                .unwrap(),
+            size,
+            "{scope:?}"
+        );
+    }
+}
+
 #[tokio::test]
 async fn repeated_append_keeps_one_fts_posting_per_message() {
     let tmp = TempDir::new().unwrap();

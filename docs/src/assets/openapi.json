@@ -9952,7 +9952,7 @@
           "storage_bytes": {
             "type": "integer",
             "format": "int64",
-            "description": "Attachment bytes this account owns."
+            "description": "Attachment bytes this account stores, each stored file counted once."
           },
           "time_zone": {
             "type": "string",
@@ -10052,7 +10052,7 @@
           "total_bytes": {
             "type": "integer",
             "format": "int64",
-            "description": "Attachment bytes, by original file size."
+            "description": "Attachment bytes, by original file size, each stored file counted once."
           }
         }
       },
@@ -12259,7 +12259,7 @@
                 "storage_bytes": {
                   "type": "integer",
                   "format": "int64",
-                  "description": "Attachment bytes this account owns."
+                  "description": "Attachment bytes this account stores, each stored file counted once."
                 },
                 "time_zone": {
                   "type": "string",
@@ -13898,7 +13898,7 @@
           "total_bytes": {
             "type": "integer",
             "format": "int64",
-            "description": "Attachment bytes across every account, by original file size."
+            "description": "Attachment bytes across every account, by original file size, each\nstored file counted once."
           }
         }
       },

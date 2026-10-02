@@ -126,6 +126,7 @@ export default function ImportScreen() {
     mediaToolsMissing,
     mediaPartiallyRan,
     resumeError,
+    reviewError,
     sourceIdentities,
     computingSummary,
     completionText,
@@ -867,6 +868,7 @@ export default function ImportScreen() {
             ) : undefined
           }
           reviewBusy={running}
+          reviewError={reviewError}
           onApprove={() => void approve()}
           onCancelRun={() => void cancelRun()}
           onCancel={() => void cancel()}

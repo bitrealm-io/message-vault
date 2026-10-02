@@ -145,4 +145,40 @@ describe("ConvertSection", () => {
     expect(await screen.findByText("input and output directories must be different")).toBeTruthy();
     expect(screen.queryByText(/Conversion complete/)).toBeNull();
   });
+
+  it("names the folder and format the conversion wrote to after the form changes", async () => {
+    const user = await fillFolders("/home/demo/export-json", "/a", "CSV (.csv)");
+    await user.click(convertButton());
+    await screen.findByText(/Conversion complete/);
+
+    const field = screen.getByLabelText("Output folder");
+    await user.clear(field);
+    await user.type(field, "/b");
+    await user.click(screen.getByRole("button", { name: /Output format/ }));
+    await user.click(await screen.findByRole("option", { name: "JSON Lines (.jsonl)" }));
+
+    expect(screen.getByText(/Conversion complete/)).toHaveTextContent(
+      "Conversion complete. CSV (.csv) written to /a.",
+    );
+  });
+
+  it("locks both folder fields while a conversion runs", async () => {
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    awaitTauriJob.mockImplementationOnce(async (invokeFn: () => Promise<void>) => {
+      await held;
+      await invokeFn();
+      return { summary: "Format conversion complete." };
+    });
+
+    const user = await fillFolders("/home/demo/export-json", "/a");
+    await user.click(convertButton());
+    expect(screen.getByLabelText("Input folder")).toBeDisabled();
+    expect(screen.getByLabelText("Output folder")).toBeDisabled();
+    release();
+    await screen.findByText(/Conversion complete/);
+    expect(screen.getByLabelText("Output folder")).toBeEnabled();
+  });
 });

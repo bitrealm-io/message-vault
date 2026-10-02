@@ -281,6 +281,17 @@ export function SystemSection() {
     setStagingDir(trimmed);
   };
 
+  // A typed value that is neither empty, the default, nor usable is kept in the field but not saved.
+  const stagingTrimmed = stagingPath.trim();
+  const stagingNotSaved =
+    stagingTrimmed !== "" &&
+    stagingTrimmed !== defaultStagingPath &&
+    !isUsableStagingParent(stagingTrimmed);
+
+  const onStagingPathBlur = () => {
+    if (stagingNotSaved) setStagingPath(getStagingDir() || defaultStagingPath);
+  };
+
   const onFfmpegPathChange = (next: string) => {
     setFfmpegPath(next);
     if (ffmpegDebounceRef.current) clearTimeout(ffmpegDebounceRef.current);
@@ -315,10 +326,16 @@ export function SystemSection() {
             id={stagingId}
             value={stagingPath}
             onChange={onStagingPathChange}
+            onBlur={onStagingPathBlur}
             directory
             placeholder={defaultStagingPath || "~/message-crate"}
           />
         </div>
+        {stagingNotSaved ? (
+          <p className="col-start-2 m-0 pl-2 text-[0.75rem] text-danger">
+            Not saved. The staging directory must be a full path, and not the root of a drive.
+          </p>
+        ) : null}
         <p className={settingsHelp}>
           Temporary files for Import and Export are written here. For example {helpExample}
         </p>

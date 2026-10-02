@@ -61,7 +61,11 @@ export function ServerSettingsPanel() {
   const limitInForce = megabytes(data.asset_max_bytes);
   const limitText = limitDraft ?? limitInForce;
   const typedBytes = Math.round(Number(limitText) * MIB);
+  // Compared as text: the field shows the limit rounded to 0.01 MB, so an untouched field must
+  // never count as a new limit.
   const canSaveLimit =
+    limitDraft !== null &&
+    limitDraft !== limitInForce &&
     limitText.trim() !== "" &&
     Number.isFinite(typedBytes) &&
     typedBytes > 0 &&

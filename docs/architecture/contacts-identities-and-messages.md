@@ -188,6 +188,10 @@ again.
 **A participant's display name has one rule.** The contact's name, else what
 that backup called them in that conversation, else the identity. One loader
 applies it for the conversation list, the message pane, and Export.
+A contact in the trash counts as no contact here: the participant takes the
+backup's name, else the identity, and carries no contact id.
+Why: the contact cannot be opened while it is in the trash, so a link to it
+would lead to `404 Not Found`.
 
 **Deleting a contact keeps its conversations.** The name and details go. The
 identities stay in their conversations and the person becomes Unknown again.

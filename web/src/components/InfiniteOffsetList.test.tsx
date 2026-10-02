@@ -38,7 +38,90 @@ describe("InfiniteOffsetList in the desktop app", () => {
       widths.mockRestore();
     }
   });
+
+  it("shows the rows on screen and asks for more when the first page fits, without a scroll", async () => {
+    tauriMock.current = true;
+    const requestMore = vi.fn();
+    const restore = layOutDrawnRows(49);
+    try {
+      renderList(manyItems().slice(0, 6), {
+        sectioned: false,
+        hasMore: true,
+        requestMore,
+        total: 90,
+      });
+      const pill = screen.getByTestId("contact-list-range-pill");
+      await waitFor(() => expect(pill).toHaveTextContent("1–6 of 90"));
+      expect(requestMore).toHaveBeenCalled();
+    } finally {
+      restore();
+    }
+  });
+
+  it("reads the range from the rows' own heights, not the estimate", async () => {
+    tauriMock.current = true;
+    const requestMore = vi.fn();
+    // Rows twice the estimate: four of them reach into the 360px above the pill.
+    const restore = layOutDrawnRows(98);
+    try {
+      renderList(manyItems(), { sectioned: false, hasMore: true, requestMore, total: 90 });
+      const pill = screen.getByTestId("contact-list-range-pill");
+      await waitFor(() => expect(pill).toHaveTextContent("1–4 of 90"));
+      expect(requestMore).not.toHaveBeenCalled();
+    } finally {
+      restore();
+    }
+  });
+
+  it("works the range out again when a new search replaces the rows", async () => {
+    tauriMock.current = true;
+    const restore = layOutDrawnRows(49);
+    try {
+      const { rerender } = renderList(manyItems(), { sectioned: false, total: 90 });
+      const pill = screen.getByTestId("contact-list-range-pill");
+      await waitFor(() => expect(pill).toHaveTextContent("1–8 of 90"));
+
+      rerender(listElement(manyItems().slice(0, 3), { sectioned: false, total: 3 }));
+      await waitFor(() => expect(pill).toHaveTextContent("1–3 of 3"));
+    } finally {
+      restore();
+    }
+  });
 });
+
+/**
+ * jsdom lays out nothing. This gives every element a 400px viewport and puts
+ * each row React Aria's Virtualizer draws at its place in the list, `height`
+ * pixels apart, whatever height the virtualizer itself assumed.
+ */
+function layOutDrawnRows(height: number) {
+  const viewport = 400;
+  const heights = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(viewport);
+  const widths = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(300);
+  const rects = vi
+    .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+    .mockImplementation(function (this: HTMLElement) {
+      const position = Number(this.getAttribute("aria-posinset"));
+      if (this.getAttribute("role") === "option" && position > 0) {
+        const listbox = this.closest<HTMLElement>('[role="listbox"]');
+        const top = (position - 1) * height - (listbox?.scrollTop ?? 0);
+        return { top, bottom: top + height, left: 0, right: 300, width: 300, height } as DOMRect;
+      }
+      return {
+        top: 0,
+        bottom: viewport,
+        left: 0,
+        right: 300,
+        width: 300,
+        height: viewport,
+      } as DOMRect;
+    });
+  return () => {
+    heights.mockRestore();
+    widths.mockRestore();
+    rects.mockRestore();
+  };
+}
 
 type Item = { id: string; name: string };
 
@@ -52,13 +135,18 @@ function renderList(
     onSelect?: (item: Item) => void;
     sectioned?: boolean;
     lead?: boolean;
+    total?: number;
   },
 ) {
-  return render(
+  return render(listElement(items, extra));
+}
+
+function listElement(items: Item[], extra?: Parameters<typeof renderList>[1]) {
+  return (
     <div style={{ height: 400 }}>
       <InfiniteOffsetList
         items={items}
-        total={items.length}
+        total={extra?.total ?? items.length}
         loading={extra?.loading ?? false}
         filling={extra?.filling ?? false}
         error=""
@@ -78,7 +166,7 @@ function renderList(
           extra?.sectioned === false ? undefined : (c) => c.name.charAt(0).toUpperCase()
         }
       />
-    </div>,
+    </div>
   );
 }
 
@@ -207,12 +295,9 @@ describe("InfiniteOffsetList asking for more", () => {
     expect(requestMore).not.toHaveBeenCalled();
   });
 
-  // Only the sectioned path is exercised here. The virtualized path builds its
-  // range from `rangeFromScroll`, and React Aria's Virtualizer does not lay
-  // out or forward scroll in jsdom, so a test of it would assert that the
-  // harness is wired rather than that the list asks for more. Only the contact
-  // list passes `getSectionLetter`, and only while no filter is active; the
-  // conversation list and a filtered contact list run the virtualized path.
+  // Only the sectioned path is exercised here. The desktop app's virtualized
+  // path, used for a contact search and the "Last heard" sort, has its own
+  // tests under "InfiniteOffsetList in the desktop app".
 });
 
 describe("InfiniteOffsetList choosing a row", () => {

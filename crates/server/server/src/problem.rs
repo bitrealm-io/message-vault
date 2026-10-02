@@ -188,7 +188,7 @@ impl ProblemType {
                 crate::credentials::AUTH_RATE_MAX,
                 crate::credentials::AUTH_RATE_WINDOW.as_secs()
             ),
-            Self::UsernameTaken => "The username already belongs to an account on this server. Usernames are compared ignoring case. Pick another.".to_string(),
+            Self::UsernameTaken => "The username already belongs to an account on this server. Usernames are compared ignoring case. `demo` belongs to the Demo Account even while that account is absent. Pick another.".to_string(),
             Self::NameTaken => "A Contact Group, Message Tag or Saved Search with this name already exists for the account. Names are compared ignoring case. Pick another, or rename the existing one.".to_string(),
             Self::DemoAccountProtected => "The demo account refuses this operation, because it exists to be looked at and reset rather than changed. Log in as a real account, or run `reset-demo` on the server to restore the demo data.".to_string(),
             Self::NotTheOwner => "This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates. Ask the owner to do it, or to give you what you need.".to_string(),

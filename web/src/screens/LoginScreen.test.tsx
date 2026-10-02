@@ -31,6 +31,19 @@ vi.mock("../lib/localServer", async (importOriginal) => ({
   openDataFolder: () => openDataFolder(),
 }));
 
+const setBaseUrlSpy = vi.hoisted(() => vi.fn());
+
+vi.mock("../lib/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/api")>();
+  return {
+    ...actual,
+    setBaseUrl: (url: string) => {
+      setBaseUrlSpy(url);
+      actual.setBaseUrl(url);
+    },
+  };
+});
+
 import { Providers } from "../test/providers";
 import LoginScreen from "./LoginScreen";
 
@@ -92,6 +105,8 @@ describe("LoginScreen", () => {
     localServerStatus.mockResolvedValue({ status: "ready", started_by_app: true });
     openDataFolder.mockReset();
     openDataFolder.mockResolvedValue(undefined);
+    setBaseUrlSpy.mockReset();
+    retrySavedLogin.mockReset();
   });
 
   afterEach(() => {
@@ -282,23 +297,70 @@ describe("LoginScreen", () => {
     expect(screen.getByRole("button", { name: "Change server address" })).toBeEnabled();
   });
 
-  it("disables Log in while the server is unreachable", async () => {
-    stubServer();
+  it("stays on the Message Crate it has and names the address that did not answer", async () => {
+    // A answers and B does not. The card is connected to A, B is applied, and
+    // the card must neither move to B nor slip back to A without a word.
+    const A = "http://crate-a.example:8080";
+    const B = "http://crate-b.example:8080";
+    authState.serverUrl = A;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (String(url).startsWith(A)) {
+          return {
+            ok: true,
+            status: 200,
+            text: async () => JSON.stringify({ state: "closed" }),
+            json: async () => ({ state: "closed" }),
+          };
+        }
+        throw new TypeError("Failed to fetch");
+      }),
+    );
     const user = setupUser();
     renderScreen();
 
     await screen.findByText("Connected");
     await user.click(screen.getByRole("button", { name: "Change server address" }));
+    const field = screen.getByRole("textbox", { name: "Address" });
+    await user.clear(field);
+    await user.type(field, B);
+    await user.click(screen.getByRole("button", { name: "Use this address" }));
 
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      `Nothing answered at ${B}. Still connected to ${A}.`,
+    );
+    // Long enough for the card's own health probe (400ms debounce) to have
+    // run, had it gone back to watching A as a disconnected card.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("Connected");
+    expect(screen.getByRole("button", { name: "Log in" })).toBeEnabled();
+    expect(setServer).not.toHaveBeenCalledWith(B);
+    expect(setBaseUrlSpy).not.toHaveBeenCalledWith(B);
+    expect(setBaseUrlSpy).toHaveBeenCalledWith(A);
+    expect(retrySavedLogin).not.toHaveBeenCalled();
+  });
+
+  it("says a disconnected card is still disconnected when the new address does not answer either", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    const user = setupUser();
+    renderScreen();
+
+    await screen.findByText("Disconnected");
+    await user.click(screen.getByRole("button", { name: "Change server address" }));
     const field = screen.getByRole("textbox", { name: "Address" });
     await user.clear(field);
     await user.type(field, "http://127.0.0.1:9999");
     await user.click(screen.getByRole("button", { name: "Use this address" }));
 
-    expect(await screen.findByText("Disconnected")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Login" })).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Nothing answered at http://127.0.0.1:9999.",
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Disconnected");
     expect(screen.getByRole("button", { name: "Log in" })).toBeDisabled();
+    expect(setBaseUrlSpy).not.toHaveBeenCalledWith("http://127.0.0.1:9999");
   });
 
   it("offers Use this address only for an address that is a change", async () => {
@@ -779,10 +841,32 @@ describe("LoginScreen", () => {
     expect(await screen.findByRole("tab", { name: "Login" })).toBeInTheDocument();
   });
 
-  it("goes back to the app's own Message Crate from the connection screen", async () => {
+  it("starts the app's own Message Crate when asked to go back to it", async () => {
+    // The person left the app on a Message Crate elsewhere, so the app started
+    // nothing at launch, and nothing answers at the app's own address until
+    // the app starts its server.
     tauriState.isTauri = true;
     authState.serverUrl = "http://crate.example:8080";
-    stubServer();
+    let ownRunning = false;
+    startLocalServer.mockImplementation(async () => {
+      ownRunning = true;
+      return { status: "starting", first_time: false };
+    });
+    localServerStatus.mockResolvedValue({ status: "ready", started_by_app: true });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (ownRunning && String(url).startsWith("http://127.0.0.1:8080")) {
+          return {
+            ok: true,
+            status: 200,
+            text: async () => JSON.stringify({ state: "closed" }),
+            json: async () => ({ state: "closed" }),
+          };
+        }
+        throw new TypeError("Failed to fetch");
+      }),
+    );
     const user = setupUser();
     renderScreen();
 
@@ -790,8 +874,35 @@ describe("LoginScreen", () => {
       await screen.findByRole("button", { name: "Use the Message Crate on this computer" }),
     );
 
-    await waitFor(() => expect(setServer).toHaveBeenCalledWith("http://127.0.0.1:8080"));
-    expect(startLocalServer).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(startLocalServer).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(setServer).toHaveBeenCalledWith("http://127.0.0.1:8080"), {
+      timeout: 3000,
+    });
+    expect(await screen.findByText("Connected")).toBeInTheDocument();
+    expect(setBaseUrlSpy).not.toHaveBeenCalledWith("http://crate.example:8080");
+  });
+
+  it("says why the app's own Message Crate did not start, when asked to go back to it", async () => {
+    tauriState.isTauri = true;
+    authState.serverUrl = "http://crate.example:8080";
+    startLocalServer.mockResolvedValue({
+      status: "failed",
+      reason: "port_taken",
+      message: "Another program is using port 8080.",
+      details: "",
+    });
+    stubNoServer();
+    const user = setupUser();
+    renderScreen();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Use the Message Crate on this computer" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Another program is using port 8080.",
+    );
+    expect(setServer).not.toHaveBeenCalledWith("http://127.0.0.1:8080");
   });
 
   it("opens the browser on the login card whatever the address", async () => {

@@ -423,6 +423,113 @@ describe("useImportJob wiring", () => {
     expect(setImportStageMock).toHaveBeenCalledWith(1, "awaiting_gate_1", undefined);
   });
 
+  /** `setImportStage` rejects for `failing` and resolves for every other stage. */
+  function failStageWrite(failing: string, times = Number.POSITIVE_INFINITY) {
+    let left = times;
+    setImportStageMock.mockImplementation((_id: number, stage: string) => {
+      if (stage === failing && left > 0) {
+        left -= 1;
+        return Promise.reject(new Error("Failed to fetch"));
+      }
+      return Promise.resolve();
+    });
+  }
+
+  function rowStatus(steps: { label: string; status: string }[], label: string) {
+    return steps.find((step) => step.label === label)?.status;
+  }
+
+  it("does not start Staging when the server does not record the write stage", async () => {
+    failStageWrite("write");
+    const { result } = renderHook(() => useImportJob());
+    await act(() => result.current.startImport(form({ attachmentMedia: "copy" })));
+
+    expect(invokeExtractMock).not.toHaveBeenCalled();
+    expect(result.current.phase).toBe("done");
+    expect(result.current.summaryView?.status).toBe("failed");
+    expect(result.current.summaryView?.issues[0]?.reason).toMatch(/Failed to fetch/);
+    expect(rowStatus(result.current.steps, "Staging")).toBe("error");
+    // The run stays at the stage the server last recorded, so it is not completed.
+    expect(completeImportMock).not.toHaveBeenCalled();
+  });
+
+  it("does not start the Media pass when the server does not record the transcode stage", async () => {
+    const { result } = renderHook(() => useImportJob());
+    await act(() => result.current.startImport(form({ attachmentMedia: "convert" })));
+    failStageWrite("transcode");
+    await act(() => result.current.approve());
+
+    expect(invokeTranscodeStagingMock).not.toHaveBeenCalled();
+    expect(result.current.summaryView?.status).toBe("failed");
+    expect(result.current.summaryView?.issues[0]?.reason).toMatch(/Failed to fetch/);
+    expect(rowStatus(result.current.steps, "Media")).toBe("error");
+    expect(completeImportMock).not.toHaveBeenCalled();
+    expect(invokeDeleteStagingMock).not.toHaveBeenCalled();
+  });
+
+  it("does not start the Upload when the server does not record the pushing stage", async () => {
+    const { result } = renderHook(() => useImportJob());
+    await act(() => result.current.startImport(form({ attachmentMedia: "copy" })));
+    failStageWrite("pushing");
+    await act(() => result.current.approve());
+
+    expect(invokePushMock).not.toHaveBeenCalled();
+    expect(result.current.summaryView?.status).toBe("failed");
+    expect(result.current.summaryView?.issues[0]?.reason).toMatch(/Failed to fetch/);
+    expect(rowStatus(result.current.steps, "Upload")).toBe("error");
+    expect(completeImportMock).not.toHaveBeenCalled();
+    expect(invokeDeleteStagingMock).not.toHaveBeenCalled();
+  });
+
+  it("shows a failed awaiting_gate_1 write on the Staging Review, and approving writes it again first", async () => {
+    failStageWrite("awaiting_gate_1", 2);
+    const { result } = renderHook(() => useImportJob());
+    await act(() => result.current.startImport(form({ attachmentMedia: "copy" })));
+
+    expect(result.current.phase).toBe("staging_review");
+    expect(result.current.reviewError).toMatch(/Failed to fetch/);
+
+    // The second write fails too: the run stays at the review and uploads nothing.
+    await act(() => result.current.approve());
+    expect(result.current.phase).toBe("staging_review");
+    expect(result.current.reviewError).toMatch(/Failed to fetch/);
+    expect(invokePushMock).not.toHaveBeenCalled();
+
+    // The third succeeds, and the Upload follows it.
+    runMock.mockImplementationOnce(runResult({ summary: "Push finished.", report: okReport() }));
+    await act(() => result.current.approve());
+    const stages = setImportStageMock.mock.calls.map(([, stage]) => stage);
+    expect(stages.filter((stage) => stage === "awaiting_gate_1")).toHaveLength(3);
+    expect(stages.lastIndexOf("awaiting_gate_1")).toBeLessThan(stages.indexOf("pushing"));
+    expect(result.current.reviewError).toBeNull();
+    expect(invokePushMock).toHaveBeenCalled();
+  });
+
+  it("shows a failed awaiting_gate_2 write on the Media Review, and approving writes it again first", async () => {
+    runMock.mockImplementationOnce(
+      runResult({ summary: "Transcode finished.", transcode: undefined }),
+    );
+    const approved = stagingSummary({ conversations: 5 });
+    invokeSummarizeStagingMock.mockResolvedValueOnce(approved);
+    const { result } = renderHook(() => useImportJob());
+    await act(() => result.current.startImport(form({ attachmentMedia: "convert" })));
+    failStageWrite("awaiting_gate_2", 1);
+    await act(() => result.current.approve());
+
+    expect(result.current.phase).toBe("media_review");
+    expect(result.current.reviewError).toMatch(/Failed to fetch/);
+
+    runMock.mockImplementationOnce(runResult({ summary: "Push finished.", report: okReport() }));
+    await act(() => result.current.approve());
+    const gateCalls = setImportStageMock.mock.calls.filter(
+      ([, stage]) => stage === "awaiting_gate_2",
+    );
+    expect(gateCalls).toHaveLength(2);
+    expect(gateCalls[1]).toEqual([1, "awaiting_gate_2", approved]);
+    expect(result.current.reviewError).toBeNull();
+    expect(invokePushMock).toHaveBeenCalled();
+  });
+
   it("runs the media pass then stops at the second gate", async () => {
     runMock.mockImplementationOnce(
       runResult({ summary: "Transcode finished.", transcode: undefined }),

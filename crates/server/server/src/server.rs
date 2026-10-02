@@ -858,11 +858,11 @@ async fn limit_request_body(
 /// `application/*` or `*/*`. A missing `Accept` is a request for JSON, which
 /// is what every one of the server's own clients sends.
 ///
-/// Applied to the `/v1` routes only, through `route_layer`, so the static app,
-/// `/health` and the OpenAPI UI keep producing what they produce. Three
-/// routes answer bytes, not JSON, and are let through here by path: the
-/// asset download and its preview stream the file's own bytes, and the
-/// address book export answers `text/csv`.
+/// Applied to the `/v1` routes only, through `route_layer`; the static app,
+/// `/health` and the OpenAPI UI are mounted outside it, so they keep
+/// producing what they produce. Three routes answer bytes, not JSON, and are
+/// let through here by path: the asset download and its preview stream the
+/// file's own bytes, and the address book export answers `text/csv`.
 async fn require_json_acceptable(
     request: axum::extract::Request,
     next: axum::middleware::Next,
@@ -933,6 +933,8 @@ pub(crate) fn http_app(state: AppState) -> Router {
         .as_ref()
         .map_or_else(|| "static".into(), |s| s.static_dir.clone());
     let (auth_small, mut spec) = limited_auth_router();
+    let (health_router, health) = crate::openapi::health_openapi().split_for_parts();
+    spec.merge(health);
     let (doc_router, rest) = crate::openapi::api_openapi().split_for_parts();
     spec.merge(rest);
     crate::openapi::finish(&mut spec);
@@ -952,6 +954,11 @@ pub(crate) fn http_app(state: AppState) -> Router {
         // `route_layer`, not `layer`: the `Accept` check belongs to the API
         // routes above and never to the static app served by the fallback.
         .route_layer(axum::middleware::from_fn(require_json_acceptable))
+        // After the `Accept` check and before the query check: `/health` is
+        // outside `/v1`, so a probe sending `Accept: text/plain` gets the
+        // plain text it answers, and its query is still checked like every
+        // other route's.
+        .merge(health_router)
         // After routing, so the matched path names the operation whose
         // declared parameters the query is checked against.
         .route_layer(axum::middleware::from_fn_with_state(

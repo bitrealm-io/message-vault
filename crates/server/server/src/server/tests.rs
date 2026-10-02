@@ -1206,6 +1206,25 @@ async fn accept_is_checked_on_v1_json_routes_only() {
     assert_ne!(asset.status(), StatusCode::NOT_ACCEPTABLE);
 }
 
+/// `/health` answers a probe that accepts only text, as a container health
+/// check or a load balancer may send (#1221): it is outside `/v1`, so its
+/// `Accept` is not checked.
+#[tokio::test]
+async fn health_answers_a_probe_that_accepts_only_text() {
+    let fixture = crate::test_support::test_fixture().await;
+    let server = crate::test_support::serve(&fixture.state).await;
+
+    let response = reqwest::Client::new()
+        .get(format!("{}/health", server.base()))
+        .header(header::ACCEPT, "text/plain")
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.text().await.unwrap(), "ok\n");
+}
+
 #[test]
 fn every_api_error_answers_the_status_its_problem_type_declares() {
     let cases: Vec<(ApiError, StatusCode)> = vec![

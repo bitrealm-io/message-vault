@@ -103,10 +103,16 @@ pub fn public_openapi() -> OpenApiRouter<AppState> {
         .routes(routes!(crate::server_api::claim_server))
 }
 
-/// Health, the logged-in Session, the accounts collection, and browse routes.
+/// `/health`, the one route outside `/v1`. Kept apart from [`api_openapi`]
+/// so the server mounts it outside the `/v1` check on `Accept`, and a probe
+/// that accepts only text gets the plain text the route answers.
+pub fn health_openapi() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new().routes(routes!(crate::server::get_health))
+}
+
+/// The logged-in Session, the accounts collection, and browse routes.
 pub fn api_openapi() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
-        .routes(routes!(crate::server::get_health))
         .routes(routes!(
             crate::session_api::get_session,
             crate::session_api::delete_session
@@ -224,6 +230,8 @@ pub(crate) fn finish(spec: &mut utoipa::openapi::OpenApi) {
 /// Pretty OpenAPI JSON. Same string the CLI writes and the stale-spec test compares.
 pub fn dump_openapi_json() -> String {
     let (_a, mut spec) = public_openapi().split_for_parts();
+    let (_h, health) = health_openapi().split_for_parts();
+    spec.merge(health);
     let (_b, rest) = api_openapi().split_for_parts();
     spec.merge(rest);
     finish(&mut spec);

@@ -1081,6 +1081,88 @@ async fn deleting_an_upload_answers_204_and_removes_its_files() {
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 }
 
+/// A zero-byte attachment is a file like any other. A PUT of no bytes
+/// addressed by the empty file's fingerprint stores it, and a GET returns it
+/// with a `Content-Length` of 0.
+#[tokio::test]
+async fn an_asset_put_of_the_empty_file_is_stored() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let server = crate::test_support::serve(&fixture.state).await;
+    let sha = sha256_hex(b"");
+    let url = format!("{}/v1/assets/{sha}?source=imessage", server.base());
+    let client = reqwest::Client::new();
+    let response = client
+        .put(&url)
+        .bearer_auth(&user.token)
+        .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+        .body(Vec::new())
+        .send()
+        .await
+        .unwrap();
+    let status = response.status();
+    let text = response.text().await.unwrap();
+    assert_eq!(status, StatusCode::CREATED, "empty file refused: {text}");
+
+    let response = client
+        .get(&url)
+        .bearer_auth(&user.token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get(reqwest::header::CONTENT_LENGTH)
+            .and_then(|v| v.to_str().ok()),
+        Some("0")
+    );
+    assert!(response.bytes().await.unwrap().is_empty());
+}
+
+/// A multipart upload of the empty file starts with `bytes: 0`, sends no
+/// parts, and completes by storing the empty file.
+#[tokio::test]
+async fn a_multipart_upload_of_the_empty_file_completes_with_no_parts() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let server = crate::test_support::serve(&fixture.state).await;
+    let sha = sha256_hex(b"");
+    let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}?source=imessage", server.base());
+    let client = reqwest::Client::new();
+
+    let response = client
+        .post(url("/uploads"))
+        .bearer_auth(&user.token)
+        .json(&serde_json::json!({ "bytes": 0 }))
+        .send()
+        .await
+        .unwrap();
+    let status = response.status();
+    let text = response.text().await.unwrap();
+    assert_eq!(status, StatusCode::CREATED, "start refused: {text}");
+    let started: serde_json::Value = serde_json::from_str(&text).unwrap();
+    let upload_id = started["upload_id"].as_str().unwrap().to_string();
+
+    let response = client
+        .post(url(&format!("/uploads/{upload_id}/complete")))
+        .bearer_auth(&user.token)
+        .send()
+        .await
+        .unwrap();
+    let status = response.status();
+    let text = response.text().await.unwrap();
+    assert_eq!(status, StatusCode::CREATED, "complete refused: {text}");
+    let done: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(done["sha256"], sha.as_str());
+
+    let assets_dir = fixture
+        .state
+        .cfg
+        .paths
+        .assets_dir_for_account(user.account_id, "imessage");
+    assert!(lookup_by_sha256_unverified(&assets_dir, &sha).is_some());
+}
+
 /// A PUT with no bytes was read in full; it just does not hash to the
 /// fingerprint it is addressed by, so it answers 422 like any other body that
 /// does not, and stores nothing.

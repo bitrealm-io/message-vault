@@ -72,7 +72,9 @@ That works only while the app is open.
 The connection is plain HTTP, so anyone on the network can read what is sent, passwords included.
 
 Changing the checkbox restarts the Message Crate, which takes a moment.
+During an import, the restart waits until the import's current step ends, so the import isn't cut off.
 It has no effect on a Message Crate the app didn't start, such as one in Docker on the same computer, and a line under the checkbox says so.
+While the app uses a Message Crate at another address, the checkbox starts nothing, and the setting applies the next time the app starts its own.
 
 ## About
 

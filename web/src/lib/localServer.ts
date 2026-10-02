@@ -31,7 +31,7 @@ export function isOwnAddress(url: string): boolean {
  * Make sure the app's own Message Crate is running. Safe to call on every
  * launch: a Message Crate already answering is used as it is, and a start
  * under way is left alone. Calling it again after a failure tries again, and
- * calling it after the network setting changed restarts the app's own server.
+ * a Message Crate the app found is asked again whether it still answers.
  */
 export async function startLocalServer(): Promise<LocalServerStatus> {
   return invoke<LocalServerStatus>("start_local_server", { openToNetwork: getOpenToNetwork() });
@@ -49,12 +49,21 @@ export function getOpenToNetwork(): boolean {
 }
 
 /**
- * Save the setting. It takes effect at the next `startLocalServer`, which
- * restarts the app's own server when it was started the other way.
+ * Save the setting for the next launch. `setLocalServerOpenToNetwork` gives
+ * it to a server the app runs now.
  */
 export function setOpenToNetwork(on: boolean): void {
   if (on) writePref(OPEN_TO_NETWORK_KEY, "1");
   else removePref(OPEN_TO_NETWORK_KEY);
+}
+
+/**
+ * Give the network setting to the desktop app. It starts nothing: the app's
+ * own server is restarted to match, once no import or other desktop job
+ * runs, and a Message Crate the app only found is left as it is.
+ */
+export async function setLocalServerOpenToNetwork(on: boolean): Promise<LocalServerStatus> {
+  return invoke<LocalServerStatus>("set_open_to_network", { openToNetwork: on });
 }
 
 /** Read the state of the app's own Message Crate without starting it. */

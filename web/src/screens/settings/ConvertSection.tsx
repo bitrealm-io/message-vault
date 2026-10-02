@@ -33,7 +33,12 @@ export function ConvertSection() {
   const [format, setFormat] = useState<ExportFormat>("jsonl");
   const [error, setError] = useState("");
   const [log, setLog] = useState<string[]>([]);
-  const { running, finished, run, cancel } = useTauriJob();
+  // The folder and format each conversion was started with, so the success
+  // message names what was written even after the form changes.
+  const { running, finished, run, cancel } = useTauriJob<{
+    outputDir: string;
+    format: ExportFormat;
+  }>({ job: "Convert" });
 
   const appendLog = useCallback((line: string) => {
     setLog((prev) => [...prev, line]);
@@ -54,15 +59,17 @@ export function ConvertSection() {
     if (running || foldersClash) return;
     setError("");
     setLog([]);
+    const request = { outputDir: outputDir.trim(), format };
     void (async () => {
       try {
         await run(
           () =>
             invokeFormat({
               input_dir: inputDir.trim(),
-              output_dir: outputDir.trim(),
-              output_format: format,
+              output_dir: request.outputDir,
+              output_format: request.format,
             }),
+          request,
           { onLog: appendLog },
         );
       } catch (err: unknown) {
@@ -76,6 +83,7 @@ export function ConvertSection() {
   return (
     <TauriJobFormShell
       className="max-w-[700px]"
+      job="Convert"
       startLabel="Convert"
       runningLabel="Converting…"
       running={running}
@@ -93,7 +101,7 @@ export function ConvertSection() {
       success={
         finished && !error ? (
           <div className="mt-4 rounded-md bg-ok-soft-bg p-4 text-[0.875rem]">
-            Conversion complete. {formatLabel(format)} written to {outputDir.trim()}.
+            Conversion complete. {formatLabel(finished.format)} written to {finished.outputDir}.
           </div>
         ) : null
       }
@@ -104,6 +112,7 @@ export function ConvertSection() {
           onChange={setInputDir}
           directory
           placeholder="Folder holding an export…"
+          isDisabled={running}
         />
       </FormRow>
       <FormRow label="Output folder">
@@ -112,6 +121,7 @@ export function ConvertSection() {
           onChange={setOutputDir}
           directory
           placeholder="A different folder to write into…"
+          isDisabled={running}
         />
       </FormRow>
       {foldersClash ? (

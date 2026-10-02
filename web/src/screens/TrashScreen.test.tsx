@@ -2,7 +2,7 @@
 
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   deleteContact,
@@ -162,6 +162,54 @@ describe("TrashScreen", () => {
     expect(await screen.findByText("conversations: applies to contacts only")).toBeTruthy();
     expect(await screen.findByText("Ada Lovelace")).toBeTruthy();
     expect(listConversationsMock).not.toHaveBeenCalled();
+  });
+
+  it("names a word neither list knows once, and not as the other list's word", async () => {
+    // `re` is a search word of neither list (#1234).
+    renderAt("/trash?tq=re:lunch");
+
+    expect(await screen.findByText("re: is not a search word")).toBeTruthy();
+    expect(screen.queryByText("re: applies to contacts only")).toBeNull();
+    expect(screen.queryByText("re: applies to conversations only")).toBeNull();
+    expect(listConversationsMock).not.toHaveBeenCalled();
+    expect(listContactsMock).not.toHaveBeenCalled();
+  });
+
+  it("shows the error, and blames no list, when the search words cannot be loaded", async () => {
+    // With no registry, `trashed:` (which the page adds itself) read as a word
+    // both lists refuse (#1234).
+    listSearchFieldsMock.mockRejectedValue(new Error("Server unreachable"));
+    renderAt("/trash");
+
+    expect(
+      await screen.findByText(
+        "Could not load the search words. Server unreachable",
+        {},
+        { timeout: 4000 },
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/applies to/)).toBeNull();
+    expect(screen.queryByText("Trash is empty.")).toBeNull();
+  });
+
+  it("shows the error, not an empty Trash, when trashed contacts cannot be loaded", async () => {
+    listConversationsMock.mockResolvedValue({ items: [], total: 0, limit: 1, offset: 0 });
+    listContactsMock.mockRejectedValue(new Error("Server unreachable"));
+    renderAt("/trash");
+
+    expect(await screen.findByText("Server unreachable", {}, { timeout: 4000 })).toBeTruthy();
+    expect(screen.queryByText("Trash is empty.")).toBeNull();
+    expect(screen.queryByText("No contacts in Trash.")).toBeNull();
+    expect(screen.getByRole("button", { name: "Empty Trash" })).toBeTruthy();
+  });
+
+  it("shows the error, not an empty Trash, when trashed conversations cannot be counted", async () => {
+    listConversationsMock.mockRejectedValue(new Error("Server unreachable"));
+    renderAt("/trash");
+
+    expect(await screen.findByText("Server unreachable", {}, { timeout: 4000 })).toBeTruthy();
+    expect(screen.queryByText("Trash is empty.")).toBeNull();
+    expect(screen.queryByText("No conversations in Trash.")).toBeNull();
   });
 
   it("reads correctly when the trash is empty", async () => {
@@ -429,5 +477,37 @@ describe("TrashScreen", () => {
       expect(screen.getByRole("button", { name: "Restore" })).not.toBeDisabled();
       expect(screen.getByRole("button", { name: "Restore Grace Hopper" })).not.toBeDisabled();
     });
+  });
+
+  it("does not show a Restore error from one conversation on the next one selected", async () => {
+    restoreConversationMock.mockRejectedValue(new Error("Restore refused."));
+    getConversationMock.mockImplementation(async (id) =>
+      conversation({ id, participants: [{ name: id === 42 ? "Ada Lovelace" : "Bob Kahn" }] }),
+    );
+    // The left column selects a row by setting `tsel`, as AppLayout does.
+    function SelectBob() {
+      const navigate = useNavigate();
+      return (
+        <button type="button" onClick={() => navigate("/trash?tsel=7")}>
+          select Bob
+        </button>
+      );
+    }
+    render(
+      <Providers>
+        <MemoryRouter initialEntries={["/trash?tsel=42"]}>
+          <SelectBob />
+          <TrashScreen />
+        </MemoryRouter>
+      </Providers>,
+    );
+
+    await screen.findByText("Ada Lovelace");
+    await userEvent.click(screen.getByRole("button", { name: "Restore" }));
+    await screen.findByText("Restore refused.");
+
+    await userEvent.click(screen.getByRole("button", { name: "select Bob" }));
+    await screen.findByText("Bob Kahn");
+    expect(screen.queryByText("Restore refused.")).toBeNull();
   });
 });

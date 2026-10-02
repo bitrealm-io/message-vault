@@ -1053,15 +1053,48 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
     eprintln!(
         "  routes: `message-crate-server dump-openapi` lists them all; set [server] openapi_ui = true for /docs"
     );
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    serve_until_shutdown(listener, app).await?;
     Ok(())
 }
 
-/// Resolve on Ctrl-C so axum drains in-flight requests before exiting.
+/// Serve `app` on `listener` until a shutdown signal arrives, then stop
+/// accepting connections and return once the requests in flight have finished.
+async fn serve_until_shutdown(
+    listener: tokio::net::TcpListener,
+    app: Router,
+) -> std::io::Result<()> {
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+}
+
+/// Resolve on Ctrl-C, or on SIGTERM on Unix, so axum drains in-flight
+/// requests before exiting. `docker stop` and a service manager send SIGTERM,
+/// not Ctrl-C (#1218).
 async fn shutdown_signal() {
-    let _ = tokio::signal::ctrl_c().await;
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut sigterm) => {
+                sigterm.recv().await;
+            }
+            // Without a SIGTERM handler the process still stops on SIGTERM,
+            // only without draining; Ctrl-C keeps working.
+            Err(e) => {
+                eprintln!("cannot listen for SIGTERM: {e}");
+                std::future::pending::<()>().await;
+            }
+        }
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+    tokio::select! {
+        () = ctrl_c => {}
+        () = terminate => {}
+    }
     eprintln!("shutting down");
 }
 

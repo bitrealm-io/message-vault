@@ -690,12 +690,22 @@ pub(crate) async fn seeded() -> (sqlx::SqlitePool, tempfile::TempDir, Fixture) {
 
 /// Compile `q` for `list` and return the matching ids, ascending.
 pub(crate) async fn run(conn: &mut SqliteConnection, list: ListKind, q: &str) -> Vec<i64> {
+    run_in(conn, list, q, chrono_tz::UTC).await
+}
+
+/// [`run`] for an account whose time zone is `zone`.
+pub(crate) async fn run_in(
+    conn: &mut SqliteConnection,
+    list: ListKind,
+    q: &str,
+    zone: chrono_tz::Tz,
+) -> Vec<i64> {
     let f = compile(CompileRequest {
         list,
         query: q,
         account_id: ACCOUNT,
         today: today(),
-        zone: chrono_tz::UTC,
+        zone,
     })
     .unwrap_or_else(|e| panic!("{q:?} on {list:?}: {}", e.message));
     let table = match list {
@@ -2298,6 +2308,59 @@ mod measure_words {
         assert_eq!(
             run(&mut conn, ListKind::Messages, "date:<1y").await.len(),
             14
+        );
+    }
+
+    /// Pacific/Apia skipped 30 December 2011. A search that names that day,
+    /// or ends on it, runs instead of panicking, and the skipped day holds no
+    /// message (#1204).
+    #[tokio::test]
+    async fn a_day_the_time_zone_skipped_holds_no_message() {
+        let (pool, _dir, f) = seeded().await;
+        let mut conn = pool.acquire().await.unwrap();
+        let apia = chrono_tz::Pacific::Apia;
+        let a = ACCOUNT;
+        let c = f.ana_direct;
+        let h = Some(f.ana_handle);
+        // 19:00 on the 28th, 10:00 on the 29th, and 02:00 on the 31st in Apia.
+        let on_28th = message(&mut conn, a, msg(c, "2011-12-29T05:00:00Z", false, h, "a")).await;
+        let on_29th = message(&mut conn, a, msg(c, "2011-12-29T20:00:00Z", false, h, "b")).await;
+        let on_31st = message(&mut conn, a, msg(c, "2011-12-30T12:00:00Z", false, h, "c")).await;
+        let m = ListKind::Messages;
+        assert_eq!(
+            run_in(&mut conn, m, "date:2011-12-30", apia).await,
+            Vec::<i64>::new()
+        );
+        assert_eq!(
+            run_in(&mut conn, m, "date:2011-12-29", apia).await,
+            vec![on_29th]
+        );
+        assert_eq!(
+            run_in(&mut conn, m, "date:2011-12-31", apia).await,
+            vec![on_31st]
+        );
+        assert_eq!(
+            run_in(&mut conn, m, "date:2011-12-29..2011-12-30", apia).await,
+            vec![on_29th]
+        );
+        assert_eq!(
+            run_in(&mut conn, m, "date:2011-12-28 or date:2011-12-29", apia).await,
+            vec![on_28th, on_29th]
+        );
+        assert!(
+            !run_in(&mut conn, m, "date:<=2011-12-29", apia)
+                .await
+                .contains(&on_31st)
+        );
+        assert!(
+            run_in(
+                &mut conn,
+                ListKind::Contacts,
+                "last-message:>2011-12-29",
+                apia
+            )
+            .await
+            .contains(&f.ana)
         );
     }
 

@@ -235,7 +235,7 @@ export default function AppLayout() {
         />
         <ColumnResizeProvider>
           <div className="flex min-h-0 flex-1 overflow-hidden">
-            <LeftPanel onSearchChange={handleSearchChange} browseQuery={browseQuery} />
+            <LeftPanel browseQuery={browseQuery} />
 
             {/* Conversations: render list component directly with props */}
             {mode === "conversations" && !isMessageRoute && (

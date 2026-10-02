@@ -1,9 +1,10 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getConversation, listConversationMessages } from "../lib/serverApi";
+import { getConversation, listConversationMessages, trashConversation } from "../lib/serverApi";
 import type { Conversation } from "../lib/types";
 import { mockedAuth, Providers } from "../test/providers";
 import MessageRoute from "./MessageRoute";
@@ -19,10 +20,12 @@ vi.mock("../lib/serverApi", async (importOriginal) => ({
   listMessageTags: vi.fn().mockResolvedValue({ items: [] }),
   getConversation: vi.fn(),
   listConversationMessages: vi.fn(),
+  trashConversation: vi.fn(),
 }));
 
 const getConversationMock = vi.mocked(getConversation);
 const listConversationMessagesMock = vi.mocked(listConversationMessages);
+const trashConversationMock = vi.mocked(trashConversation);
 
 // jsdom has no ResizeObserver; VirtualList observes its scroll container on mount.
 class StubResizeObserver {
@@ -35,6 +38,7 @@ beforeEach(() => {
   vi.stubGlobal("ResizeObserver", StubResizeObserver);
   getConversationMock.mockReset();
   listConversationMessagesMock.mockReset();
+  trashConversationMock.mockReset();
   listConversationMessagesMock.mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
 });
 
@@ -59,11 +63,29 @@ function conv(id: number, label: string): Conversation {
 }
 
 function renderAt(path: string, state?: unknown) {
+  /**
+   * Opens conversation 8 as a click on its row in the list column does: the row
+   * rides along as `location.state`, so the thread pane never shows "Loading".
+   */
+  function OpenEight() {
+    const navigate = useNavigate();
+    return (
+      <button
+        type="button"
+        onClick={() => navigate("/messages/8", { state: { conversation: conv(8, "Chat 8") } })}
+      >
+        open 8
+      </button>
+    );
+  }
+
   return render(
     <Providers>
       <MemoryRouter initialEntries={[{ pathname: path, state }]}>
         <RightToolbarProvider>
+          <OpenEight />
           <Routes>
+            <Route path="/" element={<div>Conversations list</div>} />
             <Route path="/messages/:conversationId" element={<MessageRoute />} />
             <Route path="/messages" element={<MessageRoute />} />
           </Routes>
@@ -127,5 +149,47 @@ describe("MessageRoute", () => {
 
     expect(await screen.findByText("Fresh Name")).toBeInTheDocument();
     expect(screen.queryByText("Stale Name")).not.toBeInTheDocument();
+  });
+
+  it("does not show a Move to trash error from one conversation on the next one opened", async () => {
+    getConversationMock.mockImplementation(async (id) => conv(id, `Chat ${id}`));
+    trashConversationMock.mockRejectedValue(new Error("Trash refused."));
+    const user = userEvent.setup();
+
+    renderAt("/messages/7");
+    await screen.findByText("Chat 7");
+    await user.click(screen.getByRole("button", { name: "Move to trash" }));
+    await screen.findByText("Trash refused.");
+
+    await user.click(screen.getByRole("button", { name: "open 8" }));
+    await screen.findByText("Chat 8");
+    expect(screen.queryByText("Trash refused.")).not.toBeInTheDocument();
+  });
+
+  it("stays on the conversation now open when a Move to trash pressed on the last one succeeds", async () => {
+    getConversationMock.mockImplementation(async (id) => conv(id, `Chat ${id}`));
+    let finishTrash: () => void = () => {};
+    trashConversationMock.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishTrash = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+
+    renderAt("/messages/7");
+    await screen.findByText("Chat 7");
+    await user.click(screen.getByRole("button", { name: "Move to trash" }));
+    await waitFor(() => expect(trashConversationMock).toHaveBeenCalledWith(7, expect.anything()));
+
+    await user.click(screen.getByRole("button", { name: "open 8" }));
+    await screen.findByText("Chat 8");
+    // Conversation 8 has nothing pending, so its button is live.
+    expect(screen.getByRole("button", { name: "Move to trash" })).not.toBeDisabled();
+
+    finishTrash();
+    await waitFor(() => expect(trashConversationMock.mock.results[0]?.type).toBe("return"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.getByText("Chat 8")).toBeInTheDocument();
+    expect(screen.queryByText("Conversations list")).not.toBeInTheDocument();
   });
 });

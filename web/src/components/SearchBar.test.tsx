@@ -2,13 +2,19 @@
 
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ComponentProps } from "react";
+import { type ComponentProps, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SearchBar from "./SearchBar";
 
+const recentsMock = vi.hoisted(() => ({ current: ["ada", "grace"] as string[] }));
+
 vi.mock("../lib/recentSearches", () => ({
-  loadRecentSearches: () => ["ada", "grace"],
-  pushRecentSearch: vi.fn(),
+  loadRecentSearches: () => recentsMock.current,
+  // As the real one does: the query moves to the front.
+  pushRecentSearch: vi.fn((_scope: string, q: string) => {
+    recentsMock.current = [q, ...recentsMock.current.filter((x) => x !== q)];
+    return recentsMock.current;
+  }),
   clearRecentSearches: vi.fn(),
 }));
 
@@ -51,6 +57,7 @@ describe("SearchBar", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     suggestionsMock.current = [];
+    recentsMock.current = ["ada", "grace"];
   });
 
   afterEach(() => {
@@ -82,6 +89,35 @@ describe("SearchBar", () => {
     await user.keyboard("{ArrowDown}{Enter}");
 
     expect(onSubmit).toHaveBeenCalledWith("ada");
+  });
+
+  it("runs the query the box shows when Enter is pressed a second time", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    function Controlled() {
+      const [value, setValue] = useState("");
+      return (
+        <SearchBar
+          value={value}
+          onChange={setValue}
+          onSubmit={onSubmit}
+          scope="contact"
+          list="contacts"
+          placeholder="Search contacts"
+          advancedMode="contacts"
+        />
+      );
+    }
+    render(<Controlled />);
+    const input = screen.getByRole("combobox", { name: "Search contacts" });
+
+    await user.click(input);
+    await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+    expect(onSubmit).toHaveBeenLastCalledWith("grace");
+    expect(input).toHaveValue("grace");
+
+    await user.keyboard("{Enter}");
+    expect(onSubmit).toHaveBeenLastCalledWith("grace");
   });
 
   it("submits the typed text when no row is highlighted", async () => {

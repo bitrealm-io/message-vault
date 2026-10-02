@@ -381,6 +381,35 @@ describe("ImportRunView", () => {
     expect(screen.getByText(/Media needs ffmpeg/)).toBeInTheDocument();
   });
 
+  it("shows on each review that the server did not record it, with approving still offered", () => {
+    const error = "Message Crate didn't record the run's progress: Failed to fetch";
+    renderView({
+      phase: "staging_review",
+      running: false,
+      steps: stepsAt("convert", { Staging: "done" }),
+      stagingSummary: staged(),
+      reviewWaiting: "staging",
+      reviewError: error,
+    });
+    const staging = within(stageRow(WAITING_STAGING));
+    expect(staging.getByRole("alert")).toHaveTextContent(error);
+    expect(staging.getByRole("button", { name: "Convert media" })).toBeEnabled();
+    cleanup();
+
+    renderView({
+      phase: "media_review",
+      running: false,
+      steps: stepsAt("convert", { Staging: "done", Media: "done" }),
+      stagingSummary: staged(),
+      mediaSummary: staged(),
+      reviewWaiting: "media",
+      reviewError: error,
+    });
+    const media = within(stageRow(WAITING_MEDIA));
+    expect(media.getByRole("alert")).toHaveTextContent(error);
+    expect(media.getByRole("button", { name: "Upload to Message Crate" })).toBeEnabled();
+  });
+
   it("drops the estimates when Media already ran partway", () => {
     renderView({
       phase: "staging_review",

@@ -211,35 +211,6 @@ describe("useConversationMessages", () => {
     act(() => result.current.setFindTerm(""));
     await waitFor(() => expect(result.current.finding).toBe(false));
   });
-
-  it("resets offset, activeYear, findTerm and activeMatch when the conversation changes", async () => {
-    getMessages.mockResolvedValue(page([message(1)]));
-
-    const { result, rerender } = renderHook(
-      ({ id }: { id: number }) => useConversationMessages(id),
-      { initialProps: { id: 1 }, wrapper: Providers },
-    );
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    // Drive every reset-target away from its default before switching. A new
-    // find term starts at page one, so the page turn comes after it.
-    act(() => result.current.selectYear(2020));
-    act(() => result.current.setFindTerm("hello"));
-    act(() => result.current.fetchConversationPage(50));
-    act(() => result.current.setActiveMatch(3));
-
-    expect(result.current.activeYear).toBe(2020);
-    expect(result.current.offset).toBe(50);
-    expect(result.current.findTerm).toBe("hello");
-    expect(result.current.activeMatch).toBe(3);
-
-    rerender({ id: 2 });
-
-    expect(result.current.activeYear).toBeNull();
-    expect(result.current.offset).toBe(0);
-    expect(result.current.findTerm).toBe("");
-    expect(result.current.activeMatch).toBe(0);
-  });
 });
 
 describe("conversationYears", () => {

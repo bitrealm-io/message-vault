@@ -105,10 +105,8 @@ function browseLinkClass(active: boolean): string {
 }
 
 export default function LeftPanel({
-  onSearchChange,
   browseQuery,
 }: {
-  onSearchChange: (v: string) => void;
   /**
    * The query the conversation list is showing right now, or "" when the
    * person is not looking at conversations. Export opens with it prefilled
@@ -325,10 +323,7 @@ export default function LeftPanel({
                   <div className={navGlyphRowClass(active)}>
                     <button
                       type="button"
-                      onClick={() => {
-                        onSearchChange(g.query);
-                        navigate(`/?q=${encodeURIComponent(g.query)}`);
-                      }}
+                      onClick={() => navigate(`/?q=${encodeURIComponent(g.query)}`)}
                       className={`${NAV_NESTED_ROW_CLASS} cursor-pointer border-none bg-transparent p-0 text-left text-inherit`}
                     >
                       <span className={NAV_LEADING_GLYPH_CLASS}>

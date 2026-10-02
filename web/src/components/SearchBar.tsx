@@ -152,6 +152,7 @@ export default function SearchBar({
     }
     setPopdownOpen(false);
     setShowAdvanced(false);
+    setActiveIndex(-1);
   };
 
   /** Autocomplete edits the query in place; it never runs the search. */
@@ -192,7 +193,10 @@ export default function SearchBar({
         })),
         ...(advancedMode ? [{ id: advancedOptionId(scope), run: openAdvanced }] : []),
       ];
-  const active = activeIndex >= 0 && activeIndex < options.length ? options[activeIndex] : null;
+  // A row counts as highlighted only while the popdown shows it. With the popdown
+  // closed, Enter submits the text in the box, not a row the reader cannot see.
+  const active =
+    popdownOpen && activeIndex >= 0 && activeIndex < options.length ? options[activeIndex] : null;
 
   const moveActive = (delta: number) => {
     if (!popdownOpen) {
@@ -221,7 +225,7 @@ export default function SearchBar({
           aria-expanded={popdownOpen}
           aria-controls={popdownId}
           aria-autocomplete="list"
-          aria-activedescendant={popdownOpen && active ? active.id : undefined}
+          aria-activedescendant={active ? active.id : undefined}
           onChange={(e) => {
             onChange(e.target.value);
             setActiveIndex(-1);

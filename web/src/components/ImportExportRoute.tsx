@@ -6,6 +6,7 @@ import {
   type ImportExportFeature,
   importExportBlock,
 } from "../lib/desktopFeatures";
+import { desktopJobRunningText } from "../lib/desktopJob";
 import { isTauri } from "../lib/tauri-check";
 import { useAccountProfile } from "../lib/useAccountProfile";
 import { useImportRunState } from "../screens/import/importRunStore";
@@ -95,6 +96,19 @@ export default function ImportExportRoute({
   }
   if (block) {
     return <PermissionMessage feature={feature} block={block} />;
+  }
+  // The desktop runs one job at a time, and an Import Run starts its stages'
+  // jobs one after another. An export started between two of them would make
+  // the desktop refuse the next stage, so Export waits for the run to end.
+  if (feature === "export" && run.running) {
+    return (
+      <div className="max-w-[700px] p-6">
+        <h2 className="m-0 mb-6">{TITLE[feature]}</h2>
+        <p role="status" className="m-0 text-[0.875rem] text-muted">
+          {desktopJobRunningText("Import Run", TITLE[feature])}
+        </p>
+      </div>
+    );
   }
   // The chunk only starts loading once the route is allowed, so the message
   // and the redirect paths above never pay for it.

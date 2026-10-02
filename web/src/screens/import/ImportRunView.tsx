@@ -86,22 +86,39 @@ function ReviewActions({
   onCancelRun,
   busy,
   approveDisabled,
+  error,
 }: {
   approveLabel: string;
   onApprove: () => void;
   onCancelRun: () => void;
   busy?: boolean;
   approveDisabled?: boolean;
+  /** The server did not record that the run reached this review. */
+  error?: string | null;
 }) {
   return (
-    <div className="mt-1 flex flex-wrap items-center gap-3">
-      <Button variant="primary" size="wide" onClick={onApprove} disabled={busy || approveDisabled}>
-        {approveLabel}
-      </Button>
-      <Button onClick={onCancelRun} disabled={busy}>
-        Cancel this import
-      </Button>
-    </div>
+    <>
+      {error ? (
+        <p className="m-0 text-[0.813rem] text-danger" role="alert">
+          {error}
+          <br />
+          Approving records this review again first.
+        </p>
+      ) : null}
+      <div className="mt-1 flex flex-wrap items-center gap-3">
+        <Button
+          variant="primary"
+          size="wide"
+          onClick={onApprove}
+          disabled={busy || approveDisabled}
+        >
+          {approveLabel}
+        </Button>
+        <Button onClick={onCancelRun} disabled={busy}>
+          Cancel this import
+        </Button>
+      </div>
+    </>
   );
 }
 
@@ -186,6 +203,7 @@ export default function ImportRunView({
   mediaPartiallyRan,
   identityPanel,
   reviewBusy,
+  reviewError,
   onApprove,
   onCancelRun,
   onCancel,
@@ -225,6 +243,8 @@ export default function ImportRunView({
   /** The backup's identities, composed by the caller (omit to hide). */
   identityPanel?: ReactNode;
   reviewBusy?: boolean;
+  /** The server did not record that the run reached the review on screen. */
+  reviewError?: string | null;
   onApprove: () => void;
   /** Cancel the run from a review: the run ends and what was staged is deleted. */
   onCancelRun: () => void;
@@ -357,6 +377,7 @@ export default function ImportRunView({
           onCancelRun={onCancelRun}
           busy={reviewBusy}
           approveDisabled={toolsBlocked}
+          error={reviewError}
         />
       </WaitingBody>
     );
@@ -389,6 +410,7 @@ export default function ImportRunView({
           onApprove={onApprove}
           onCancelRun={onCancelRun}
           busy={reviewBusy}
+          error={reviewError}
         />
       </WaitingBody>
     );

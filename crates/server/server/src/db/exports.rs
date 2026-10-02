@@ -461,7 +461,7 @@ pub async fn export_messages(
             SqlParam::Int(through),
         ],
         &format!("e.row_order {}", direction.sql()),
-        opts.limit as u32,
+        opts.limit,
         0,
     )
     .await?;

@@ -32,9 +32,7 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
         bail!("output directory is required");
     }
     let report = convert_export(input, config)?;
-    Ok(RunResult {
-        messages: report.log_lines(),
-    })
+    Ok(RunResult::new(report.log_lines(), &report.report))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

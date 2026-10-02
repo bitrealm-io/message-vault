@@ -334,6 +334,38 @@ async fn openapi_ui_on_serves_spec_without_token() {
     assert!(v["openapi"].as_str().unwrap().starts_with("3."));
 }
 
+/// The OpenAPI document and the Swagger UI are wrapped by the same layers as
+/// every other route: a request id and the CORS headers for an allowed origin.
+/// `/docs/` is asked for the way a browser asks for a page, so the `Accept`
+/// check that guards `/v1` must not refuse it.
+#[tokio::test]
+async fn openapi_ui_routes_carry_a_request_id_and_cors_headers() {
+    let (_dir, mut state, _token, _import_id) = test_state().await;
+    {
+        let cfg = Arc::make_mut(&mut state.cfg);
+        cfg.server.as_mut().unwrap().openapi_ui = true;
+    }
+    let origin = "http://localhost:5173";
+    let state = with_cors(state, &[origin]);
+    let server = crate::test_support::serve(&state).await;
+    let client = reqwest::Client::new();
+    for path in ["/openapi.json", "/docs/"] {
+        let response = client
+            .get(format!("{}{path}", server.base()))
+            .header("Origin", origin)
+            .header(header::ACCEPT, "text/html")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "{path}");
+        assert!(
+            response.headers().contains_key(crate::request_id::HEADER),
+            "{path} carries no request id"
+        );
+        assert_eq!(allow_origin(&response), Some(origin), "{path}");
+    }
+}
+
 #[tokio::test]
 async fn imports_complete_and_detail_surface_timings_and_issues() {
     let (_dir, state, token, import_id) = test_state().await;

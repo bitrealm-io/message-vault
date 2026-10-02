@@ -13,6 +13,8 @@ use std::path::Path;
 fn to_core_report(report: ReadReport) -> ExportReport {
     let mut out = ExportReport {
         conversations: report.conversations,
+        // Every message in a produced document is either sent or received.
+        messages: report.sent + report.received,
         sent: report.sent,
         received: report.received,
         attachments_saved: report.attachments_saved,

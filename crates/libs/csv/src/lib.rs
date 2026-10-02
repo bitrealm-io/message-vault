@@ -43,8 +43,8 @@ impl From<AttachmentCell> for message_ir::IrAttachment {
             is_sticker,
             transcription,
             sticker_effect,
-            size_bytes: None,
-            missing_reason: None,
+            size_bytes: meta.size_bytes,
+            missing_reason: meta.missing_reason,
             bytes: None,
         }
     }

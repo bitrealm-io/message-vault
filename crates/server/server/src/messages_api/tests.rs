@@ -53,6 +53,24 @@ async fn seeded() -> (TestFixture, RegisteredAccount, i64, i64) {
         },
     )
     .await;
+    // A group's chat id is not a person, so the group's participant is a
+    // member of its own.
+    let mut conn = fixture.state.db.acquire().await.unwrap();
+    let member: i64 = sqlx::query_scalar(
+        "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
+         VALUES ($1, '+15555550200', '+15555550200', 'phone', 'phone') RETURNING id",
+    )
+    .bind(alice.account_id)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO participants (conversation_id, handle_id) VALUES ($1, $2)")
+        .bind(group)
+        .bind(member)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    drop(conn);
     seed_conversation(
         &fixture.state,
         &SeedConversation {
@@ -116,7 +134,7 @@ async fn a_page_across_two_conversations_names_each_conversations_own_participan
         [
             (direct, "+15555550100"),
             (direct, "+15555550100"),
-            (group, "chat100"),
+            (group, "+15555550200"),
         ]
     );
 }

@@ -25,7 +25,10 @@
 //! that recorded the thread's address and nothing about who was in it.
 //! [`load_for_conversations`] answers for that shape too, from the
 //! conversation's own chat handle, so a caller never has to know the shape
-//! exists or carry a second naming path of its own. Reading one conversation's
+//! exists or carry a second naming path of its own. Only a one-to-one
+//! conversation's chat handle is a person's address; a group's chat handle is
+//! the group's own id, such as `chat1000000005`, so a group with no
+//! participants rows has no participants. Reading one conversation's
 //! messages and listing conversations therefore name the same person the same
 //! way; while the fallback lived beside the list, a message page showed no one
 //! at all for such a thread.
@@ -119,6 +122,12 @@ async fn load_participant_rows(
 /// The chat handle of each conversation in `conversation_ids` as its sole
 /// participant, for conversations that have no participants rows at all.
 ///
+/// Only a one-to-one (`individual`) conversation's chat handle is a person
+/// (`docs/architecture/contacts-identities-and-messages.md`, "A group
+/// conversation is not a person"). Any other conversation type is left out,
+/// so it has no participants. The type is compared without case, as the import
+/// compares it when it decides whether the chat handle gets a contact.
+///
 /// Same rule, one clause shorter: with no participants row there is no
 /// per-conversation backup name, so it is the Contact's name, else the handle.
 /// The Contact is reached through `contact_handles` exactly as above, so a
@@ -151,7 +160,8 @@ async fn load_from_chat_handle(
                  LEFT JOIN contacts c
                    ON c.id = ch.contact_id AND c.account_id = conv.account_id
                   AND {NOT_TRASHED}
-                 WHERE conv.id IN ({placeholders})"
+                 WHERE conv.id IN ({placeholders})
+                   AND conv.conversation_type = 'individual' COLLATE NOCASE"
             )
         },
         participant_row,

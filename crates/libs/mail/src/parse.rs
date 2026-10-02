@@ -18,6 +18,8 @@ struct AttachmentMetaCell {
     transcription: Option<String>,
     sticker_effect: Option<String>,
     digest_sha256: Option<String>,
+    size_bytes: Option<u64>,
+    missing_reason: Option<String>,
 }
 
 /// Parse one RFC 5322 / MIME message (EML bytes) into [`MailMessage`].
@@ -121,7 +123,7 @@ pub fn mail_message_from_eml_bytes(bytes: &[u8]) -> Result<MailMessage> {
             message_kind,
             sender_handle,
             sender_display_name,
-            owner_handle: None,
+            owner_handle: optional_header(headers, hn::MESSAGE_OWNER_HANDLE),
             subject,
             text,
             // Attachment payloads live in `MailMessage::attachments`; readers
@@ -294,6 +296,8 @@ fn merge_attachments(mail: &ParsedMail<'_>, headers: &[MailHeader<'_>]) -> Vec<M
                 original_name: m.and_then(|c| c.original_name.clone()).or(name_fallback),
                 mime_type: m.and_then(|c| c.mime_type.clone()).or(mime_fallback),
                 digest_sha256: m.and_then(|c| c.digest_sha256.clone()),
+                size_bytes: m.and_then(|c| c.size_bytes),
+                missing_reason: m.and_then(|c| c.missing_reason.clone()),
             },
             is_sticker: m.is_some_and(|c| c.is_sticker),
             transcription: m.and_then(|c| c.transcription.clone()),
@@ -469,6 +473,8 @@ mod tests {
                     original_name: Some("photo.jpg".into()),
                     mime_type: Some("image/jpeg".into()),
                     digest_sha256: Some("deadbeef".into()),
+                    size_bytes: Some(13),
+                    missing_reason: None,
                 },
                 is_sticker: true,
                 transcription: Some("a beach".into()),
@@ -516,6 +522,7 @@ mod tests {
         assert_eq!(att.meta.original_name.as_deref(), Some("photo.jpg"));
         assert_eq!(att.meta.mime_type.as_deref(), Some("image/jpeg"));
         assert_eq!(att.meta.digest_sha256.as_deref(), Some("deadbeef"));
+        assert_eq!(att.meta.size_bytes, Some(13));
         assert!(att.is_sticker);
         assert_eq!(att.transcription.as_deref(), Some("a beach"));
         assert_eq!(att.sticker_effect.as_deref(), Some("stroke"));
@@ -531,6 +538,8 @@ mod tests {
                 original_name: Some(name.into()),
                 mime_type: Some(mime.into()),
                 digest_sha256: None,
+                size_bytes: None,
+                missing_reason: None,
             },
             is_sticker: false,
             transcription: None,

@@ -763,12 +763,10 @@ async fn stream_file(path: &Path, mime_type: Option<String>) -> Result<Response,
         header::CONTENT_DISPOSITION,
         header::HeaderValue::from_static("attachment; filename=\"asset\""),
     );
-    if meta.len() > 0 {
-        headers_mut.insert(
-            header::CONTENT_LENGTH,
-            header::HeaderValue::from(meta.len()),
-        );
-    }
+    headers_mut.insert(
+        header::CONTENT_LENGTH,
+        header::HeaderValue::from(meta.len()),
+    );
     Ok(response)
 }
 
@@ -845,18 +843,11 @@ pub(crate) async fn replace_asset(
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_nanos())
     ));
-    let n = match stream_body_to_file(request.into_body(), &tmp_path, max_body_bytes).await {
-        Ok(n) => n,
-        Err(err) => {
-            let _ = tokio::fs::remove_file(&tmp_path).await;
-            return Err(err);
-        }
-    };
-    if n == 0 {
+    // An empty body is checked like any other: the empty file is stored when
+    // the claim is its fingerprint and refused when it is not.
+    if let Err(err) = stream_body_to_file(request.into_body(), &tmp_path, max_body_bytes).await {
         let _ = tokio::fs::remove_file(&tmp_path).await;
-        return Err(ApiError::AssetUploadInvalid(
-            "the body is empty, so it does not hash to the claimed sha256".into(),
-        ));
+        return Err(err);
     }
 
     let sha = sha256.clone();

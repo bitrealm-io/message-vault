@@ -21,11 +21,11 @@ use message_ir_format::{EXPORT_SENTINEL, read_conversation_jsonl};
 use serde_json::{Value, json};
 use tempfile::tempdir;
 
-/// Fingerprint of the menu attachment. The pull never hashes what it
-/// downloads, so any 64 hex characters name an asset.
-const MENU_SHA: &str = "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a";
-/// Fingerprint of the photo attachment, which the server sends without a path.
-const PHOTO_SHA: &str = "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b";
+/// SHA-256 of [`MENU_BYTES`], the menu attachment's fingerprint.
+const MENU_SHA: &str = "9170c75b5d7058e5075b811f12e88ef3e7b0bd9018ff8b52bead945b6b1219f7";
+/// SHA-256 of [`PHOTO_BYTES`], the fingerprint of the photo attachment, which
+/// the server sends without a path.
+const PHOTO_SHA: &str = "be04c407026cf352d54a051993ef2fec8153cc554f8ff7c697b225c87a6e5e03";
 /// 13 bytes.
 const MENU_BYTES: &[u8] = b"%PDF-1.4 menu";
 /// 9 bytes.
@@ -260,6 +260,7 @@ fn report_for(out_dir: &Path, downloaded: u64, skipped: u64) -> PullReport {
         messages: 3,
         attachments_downloaded: downloaded,
         attachments_skipped: skipped,
+        refused_attachment_paths: Vec::new(),
         out_dir: out_dir.display().to_string(),
     }
 }
@@ -322,6 +323,92 @@ fn a_pull_records_one_run_and_writes_the_conversation_and_every_asset_once_acros
         doc.messages[1].attachments[0].path.as_deref(),
         Some(format!("attachments/{PHOTO_SHA}").as_str())
     );
+}
+
+/// The server can hold an attachment path that climbs out of a folder or
+/// names an absolute one, because an import that reuses a stored fingerprint
+/// never read the file at that path. Joined onto the output folder, such a
+/// path would write the download anywhere on disk. Each one is refused: the
+/// file lands at `attachments/{sha256}`, the conversation file names that
+/// path, and the report and the log name the refused path.
+#[test]
+fn an_attachment_path_that_leaves_the_output_folder_is_written_under_its_fingerprint_instead() {
+    let server = MockServer::start();
+    let _auth = mock_auth(&server);
+    let (_create, complete) = mock_run(&server);
+    let dir = tempdir().unwrap();
+    let out = dir.path().join("pulled");
+    let climbing = "../escape.pdf";
+    let absolute = dir.path().join("absolute.png").display().to_string();
+    let page = server.mock(|when, then| {
+        when.method(GET)
+            .path(format!("/v1/exports/{EXPORT_ID}/messages"))
+            .query_param("offset", "0");
+        then.status(200).json_body(json!({
+            "items": [
+                message(
+                    1, "sms-backup-restore", "guid-1", "2015-03-12T18:05:01Z", "the menu",
+                    json!([menu_attachment(json!(climbing))])
+                ),
+                message(
+                    2, "sms-backup-restore", "guid-2", "2015-03-12T18:05:02Z", "the photo",
+                    json!([{
+                        "path": absolute,
+                        "original_name": "photo.png",
+                        "mime_type": "image/png",
+                        "sha256": PHOTO_SHA
+                    }])
+                )
+            ],
+            "total": 2,
+            "limit": 2,
+            "offset": 0
+        }));
+    });
+    let _menu = mock_asset(&server, MENU_SHA, "sms-backup-restore", MENU_BYTES);
+    let _photo = mock_asset(&server, PHOTO_SHA, "sms-backup-restore", PHOTO_BYTES);
+    let mut events = Vec::new();
+    let mut on_progress = |event: ProgressEvent| events.push(event);
+
+    let report = run(&config(&out, server.base_url()), Some(&mut on_progress)).unwrap();
+
+    page.assert();
+    complete.assert();
+    assert!(!dir.path().join("escape.pdf").exists());
+    assert!(!dir.path().join("absolute.png").exists());
+    assert_eq!(
+        fs::read(out.join("attachments").join(MENU_SHA)).unwrap(),
+        MENU_BYTES
+    );
+    assert_eq!(
+        fs::read(out.join("attachments").join(PHOTO_SHA)).unwrap(),
+        PHOTO_BYTES
+    );
+    let doc = read_conversation_jsonl(&out.join(CONVERSATION_FILE)).unwrap();
+    let written: Vec<Option<&str>> = doc
+        .messages
+        .iter()
+        .map(|m| m.attachments[0].path.as_deref())
+        .collect();
+    assert_eq!(
+        written,
+        [
+            Some(format!("attachments/{MENU_SHA}").as_str()),
+            Some(format!("attachments/{PHOTO_SHA}").as_str()),
+        ]
+    );
+    let mut refused = vec![climbing.to_string(), absolute.clone()];
+    refused.sort();
+    assert_eq!(report.refused_attachment_paths, refused);
+    for (path, sha) in [(climbing, MENU_SHA), (absolute.as_str(), PHOTO_SHA)] {
+        let line = format!(
+            "warning: attachment path {path} would leave the output folder; written at attachments/{sha} instead"
+        );
+        assert!(
+            events.contains(&ProgressEvent::Log(line.clone())),
+            "the log names {path}: {events:?}"
+        );
+    }
 }
 
 #[test]
@@ -677,6 +764,59 @@ fn an_asset_the_server_does_not_have_fails_the_run_and_cancels_it_on_the_server(
     assert!(!out.join("attachments/menu.pdf").exists());
     assert!(!out.join(CONVERSATION_FILE).exists());
     let state = journal::load(&journal::journal_path(&out), &server.base_url(), "alice").unwrap();
+    assert!(!state.backup_complete);
+}
+
+/// An access proxy whose session has expired answers the asset request with
+/// its login page and `200 OK`. Those bytes are not the photo, so the run
+/// fails naming the photo's fingerprint, and nothing at the photo's path or in
+/// the journal lets a later run skip it.
+#[test]
+fn bytes_whose_sha256_is_not_the_one_asked_for_fail_the_run_and_are_not_kept() {
+    let server = MockServer::start();
+    let _auth = mock_auth(&server);
+    let (create, complete) = mock_run(&server);
+    let cancel = mock_cancel(&server);
+    let _pages = mock_pages(&server, "sms-backup-restore");
+    let _menu = mock_asset(&server, MENU_SHA, "sms-backup-restore", MENU_BYTES);
+    let photo = mock_asset(
+        &server,
+        PHOTO_SHA,
+        "sms-backup-restore",
+        b"<html><body>Sign in to continue</body></html>",
+    );
+    let dir = tempdir().unwrap();
+    let out = dir.path().join("pulled");
+
+    let error = run(&config(&out, server.base_url()), None).unwrap_err();
+
+    let message = error.to_string();
+    assert!(
+        message.starts_with("asset download failed: ") && message.contains(PHOTO_SHA),
+        "{message}"
+    );
+    assert_eq!(
+        photo.calls(),
+        1,
+        "the same answer would come back, so it is not retried"
+    );
+    create.assert();
+    cancel.assert();
+    assert_eq!(complete.calls(), 0);
+    let photo_path = out.join("attachments").join(PHOTO_SHA);
+    assert!(
+        !photo_path.exists(),
+        "the login page is not kept as the photo"
+    );
+    assert!(
+        !photo_path.with_extension("part").exists(),
+        "the .part file is removed"
+    );
+    let state = journal::load(&journal::journal_path(&out), &server.base_url(), "alice").unwrap();
+    assert!(
+        !state.assets.contains(PHOTO_SHA),
+        "the photo is not journalled"
+    );
     assert!(!state.backup_complete);
 }
 

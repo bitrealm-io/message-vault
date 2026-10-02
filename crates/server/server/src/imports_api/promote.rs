@@ -53,9 +53,11 @@ pub(super) async fn promote_append(
     promote.promote_conversations().await?;
     promote.promote_participants().await?;
     let messages_before = promote.promote_messages().await?;
-    promote.promote_attachments().await?;
+    let attachments_before = promote.promote_attachments().await?;
     promote.promote_tapbacks().await?;
-    promote.index_fts(messages_before).await?;
+    promote
+        .index_fts(messages_before, attachments_before)
+        .await?;
     if fill_content_keys {
         promote.fill_content_keys().await?;
     }
@@ -335,8 +337,12 @@ impl Promote<'_> {
     }
 
     /// Insert the staged attachments under their production messages.
-    async fn promote_attachments(&mut self) -> Result<()> {
+    /// Returns the highest attachment id that existed before the insert:
+    /// every new row lands above it, which is how [`Self::index_fts`] finds
+    /// the existing messages that gained an attachment.
+    async fn promote_attachments(&mut self) -> Result<i64> {
         let phase = Self::begin("bulk-inserting attachments…");
+        let attachments_before = staging::max_attachment_id(self.tx).await?;
         let promoted = staging::promote_attachments(self.tx).await?;
         self.stats.attachments = promoted.inserted;
         self.done(
@@ -346,7 +352,7 @@ impl Promote<'_> {
                 promoted.inserted, promoted.filled
             ),
         );
-        Ok(())
+        Ok(attachments_before)
     }
 
     /// Insert the staged tapbacks under their production messages.
@@ -360,11 +366,18 @@ impl Promote<'_> {
         Ok(())
     }
 
-    /// Index the new messages (those above `messages_before`) for full-text
-    /// search in one pass, then put the per-row triggers back.
-    async fn index_fts(&mut self, messages_before: i64) -> Result<()> {
+    /// Index the new messages (those above `messages_before`) and the
+    /// existing messages that gained an attachment (one above
+    /// `attachments_before`) for full-text search in one pass, then put the
+    /// per-row triggers back.
+    async fn index_fts(&mut self, messages_before: i64, attachments_before: i64) -> Result<()> {
         let phase = Self::begin("bulk-indexing FTS for new messages…");
-        let indexed = schema::index_messages_fts_from_promote_map(self.tx, messages_before).await?;
+        let indexed = schema::index_messages_fts_from_promote_map(
+            self.tx,
+            messages_before,
+            attachments_before,
+        )
+        .await?;
         schema::install_messages_fts_triggers(self.tx).await?;
         self.done(phase, format!("FTS indexed={indexed} (triggers restored)"));
         Ok(())

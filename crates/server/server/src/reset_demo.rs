@@ -15,7 +15,7 @@ use anyhow::{Context, Result, bail};
 use demo_seed::DemoSize;
 use message_ir::HandleType;
 use serde::Deserialize;
-use sqlx::Row;
+use sqlx::{Row, SqlitePool};
 
 use crate::config::Config;
 use crate::db::account_profile;
@@ -24,7 +24,7 @@ use crate::db::dialect;
 use crate::db::engine;
 use crate::db::schema;
 use crate::dedupe;
-use crate::imports_api::{self, ImportExportArgs, ImportMode};
+use crate::imports_api::{self, FixedImportArgs, ImportMode, ImportOptions, ImportSchemaMode};
 use crate::open_db::OpenDb;
 use crate::process_assets::{self, ProcessAssetsOptions};
 
@@ -136,27 +136,31 @@ fn print_reset_header(account_id: i64, prepared: &PreparedBundle, db: &dyn std::
     println!("  db:           {db}");
 }
 
-/// Shared post-import tail: fill dedupe content keys, convert media, and warn
-/// (but continue) when some attachments fail conversion.
+/// Shared post-import tail: fill dedupe content keys, convert the account's
+/// media, and warn (but continue) when some attachments fail conversion.
+/// Only `account_id` is converted: on a running server every other account
+/// is someone's, with Uploads of its own in progress.
 async fn dedupe_and_process_assets(
     cfg: &Config,
+    db: &SqlitePool,
     account_id: i64,
-    target: &Path,
 ) -> Result<(dedupe::DedupeStats, process_assets::ProcessAssetsStats)> {
-    let opened = OpenDb::open(cfg.clone().with_db_override(Some(target.to_path_buf()))).await?;
     let dedupe_stats = {
-        let mut conn = opened.conn().await?;
+        let mut conn = db.acquire().await?;
         dedupe::dedupe_cross_source(&mut conn, account_id, None, 2).await?
     };
     // Demo Data holds only formats every browser shows as they are, so the
     // preview pass is an improvement and not a need. Without ffmpeg it would
     // fail once per attachment; say so once instead (#1018).
     if !media::ffmpeg_available() {
-        opened.close().await;
         println!("Reset demo — ffmpeg not found; demo attachments stay as written");
         return Ok((dedupe_stats, process_assets::ProcessAssetsStats::default()));
     }
     println!("Reset demo — processing prepared assets");
+    let opened = OpenDb {
+        cfg: cfg.clone(),
+        db: db.clone(),
+    };
     let process_stats = process_assets::run(
         &opened,
         &ProcessAssetsOptions {
@@ -166,11 +170,11 @@ async fn dedupe_and_process_assets(
             skip_video: false,
             skip_audio: false,
             source: None,
+            account: Some(account_id),
         },
     )
     .await
     .context("process-assets after prepared demo import")?;
-    opened.close().await;
     if let Some(warning) = conversion_warning(process_stats.errors) {
         eprintln!("warning: {warning}");
     }
@@ -293,7 +297,15 @@ async fn seed_new_database_with<G>(cfg: &Config, generate: G) -> Option<u64>
 where
     G: FnOnce(&Path) -> Result<()>,
 {
-    match build_demo_account_with(cfg, generate).await {
+    let built = match OpenDb::open(cfg.clone()).await {
+        Ok(opened) => {
+            let built = build_demo_account_with(cfg, &opened.db, generate).await;
+            opened.close().await;
+            built
+        }
+        Err(error) => Err(error),
+    };
+    match built {
         Ok(messages) => Some(messages),
         Err(error) => {
             eprintln!("warning: could not add the Demo Account: {error:#}");
@@ -315,16 +327,18 @@ pub fn generate_bundle(size: DemoSize, bundle: &Path) -> Result<()> {
     demo_seed::generate_size_to(size, bundle).map(|_| ())
 }
 
-/// Build the Demo Account in the database `cfg` names while the server is
+/// Build the Demo Account in the server's database `db` while the server is
 /// serving it: the Owner Home action. The account is removed and built again,
-/// in the live database, and no other account is touched. Returns the number
-/// of messages imported.
+/// in the live database, and no other account is touched. Each source is
+/// imported in batches, each its own transaction, so another account's write
+/// waits for one batch at most. Returns the number of messages imported.
 ///
 /// # Errors
 ///
 /// Returns an error when generation, import or media processing fails; the
 /// partly built Demo Account is removed first.
 pub async fn build_demo_account(
+    db: SqlitePool,
     cfg: std::sync::Arc<Config>,
     size: DemoSize,
     generate: BundleGenerator,
@@ -339,15 +353,15 @@ pub async fn build_demo_account(
             .await
             .context("the demo bundle generator stopped")?
             .context("generate demo bundle (demo-seed)")?;
-        seed_new_database_from_bundle(&cfg, &bundle).await
+        build_from_bundle(&cfg, &db, &bundle).await
     }
     .await;
-    whole_demo_account_or_none(&cfg, outcome).await
+    whole_demo_account_or_none(&cfg, &db, outcome).await
 }
 
 /// Generate a bundle with `generate` and build the Demo Account from it in
-/// the database `cfg` names.
-async fn build_demo_account_with<G>(cfg: &Config, generate: G) -> Result<u64>
+/// the database `db`, the one `cfg` names.
+async fn build_demo_account_with<G>(cfg: &Config, db: &SqlitePool, generate: G) -> Result<u64>
 where
     G: FnOnce(&Path) -> Result<()>,
 {
@@ -355,10 +369,10 @@ where
         let work = tempfile::tempdir().context("create temporary demo bundle directory")?;
         let bundle = work.path().join("bundle");
         generate(&bundle).context("generate demo bundle (demo-seed)")?;
-        seed_new_database_from_bundle(cfg, &bundle).await
+        build_from_bundle(cfg, db, &bundle).await
     }
     .await;
-    whole_demo_account_or_none(cfg, outcome).await
+    whole_demo_account_or_none(cfg, db, outcome).await
 }
 
 /// The number of messages a build imported. When the build failed, the
@@ -366,12 +380,13 @@ where
 /// Demo Account or none.
 async fn whole_demo_account_or_none(
     cfg: &Config,
+    db: &SqlitePool,
     outcome: Result<ResetPreparedStats>,
 ) -> Result<u64> {
     match outcome {
         Ok(stats) => Ok(stats.import.messages),
         Err(error) => {
-            if let Err(error) = wipe_demo_account(cfg, DEMO_ACCOUNT_ID, &cfg.paths.db).await {
+            if let Err(error) = wipe_demo_account(cfg, db, DEMO_ACCOUNT_ID).await {
                 eprintln!("warning: could not remove the partly added Demo Account: {error:#}");
             }
             Err(error)
@@ -379,16 +394,17 @@ async fn whole_demo_account_or_none(
     }
 }
 
-/// Build the Demo Account in the database `cfg` names from the bundle at
-/// `bundle`. There is nothing to snapshot or swap: this writes to the
-/// database directly, touching the Demo Account alone, and leaves the config
-/// file as it is.
-async fn seed_new_database_from_bundle(cfg: &Config, bundle: &Path) -> Result<ResetPreparedStats> {
+/// Build the Demo Account in the database `db`, the one `cfg` names, from
+/// the bundle at `bundle`. There is nothing to snapshot or swap: this writes
+/// to the database directly, touching the Demo Account alone, and leaves the
+/// config file as it is.
+async fn build_from_bundle(
+    cfg: &Config,
+    db: &SqlitePool,
+    bundle: &Path,
+) -> Result<ResetPreparedStats> {
     let prepared = validate_prepared_bundle(bundle)?;
-    let parent = parent_dir_or_cwd(&cfg.paths.db);
-    fs::create_dir_all(parent)
-        .with_context(|| format!("create database parent {}", parent.display()))?;
-    rebuild_demo_account(cfg, &prepared, DEMO_ACCOUNT_ID, &cfg.paths.db).await
+    rebuild_demo_account(cfg, db, &prepared, DEMO_ACCOUNT_ID).await
 }
 
 /// Copy the bundle's config into place and reset the account by the
@@ -443,7 +459,7 @@ async fn reset_prepared_bundle(
 ) -> Result<ResetPreparedStats> {
     let prepared = validate_prepared_bundle(bundle)?;
     let _operation_lock = crate::operation_lock::acquire_for_reset(&cfg.paths.db)?;
-    crate::operation_lock::clear_ready(&cfg.paths.db)?;
+    let mut ready = crate::operation_lock::ReadyWhileRebuilding::clear(&cfg.paths.db)?;
     let db_parent = parent_dir_or_cwd(&cfg.paths.db);
     fs::create_dir_all(db_parent)
         .with_context(|| format!("create database parent {}", db_parent.display()))?;
@@ -462,7 +478,11 @@ async fn reset_prepared_bundle(
     let mut temporary_cfg = cfg.clone();
     temporary_cfg.paths.db = prepared_db.clone();
     temporary_cfg.paths.data_dir = data_work.path().to_path_buf();
-    let stats = rebuild_demo_account(&temporary_cfg, &prepared, account_id, &prepared_db).await?;
+    let opened = OpenDb::open(temporary_cfg.clone()).await?;
+    let stats = rebuild_demo_account(&temporary_cfg, &opened.db, &prepared, account_id).await;
+    // Closed before anything checks, checkpoints or renames the file.
+    opened.close().await;
+    let stats = stats?;
 
     verify_non_demo_state_preserved(&cfg.paths.db, &prepared_db, account_id).await?;
     let active_account = cfg.paths.data_dir.join(account_id.to_string());
@@ -475,18 +495,21 @@ async fn reset_prepared_bundle(
         active_config: config_dest,
         prepared_config,
     };
-    install_reset_state_or_keep_work(&paths, db_work, data_work).await?;
-    crate::operation_lock::mark_ready(&cfg.paths.db)?;
+    install_reset_state_or_keep_work(&paths, db_work, data_work, &mut ready).await?;
+    ready.mark_ready()?;
     Ok(stats)
 }
 
 /// Swap the prepared state in. When the swap fails and its rollback left any
 /// of the previous state in the work directories, keep those directories on
-/// disk and name them in the error so nothing is lost.
+/// disk, name them in the error so nothing is lost, and leave `server.ready`
+/// removed, since the active state is not whole. Every other failure here
+/// leaves the previous state installed, and `ready` writes the marker back.
 async fn install_reset_state_or_keep_work(
     paths: &ResetPaths<'_>,
     db_work: tempfile::TempDir,
     data_work: tempfile::TempDir,
+    ready: &mut crate::operation_lock::ReadyWhileRebuilding,
 ) -> Result<()> {
     let Err(error) = install_reset_state(paths).await else {
         return Ok(());
@@ -496,6 +519,7 @@ async fn install_reset_state_or_keep_work(
         || data_work.path().join("previous-account").exists()
         || config_backup.exists();
     if previous_state_still_in_work {
+        ready.keep_cleared();
         let db_work = db_work.keep();
         let data_work = data_work.keep();
         return Err(error.context(format!(
@@ -508,22 +532,24 @@ async fn install_reset_state_or_keep_work(
 }
 
 /// Wipe, seed, import, load the address book, dedupe, convert media, and
-/// vacuum the demo account on the database file `target`. A new database and a reset both run exactly
-/// this; what differs is what the caller does around it (a reset snapshots
-/// the database first and swaps it in after).
+/// vacuum the demo account in the database `db`, the one `cfg` names. A new
+/// database, a reset and a build on a running server all run exactly this;
+/// what differs is what the caller does around it (a reset snapshots the
+/// database first and swaps it in after). Every step uses `db`, so on a
+/// running server the build shares the server's pool.
 async fn rebuild_demo_account(
     cfg: &Config,
+    db: &SqlitePool,
     prepared: &PreparedBundle,
     account_id: i64,
-    target: &Path,
 ) -> Result<ResetPreparedStats> {
-    wipe_demo_account(cfg, account_id, target).await?;
-    print_reset_header(account_id, prepared, &target.display());
-    seed_demo_account(target, account_id, &prepared.seed).await?;
-    let import = import_demo_sources(cfg, prepared, account_id, target).await?;
-    let address_book = load_demo_address_book(prepared, account_id, target).await?;
-    let (dedupe_stats, process_stats) = dedupe_and_process_assets(cfg, account_id, target).await?;
-    vacuum_after_demo(target).await;
+    wipe_demo_account(cfg, db, account_id).await?;
+    print_reset_header(account_id, prepared, &cfg.paths.db.display());
+    seed_demo_account(db, account_id, &prepared.seed).await?;
+    let import = import_demo_sources(cfg, db, prepared, account_id).await?;
+    let address_book = load_demo_address_book(db, prepared, account_id).await?;
+    let (dedupe_stats, process_stats) = dedupe_and_process_assets(cfg, db, account_id).await?;
+    vacuum_after_demo(db).await;
     Ok(ResetPreparedStats {
         import,
         address_book,
@@ -532,27 +558,130 @@ async fn rebuild_demo_account(
     })
 }
 
+/// The most JSONL a build imports in one transaction: what an Upload sends
+/// in one request, `message_crate_push::MAX_IMPORT_BODY_BYTES` (64 MiB).
+/// Every other write on the server waits for the transaction, so it waits
+/// for one batch at most.
+const IMPORT_BATCH_BYTES: u64 = 64 * 1024 * 1024;
+
+/// Group `paths`, in order, into batches whose sizes add up to `limit` bytes
+/// or less. A file larger than `limit` is a batch of its own, because a
+/// conversation file is never split.
+///
+/// # Errors
+///
+/// Returns an error when a file's size cannot be read.
+fn import_batches(paths: Vec<PathBuf>, limit: u64) -> Result<Vec<Vec<PathBuf>>> {
+    let mut batches: Vec<Vec<PathBuf>> = Vec::new();
+    let mut batch_bytes = 0u64;
+    for path in paths {
+        let bytes = fs::metadata(&path)
+            .with_context(|| format!("read the size of {}", path.display()))?
+            .len();
+        match batches.last_mut() {
+            Some(batch) if batch_bytes.saturating_add(bytes) <= limit => {
+                batch.push(path);
+                batch_bytes += bytes;
+            }
+            _ => {
+                batches.push(vec![path]);
+                batch_bytes = bytes;
+            }
+        }
+    }
+    Ok(batches)
+}
+
 /// Import the staged sources in [`DEMO_IMPORT_SOURCES`] order: the first
 /// replaces the account's data and the rest append. Returns the summed counts.
 async fn import_demo_sources(
     cfg: &Config,
+    db: &SqlitePool,
     prepared: &PreparedBundle,
     account_id: i64,
-    target: &Path,
+) -> Result<imports_api::ImportStats> {
+    import_demo_sources_with(
+        cfg,
+        db,
+        prepared,
+        account_id,
+        IMPORT_BATCH_BYTES,
+        async || Ok(()),
+    )
+    .await
+}
+
+/// [`import_demo_sources`] in batches of at most `batch_bytes`, calling
+/// `after_batch` once each batch is committed, so a test can write for
+/// another account between two batches.
+///
+/// Each source is one Import Run, sent as batches the way an Upload sends
+/// them: each batch is its own transaction, and a source that replaces does
+/// so on its first batch alone, so a later batch never removes an earlier
+/// one's messages.
+async fn import_demo_sources_with(
+    cfg: &Config,
+    db: &SqlitePool,
+    prepared: &PreparedBundle,
+    account_id: i64,
+    batch_bytes: u64,
+    mut after_batch: impl AsyncFnMut() -> Result<()>,
 ) -> Result<imports_api::ImportStats> {
     let mut totals = imports_api::ImportStats::default();
     for source in &DEMO_IMPORT_SOURCES {
+        let export_dir = (source.staging_dir)(prepared);
+        let paths = crate::import_cli::list_jsonl_files(export_dir)?;
         let assets_dir = cfg.paths.assets_dir_for_account(account_id, source.source);
-        let stats = imports_api::import_export(&ImportExportArgs {
-            export_dir: (source.staging_dir)(prepared),
-            db: target,
-            assets_dir: &assets_dir,
-            mode: source.mode,
-            source: source.source,
+        let mut conn = db.acquire().await?;
+        let session = imports_api::OwnedSession::start(
+            &mut conn,
             account_id,
-        })
+            source.source,
+            source.mode,
+            "message-crate-server",
+        )
         .await?;
-        totals.add_run(&stats);
+        let mut run = imports_api::ImportStats {
+            mode: source.mode,
+            ..Default::default()
+        };
+        let mut result = Ok(());
+        for (index, batch) in import_batches(paths, batch_bytes)?.iter().enumerate() {
+            let mode = if index == 0 {
+                source.mode
+            } else {
+                ImportMode::Append
+            };
+            let imported = imports_api::import_jsonl_files_on_conn(
+                &mut conn,
+                batch,
+                &ImportOptions::fixed(FixedImportArgs {
+                    assets_dir: &assets_dir,
+                    asset_root: export_dir,
+                    mode,
+                    source: source.source,
+                    account_id,
+                    fill_content_keys: true,
+                    import_id: Some(session.id),
+                }),
+                ImportSchemaMode::AssumeReady,
+            )
+            .await;
+            match imported {
+                Ok(stats) => run.add_run(&stats),
+                Err(error) => {
+                    result = Err(error);
+                    break;
+                }
+            }
+            if let Err(error) = after_batch().await {
+                result = Err(error);
+                break;
+            }
+        }
+        let result = result.map(|()| run);
+        session.finish(&mut conn, &result).await;
+        totals.add_run(&result?);
     }
     Ok(totals)
 }
@@ -566,17 +695,14 @@ async fn import_demo_sources(
 /// demo exercises the same rules a person's file does, the move from an
 /// Unknown holder among them.
 async fn load_demo_address_book(
+    db: &SqlitePool,
     prepared: &PreparedBundle,
     account_id: i64,
-    target: &Path,
 ) -> Result<LoadCounts> {
     let text = fs::read_to_string(&prepared.contacts_csv)
         .with_context(|| format!("read {}", prepared.contacts_csv.display()))?;
-    let pool = engine::open_pool_for_path(target).await?;
-    let mut conn = pool.acquire().await?;
+    let mut conn = db.acquire().await?;
     let loaded = address_book::load(&mut conn, account_id, &text, LoadMode::Edit).await;
-    conn.close().await?;
-    pool.close().await;
     let counts = loaded.map_err(|e| anyhow::anyhow!("load the demo address book: {e}"))?;
     println!(
         "  contacts: {} named from the address book ({} identities moved from Unknowns, {} added)",
@@ -1016,36 +1142,18 @@ fn remove_any_if_exists(path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Compact import tables after the sample inbox is fully loaded. Best effort:
-/// failures are printed, not returned, because the demo rows are already committed.
-async fn vacuum_after_demo(target: &Path) {
-    let pool = match engine::open_pool_for_path(target).await {
-        Ok(pool) => pool,
-        Err(err) => {
-            eprintln!("  sql:      warning: vacuum after demo failed to open the database: {err}");
-            return;
-        }
-    };
-    vacuum_after_demo_on_pool(pool).await;
-}
-/// Reclaim space after the demo import replaced most rows. Best effort: a failed vacuum only costs disk space.
-async fn vacuum_after_demo_on_pool(pool: sqlx::SqlitePool) {
-    let mut conn = match pool.acquire().await {
+/// Reclaim space after the demo import replaced most rows. Best effort:
+/// failures are printed, not returned, because the demo rows are already
+/// committed and a failed vacuum only costs disk space.
+async fn vacuum_after_demo(db: &SqlitePool) {
+    let mut conn = match db.acquire().await {
         Ok(conn) => conn,
         Err(err) => {
             eprintln!("  sql:      warning: vacuum after demo failed to open a connection: {err}");
-            pool.close().await;
             return;
         }
     };
     dialect::vacuum_import_tables(&mut conn).await;
-    // Close deterministically before reset-demo renames the SQLite file.
-    // `pool.close()` only waits for the connection to be returned; the
-    // sqlx worker runs sqlite3_close later.
-    if let Err(err) = conn.close().await {
-        eprintln!("  sql:      warning: vacuum after demo failed to close the connection: {err}");
-    }
-    pool.close().await;
 }
 
 /// Parse `config/seed.toml` from the bundle.
@@ -1055,15 +1163,10 @@ fn load_demo_seed(path: &Path) -> Result<DemoSeed> {
     toml::from_str(&text).with_context(|| format!("failed to parse demo seed {}", path.display()))
 }
 
-/// Open the target database and seed the demo account row and profile.
-async fn seed_demo_account(target: &Path, account_id: i64, seed: &DemoSeed) -> Result<()> {
-    let pool = engine::open_pool_for_path(target).await?;
-    let mut conn = pool.acquire().await?;
-    schema::ensure_schema(&mut conn).await?;
-    seed_demo_account_on_conn(&mut conn, account_id, seed).await?;
-    conn.close().await?;
-    pool.close().await;
-    Ok(())
+/// Seed the demo account row and profile in the database `db`.
+async fn seed_demo_account(db: &SqlitePool, account_id: i64, seed: &DemoSeed) -> Result<()> {
+    let mut conn = db.acquire().await?;
+    seed_demo_account_on_conn(&mut conn, account_id, seed).await
 }
 /// Create the demo account row and the profile fields the seed names, so the demo logs in without setup.
 async fn seed_demo_account_on_conn(
@@ -1153,14 +1256,15 @@ async fn seed_demo_account_on_conn(
 
 /// Delete the demo account's rows (child rows follow via CASCADE) and
 /// on-disk attachments. Leaves the database and other accounts intact.
-async fn wipe_demo_account(cfg: &Config, account_id: i64, target: &Path) -> Result<()> {
-    println!("Reset demo — clearing account data in {}", target.display());
-    let pool = engine::open_pool_for_path(target).await?;
-    let mut conn = pool
+async fn wipe_demo_account(cfg: &Config, db: &SqlitePool, account_id: i64) -> Result<()> {
+    println!(
+        "Reset demo — clearing account data in {}",
+        cfg.paths.db.display()
+    );
+    let mut conn = db
         .acquire()
         .await
-        .with_context(|| format!("open {} for demo account wipe", target.display()))?;
-    schema::ensure_schema(&mut conn).await?;
+        .with_context(|| format!("open {} for demo account wipe", cfg.paths.db.display()))?;
     let deleted = sqlx::query("DELETE FROM accounts WHERE id = $1")
         .bind(account_id)
         .execute(&mut *conn)
@@ -1168,8 +1272,7 @@ async fn wipe_demo_account(cfg: &Config, account_id: i64, target: &Path) -> Resu
         .with_context(|| format!("delete account {account_id}"))?
         .rows_affected();
     println!("  sql:      demo account rows removed (accounts matched={deleted})");
-    conn.close().await?;
-    pool.close().await;
+    drop(conn);
 
     let account_root = cfg.paths.data_dir.join(account_id.to_string());
     remove_tree_if_exists(&account_root)?;

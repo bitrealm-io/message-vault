@@ -69,10 +69,39 @@ async fn a_contact_group_cannot_take_a_computed_groups_name() {
             other => panic!("rename to {name}: expected BadRequest, got {other:?}"),
         }
     }
-    // Neither name means anything for a Message Tag, so a tag can take it.
+    // `tag:` has no Unknown, so a Message Tag can take that name.
     create_set(tag_spec(), &mut conn, account, "Unknown")
         .await
         .unwrap();
+}
+
+// The search reads `tag:none`, quoted or not, as "no tag", so a Message Tag
+// stored under that name would list the untagged conversations on its page.
+#[tokio::test]
+async fn a_message_tag_cannot_be_named_none() {
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
+    let (holiday_id, _) = create_set(tag_spec(), &mut conn, account, "Holiday")
+        .await
+        .unwrap();
+    for name in ["none", "None", "NONE"] {
+        let expected = format!("\"{name}\" is a reserved tag");
+        match create_set(tag_spec(), &mut conn, account, name)
+            .await
+            .unwrap_err()
+        {
+            MembershipError::BadRequest(msg) => assert_eq!(msg, expected),
+            other => panic!("create {name}: expected BadRequest, got {other:?}"),
+        }
+        match rename_set(tag_spec(), &mut conn, account, holiday_id, name)
+            .await
+            .unwrap_err()
+        {
+            MembershipError::BadRequest(msg) => assert_eq!(msg, expected),
+            other => panic!("rename to {name}: expected BadRequest, got {other:?}"),
+        }
+    }
 }
 
 #[tokio::test]

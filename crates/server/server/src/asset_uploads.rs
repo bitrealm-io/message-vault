@@ -123,13 +123,10 @@ fn part_path(session: &Path, part: u32) -> PathBuf {
     session.join(format!("part-{part:04}"))
 }
 
-/// How many parts a file of `bytes` needs at `part_size`.
+/// How many parts a file of `bytes` needs at `part_size`: none for the empty
+/// file.
 fn expected_part_count(bytes: u64, part_size: usize) -> u32 {
-    if bytes == 0 {
-        return 0;
-    }
-    let ps = part_size as u64;
-    bytes.div_ceil(ps) as u32
+    bytes.div_ceil(part_size as u64) as u32
 }
 
 /// The size of part `part` (1-based); zero when the part number is out of range.
@@ -196,9 +193,6 @@ pub fn start_upload(
     limits: UploadLimits,
 ) -> Result<(Option<StoredAsset>, Option<StartUpload>)> {
     let sha = assets_api::require_sha256(sha256)?;
-    if bytes == 0 {
-        bail!("bytes must be > 0");
-    }
     if bytes > limits.max_bytes {
         bail!(
             "object exceeds {} byte server limit ({} MiB)",
@@ -307,10 +301,9 @@ pub fn complete_upload(
     if manifest.sha256 != sha {
         bail!("upload session sha256 mismatch");
     }
+    // The empty file has no parts: it completes with none and is checked
+    // against its fingerprint like any other file.
     let count = expected_part_count(manifest.bytes, manifest.part_size);
-    if count == 0 {
-        bail!("empty upload");
-    }
     for n in 1..=count {
         if !manifest.received.contains(&n) {
             bail!("missing part {n} of {count}");

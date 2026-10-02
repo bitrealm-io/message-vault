@@ -1444,6 +1444,31 @@ async fn the_owner_deletes_any_account_outright() {
     );
 }
 
+/// A data folder that cannot be removed does not turn a delete that happened
+/// into a failure: the row is gone, so the delete answers `204 No Content`.
+#[tokio::test]
+async fn a_folder_that_cannot_be_removed_still_answers_no_content() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
+    let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let victim = register_via_api(&state, "bob", "hunter2hunter2").await;
+    // A file where the account's folder belongs makes `remove_dir_all` fail
+    // whoever runs the test, root included.
+    let data_dir = &state.cfg.paths.data_dir;
+    std::fs::create_dir_all(data_dir).unwrap();
+    std::fs::write(data_dir.join(victim.account_id.to_string()), b"stuck").unwrap();
+
+    assert_eq!(
+        delete_status(&state, &member(victim.account_id), &owner.token).await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        get_status(&state, &member(victim.account_id), &owner.token).await,
+        StatusCode::NOT_FOUND,
+        "the account is gone"
+    );
+}
+
 /// An account deletes itself with its confirmation and its current password
 /// in the body, and nothing stands above it to refuse; the demo account is
 /// the one that refuses its own.

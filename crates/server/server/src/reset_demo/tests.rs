@@ -113,6 +113,13 @@ async fn test_db(db: &Path) -> (sqlx::SqlitePool, sqlx::pool::PoolConnection<sql
     (pool, conn)
 }
 
+/// Open `db` with the schema applied, the pool a build is handed.
+async fn build_pool(db: &Path) -> sqlx::SqlitePool {
+    let (pool, conn) = test_db(db).await;
+    drop(conn);
+    pool
+}
+
 /// Close the pool so no connection stays attached to the database file.
 async fn close_test_db(pool: sqlx::SqlitePool, conn: sqlx::pool::PoolConnection<sqlx::Sqlite>) {
     // Await the real close: `pool.close()` alone only waits for the
@@ -285,6 +292,51 @@ async fn failed_reset_preserves_existing_demo_account() {
         fs::read(&sentinel).expect("read account sentinel"),
         original_data
     );
+}
+
+/// A reset whose rebuild fails never touched the active database, so it
+/// leaves `server.ready` in place for sqlite-web, which waits for it (#1224).
+#[tokio::test]
+async fn a_reset_whose_rebuild_fails_leaves_the_database_and_server_ready_in_place() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let db = temp.path().join("messagecrate.db");
+    seed_reset_test_database(&db).await;
+    crate::operation_lock::mark_ready(&db).expect("write server.ready");
+    let bundle = temp.path().join("bundle");
+    write_tiny_reset_bundle(&bundle);
+    fs::write(
+        bundle.join("staging").join(IMESSAGE_SOURCE).join("a.jsonl"),
+        "not a conversation\n",
+    )
+    .expect("write unreadable jsonl");
+    let cfg = Config {
+        paths: PathsConfig {
+            db: db.clone(),
+            data_dir: temp.path().join("data"),
+            assets_dir: "assets".into(),
+            assets_converted_dir: "assets_converted".into(),
+        },
+        server: None,
+    };
+
+    let result = reset_prepared_bundle(
+        &cfg,
+        &bundle,
+        DEMO_ACCOUNT_ID,
+        &temp.path().join("config/config.toml"),
+        &temp.path().join("prepared-config.toml"),
+    )
+    .await;
+
+    assert!(
+        result.is_err(),
+        "an unreadable JSONL file fails the rebuild"
+    );
+    assert!(
+        crate::operation_lock::ready_path(&db).is_file(),
+        "server.ready is back after the failed reset"
+    );
+    assert_reset_test_database(&db).await;
 }
 
 #[tokio::test]
@@ -912,6 +964,8 @@ async fn a_successful_install_removes_the_work_directories() {
         },
         db_work,
         data_work,
+        &mut crate::operation_lock::ReadyWhileRebuilding::clear(&active_db)
+            .expect("clear server.ready"),
     )
     .await
     .expect("install the prepared state");
@@ -950,6 +1004,8 @@ async fn a_failed_install_with_nothing_left_in_the_work_directories_removes_them
     let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID.to_string());
     let active_config = temp.path().join("config/config.toml");
 
+    let mut ready =
+        crate::operation_lock::ReadyWhileRebuilding::clear(&active_db).expect("clear server.ready");
     let error = install_reset_state_or_keep_work(
         &ResetPaths {
             active_db: &active_db,
@@ -961,6 +1017,7 @@ async fn a_failed_install_with_nothing_left_in_the_work_directories_removes_them
         },
         db_work,
         data_work,
+        &mut ready,
     )
     .await
     .expect_err("an incomplete prepared state must fail");
@@ -971,6 +1028,11 @@ async fn a_failed_install_with_nothing_left_in_the_work_directories_removes_them
         "{text}"
     );
     assert!(!text.contains("rollback was incomplete"), "{text}");
+    drop(ready);
+    assert!(
+        crate::operation_lock::ready_path(&active_db).is_file(),
+        "the previous state is still installed, so server.ready is written back"
+    );
     assert!(!db_work_path.exists(), "{}", db_work_path.display());
     assert!(!data_work_path.exists(), "{}", data_work_path.display());
 }
@@ -995,6 +1057,8 @@ async fn a_failed_install_that_left_previous_state_in_the_work_directories_keeps
     let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID.to_string());
     let active_config = temp.path().join("config/config.toml");
 
+    let mut ready =
+        crate::operation_lock::ReadyWhileRebuilding::clear(&active_db).expect("clear server.ready");
     let error = install_reset_state_or_keep_work(
         &ResetPaths {
             active_db: &active_db,
@@ -1006,9 +1070,15 @@ async fn a_failed_install_that_left_previous_state_in_the_work_directories_keeps
         },
         db_work,
         data_work,
+        &mut ready,
     )
     .await
     .expect_err("an incomplete prepared state must fail");
+    drop(ready);
+    assert!(
+        !crate::operation_lock::ready_path(&active_db).exists(),
+        "the previous state is in the work directories, so server.ready stays removed"
+    );
 
     let text = format!("{error:#}");
     assert!(
@@ -1110,13 +1180,14 @@ async fn a_generated_demo_bundle_imports_whole_and_its_overlap_dedupes() {
     };
 
     let prepared = validate_prepared_bundle(bundle).expect("the generator wrote a complete bundle");
-    seed_demo_account(target, DEMO_ACCOUNT_ID, &prepared.seed)
+    let build = build_pool(target).await;
+    seed_demo_account(&build, DEMO_ACCOUNT_ID, &prepared.seed)
         .await
         .expect("seed the demo account");
     // The import stops at the first row it cannot read, so an `Ok` here is
     // the "no failed rows" of the whole bundle; the counts below say that
     // nothing was skipped on the way in either.
-    let import = import_demo_sources(&cfg, &prepared, DEMO_ACCOUNT_ID, target)
+    let import = import_demo_sources(&cfg, &build, &prepared, DEMO_ACCOUNT_ID)
         .await
         .expect("import every source of the generated bundle");
     assert_eq!(import.files as usize, contents.files, "every file imported");
@@ -1334,10 +1405,11 @@ async fn the_demo_address_book_names_the_unknowns_the_imports_made() {
         server: None,
     };
     let prepared = validate_prepared_bundle(bundle).expect("the generator wrote a complete bundle");
-    seed_demo_account(target, DEMO_ACCOUNT_ID, &prepared.seed)
+    let build = build_pool(target).await;
+    seed_demo_account(&build, DEMO_ACCOUNT_ID, &prepared.seed)
         .await
         .expect("seed the demo account");
-    import_demo_sources(&cfg, &prepared, DEMO_ACCOUNT_ID, target)
+    import_demo_sources(&cfg, &build, &prepared, DEMO_ACCOUNT_ID)
         .await
         .expect("import every source of the generated bundle");
 
@@ -1367,7 +1439,7 @@ async fn the_demo_address_book_names_the_unknowns_the_imports_made() {
     );
     close_test_db(pool, conn).await;
 
-    let counts = load_demo_address_book(&prepared, DEMO_ACCOUNT_ID, target)
+    let counts = load_demo_address_book(&build, &prepared, DEMO_ACCOUNT_ID)
         .await
         .expect("load the demo address book");
 
@@ -1551,9 +1623,11 @@ async fn the_wipe_removes_the_demo_rows_and_folder_and_leaves_other_accounts() {
         server: None,
     };
 
-    wipe_demo_account(&cfg, DEMO_ACCOUNT_ID, &db)
+    let build = build_pool(&db).await;
+    wipe_demo_account(&cfg, &build, DEMO_ACCOUNT_ID)
         .await
         .expect("wipe the demo account");
+    build.close().await;
 
     let (pool, mut conn) = test_db(&db).await;
     let demo_rows: i64 = sqlx::query_scalar(
@@ -1841,4 +1915,103 @@ async fn a_first_start_seed_that_fails_partway_leaves_no_demo_account() {
             .exists(),
         "the demo account's files are removed with it"
     );
+}
+
+/// Files go into a batch in order until the next would take it past the
+/// limit. A file larger than the limit is a batch of its own, since the
+/// build never splits a conversation file.
+#[test]
+fn import_batches_fill_to_the_limit_and_give_a_larger_file_its_own() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let file = |name: &str, bytes: usize| {
+        let path = temp.path().join(name);
+        fs::write(&path, vec![b'x'; bytes]).expect("write a file of the size");
+        path
+    };
+    let a = file("a.jsonl", 10);
+    let b = file("b.jsonl", 10);
+    let c = file("c.jsonl", 30);
+    let d = file("d.jsonl", 5);
+    let e = file("e.jsonl", 25);
+
+    let batches = import_batches(
+        vec![a.clone(), b.clone(), c.clone(), d.clone(), e.clone()],
+        25,
+    )
+    .expect("read the file sizes");
+
+    assert_eq!(batches, vec![vec![a, b], vec![c], vec![d], vec![e]]);
+}
+
+/// The Demo Account build imports each source in batches, each its own
+/// transaction, so another account's write between two batches succeeds at
+/// once instead of waiting out the busy timeout. Only the first batch of
+/// the first source replaces; every later one appends, so no batch removes
+/// what an earlier one imported (#1220).
+#[tokio::test]
+async fn another_account_writes_between_the_demo_builds_import_batches() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let bundle = temp.path().join("bundle");
+    write_tiny_reset_bundle(&bundle);
+    let imessage = bundle.join("staging").join(IMESSAGE_SOURCE);
+    fs::write(
+        imessage.join("b.jsonl"),
+        fs::read_to_string(imessage.join("a.jsonl"))
+            .expect("read the first conversation")
+            .replace("+15555550101", "+15555550104")
+            .replace("pg-demo-imessage", "pg-demo-imessage-2"),
+    )
+    .expect("write a second imessage conversation");
+    let cfg = crate::open_db::fresh_config(temp.path());
+    let build = OpenDb::open(cfg.clone()).await.expect("open the database");
+    let other = {
+        let mut conn = build.conn().await.expect("acquire");
+        account_profile::insert_account(&mut conn, "someone", None, None)
+            .await
+            .expect("add another account")
+    };
+    let prepared = validate_prepared_bundle(&bundle).expect("a complete bundle");
+    seed_demo_account(&build.db, DEMO_ACCOUNT_ID, &prepared.seed)
+        .await
+        .expect("seed the demo account");
+
+    // The other account's requests come in on a connection of their own,
+    // which gives up at once when the database is locked.
+    let others = engine::open_pool_for_path(&cfg.paths.db)
+        .await
+        .expect("open a second pool");
+    let mut writes = 0;
+    let import =
+        import_demo_sources_with(&cfg, &build.db, &prepared, DEMO_ACCOUNT_ID, 1, async || {
+            let mut conn = others.acquire().await?;
+            sqlx::query("PRAGMA busy_timeout = 0")
+                .execute(&mut *conn)
+                .await?;
+            writes += 1;
+            sqlx::query("UPDATE accounts SET preferred_name = $1 WHERE id = $2")
+                .bind(format!("write {writes}"))
+                .bind(other)
+                .execute(&mut *conn)
+                .await?;
+            Ok(())
+        })
+        .await
+        .expect("the build imports every source, and every write between batches succeeds");
+
+    assert_eq!(
+        writes, 4,
+        "one batch per file: two imessage, one each of the others"
+    );
+    assert_eq!(import.messages, 4, "every batch's message is kept");
+    let mut conn = build.conn().await.expect("acquire");
+    let demo_messages: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE account_id = $1")
+            .bind(DEMO_ACCOUNT_ID)
+            .fetch_one(&mut *conn)
+            .await
+            .expect("count demo messages");
+    assert_eq!(demo_messages, 4);
+    drop(conn);
+    others.close().await;
+    build.close().await;
 }

@@ -7,9 +7,10 @@ import { useAccountProfile } from "./useAccountProfile";
  * so every screen built around conversations is meaningless to them and the
  * routing has to know it. `loading` matters to the caller: a guard that
  * treated "not loaded yet" as "an ordinary account" would flash the message
- * shell at someone who has no messages.
+ * shell at someone who has no messages. `error` matters for the same reason:
+ * a profile that failed to load says nothing about who this is.
  */
-export function useIsOwner(): { isOwner: boolean; loading: boolean } {
-  const { profile, loading } = useAccountProfile();
-  return { isOwner: profile?.is_owner === true, loading };
+export function useIsOwner(): { isOwner: boolean; loading: boolean; error: string } {
+  const { profile, loading, error } = useAccountProfile();
+  return { isOwner: profile?.is_owner === true, loading, error };
 }

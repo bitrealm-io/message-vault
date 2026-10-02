@@ -20,6 +20,8 @@
 
 import {
   type InfiniteData,
+  MutationCache,
+  QueryCache,
   QueryClient,
   type UseQueryOptions,
   type UseQueryResult,
@@ -28,6 +30,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { ApiError } from "./api";
 import { useAuth } from "./auth";
 import { PAGE_SIZE_FILL, PAGE_SIZE_FIRST } from "./listPaging";
 import {
@@ -38,13 +41,38 @@ import {
 } from "./routeQueryKey";
 
 /**
+ * Whether a failure says the session token is no longer any good.
+ *
+ * The server answers `401 Unauthorized` both for a token it no longer accepts
+ * (`authentication-required`) and for a mistyped current password
+ * (`invalid-credentials`). Only the first ends the session: a wrong password
+ * typed into Settings must not log the person out.
+ */
+function endsSession(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401 && error.type !== "invalid-credentials";
+}
+
+/**
  * Build the query client.
  *
  * Exported as a factory rather than a singleton so each test gets a client of
  * its own and cannot inherit another test's cache.
+ *
+ * `onUnauthorized` runs when any query or mutation fails because the server no
+ * longer accepts the session token. Without it every screen showed its own
+ * error and the person was never sent back to the login screen.
  */
-export function createQueryClient(): QueryClient {
+export function createQueryClient({
+  onUnauthorized = () => {},
+}: {
+  onUnauthorized?: () => void;
+} = {}): QueryClient {
+  const onError = (error: unknown) => {
+    if (endsSession(error)) onUnauthorized();
+  };
   return new QueryClient({
+    queryCache: new QueryCache({ onError }),
+    mutationCache: new MutationCache({ onError }),
     defaultOptions: {
       queries: {
         // The server is usually on the same host or a local network, so a
@@ -52,7 +80,9 @@ export function createQueryClient(): QueryClient {
         // screens does not refetch, and short enough that a stale list
         // corrects itself without anyone reloading.
         staleTime: 30_000,
-        retry: 1,
+        // One retry, except for an ended session: asking again with the same
+        // token gets the same answer, and only delays the login screen.
+        retry: (failureCount, error) => !endsSession(error) && failureCount < 1,
         refetchOnWindowFocus: true,
       },
     },

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Button from "../../components/Button";
 import TimeZoneField from "../../components/TimeZoneField";
 import { useSettingsAccount, useUpdateSettingsProfile } from "../../lib/useSettingsAccount";
@@ -19,13 +19,10 @@ export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: 
   const { profile, loading, error: loadError } = useSettingsAccount(managedAccountId);
   const updateProfile = useUpdateSettingsProfile(managedAccountId);
   const managed = managedAccountId !== undefined;
-  const [name, setName] = useState("");
+  // What the person has typed and not yet saved; null shows the stored name.
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [nameError, setNameError] = useState("");
   const [zoneError, setZoneError] = useState("");
-
-  useEffect(() => {
-    if (profile) setName(profile.preferred_name ?? "");
-  }, [profile]);
 
   if (loadError) {
     return <div className="text-danger">Could not load profile: {loadError}</div>;
@@ -35,13 +32,15 @@ export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: 
     return <div className="text-muted">Loading…</div>;
   }
 
+  const name = nameDraft ?? profile.preferred_name ?? "";
+
   const handleSaveName = async () => {
     setNameError("");
     try {
-      const updated = await updateProfile.mutateAsync({
+      await updateProfile.mutateAsync({
         preferred_name: name.trim() || null,
       });
-      setName(updated.preferred_name ?? "");
+      setNameDraft(null);
     } catch (e) {
       setNameError(e instanceof Error ? e.message : String(e));
     }
@@ -67,7 +66,7 @@ export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: 
           type="text"
           aria-label="Display name"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => setNameDraft(e.target.value)}
           className={`${inputClassName} flex-1`}
         />
         <Button variant="primary" onClick={handleSaveName} className="!px-[0.85rem] !py-[0.35rem]">

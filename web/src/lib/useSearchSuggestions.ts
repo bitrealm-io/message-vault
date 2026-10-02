@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { type SearchField, type SearchList, useSearchFields } from "./searchFields";
-import { forPerson, suggestion as suggestionTerm } from "./searchQuery";
+import {
+  forPerson,
+  lastToken,
+  replaceLastToken,
+  suggestion as suggestionTerm,
+} from "./searchQuery";
 import { listContacts } from "./serverApi";
 
 interface ContactName {
@@ -28,16 +33,19 @@ export function buildSearchSuggestions(args: {
   fields: SearchField[];
   contacts: ContactName[];
 }): Suggestion[] {
-  const colon = args.lastToken.indexOf(":");
+  // A negated token keeps its minus in the text a suggestion inserts.
+  const minus = args.lastToken.startsWith("-") ? "-" : "";
+  const token = args.lastToken.slice(minus.length);
+  const colon = token.indexOf(":");
   if (args.completingValue) {
-    const word = args.lastToken.slice(0, colon).replace(/^-/, "").toLowerCase();
-    const typed = args.lastToken.slice(colon + 1).toLowerCase();
+    const word = token.slice(0, colon).toLowerCase();
+    const typed = token.slice(colon + 1).toLowerCase();
     if (args.personOp) {
       return args.contacts.slice(0, 6).map((c) => ({
         id: c.id,
         label: c.name,
         // #id survives names with spaces and renames.
-        insert: `${forPerson(word, c.id)} `,
+        insert: `${minus}${forPerson(word, c.id)} `,
       }));
     }
     const field = args.fields.find((f) => f.word === word);
@@ -47,22 +55,20 @@ export function buildSearchSuggestions(args: {
       .map((v) => {
         // The label is the term itself, so a value that needs quoting shows
         // the quotes the row will actually type.
-        const term = suggestionTerm(word, v);
+        const term = `${minus}${suggestionTerm(word, v)}`;
         return { id: term, label: term, insert: `${term} ` };
       });
   }
-  if (args.lastToken.length === 0) return [];
-  const typed = args.lastToken.replace(/^-/, "").toLowerCase();
+  if (token.length === 0) return [];
+  const typed = token.toLowerCase();
   return args.fields
     .filter((f) => f.word.startsWith(typed))
-    .map((f) => ({ id: f.word, label: `${f.word}:`, insert: `${f.word}:` }));
+    .map((f) => ({ id: f.word, label: `${f.word}:`, insert: `${minus}${f.word}:` }));
 }
 
-/** Replace the token being typed with a suggestion's text. */
+/** Replace the token being typed with a suggestion's text, and leave the rest as typed. */
 export function applySuggestionToQuery(value: string, suggestion: Suggestion): string {
-  const tokens = value.split(/\s+/);
-  tokens.pop();
-  return tokens.concat(suggestion.insert).join(" ");
+  return replaceLastToken(value, suggestion.insert);
 }
 
 /**
@@ -74,11 +80,11 @@ export function useSearchSuggestions(value: string, list: SearchList | null): Su
   const { fields } = useSearchFields(list);
   const [contacts, setContacts] = useState<ContactName[]>([]);
 
-  const lastToken = value.split(/\s+/).pop() || "";
-  const colonIdx = lastToken.indexOf(":");
+  const typedToken = lastToken(value).text;
+  const colonIdx = typedToken.indexOf(":");
   const completingValue = colonIdx !== -1;
-  const word = completingValue ? lastToken.slice(0, colonIdx).replace(/^-/, "").toLowerCase() : "";
-  const valuePart = completingValue ? lastToken.slice(colonIdx + 1).replace(/^"|"$/g, "") : "";
+  const word = completingValue ? typedToken.slice(0, colonIdx).replace(/^-/, "").toLowerCase() : "";
+  const valuePart = completingValue ? typedToken.slice(colonIdx + 1).replace(/^"|"$/g, "") : "";
   const personOp = completingValue && isPersonWord(fields.find((f) => f.word === word));
 
   useEffect(() => {
@@ -100,5 +106,11 @@ export function useSearchSuggestions(value: string, list: SearchList | null): Su
     };
   }, [personOp, valuePart]);
 
-  return buildSearchSuggestions({ completingValue, personOp, lastToken, fields, contacts });
+  return buildSearchSuggestions({
+    completingValue,
+    personOp,
+    lastToken: typedToken,
+    fields,
+    contacts,
+  });
 }

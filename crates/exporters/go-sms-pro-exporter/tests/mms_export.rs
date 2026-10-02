@@ -124,6 +124,8 @@ fn a_pdu_picture_is_one_attachment_with_its_bytes_staged() {
     assert_eq!(bytes.len(), 200);
     assert_eq!(&bytes[..4], b"\xff\xd8\xff\xe0");
     assert!(bytes[10..].iter().all(|b| *b == 0x11));
+    // The spool the payload waited in between parse and write is gone.
+    assert!(!output.join(".attachment-spool").exists());
 
     // The message without a picture has no attachment row.
     assert_eq!(rows["Sent from me"]["attachments_json"], "[]");

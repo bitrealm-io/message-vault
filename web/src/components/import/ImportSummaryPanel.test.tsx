@@ -80,4 +80,8 @@ describe("completionTextFor", () => {
   it("names the with-issues outcome", () => {
     expect(completionTextFor("completed_with_issues")).toBe("Import completed with issues");
   });
+
+  it("names a paused Upload as paused, not cancelled", () => {
+    expect(completionTextFor("paused")).toBe("Import paused");
+  });
 });

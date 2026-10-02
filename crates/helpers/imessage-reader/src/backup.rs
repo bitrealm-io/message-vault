@@ -17,8 +17,8 @@
 //! that folder.
 
 use std::{
-    fs::File,
-    io::{BufWriter, Write, copy},
+    fs::{File, remove_file},
+    io::{BufWriter, Read, Write, copy},
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
@@ -166,11 +166,8 @@ pub(crate) fn get_decrypted_message_database(
     let tmp_path = options
         .scratch_dir()
         .join(format!("crabapple-sms-{}.db", unique_suffix()));
-    let mut file = File::create(&tmp_path)?;
-    restrict_permissions(&file)?;
-
     options.setup_step(3, DECRYPT_STEPS, "Decrypting messages database");
-    copy(&mut decrypted_chat_db, &mut file)?;
+    write_scratch_file(&tmp_path, &mut decrypted_chat_db)?;
     Ok(tmp_path)
 }
 
@@ -191,13 +188,37 @@ pub(crate) fn get_decrypted_contacts_database(
     let tmp_path = options
         .scratch_dir()
         .join(format!("crabapple-contacts-{}.db", unique_suffix()));
-    let mut file = File::create(&tmp_path)?;
-    restrict_permissions(&file)?;
-
     options.setup_step(5, DECRYPT_STEPS, "Decrypting contacts database");
-    copy(&mut decrypted_contacts_db, &mut file)?;
+    write_scratch_file(&tmp_path, &mut decrypted_contacts_db)?;
 
     Ok(tmp_path)
+}
+
+/// Copy `decrypted` into a new owner-only file at `path`.
+///
+/// A copy that fails part-way removes the file again, so a partial copy of
+/// decrypted data is not left in the scratch folder.
+///
+/// # Errors
+///
+/// Returns an error when the file cannot be created or restricted, or the
+/// copy fails.
+fn write_scratch_file(path: &Path, decrypted: &mut impl Read) -> Result<(), RuntimeError> {
+    let written = File::create(path)
+        .map_err(RuntimeError::from)
+        .and_then(|file| {
+            restrict_permissions(&file)?;
+            let mut writer = BufWriter::new(file);
+            copy(decrypted, &mut writer)?;
+            writer.flush()?;
+            Ok(())
+        });
+    if written.is_err() {
+        // The copy's own error is what the app is told; a file that will not
+        // go is left for the app, which deletes the whole scratch folder.
+        let _ = remove_file(path);
+    }
+    written
 }
 
 /// Decrypt one iOS backup file into the scratch folder.
@@ -229,18 +250,14 @@ pub(crate) fn decrypt_file(
             // path components from a malicious manifest.
             let safe_id = file.file_id.rsplit('/').next().unwrap_or(&file.file_id);
             let temp_path = scratch_dir.join(format!("{safe_id}-{}.attachment", unique_suffix()));
-            let mut temp_file = File::create(&temp_path)?;
-            restrict_permissions(&temp_file)?;
 
             let file_size = file.metadata.size;
             if file_size > MAX_IN_MEMORY_DECRYPT {
                 let mut decryption_stream = backup.decrypt_entry_stream(&file)?;
-                let mut writer = BufWriter::new(temp_file);
-                copy(&mut decryption_stream, &mut writer)?;
-                writer.flush()?;
+                write_scratch_file(&temp_path, &mut decryption_stream)?;
             } else {
                 let decrypted_bytes = backup.decrypt_entry(&file)?;
-                temp_file.write_all(&decrypted_bytes)?;
+                write_scratch_file(&temp_path, &mut decrypted_bytes.as_slice())?;
             }
 
             Ok(temp_path)
@@ -253,7 +270,7 @@ pub(crate) fn decrypt_file(
 mod tests {
     use super::{
         decrypt_backup, password_for_encrypted_backup, reject_leftover_password,
-        restrict_permissions, unique_suffix,
+        restrict_permissions, unique_suffix, write_scratch_file,
     };
     use crate::{
         error::{
@@ -295,24 +312,61 @@ mod tests {
         }
     }
 
+    /// A decrypted copy that fails part-way is removed, so half of a
+    /// decrypted database is not left in the scratch folder (#1135).
+    #[test]
+    fn a_copy_that_fails_part_way_leaves_no_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("crabapple-sms-x.db");
+        let mut failing = std::io::Read::chain(
+            &b"SQLite format 3\0"[..],
+            FailingReader("the backup could not be read"),
+        );
+        let err = write_scratch_file(&path, &mut failing).unwrap_err();
+        assert!(
+            err.to_string().contains("the backup could not be read"),
+            "{err}"
+        );
+        assert!(!path.exists(), "the partial copy is still there");
+
+        let path = dir.path().join("crabapple-contacts-x.db");
+        write_scratch_file(&path, &mut &b"whole"[..]).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"whole");
+    }
+
+    /// A reader that fails on its first read.
+    struct FailingReader(&'static str);
+
+    impl std::io::Read for FailingReader {
+        fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::other(self.0))
+        }
+    }
+
     /// A Mac source is never decrypted, and an iOS folder without a
     /// `Manifest.plist` is not a backup. The real decrypt path needs an
     /// encrypted backup, and none is built from anyone's own.
     #[test]
     fn only_an_ios_backup_folder_is_opened() {
         let dir = tempfile::tempdir().unwrap();
-        let mac = ReaderOptions::from_source(Source {
-            db_path: dir.path().join("chat.db"),
-            platform: Platform::MacOs,
-            backup_password: None,
-        });
+        let mac = ReaderOptions::from_source(
+            Source {
+                db_path: dir.path().join("chat.db"),
+                platform: Platform::MacOs,
+                backup_password: None,
+            },
+            dir.path().to_path_buf(),
+        );
         assert!(decrypt_backup(&mac).unwrap().is_none());
 
-        let ios = ReaderOptions::from_source(Source {
-            db_path: dir.path().to_path_buf(),
-            platform: Platform::Ios,
-            backup_password: None,
-        });
+        let ios = ReaderOptions::from_source(
+            Source {
+                db_path: dir.path().to_path_buf(),
+                platform: Platform::Ios,
+                backup_password: None,
+            },
+            dir.path().to_path_buf(),
+        );
         let err = decrypt_backup(&ios).unwrap_err();
         assert!(
             !matches!(err, RuntimeError::InvalidOptions(_)),
@@ -343,11 +397,14 @@ mod tests {
 </dict></plist>"#,
         )
         .unwrap();
-        let ios = ReaderOptions::from_source(Source {
-            db_path: dir.path().to_path_buf(),
-            platform: Platform::Ios,
-            backup_password: None,
-        });
+        let ios = ReaderOptions::from_source(
+            Source {
+                db_path: dir.path().to_path_buf(),
+                platform: Platform::Ios,
+                backup_password: None,
+            },
+            dir.path().to_path_buf(),
+        );
         assert!(decrypt_backup(&ios).unwrap().is_none());
     }
 

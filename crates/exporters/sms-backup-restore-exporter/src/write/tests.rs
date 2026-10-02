@@ -1,4 +1,5 @@
 use super::*;
+use message_staging::AttachmentSpool;
 use serde_json::{Map, json};
 use std::fs;
 
@@ -13,17 +14,40 @@ fn round_trip(docs: &[ConversationDocument]) -> Vec<ConversationDocument> {
     }
     let path = session.finish().unwrap();
     let owners = [OWNER.to_string()];
-    let (read, report) = crate::read_backup(&path, read_options(&owners)).unwrap();
+    let (read, report) = read_with_bytes(&path, &owners);
     assert!(report.errors.is_empty(), "{:?}", report.errors);
     read
 }
 
-/// Reader options that keep attachment bytes on the records.
-fn read_options(owners: &[String]) -> crate::ReadOptions<'_> {
+/// Read `path` with the SBR reader, then put each attachment's bytes back
+/// on it from the spool, so a test can compare payloads.
+fn read_with_bytes(
+    path: &Path,
+    owners: &[String],
+) -> (Vec<ConversationDocument>, crate::ReadReport) {
+    let spool_dir = tempfile::tempdir().unwrap();
+    let spool = AttachmentSpool::open(spool_dir.path()).unwrap();
+    let (mut docs, report) = crate::read_backup(path, read_options(owners, &spool)).unwrap();
+    for att in docs
+        .iter_mut()
+        .flat_map(|doc| doc.messages.iter_mut())
+        .flat_map(|msg| msg.attachments.iter_mut())
+    {
+        att.bytes = att
+            .digest_sha256
+            .as_deref()
+            .and_then(|digest| spool.path(digest))
+            .map(|spooled| fs::read(spooled).unwrap());
+    }
+    (docs, report)
+}
+
+/// Reader options that spool attachment payloads and stage nothing.
+fn read_options<'a>(owners: &'a [String], spool: &'a AttachmentSpool) -> crate::ReadOptions<'a> {
     crate::ReadOptions {
         owner_phones: owners,
         attachments_dir: None,
-        copy_attachments: true,
+        spool: Some(spool),
         stage_attachments: false,
         media: media::MediaMode::Disabled,
         compress: media::CompressOptions::default(),
@@ -364,7 +388,7 @@ fn restored_mms_parts_get_back_their_own_attachment_bytes() {
     )
     .unwrap();
     let owners = [OWNER.to_string()];
-    let (docs, _) = crate::read_backup(&input, read_options(&owners)).unwrap();
+    let (docs, _) = read_with_bytes(&input, &owners);
     assert_eq!(docs[0].messages[0].attachments.len(), 2, "a.jpg, c.jpg");
     let payloads = |a_copy: Option<&[u8]>| {
         vec![

@@ -65,8 +65,20 @@ pub struct Roster {
 }
 
 pub const EMPTY_GROUP_HANDLE: &str = "chat0000000001";
-pub const EMPTY_THREAD_HANDLE: &str = "+18007438200";
+pub const EMPTY_GROUP_MEMBERS: [&str; 2] = ["+12125550101", "+13035550102"];
+pub const EMPTY_THREAD_HANDLE: &str = "+13125550100";
 pub const ORPHAN_SENDER: &str = "+447700900999";
+
+/// The numbers the generator writes by name. They are kept out of the
+/// numbers handed to contacts, groups and unassigned handles, so none of
+/// them ends up on a second person.
+const FIXED_PHONES: [&str; 5] = [
+    OWNER_PHONE,
+    EMPTY_GROUP_MEMBERS[0],
+    EMPTY_GROUP_MEMBERS[1],
+    EMPTY_THREAD_HANDLE,
+    ORPHAN_SENDER,
+];
 
 const GROUP_TITLES: &[&str] = &[
     "Weekend Trip",
@@ -92,20 +104,20 @@ const GROUP_TITLES: &[&str] = &[
 /// # Errors
 ///
 /// Returns an error if not enough contacts can be placed into the required
-/// large groups.
+/// large groups, or if the fictional phone number ranges run out.
 pub fn build_roster(cfg: &SeedConfig, names: &NameBank, rng: &mut impl Rng) -> Result<Roster> {
-    let mut used_phones = HashSet::new();
-    used_phones.insert(OWNER_PHONE.to_string());
+    let mut used_phones: HashSet<String> =
+        FIXED_PHONES.iter().map(|phone| phone.to_string()).collect();
 
     let mut contacts = Vec::with_capacity(cfg.contacts.count);
     for _ in 0..cfg.contacts.count {
-        contacts.push(make_contact(cfg, names, rng, &mut used_phones));
+        contacts.push(make_contact(cfg, names, rng, &mut used_phones)?);
     }
 
     mark_whatsapp_contacts(&mut contacts, cfg.sources.whatsapp_contact_fraction, rng);
 
     let groups = build_groups(cfg, &contacts, rng, &mut used_phones)?;
-    let unassigned = build_unassigned(cfg, rng, &mut used_phones);
+    let unassigned = build_unassigned(cfg, rng, &mut used_phones)?;
 
     Ok(Roster {
         contacts,
@@ -139,7 +151,7 @@ fn make_contact(
     names: &NameBank,
     rng: &mut impl Rng,
     used: &mut HashSet<String>,
-) -> Contact {
+) -> Result<Contact> {
     let nameless = rng.random_bool(cfg.contacts.no_name);
     let (first, middle, last) = if nameless {
         (String::new(), String::new(), String::new())
@@ -147,9 +159,9 @@ fn make_contact(
         sample_name_shape(cfg, names, rng)
     };
 
-    let mut phones = vec![phones::generate_phone(rng, cfg.contacts.us_phones, used)];
+    let mut phones = vec![phones::generate_phone(rng, cfg.contacts.us_phones, used)?];
     if rng.random_bool(cfg.contacts.multi_phone_fraction) {
-        phones.push(phones::generate_phone(rng, cfg.contacts.us_phones, used));
+        phones.push(phones::generate_phone(rng, cfg.contacts.us_phones, used)?);
     }
 
     let inactive = rng.random_bool(cfg.contacts.inactive_fraction);
@@ -182,7 +194,7 @@ fn make_contact(
         MessageScope::Group
     };
 
-    Contact {
+    Ok(Contact {
         phones,
         first_name: first,
         middle_name: middle,
@@ -199,7 +211,7 @@ fn make_contact(
             rng,
         ),
         has_whatsapp: false,
-    }
+    })
 }
 
 /// Pick first-only, first-middle-last, or first-last from the configured shares.
@@ -515,7 +527,7 @@ fn build_groups(
                     rng,
                     cfg.contacts.us_phones,
                     used_phones,
-                ));
+                )?);
             }
         } else {
             match pick_group_members(target_size, 2, &mut remaining, contacts, rng) {
@@ -544,10 +556,10 @@ fn build_unassigned(
     cfg: &SeedConfig,
     rng: &mut impl Rng,
     used: &mut HashSet<String>,
-) -> Vec<Unassigned> {
+) -> Result<Vec<Unassigned>> {
     let mut out = Vec::new();
     for i in 0..cfg.edge_cases.unassigned_phones {
-        let handle = phones::generate_phone(rng, cfg.contacts.us_phones, used);
+        let handle = phones::generate_phone(rng, cfg.contacts.us_phones, used)?;
         let name_alias = if i % 2 == 0 {
             Some("(Unverified)".into())
         } else {
@@ -570,7 +582,7 @@ fn build_unassigned(
             email_only: true,
         });
     }
-    out
+    Ok(out)
 }
 
 impl Contact {

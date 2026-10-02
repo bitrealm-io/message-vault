@@ -341,7 +341,7 @@ describe("TrashScreen", () => {
 
       expect(await screen.findByText("No contacts match this search.")).toBeTruthy();
       expect(listContactsMock).toHaveBeenCalledWith(
-        expect.objectContaining({ q: "trashed:yes ada" }),
+        expect.objectContaining({ q: "trashed:yes (ada)" }),
         expect.anything(),
       );
     });

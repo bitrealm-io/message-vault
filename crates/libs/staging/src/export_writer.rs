@@ -1,6 +1,7 @@
 //! The shared write tail every exporter used to copy: sink opening, the
 //! queue-or-sink decision, and both drain arms.
 
+use crate::spool::AttachmentSpool;
 use crate::write_queue::{
     AttachmentSource, ConversationUnit, WriteQueueOptions, drain_units, load_attachment_source,
 };
@@ -36,6 +37,7 @@ pub struct ExportWriter {
     resume: bool,
     use_queue: bool,
     copy_attachments: bool,
+    spool: AttachmentSpool,
 }
 
 /// The opened sink and the decisions [`ExportWriter::open`] made, for an
@@ -98,6 +100,7 @@ impl ExportWriter {
         } else {
             FormatSink::open_prepared(output_dir, format, transforms)
         }?;
+        let spool = AttachmentSpool::open(output_dir)?;
         Ok(Self {
             output_dir: output_dir.to_path_buf(),
             sink,
@@ -109,6 +112,7 @@ impl ExportWriter {
             resume,
             use_queue,
             copy_attachments,
+            spool,
         })
     }
 
@@ -137,6 +141,15 @@ impl ExportWriter {
     /// the buffered sink.
     pub fn use_queue(&self) -> bool {
         self.use_queue
+    }
+
+    /// The run's attachment spool, inside the output directory. An exporter
+    /// whose attachments arrive as bytes writes each payload here as it
+    /// parses it, so no payload waits in memory for the write.
+    /// [`finish`](Self::finish) reads every spooled attachment back from its
+    /// file, and the spool is removed when the writer is done.
+    pub fn spool(&self) -> &AttachmentSpool {
+        &self.spool
     }
 
     /// Media mode this run stages with ([`MediaMode::Disabled`] when the
@@ -176,10 +189,11 @@ impl ExportWriter {
     /// an interrupted run can resume); the sink arm stages attachments and
     /// writes every document through the buffered sink.
     ///
-    /// `source_for` is the per-exporter attachment hook. It is called once
-    /// per attachment, in document order, and returns where that
-    /// attachment's bytes come from plus a size hint for the progress
-    /// totals. Exporters carrying bytes on the document move them out with
+    /// An attachment whose digest is in the [`spool`](Self::spool) is read
+    /// from its spooled file. For every other attachment, `source_for` is
+    /// the per-exporter hook. It is called once per attachment, in document
+    /// order, and returns where that attachment's bytes come from plus a
+    /// size hint for the progress totals. Exporters carrying bytes on the document move them out with
     /// `att.bytes.take()`; path-backed exporters return
     /// [`AttachmentSource::Path`] from their own source list.
     ///
@@ -197,6 +211,11 @@ impl ExportWriter {
         cancel: Option<&CancelFlag>,
         report: &mut ExportReport,
     ) -> Result<()> {
+        let spool = &self.spool;
+        let mut source_for = |att: &mut IrAttachment| match spool.source(att) {
+            Some(spooled) => spooled,
+            None => source_for(att),
+        };
         if self.use_queue {
             let units: Vec<ConversationUnit> = documents
                 .into_iter()

@@ -90,15 +90,15 @@ pub(crate) async fn list_messages(
     }))
 }
 
-/// One message by id: the row the Messages list would show, looked up
-/// directly.
+/// One message by id, in the shape the Messages list gives each row.
 ///
 /// Read-only. A message is never written through this route: an import
 /// writes messages, and trashing is a conversation operation
-/// (`docs/architecture/http-api.md`, "Methods"). The lookup carries the
-/// list's own defaults — the caller's account, no trashed conversation, no
-/// duplicate — so a row the list hides is `404` here too, and a link out of
-/// a search result never reaches further than the search did.
+/// (`docs/architecture/http-api.md`, "Methods"). The id is enough: an id
+/// names one message, and a lookup by id does not depend on how it was
+/// found, so the route returns any message of the caller's account, one in
+/// a trashed conversation and a duplicate included, and takes no `q`.
+/// Another account's message is `404`.
 #[utoipa::path(
     get,
     path = "/v1/messages/{id}",
@@ -115,13 +115,10 @@ pub(crate) async fn get_message(
     Path(message_id): Path<i64>,
 ) -> Result<Json<Message>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    let clock = crate::db::account_profile::account_clock(&mut conn, auth.account_id).await?;
-    let filter = message_filter(auth.account_id, "", clock)?
-        .and_where("m.id = ?", [SqlParam::Int(message_id)]);
     let mut items = load_messages(
         &mut conn,
-        filter.where_sql(),
-        filter.params(),
+        "m.account_id = ? AND m.id = ?",
+        &[SqlParam::Int(auth.account_id), SqlParam::Int(message_id)],
         &DEFAULT_MESSAGE_SORT,
         1,
         0,

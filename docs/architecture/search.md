@@ -110,7 +110,11 @@ In practical terms:
 - A term ending in `*` is a prefix (`avoc*`). A quoted phrase has no prefix.
 
 The parser refuses a query with more than 32 free-text terms, more than 64
-nodes in its tree, or parentheses and `not` nested deeper than 32. An
+nodes in its tree, or parentheses and `not` nested deeper than 32. Each comma
+value of a `word:` counts as one node, so `service:imessage,sms` counts 2,
+because each value becomes one more `OR` in the SQL. Counted as one node, a
+list of about 1,000 values would reach SQLite, which refuses an expression tree
+deeper than 1,000, and the request would answer `500 Internal Server Error`. An
 unclosed quote or parenthesis, an `or` or `and` with nothing on one side, and
 a `word:` with no value are refused with the span of the text at fault.
 An empty quoted phrase, `""` or one holding only spaces, is refused with the

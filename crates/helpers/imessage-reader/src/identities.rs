@@ -5,7 +5,7 @@
 //! identity leaves the helper spelled the way the same address leaves it on
 //! a message. The app deduplicates.
 
-use imessage_reader_protocol::{Source, bare_address};
+use imessage_reader_protocol::{IdentitiesRequest, bare_address};
 use rusqlite::Connection;
 
 use crate::{data_source::DataSource, error::RuntimeError, options::ReaderOptions};
@@ -19,7 +19,9 @@ pub(crate) struct Identities {
     pub values: Vec<String>,
 }
 
-/// Open the source and read the addresses its device sent from.
+/// Open the source and read the addresses its device sent from. An
+/// encrypted backup's databases are decrypted into the request's scratch
+/// folder.
 ///
 /// Each per-column query falls back to an empty list when the table or
 /// column is missing, so an unusual schema degrades to fewer signals rather
@@ -29,8 +31,8 @@ pub(crate) struct Identities {
 ///
 /// Returns an error when the source cannot be opened: missing database,
 /// missing or wrong backup password, not an iPhone backup.
-pub(crate) fn identities(source: Source) -> Result<Identities, RuntimeError> {
-    let options = ReaderOptions::from_source(source);
+pub(crate) fn identities(request: IdentitiesRequest) -> Result<Identities, RuntimeError> {
+    let options = ReaderOptions::from_source(request.source, request.scratch_dir);
     let data_source = DataSource::from(&options)?;
     let mut raw = distinct_texts(data_source.db(), "SELECT DISTINCT account_login FROM chat");
     raw.extend(distinct_texts(
@@ -57,14 +59,19 @@ fn distinct_texts(db: &Connection, sql: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::identities;
-    use imessage_reader_protocol::{Platform, Source};
+    use imessage_reader_protocol::{IdentitiesRequest, Platform, Source};
     use rusqlite::Connection;
 
-    fn source(db_path: &std::path::Path) -> Source {
-        Source {
-            db_path: db_path.to_path_buf(),
-            platform: Platform::MacOs,
-            backup_password: None,
+    /// The identities request for the `chat.db` at `db_path`, with the
+    /// folder beside it as the scratch folder.
+    fn source(db_path: &std::path::Path) -> IdentitiesRequest {
+        IdentitiesRequest {
+            source: Source {
+                db_path: db_path.to_path_buf(),
+                platform: Platform::MacOs,
+                backup_password: None,
+            },
+            scratch_dir: db_path.parent().unwrap().to_path_buf(),
         }
     }
 

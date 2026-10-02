@@ -720,7 +720,7 @@ mod tests {
                 attachment_root: None,
                 contacts_path: None,
                 use_caller_id: false,
-                scratch_dir: None,
+                scratch_dir: PathBuf::from("/nowhere/scratch"),
             },
             export_path: PathBuf::from("/nowhere/out"),
             attachment_embed: AttachmentEmbed::Embed,

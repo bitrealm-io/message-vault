@@ -25,6 +25,7 @@ const NOTHING = {
   identities_moved: 0,
   identities_removed: 0,
   groups_created: 0,
+  notes: [],
 };
 
 function chooseFile(name: string, body: string) {
@@ -80,6 +81,7 @@ describe("AddressBookSection", () => {
       identities_moved: 5,
       identities_removed: 6,
       groups_created: 7,
+      notes: [],
     });
     render(<AddressBookSection />);
     chooseFile("address-book.csv", FILE);
@@ -97,6 +99,32 @@ describe("AddressBookSection", () => {
       "Identities removed: 6",
       "Contact Groups created: 7",
     ]);
+  });
+
+  it("lists each number the load read with its + back or made a new identity", async () => {
+    const notes = [
+      'row 2: 6591234567 has no +, so it was read as +6591234567, which "Ada" (contact 4) holds',
+      "row 5: 447700900123 has no +, so it became the new identity 447700900123",
+    ];
+    post.mockResolvedValue({ ...NOTHING, notes });
+    render(<AddressBookSection />);
+    chooseFile("address-book.csv", FILE);
+
+    const list = await screen.findByLabelText("Numbers written without +");
+    expect(
+      within(list)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual(notes);
+  });
+
+  it("shows no list of numbers when every number kept its +", async () => {
+    post.mockResolvedValue(NOTHING);
+    render(<AddressBookSection />);
+    chooseFile("address-book.csv", FILE);
+
+    await screen.findByLabelText("What the load changed");
+    expect(screen.queryByLabelText("Numbers written without +")).toBeNull();
   });
 
   it("marks the account's cache stale after a load", async () => {

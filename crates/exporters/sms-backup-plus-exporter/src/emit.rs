@@ -14,7 +14,7 @@ use message_ir::{
     ExportMeta, IrAttachment, IrParticipant, IrService, IrSource, PendingAttachment,
     PendingConversation, PendingMessage, ProjectionHooks, default_participants, parse_android_type,
 };
-use message_staging::{AttachmentSource, ExportWriter};
+use message_staging::{AttachmentSource, AttachmentSpool, ExportWriter};
 use phone::{Handle, OwnerHandleSet};
 use rayon::prelude::*;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -186,12 +186,11 @@ pub(super) fn is_eml_file(p: &Path) -> bool {
 }
 
 /// SMS Backup+ deltas of the shared [`message_ir::pending_to_document`] projection.
-struct SbpProjection<'a> {
+struct SbpProjection {
     export: ExportMeta,
-    blob_bytes: &'a HashMap<String, Vec<u8>>,
 }
 
-impl ProjectionHooks for SbpProjection<'_> {
+impl ProjectionHooks for SbpProjection {
     fn export(&self) -> ExportMeta {
         self.export.clone()
     }
@@ -218,7 +217,7 @@ impl ProjectionHooks for SbpProjection<'_> {
     }
 
     fn attachment_to_ir(&self, att: &PendingAttachment, _msg: &PendingMessage) -> IrAttachment {
-        att.to_ir(self.blob_bytes)
+        att.to_ir()
     }
 
     fn source(&self, convo: &PendingConversation, msg: &PendingMessage) -> IrSource {
@@ -366,11 +365,11 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
         owners,
         owner_emails_lc,
     };
-    let mut ingest = EmlIngest::new(writer.copies_attachments(), eml_paths.len());
+    let spool = writer.copies_attachments().then(|| writer.spool());
+    let mut ingest = EmlIngest::new(spool, eml_paths.len());
     parse_all_emls(&eml_paths, &parse, cancel, verbose, &mut ingest)?;
     verbose.line(ingest.parse_summary());
     let EmlIngest {
-        blob_bytes,
         conversations,
         mut report,
         ..
@@ -384,7 +383,6 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
             Some(owner_handle),
             None,
         ),
-        blob_bytes: &blob_bytes,
     };
     let mut documents = Vec::new();
     for (chat_id, mut convo) in conversations {
@@ -442,7 +440,7 @@ fn parse_all_emls(
     inputs: &ParseInputs,
     cancel: Option<&CancelFlag>,
     verbose: Verbose<'_>,
-    ingest: &mut EmlIngest,
+    ingest: &mut EmlIngest<'_>,
 ) -> Result<()> {
     let total = eml_paths.len() as u64;
     let mut scanned = 0u64;
@@ -476,12 +474,12 @@ fn parse_eml_path(
     parse_one_eml(eml_path, rel_path, &inputs.owners, &inputs.owner_emails_lc)
 }
 
-/// Everything the scan accumulates: conversations, dedupe state, attachment
-/// bytes, and the counts that end up in the report.
-struct EmlIngest {
-    copy_attachments: bool,
-    /// Attachment bytes by digest, kept until the writer asks for them.
-    blob_bytes: HashMap<String, Vec<u8>>,
+/// Everything the scan accumulates: conversations, dedupe state, and the
+/// counts that end up in the report.
+struct EmlIngest<'a> {
+    /// Where attachment payloads are written as they are parsed; `None`
+    /// when the run does not copy attachments.
+    spool: Option<&'a AttachmentSpool>,
     conversations: HashMap<String, PendingConversation>,
     /// Online dedupe state (fingerprint → message index) keyed by chat id;
     /// the shared `PendingConversation` carries document data only.
@@ -489,12 +487,11 @@ struct EmlIngest {
     report: ExportReport,
 }
 
-impl EmlIngest {
+impl<'a> EmlIngest<'a> {
     /// Empty state, pre-sized for the typical ratio of chats to EML files.
-    fn new(copy_attachments: bool, eml_count: usize) -> Self {
+    fn new(spool: Option<&'a AttachmentSpool>, eml_count: usize) -> Self {
         Self {
-            copy_attachments,
-            blob_bytes: HashMap::new(),
+            spool,
             conversations: HashMap::with_capacity((eml_count / 4).min(50_000)),
             by_identity: HashMap::new(),
             report: ExportReport::default(),
@@ -505,13 +502,14 @@ impl EmlIngest {
     ///
     /// # Errors
     ///
-    /// Returns an error when a worker saw the cancel flag.
+    /// Returns an error when a worker saw the cancel flag, or an attachment
+    /// cannot be written to the spool.
     fn absorb(&mut self, outcome: ParsedEmlKind) -> Result<()> {
         match outcome {
             ParsedEmlKind::Cancelled => bail!("cancelled"),
             ParsedEmlKind::Flat { msg } => {
                 self.report.bump("flat_eml", 1);
-                self.add_parsed(*msg);
+                self.add_parsed(*msg)?;
             }
             ParsedEmlKind::FlatNone => self.report.bump("skipped_parse_error", 1),
             ParsedEmlKind::CallLog => self.report.bump("skipped_call_log", 1),
@@ -526,15 +524,15 @@ impl EmlIngest {
     }
 
     /// Queue one message's attachments and add it to its conversation.
-    fn add_parsed(&mut self, msg: ParsedMessage) {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when an attachment cannot be written to the spool.
+    fn add_parsed(&mut self, msg: ParsedMessage) -> Result<()> {
         if msg.chat_key.is_empty() {
             self.report.bump("unknown_chat_messages", 1);
         }
-        let atts = queue_attachments(
-            &msg.attachments,
-            self.copy_attachments,
-            &mut self.blob_bytes,
-        );
+        let atts = queue_attachments(&msg.attachments, self.spool)?;
         add_message(
             &mut self.conversations,
             &mut self.by_identity,
@@ -542,6 +540,7 @@ impl EmlIngest {
             atts,
             &mut self.report,
         );
+        Ok(())
     }
 
     /// One line of parse counters for the verbose log.
@@ -637,11 +636,11 @@ mod tests {
                 data: vec![4, 5, 6],
             },
         ];
-        let mut blob_bytes = std::collections::HashMap::new();
-        let queued = queue_attachments(&blobs, true, &mut blob_bytes);
+        let spool = AttachmentSpool::open(dir.path()).unwrap();
+        let queued = queue_attachments(&blobs, Some(&spool)).unwrap();
         assert_eq!(queued.len(), 2);
 
-        let mut atts: Vec<_> = queued.iter().map(|a| a.to_ir(&blob_bytes)).collect();
+        let mut atts: Vec<_> = queued.iter().map(PendingAttachment::to_ir).collect();
         let mut report = ExportReport::default();
         let mut doc = ConversationDocument {
             schema_version: SCHEMA_VERSION,
@@ -676,16 +675,20 @@ mod tests {
             }],
             packaging_stem_suffix: None,
         };
-        let payloads: Vec<Option<Vec<u8>>> = doc
+        let mut sources: Vec<Option<AttachmentSource>> = doc
             .messages
             .iter()
-            .flat_map(|msg| msg.attachments.iter().map(|att| att.bytes.clone()))
+            .flat_map(|msg| msg.attachments.iter().map(|att| spool.source(att)))
+            .map(|spooled| spooled.map(|(source, _)| source))
             .collect();
         report.attachments_saved += message_crate_core::stage_conversation_attachments(
             doc.messages.iter_mut(),
             &att_dir,
             &message_crate_core::MediaConfig::default(),
-            |i| Ok(payloads.get(i).cloned().flatten()),
+            |i| match sources.get_mut(i) {
+                Some(Some(source)) => message_staging::load_attachment_source(source),
+                _ => Ok(None),
+            },
             None,
             None,
             None,

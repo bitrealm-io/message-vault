@@ -8,6 +8,6 @@ describe("the Unknown contact group", () => {
   });
 
   it("keeps a typed search alongside it", () => {
-    expect(groupListQuery(UNKNOWN_GROUP, "messages:>0")).toBe("group:unknown messages:>0");
+    expect(groupListQuery(UNKNOWN_GROUP, "messages:>0")).toBe("group:unknown (messages:>0)");
   });
 });

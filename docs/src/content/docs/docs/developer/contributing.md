@@ -39,7 +39,7 @@ sudo apt install -y ffmpeg
 
 ### Install Rust
 
-Ubuntu's `rust` package is usually too old. Install Rust with rustup instead; the minimum supported version is 1.85.
+Ubuntu's `rust` package is usually too old. Install Rust with rustup instead; `rust-toolchain.toml` pins 1.98.1, and rustup reads that file in this repository.
 
 ```bash title="Install Rust with rustup"
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -109,7 +109,7 @@ Later sessions, start with no flags so `data/` stays. With no database yet, the 
 
 `--reset` wipes `data/` and starts empty (no sample inbox): it runs `create-database` first, because the server adds the Demo Account only to a database that does not exist yet. Don't combine `--reset` and `--reset-demo`. `--sqlweb` works with any of these.
 
-`--reset` alone leaves Message Crate **unclaimed**, so the first screen is Create Owner — which is the only way to reach that screen in dev. Add `--owner` to claim it as `admin`/`admin` instead and land on the login. `--reset-demo` seeds the Demo Account and no owner, so it also leaves Message Crate unclaimed unless `--owner` is added.
+`--reset` alone leaves Message Crate **unclaimed**, so the first screen is Create Owner. Add `--owner` to claim it as `admin`/`admin` instead and land on the login. `--reset-demo` seeds the Demo Account and no owner, so it also leaves Message Crate unclaimed unless `--owner` is added.
 
 
 ### Open the website (terminal 2)
@@ -185,7 +185,7 @@ Each commit should be one idea. Don't mix a bug fix with a rename, or a feature 
 
 Prefer `feat:`, `fix:`, or `docs:` at the start of the subject when it fits; other prefixes are fine too. The subject should say what changed. Add a short body when the reason isn't obvious, and mention the issue (`Ref: #123`).
 
-Never commit passwords, API tokens, certificates, credential `.env` files, or real message backups. Tests use committed fixtures under `crates/*/tests/fixtures/`.
+Never commit passwords, API tokens, certificates, credential `.env` files, or real message backups. Tests use committed fixtures under `tests/fixtures/` and `crates/exporters/*/tests/fixtures/`.
 
 ### Example
 

@@ -17,8 +17,8 @@ Released sqlx 0.9 does not help either (its range caps below 0.38).
    edition), set `libsqlite3-sys` to the rusqlite-matched release
    (`0.38.0` unless rusqlite moved), pin `sqlx-core` to the matching
    version, and drop the `[lints] workspace = true` block.
-3. Run the full verification suite — the dual-engine tests are the gate
-   for this combination (upstream tests sqlx-sqlite only against its own
+3. Run the full verification suite — the server's SQLite tests are the
+   gate for this combination (upstream tests sqlx-sqlite only against its own
    libsqlite3-sys pin).
 4. Never edit fork source beyond the manifest. Upstream license:
    MIT OR Apache-2.0 (both license files stay in the vendor dir).

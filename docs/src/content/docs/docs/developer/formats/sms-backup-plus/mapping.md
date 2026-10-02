@@ -31,9 +31,9 @@ In CSV form: one file per conversation (header + one row per message after dedup
 | `guid` | Deterministic SHA-256 fingerprint |
 | `timestamp` / `timestamp_utc` / `timestamp_display` / `timestamp_unix_ms` | Flat: `X-smssync-date` / `Date`; archive: body timestamp |
 | `direction` | `incoming` / `outgoing` from `X-smssync-type` or archive sender |
-| `service` | Always `SMS` |
+| `service` | Always `sms` |
 | `sender_handle` / `sender_display_name` | Outgoing uses export owner; incoming may use Subject / name hint |
-| `text` | The `text/html` part stripped to text when there is one, else `text/plain` |
+| `text` | The first `text/plain` part |
 | `attachments_json` | Non-text MIME parts under `attachments/` |
 | `message_kind` | `sms` or `mms` |
 | `export_source` / `export_tool` / `export_tool_version` | `sms-backup-plus` / `SMS Backup+` / `1.5.11` |

@@ -18,8 +18,8 @@ The run model (`ExporterConfig`, `ExportReport`, `ExportTransforms`, `run_pipeli
 
 On-disk forms:
 
-- **JSON** (CLI/GUI default) — one pretty-printed `<conversation-stem>.json` per chat
-- **JSONL** — one `<conversation-stem>.jsonl` per chat: header line, then one `IrMessage` per line
+- **JSON** — one pretty-printed `<conversation-stem>.json` per chat
+- **JSONL** (the desktop app's default) — one `<conversation-stem>.jsonl` per chat: header line, then one `IrMessage` per line
 
 Stem rules match CSV filenames. Packaging-only suffixes (e.g. `__whatsapp`) affect the on-disk stem but are **not** serialized in the JSON body. When two conversations in one run reduce to the same stem, ignoring case (two groups with one title, or two untitled groups with the same people), each gets `__` and the first 8 hex digits of the SHA-256 of its `chat_identifier` appended, so neither file replaces the other. Two conversations with the same `chat_identifier` and stem stop the run instead.
 
@@ -97,7 +97,7 @@ Attachment **bytes** are never stored in JSON/JSONL (`#[serde(skip)]`). Paths + 
 ### Vocabulary (enums)
 
 - `conversation_type`: `individual` \| `group`
-- `service`: `sms` \| `imessage` \| `whatsapp` \| `rcs` \| `unknown`
+- `service`: `sms` \| `imessage` \| `whatsapp` \| `rcs` \| `discord` \| `signal` \| `telegram` \| `slack` \| `unknown`
 - `message_kind`: `sms` \| `mms` \| `imessage` \| `tapback` \| `sticker_tapback` \| `announcement` \| `location_share` \| `balloon` \| `unknown`
 
 ### Serialization rules
@@ -127,7 +127,7 @@ Line 1 is the header (includes `conversation.stats`; no `messages` array). Each 
 | JSON | pretty-printed `ConversationDocument` | `read_conversation_json` |
 | JSONL | header + one message per line | `read_conversation_jsonl` |
 | CSV | unified [`CSV_HEADERS`](https://github.com/messagecrate/message-crate/blob/main/crates/libs/ir-format/src/write.rs) (header from first data row on read) | `read_conversation_csv` |
-| EML / MBOX | common message → `MailMessage` → [`message-mail`](https://github.com/messagecrate/message-crate/tree/main/crates/libs/mail) | `read_conversation_eml_dir` / `read_conversation_mbox` |
+| EML / MBOX | common message → `MailMessage` → [`mail`](https://github.com/messagecrate/message-crate/tree/main/crates/libs/mail) | `read_conversation_eml_dir` / `read_conversation_mbox` |
 | XML | single `smses.xml` via [`sms_backup_restore_exporter::SbrArchive`](https://github.com/messagecrate/message-crate/tree/main/crates/exporters/sms-backup-restore-exporter) handed to `FormatSink::with_archive` | `sms_backup_restore_exporter::read_backup` (owner inferred when omitted) |
 
 **Directory convert:** [`message-reexport`](https://github.com/messagecrate/message-crate/tree/main/crates/libs/reexport) auto-detects one format in an export folder and writes another via `FormatSink`. Export calls it for any format other than JSON Lines.

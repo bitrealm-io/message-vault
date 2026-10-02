@@ -53,7 +53,7 @@ The Message Crate software has three parts:
 
 - **Backend** - The core system that runs on your computer. It keeps you logged in, stores your messages, and powers the search feature.
 - **Desktop App** - A program that imports your messages into Message Crate from phone backups and app exports. You can also view, organize, and export your messages from here.
-- **Website** - A read-only version of the desktop app running in a web browser.
+- **Website** - The desktop app in a web browser, for reading, searching, and organizing your messages. Importing, exporting, and converting need the desktop app.
 
 You can bring in:
 

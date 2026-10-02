@@ -57,11 +57,9 @@ A limit below `asset_part_size` is accepted, and the server then hands out parts
 The part size is worked out on each upload, so neither a change to the limit nor an edit to `asset_part_size` can leave a server that does not start.
 The server refuses only a limit of zero, or one above 9223372036854775807, with `422 Unprocessable Entity`.
 
-Web env overrides (optional): `MC_DB`, `MC_DATA_DIR`.
-
 ### Logging
 
-The server writes its log to stderr through `tracing`: one `INFO` line per HTTP response with the method, path, status and latency, an `ERROR` line with the full cause chain behind every `500`, and `WARN` lines for work the server could not complete but did not fail the request over. `RUST_LOG` sets the level and accepts the usual filter syntax, for example `RUST_LOG=debug` or `RUST_LOG=message_crate_server=debug,tower_http=info`. Unset, the level is `info`. The `import`, `dedupe`, `process-assets` and `reset-demo` subcommands print their progress to stdout as before; that is their output, not the log.
+The server writes its log to stderr through `tracing`: one `INFO` line per HTTP response with the method, path, status and latency, an `ERROR` line with the full cause chain behind every `500`, and `WARN` lines for work the server could not complete but did not fail the request over. `RUST_LOG` sets the level and accepts the usual filter syntax, for example `RUST_LOG=debug` or `RUST_LOG=message_crate_server=debug,tower_http=info`. Unset, the level is `info`. The `import`, `dedupe-cross-source`, `process-assets` and `reset-demo` subcommands print their progress to stdout as before; that is their output, not the log.
 
 ## Per-account asset files
 

@@ -262,7 +262,7 @@ _Avoid_: Login, Auth, Import session, Token
 **API Token**:
 A named credential an account makes so a program can act for it without
 logging in, limited to the scopes the person chose: importing, exporting, or
-deleting. A program holding one can bring messages in, or take them out
+both. A program holding one can bring messages in, or take them out
 through an Export Run it starts, but it can never browse: reading messages
 outside a run needs a Session. The secret is shown once when the token is
 made; afterwards the account sees only its name, a masked hint, and when it
@@ -337,7 +337,9 @@ The one directory the desktop app keeps on a computer, made the first time
 the app starts. It holds the Data Directory of the Message Crate the app
 starts, the Staging Directory, and the Tools Directory. It exists on every
 computer the app runs on, including one whose app connects to a Message
-Crate elsewhere.
+Crate elsewhere. Decided, not built yet: #1053 tracks the work, and until it
+lands the app keeps its Message Crate's data in the operating system's
+app-data directory.
 _Avoid_: Folder, App Data, Home Directory
 
 **Data Directory**:
@@ -360,7 +362,8 @@ _Avoid_: Import Staging Directory, Temp Folder, Working Directory
 The directory inside the Message Crate Directory where the desktop app keeps
 the programs it downloads for itself: ffmpeg, ffprobe and wtsexporter. The
 app owns its contents and replaces them when a release needs a newer
-version.
+version. Decided, not built yet: #1053 tracks the work, and until it lands
+the app downloads nothing.
 _Avoid_: Tools Folder, Bin Directory, ffmpeg directory
 
 **Apple Messages Reader**:

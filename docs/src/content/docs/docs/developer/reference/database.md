@@ -72,7 +72,7 @@ Web accounts log in with **user ID** (`username`) and optional password.
 `preferred_name` is the display name. `account_handles` (and optional
 `account_emails`) are handles used to recognize “you” in messages — emails are
 never used for login. GUI **session** tokens live in `account_session_tokens` (one
-per account; rotated on login; prefix `mc-user-`). Named **API tokens** for CLI
+per account; rotated on login; prefix `mc-user-`). Named **API tokens** for program
 import/export live in `account_api_tokens` (many per account; prefix `mc-api-`).
 
 ### `handles`

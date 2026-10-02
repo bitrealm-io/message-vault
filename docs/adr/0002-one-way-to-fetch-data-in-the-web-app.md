@@ -118,9 +118,10 @@ nothing — the opposite of the pattern this decision removes.
 ## Consequences
 
 - `web/src/lib/serverApi.ts` holds one function per server route. Its generated
-  companion, `web/src/lib/serverApi.types.ts`, is checked in. `scripts/check-pr.sh`
-  regenerates the types and fails on any diff, mirroring what
-  `crates/server/server/src/openapi.rs:337` already does for the JSON document.
+  companion, `web/src/lib/serverApi.types.ts`, is checked in.
+  `scripts/check-generated-api-types.sh` regenerates the types and fails on any
+  diff, mirroring what the `committed_openapi_matches_dump` test in
+  `crates/server/server/src/openapi.rs` already does for the JSON document.
   Regenerate the JSON with
   `cargo run -p message-crate-server -- dump-openapi --output docs/src/assets/openapi.json`.
 - `web/src/lib/api.ts` keeps `apiClient`, the base URL, and the Bearer header.
@@ -128,9 +129,10 @@ nothing — the opposite of the pattern this decision removes.
 - Response shapes are deleted from `web/src/lib/types.ts` and come from the
   generated file. Shapes that describe the interface rather than a server
   response stay.
-- `useResource`, `usePagedList`, `nameCollection`, `contactDetailCache`, and the
-  four `mv-*-changed` events are removed. `savedSearches.ts`, `contactGroups.ts`,
-  `messageTags.ts`, `useAccountProfile.ts`, and `importSession.ts` survive as
+- `useResource`, `usePagedList`, `contactDetailCache`, and the four
+  `mv-*-changed` events are removed. `nameCollection.ts`, `savedSearches.ts`,
+  `contactGroups.ts`, `messageTags.ts`, `useAccountProfile.ts`, and
+  `importSession.ts` survive as
   the per-feature layer over TanStack Query, without caches of their own.
   `InfiniteOffsetList` and `VirtualList` are untouched: they render the items
   they are given and never fetch.
@@ -139,7 +141,8 @@ nothing — the opposite of the pattern this decision removes.
   than `POST`. The prefix is only a naming problem: the server already requires
   a logged-in session for those five and accepts an export-scoped API token only
   on `GET /v1/export/messages` and `GET /v1/export/messages/count`, which keep
-  the prefix. The rename happens in the same pull request as the route
+  the prefix (both later gave way to the Export Run routes under `/v1/exports`).
+  The rename happens in the same pull request as the route
   functions, so those functions are written once against their final URLs.
 - The work landed as four pull requests, split for reviewability rather than to
   avoid breaking anything. The first added the generated types, the route

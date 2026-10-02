@@ -134,7 +134,7 @@ sequenceDiagram
     Dev->>Desktop: Starts
     Dev->>Desktop: Enters credentials
     Desktop->>Server: Forwards credentials (Auth, API)
-    Server->>DB: Reads account (rusqlite)
+    Server->>DB: Reads account (sqlx)
     Server-->>Desktop: Session
 ```
 
@@ -166,10 +166,10 @@ sequenceDiagram
     Desktop-->>Dev: JSONL on disk
 
     Dev->>Desktop: Import into Message Crate
-    Desktop->>Server: Import JSONL (Import, API)
-    Server->>DB: Writes messages
     Desktop->>Server: Upload attachments (Assets, API)
     Server->>Disk: Writes files
+    Desktop->>Server: Import JSONL (Import, API)
+    Server->>DB: Writes messages
 ```
 
 ### Export from Message Crate
@@ -197,7 +197,7 @@ sequenceDiagram
 
     Dev->>Desktop: Export messages
     Desktop->>Server: Export messages (Browse / export, API)
-    Server->>DB: Reads messages (rusqlite)
+    Server->>DB: Reads messages (sqlx)
     Server-->>Desktop: Message pages
     Desktop->>Server: Download attachments (Assets, API)
     Server->>Disk: Reads files

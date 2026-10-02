@@ -3,9 +3,9 @@ title: "Mail archives"
 description: "EML and MBOX layout and X-ME headers used when Message Crate writes a mail archive."
 ---
 
-Design for a human-viewable export: **one folder per conversation**, **one `.eml` per message**, with structured `X-ME-*` headers for machine fidelity. Intended as an archive / interchange path before the server exists. Mail clients can open individual messages; translators can recover SMS, group MMS, and (later) iMessage semantics without relying on CSV.
+Design for a human-viewable export: **one folder per conversation**, **one `.eml` per message**, with structured `X-ME-*` headers for machine fidelity. Intended as an archive / interchange path. Mail clients can open individual messages; translators can recover SMS, group MMS, and (later) iMessage semantics without relying on CSV.
 
-**Status:** Writer in [`message-mail`](https://github.com/messagecrate/message-crate/blob/main/crates/libs/mail/). Every exporter's output can be rewritten as EML or MBOX through [Convert](/docs/developer/formats/convert/). All exporters (including iMessage via [`imessage-ir-exporter`](https://github.com/messagecrate/message-crate/blob/main/crates/exporters/imessage-ir-exporter/)) go backup → [shared conversation structure](/docs/developer/reference/export-structure/) ([`message-ir`](https://github.com/messagecrate/message-crate/blob/main/crates/libs/ir/)) → output format (see [message-ir architecture](/docs/developer/architecture/common-message/)). JSON is the default format. iMessage writes extension headers; handwriting attaches SVG. See also [CSV columns](/docs/developer/reference/csv-columns/).
+**Status:** Writer in [`mail`](https://github.com/messagecrate/message-crate/blob/main/crates/libs/mail/). Every exporter's output can be rewritten as EML or MBOX through [Convert](/docs/developer/formats/convert/). All exporters (including iMessage via [`imessage-ir-exporter`](https://github.com/messagecrate/message-crate/blob/main/crates/exporters/imessage-ir-exporter/)) go backup → [shared conversation structure](/docs/developer/reference/export-structure/) ([`message-ir`](https://github.com/messagecrate/message-crate/blob/main/crates/libs/ir/)) → output format (see [message-ir architecture](/docs/developer/architecture/common-message/)). JSON is the default format. iMessage writes extension headers; handwriting attaches SVG. See also [CSV columns](/docs/developer/reference/csv-columns/).
 
 ## Goals
 
@@ -33,12 +33,12 @@ output/
     ...
 ```
 
-- **Conversation stem:** same rules as CSV filenames from [`message-csv::conversation_filename`](https://github.com/messagecrate/message-crate/blob/main/crates/libs/csv/src/lib.rs), without the `.csv` suffix (e.g. `+15555550101`, `Family_Chat`, `group_+A_+B`).
+- **Conversation stem:** same rules as CSV filenames from [`message_ir::conversation_stem`](https://github.com/messagecrate/message-crate/blob/main/crates/libs/ir/src/lib.rs), without the `.csv` suffix (e.g. `+15555550101`, `Family_Chat`, `group_+A_+B`).
 - **Sequence prefix:** zero-padded decimal in chronological emit order so file browsers sort stably.
 - **Timestamp in name:** local wall-clock of the message for skimming (authoritative time is still `Date` / `X-ME-Timestamp-Unix-Ms`).
 - **`guid8`:** first 8 hex chars of `X-ME-Guid` (or Message-ID local-part hash) to avoid collisions when two messages share a second.
 
-Each file is one RFC 5322 message. Prefer writing via a MIME builder (e.g. `mail-builder`) when implemented.
+Each file is one RFC 5322 message, written with the `mail-builder` crate.
 
 ### Why not one `.mbox` per conversation
 
@@ -131,7 +131,6 @@ Prefix: **`X-ME-`** (Message Crate). JSON header values are compact single-line 
 | `X-ME-Service` | lowercase common-message vocabulary preferred (`sms` / `imessage` / …) | Older exports may use `SMS` / `iMessage` |
 | `X-ME-Message-Kind` | see taxonomy below | |
 | `X-ME-Timestamp-Unix-Ms` | integer string | Authoritative epoch ms (UTC) |
-| `X-ME-Timestamp-Display-TZ` | optional offset/name | When export used a non-host timezone |
 | `X-ME-Subject` | string | When distinct from mail `Subject` |
 | `X-ME-Guid` | hex / guid string | Matches CSV `guid` when possible |
 | `X-ME-Export-Source` | string | e.g. `sms-backup-restore` |
@@ -340,7 +339,7 @@ Normal sticker sends: image MIME part + `X-ME-Attachment-Meta` (`is_sticker`, `s
 
 ## Implementation notes
 
-1. Crate [`message-mail`](https://github.com/messagecrate/message-crate/blob/main/crates/libs/mail/) emits one `.eml` / mboxrd record per message (`write_mail_package`).
+1. Crate [`mail`](https://github.com/messagecrate/message-crate/blob/main/crates/libs/mail/) emits one `.eml` / mboxrd record per message (`write_mail_package`).
 2. **Android / OpenExtract / iMazing / WhatsApp** exporters map pending rows → `MailMessage` for the EML and MBOX formats.
 3. **iMessage** is [`imessage-ir-exporter`](https://github.com/messagecrate/message-crate/blob/main/crates/exporters/imessage-ir-exporter/) (`imessage-database` → common message → packaging).
 4. Deferred: Digital Touch animation, translations UI, HEIC convert / obfuscate inside MIME, Askama HTML bodies.

@@ -20,7 +20,8 @@ current.
   Contact Group" wherever it is accepted. Each list says which words it
   accepts.
 - **A word that does not belong to the list is refused.** The answer is a
-  400 that names the word and the list, with a "did you mean" only when the
+  400 (now `422 Unprocessable Entity`, by `docs/architecture/http-api.md`)
+  that names the word and the list, with a "did you mean" only when the
   current word list has something close. Nothing is silently searched as
   text or dropped, and the module knows nothing about spellings that came
   before it.
@@ -98,9 +99,9 @@ word, the same as typed text, and the person edits it once.
 - Adding a filter is one entry in the module's field registry plus one SQL
   emitter. The web's suggestions, the docs page, and the refusal messages
   read that registry, so they cannot drift from what compiles.
-- The web sends `sort`, `order`, `rows`, and `context` as request parameters
-  and no longer embeds them in the query string. Its operator-sniffing
-  regexes are deleted in favour of `GET /v1/search/fields`.
+- The web sends `sort` as a request parameter and no longer embeds it in the
+  query string. Its operator-sniffing regexes are deleted in favour of
+  `GET /v1/search-fields/{list}`.
 - Saved Searches written in spellings the language does not have fail as
   unknown words.
 - The three route files shrink to their handlers and their base queries. A

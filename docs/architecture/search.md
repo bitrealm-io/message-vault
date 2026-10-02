@@ -41,8 +41,8 @@ Each rule holds on every list, and each has its reason.
   dropped. The language keeps no table of spellings it used to have. Why: a
   silently ignored word returns rows the person did not ask for, and they
   cannot see why.
-- **A query only narrows.** Sort order, grouping by conversation, context
-  lines, and the Contacts mode switch are request parameters, never words.
+- **A query only narrows.** Sort order is a request parameter (`sort`), never
+  a word.
   Why: a Saved Search then holds only what to find, so it means the same thing
   on every screen that runs it.
 - **Compile is pure.** Compiling reads no database and no clock. Anything that

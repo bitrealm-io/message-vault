@@ -48,7 +48,7 @@ The website in the image is the production Vite build from `web/`. There is no V
 The file has three stages. Each stage is a temporary image. Only the last stage is what you run.
 
 1. **Website.** Node 22 installs `web/` dependencies and runs `npm run build`. The output is `web/dist`.
-2. **Server binary.** Rust 1.95 compiles `message-crate-server` in release mode. The binary carries what it needs to generate Demo Data: the `demo-seed` crate, its two size settings, the Pride and Prejudice text, and the name lists.
+2. **Server binary.** Rust 1.98.1, the version `rust-toolchain.toml` pins, compiles `message-crate-server` in release mode. The binary carries what it needs to generate Demo Data: the `demo-seed` crate, its two size settings, the Pride and Prejudice text, and the name lists.
 3. **Runtime.** A slim Node 20 image gets ffmpeg, the server binary, `config/config.docker.toml`, and the website files copied to `static/`.
 
 The build context is the **repository root**. `.dockerignore` decides what Docker sends into that context. It must ignore the live data folder at the repo root (`/data`) so a personal database is not copied into the image. It must not ignore `crates/server/demo-seed/data/`. That folder holds the Pride and Prejudice text and the name lists the server compiles in.
@@ -91,14 +91,13 @@ CI builds `docker/Dockerfile` from the repository root. It does not use Compose.
 docker build -f docker/Dockerfile -t bitrealm/message-crate:local .
 ```
 
-CI uses Buildx and then pushes to Docker Hub. Locally, omit the push. To include the same optional build arguments CI passes:
+CI uses Buildx and then pushes to Docker Hub. Locally, omit the push. To include the same optional build argument CI passes:
 
 ```bash title="Build with Buildx, load onto this machine"
 docker buildx build \
   -f docker/Dockerfile \
   -t bitrealm/message-crate:local \
-  --build-arg BUILD_ID=local \
-  --build-arg BUILD_DATE=$(date -u +%Y-%m-%d) \
+  --build-arg BUILD_METADATA= \
   --load \
   .
 ```

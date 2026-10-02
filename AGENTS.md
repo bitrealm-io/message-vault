@@ -70,7 +70,7 @@ The product has two pieces:
 message-crate
 ├── config/                 # server config templates (copy example → config.toml)
 ├── crates/                 # Rust workspace (src-tauri is excluded)
-│   ├── core/               # shared form model, jobs, export.ini
+│   ├── core/               # shared form model, export pipeline, jobs
 │   ├── exporters/          # backup parsers (iMessage, WhatsApp, SMS, experimental)
 │   ├── helpers/            # imessage-reader (GPL helper process the app spawns) and its protocol
 │   ├── libs/               # shared libraries (ir, ir-format, reexport, contacts, media,
@@ -183,7 +183,7 @@ Work from the repository root. The server process must be running before the web
 ./scripts/run-dev.sh --release       # optimized build; combines with any flag above
 ```
 
-`serve` adds the Demo Account to a database that does not exist yet, so a plain first start has it too; `--reset` creates the database empty first (`create-database`). `--reset` and `--reset-demo` cannot be combined. Neither claims the Message Crate; add `--owner` to either for that. `--help` on either dev script lists every flag with examples. `--reset-demo` also rewrites `config/config.toml` from the example (CORS for Vite `:5173` enabled). Later sessions omit `--reset-demo` so the existing database stays.
+`serve` adds the Demo Account to a database that does not exist yet, so a plain first start has it too; `--reset` creates the database empty first (`create-database`). `--reset` and `--reset-demo` cannot be combined. Neither claims the Message Crate; add `--owner` to either for that. `./scripts/run-dev.sh --help` lists every flag with examples. `--reset-demo` also rewrites `config/config.toml` from the example (CORS for Vite `:5173` enabled). Later sessions omit `--reset-demo` so the existing database stays.
 
 API: **http://127.0.0.1:8080**. After `--reset-demo`, press **Explore Demo Account** on the login card; the Demo Account has no password. After `--owner`, log in as `admin` / `admin`. Otherwise create the owner in the UI.
 

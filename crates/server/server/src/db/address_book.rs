@@ -581,9 +581,25 @@ fn plan(rows: &[FileRow], snapshot: &Snapshot) -> Result<Vec<FileContact>, Vec<S
             if holder_name.is_empty() || in_file.contains(&holder) {
                 continue;
             }
+            // A trashed holder cannot be added to the file, because its id
+            // reads as unknown text, so the way through is the Trash.
+            let (where_it_is, way_through) = if snapshot.trashed.contains_key(&holder) {
+                (
+                    "is in the Trash",
+                    format!(
+                        "restore \"{holder_name}\" and add it to the file, \
+                         or delete \"{holder_name}\" for good,"
+                    ),
+                )
+            } else {
+                (
+                    "is not in the file",
+                    format!("add \"{holder_name}\" to the file"),
+                )
+            };
             errors.push(format!(
-                "row {}: {} belongs to \"{holder_name}\" (contact {holder}), which is not in the file, \
-                 so it cannot move to {}; add \"{holder_name}\" to the file to move it",
+                "row {}: {} belongs to \"{holder_name}\" (contact {holder}), which {where_it_is}, \
+                 so it cannot move to {}; {way_through} to move it",
                 identity.row,
                 identity.key.normalized,
                 contact.describe()

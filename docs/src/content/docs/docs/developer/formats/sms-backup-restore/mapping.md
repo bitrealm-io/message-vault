@@ -43,7 +43,7 @@ Apple-only columns (`parts_json`, tapbacks, balloons, …) stay empty.
 - `address` → `chat_identifier` / participant handle (after phone normalization)
 - `date` → `timestamp*` and `timestamp_unix_ms` (invalid or missing dates are skipped)
 - `type` `1` / `2` → `direction` incoming / outgoing; `3` (draft) and `4` (outbox) are skipped and counted as `skipped_draft_or_outbox`; other types are skipped and counted as `skipped_unknown_type`; raw value in `android_type`
-- `body` → `text` (HTML entities decoded)
+- `body` → `text` (character references and HTML entities decoded; a surrogate pair written as two references, such as `&#55357;&#56832;`, becomes one character; a reference that is not a character, such as `&#0;` or a lone surrogate, is dropped and counted as `dropped_character_references`)
 - `subject` → `subject` when present
 - `contact_name` → `sender_display_name` for incoming (not a separate CSV column)
 - **Every** `<sms>` attribute → `source_fields_json.attrs`

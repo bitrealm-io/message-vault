@@ -8,7 +8,7 @@ use message_crate_core::{
 };
 
 use super::events;
-use super::jobs::{reset_and_clone_cancel, spawn_job};
+use super::jobs::{spawn_job, start_job};
 use super::last_log_line_or;
 use crate::state::AppState;
 
@@ -21,8 +21,8 @@ use crate::state::AppState;
 /// # Errors
 ///
 /// Returns an error if `output_format` is not one of json, jsonl, csv, eml,
-/// mbox, or xml, or if another thread panicked while holding the shared
-/// state lock. Failures during conversion are sent as `extract:error`.
+/// mbox, or xml, if another job is running, or if another thread panicked
+/// while holding the shared state lock. Failures during conversion are sent as `extract:error`.
 #[tauri::command(async)]
 pub fn format(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
@@ -41,10 +41,11 @@ pub fn format(
         _ => return Err(format!("unsupported output format '{output_format}'")),
     };
 
-    let cancel = reset_and_clone_cancel(&state)?;
+    let job = start_job(&state, "a format conversion")?;
+    let cancel = job.cancel_flag();
 
     let app_handle = app.clone();
-    spawn_job(app, move || {
+    spawn_job(app, job, move || {
         let log_app = app_handle.clone();
         let config = ExporterConfig {
             inputs: vec![PathBuf::from(&input_dir)],
@@ -63,17 +64,12 @@ pub fn format(
             source: SourceConfig::Format(FormatConfig {}),
         };
 
-        match message_reexport::run(&config) {
-            Ok(run_result) => {
-                let summary = last_log_line_or(&run_result.messages, "Format conversion complete.");
-                for line in run_result.messages {
-                    events::emit(&app_handle, events::LOG, line);
-                }
-                events::emit(&app_handle, events::FINISHED, summary);
-            }
-            Err(err) => return Err(err),
+        let run_result = message_reexport::run(&config)?;
+        let summary = last_log_line_or(&run_result.messages, "Format conversion complete.");
+        for line in run_result.messages {
+            events::emit(&app_handle, events::LOG, line);
         }
-        Ok(())
+        Ok(summary)
     });
 
     Ok(())

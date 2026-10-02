@@ -147,6 +147,8 @@ instant midnight falls in the account's time zone, so the comparison is
 plain text and a message sent at 11:59 pm on New Year's Eve belongs to the
 old year wherever the server runs. A midnight that falls in a
 daylight-saving gap starts the day at the first instant after the gap.
+A day the zone skipped whole, such as 30 December 2011 in Pacific/Apia,
+starts where the next day starts, so it holds no message.
 
 Case and accents:
 

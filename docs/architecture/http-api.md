@@ -230,7 +230,11 @@ that counts something else is a second shape.
 
 `limit` is at least 1 and at most 500, default 40, on every list including an
 Export Run's messages. `offset` is at most 50 000 on the browse lists. A value
-outside the range is `validation-failed`, never a silent clamp.
+outside the range is `validation-failed`, never a silent clamp. One
+conversation's messages, `GET /v1/conversations/{id}/messages`, is not a browse
+list and has no `offset` cap. Why: the conversation page reads a thread by
+stepping `offset` forward, and a cap would leave the rest of a long thread out
+of reach.
 
 Sorting is `sort=-field,field`: comma-separated keys, a leading `-` for
 descending. Each list declares the keys it accepts, and an unlisted key is

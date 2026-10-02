@@ -53,6 +53,8 @@ pub struct ReadReport {
     pub skipped_empty_participants: u64,
     /// Parts with undecodable base64.
     pub skipped_bad_attachment: u64,
+    /// Character references dropped because they are not a character.
+    pub dropped_character_references: u64,
     /// Per-file error messages from parsing/staging.
     pub errors: Vec<String>,
 }
@@ -146,6 +148,7 @@ fn merge_stats(report: &mut ReadReport, stats: ParseStats) {
     report.skipped_draft_or_outbox += stats.skipped_draft_or_outbox;
     report.skipped_empty_participants += stats.skipped_empty_participants;
     report.skipped_bad_attachment += stats.skipped_bad_attachment;
+    report.dropped_character_references += stats.dropped_character_references;
 }
 
 /// Pending attachments for a message's decoded parts, carrying bytes only when the caller keeps them.
@@ -475,13 +478,15 @@ pub fn read_backup(
         owner_phones.sort();
         owner_phones.dedup();
     }
-    let (owners, owner_handle) = if owner_phones.is_empty() {
-        (HashSet::new(), None)
+    let owners = if owner_phones.is_empty() {
+        None
     } else {
-        let owners = OwnerHandleSet::from_phones(&owner_phones)?;
-        // from_phones guarantees at least one phone handle in the set.
-        (owners.all_phone_digits(), owners.primary_owner_handle())
+        Some(OwnerHandleSet::from_phones(&owner_phones)?)
     };
+    // from_phones guarantees at least one phone handle in the set.
+    let owner_handle = owners
+        .as_ref()
+        .and_then(OwnerHandleSet::primary_owner_handle);
     let mut report = ReadReport::default();
     let mut conversations = BTreeMap::new();
     for path in paths {
@@ -490,7 +495,7 @@ pub fn read_backup(
         // conversation is built. Messages that parse before an XML error are
         // kept; stats are merged even when the file is truncated.
         let mut stats = ParseStats::default();
-        let parse_result = parse_file_with(&path, &owners, &mut stats, |record| {
+        let parse_result = parse_file_with(&path, owners.as_ref(), &mut stats, |record| {
             check_cancel(options.cancel)?;
             let attachments = queue_attachments(&record.attachments, options.copy_attachments);
             match add_record(&mut conversations, record, attachments) {
@@ -795,5 +800,40 @@ mod tests {
             // SHA-256 of "hello", the decoded payload.
             Some("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824")
         );
+    }
+
+    /// A carrier often lists the owner's number in national form in an MMS,
+    /// so `07700900123` is the owner `+447700900123`, and the MMS is the
+    /// one-to-one conversation with the other person, not a group.
+    #[test]
+    fn the_owner_in_national_form_is_not_a_participant() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("input.xml");
+        fs::write(&input, r#"<smses><mms date="1400773400000" msg_box="1" address="+447911123456~07700900123"><parts><part ct="text/plain" text="hi"/></parts><addrs><addr address="+447911123456" type="137"/><addr address="07700900123" type="151"/></addrs></mms></smses>"#).unwrap();
+        let owner = vec!["+447700900123".to_string()];
+        let (docs, _) = read_backup(&input, opts(&owner, None, false)).unwrap();
+        assert_eq!(
+            docs[0].conversation.participants.len(),
+            1,
+            "{:?}",
+            docs[0].conversation.participants
+        );
+    }
+
+    /// With more than one owner number, a sent message is credited to the
+    /// first one given, in every run.
+    #[test]
+    fn the_first_owner_number_given_is_the_owner_handle() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("input.xml");
+        fs::write(&input, r#"<smses><sms protocol="0" address="+15555550101" date="1400773261000" type="2" body="hi"/></smses>"#).unwrap();
+        // Nine numbers, so a set's order would pick the first one given only
+        // by chance; the first given is not the smallest either.
+        let owners: Vec<String> = [9, 0, 2, 3, 4, 5, 6, 7, 8]
+            .iter()
+            .map(|i| format!("+1555555010{i}"))
+            .collect();
+        let (docs, _) = read_backup(&input, opts(&owners, None, false)).unwrap();
+        assert_eq!(docs[0].export.owner_handle.as_deref(), Some("+15555550109"));
     }
 }

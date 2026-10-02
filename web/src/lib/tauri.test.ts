@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { currentDesktopJob } from "./desktopJob";
 import type { PushFinishedReport } from "./tauri";
 import {
+  awaitTauriJob,
   invokeDeleteStaging,
   invokeSummarizeStaging,
   invokeTranscodeStaging,
@@ -12,6 +14,15 @@ const resolveStagingParent = vi.fn();
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invoke(...args),
+}));
+
+const listeners = vi.hoisted(() => new Map<string, (e: { payload: unknown }) => void>());
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: async (name: string, handler: (e: { payload: unknown }) => void) => {
+    listeners.set(name, handler);
+    return () => listeners.delete(name);
+  },
 }));
 
 vi.mock("./system-settings", () => ({
@@ -200,5 +211,26 @@ describe("staging command wrappers resolve their own staging root", () => {
       }),
     ).rejects.toThrow(/staging directory/i);
     expect(invoke).not.toHaveBeenCalled();
+  });
+});
+
+describe("awaitTauriJob", () => {
+  it("holds the desktop job under its name until the job finishes", async () => {
+    let seenWhileRunning: string | null = null;
+    const done = awaitTauriJob("Export", async () => {
+      seenWhileRunning = currentDesktopJob();
+      queueMicrotask(() => listeners.get("extract:finished")?.({ payload: "Pull complete" }));
+    });
+    await done;
+    expect(seenWhileRunning).toBe("Export");
+    expect(currentDesktopJob()).toBeNull();
+  });
+
+  it("lets the desktop job go when the job fails", async () => {
+    const done = awaitTauriJob("Convert", async () => {
+      queueMicrotask(() => listeners.get("extract:error")?.({ payload: { detail: "disk full" } }));
+    });
+    await expect(done).rejects.toThrow("disk full");
+    expect(currentDesktopJob()).toBeNull();
   });
 });

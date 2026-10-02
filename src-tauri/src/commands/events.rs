@@ -103,6 +103,16 @@ pub struct ExtractErrorEvent {
     pub user_message: Option<String>,
 }
 
+/// A job's error, with its full chain as `detail` and no friendlier message.
+impl From<anyhow::Error> for ExtractErrorEvent {
+    fn from(err: anyhow::Error) -> Self {
+        Self {
+            detail: format!("{err:#}"),
+            user_message: None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

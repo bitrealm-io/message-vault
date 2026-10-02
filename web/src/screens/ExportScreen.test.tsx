@@ -25,7 +25,8 @@ vi.mock("../lib/tauri", async (importOriginal) => {
     invokeFormat: (...args: unknown[]) => invokeFormat(...args),
     invokeDeleteStaging: (...args: unknown[]) => invokeDeleteStaging(...args),
     invokeCancel: (...args: unknown[]) => invokeCancel(...args),
-    awaitTauriJob: (...args: unknown[]) => awaitTauriJob(...args),
+    // The job's name comes first; the mocks below take what follows it.
+    awaitTauriJob: (_job: string, ...args: unknown[]) => awaitTauriJob(...args),
     onExtractEvents: vi.fn(async () => () => {}),
   };
 });
@@ -154,8 +155,8 @@ describe("ExportScreen", () => {
   });
 
   it("does not start the conversion when Cancel is pressed after the pull finished", async () => {
-    // Every job command clears the shared cancel flag when it starts, so a
-    // Cancel sent before invokeFormat would be erased by invokeFormat itself.
+    // A Cancel sent while no job runs stops nothing, and invokeFormat starts
+    // its job with a cancel flag of its own, so the screen must not start it.
     const staging = "/home/demo/message-crate/staging-export-260831-120000";
     let releaseFormat: () => void = () => {};
     const formatHeld = new Promise<void>((resolve) => {

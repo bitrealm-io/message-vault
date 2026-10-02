@@ -66,14 +66,7 @@ function useDrawerLeft(open: boolean): number | null {
   return left;
 }
 
-export default function ContactDrawer({
-  contactId,
-  preview = null,
-  onClose,
-  onBrowseConversations,
-  /** `docked` = flex sibling (contacts page). `overlay` = fixed panel (e.g. from messages). */
-  variant = "overlay",
-}: {
+type ContactDrawerProps = {
   contactId: string | null;
   preview?: ContactPreview | null;
   onClose: () => void;
@@ -82,8 +75,28 @@ export default function ContactDrawer({
     kind: ContactBrowseKind;
     handle?: string;
   }) => void;
+  /** `docked` = flex sibling (contacts page). `overlay` = fixed panel (e.g. from messages). */
   variant?: "docked" | "overlay";
-}) {
+};
+
+/**
+ * The drawer stays mounted while the person clicks from one contact to the
+ * next, so it is keyed by contact id: each contact starts with its own name
+ * editor and its own Move to trash. A Move to trash still answering for the
+ * last contact then neither shows its error here nor closes the drawer of the
+ * contact now open.
+ */
+export default function ContactDrawer(props: ContactDrawerProps) {
+  return <OneContactDrawer key={props.contactId ?? ""} {...props} />;
+}
+
+function OneContactDrawer({
+  contactId,
+  preview = null,
+  onClose,
+  onBrowseConversations,
+  variant = "overlay",
+}: ContactDrawerProps) {
   const updateContact = useUpdateContact();
   const trashContact = useTrashContact();
   const { detail: matchedDetail } = useContactDetail(contactId);
@@ -106,13 +119,6 @@ export default function ContactDrawer({
       ? preview?.name
       : "Loading…";
   const loading = !detailMatches;
-
-  // Opening a different contact resets the name editor. Loading the contact
-  // itself is the query's job, and the group chips a contact-list edit writes
-  // into the cache re-render here without an event to subscribe to.
-  useEffect(() => {
-    setEditingName(false);
-  }, []);
 
   useEffect(() => {
     setNameValue(displayName === "Loading…" ? "" : displayName);

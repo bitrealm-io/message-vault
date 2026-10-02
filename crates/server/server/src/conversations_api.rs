@@ -19,7 +19,7 @@ use crate::db::conversations::{
 };
 use crate::db::trash::{DeleteOutcome, Trashable, delete_trashed, move_to_trash, restore};
 use crate::paging::{
-    DEFAULT_LIST_LIMIT, ListRequest, Page, PageQuery, page_of, page_params, sorted_page,
+    DEFAULT_LIST_LIMIT, ListRequest, Page, PageQuery, page_of, page_params, parse_sort,
 };
 use crate::server::{ApiError, AppState, FullAccess, FullDeleteAccess};
 use crate::trash_api::remove_orphaned_files;
@@ -138,7 +138,8 @@ pub(crate) struct ListConversationMessagesQuery {
 
 /// A conversation's messages, ascending by timestamp then `sort_order`. The
 /// read path a screen uses to open a conversation: no search query to compose,
-/// just the conversation id.
+/// just the conversation id. `offset` has no cap: the conversation page reads
+/// a thread by stepping it forward, and every message must be reachable.
 #[utoipa::path(
     get,
     path = "/v1/conversations/{id}/messages",
@@ -147,7 +148,7 @@ pub(crate) struct ListConversationMessagesQuery {
     params(
         ("id" = i64, Path, description = "Conversation id"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
-        ("offset" = Option<usize>, Query, description = "Page offset, max 50000"),
+        ("offset" = Option<usize>, Query, description = "Page offset, no maximum"),
         ("sort" = Option<String>, Query, description = "`date` or `-date`. Default `date`, oldest first.")
     ),
     responses(
@@ -161,9 +162,8 @@ pub(crate) async fn list_conversation_messages(
     Query(query): Query<ListConversationMessagesQuery>,
 ) -> Result<Json<Page<Message>>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    let (page, order) = sorted_page(
-        query.limit,
-        query.offset,
+    let page = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
+    let order = parse_sort(
         query.sort.as_deref(),
         &MESSAGE_SORT_KEYS,
         &DEFAULT_MESSAGE_SORT,

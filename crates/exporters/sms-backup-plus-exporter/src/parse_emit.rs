@@ -6,7 +6,7 @@ use crate::flat_eml::{MailHeaders, is_flat_sms_eml, parse_flat_eml_mail};
 use crate::types::ParsedMessage;
 use anyhow::{Result, bail};
 use message_crate_core::CancelFlag;
-use std::collections::HashSet;
+use phone::OwnerHandleSet;
 use std::path::{Path, PathBuf};
 
 /// Collect `.eml` paths from files and directories, skipping `duplicate` /
@@ -95,7 +95,7 @@ pub(super) enum ParsedEmlKind {
 pub(super) fn parse_one_eml(
     eml_path: &Path,
     rel_path: String,
-    owner_digits: &HashSet<String>,
+    owners: &OwnerHandleSet,
     owner_emails_lc: &[String],
 ) -> ParsedEmlKind {
     let bytes = match std::fs::read(eml_path) {
@@ -115,7 +115,7 @@ pub(super) fn parse_one_eml(
     if headers.is_call_log() {
         ParsedEmlKind::CallLog
     } else if is_flat_sms_eml(&headers) {
-        match parse_flat_eml_mail(eml_path, &mail, &headers, owner_digits, owner_emails_lc) {
+        match parse_flat_eml_mail(eml_path, &mail, &headers, owners, owner_emails_lc) {
             Some(mut msg) => {
                 msg.eml_path = rel_path;
                 ParsedEmlKind::Flat { msg: Box::new(msg) }

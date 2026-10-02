@@ -1,5 +1,6 @@
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { DesktopJobName } from "../lib/desktopJob";
 import { awaitTauriJob, invokeCancel, onExtractEvents, type TauriJobResult } from "../lib/tauri";
 import type { ImportIssueEvent, ImportProgressEvent } from "../lib/types";
 
@@ -13,10 +14,12 @@ export type TauriJobRunCallbacks = {
  * Shared start/cancel/log state for long-running desktop jobs
  * (extract, push, pull, and similar).
  *
- * Export and Settings → Convert use `run`, which waits for the job's result.
- * `start` only collects a log; no screen calls it.
+ * Export and Settings → Convert use `run`, which waits for the job's result
+ * and holds the desktop job under `job` while it runs. `start` only collects
+ * a log; no screen calls it.
  */
-export function useTauriJob(options?: {
+export function useTauriJob(options: {
+  job: DesktopJobName;
   onError?: (msg: string) => void;
   onProgress?: (event: ImportProgressEvent) => void;
   onIssue?: (event: ImportIssueEvent) => void;
@@ -33,9 +36,10 @@ export function useTauriJob(options?: {
   run: (invokeFn: () => Promise<void>, callbacks?: TauriJobRunCallbacks) => Promise<TauriJobResult>;
   cancel: () => Promise<void>;
 } {
-  const onError = options?.onError;
-  const onProgress = options?.onProgress;
-  const onIssue = options?.onIssue;
+  const job = options.job;
+  const onError = options.onError;
+  const onProgress = options.onProgress;
+  const onIssue = options.onIssue;
   const [running, setRunning] = useState(false);
   const [finished, setFinished] = useState(false);
   const [log, setLog] = useState<string[]>([]);
@@ -106,6 +110,7 @@ export function useTauriJob(options?: {
       setFinished(false);
       try {
         const result = await awaitTauriJob(
+          job,
           invokeFn,
           callbacks?.onLog,
           callbacks?.onProgress ?? onProgress,
@@ -120,7 +125,7 @@ export function useTauriJob(options?: {
         setRunning(false);
       }
     },
-    [onIssue, onProgress, tearDown],
+    [job, onIssue, onProgress, tearDown],
   );
 
   const cancel = useCallback(async () => {

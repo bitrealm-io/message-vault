@@ -41,6 +41,10 @@ fn to_core_report(report: ReadReport) -> ExportReport {
         "skipped_bad_attachment".into(),
         report.skipped_bad_attachment,
     );
+    out.extra.insert(
+        "dropped_character_references".into(),
+        report.dropped_character_references,
+    );
     out
 }
 

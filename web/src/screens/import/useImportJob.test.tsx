@@ -60,7 +60,8 @@ const onExtractEventsMock = vi.fn(
 );
 
 vi.mock("../../lib/tauri", () => ({
-  awaitTauriJob: (...args: Parameters<typeof runMock>) => runMock(...args),
+  // The job's name comes first; the canned results below take what follows it.
+  awaitTauriJob: (_job: string, ...args: Parameters<typeof runMock>) => runMock(...args),
   invokeCancel: (...args: unknown[]) => cancelMock(...args),
   invokeExtract: (...args: unknown[]) => invokeExtractMock(...args),
   invokePush: (...args: unknown[]) => invokePushMock(...args),
@@ -848,8 +849,8 @@ describe("useImportJob wiring", () => {
   });
 
   it("does not start the extract when Cancel is pressed while the run is being created", async () => {
-    // Every job command clears the shared cancel flag when it starts, so a
-    // Cancel sent before invokeExtract would be erased by invokeExtract itself.
+    // A Cancel sent while no job runs stops nothing, and invokeExtract starts
+    // its job with a cancel flag of its own, so the run must not start it.
     let releaseCreate: (value: { id: number }) => void = () => {};
     createImportMock.mockReset();
     createImportMock.mockImplementationOnce(
@@ -900,8 +901,8 @@ describe("useImportJob wiring", () => {
   });
 
   it("sends Cancel again once a job has started, when it was pressed while the job was starting", async () => {
-    // The job command clears the shared flag when it starts, so a Cancel that
-    // reached the desktop side before that is gone, and has to be sent again.
+    // A Cancel that reached the desktop side before the job started stopped
+    // nothing, because no job was running yet, so it has to be sent again.
     let releasePush: () => void = () => {};
     const { result } = renderHook(() => useImportJob());
     await act(() => result.current.startImport(form({ attachmentMedia: "copy" })));

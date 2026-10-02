@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { type DesktopJobName, holdDesktopJob } from "./desktopJob";
 import type { components } from "./serverApi.types";
 import { resolveStagingParent } from "./system-settings";
 import type {
@@ -406,14 +407,19 @@ export function onExtractEvents(callbacks: {
  * Run a desktop job and wait until it finishes.
  * Extract and push return as soon as the background thread starts, so callers
  * must use this instead of awaiting the invoke call alone.
+ *
+ * `job` names the screen's job while it runs (`desktopJob.ts`), so the other
+ * screens keep their Start buttons off until it ends.
  */
 export async function awaitTauriJob(
+  job: DesktopJobName,
   invokeFn: () => Promise<void>,
   onLog?: (line: string) => void,
   onProgress?: (event: ImportProgressEvent) => void,
   onIssue?: (event: ImportIssueEvent) => void,
 ): Promise<TauriJobResult> {
   let unlisten: UnlistenFn | undefined;
+  const release = holdDesktopJob(job);
   try {
     return await new Promise<TauriJobResult>((resolve, reject) => {
       void (async () => {
@@ -433,6 +439,7 @@ export async function awaitTauriJob(
     });
   } finally {
     unlisten?.();
+    release();
   }
 }
 

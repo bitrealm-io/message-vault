@@ -3,7 +3,8 @@
 use crate::assets::extract_attachments;
 use crate::types::ParsedMessage;
 use mailparse::{MailHeaderMap, ParsedMail};
-use phone::sanitize_number;
+use message_ir::HandleType;
+use phone::{OwnerHandleSet, sanitize_number};
 use regex::Regex;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
@@ -196,7 +197,7 @@ pub(crate) fn parse_flat_eml_mail(
     path: &Path,
     mail: &ParsedMail<'_>,
     headers: &MailHeaders,
-    owner_digits: &HashSet<String>,
+    owners: &OwnerHandleSet,
     owner_emails: &[String],
 ) -> Option<ParsedMessage> {
     if !is_single_sms_eml(headers) {
@@ -204,7 +205,7 @@ pub(crate) fn parse_flat_eml_mail(
     }
     let timestamp_secs = timestamp_seconds(headers)?;
     let name_alias = contact_name_from_subject(&headers.subject);
-    let addresses = FlatAddresses::from_headers(headers, name_alias.as_deref(), owner_digits);
+    let addresses = FlatAddresses::from_headers(headers, name_alias.as_deref(), owners);
     if addresses.is_blank() {
         return None;
     }
@@ -258,7 +259,7 @@ impl FlatAddresses {
     fn from_headers(
         headers: &MailHeaders,
         subject_name: Option<&str>,
-        owner_digits: &HashSet<String>,
+        owners: &OwnerHandleSet,
     ) -> Self {
         let raw = if headers.smssync_address.is_empty() {
             subject_name.unwrap_or_default().to_string()
@@ -273,7 +274,7 @@ impl FlatAddresses {
             .unwrap_or_default();
         let non_owner = numbers
             .into_iter()
-            .filter(|n| !owner_digits.contains(n))
+            .filter(|n| !owners.is_owner(n, HandleType::Phone))
             .collect();
         Self {
             raw,
@@ -368,7 +369,7 @@ Hello from Alice\r\n",
         let bytes = std::fs::read(&path).unwrap();
         let mail = mailparse::parse_mail(&bytes).unwrap();
         let headers = MailHeaders::from_mail(&mail);
-        let owners = HashSet::from(["5555550100".to_string()]);
+        let owners = OwnerHandleSet::from_phones(&["5555550100".to_string()]).unwrap();
         let msg = parse_flat_eml_mail(&path, &mail, &headers, &owners, &[]).unwrap();
         assert!(!msg.is_from_me);
         assert_eq!(msg.text.trim(), "Hello from Alice");
@@ -396,7 +397,7 @@ Hello\r\n",
         let bytes = std::fs::read(&path).unwrap();
         let mail = mailparse::parse_mail(&bytes).unwrap();
         let headers = MailHeaders::from_mail(&mail);
-        let owners = HashSet::from(["5555550100".to_string()]);
+        let owners = OwnerHandleSet::from_phones(&["5555550100".to_string()]).unwrap();
         let msg = parse_flat_eml_mail(&path, &mail, &headers, &owners, &["me@example.com".into()])
             .unwrap();
         assert_eq!(msg.chat_key, "4075551234");
@@ -428,7 +429,7 @@ old message\r\n"
         let bytes = std::fs::read(&path).unwrap();
         let mail = mailparse::parse_mail(&bytes).unwrap();
         let headers = MailHeaders::from_mail(&mail);
-        let owners = HashSet::from(["5555550100".to_string()]);
+        let owners = OwnerHandleSet::from_phones(&["5555550100".to_string()]).unwrap();
         let msg = parse_flat_eml_mail(&path, &mail, &headers, &owners, &[]).unwrap();
         assert!((msg.timestamp_secs - 978_307_200.0).abs() < 0.001);
     }
@@ -513,7 +514,8 @@ old message\r\n"
         let bytes = std::fs::read(&path).unwrap();
         let mail = mailparse::parse_mail(&bytes).unwrap();
         let headers = MailHeaders::from_mail(&mail);
-        let owners: HashSet<String> = owners.iter().map(|s| s.to_string()).collect();
+        let owners: Vec<String> = owners.iter().map(|s| s.to_string()).collect();
+        let owners = OwnerHandleSet::from_phones(&owners).unwrap();
         parse_flat_eml_mail(&path, &mail, &headers, &owners, &[])
     }
 
@@ -526,5 +528,17 @@ old message\r\n"
             &["5555550100"],
         );
         assert!(msg.is_none(), "{:?}", msg.map(|m| m.text));
+    }
+
+    /// An MMS whose address list names the owner in national form
+    /// (`07700900123` for `+447700900123`) is one-to-one with the other number.
+    #[test]
+    fn the_owner_in_national_form_is_not_a_peer() {
+        let msg = parse(
+            "From: x@unknown.email\nTo: me@example.com\nSubject: MMS with X\nX-smssync-type: 132\nX-smssync-address: 07700900123~+447911123456\nX-smssync-date: 1609459200000\nContent-Type: text/plain; charset=utf-8\n\nhi\n",
+            &["+447700900123"],
+        )
+        .unwrap();
+        assert_eq!(msg.conversation_type, "individual");
     }
 }

@@ -1825,3 +1825,95 @@ async fn a_small_attachment_size_limit_holds_only_the_attachment_uploads() {
         crate::problem::ProblemType::PayloadTooLarge,
     );
 }
+
+// ---------------------------------------------------------------------------
+// A body with no declared length over its cap (#1219)
+// ---------------------------------------------------------------------------
+
+/// A body of 8 bytes in two chunks, wrapped in `Limited` at `cap` the way
+/// `limit_request_body` wraps a body with no `Content-Length`.
+fn limited_chunked_body(cap: usize) -> axum::body::Body {
+    let chunks: Vec<Result<axum::body::Bytes, std::io::Error>> = vec![
+        Ok(axum::body::Bytes::from_static(b"four")),
+        Ok(axum::body::Bytes::from_static(b"more")),
+    ];
+    let inner = axum::body::Body::from_stream(futures_util::stream::iter(chunks));
+    axum::body::Body::new(http_body_util::Limited::new(inner, cap))
+}
+
+/// `Limited` cuts the body off at the same cap the reader holds it to, so the
+/// reader sees `Limited`'s error before its own size check runs. That error
+/// means the body is too large, not that it is malformed.
+#[tokio::test]
+async fn a_limited_body_streamed_to_a_file_over_the_cap_is_too_large() {
+    let dir = TempDir::new().unwrap();
+
+    let error = stream_body_to_file(limited_chunked_body(5), &dir.path().join("upload"), 5)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.status(), StatusCode::PAYLOAD_TOO_LARGE, "{error}");
+}
+
+#[tokio::test]
+async fn a_limited_body_read_into_memory_over_the_cap_is_too_large() {
+    let error = read_body_limited(limited_chunked_body(5), 5)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.status(), StatusCode::PAYLOAD_TOO_LARGE, "{error}");
+}
+
+#[tokio::test]
+async fn a_limited_body_discarded_over_the_cap_is_too_large() {
+    let error = discard_body(limited_chunked_body(5), 5).await.unwrap_err();
+
+    assert_eq!(error.status(), StatusCode::PAYLOAD_TOO_LARGE, "{error}");
+}
+
+/// Send `PUT path` with `Transfer-Encoding: chunked` and `body` as one chunk,
+/// and return the answer's status. reqwest sends every body it is given here
+/// with a `Content-Length`, so the request is written by hand.
+async fn put_chunked(base: &str, path: &str, token: &str, body: &[u8]) -> StatusCode {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let address = base.strip_prefix("http://").unwrap();
+    let mut stream = tokio::net::TcpStream::connect(address).await.unwrap();
+    let head = format!(
+        "PUT {path} HTTP/1.1\r\nHost: {address}\r\nAuthorization: Bearer {token}\r\n\
+         Content-Type: image/png\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n{:x}\r\n",
+        body.len()
+    );
+    // The server may answer and close before it has read the whole body, so
+    // a failed write is not what the test checks; the answer is.
+    let _ = stream.write_all(head.as_bytes()).await;
+    let _ = stream.write_all(body).await;
+    let _ = stream.write_all(b"\r\n0\r\n\r\n").await;
+    let mut response = Vec::new();
+    let _ = stream.read_to_end(&mut response).await;
+    let response = String::from_utf8_lossy(&response);
+    let code = response
+        .split_whitespace()
+        .nth(1)
+        .unwrap_or_else(|| panic!("no status line in {response:?}"));
+    StatusCode::from_u16(code.parse().unwrap()).unwrap()
+}
+
+/// An attachment upload with no `Content-Length` and a body over the
+/// attachment size limit answers 413, as one with a `Content-Length` does.
+#[tokio::test]
+async fn a_chunked_attachment_upload_over_the_limit_is_413() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    crate::test_support::store_asset_max_bytes(&fixture.state, 1024).await;
+    let server = crate::test_support::serve(&fixture.state).await;
+    let sha = "0".repeat(64);
+
+    let status = put_chunked(
+        server.base(),
+        &format!("/v1/assets/{sha}?source=imessage"),
+        &user.token,
+        &[b'x'; 4096],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+}

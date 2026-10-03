@@ -56,7 +56,9 @@ only the user resolves it.
    closes, and the diff.
 
    ```bash
-   gh pr view <N> --json headRefName,headRefOid,baseRefName,isDraft,closingIssuesReferences,body
+   gh pr view <N> --json headRefName,headRefOid,baseRefName,isDraft,body
+   gh api graphql -f query='{ repository(owner: "messagecrate", name: "message-crate") {
+     pullRequest(number: <N>) { closingIssuesReferences(first: 20) { nodes { number } } } } }'
    gh pr diff <N>
    ```
 
@@ -76,14 +78,19 @@ only the user resolves it.
    with no line in the diff goes in a top-level comment instead
    (`gh pr comment <N>`), with the marker on its first line. It has no thread,
    so it is answered by a new marked `gh pr comment <N>` that quotes it.
-3. **Fix on a detached worktree** at the reviewed head. The branch may be
-   checked out in another worktree, and a detached one works either way.
-   Push without force, because the branch may carry another session's
-   commits:
+3. **Work on a detached worktree** made at the pull request's head, before
+   the review. The branch may be checked out in another worktree, and a
+   detached one works either way. Before every push, run the **local
+   checks**: `./scripts/check-pr.sh`, then the tests for each area the
+   unpushed commits change, as "Build, format, and test" gives them
+   (`cargo test -p <crate>` for a workspace crate, the `src-tauri` tests,
+   Vitest for `web/`). CI runs everything else. Push without force, because
+   the branch may carry another session's commits:
 
    ```bash
    git fetch origin <headRefName>
    git worktree add --detach .worktrees/review-<N> <headRefOid>
+   git diff --name-only <last pushed SHA>..HEAD   # the areas to test
    git push origin HEAD:<headRefName>
    ```
 
@@ -115,9 +122,9 @@ only the user resolves it.
    git fetch origin <baseRefName>
    git merge-base --is-ancestor origin/<baseRefName> HEAD || echo behind
    until m=$(gh pr view <N> --json mergeable -q .mergeable) && [ "$m" != UNKNOWN ]; do sleep 10; done
-   echo "$m"                      # CONFLICTING means merge the base
+   echo "$m"                      # before queueing, CONFLICTING means merge the base
    git merge origin/<baseRefName> # stops at each conflict, with nothing committed
-   # resolve every conflict, git add the files, git commit, ./scripts/check-pr.sh
+   # resolve every conflict, git add the files, git commit, run the local checks
    git show --remerge-diff HEAD   # the conflict resolution alone, for review
    git push origin HEAD:<headRefName>
    ```
@@ -126,7 +133,7 @@ only the user resolves it.
    `origin/<headRefName>` in (`git merge origin/<headRefName>`). A rebase
    would drop the merge commit and replay the base's commits one by one,
    which brings the conflict back. If that merge conflicts too, resolve it,
-   commit, run `./scripts/check-pr.sh`, and review its remerge diff like the
+   commit, run the local checks, and review its remerge diff like the
    first one. Then push again.
 
 6. **Wait for the required checks.** GitHub moves the pull request's head to
@@ -137,8 +144,11 @@ only the user resolves it.
    Watch only the head you mean to queue: a new push to the pull request
    cancels the run on the head before it (`ci.yml`'s concurrency group), so
    push a fix as soon as a check fails rather than waiting for the rest.
-   Rerun only the failed jobs of a run that failed for a reason outside the
-   pull request:
+   A run that failed for a reason outside the pull request is left to
+   finish, because GitHub reruns the failed jobs of a finished run only;
+   then rerun just those. Green counts only while the pull request's head
+   is still the commit you pushed: a push from another session moves it,
+   and its commits have not been reviewed.
 
    ```bash
    sha=$(git rev-parse HEAD)
@@ -146,7 +156,9 @@ only the user resolves it.
          [ "$(gh api repos/messagecrate/message-crate/commits/$sha/check-runs -q .total_count)" -gt 0 ]
    do sleep 30; done
    gh pr checks <N> --watch --required --fail-fast
+   gh run watch <run-id>          # an outside failure: wait for the run to finish
    gh run rerun <run-id> --failed
+   [ "$(gh pr view <N> --json headRefOid -q .headRefOid)" = "$sha" ] || echo moved
    ```
 
 #### Merging

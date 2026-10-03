@@ -214,11 +214,11 @@ CREATE TABLE IF NOT EXISTS imports (
     -- media_review, or upload. NULL once the run is over. `status` says
     -- how a run ended; `stage` says where it is.
     stage TEXT,
-    -- Absolute path to this session's staging folder on the client. The
+    -- Absolute path to this run's staging folder on the client. The
     -- database holds the pointer so resuming means asking the server where
     -- to go, rather than guessing from a directory listing.
     staging_dir TEXT,
-    -- Which install created the session, so another machine can say where
+    -- Which install created the run, so another machine can say where
     -- it belongs instead of failing to open a path that was never local.
     device_id TEXT,
     -- Import form snapshot: restores the screen, and restarts the run with
@@ -228,15 +228,15 @@ CREATE TABLE IF NOT EXISTS imports (
     -- between attempts has different conversation boundaries.
     source_fingerprint TEXT,
     -- Addresses the backup's device sent from (JSON array), read by the
-    -- client before parsing. Lets a resumed Gate 1 show the identity list
-    -- without re-reading the backup.
+    -- client before parsing. Lets a resumed Staging Review show the identity
+    -- list without re-reading the backup.
     source_identities TEXT
 );
 
 CREATE INDEX IF NOT EXISTS ix_imports_account_started
     ON imports(account_id, started_at DESC);
 
--- At most one live import session per account. A partial unique index
+-- At most one running Import Run per account. A partial unique index
 -- rather than application logic, so it holds against a racing client.
 CREATE UNIQUE INDEX IF NOT EXISTS ux_imports_active_account
     ON imports(account_id) WHERE status = 'running';

@@ -119,7 +119,7 @@ fn remove_if_present(path: &Path) -> Result<(), ApiError> {
         (status = 204, description = "Trash emptied"),
     )
 )]
-pub(crate) async fn empty_trash(
+pub(crate) async fn delete_trash(
     State(state): State<AppState>,
     FullDeleteAccess(auth): FullDeleteAccess,
 ) -> Result<StatusCode, ApiError> {

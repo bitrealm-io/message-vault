@@ -10,8 +10,8 @@ use axum::http::header;
 use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 
-use crate::db::address_book::{self, LoadCounts, LoadError, LoadMode};
-use crate::db::sql::bind_args;
+use crate::db::address_book::{self, CreateContactsResponse, LoadError, LoadMode};
+use crate::db::contacts::read::contact_ids_matching;
 use crate::extract::{Json, Query};
 use crate::server::{ApiError, AppState, FullAccess, content_type_base, read_body_limited};
 
@@ -83,7 +83,7 @@ impl From<LoadError> for ApiError {
         description = "The address book: Message Crate's own CSV, one row per identity."
     ),
     responses(
-        (status = 200, body = LoadCounts),
+        (status = 200, body = CreateContactsResponse),
     )
 )]
 pub(crate) async fn create_contacts(
@@ -91,7 +91,7 @@ pub(crate) async fn create_contacts(
     FullAccess(auth): FullAccess,
     Query(query): Query<LoadQuery>,
     request: Request,
-) -> Result<Json<LoadCounts>, ApiError> {
+) -> Result<Json<CreateContactsResponse>, ApiError> {
     if !content_type_base(request.headers())
         .is_some_and(|base| base.eq_ignore_ascii_case("text/csv"))
     {
@@ -113,7 +113,7 @@ pub(crate) async fn create_contacts(
 /// Which contacts `POST /v1/contacts/address-book` writes: the Contacts
 /// list's search and its checked rows.
 #[derive(Debug, Default, Deserialize, utoipa::ToSchema)]
-pub(crate) struct ExportAddressBookRequest {
+pub(crate) struct GetAddressBookRequest {
     /// A Contacts search, as `GET /v1/contacts` takes in `q`. Absent or
     /// empty matches every contact.
     #[serde(default)]
@@ -143,7 +143,7 @@ pub(crate) struct ExportAddressBookRequest {
     path = "/v1/contacts/address-book",
     tag = "Contacts",
     security(("session" = [])),
-    request_body = ExportAddressBookRequest,
+    request_body = GetAddressBookRequest,
     responses(
         (
             status = 200,
@@ -155,10 +155,10 @@ pub(crate) struct ExportAddressBookRequest {
         crate::problem::openapi::SearchQueryInvalid
     )
 )]
-pub(crate) async fn export_address_book(
+pub(crate) async fn get_address_book(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
-    Json(body): Json<ExportAddressBookRequest>,
+    Json(body): Json<GetAddressBookRequest>,
 ) -> Result<Response, ApiError> {
     let mut conn = state.db.acquire().await?;
     let q = body.q.as_deref().unwrap_or("").trim();
@@ -167,20 +167,8 @@ pub(crate) async fn export_address_book(
     } else {
         // The same compile the Contacts list runs, so the file holds the
         // rows the person was looking at.
-        let (zone, today) =
-            crate::db::account_profile::account_clock(&mut conn, auth.account_id).await?;
-        let filter = crate::search::compile(crate::search::CompileRequest {
-            list: crate::search::ListKind::Contacts,
-            query: q,
-            account_id: auth.account_id,
-            today,
-            zone,
-        })?;
-        let sql = format!("SELECT ct.id FROM contacts ct WHERE {}", filter.where_sql());
-        let matched: Vec<i64> = sqlx::query_scalar_with(&sql, bind_args(filter.params()))
-            .fetch_all(&mut *conn)
-            .await?;
-        let matched: HashSet<i64> = matched.into_iter().collect();
+        let clock = crate::db::account_profile::account_clock(&mut conn, auth.account_id).await?;
+        let matched = contact_ids_matching(&mut conn, auth.account_id, q, clock).await?;
         Some(if body.ids.is_empty() {
             matched
         } else {

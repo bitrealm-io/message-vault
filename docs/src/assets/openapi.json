@@ -1044,7 +1044,7 @@
           "Accounts"
         ],
         "summary": "Rename one named API token.",
-        "description": "The label is trimmed before storing.",
+        "description": "The label is trimmed before storing. The answer is the token, as `GET /v1/accounts/{id}/api-tokens` lists it.",
         "operationId": "update_api_token",
         "parameters": [
           {
@@ -1084,7 +1084,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UpdateApiTokenResponse"
+                  "$ref": "#/components/schemas/ApiToken"
                 }
               }
             }
@@ -3237,7 +3237,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/NamedSetRequest"
+                "$ref": "#/components/schemas/CreateNamedSetRequest"
               }
             }
           },
@@ -3467,7 +3467,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/NamedSetRequest"
+                "$ref": "#/components/schemas/UpdateNamedSetRequest"
               }
             }
           },
@@ -3987,7 +3987,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LoadCounts"
+                  "$ref": "#/components/schemas/CreateContactsResponse"
                 }
               }
             }
@@ -4086,12 +4086,12 @@
         ],
         "summary": "Write the address book for the contacts a search matches, the checked ones among them, or every contact when the body names neither.",
         "description": "The answer is `text/csv`, not JSON: one row per identity, with the\ncolumns `contact_id`, `display_name`, `groups`, `service`, `handle_type`\nand `identity`. A contact's name and its Contact Group names, separated\nby `;`, repeat on each of its rows. A contact with no name has a blank\n`display_name`, and a contact with no identity is one row with the last\nthree columns blank. Contacts in the trash are left out.\n\nA cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return\nis written with a `'` in front, in every column, because a spreadsheet\nruns such a cell as a formula and drops the `+` of a phone number.\n`POST /v1/contacts` loads the file back and takes that `'` off.",
-        "operationId": "export_address_book",
+        "operationId": "get_address_book",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ExportAddressBookRequest"
+                "$ref": "#/components/schemas/GetAddressBookRequest"
               }
             }
           },
@@ -4210,12 +4210,12 @@
           "Contacts"
         ],
         "summary": "First/last message dates and counts for a list of contact ids.",
-        "operationId": "summarize_contacts",
+        "operationId": "list_contact_summaries",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SummarizeContactsRequest"
+                "$ref": "#/components/schemas/ListContactSummariesRequest"
               }
             }
           },
@@ -4325,12 +4325,12 @@
           "Contacts"
         ],
         "summary": "Report which identifiers this account has no contact for.",
-        "operationId": "find_unmatched_identities",
+        "operationId": "list_unmatched_identities",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/FindUnmatchedIdentitiesRequest"
+                "$ref": "#/components/schemas/ListUnmatchedIdentitiesRequest"
               }
             }
           },
@@ -6419,7 +6419,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Page_ImportSummary"
+                  "$ref": "#/components/schemas/Page_ImportRun"
                 }
               }
             }
@@ -7042,6 +7042,7 @@
           "Import"
         ],
         "summary": "Record the outcome of an Import Run started with POST /v1/imports.",
+        "description": "The answer is the run as it now stands.",
         "operationId": "complete_import",
         "parameters": [
           {
@@ -7071,7 +7072,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CompleteImportResponse"
+                  "$ref": "#/components/schemas/ImportRun"
                 }
               }
             }
@@ -7321,6 +7322,7 @@
           "Import"
         ],
         "summary": "Discard a running Import Run, freeing the account's single slot.",
+        "description": "The answer is the run, now `cancelled`.",
         "operationId": "discard_import",
         "parameters": [
           {
@@ -7340,7 +7342,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DiscardImportResponse"
+                  "$ref": "#/components/schemas/ImportRun"
                 }
               }
             }
@@ -7523,7 +7525,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/NamedSetRequest"
+                "$ref": "#/components/schemas/CreateNamedSetRequest"
               }
             }
           },
@@ -7753,7 +7755,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/NamedSetRequest"
+                "$ref": "#/components/schemas/UpdateNamedSetRequest"
               }
             }
           },
@@ -8428,7 +8430,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SavedSearchRequest"
+                "$ref": "#/components/schemas/CreateSavedSearchRequest"
               }
             }
           },
@@ -8659,7 +8661,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SavedSearchRequest"
+                "$ref": "#/components/schemas/UpdateSavedSearchRequest"
               }
             }
           },
@@ -8991,7 +8993,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ServerInfo"
+                  "$ref": "#/components/schemas/Server"
                 }
               }
             }
@@ -9849,7 +9851,7 @@
         ],
         "summary": "Empty the trash: every trashed conversation is deleted for good, with its messages and any attachment file no other message uses, and every trashed contact loses its name and details and becomes Unknown, its conversations untouched.",
         "description": "Trash is the only door to permanent deletion; this is the door for everything in it at once.",
-        "operationId": "empty_trash",
+        "operationId": "delete_trash",
         "responses": {
           "204": {
             "description": "Trash emptied"
@@ -10044,24 +10046,6 @@
         ],
         "description": "An account's Export Runs as its reader may see them: in full for the\naccount itself, each an `OwnerExportRun` for the owner."
       },
-      "AccountIdentityRequest": {
-        "type": "object",
-        "description": "One identity to link or unlink, with its platform service.",
-        "required": [
-          "address",
-          "service"
-        ],
-        "properties": {
-          "address": {
-            "type": "string",
-            "description": "The address as typed, e.g. `+15555550100` or `alex@example.com`."
-          },
-          "service": {
-            "type": "string",
-            "description": "Platform the address belongs to: `phone`, `email`, or `whatsapp`."
-          }
-        }
-      },
       "AccountImportRun": {
         "oneOf": [
           {
@@ -10078,7 +10062,7 @@
       "AccountImportRuns": {
         "oneOf": [
           {
-            "$ref": "#/components/schemas/Page_ImportSummary",
+            "$ref": "#/components/schemas/Page_ImportRun",
             "description": "The account's own runs."
           },
           {
@@ -10430,38 +10414,6 @@
               "null"
             ],
             "format": "int64"
-          }
-        }
-      },
-      "CompleteImportResponse": {
-        "type": "object",
-        "description": "The Import Run that was completed.",
-        "required": [
-          "id",
-          "status",
-          "message_count",
-          "attachment_count",
-          "bytes_uploaded"
-        ],
-        "properties": {
-          "attachment_count": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "bytes_uploaded": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "message_count": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "status": {
-            "$ref": "#/components/schemas/ImportStatus"
           }
         }
       },
@@ -10958,6 +10910,71 @@
           }
         }
       },
+      "CreateContactsResponse": {
+        "type": "object",
+        "description": "What a load changed.",
+        "required": [
+          "contacts_created",
+          "contacts_updated",
+          "contacts_deleted",
+          "identities_added",
+          "identities_moved",
+          "identities_removed",
+          "groups_created",
+          "notes"
+        ],
+        "properties": {
+          "contacts_created": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Contacts the load created.",
+            "minimum": 0
+          },
+          "contacts_deleted": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Contacts the load deleted: the ones it left with neither a name nor\nan identity.",
+            "minimum": 0
+          },
+          "contacts_updated": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Contacts the load renamed, or whose identities or Contact Group\nmemberships it changed.",
+            "minimum": 0
+          },
+          "groups_created": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Contact Groups the load created.",
+            "minimum": 0
+          },
+          "identities_added": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Identities linked to a contact that no contact held before.",
+            "minimum": 0
+          },
+          "identities_moved": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Identities taken from one contact and given to another.",
+            "minimum": 0
+          },
+          "identities_removed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Identities taken off a contact, which only Edit does.",
+            "minimum": 0
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "One sentence for each phone number the file wrote without `+` that\nthe load matched to the `+` key its contact holds, or that became a\nnew identity. Each starts with its row number. A spreadsheet can drop\nthe `+` from a number without showing it, so the load says how it\nread the number."
+          }
+        }
+      },
       "CreateExportRequest": {
         "type": "object",
         "description": "Body of `POST /v1/exports`: the scope, and the tool that asked.",
@@ -11077,6 +11094,34 @@
           "id": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "CreateNamedSetRequest": {
+        "type": "object",
+        "description": "The name of a new set.",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateSavedSearchRequest": {
+        "type": "object",
+        "description": "The name and query of a new saved search.",
+        "required": [
+          "name",
+          "query"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
           }
         }
       },
@@ -11256,44 +11301,6 @@
           "medium",
           "large"
         ]
-      },
-      "DiscardImportResponse": {
-        "type": "object",
-        "description": "Confirmation that an Import Run was discarded.",
-        "required": [
-          "id",
-          "status"
-        ],
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "status": {
-            "$ref": "#/components/schemas/ImportStatus"
-          }
-        }
-      },
-      "ExportAddressBookRequest": {
-        "type": "object",
-        "description": "Which contacts `POST /v1/contacts/address-book` writes: the Contacts\nlist's search and its checked rows.",
-        "properties": {
-          "ids": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "int64"
-            },
-            "description": "Contact ids to keep from what `q` matches. Absent or empty keeps\nthem all."
-          },
-          "q": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "A Contacts search, as `GET /v1/contacts` takes in `q`. Absent or\nempty matches every contact."
-          }
-        }
       },
       "ExportQueryList": {
         "type": "string",
@@ -11507,19 +11514,24 @@
           }
         }
       },
-      "FindUnmatchedIdentitiesRequest": {
+      "GetAddressBookRequest": {
         "type": "object",
-        "description": "Body for `POST /v1/contacts/unmatched-identities`.",
-        "required": [
-          "identifiers"
-        ],
+        "description": "Which contacts `POST /v1/contacts/address-book` writes: the Contacts\nlist's search and its checked rows.",
         "properties": {
-          "identifiers": {
+          "ids": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "integer",
+              "format": "int64"
             },
-            "description": "Raw identifiers — phone numbers, emails — as they appear in an export."
+            "description": "Contact ids to keep from what `q` matches. Absent or empty keeps\nthem all."
+          },
+          "q": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A Contacts search, as `GET /v1/contacts` takes in `q`. Absent or\nempty matches every contact."
           }
         }
       },
@@ -11634,16 +11646,20 @@
       },
       "ImportRun": {
         "type": "object",
-        "description": "Full Import Run record.",
+        "description": "An Import Run: one per import, the same record wherever the interface\nhands one out. It holds the counts Settings shows, everything the desktop\napp needs to resume a running run, and the issues the run recorded.",
         "required": [
           "id",
           "source",
           "mode",
+          "dedupe",
           "status",
           "started_at",
           "message_count",
           "attachment_count",
           "bytes_uploaded",
+          "form",
+          "source_fingerprint",
+          "source_identities",
           "summary",
           "issues",
           "contacts_new",
@@ -11652,18 +11668,21 @@
         "properties": {
           "attachment_count": {
             "type": "integer",
-            "format": "int64"
+            "format": "int64",
+            "description": "Attachments counted for the run."
           },
           "attachments_ms": {
             "type": [
               "integer",
               "null"
             ],
-            "format": "int64"
+            "format": "int64",
+            "description": "Time spent on attachments, when finished."
           },
           "bytes_uploaded": {
             "type": "integer",
-            "format": "int64"
+            "format": "int64",
+            "description": "Bytes uploaded so far."
           },
           "contacts_changed": {
             "type": "integer",
@@ -11677,72 +11696,121 @@
             "description": "Contacts this run created.",
             "minimum": 0
           },
+          "dedupe": {
+            "type": "boolean",
+            "description": "Whether cross-source dedupe runs after each batch."
+          },
+          "device_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Which install created the run."
+          },
           "duration_ms": {
             "type": [
               "integer",
               "null"
             ],
-            "format": "int64"
+            "format": "int64",
+            "description": "Total wall-clock duration, when finished."
           },
           "finished_at": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "UTC time the run finished, when it has."
+          },
+          "form": {
+            "description": "Import form snapshot, or null."
           },
           "id": {
             "type": "integer",
-            "format": "int64"
+            "format": "int64",
+            "description": "Import Run id."
           },
           "issues": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ImportIssue"
-            }
+            },
+            "description": "Issues the run recorded, oldest first."
           },
           "message_count": {
             "type": "integer",
-            "format": "int64"
+            "format": "int64",
+            "description": "Messages counted for the run."
           },
           "mode": {
-            "type": "string"
+            "type": "string",
+            "description": "Import mode (`replace` or `append`)."
           },
           "parse_ms": {
             "type": [
               "integer",
               "null"
             ],
-            "format": "int64"
+            "format": "int64",
+            "description": "Time spent parsing, when finished."
           },
           "prepare_ms": {
             "type": [
               "integer",
               "null"
             ],
-            "format": "int64"
+            "format": "int64",
+            "description": "Time spent preparing conversation files, when finished."
           },
           "source": {
-            "type": "string"
+            "type": "string",
+            "description": "Source id the run imports."
+          },
+          "source_fingerprint": {
+            "description": "Source path, size, mtime, and message count, or null."
+          },
+          "source_identities": {
+            "description": "Addresses the backup's device sent from (JSON array), or null."
+          },
+          "stage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Where a running run is; null once it is over."
+          },
+          "staging_dir": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Absolute path to the staging folder on the client that owns the run."
           },
           "started_at": {
-            "type": "string"
+            "type": "string",
+            "description": "UTC time the run started."
           },
           "status": {
-            "$ref": "#/components/schemas/ImportStatus"
+            "$ref": "#/components/schemas/ImportStatus",
+            "description": "Lifecycle status."
           },
-          "summary": {},
+          "summary": {
+            "description": "What the user approved at the last gate they passed, or null. The\ncolumn `PATCH /v1/imports/{id}` writes with its `summary`."
+          },
           "tool": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Importing tool, e.g. `message-crate-push`."
           },
           "upload_ms": {
             "type": [
               "integer",
               "null"
             ],
-            "format": "int64"
+            "format": "int64",
+            "description": "Time spent uploading, when finished."
           }
         }
       },
@@ -11868,119 +11936,35 @@
           "cancelled"
         ]
       },
-      "ImportSummary": {
+      "LinkAccountIdentityRequest": {
         "type": "object",
-        "description": "One Import Run as `GET /v1/imports` lists it: the counts Settings shows,\nand everything the desktop app needs to resume a running one.",
+        "description": "One identity to link onto the account, with its platform service.",
         "required": [
-          "id",
-          "source",
-          "mode",
-          "dedupe",
-          "status",
-          "started_at",
-          "message_count",
-          "attachment_count",
-          "bytes_uploaded",
-          "form",
-          "source_fingerprint",
-          "source_identities",
-          "summary"
+          "address",
+          "service"
         ],
         "properties": {
-          "attachment_count": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Attachments counted for the run."
-          },
-          "bytes_uploaded": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Bytes uploaded so far."
-          },
-          "dedupe": {
-            "type": "boolean",
-            "description": "Whether cross-source dedupe runs after each batch."
-          },
-          "device_id": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Which install created the run."
-          },
-          "duration_ms": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64",
-            "description": "Total wall-clock duration, when finished."
-          },
-          "finished_at": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "UTC time the run finished, when it has."
-          },
-          "form": {
-            "description": "Import form snapshot, or null."
-          },
-          "id": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Import Run id."
-          },
-          "message_count": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Messages counted for the run."
-          },
-          "mode": {
+          "address": {
             "type": "string",
-            "description": "Import mode (`replace` or `append`)."
+            "description": "The address as typed, e.g. `+15555550100` or `alex@example.com`."
           },
-          "source": {
+          "service": {
             "type": "string",
-            "description": "Source id the run imports."
-          },
-          "source_fingerprint": {
-            "description": "Source path, size, mtime, and message count, or null."
-          },
-          "source_identities": {
-            "description": "Addresses the backup's device sent from (JSON array), or null."
-          },
-          "stage": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Where a running run is; null once it is over."
-          },
-          "staging_dir": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Absolute path to the staging folder on the client that owns the run."
-          },
-          "started_at": {
-            "type": "string",
-            "description": "UTC time the run started."
-          },
-          "status": {
-            "$ref": "#/components/schemas/ImportStatus",
-            "description": "Lifecycle status."
-          },
-          "summary": {
-            "description": "What the user approved at the last gate they passed, or null. The\ncolumn `PATCH /v1/imports/{id}` writes with its `summary`."
-          },
-          "tool": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Importing tool, e.g. `message-crate-push`."
+            "description": "Platform the address belongs to: `phone`, `email`, or `whatsapp`."
+          }
+        }
+      },
+      "ListContactSummariesRequest": {
+        "type": "object",
+        "description": "Body for `POST /v1/contacts/summaries`.",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "Contact ids to summarize; an empty list covers every contact."
           }
         }
       },
@@ -11993,68 +11977,19 @@
           "messages"
         ]
       },
-      "LoadCounts": {
+      "ListUnmatchedIdentitiesRequest": {
         "type": "object",
-        "description": "What a load changed.",
+        "description": "Body for `POST /v1/contacts/unmatched-identities`.",
         "required": [
-          "contacts_created",
-          "contacts_updated",
-          "contacts_deleted",
-          "identities_added",
-          "identities_moved",
-          "identities_removed",
-          "groups_created",
-          "notes"
+          "identifiers"
         ],
         "properties": {
-          "contacts_created": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Contacts the load created.",
-            "minimum": 0
-          },
-          "contacts_deleted": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Contacts the load deleted: the ones it left with neither a name nor\nan identity.",
-            "minimum": 0
-          },
-          "contacts_updated": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Contacts the load renamed, or whose identities or Contact Group\nmemberships it changed.",
-            "minimum": 0
-          },
-          "groups_created": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Contact Groups the load created.",
-            "minimum": 0
-          },
-          "identities_added": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Identities linked to a contact that no contact held before.",
-            "minimum": 0
-          },
-          "identities_moved": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Identities taken from one contact and given to another.",
-            "minimum": 0
-          },
-          "identities_removed": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Identities taken off a contact, which only Edit does.",
-            "minimum": 0
-          },
-          "notes": {
+          "identifiers": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "One sentence for each phone number the file wrote without `+` that\nthe load matched to the `+` key its contact holds, or that became a\nnew identity. Each starts with its row number. A spreadsheet can drop\nthe `+` from a number without showing it, so the load says how it\nread the number."
+            "description": "Raw identifiers — phone numbers, emails — as they appear in an export."
           }
         }
       },
@@ -12246,18 +12181,6 @@
             "type": "integer",
             "format": "int64"
           },
-          "name": {
-            "type": "string"
-          }
-        }
-      },
-      "NamedSetRequest": {
-        "type": "object",
-        "description": "A name to create, or the new name for an existing set.",
-        "required": [
-          "name"
-        ],
-        "properties": {
           "name": {
             "type": "string"
           }
@@ -13392,7 +13315,7 @@
           }
         }
       },
-      "Page_ImportSummary": {
+      "Page_ImportRun": {
         "type": "object",
         "description": "One page of a list.",
         "required": [
@@ -13406,7 +13329,7 @@
             "type": "array",
             "items": {
               "type": "object",
-              "description": "One Import Run as `GET /v1/imports` lists it: the counts Settings shows,\nand everything the desktop app needs to resume a running one.",
+              "description": "An Import Run: one per import, the same record wherever the interface\nhands one out. It holds the counts Settings shows, everything the desktop\napp needs to resume a running run, and the issues the run recorded.",
               "required": [
                 "id",
                 "source",
@@ -13420,7 +13343,10 @@
                 "form",
                 "source_fingerprint",
                 "source_identities",
-                "summary"
+                "summary",
+                "issues",
+                "contacts_new",
+                "contacts_changed"
               ],
               "properties": {
                 "attachment_count": {
@@ -13428,10 +13354,30 @@
                   "format": "int64",
                   "description": "Attachments counted for the run."
                 },
+                "attachments_ms": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "description": "Time spent on attachments, when finished."
+                },
                 "bytes_uploaded": {
                   "type": "integer",
                   "format": "int64",
                   "description": "Bytes uploaded so far."
+                },
+                "contacts_changed": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Contacts it only changed.",
+                  "minimum": 0
+                },
+                "contacts_new": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Contacts this run created.",
+                  "minimum": 0
                 },
                 "dedupe": {
                   "type": "boolean",
@@ -13467,6 +13413,13 @@
                   "format": "int64",
                   "description": "Import Run id."
                 },
+                "issues": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ImportIssue"
+                  },
+                  "description": "Issues the run recorded, oldest first."
+                },
                 "message_count": {
                   "type": "integer",
                   "format": "int64",
@@ -13475,6 +13428,22 @@
                 "mode": {
                   "type": "string",
                   "description": "Import mode (`replace` or `append`)."
+                },
+                "parse_ms": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "description": "Time spent parsing, when finished."
+                },
+                "prepare_ms": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "description": "Time spent preparing conversation files, when finished."
                 },
                 "source": {
                   "type": "string",
@@ -13517,6 +13486,14 @@
                     "null"
                   ],
                   "description": "Importing tool, e.g. `message-crate-push`."
+                },
+                "upload_ms": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "description": "Time spent uploading, when finished."
                 }
               }
             },
@@ -14394,23 +14371,7 @@
           }
         }
       },
-      "SavedSearchRequest": {
-        "type": "object",
-        "description": "A saved search's name and query.",
-        "required": [
-          "name",
-          "query"
-        ],
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "query": {
-            "type": "string"
-          }
-        }
-      },
-      "ServerInfo": {
+      "Server": {
         "type": "object",
         "description": "The state of this Message Crate, for the screen a logged-out person sees.",
         "required": [
@@ -14567,20 +14528,6 @@
           }
         }
       },
-      "SummarizeContactsRequest": {
-        "type": "object",
-        "description": "Body for `POST /v1/contacts/summaries`.",
-        "properties": {
-          "ids": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "int64"
-            },
-            "description": "Contact ids to summarize; an empty list covers every contact."
-          }
-        }
-      },
       "Tapback": {
         "type": "object",
         "description": "One tapback reaction on an exported message.",
@@ -14675,6 +14622,24 @@
           }
         }
       },
+      "UnlinkAccountIdentityRequest": {
+        "type": "object",
+        "description": "One identity to unlink from the account, with its platform service.",
+        "required": [
+          "address",
+          "service"
+        ],
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "The address as typed, e.g. `+15555550100` or `alex@example.com`."
+          },
+          "service": {
+            "type": "string",
+            "description": "Platform the address belongs to: `phone`, `email`, or `whatsapp`."
+          }
+        }
+      },
       "UpdateAccountRequest": {
         "type": "object",
         "description": "Body for changing an account. Omitted fields are left alone. The name,\nzone and identities are set by the account or by the owner; the\ndisabled flag and the three permissions are the owner's alone.",
@@ -14710,7 +14675,7 @@
           "identities": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AccountIdentityRequest"
+              "$ref": "#/components/schemas/LinkAccountIdentityRequest"
             },
             "description": "Identities to link onto the account profile."
           },
@@ -14724,7 +14689,7 @@
           "remove_identities": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AccountIdentityRequest"
+              "$ref": "#/components/schemas/UnlinkAccountIdentityRequest"
             },
             "description": "Identities to unlink from the account profile."
           },
@@ -14747,25 +14712,6 @@
           "label": {
             "type": "string",
             "description": "Replacement label."
-          }
-        }
-      },
-      "UpdateApiTokenResponse": {
-        "type": "object",
-        "description": "The renamed token's id and stored label.",
-        "required": [
-          "id",
-          "label"
-        ],
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Token id that was renamed."
-          },
-          "label": {
-            "type": "string",
-            "description": "Stored label after the rename."
           }
         }
       },
@@ -14892,6 +14838,34 @@
             "type": "integer",
             "format": "int64",
             "minimum": 0
+          }
+        }
+      },
+      "UpdateNamedSetRequest": {
+        "type": "object",
+        "description": "The new name for an existing set.",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateSavedSearchRequest": {
+        "type": "object",
+        "description": "A saved search's new name and query.",
+        "required": [
+          "name",
+          "query"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
           }
         }
       },

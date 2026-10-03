@@ -12,7 +12,7 @@ use crate::paging::{DEFAULT_LIST_LIMIT, Page, PageQuery, page_of, page_params};
 use axum::extract::State;
 use serde::{Deserialize, Serialize};
 
-use crate::accounts_api::{Admits, require_account_reach};
+use super::{Admits, require_account_reach};
 use crate::db::api_tokens;
 use crate::db::permissions::Permissions;
 use crate::db::{account_profile, schema};
@@ -128,15 +128,6 @@ pub struct UpdateApiTokenRequest {
     pub label: String,
 }
 
-/// The renamed token's id and stored label.
-#[derive(Debug, Serialize, utoipa::ToSchema)]
-pub struct UpdateApiTokenResponse {
-    /// Token id that was renamed.
-    pub id: i64,
-    /// Stored label after the rename.
-    pub label: String,
-}
-
 /// List the account's named API tokens with their permissions and masked
 /// secrets. Each token's permissions are capped by the account's as they are
 /// now. The owner lists any account's tokens, without their masked secrets.
@@ -167,29 +158,45 @@ pub async fn list_api_tokens(
 
     schema::ensure_accounts_schema(&mut conn).await?;
     let rows = api_tokens::list_api_tokens(&mut conn, account_id).await?;
-    // Each token shows what it may do now: its stored scopes capped by the
-    // permissions of the account that holds it, as they are on this request,
-    // so a permission the owner turned off after the token was made shows as
-    // off. They are read from the account's row, not from the caller, who
-    // may be the owner and holds none.
-    let account_permissions = account_profile::load_account_auth(&mut conn, account_id)
-        .await?
-        .map_or_else(Permissions::none, |a| a.permissions);
+    let account_permissions = holder_permissions(&mut conn, account_id).await?;
     let shows_hint = reach.is_own();
     let items: Vec<ApiToken> = rows
         .into_iter()
-        .map(|row| api_tokens::ApiTokenRow {
-            permissions: row.permissions.intersect(account_permissions),
-            ..row
-        })
-        .map(ApiToken::from)
-        .map(|token| ApiToken {
-            token_hint: token.token_hint.filter(|_| shows_hint),
-            ..token
-        })
+        .map(|row| shown_token(row, account_permissions, shows_hint))
         .collect();
 
     Ok(Json(page_of(items, params)))
+}
+
+/// The permissions of the account that holds the tokens, as they are on
+/// this request. They are read from the account's row, not from the caller,
+/// who may be the owner and holds none.
+async fn holder_permissions(
+    conn: &mut sqlx::SqliteConnection,
+    account_id: i64,
+) -> Result<Permissions, ApiError> {
+    Ok(account_profile::load_account_auth(conn, account_id)
+        .await?
+        .map_or_else(Permissions::none, |a| a.permissions))
+}
+
+/// A token as the interface hands it out: what it may do now, its stored
+/// scopes capped by `account_permissions`, so a permission the owner turned
+/// off after the token was made shows as off; and its masked secret only
+/// when `shows_hint`.
+fn shown_token(
+    row: api_tokens::ApiTokenRow,
+    account_permissions: Permissions,
+    shows_hint: bool,
+) -> ApiToken {
+    let token = ApiToken::from(api_tokens::ApiTokenRow {
+        permissions: row.permissions.intersect(account_permissions),
+        ..row
+    });
+    ApiToken {
+        token_hint: token.token_hint.filter(|_| shows_hint),
+        ..token
+    }
 }
 
 /// Create a named API token. Returns the plaintext secret once, at creation;
@@ -279,7 +286,8 @@ pub async fn delete_api_token(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
-/// Rename one named API token. The label is trimmed before storing.
+/// Rename one named API token. The label is trimmed before storing. The
+/// answer is the token, as `GET /v1/accounts/{id}/api-tokens` lists it.
 #[utoipa::path(
     patch,
     path = "/v1/accounts/{id}/api-tokens/{token_id}",
@@ -291,7 +299,7 @@ pub async fn delete_api_token(
     ),
     request_body = UpdateApiTokenRequest,
     responses(
-        (status = 200, body = UpdateApiTokenResponse),
+        (status = 200, body = ApiToken),
     )
 )]
 pub async fn update_api_token(
@@ -299,7 +307,7 @@ pub async fn update_api_token(
     Path((account_id, id)): Path<(i64, i64)>,
     FullAccess(auth): FullAccess,
     Json(req): Json<UpdateApiTokenRequest>,
-) -> Result<Json<UpdateApiTokenResponse>, ApiError> {
+) -> Result<Json<ApiToken>, ApiError> {
     let mut conn = state.db.acquire().await?;
     require_account_reach(&mut conn, &auth, account_id, HOLDER_ONLY).await?;
     let label = req.label;
@@ -313,7 +321,11 @@ pub async fn update_api_token(
     if !ok {
         return Err(ApiError::NotFound("API token not found".into()));
     }
-    Ok(Json(UpdateApiTokenResponse { id, label: trimmed }))
+    let row = api_tokens::get_api_token(&mut conn, account_id, id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("API token not found".into()))?;
+    let account_permissions = holder_permissions(&mut conn, account_id).await?;
+    Ok(Json(shown_token(row, account_permissions, true)))
 }
 
 #[cfg(test)]
@@ -545,8 +557,8 @@ mod tests {
         );
     }
 
-    /// A rename answers the new label, trimmed, and the list shows it; an id
-    /// the account does not hold is a 404.
+    /// A rename answers the token with its new label, trimmed, as the list
+    /// shows it; an id the account does not hold is a 404.
     #[tokio::test]
     async fn renaming_a_token_answers_and_stores_the_new_label() {
         use crate::test_support::{
@@ -573,12 +585,12 @@ mod tests {
             serde_json::json!({ "label": "  new name  " }),
         )
         .await;
-        assert_eq!(
-            renamed,
-            serde_json::json!({ "id": id, "label": "new name" })
-        );
         let listed: serde_json::Value = get_json(&state, &collection, &alice.token).await;
         assert_eq!(listed["items"][0]["label"], "new name", "{listed}");
+        assert_eq!(
+            renamed, listed["items"][0],
+            "the rename answers the token as the list shows it"
+        );
 
         assert_eq!(
             patch_status(

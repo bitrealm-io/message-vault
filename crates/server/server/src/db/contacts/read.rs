@@ -281,6 +281,35 @@ pub async fn list_contacts_sorted(
     })
 }
 
+/// The ids of every contact `q` matches, a query in the search language,
+/// compiled as [`list_contacts_sorted`] compiles it, so the address book
+/// holds the rows the Contacts list showed.
+///
+/// # Errors
+///
+/// `BadRequest` for a query the language refuses; `Internal` when the
+/// statement fails.
+pub async fn contact_ids_matching(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    q: &str,
+    clock: (chrono_tz::Tz, chrono::NaiveDate),
+) -> Result<HashSet<i64>, ApiError> {
+    let (zone, today) = clock;
+    let filter = crate::search::compile(crate::search::CompileRequest {
+        list: crate::search::ListKind::Contacts,
+        query: q,
+        account_id,
+        today,
+        zone,
+    })?;
+    let sql = format!("SELECT ct.id FROM contacts ct WHERE {}", filter.where_sql());
+    let ids: Vec<i64> = sqlx::query_scalar_with(&sql, bind_args(filter.params()))
+        .fetch_all(&mut *conn)
+        .await?;
+    Ok(ids.into_iter().collect())
+}
+
 type ContactRow = (
     i64,
     String,

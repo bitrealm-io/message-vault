@@ -319,11 +319,11 @@ async fn the_list_sorted_by_start_ascending_puts_the_oldest_run_first() {
 
 /// The account's running Import Run through the list, as the desktop app
 /// finds it: `status=running`, and at most one.
-async fn running_import(conn: &mut SqliteConnection, account: i64) -> Option<ImportSummary> {
+async fn running_import(conn: &mut SqliteConnection, account: i64) -> Option<ImportRow> {
     let (items, _) = list_imports_page(conn, account, Some("running"), &DEFAULT_IMPORT_SORT, 1, 0)
         .await
         .unwrap();
-    items.into_iter().next().map(Into::into)
+    items.into_iter().next()
 }
 
 #[tokio::test]
@@ -356,7 +356,7 @@ async fn active_session_round_trips_and_blocks_a_second() {
         Some("/home/u/message-crate/staging-iphone-260830")
     );
     assert_eq!(active.device_id.as_deref(), Some("device-a"));
-    assert_eq!(active.form["source"], "imessage-ios");
+    assert_eq!(json_column(active.form_json)["source"], "imessage-ios");
 
     assert!(
         matches!(

@@ -54,7 +54,7 @@ pub enum LoadMode {
 
 /// What a load changed.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, utoipa::ToSchema)]
-pub struct LoadCounts {
+pub struct CreateContactsResponse {
     /// Contacts the load created.
     pub contacts_created: u64,
     /// Contacts the load renamed, or whose identities or Contact Group
@@ -150,7 +150,7 @@ struct FileIdentity {
     /// The identity as the file wrote it, kept as the `raw` of a new row.
     written: String,
     /// What the load says about how it read this row, for
-    /// [`LoadCounts::notes`].
+    /// [`CreateContactsResponse::notes`].
     note: Option<String>,
 }
 
@@ -756,7 +756,7 @@ pub async fn load(
     account_id: i64,
     csv_text: &str,
     mode: LoadMode,
-) -> Result<LoadCounts, LoadError> {
+) -> Result<CreateContactsResponse, LoadError> {
     let rows = read_rows(csv_text).map_err(LoadError::Refused)?;
     // A write transaction from the first read: the plan is checked against
     // the contacts the writes then change, and an import that commits
@@ -776,9 +776,9 @@ async fn apply(
     snapshot: &Snapshot,
     file: &[FileContact],
     mode: LoadMode,
-) -> Result<LoadCounts> {
+) -> Result<CreateContactsResponse> {
     let conn: &mut SqliteConnection = tx;
-    let mut counts = LoadCounts::default();
+    let mut counts = CreateContactsResponse::default();
     let mut groups = snapshot.groups.clone();
     // Who holds each identity as the load goes: it changes as rows move them.
     let mut holder_of: HashMap<i64, i64> = snapshot

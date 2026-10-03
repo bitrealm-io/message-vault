@@ -25,7 +25,7 @@ type Schema = components["schemas"];
  * One past Import Run, as the imports list returns it: in full to the
  * account itself, and to the owner without what the run held.
  */
-export type ImportRow = Schema["ImportSummary"] | Schema["OwnerImportRun"];
+export type ImportRow = Schema["ImportRun"] | Schema["OwnerImportRun"];
 
 /**
  * One Export Run as the history table lists it: in full to the account

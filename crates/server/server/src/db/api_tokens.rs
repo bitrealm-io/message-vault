@@ -256,8 +256,34 @@ pub async fn list_api_tokens(
     .bind(account_id)
     .fetch_all(&mut *conn)
     .await?;
-    let mut out = Vec::with_capacity(rows.len());
-    for (
+    Ok(rows.into_iter().map(api_token_row).collect())
+}
+
+/// One API token of the account (no secret); `None` when the account holds
+/// no token with this id.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn get_api_token(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    id: i64,
+) -> Result<Option<ApiTokenRow>> {
+    let row: Option<ApiTokenRowRaw> = sqlx::query_as(
+        "SELECT id, label, can_import, can_export, token_hint, created_at, last_accessed_at, expires_at, disabled
+         FROM account_api_tokens
+         WHERE id = $1 AND account_id = $2",
+    )
+    .bind(id)
+    .bind(account_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+    Ok(row.map(api_token_row))
+}
+
+fn api_token_row(
+    (
         id,
         label,
         can_import,
@@ -267,20 +293,18 @@ pub async fn list_api_tokens(
         last_accessed_at,
         expires_at,
         disabled,
-    ) in rows
-    {
-        out.push(ApiTokenRow {
-            id,
-            label,
-            permissions: Permissions::token(can_import != 0, can_export != 0),
-            token_hint,
-            created_at,
-            last_accessed_at,
-            expires_at,
-            disabled: disabled != 0,
-        });
+    ): ApiTokenRowRaw,
+) -> ApiTokenRow {
+    ApiTokenRow {
+        id,
+        label,
+        permissions: Permissions::token(can_import != 0, can_export != 0),
+        token_hint,
+        created_at,
+        last_accessed_at,
+        expires_at,
+        disabled: disabled != 0,
     }
-    Ok(out)
 }
 
 /// Delete one API token if it belongs to the account.

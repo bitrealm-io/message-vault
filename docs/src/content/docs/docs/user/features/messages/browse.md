@@ -34,6 +34,11 @@ The username of the logged-in account is always shown beside that button, on eve
 
 ## The conversation list
 
+A switch above the list reads **Conversations** and **Messages**.
+**Conversations** lists Conversations, as this section describes.
+**Messages** lists single messages, as [the Messages list](#the-messages-list) describes.
+The search box drives both.
+
 Each row is one Conversation.
 A group Conversation and a one-to-one Conversation appear in the same list.
 
@@ -59,6 +64,29 @@ The search box at the top narrows the list.
 Each row has a checkbox, and the checkbox above the list ticks every row loaded so far.
 The tag button acts on the ticked rows.
 [Message Tags](/docs/user/features/messages/message-tags/) describes it.
+
+## The Messages list
+
+With **Messages** picked above the list, the search in the box lists every message it matches, from every Conversation, one row per message.
+`from:Alice photo` lists the messages Alice sent with the word "photo" in them.
+An empty search lists no messages.
+
+A row shows:
+
+- The Conversation's name, as the conversation list shows it, and the day the message was sent, in the Account's Time Zone.
+- Who sent it, or **You** for a message the Account sent.
+- The message's text, from shortly before the first matching word, with the words of the search in bold. A message with no text shows the names of its attachments.
+- 📎 and a count, for a message with attachments.
+
+The count above the list reads like `12,408 messages`.
+More rows load as the list scrolls, up to the first 50,000.
+
+The sort button above the list offers **Relevance** and **Date**.
+**Relevance** puts the best match first, and is offered only when the search has plain words, which are what it ranks by; it is then where the list starts.
+**Date** orders by when the message was sent, **Newest first** or **Oldest first**, and is where a search with no plain words starts, newest first.
+
+Selecting a row opens its Conversation on the right at that message, highlighted, with the messages before and after it.
+The list stays as it was, so another row opens the same way.
 
 ## The open conversation
 

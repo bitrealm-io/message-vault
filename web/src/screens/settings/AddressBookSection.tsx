@@ -10,7 +10,7 @@ import { sectionTitleClass } from "./profileStyles";
 /** Largest file the server accepts, mirrored here so the refusal is immediate. */
 const MAX_BYTES = 8 * 1024 * 1024;
 
-type LoadCounts = components["schemas"]["LoadCounts"];
+type CreateContactsResponse = components["schemas"]["CreateContactsResponse"];
 
 const MODES: ReadonlyArray<{ value: AddressBookLoadMode; label: string; detail: string }> = [
   {
@@ -28,7 +28,10 @@ const MODES: ReadonlyArray<{ value: AddressBookLoadMode; label: string; detail: 
 ];
 
 /** The seven counts a load answers, in the order the result lists them. */
-const COUNTS: ReadonlyArray<{ field: Exclude<keyof LoadCounts, "notes">; label: string }> = [
+const COUNTS: ReadonlyArray<{
+  field: Exclude<keyof CreateContactsResponse, "notes">;
+  label: string;
+}> = [
   { field: "contacts_created", label: "Contacts created" },
   { field: "contacts_updated", label: "Contacts updated" },
   { field: "contacts_deleted", label: "Contacts deleted" },
@@ -61,7 +64,7 @@ export function AddressBookSection() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<AddressBookLoadMode>("append");
   const [busy, setBusy] = useState(false);
-  const [counts, setCounts] = useState<LoadCounts | null>(null);
+  const [counts, setCounts] = useState<CreateContactsResponse | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
 
   const load = async (file: File) => {

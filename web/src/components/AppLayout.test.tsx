@@ -27,6 +27,11 @@ vi.mock("../screens/ConversationList", () => ({
     </div>
   ),
 }));
+vi.mock("../screens/MessageSearchList", () => ({
+  default: ({ query }: { query: string }) => (
+    <div data-testid="message-search-list">{`query: ${query}`}</div>
+  ),
+}));
 // The header stands in as one button that searches for "ada".
 vi.mock("./AppHeader", () => ({
   default: ({ onSearch }: { onSearch: (q: string) => void }) => (
@@ -127,6 +132,7 @@ describe("AppLayout", () => {
   it.each([
     ["a search", "?q=dentist"],
     ["a contact's conversations", "?q=with%3A%2342&f=with%3A%2342"],
+    ["the Messages list's picked sort", "?q=dentist&sort=date"],
   ])("keeps %s when a conversation in the list is opened", async (_name, search) => {
     const user = userEvent.setup();
     renderLayout(`/${search}`);
@@ -187,5 +193,19 @@ describe("AppLayout on a Contact Group or Message Tag page", () => {
 
     await user.click(screen.getByRole("button", { name: "Search for ada" }));
     expect(screen.getByTestId("location").textContent).toBe("/tag/%231?q=ada");
+  });
+
+  it("on a tag page with nothing typed, the Messages list asks for a search", () => {
+    sets.tags = ["Holiday"];
+    renderLayout("/tag/Holiday?view=messages");
+    expect(screen.getByTestId("message-search-list").textContent).toBe("query: ");
+  });
+
+  it("on a tag page with a typed search, the Messages list searches the tag", () => {
+    sets.tags = ["Holiday"];
+    renderLayout("/tag/Holiday?q=ada&view=messages");
+    const list = screen.getByTestId("message-search-list").textContent ?? "";
+    expect(list).toContain("Holiday");
+    expect(list).toContain("ada");
   });
 });

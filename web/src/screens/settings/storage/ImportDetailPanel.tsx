@@ -3,7 +3,7 @@ import ImportSummaryPanel, {
 } from "../../../components/import/ImportSummaryPanel";
 import PlainButton from "../../../components/PlainButton";
 import ImportContactsPanel from "./ImportContactsPanel";
-import type { ImportDetailResponse } from "./storageUtils";
+import type { AccountImportRun } from "./storageUtils";
 import {
   formatBytes,
   formatImportDate,
@@ -24,7 +24,7 @@ export default function ImportDetailPanel({
   detailId: string;
   /** False for the owner: who an account's contacts are is the account's own. */
   listContacts: boolean;
-  selectedImport: ImportDetailResponse | null;
+  selectedImport: AccountImportRun | null;
   selectedImportSummary: ImportSummaryView | null;
   selectedImportLoading: boolean;
   selectedImportError: string;

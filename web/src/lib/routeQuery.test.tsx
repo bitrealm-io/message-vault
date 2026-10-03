@@ -124,6 +124,23 @@ describe("useRoutePagedList", () => {
     expect(result.current.hasMore).toBe(false);
   });
 
+  it("stops at the server's offset ceiling, however many rows the total names", async () => {
+    // A browse list refuses an `offset` past 50,000 (`docs/architecture/http-api.md`,
+    // "Lists"), so the list ends where the next page would start past it.
+    const fetchPage = vi.fn(async ({ offset }: { offset: number }) => page(offset, 2, 100));
+    const { result } = renderHook(
+      () =>
+        useRoutePagedList(["rows"], fetchPage, { firstPageSize: 2, fillPageSize: 2, maxOffset: 3 }),
+      { wrapper },
+    );
+    await waitFor(() => expect(ids(result.current.items)).toEqual([0, 1]));
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(ids(result.current.items)).toEqual([0, 1, 2, 3]));
+    expect(result.current.total).toBe(100);
+    expect(result.current.hasMore).toBe(false);
+    expect(fetchPage).toHaveBeenCalledTimes(2);
+  });
+
   it("asks for the first page size first and the fill size afterwards", async () => {
     const fetchPage = vi.fn(async ({ offset }: { offset: number }) => page(offset, 3, 9));
     const { result } = renderHook(

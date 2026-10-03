@@ -20,14 +20,12 @@ import { checksFromMembers } from "../lib/membershipChecks";
 import { useMessageTagActions, useSetMessageTagMembers } from "../lib/messageTags";
 import { keys } from "../lib/queryKeys";
 import { type PagedFetchPage, useRoutePagedList } from "../lib/routeQuery";
-import { hasFieldToken } from "../lib/searchFields";
 import { listConversations } from "../lib/serverApi";
 import type { Conversation } from "../lib/types";
+import { useDebouncedQuery } from "../lib/useDebouncedQuery";
 import { useMessageTags } from "../lib/useMessageTags";
 import { useResetOnChange } from "../lib/useResetOnChange";
 import { useSelectAll } from "../lib/useSelectAll";
-
-const QUERY_DEBOUNCE_MS = 300;
 
 export default function ConversationList({
   selectedId,
@@ -40,7 +38,7 @@ export default function ConversationList({
 }) {
   const tagActions = useMessageTagActions();
   const setTagMembers = useSetMessageTagMembers();
-  const [debouncedQ, setDebouncedQ] = useState(query);
+  const debouncedQ = useDebouncedQuery(query);
   const [visibleRange, setVisibleRange] = useState<VisibleRange>({ start: 0, end: 0 });
   const [checkedIds, setCheckedIds] = useState<Set<number>>(() => new Set());
   const [sortState, setSortState] = useState<ConversationSortState>(() => loadConversationSort());
@@ -49,16 +47,6 @@ export default function ConversationList({
 
   // A new query unticks every row, so a tick never applies to a row the list no longer shows.
   useResetOnChange([query], () => setCheckedIds(new Set()));
-
-  useEffect(() => {
-    // A query that names a word applies at once, so the list does not flash empty.
-    if (hasFieldToken(query)) {
-      setDebouncedQ(query);
-      return;
-    }
-    const t = window.setTimeout(() => setDebouncedQ(query), QUERY_DEBOUNCE_MS);
-    return () => window.clearTimeout(t);
-  }, [query]);
 
   const fetchPage = useCallback<PagedFetchPage<Conversation>>(
     async ({ limit, offset, signal }) => {

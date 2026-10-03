@@ -2105,7 +2105,7 @@ async fn load_address_book(
 
 /// `POST /v1/contacts/address-book`: the status, the two headers that make
 /// the answer a file, and the body.
-async fn export_address_book(
+async fn get_address_book(
     fixture: &TestFixture,
     account: &RegisteredAccount,
     body: serde_json::Value,
@@ -2309,7 +2309,7 @@ async fn the_address_book_export_answers_a_csv_attachment() {
     let (fixture, account) = contacts_fixture_with_handles(&["+15555550100", "+15555550101"]).await;
     for accept in [None, Some("text/csv"), Some("application/json")] {
         let (status, content_type, disposition, text) =
-            export_address_book(&fixture, &account, serde_json::json!({}), accept).await;
+            get_address_book(&fixture, &account, serde_json::json!({}), accept).await;
         assert_eq!(status, StatusCode::OK, "{accept:?}: {text}");
         assert_eq!(content_type, "text/csv; charset=utf-8", "{accept:?}");
         assert_eq!(
@@ -2356,7 +2356,7 @@ async fn the_address_book_export_holds_the_contacts_the_search_and_the_checked_r
             .collect()
     };
 
-    let (_, _, _, text) = export_address_book(
+    let (_, _, _, text) = get_address_book(
         &fixture,
         &account,
         serde_json::json!({ "q": "+15555550101" }),
@@ -2365,7 +2365,7 @@ async fn the_address_book_export_holds_the_contacts_the_search_and_the_checked_r
     .await;
     assert_eq!(names(&text), ["Contact 1"]);
 
-    let (_, _, _, text) = export_address_book(
+    let (_, _, _, text) = get_address_book(
         &fixture,
         &account,
         serde_json::json!({ "ids": [id_of("Contact 0"), id_of("Contact 2")] }),
@@ -2374,7 +2374,7 @@ async fn the_address_book_export_holds_the_contacts_the_search_and_the_checked_r
     .await;
     assert_eq!(names(&text), ["Contact 0", "Contact 2"]);
 
-    let (_, _, _, text) = export_address_book(
+    let (_, _, _, text) = get_address_book(
         &fixture,
         &account,
         serde_json::json!({
@@ -2386,7 +2386,7 @@ async fn the_address_book_export_holds_the_contacts_the_search_and_the_checked_r
     .await;
     assert_eq!(names(&text), ["Contact 1"]);
 
-    let (status, _, _, text) = export_address_book(
+    let (status, _, _, text) = get_address_book(
         &fixture,
         &account,
         serde_json::json!({ "q": "nosuchword:1" }),
@@ -2408,7 +2408,7 @@ async fn the_address_book_export_never_holds_another_accounts_contact() {
     let other = account_with_handle(&fixture, "+15555550199").await;
     let theirs: serde_json::Value =
         crate::test_support::get_json(&fixture.state, "/v1/contacts", &other.token).await;
-    let (status, _, _, text) = export_address_book(
+    let (status, _, _, text) = get_address_book(
         &fixture,
         &account,
         serde_json::json!({ "ids": [theirs["items"][0]["id"]] }),
@@ -2424,8 +2424,7 @@ async fn the_address_book_export_never_holds_another_accounts_contact() {
 #[tokio::test]
 async fn the_exported_file_loads_back_through_the_route_and_changes_nothing() {
     let (fixture, account) = contacts_fixture_with_handles(&["+15555550100", "+15555550101"]).await;
-    let (_, _, _, file) =
-        export_address_book(&fixture, &account, serde_json::json!({}), None).await;
+    let (_, _, _, file) = get_address_book(&fixture, &account, serde_json::json!({}), None).await;
     for query in ["?mode=append", "?mode=edit"] {
         let (status, text) = load_address_book(&fixture, &account, query, file.clone()).await;
         assert_eq!(status, StatusCode::OK, "{text}");
@@ -2436,7 +2435,7 @@ async fn the_exported_file_loads_back_through_the_route_and_changes_nothing() {
             assert_eq!(value, 0, "{query}: {count}");
         }
         let (_, _, _, again) =
-            export_address_book(&fixture, &account, serde_json::json!({}), None).await;
+            get_address_book(&fixture, &account, serde_json::json!({}), None).await;
         assert_eq!(again, file, "{query}");
     }
 }
@@ -2703,7 +2702,7 @@ async fn summaries_of_no_contacts_are_refused() {
 fn the_reference_states_the_summary_id_bounds() {
     let doc: serde_json::Value =
         serde_json::from_str(&crate::openapi::dump_openapi_json()).unwrap();
-    let ids = &doc["components"]["schemas"]["SummarizeContactsRequest"]["properties"]["ids"];
+    let ids = &doc["components"]["schemas"]["ListContactSummariesRequest"]["properties"]["ids"];
     assert_eq!(ids["minItems"], 1, "{ids}");
     assert_eq!(
         ids["maxItems"],

@@ -1,5 +1,6 @@
-//! The accounts collection: `/v1/accounts` and everything under a member
-//! except API tokens, which `api_tokens_api` serves.
+//! The accounts collection: `/v1/accounts` and everything under a member.
+//! API tokens, `/v1/accounts/{id}/api-tokens`, are in the `api_tokens`
+//! submodule.
 //!
 //! One collection serves the owner and every account. Who may call a
 //! route is decided here, per handler, never by the path: the owner reaches
@@ -38,6 +39,8 @@ use crate::paging::{DEFAULT_LIST_LIMIT, Page, PageQuery, page_of, page_params};
 use crate::server::{
     ApiError, AppState, AuthIdentity, Created, LoggedIn, Owner, refuse_for_demo_account,
 };
+
+pub(crate) mod api_tokens;
 
 // ---------------------------------------------------------------------------
 // The account as every caller sees it
@@ -454,9 +457,18 @@ pub async fn get_account(
     Ok(Json(require_account(&mut conn, target).await?))
 }
 
-/// One identity to link or unlink, with its platform service.
+/// One identity to link onto the account, with its platform service.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub struct AccountIdentityRequest {
+pub struct LinkAccountIdentityRequest {
+    /// The address as typed, e.g. `+15555550100` or `alex@example.com`.
+    pub address: String,
+    /// Platform the address belongs to: `phone`, `email`, or `whatsapp`.
+    pub service: String,
+}
+
+/// One identity to unlink from the account, with its platform service.
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+pub struct UnlinkAccountIdentityRequest {
     /// The address as typed, e.g. `+15555550100` or `alex@example.com`.
     pub address: String,
     /// Platform the address belongs to: `phone`, `email`, or `whatsapp`.
@@ -480,10 +492,10 @@ pub struct UpdateAccountRequest {
     pub time_zone: Option<String>,
     /// Identities to link onto the account profile.
     #[serde(default)]
-    pub identities: Vec<AccountIdentityRequest>,
+    pub identities: Vec<LinkAccountIdentityRequest>,
     /// Identities to unlink from the account profile.
     #[serde(default)]
-    pub remove_identities: Vec<AccountIdentityRequest>,
+    pub remove_identities: Vec<UnlinkAccountIdentityRequest>,
     /// Disable or re-enable login.
     #[serde(default)]
     pub disabled: Option<bool>,
@@ -586,8 +598,8 @@ async fn apply_profile_update(
     account_id: i64,
     preferred_name: Option<Option<&str>>,
     time_zone: Option<&str>,
-    identities: &[AccountIdentityRequest],
-    remove_identities: &[AccountIdentityRequest],
+    identities: &[LinkAccountIdentityRequest],
+    remove_identities: &[UnlinkAccountIdentityRequest],
 ) -> std::result::Result<(), ProfileUpdateError> {
     if let Some(name) = time_zone.map(str::trim).filter(|n| !n.is_empty()) {
         let zone: chrono_tz::Tz = name
@@ -1308,7 +1320,7 @@ pub(crate) async fn list_account_identities(
 #[serde(untagged)]
 pub(crate) enum AccountImportRuns {
     /// The account's own runs.
-    Own(Page<imports::ImportSummary>),
+    Own(Page<ImportRun>),
     /// Another account's runs, as the owner reads them.
     Owner(Page<OwnerImportRun>),
 }
@@ -1375,12 +1387,8 @@ pub(crate) async fn list_account_imports(
             offset: rows.offset,
         })));
     }
-    Ok(Json(AccountImportRuns::Own(Page {
-        items: rows.items.into_iter().map(Into::into).collect(),
-        total: rows.total,
-        limit: rows.limit,
-        offset: rows.offset,
-    })))
+    let page = crate::imports_api::import_runs_page(&mut conn, rows).await?;
+    Ok(Json(AccountImportRuns::Own(page)))
 }
 
 /// One of an account's Import Runs: status, timings and counts, and for the
@@ -1414,7 +1422,7 @@ pub(crate) async fn get_account_import(
         let run = crate::imports_api::owner_import_run(&mut conn, row).await?;
         return Ok(Json(AccountImportRun::Owner(run)));
     }
-    let run = crate::imports_api::import_detail(&mut conn, target, import_id).await?;
+    let run = crate::imports_api::full_import_run(&mut conn, target, import_id).await?;
     Ok(Json(AccountImportRun::Own(run)))
 }
 

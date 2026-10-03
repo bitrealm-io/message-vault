@@ -8,15 +8,57 @@ use std::collections::HashSet;
 use axum::extract::{Request, State};
 use axum::http::header;
 use axum::response::{IntoResponse, Response};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::db::address_book::{self, LoadCounts, LoadError, LoadMode};
 use crate::db::audit_trail::{self, AuditAction, AuditActor, Details};
-use crate::db::sql::bind_args;
+use crate::db::contacts::read::contact_ids_matching;
 use crate::extract::{Json, Query};
 use crate::server::{
     ApiError, AppState, FullAccess, content_type_base, read_body_limited, refuse_for_demo_account,
 };
+
+/// What an address book load changed.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct CreateContactsResponse {
+    /// Contacts the load created.
+    pub contacts_created: u64,
+    /// Contacts the load renamed, or whose identities or Contact Group
+    /// memberships it changed.
+    pub contacts_updated: u64,
+    /// Contacts the load deleted: the ones it left with neither a name nor
+    /// an identity.
+    pub contacts_deleted: u64,
+    /// Identities linked to a contact that no contact held before.
+    pub identities_added: u64,
+    /// Identities taken from one contact and given to another.
+    pub identities_moved: u64,
+    /// Identities taken off a contact, which only Edit does.
+    pub identities_removed: u64,
+    /// Contact Groups the load created.
+    pub groups_created: u64,
+    /// One sentence for each phone number the file wrote without `+` that
+    /// the load matched to the `+` key its contact holds, or that became a
+    /// new identity. Each starts with its row number. A spreadsheet can drop
+    /// the `+` from a number without showing it, so the load says how it
+    /// read the number.
+    pub notes: Vec<String>,
+}
+
+impl From<LoadCounts> for CreateContactsResponse {
+    fn from(counts: LoadCounts) -> Self {
+        Self {
+            contacts_created: counts.contacts_created,
+            contacts_updated: counts.contacts_updated,
+            contacts_deleted: counts.contacts_deleted,
+            identities_added: counts.identities_added,
+            identities_moved: counts.identities_moved,
+            identities_removed: counts.identities_removed,
+            groups_created: counts.groups_created,
+            notes: counts.notes,
+        }
+    }
+}
 
 /// Largest address book the load route accepts, in bytes.
 ///
@@ -32,7 +74,7 @@ const EXPORT_FILE_NAME: &str = "address-book.csv";
 
 /// The query of `POST /v1/contacts`.
 #[derive(Debug, Deserialize)]
-pub(crate) struct LoadQuery {
+pub(crate) struct CreateContactsQuery {
     #[serde(default)]
     mode: LoadMode,
 }
@@ -93,16 +135,16 @@ impl From<LoadError> for ApiError {
         description = "The address book: Message Crate's own CSV, one row per identity."
     ),
     responses(
-        (status = 200, body = LoadCounts),
+        (status = 200, body = CreateContactsResponse),
         crate::problem::openapi::DemoAccountProtected,
     )
 )]
 pub(crate) async fn create_contacts(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
-    Query(query): Query<LoadQuery>,
+    Query(query): Query<CreateContactsQuery>,
     request: Request,
-) -> Result<Json<LoadCounts>, ApiError> {
+) -> Result<Json<CreateContactsResponse>, ApiError> {
     refuse_for_demo_account(auth.account_id, "address book cannot be loaded")?;
     if !content_type_base(request.headers())
         .is_some_and(|base| base.eq_ignore_ascii_case("text/csv"))
@@ -135,13 +177,13 @@ pub(crate) async fn create_contacts(
         details,
     )
     .await?;
-    Ok(Json(counts))
+    Ok(Json(counts.into()))
 }
 
 /// Which contacts `POST /v1/contacts/address-book` writes: the Contacts
 /// list's search and its checked rows.
 #[derive(Debug, Default, Deserialize, utoipa::ToSchema)]
-pub(crate) struct ExportAddressBookRequest {
+pub(crate) struct GetAddressBookRequest {
     /// A Contacts search, as `GET /v1/contacts` takes in `q`. Absent or
     /// empty matches every contact.
     #[serde(default)]
@@ -171,7 +213,7 @@ pub(crate) struct ExportAddressBookRequest {
     path = "/v1/contacts/address-book",
     tag = "Contacts",
     security(("session" = [])),
-    request_body = ExportAddressBookRequest,
+    request_body = GetAddressBookRequest,
     responses(
         (
             status = 200,
@@ -183,10 +225,10 @@ pub(crate) struct ExportAddressBookRequest {
         crate::problem::openapi::SearchQueryInvalid
     )
 )]
-pub(crate) async fn export_address_book(
+pub(crate) async fn get_address_book(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
-    Json(body): Json<ExportAddressBookRequest>,
+    Json(body): Json<GetAddressBookRequest>,
 ) -> Result<Response, ApiError> {
     let mut conn = state.db.acquire().await?;
     let q = body.q.as_deref().unwrap_or("").trim();
@@ -195,20 +237,8 @@ pub(crate) async fn export_address_book(
     } else {
         // The same compile the Contacts list runs, so the file holds the
         // rows the person was looking at.
-        let (zone, today) =
-            crate::db::account_profile::account_clock(&mut conn, auth.account_id).await?;
-        let filter = crate::search::compile(crate::search::CompileRequest {
-            list: crate::search::ListKind::Contacts,
-            query: q,
-            account_id: auth.account_id,
-            today,
-            zone,
-        })?;
-        let sql = format!("SELECT ct.id FROM contacts ct WHERE {}", filter.where_sql());
-        let matched: Vec<i64> = sqlx::query_scalar_with(&sql, bind_args(filter.params()))
-            .fetch_all(&mut *conn)
-            .await?;
-        let matched: HashSet<i64> = matched.into_iter().collect();
+        let clock = crate::db::account_profile::account_clock(&mut conn, auth.account_id).await?;
+        let matched = contact_ids_matching(&mut conn, auth.account_id, q, clock).await?;
         Some(if body.ids.is_empty() {
             matched
         } else {

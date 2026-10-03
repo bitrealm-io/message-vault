@@ -6,7 +6,7 @@
 //! `(TempDir, AppState, String, i64)` for handler-level tests that call a
 //! handler function directly. This module drives the whole stack over real
 //! HTTP, for tests in `session_api.rs`, `accounts_api.rs`,
-//! `api_tokens_api.rs`, and any route whose contract is worth checking end
+//! `accounts_api/api_tokens.rs`, and any route whose contract is worth checking end
 //! to end.
 
 use axum::http::StatusCode;

@@ -37,7 +37,7 @@ pub enum ServerState {
 
 /// The state of this Message Crate, for the screen a logged-out person sees.
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct ServerInfo {
+pub struct Server {
     /// `unclaimed` shows Create Owner alone; `closed` shows Login alone;
     /// `open` shows Login and Create Account.
     pub state: ServerState,
@@ -62,7 +62,7 @@ pub struct ServerInfo {
 
 /// Body for claiming a Message Crate.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub struct ClaimRequest {
+pub struct ClaimServerRequest {
     /// Login username for the owner.
     pub username: String,
     /// Password for the owner. Must satisfy the server's password policy.
@@ -90,11 +90,11 @@ async fn state_on_conn(conn: &mut sqlx::SqliteConnection) -> Result<ServerState,
     get,
     path = "/v1/server",
     tag = "Server",
-    responses((status = 200, body = ServerInfo))
+    responses((status = 200, body = Server))
 )]
-pub async fn get_server(State(state): State<AppState>) -> Result<Json<ServerInfo>, ApiError> {
+pub async fn get_server(State(state): State<AppState>) -> Result<Json<Server>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    Ok(Json(ServerInfo {
+    Ok(Json(Server {
         state: state_on_conn(&mut conn).await?,
         demo_account: !state.demo_build.is_building()
             && account_profile::username_for_account(&mut conn, account_profile::DEMO_ACCOUNT_ID)
@@ -118,7 +118,7 @@ pub async fn get_server(State(state): State<AppState>) -> Result<Json<ServerInfo
     post,
     path = "/v1/server/claim",
     tag = "Server",
-    request_body = ClaimRequest,
+    request_body = ClaimServerRequest,
     responses(
         (
             status = 201,
@@ -134,7 +134,7 @@ pub async fn get_server(State(state): State<AppState>) -> Result<Json<ServerInfo
 pub async fn claim_server(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
-    Json(req): Json<ClaimRequest>,
+    Json(req): Json<ClaimServerRequest>,
 ) -> Result<Created<crate::session_api::CreateSessionResponse>, ApiError> {
     let username = crate::credentials::require_valid_username(&req.username)?;
     crate::credentials::check_auth_rate_limit(&state.auth_rate_limits, "claim")?;

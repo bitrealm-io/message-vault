@@ -146,7 +146,7 @@ beforeEach(() => {
       group_messages: 30,
     },
   ]);
-  getAccountImport.mockResolvedValue(anImportDetail);
+  getAccountImport.mockResolvedValue(anAccountImportRun);
   listAccountExports.mockResolvedValue({ items: [], total: 0, limit: 40, offset: 0 });
   deleteAccountById.mockResolvedValue(undefined);
   deleteAccountMessages.mockResolvedValue(undefined);
@@ -244,7 +244,7 @@ const anImport = {
 };
 
 /** The same run in full, which is what opening its row reads. */
-const anImportDetail = {
+const anAccountImportRun = {
   ...anImport,
   tool: "desktop",
   mode: "full",

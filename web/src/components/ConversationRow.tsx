@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
+import { conversationName } from "../lib/conversationName";
 import { formatDateSpan } from "../lib/formatDate";
 import { conversationServiceLabel } from "../lib/serviceLabel";
 import { useTimeZone } from "../lib/timeZone";
 import { listRowDivider } from "../lib/tw";
 import type { Conversation } from "../lib/types";
+import { focusRing } from "../lib/uiStyles";
 import Checkbox from "./Checkbox";
 import { useColumnResizing } from "./columnResizeState";
 import PlainButton from "./PlainButton";
@@ -48,24 +50,25 @@ function GroupNames({ conv }: { conv: Conversation }) {
   );
 }
 
+/**
+ * The row title: an untitled group with people in it lists them, each kept
+ * whole on a line; every other conversation shows {@link conversationName},
+ * the name the Messages list gives it too.
+ */
 function titleContent(conv: Conversation): ReactNode {
-  if (conv.label) return conv.label;
-  if (!conv.is_group) {
-    const p = conv.participants[0];
-    if (!p) return "(unknown)";
-    return p.name;
+  if (!conv.label && conv.is_group && conv.participants.length > 0) {
+    return <GroupNames conv={conv} />;
   }
-  return <GroupNames conv={conv} />;
+  return conversationTitleText(conv);
 }
 
 /** Plain-text form of the row title, for the checkbox's accessible name. */
 function conversationTitleText(conv: Conversation): string {
-  if (conv.label) return conv.label;
-  if (!conv.is_group) {
-    const p = conv.participants[0];
-    return p ? p.name : "(unknown)";
-  }
-  return conv.participants.map((p) => p.name).join(", ");
+  return conversationName({
+    title: conv.label,
+    isGroup: conv.is_group,
+    participants: conv.participants,
+  });
 }
 
 function GroupParticipantCount({ count }: { count: number }) {
@@ -129,7 +132,7 @@ export default function ConversationRow({
 
   if (!onCheckChange) {
     return (
-      <PlainButton onPress={onClick} className={`cursor-pointer ${rowClass}`}>
+      <PlainButton onPress={onClick} className={`cursor-pointer ${focusRing} ${rowClass}`}>
         {body}
       </PlainButton>
     );
@@ -154,7 +157,7 @@ export default function ConversationRow({
       />
       <PlainButton
         onPress={onClick}
-        className="flex min-w-0 flex-1 cursor-pointer items-start border-none bg-transparent p-0 text-left"
+        className={`flex min-w-0 flex-1 cursor-pointer items-start border-none bg-transparent p-0 text-left ${focusRing}`}
       >
         {body}
       </PlainButton>

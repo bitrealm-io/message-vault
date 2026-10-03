@@ -28,7 +28,7 @@ use crate::server::{ApiError, AppState, FullDeleteAccess};
         (status = 204, description = "Trash emptied"),
     )
 )]
-pub(crate) async fn empty_trash(
+pub(crate) async fn delete_trash(
     State(state): State<AppState>,
     FullDeleteAccess(auth): FullDeleteAccess,
 ) -> Result<StatusCode, ApiError> {

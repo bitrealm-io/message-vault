@@ -24,9 +24,15 @@ pub(crate) struct NamedSet {
     pub(crate) name: String,
 }
 
-/// A name to create, or the new name for an existing set.
+/// The name of a new set.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub(crate) struct NamedSetRequest {
+pub(crate) struct CreateNamedSetRequest {
+    pub(crate) name: String,
+}
+
+/// The new name for an existing set.
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+pub(crate) struct UpdateNamedSetRequest {
     pub(crate) name: String,
 }
 
@@ -78,7 +84,7 @@ pub(crate) async fn create(
     root_path: &str,
     state: &AppState,
     account_id: i64,
-    body: NamedSetRequest,
+    body: CreateNamedSetRequest,
 ) -> Result<Created<NamedSet>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let (id, name) = named_membership::create_set(spec, &mut conn, account_id, &body.name).await?;
@@ -97,7 +103,7 @@ pub(crate) async fn update(
     state: &AppState,
     account_id: i64,
     id: i64,
-    body: NamedSetRequest,
+    body: UpdateNamedSetRequest,
 ) -> Result<Json<NamedSet>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let name = named_membership::rename_set(spec, &mut conn, account_id, id, &body.name).await?;
@@ -220,7 +226,7 @@ macro_rules! named_set_routes {
             path = $root_path,
             tag = $tag,
             security(("session" = [])),
-            request_body = NamedSetRequest,
+            request_body = CreateNamedSetRequest,
             responses(
                 (
                     status = 201,
@@ -233,7 +239,7 @@ macro_rules! named_set_routes {
         pub(crate) async fn $create_fn(
             axum::extract::State(state): axum::extract::State<AppState>,
             FullAccess(auth): FullAccess,
-            Json(body): Json<NamedSetRequest>,
+            Json(body): Json<CreateNamedSetRequest>,
         ) -> Result<Created<NamedSet>, ApiError> {
             create($spec(), $root_path, &state, auth.account_id, body).await
         }
@@ -245,7 +251,7 @@ macro_rules! named_set_routes {
             tag = $tag,
             security(("session" = [])),
             params(("id" = i64, Path, description = $id_description)),
-            request_body = NamedSetRequest,
+            request_body = UpdateNamedSetRequest,
             responses(
                 (status = 200, body = NamedSet),
                 crate::problem::openapi::NameTaken
@@ -255,7 +261,7 @@ macro_rules! named_set_routes {
             axum::extract::State(state): axum::extract::State<AppState>,
             FullAccess(auth): FullAccess,
             crate::extract::Path(id): crate::extract::Path<i64>,
-            Json(body): Json<NamedSetRequest>,
+            Json(body): Json<UpdateNamedSetRequest>,
         ) -> Result<Json<NamedSet>, ApiError> {
             update($spec(), &state, auth.account_id, id, body).await
         }

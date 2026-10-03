@@ -2177,15 +2177,15 @@ async fn apply_profile_update_sets_name_and_handles() {
         Some(Some("Alex")),
         None,
         &[
-            AccountIdentityRequest {
+            LinkAccountIdentityRequest {
                 address: "+1 (555) 555-0100".into(),
                 service: "phone".into(),
             },
-            AccountIdentityRequest {
+            LinkAccountIdentityRequest {
                 address: "Alex@Example.com".into(),
                 service: "email".into(),
             },
-            AccountIdentityRequest {
+            LinkAccountIdentityRequest {
                 address: "+15555550199".into(),
                 service: "whatsapp".into(),
             },
@@ -2265,30 +2265,42 @@ async fn apply_profile_update_removes_handles() {
     let fixture = test_fixture().await;
     let account_id = fixture.account_with_id(101, "alice").await;
     let mut conn = fixture.conn().await;
-    let both = [
-        AccountIdentityRequest {
-            address: "+15555550100".into(),
-            service: "phone".into(),
-        },
-        AccountIdentityRequest {
-            address: "alex@example.com".into(),
-            service: "email".into(),
-        },
-    ];
-    apply_profile_update(&mut conn, account_id, None, None, &both, &[])
-        .await
-        .unwrap();
-    apply_profile_update(&mut conn, account_id, None, None, &[], &both)
-        .await
-        .unwrap();
+    let both = [("+15555550100", "phone"), ("alex@example.com", "email")];
+    apply_profile_update(
+        &mut conn,
+        account_id,
+        None,
+        None,
+        &both.map(|(a, s)| link(a, s)),
+        &[],
+    )
+    .await
+    .unwrap();
+    apply_profile_update(
+        &mut conn,
+        account_id,
+        None,
+        None,
+        &[],
+        &both.map(|(a, s)| unlink(a, s)),
+    )
+    .await
+    .unwrap();
 
     let loaded = require_account(&mut conn, account_id).await.unwrap();
     assert!(loaded.phones.is_empty());
     assert!(loaded.emails.is_empty());
 }
 
-fn identity(address: &str, service: &str) -> AccountIdentityRequest {
-    AccountIdentityRequest {
+fn link(address: &str, service: &str) -> LinkAccountIdentityRequest {
+    LinkAccountIdentityRequest {
+        address: address.into(),
+        service: service.into(),
+    }
+}
+
+fn unlink(address: &str, service: &str) -> UnlinkAccountIdentityRequest {
+    UnlinkAccountIdentityRequest {
         address: address.into(),
         service: service.into(),
     }
@@ -2321,8 +2333,8 @@ async fn removing_one_service_of_a_number_leaves_the_other() {
     let account_id = fixture.account_with_id(101, "alice").await;
     let mut conn = fixture.conn().await;
     let both = [
-        identity("+15555550100", "phone"),
-        identity("+15555550100", "whatsapp"),
+        link("+15555550100", "phone"),
+        link("+15555550100", "whatsapp"),
     ];
 
     apply_profile_update(&mut conn, account_id, None, None, &both, &[])
@@ -2334,7 +2346,7 @@ async fn removing_one_service_of_a_number_leaves_the_other() {
         None,
         None,
         &[],
-        &[identity("+15555550100", "whatsapp")],
+        &[unlink("+15555550100", "whatsapp")],
     )
     .await
     .unwrap();
@@ -2352,7 +2364,7 @@ async fn removing_one_service_of_a_number_leaves_the_other() {
         None,
         None,
         &[],
-        &[identity("+15555550100", "phone")],
+        &[unlink("+15555550100", "phone")],
     )
     .await
     .unwrap();
@@ -2379,14 +2391,27 @@ async fn removing_a_whatsapp_identity_ignores_an_unlinked_text_message_row() {
     )
     .await
     .unwrap();
-    let whatsapp = [identity("+15555550100", "whatsapp")];
-    apply_profile_update(&mut conn, account_id, None, None, &whatsapp, &[])
-        .await
-        .unwrap();
+    apply_profile_update(
+        &mut conn,
+        account_id,
+        None,
+        None,
+        &[link("+15555550100", "whatsapp")],
+        &[],
+    )
+    .await
+    .unwrap();
 
-    apply_profile_update(&mut conn, account_id, None, None, &[], &whatsapp)
-        .await
-        .unwrap();
+    apply_profile_update(
+        &mut conn,
+        account_id,
+        None,
+        None,
+        &[],
+        &[unlink("+15555550100", "whatsapp")],
+    )
+    .await
+    .unwrap();
 
     assert!(
         linked_services(&mut conn, account_id, "+15555550100")
@@ -2406,7 +2431,7 @@ async fn profile_update_rolls_back_when_a_handle_service_is_unsupported() {
         account_id,
         &UpdateAccountRequest {
             preferred_name: Some(Some("Changed Name".into())),
-            identities: vec![AccountIdentityRequest {
+            identities: vec![LinkAccountIdentityRequest {
                 address: "alice@example.com".into(),
                 service: "unsupported".into(),
             }],

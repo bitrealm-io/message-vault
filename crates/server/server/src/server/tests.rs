@@ -183,10 +183,7 @@ fn auth_headers(token: &str) -> HeaderMap {
 
 /// The account's running Import Run through `GET /v1/imports?status=running`,
 /// as the desktop app finds it.
-async fn running_import(
-    state: &AppState,
-    token: &str,
-) -> Option<crate::db::imports::ImportSummary> {
+async fn running_import(state: &AppState, token: &str) -> Option<crate::imports_api::ImportRun> {
     list_imports(
         State(state.clone()),
         import_access(state, token).await,

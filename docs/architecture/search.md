@@ -45,6 +45,17 @@ Each rule holds on every list, and each has its reason.
   a word.
   Why: a Saved Search then holds only what to find, so it means the same thing
   on every screen that runs it.
+- **Relevance ranks by the positive free-text words.** The Messages list's
+  `sort=relevance` orders by the full-text index's `bm25()` over the query's
+  free-text words that are not behind `-` or `not`; field words never rank.
+  A query with no such word refuses `relevance` with `validation-failed`
+  rather than answering in another order, and `-relevance` is refused too:
+  best match first is its only direction. A message matched only by an
+  attachment's file name has no rank and follows every ranked one. The rank
+  is read from the index once for the whole search, never per row (#413).
+  Why: a word that only excludes says nothing about how well a message
+  matches, and a silent fallback to date would show an order the person did
+  not pick.
 - **Compile is pure.** Compiling reads no database and no clock. Anything that
   needs a lookup (the last Import Run, a Contact Group by name) is a subquery,
   and today's date and the account's time zone are inputs. Why: the same

@@ -51,4 +51,15 @@ describe("ConversationRow", () => {
     const row = screen.getByRole("button");
     expect(row.textContent).toBe("Ada LovelaceText Message");
   });
+
+  it("names a group with nobody in it as the Messages list does", () => {
+    render(
+      <ConversationRow
+        conversation={conversation({ is_group: true, participants: [] })}
+        isSelected={false}
+        onClick={() => {}}
+      />,
+    );
+    expect(screen.getByRole("button").textContent).toContain("(unknown)");
+  });
 });

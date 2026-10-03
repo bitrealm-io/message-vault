@@ -16,7 +16,7 @@ import SearchBar from "./SearchBar";
 import VersionNotice from "./VersionNotice";
 
 /** Which list the header search runs against. */
-export type HeaderSearchTarget = "accounts" | "contacts" | "messages" | "trash";
+export type HeaderSearchTarget = "accounts" | "contacts" | "conversations" | "messages" | "trash";
 
 /**
  * Every target uses the same bar; only the wording, the recents bucket, the
@@ -47,9 +47,18 @@ const SEARCH_TARGETS: Record<
     placeholder: "Search contacts",
     advancedMode: "contacts",
   },
-  messages: {
+  // The Messages screen's two result lists (#313): one search box, whose
+  // words and wording follow the list the switch shows. Both keep one set
+  // of recent searches, because one box serves both.
+  conversations: {
     scope: "message",
     list: "conversations",
+    placeholder: "Search conversations",
+    advancedMode: "messages",
+  },
+  messages: {
+    scope: "message",
+    list: "messages",
     placeholder: "Search messages",
     advancedMode: "messages",
   },

@@ -44,7 +44,7 @@ Never write self-contradictory filler, invented terms, or unexplained jargon in 
 
 Write each HTTP handler's doc comment as plain prose. The summary says what the route does; the description says when and why. Never echo the route path: it adds nothing over the OpenAPI path itself.
 
-- `crates/server/server/src/api_tokens_api.rs`, `fn list_api_tokens` — "List the account's named API tokens with their permissions and masked secrets." — Good: the summary says what comes back, and the path appears only once, in the OpenAPI path.
+- `crates/server/server/src/accounts_api/api_tokens.rs`, `fn list_api_tokens` — "List the account's named API tokens with their permissions and masked secrets." — Good: the summary says what comes back, and the path appears only once, in the OpenAPI path.
 - `crates/server/server/src/accounts_api.rs`, `fn update_account` — "Change an account. Its display name, time zone and identities are set by the account itself or by the owner; only the owner sets an account's disabled flag and its import, export and delete permissions." — Good: the summary names the operation, and the description says who may change what.
 
 ## No `# Errors` sections in OpenAPI descriptions

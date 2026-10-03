@@ -1,5 +1,6 @@
 use super::*;
 use crate::config::PathsConfig;
+use crate::imports_api::IMPORT_CONTACT_GROUP_NAME_SQL;
 use sqlx::SqliteConnection;
 
 pub(crate) fn write_tiny_reset_bundle(root: &Path) {
@@ -1782,15 +1783,15 @@ async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
     );
     // Issue #1107: each of the build's runs has its Contact Group and its
     // Saved Search, as a run a person imports does.
-    let runs: Vec<(String, i64, i64)> = sqlx::query_as(
+    let runs: Vec<(String, i64, i64)> = sqlx::query_as(&format!(
         "SELECT i.source,
                 (SELECT COUNT(*) FROM contact_groups g
                  WHERE g.account_id = i.account_id AND g.kind = 'import'
-                   AND g.name = i.source || ' import ' || substr(i.finished_at, 1, 10)),
+                   AND g.name = {IMPORT_CONTACT_GROUP_NAME_SQL}),
                 (SELECT COUNT(*) FROM saved_searches s
                  WHERE s.account_id = i.account_id AND s.query = 'import:#' || i.id)
-         FROM imports i WHERE i.account_id = $1 ORDER BY i.id",
-    )
+         FROM imports i WHERE i.account_id = $1 ORDER BY i.id"
+    ))
     .bind(DEMO_ACCOUNT_ID)
     .fetch_all(&mut *conn)
     .await
@@ -2222,14 +2223,14 @@ async fn every_import_contact_group_of_a_built_demo_has_members() {
     build.close().await;
 
     let (pool, mut conn) = test_db(&db_path).await;
-    let groups: Vec<(String, i64)> = sqlx::query_as(
+    let groups: Vec<(String, i64)> = sqlx::query_as(&format!(
         "SELECT i.source,
                 (SELECT COUNT(*) FROM contact_group_members m
                  JOIN contact_groups g ON g.id = m.group_id
                  WHERE g.account_id = i.account_id AND g.kind = 'import'
-                   AND g.name = i.source || ' import ' || substr(i.finished_at, 1, 10))
-         FROM imports i WHERE i.account_id = $1 ORDER BY i.id",
-    )
+                   AND g.name = {IMPORT_CONTACT_GROUP_NAME_SQL})
+         FROM imports i WHERE i.account_id = $1 ORDER BY i.id"
+    ))
     .bind(DEMO_ACCOUNT_ID)
     .fetch_all(&mut *conn)
     .await

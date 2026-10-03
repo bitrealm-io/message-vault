@@ -3975,3 +3975,38 @@ async fn the_batch_answer_counts_the_contacts_it_created() {
     assert_eq!(answer["contacts_created"], 1, "{text}");
     assert_eq!(answer["participants"], 1, "{text}");
 }
+
+/// The SQL form of an Import Run's Contact Group name is the name the run's
+/// group is given, before and after the run finishes.
+#[tokio::test]
+async fn the_sql_form_of_an_import_groups_name_is_the_name_the_group_is_given() {
+    let (fixture, account) = fixture_with_account().await;
+    let (_, created): (String, serde_json::Value) = post_created_json(
+        &fixture.state,
+        "/v1/imports",
+        &account.token,
+        serde_json::json!({ "source": "imessage" }),
+    )
+    .await;
+    let import_id = created["id"].as_i64().expect("created session has an id");
+    let mut conn = fixture.state.db.acquire().await.unwrap();
+    for finished_at in [None, Some("2031-02-03T04:05:06Z")] {
+        sqlx::query("UPDATE imports SET finished_at = $1 WHERE id = $2")
+            .bind(finished_at)
+            .bind(import_id)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        let row = crate::db::imports::get_owned_import(&mut conn, account.account_id, import_id)
+            .await
+            .unwrap();
+        let from_sql: String = sqlx::query_scalar(&format!(
+            "SELECT {IMPORT_CONTACT_GROUP_NAME_SQL} FROM imports i WHERE i.id = $1"
+        ))
+        .bind(import_id)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+        assert_eq!(from_sql, import_contact_group_name(&row), "{finished_at:?}");
+    }
+}

@@ -1266,6 +1266,15 @@ fn import_contact_group_name(row: &crate::db::imports::ImportRow) -> String {
     format!("{} import {}", row.source, import_date_ymd(row))
 }
 
+/// [`import_contact_group_name`] as an SQL expression over an `imports` row
+/// aliased `i`, for a test query that finds a run's Contact Group. It falls
+/// back from `finished_at` to `started_at` as [`import_date_ymd`] does, and
+/// leaves out the fall back to today, which only a timestamp shorter than a
+/// date takes, and the " 2" a taken name gets.
+#[cfg(test)]
+pub(crate) const IMPORT_CONTACT_GROUP_NAME_SQL: &str =
+    "i.source || ' import ' || substr(coalesce(i.finished_at, i.started_at), 1, 10)";
+
 /// Calendar date to name an import's saved search after: the day the run
 /// finished, falling back to the day it started, then to today. All three are
 /// UTC, because that is what `imports` stores.

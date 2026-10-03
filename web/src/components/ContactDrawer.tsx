@@ -386,7 +386,7 @@ function OneContactDrawer({
               type="button"
               aria-label="Close"
               onClick={onClose}
-              className="cursor-pointer border-none bg-transparent p-0 text-[1.25rem] leading-none text-muted outline-none hover:text-text"
+              className="cursor-pointer border-none bg-transparent p-0 text-[1.25rem] leading-none text-muted outline-none hover:text-text focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
             >
               ×
             </button>
@@ -424,7 +424,7 @@ function ContactLoadFailed({
           type="button"
           aria-label="Close"
           onClick={onClose}
-          className="cursor-pointer border-none bg-transparent p-0 text-[1.25rem] leading-none text-muted outline-none hover:text-text"
+          className="cursor-pointer border-none bg-transparent p-0 text-[1.25rem] leading-none text-muted outline-none hover:text-text focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
         >
           ×
         </button>

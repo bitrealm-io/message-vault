@@ -216,3 +216,30 @@ describe("IdentityTable dates", () => {
     expect(screen.getAllByText("2024-12-31")).toHaveLength(2);
   });
 });
+
+describe("IdentityTable focus", () => {
+  // The app's own :focus-visible outline loses to the outline-none utility, so
+  // a sortable header draws the style guide's ring itself.
+  it("draws the focus ring on every sortable column header", () => {
+    render(<IdentityTable {...dates} rows={rows} onRemove={() => {}} />);
+    const sortable = screen
+      .getAllByRole("columnheader")
+      .filter((header) => header.hasAttribute("aria-sort"));
+    expect(sortable).toHaveLength(7);
+    for (const header of sortable) {
+      expect(header.className).toContain("focus-visible:ring-2 focus-visible:ring-accent");
+    }
+  });
+
+  it("draws the focus ring on every row, the summary row included", () => {
+    render(<IdentityTable {...dates} rows={rows} totalConversations={2} onRemove={() => {}} />);
+    const bodyRows = screen.getAllByRole("row").slice(1);
+    expect(bodyRows).toHaveLength(4);
+    expect(bodyRows.some((row) => row.textContent?.startsWith("Summary"))).toBe(true);
+    for (const row of bodyRows) {
+      expect(row.className).toContain(
+        "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
+      );
+    }
+  });
+});

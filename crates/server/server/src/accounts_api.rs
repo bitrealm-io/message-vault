@@ -1177,25 +1177,12 @@ pub async fn delete_account_messages(
     drop(conn);
     let _batch_lock = state.account_import_locks.lock(target.to_string()).await;
     let mut conn = state.db.acquire().await?;
-    let stats = account_profile::delete_all_messages_for_account(&mut conn, target).await?;
     let actor = if reach.is_own() {
         AuditActor::Holder
     } else {
         AuditActor::Owner
     };
-    let details = Details {
-        conversations: Some(i64::try_from(stats.conversations).unwrap_or(i64::MAX)),
-        attachments: Some(i64::try_from(stats.attachments).unwrap_or(i64::MAX)),
-        ..Details::default()
-    };
-    audit_trail::record_about(
-        &mut conn,
-        AuditAction::MessagesDeleted,
-        actor,
-        target,
-        details,
-    )
-    .await?;
+    let stats = account_profile::delete_all_messages_for_account(&mut conn, target, actor).await?;
     drop(conn);
     crate::asset_store::remove_all_attachment_files(
         &state.db,

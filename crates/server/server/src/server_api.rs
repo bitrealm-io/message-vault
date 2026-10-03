@@ -726,13 +726,16 @@ pub async fn replace_demo_account(
 /// is removed and built again.
 async fn end_demo_sessions(state: &AppState) -> Result<(), ApiError> {
     let mut conn = state.db.acquire().await?;
+    let mut tx = crate::db::begin_write(&mut conn).await?;
     crate::db::session_tokens::revoke_account_sessions(
-        &mut conn,
+        &mut tx,
         account_profile::DEMO_ACCOUNT_ID,
         crate::db::audit_trail::AuditActor::Owner,
     )
     .await
-    .map_err(ApiError::Internal)
+    .map_err(ApiError::Internal)?;
+    tx.commit().await?;
+    Ok(())
 }
 
 #[cfg(test)]

@@ -1,4 +1,5 @@
 use super::*;
+use crate::db::audit_trail::AuditActor;
 const ACCOUNT_A: i64 = 7;
 const ACCOUNT_B: i64 = 8;
 
@@ -404,9 +405,14 @@ async fn delete_trashed_conversation_removes_it_and_its_messages() {
         .await
         .unwrap();
 
-    let outcome = delete_trashed(&mut conn, ACCOUNT_A, Trashable::Conversation(id))
-        .await
-        .unwrap();
+    let outcome = delete_trashed(
+        &mut conn,
+        ACCOUNT_A,
+        Trashable::Conversation(id),
+        AuditActor::Holder,
+    )
+    .await
+    .unwrap();
 
     assert_eq!(outcome, DeleteOutcome::Deleted(Vec::new()));
     assert_eq!(
@@ -438,9 +444,14 @@ async fn delete_conversation_not_in_the_trash_is_refused_and_changes_nothing() {
     let id = insert_conversation_on(&mut conn, ACCOUNT_A, "+15550001").await;
     insert_message(&mut conn, ACCOUNT_A, id, 0).await;
 
-    let outcome = delete_trashed(&mut conn, ACCOUNT_A, Trashable::Conversation(id))
-        .await
-        .unwrap();
+    let outcome = delete_trashed(
+        &mut conn,
+        ACCOUNT_A,
+        Trashable::Conversation(id),
+        AuditActor::Holder,
+    )
+    .await
+    .unwrap();
 
     assert_eq!(outcome, DeleteOutcome::NotTrashed);
     assert_eq!(
@@ -475,7 +486,12 @@ async fn a_restore_that_commits_while_delete_for_good_reads_keeps_the_conversati
         .unwrap();
     let outcome = crate::db::write_tx::commit_during(
         other,
-        delete_trashed(&mut conn, ACCOUNT_A, Trashable::Conversation(id)),
+        delete_trashed(
+            &mut conn,
+            ACCOUNT_A,
+            Trashable::Conversation(id),
+            AuditActor::Holder,
+        ),
     )
     .await
     .unwrap();
@@ -531,9 +547,14 @@ async fn delete_refuses_another_accounts_conversation_even_when_trashed() {
         .await
         .unwrap();
 
-    let outcome = delete_trashed(&mut conn, ACCOUNT_B, Trashable::Conversation(id))
-        .await
-        .unwrap();
+    let outcome = delete_trashed(
+        &mut conn,
+        ACCOUNT_B,
+        Trashable::Conversation(id),
+        AuditActor::Holder,
+    )
+    .await
+    .unwrap();
 
     assert_eq!(outcome, DeleteOutcome::NotOwned);
     assert_eq!(
@@ -607,9 +628,14 @@ async fn delete_reports_only_the_files_no_remaining_message_uses() {
     move_to_trash(&mut conn, ACCOUNT_A, Trashable::Conversation(doomed))
         .await
         .unwrap();
-    let outcome = delete_trashed(&mut conn, ACCOUNT_A, Trashable::Conversation(doomed))
-        .await
-        .unwrap();
+    let outcome = delete_trashed(
+        &mut conn,
+        ACCOUNT_A,
+        Trashable::Conversation(doomed),
+        AuditActor::Holder,
+    )
+    .await
+    .unwrap();
 
     assert_eq!(
         outcome,
@@ -708,9 +734,14 @@ async fn delete_trashed_contact_makes_it_unknown_and_leaves_its_conversations() 
         .await
         .unwrap();
 
-    let outcome = delete_trashed(&mut conn, ACCOUNT_A, Trashable::Contact(contact_id))
-        .await
-        .unwrap();
+    let outcome = delete_trashed(
+        &mut conn,
+        ACCOUNT_A,
+        Trashable::Contact(contact_id),
+        AuditActor::Holder,
+    )
+    .await
+    .unwrap();
 
     assert_eq!(outcome, DeleteOutcome::Deleted(Vec::new()));
     assert_eq!(
@@ -759,9 +790,14 @@ async fn delete_contact_not_in_the_trash_is_refused_and_keeps_the_name() {
     let (contact_id, _) =
         insert_named_contact_in_a_conversation(&mut conn, ACCOUNT_A, "+15550001").await;
 
-    let outcome = delete_trashed(&mut conn, ACCOUNT_A, Trashable::Contact(contact_id))
-        .await
-        .unwrap();
+    let outcome = delete_trashed(
+        &mut conn,
+        ACCOUNT_A,
+        Trashable::Contact(contact_id),
+        AuditActor::Holder,
+    )
+    .await
+    .unwrap();
 
     assert_eq!(outcome, DeleteOutcome::NotTrashed);
     assert_eq!(
@@ -802,7 +838,10 @@ async fn empty_trash_takes_everything_trashed_and_only_that() {
     .await
     .unwrap();
 
-    let orphaned = empty_trash(&mut conn, ACCOUNT_A).await.unwrap().orphaned;
+    let orphaned = empty_trash(&mut conn, ACCOUNT_A, AuditActor::Holder)
+        .await
+        .unwrap()
+        .orphaned;
 
     assert_eq!(
         orphaned,
@@ -853,7 +892,10 @@ async fn empty_trash_on_an_empty_trash_is_a_noop() {
     let id = insert_conversation_on(&mut conn, ACCOUNT_A, "+15550001").await;
 
     assert_eq!(
-        empty_trash(&mut conn, ACCOUNT_A).await.unwrap().orphaned,
+        empty_trash(&mut conn, ACCOUNT_A, AuditActor::Holder)
+            .await
+            .unwrap()
+            .orphaned,
         Vec::new()
     );
     assert_eq!(
@@ -940,9 +982,14 @@ async fn deleting_the_second_contact_leaves_the_first_as_it_was() {
         .await
         .unwrap();
 
-    let outcome = delete_trashed(&mut conn, ACCOUNT_A, Trashable::Contact(second))
-        .await
-        .unwrap();
+    let outcome = delete_trashed(
+        &mut conn,
+        ACCOUNT_A,
+        Trashable::Contact(second),
+        AuditActor::Holder,
+    )
+    .await
+    .unwrap();
 
     assert_eq!(outcome, DeleteOutcome::Deleted(Vec::new()));
     assert_eq!(

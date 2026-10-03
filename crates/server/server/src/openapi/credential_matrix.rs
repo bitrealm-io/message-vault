@@ -540,13 +540,15 @@ impl<'a> World<'a> {
     /// time, and a call may end it, so each call asks for its own.
     pub(super) async fn demo_session(&self) -> String {
         let mut conn = self.shared.fixture.conn().await;
+        let mut tx = crate::db::begin_write(&mut conn).await.unwrap();
         crate::db::session_tokens::revoke_account_sessions(
-            &mut conn,
+            &mut tx,
             account_profile::DEMO_ACCOUNT_ID,
             crate::db::audit_trail::AuditActor::CommandLine,
         )
         .await
         .unwrap();
+        tx.commit().await.unwrap();
         insert_account_session_token(&mut conn, account_profile::DEMO_ACCOUNT_ID)
             .await
             .unwrap()

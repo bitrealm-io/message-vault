@@ -315,23 +315,12 @@ pub(crate) async fn delete_conversation(
             &mut conn,
             auth.account_id,
             Trashable::Conversation(conversation_id),
+            crate::db::audit_trail::AuditActor::Holder,
         )
         .await?
     };
     match outcome {
         DeleteOutcome::Deleted(unreferenced) => {
-            // Which conversation it was is the holder's; the trail says only
-            // that one was deleted for good.
-            let mut conn = state.db.acquire().await?;
-            crate::db::audit_trail::record_about(
-                &mut conn,
-                crate::db::audit_trail::AuditAction::ConversationDeleted,
-                crate::db::audit_trail::AuditActor::Holder,
-                auth.account_id,
-                crate::db::audit_trail::Details::default(),
-            )
-            .await?;
-            drop(conn);
             crate::asset_store::remove_unreferenced(
                 &state.db,
                 Arc::clone(&state.cfg),

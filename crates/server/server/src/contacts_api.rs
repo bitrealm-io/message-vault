@@ -407,7 +407,14 @@ pub(crate) async fn delete_contact(
     AxumPath(contact_id): AxumPath<i64>,
 ) -> Result<StatusCode, ApiError> {
     let mut conn = state.db.acquire().await?;
-    match delete_trashed(&mut conn, auth.account_id, Trashable::Contact(contact_id)).await? {
+    match delete_trashed(
+        &mut conn,
+        auth.account_id,
+        Trashable::Contact(contact_id),
+        crate::db::audit_trail::AuditActor::Holder,
+    )
+    .await?
+    {
         // A contact owns no files, so there is nothing to remove from disk.
         DeleteOutcome::Deleted(_) => Ok(StatusCode::NO_CONTENT),
         DeleteOutcome::NotOwned => Err(ApiError::NotFound("contact not found".into())),

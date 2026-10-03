@@ -377,6 +377,7 @@ pub struct DeletedMessagesStats {
 pub async fn delete_all_messages_for_account(
     conn: &mut SqliteConnection,
     account_id: i64,
+    actor: crate::db::audit_trail::AuditActor,
 ) -> Result<DeletedMessagesStats> {
     schema::ensure_schema(conn).await?;
     let mut tx = begin_write(conn).await?;
@@ -406,6 +407,19 @@ pub async fn delete_all_messages_for_account(
     crate::db::trash::purge_account(&mut tx, account_id)
         .await
         .with_context(|| format!("purge trash markers for {account_id}"))?;
+    // Recorded in the delete's own transaction, so the two land together.
+    crate::db::audit_trail::record_about(
+        &mut tx,
+        crate::db::audit_trail::AuditAction::MessagesDeleted,
+        actor,
+        account_id,
+        crate::db::audit_trail::Details {
+            conversations: Some(i64::try_from(conversations).unwrap_or(i64::MAX)),
+            attachments: Some(attachment_count),
+            ..crate::db::audit_trail::Details::default()
+        },
+    )
+    .await?;
     tx.commit().await?;
     Ok(DeletedMessagesStats {
         conversations,
@@ -972,7 +986,12 @@ mod tests {
         .await
         .unwrap();
 
-        let result = delete_all_messages_for_account(&mut conn, ACCOUNT_ID).await;
+        let result = delete_all_messages_for_account(
+            &mut conn,
+            ACCOUNT_ID,
+            crate::db::audit_trail::AuditActor::Holder,
+        )
+        .await;
 
         assert!(result.is_err(), "the staging delete was made to fail");
         let left: i64 =
@@ -1036,9 +1055,13 @@ mod tests {
         .await
         .unwrap();
 
-        let stats = delete_all_messages_for_account(&mut conn, ACCOUNT_ID)
-            .await
-            .unwrap();
+        let stats = delete_all_messages_for_account(
+            &mut conn,
+            ACCOUNT_ID,
+            crate::db::audit_trail::AuditActor::Holder,
+        )
+        .await
+        .unwrap();
         assert_eq!(stats.conversations, 1);
         assert_eq!(stats.attachments, 1);
         let remaining_msgs: i64 =

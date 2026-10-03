@@ -83,14 +83,13 @@ pub async fn reset_owner_password(opened: &OpenDb, password: &str) -> Result<Str
         bail!("this Message Crate has no owner yet; use `create-owner` to claim it");
     }
 
-    account_profile::update_password_hash(
-        &mut conn,
-        account_profile::OWNER_ACCOUNT_ID,
-        Some(&hash),
-    )
-    .await?;
+    // The password, its record and the end of the sessions the old password
+    // opened land together.
+    let mut tx = crate::db::begin_write(&mut conn).await?;
+    account_profile::update_password_hash(&mut tx, account_profile::OWNER_ACCOUNT_ID, Some(&hash))
+        .await?;
     audit_trail::record_about(
-        &mut conn,
+        &mut tx,
         AuditAction::PasswordSet,
         AuditActor::CommandLine,
         account_profile::OWNER_ACCOUNT_ID,
@@ -99,11 +98,12 @@ pub async fn reset_owner_password(opened: &OpenDb, password: &str) -> Result<Str
     .await?;
     // The old password is gone, so every session it opened should be too.
     crate::db::session_tokens::revoke_account_sessions(
-        &mut conn,
+        &mut tx,
         account_profile::OWNER_ACCOUNT_ID,
         AuditActor::CommandLine,
     )
     .await?;
+    tx.commit().await?;
 
     let username =
         account_profile::username_for_account(&mut conn, account_profile::OWNER_ACCOUNT_ID)

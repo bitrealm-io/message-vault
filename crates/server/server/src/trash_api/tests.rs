@@ -339,10 +339,14 @@ async fn a_run_started_after_the_delete_commits_keeps_its_original() {
     let blob = attach_stored_file(&fixture.state, alice.account_id, doomed, &sha).await;
     trash(&fixture, &alice, Trashable::Conversation(doomed)).await;
     let mut conn = fixture.conn().await;
-    let files = crate::db::trash::empty_trash(&mut conn, alice.account_id)
-        .await
-        .unwrap()
-        .orphaned;
+    let files = crate::db::trash::empty_trash(
+        &mut conn,
+        alice.account_id,
+        crate::db::audit_trail::AuditActor::Holder,
+    )
+    .await
+    .unwrap()
+    .orphaned;
     assert_eq!(files.len(), 1, "the delete reports the file unnamed");
 
     drop(conn);

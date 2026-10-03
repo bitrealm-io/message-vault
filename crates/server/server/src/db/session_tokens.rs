@@ -320,25 +320,29 @@ pub async fn insert_account_session_token_with_ttl(
 }
 
 /// Log out: end the Session the presented token names, and record that it
-/// ended. Returns whether the token named a Session.
+/// ended. Returns whether the token named a Session. The lookup, the record
+/// and the delete run in one write transaction, so a login replacing the
+/// Session meanwhile, or a second logout with the same token, cannot record
+/// its end twice.
 ///
 /// # Errors
 ///
 /// Returns an error when the lookup, the record or the delete fails.
 pub async fn revoke_session_token(conn: &mut SqliteConnection, token: &str) -> Result<bool> {
     let token_hash = hash_api_token(token);
+    let mut tx = crate::db::begin_write(conn).await?;
     let found: Option<(i64, Option<i64>)> = sqlx::query_as(
         "SELECT account_id, login_entry_id FROM account_session_tokens WHERE token_hash = $1",
     )
     .bind(token_hash.as_str())
-    .fetch_optional(&mut *conn)
+    .fetch_optional(&mut *tx)
     .await?;
     let Some((account_id, login_entry_id)) = found else {
         return Ok(false);
     };
     if let Some(login_entry_id) = login_entry_id {
         audit_trail::record_session_end(
-            conn,
+            &mut tx,
             login_entry_id,
             AuditReason::LoggedOut,
             AuditActor::logged_in_as(account_id),
@@ -347,8 +351,9 @@ pub async fn revoke_session_token(conn: &mut SqliteConnection, token: &str) -> R
     }
     sqlx::query("DELETE FROM account_session_tokens WHERE token_hash = $1")
         .bind(token_hash)
-        .execute(&mut *conn)
+        .execute(&mut *tx)
         .await?;
+    tx.commit().await?;
     Ok(true)
 }
 
@@ -359,20 +364,23 @@ pub async fn revoke_session_token(conn: &mut SqliteConnection, token: &str) -> R
 /// password through `/v1` does not call this: that sets the password and
 /// nothing more, and the account's session carries on.
 ///
+/// It reads the Session and then writes, so it takes the caller's write
+/// transaction, and the end is recorded with whatever else the caller does.
+///
 /// # Errors
 ///
 /// Returns an error when the record or the delete fails.
 pub async fn revoke_account_sessions(
-    conn: &mut SqliteConnection,
+    tx: &mut crate::db::WriteTx<'_>,
     account_id: i64,
     actor: AuditActor,
 ) -> Result<()> {
-    if let Some(login_entry_id) = login_entry_for_account(conn, account_id).await? {
-        audit_trail::record_session_end(conn, login_entry_id, AuditReason::Revoked, actor).await?;
+    if let Some(login_entry_id) = login_entry_for_account(tx, account_id).await? {
+        audit_trail::record_session_end(tx, login_entry_id, AuditReason::Revoked, actor).await?;
     }
     sqlx::query("DELETE FROM account_session_tokens WHERE account_id = $1")
         .bind(account_id)
-        .execute(&mut *conn)
+        .execute(&mut **tx)
         .await
         .with_context(|| format!("revoke sessions for {account_id}"))?;
     Ok(())

@@ -9,8 +9,8 @@
 
 use axum::extract::rejection::JsonRejection;
 use axum::extract::{FromRequest, FromRequestParts, OptionalFromRequest, Request};
-use axum::http::StatusCode;
 use axum::http::request::Parts;
+use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -91,10 +91,23 @@ where
     }
 }
 
+/// Whether the request says it carries a body: a `Content-Length` above 0,
+/// or a `Transfer-Encoding`, which chunks a body of no stated length.
+fn declares_a_body(req: &Request) -> bool {
+    let headers = req.headers();
+    headers.contains_key(header::TRANSFER_ENCODING)
+        || headers
+            .get(header::CONTENT_LENGTH)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u64>().ok())
+            .is_some_and(|bytes| bytes > 0)
+}
+
 /// `body: Option<Json<T>>`, for a route one caller sends a body to and
-/// another does not: `None` when the request carries no `Content-Type`, the
-/// parsed body when it does, and the same rejections as the required form
-/// when what it carries is not JSON.
+/// another does not: `None` when the request carries no body, the parsed
+/// body when it carries JSON, and the same rejections as the required form
+/// when what it carries is not JSON. A body with no `Content-Type` is
+/// `415 Unsupported Media Type`, never read as no body.
 impl<T, S> OptionalFromRequest<S> for Json<T>
 where
     T: DeserializeOwned,
@@ -103,6 +116,12 @@ where
     type Rejection = ApiError;
 
     async fn from_request(req: Request, state: &S) -> Result<Option<Self>, Self::Rejection> {
+        if !req.headers().contains_key(header::CONTENT_TYPE) && declares_a_body(&req) {
+            return Err(ApiError::UnsupportedMediaType(
+                "the request carries a body and no Content-Type; send it as application/json"
+                    .to_string(),
+            ));
+        }
         match <axum::Json<T> as OptionalFromRequest<S>>::from_request(req, state).await {
             Ok(Some(axum::Json(value))) => Ok(Some(Json(value))),
             Ok(None) => Ok(None),
@@ -288,6 +307,42 @@ mod tests {
             "a read failure is malformed-body, got {error:?}"
         );
         assert_eq!(error.status(), StatusCode::BAD_REQUEST);
+    }
+
+    /// The optional form tells no body from a body with no `Content-Type`:
+    /// a chunked body is a body even with no `Content-Length`, and is
+    /// `415`; a request with no body, or an empty one, is `None` (#1100).
+    #[tokio::test]
+    async fn the_optional_form_refuses_a_body_without_a_content_type() {
+        async fn optional(request: Request<axum::body::Body>) -> Result<bool, ApiError> {
+            <Json<serde_json::Value> as axum::extract::OptionalFromRequest<()>>::from_request(
+                request,
+                &(),
+            )
+            .await
+            .map(|body| body.is_some())
+        }
+
+        let chunked = Request::delete("/")
+            .header(header::TRANSFER_ENCODING, "chunked")
+            .body(axum::body::Body::from(r#"{"confirm": true}"#))
+            .unwrap();
+        let error = optional(chunked).await.unwrap_err();
+        assert!(
+            matches!(error, ApiError::UnsupportedMediaType(_)),
+            "a chunked body with no Content-Type is 415, got {error:?}"
+        );
+
+        let none = Request::delete("/")
+            .body(axum::body::Body::empty())
+            .unwrap();
+        assert!(!optional(none).await.unwrap(), "no body is None");
+
+        let empty = Request::delete("/")
+            .header(header::CONTENT_LENGTH, "0")
+            .body(axum::body::Body::empty())
+            .unwrap();
+        assert!(!optional(empty).await.unwrap(), "an empty body is None");
     }
 
     #[tokio::test]

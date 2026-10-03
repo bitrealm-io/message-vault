@@ -12,7 +12,7 @@ use anyhow::{Context, Result};
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 
-use crate::assets_api::{self, AssetError, StoredAsset};
+use crate::assets_api::{self, AssetError, Sha256, StoredAsset};
 
 /// Default part size advertised to clients (under Cloudflare ~100 MiB).
 pub const DEFAULT_PART_SIZE: usize = 64 * 1024 * 1024;
@@ -106,8 +106,11 @@ pub fn require_upload_id(upload_id: &str) -> Result<String, AssetError> {
 }
 
 /// Folder for one multipart upload: `{assets}/.incoming/{sha256}/{upload_id}`.
-pub fn session_dir(assets_root: &Path, sha256: &str, upload_id: &str) -> PathBuf {
-    assets_root.join(".incoming").join(sha256).join(upload_id)
+pub fn session_dir(assets_root: &Path, sha256: &Sha256, upload_id: &str) -> PathBuf {
+    assets_root
+        .join(".incoming")
+        .join(sha256.as_str())
+        .join(upload_id)
 }
 
 /// Path of the session's manifest file.
@@ -161,6 +164,10 @@ struct ManifestLock {
 }
 
 /// Take the session's file lock so two part uploads cannot rewrite the manifest at once.
+///
+/// The lock is not waited for. A request refused because another request
+/// holds it is told so, because its bytes may well be right, and sending
+/// them again once the other request finishes succeeds.
 fn lock_session(session: &Path) -> Result<ManifestLock, AssetError> {
     let path = session.join("manifest.lock");
     let file = OpenOptions::new()
@@ -183,12 +190,11 @@ fn ext_for_mime(mime: Option<&str>) -> String {
 /// Start a chunked upload session. Returns `already_present` asset when the blob exists.
 pub fn start_upload(
     assets_root: &Path,
-    sha256: &str,
+    sha: &Sha256,
     bytes: u64,
     mime: Option<&str>,
     limits: UploadLimits,
 ) -> Result<(Option<StoredAsset>, Option<StartUpload>), AssetError> {
-    let sha = assets_api::require_sha256(sha256)?;
     if bytes > limits.max_bytes {
         return Err(AssetError::Invalid(format!(
             "object exceeds {} byte server limit ({} MiB)",
@@ -199,16 +205,16 @@ pub fn start_upload(
     // Best-effort: drop abandoned multipart staging so disk does not grow forever.
     let _ = assets_api::gc_stale_incoming(assets_root, STALE_INCOMING_SECS);
 
-    if let Some(existing) = assets_api::lookup_by_sha256(assets_root, &sha) {
+    if let Some(existing) = assets_api::lookup_by_sha256(assets_root, sha) {
         return Ok((Some(existing), None));
     }
 
     let part_size = limits.part_size;
     let upload_id = new_upload_id();
-    let session = session_dir(assets_root, &sha, &upload_id);
+    let session = session_dir(assets_root, sha, &upload_id);
     fs::create_dir_all(&session).with_context(|| format!("mkdir {}", session.display()))?;
     let manifest = UploadManifest {
-        sha256: sha,
+        sha256: sha.to_string(),
         bytes,
         part_size,
         mime: mime.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()),
@@ -231,37 +237,36 @@ pub fn start_upload(
 ///
 /// # Errors
 ///
-/// Returns [`AssetError::Invalid`] when the fingerprint or upload id is
-/// invalid, [`AssetError::UploadNotFound`] when no such upload is in
-/// progress, and [`AssetError::Io`] when its manifest is unreadable.
+/// Returns [`AssetError::Invalid`] when the upload id is invalid,
+/// [`AssetError::UploadNotFound`] when no such upload is in progress, and
+/// [`AssetError::Io`] when its manifest is unreadable.
 pub fn session_part_size(
     assets_root: &Path,
-    sha256: &str,
+    sha: &Sha256,
     upload_id: &str,
 ) -> Result<usize, AssetError> {
-    let (_sha, session) = existing_session(assets_root, sha256, upload_id)?;
+    let session = existing_session(assets_root, sha, upload_id)?;
     Ok(read_manifest(&session)?.part_size)
 }
 
-/// The checked fingerprint and the folder of an upload in progress.
+/// The folder of an upload in progress.
 fn existing_session(
     assets_root: &Path,
-    sha256: &str,
+    sha: &Sha256,
     upload_id: &str,
-) -> Result<(String, PathBuf), AssetError> {
-    let sha = assets_api::require_sha256(sha256)?;
+) -> Result<PathBuf, AssetError> {
     let upload_id = require_upload_id(upload_id)?;
-    let session = session_dir(assets_root, &sha, &upload_id);
+    let session = session_dir(assets_root, sha, &upload_id);
     if !session.is_dir() {
         return Err(AssetError::UploadNotFound);
     }
-    Ok((sha, session))
+    Ok(session)
 }
 
 /// Write (or overwrite) one part. `body` is the full part payload.
 pub fn put_part(
     assets_root: &Path,
-    sha256: &str,
+    sha: &Sha256,
     upload_id: &str,
     part: u32,
     body: &[u8],
@@ -269,10 +274,10 @@ pub fn put_part(
     if part == 0 {
         return Err(AssetError::Invalid("part number must be >= 1".into()));
     }
-    let (sha, session) = existing_session(assets_root, sha256, upload_id)?;
+    let session = existing_session(assets_root, sha, upload_id)?;
     let _lock = lock_session(&session)?;
     let mut manifest = read_manifest(&session)?;
-    if manifest.sha256 != sha {
+    if manifest.sha256 != sha.as_str() {
         return Err(AssetError::Invalid("upload session sha256 mismatch".into()));
     }
     if body.len() > manifest.part_size {
@@ -316,13 +321,13 @@ pub fn put_part(
 /// [`AssetError::Io`] when the file cannot be stored.
 pub fn complete_upload(
     assets_root: &Path,
-    sha256: &str,
+    sha: &Sha256,
     upload_id: &str,
 ) -> Result<(StoredAsset, bool), AssetError> {
-    let (sha, session) = existing_session(assets_root, sha256, upload_id)?;
+    let session = existing_session(assets_root, sha, upload_id)?;
     let _lock = lock_session(&session)?;
     let manifest = read_manifest(&session)?;
-    if manifest.sha256 != sha {
+    if manifest.sha256 != sha.as_str() {
         return Err(AssetError::Invalid("upload session sha256 mismatch".into()));
     }
     // The empty file has no parts: it completes with none and is checked
@@ -368,7 +373,7 @@ pub fn complete_upload(
     }
     let result = assets_api::store_verified(
         &assembled,
-        &sha,
+        sha,
         assets_root,
         manifest.mime.as_deref(),
         true,
@@ -381,10 +386,9 @@ pub fn complete_upload(
 }
 
 /// Abort and delete staging for an upload session.
-pub fn abort_upload(assets_root: &Path, sha256: &str, upload_id: &str) -> Result<(), AssetError> {
-    let sha = assets_api::require_sha256(sha256)?;
+pub fn abort_upload(assets_root: &Path, sha: &Sha256, upload_id: &str) -> Result<(), AssetError> {
     let upload_id = require_upload_id(upload_id)?;
-    let session = session_dir(assets_root, &sha, &upload_id);
+    let session = session_dir(assets_root, sha, &upload_id);
     if session.exists() {
         fs::remove_dir_all(&session).with_context(|| format!("remove {}", session.display()))?;
     }
@@ -396,8 +400,8 @@ mod tests {
     use super::*;
     use tempfile::tempdir;
 
-    fn hash_bytes(data: &[u8]) -> String {
-        crate::assets_api::sha256_hex(data)
+    fn hash_bytes(data: &[u8]) -> Sha256 {
+        Sha256::of_bytes(data)
     }
 
     #[test]
@@ -412,7 +416,7 @@ mod tests {
         fs::create_dir_all(&session).unwrap();
         let part_size = 10usize;
         let mut manifest = UploadManifest {
-            sha256: sha.clone(),
+            sha256: sha.to_string(),
             bytes: data.len() as u64,
             part_size,
             mime: Some("text/plain".into()),
@@ -433,7 +437,7 @@ mod tests {
 
         let (stored, already) = complete_upload(root, &sha, upload_id).unwrap();
         assert!(!already);
-        assert_eq!(stored.sha256, sha);
+        assert_eq!(stored.sha256, sha.as_str());
         assert!(root.join(&stored.assets_path).is_file());
         assert!(!session.exists());
         assert_eq!(fs::read(root.join(&stored.assets_path)).unwrap(), data);
@@ -449,7 +453,7 @@ mod tests {
         let session = session_dir(root, &wrong_sha, upload_id);
         fs::create_dir_all(&session).unwrap();
         let mut manifest = UploadManifest {
-            sha256: wrong_sha.clone(),
+            sha256: wrong_sha.to_string(),
             bytes: data.len() as u64,
             part_size: 64,
             mime: None,
@@ -470,12 +474,12 @@ mod tests {
         let root = dir.path();
         let data = b"large-enough-to-skip";
         // Claimed fingerprint deliberately wrong: completion must still hash and reject.
-        let claimed_sha = "a".repeat(64);
+        let claimed_sha = Sha256::parse(&"a".repeat(64)).unwrap();
         let upload_id = "aabbccdd";
         let session = session_dir(root, &claimed_sha, upload_id);
         fs::create_dir_all(&session).unwrap();
         let mut manifest = UploadManifest {
-            sha256: claimed_sha.clone(),
+            sha256: claimed_sha.to_string(),
             bytes: data.len() as u64,
             part_size: 64,
             mime: None,
@@ -508,8 +512,8 @@ mod tests {
     fn abort_rejects_parent_upload_id() {
         let dir = tempdir().unwrap();
         let root = dir.path();
-        let sha = "b".repeat(64);
-        let parent = root.join(".incoming").join(&sha);
+        let sha = Sha256::parse(&"b".repeat(64)).unwrap();
+        let parent = root.join(".incoming").join(sha.as_str());
         fs::create_dir_all(parent.join("keep")).unwrap();
         fs::write(parent.join("keep").join("marker"), b"x").unwrap();
 
@@ -529,7 +533,7 @@ mod tests {
         fs::create_dir_all(&session).unwrap();
         let part_size = 8usize;
         let mut manifest = UploadManifest {
-            sha256: sha.clone(),
+            sha256: sha.to_string(),
             bytes: data.len() as u64,
             part_size,
             mime: None,
@@ -570,7 +574,7 @@ mod tests {
         }
         let (stored, already) = complete_upload(root, &sha, &start.upload_id).unwrap();
         assert!(!already);
-        assert_eq!(stored.sha256, sha);
+        assert_eq!(stored.sha256, sha.as_str());
     }
 
     #[test]
@@ -579,7 +583,7 @@ mod tests {
         let root = dir.path();
         let data = b"already-here";
         let sha = hash_bytes(data);
-        let path = root.join(&sha[..2]).join(&sha);
+        let path = root.join(&sha.as_str()[..2]).join(sha.as_str());
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, data).unwrap();
 
@@ -593,7 +597,7 @@ mod tests {
     fn start_rejects_over_max_bytes() {
         let dir = tempdir().unwrap();
         let root = dir.path();
-        let sha = "a".repeat(64);
+        let sha = Sha256::parse(&"a".repeat(64)).unwrap();
         let limits = UploadLimits {
             part_size: 1024,
             max_bytes: 2048,
@@ -613,10 +617,13 @@ mod tests {
         assert_eq!((small_part.part_size, small_part.max_bytes), (10, 1024));
     }
 
+    /// S2-8: a second request to an upload while the first holds the lock is
+    /// refused without waiting. Its bytes may be right, so the refusal names
+    /// the lock and says to send again, and does not name a server path.
     #[test]
-    fn manifest_lock_is_exclusive() {
+    fn a_request_refused_for_the_lock_says_so() {
         let dir = tempdir().unwrap();
-        let sha = "c".repeat(64);
+        let sha = Sha256::parse(&"c".repeat(64)).unwrap();
         let session = session_dir(dir.path(), &sha, "locktest01");
         fs::create_dir_all(&session).unwrap();
 
@@ -625,6 +632,15 @@ mod tests {
         assert!(
             matches!(err, AssetError::Locked),
             "expected lock failure, got: {err}"
+        );
+        let message = err.to_string();
+        assert!(
+            message.contains("another request to this upload holds its lock"),
+            "expected the lock to be named, got: {message}"
+        );
+        assert!(
+            !message.contains(&dir.path().display().to_string()),
+            "the refusal names a server path: {message}"
         );
     }
 }

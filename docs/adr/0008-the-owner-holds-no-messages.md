@@ -229,8 +229,13 @@ product needs.)
   connects with.
   Storage shows the owner what it shows the holder: how much the account
   stores, its import and export history, and its largest attachments' names
-  and sizes. The owner sees no API tokens, which are the
-  holder's credentials, and no address book, which is content. The tabs that belong to a device rather than an
+  and sizes. The owner sees the account's API tokens on its Account tab,
+  each with its label, permissions and use, and revokes one, so a leaked
+  token can be ended; it never sees any part of a token's secret, and makes
+  and renames none, because a token is the holder's credential. A token's
+  label and permissions are not message content. (Until 2026-10-02 the
+  owner saw no API tokens at all.) The owner sees no address book, which is
+  content. The tabs that belong to a device rather than an
   account (System, Convert, Appearance) are not shown for a managed account.
 - The owner's own Settings are Account, Profile and Appearance. Storage,
   System and Convert work on messages, and Profile has no handles and no

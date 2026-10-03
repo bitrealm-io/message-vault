@@ -143,6 +143,11 @@ pub enum ImportError {
         failure: ImportFailure,
         cause: anyhow::Error,
     },
+    /// The import run was discarded or completed while the batch uploaded,
+    /// found when the run is checked again under the write lock. It is
+    /// refused as the check before the body refuses it.
+    #[error(transparent)]
+    Run(crate::db::imports::ImportLookupError),
     /// I/O, the database, or a bug: nothing the sender can change.
     #[error(transparent)]
     Internal(anyhow::Error),
@@ -152,6 +157,10 @@ pub enum ImportError {
 /// inside it; the pipeline's entry point sorts the two apart here, once.
 impl From<anyhow::Error> for ImportError {
     fn from(cause: anyhow::Error) -> Self {
+        let cause = match cause.downcast::<crate::db::imports::ImportLookupError>() {
+            Ok(lookup) => return Self::Run(lookup),
+            Err(cause) => cause,
+        };
         match ImportFailure::in_error(&cause).cloned() {
             Some(failure) => Self::Rejected { failure, cause },
             None => Self::Internal(cause),

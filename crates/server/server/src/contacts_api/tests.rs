@@ -212,6 +212,35 @@ async fn a_refused_contact_edit_answers_422_with_the_persons_sentence() {
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
 
+/// A contact deleted after the edit found it: the rename updated no row and
+/// answered `500` with "contact missing after mutate". The edit is one write
+/// transaction, so it finds the contact gone and answers `404`.
+#[tokio::test]
+async fn renaming_a_contact_deleted_meanwhile_answers_not_found() {
+    let (fixture, account) = contacts_fixture_with_handles(&[]).await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
+    let ada =
+        insert_contact_with_handle(&mut conn, account.account_id, "Ada", "+15555550100").await;
+
+    let mut other = crate::db::begin_write(&mut conn).await.unwrap();
+    sqlx::query("DELETE FROM contacts WHERE id = $1")
+        .bind(ada)
+        .execute(&mut *other)
+        .await
+        .unwrap();
+    let (status, _) = crate::db::write_tx::commit_during(
+        other,
+        crate::test_support::patch_failure(
+            &fixture.state,
+            &format!("/v1/contacts/{ada}"),
+            &account.token,
+            serde_json::json!({ "name": "Ada Lovelace" }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
 #[tokio::test]
 async fn replacing_an_identity_with_an_empty_address_is_refused_and_keeps_the_old_one() {
     let (fixture, account) = contacts_fixture_with_handles(&[]).await;
@@ -367,7 +396,7 @@ async fn list_contacts_filters_and_paginates() {
     let by_handle = list_contacts_sorted(
         &mut conn,
         account,
-        "handle:5555550200",
+        "identity:5555550200",
         &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
         0,
@@ -1121,7 +1150,7 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
     .unwrap();
 
     assert!(
-        mutate_contact(
+        mutate_committed(
             &mut conn,
             account,
             contact_id,
@@ -1147,7 +1176,7 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
     assert!(detail.identities[0].address.contains("5555550200"));
 
     assert!(
-        mutate_contact(
+        mutate_committed(
             &mut conn,
             account,
             contact_id,
@@ -1168,7 +1197,7 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
     assert_eq!(renamed.name, "Samantha");
 
     assert!(
-        mutate_contact(
+        mutate_committed(
             &mut conn,
             account,
             contact_id,
@@ -1194,7 +1223,7 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
     assert_eq!(updated.identities[0].address, "sam@example.com");
 
     assert!(
-        mutate_contact(
+        mutate_committed(
             &mut conn,
             account,
             contact_id,
@@ -1227,7 +1256,7 @@ async fn add_identity(
     service: Option<&str>,
 ) {
     assert!(
-        mutate_contact(
+        mutate_committed(
             conn,
             account,
             contact_id,
@@ -1304,7 +1333,7 @@ async fn naming_a_handle_again_under_another_transport_keeps_one_row() {
     add_identity(&mut conn, account, contact_id, "+15555550300", Some("sms")).await;
 
     assert!(
-        mutate_contact(
+        mutate_committed(
             &mut conn,
             account,
             contact_id,
@@ -1356,7 +1385,7 @@ async fn replace_identity(
     service: Option<&str>,
 ) {
     assert!(
-        mutate_contact(
+        mutate_committed(
             conn,
             account,
             contact_id,
@@ -1456,7 +1485,7 @@ async fn mutate_contact_rejects_trashed_contact() {
         .await
         .unwrap();
 
-    let changed = mutate_contact(
+    let changed = mutate_committed(
         &mut conn,
         account,
         contact_id,
@@ -1543,7 +1572,7 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
     const OLD: &str = "2000-01-01 00:00:00";
     set_contact_last_modified(&mut conn, account, contact_id, OLD).await;
     assert!(
-        mutate_contact(
+        mutate_committed(
             &mut conn,
             account,
             contact_id,
@@ -1562,7 +1591,7 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
 
     set_contact_last_modified(&mut conn, account, contact_id, OLD).await;
     assert!(
-        mutate_contact(
+        mutate_committed(
             &mut conn,
             account,
             contact_id,
@@ -1585,7 +1614,7 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
     // Re-adding the same handle is a no-op and must not bump.
     set_contact_last_modified(&mut conn, account, contact_id, OLD).await;
     assert!(
-        mutate_contact(
+        mutate_committed(
             &mut conn,
             account,
             contact_id,
@@ -1609,7 +1638,7 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
 
     set_contact_last_modified(&mut conn, account, contact_id, OLD).await;
     assert!(
-        mutate_contact(
+        mutate_committed(
             &mut conn,
             account,
             contact_id,
@@ -1988,7 +2017,7 @@ async fn list_contacts_filters_no_handle() {
     let page = list_contacts_sorted(
         &mut conn,
         account,
-        "handle:none",
+        "identity:none",
         &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
         0,
@@ -3029,4 +3058,18 @@ async fn a_long_comma_list_is_refused_as_too_many_parts() {
     assert_eq!(response.status(), reqwest::StatusCode::UNPROCESSABLE_ENTITY);
     let body: serde_json::Value = response.json().await.unwrap();
     assert_eq!(body["detail"], "The search has too many parts.", "{body}");
+}
+
+/// [`mutate_contact`] in a write transaction of its own, committed when the
+/// edit succeeds, as `update_contact` runs it.
+async fn mutate_committed(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    contact_id: i64,
+    body: &UpdateContactRequest,
+) -> Result<bool, ContactEditError> {
+    let mut tx = crate::db::begin_write(conn).await?;
+    let changed = mutate_contact(&mut tx, account_id, contact_id, body).await?;
+    tx.commit().await?;
+    Ok(changed)
 }

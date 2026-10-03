@@ -86,8 +86,8 @@ function DeleteAccountForm({
       <h2 className="mb-2 pr-6 text-[1rem] font-semibold text-text">Delete your account?</h2>
 
       <p className="mt-3 text-[0.875rem] leading-relaxed text-muted">
-        This cannot be undone. Your messages, contacts, group chats, profile, and attachments will
-        be permanently deleted.
+        This cannot be undone. Your messages, contacts, group conversations, profile, and
+        attachments will be permanently deleted.
       </p>
 
       <label className="mt-5 block">

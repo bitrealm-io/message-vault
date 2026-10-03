@@ -86,25 +86,30 @@ fn a_reused_blob_takes_the_export_mime_type_when_the_record_has_one() {
     std::fs::create_dir_all(&export_dir).unwrap();
     let source = export_dir.join("photo.png");
     std::fs::write(&source, b"not really a png").unwrap();
-    let sha = assets_api::hash_file(&source).unwrap();
+    let sha = assets_api::Sha256::parse(&assets_api::hash_file(&source).unwrap()).unwrap();
     assets_api::store_verified(&source, &sha, &assets_dir, Some("image/png"), false, false)
         .unwrap();
     let mut stats = AssetStats::default();
 
     let stored = store_claimed_or_path(
-        &claimed(&sha, Some("image/jpeg")),
+        &claimed(sha.as_str(), Some("image/jpeg")),
         &export_dir,
         &assets_dir,
         &mut stats,
     )
     .unwrap()
     .expect("the stored blob is reused");
-    assert_eq!(stored.sha256, sha);
+    assert_eq!(stored.sha256, sha.as_str());
     assert_eq!(stored.mime_type.as_deref(), Some("image/jpeg"));
 
-    let stored = store_claimed_or_path(&claimed(&sha, None), &export_dir, &assets_dir, &mut stats)
-        .unwrap()
-        .expect("the stored blob is reused");
+    let stored = store_claimed_or_path(
+        &claimed(sha.as_str(), None),
+        &export_dir,
+        &assets_dir,
+        &mut stats,
+    )
+    .unwrap()
+    .expect("the stored blob is reused");
     assert_eq!(stored.mime_type.as_deref(), Some("image/png"));
     assert_eq!(stats.deduped, 2);
     assert_eq!(stats.copied, 0);
@@ -123,14 +128,14 @@ fn a_path_that_leaves_the_export_folder_is_refused_whether_or_not_its_fingerprin
     std::fs::create_dir_all(&export_dir).unwrap();
     let source = export_dir.join("photo.png");
     std::fs::write(&source, b"stored bytes").unwrap();
-    let stored_sha = assets_api::hash_file(&source).unwrap();
+    let stored_sha = assets_api::Sha256::parse(&assets_api::hash_file(&source).unwrap()).unwrap();
     assets_api::store_verified(&source, &stored_sha, &assets_dir, None, false, false).unwrap();
-    let new_sha = assets_api::sha256_hex(b"bytes the store has never seen");
+    let new_sha = assets_api::Sha256::of_bytes(b"bytes the store has never seen");
 
     for sha in [&stored_sha, &new_sha] {
         let att = AttachmentRecord {
             path: Some("../escape.txt".to_string()),
-            ..claimed(sha, None)
+            ..claimed(sha.as_str(), None)
         };
         let mut stats = AssetStats::default();
 
@@ -156,7 +161,7 @@ async fn a_file_that_does_not_match_its_claimed_sha256_fails_the_import_and_is_n
     let tmp = TempDir::new().unwrap();
     let assets = tmp.path().join("assets");
     std::fs::write(tmp.path().join("photo.bin"), b"the bytes on disk").unwrap();
-    let claimed_sha = assets_api::sha256_hex(b"the bytes the export saw");
+    let claimed_sha = assets_api::Sha256::of_bytes(b"the bytes the export saw");
     let header = ORPHANED_HEADER.replace("orphaned", "+15555550701");
     let message = format!(
         r#"{{"guid":"g-mismatch","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550701","sender_display_name":null,"subject":null,"text":"hi","attachments":[{{"path":"photo.bin","original_name":"photo.bin","mime_type":"application/octet-stream","digest_sha256":"{claimed_sha}","is_sticker":false,"transcription":null,"sticker_effect":null}}],"imessage":null,"source":null}}"#
@@ -181,7 +186,10 @@ async fn a_file_that_does_not_match_its_claimed_sha256_fails_the_import_and_is_n
         format!("{err:#}").contains("sha256 mismatch"),
         "the refusal says why: {err:#}"
     );
-    for sha in [claimed_sha, assets_api::sha256_hex(b"the bytes on disk")] {
+    for sha in [
+        claimed_sha,
+        assets_api::Sha256::of_bytes(b"the bytes on disk"),
+    ] {
         assert!(assets_api::lookup_by_sha256(&assets, &sha).is_none());
     }
 }

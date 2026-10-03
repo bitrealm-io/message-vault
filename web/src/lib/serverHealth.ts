@@ -36,6 +36,11 @@ export function healthProbeUrl(baseUrl: string): string | null {
 /**
  * Probe server liveness via GET /health (plain text, not JSON).
  * Returns true only when the response is OK.
+ *
+ * Calls `fetch` itself rather than going through `serverApi.ts`: the address
+ * may be one the person is still typing on the login screen, not the server
+ * `apiClient` talks to. One of the two named exceptions in
+ * `docs/adr/0002-one-way-to-fetch-data-in-the-web-app.md`.
  */
 export async function checkServerHealth(baseUrl: string, signal?: AbortSignal): Promise<boolean> {
   const url = healthProbeUrl(baseUrl);

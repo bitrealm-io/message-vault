@@ -745,7 +745,7 @@ fn derived_file_exists(derived_assets_path: Option<&str>, converted_dir: &Path) 
 }
 
 /// Content-addressed relative path: `<aa>/<sha><ext>`.
-pub fn derived_rel_path(sha256: &str, ext: &str) -> String {
+pub fn derived_rel_path(sha256: &crate::assets_api::Sha256, ext: &str) -> String {
     crate::assets_api::shard_rel_path(sha256, ext)
 }
 
@@ -763,14 +763,14 @@ fn mime_for_ext(ext: &str) -> &'static str {
 /// same folder first and are renamed over the path, so a run killed partway
 /// never leaves a partial file under a content-addressed name.
 fn store_derived_bytes(derived_dir: &Path, buf: &[u8], ext: &str) -> Result<DerivedBlob> {
-    let sha = crate::assets_api::sha256_hex(buf);
+    let sha = crate::assets_api::Sha256::of_bytes(buf);
     let rel = derived_rel_path(&sha, ext);
     let dest = derived_dir.join(&rel);
     let parent = dest
         .parent()
         .with_context(|| format!("derived path {} has no folder", dest.display()))?;
     fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
-    if !crate::assets_api::hash_file(&dest).is_ok_and(|actual| actual == sha) {
+    if !crate::assets_api::hash_file(&dest).is_ok_and(|actual| actual == sha.as_str()) {
         let mut temporary = tempfile::NamedTempFile::new_in(parent)
             .with_context(|| format!("create temporary preview in {}", parent.display()))?;
         temporary
@@ -786,7 +786,7 @@ fn store_derived_bytes(derived_dir: &Path, buf: &[u8], ext: &str) -> Result<Deri
             .with_context(|| format!("install {}", dest.display()))?;
     }
     Ok(DerivedBlob {
-        sha256: sha,
+        sha256: sha.to_string(),
         assets_path: rel,
         mime_type: mime_for_ext(ext).to_string(),
     })

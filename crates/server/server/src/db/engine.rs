@@ -81,7 +81,10 @@ pub async fn open_pool_for_path(path: &Path) -> Result<SqlitePool> {
 }
 
 /// Shared test pool: file-backed SQLite in a fresh temp dir, returned with
-/// the pool so the test's files live there too.
+/// the pool so the test's files live there too. It runs in WAL mode, as
+/// [`open_pool_for_path`] does, because a write that lands between another
+/// transaction's read and its write fails differently under WAL than under a
+/// rollback journal, and a test must see what the server sees.
 #[cfg(test)]
 pub(crate) async fn test_pool() -> (SqlitePool, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
@@ -90,6 +93,7 @@ pub(crate) async fn test_pool() -> (SqlitePool, tempfile::TempDir) {
         .connect_with(connect_options(&path))
         .await
         .unwrap();
+    try_enable_wal(&pool).await;
     (pool, dir)
 }
 
@@ -127,6 +131,13 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(cache_size, -200000, "cache_size");
+        // The tests run in the journal mode the server runs in, so a test can
+        // show what WAL does to a write that lands between a read and a write.
+        let journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(journal_mode, "wal", "journal_mode");
         // The pool is usable for real work.
         sqlx::query("CREATE TABLE t1 (id INTEGER PRIMARY KEY, v TEXT)")
             .execute(&pool)

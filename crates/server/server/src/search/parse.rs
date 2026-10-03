@@ -91,8 +91,8 @@ fn value_hint(spec: &FieldSpec) -> String {
         ValueType::Name if spec.word == "import" => "Write #id or last.".into(),
         ValueType::Name if spec.values.is_empty() => "Write a name, pre* for a prefix, or #id.".into(),
         ValueType::Name => format!("Write a name, pre* for a prefix, #id, or one of: {}.", choices()),
-        ValueType::Person if spec.values.is_empty() => "Write a name, a handle, pre* for a prefix, or #id.".into(),
-        ValueType::Person => format!("Write a name, a handle, pre* for a prefix, #id, or one of: {}.", choices()),
+        ValueType::Person if spec.values.is_empty() => "Write a name, an identity, pre* for a prefix, or #id.".into(),
+        ValueType::Person => format!("Write a name, an identity, pre* for a prefix, #id, or one of: {}.", choices()),
         ValueType::Text if spec.values.is_empty() => "Write some text, or pre* for a prefix.".into(),
         ValueType::Text => format!("Write some text, pre* for a prefix, or one of: {}.", choices()),
     }

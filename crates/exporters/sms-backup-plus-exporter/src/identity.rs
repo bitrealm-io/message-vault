@@ -67,6 +67,7 @@ mod tests {
             sender: peer.filter(|_| !is_from_me),
             text: text.into(),
             attachments: vec![],
+            unreadable_parts: 0,
             name_alias: None,
             smssync_id: None,
             android_type: String::new(),

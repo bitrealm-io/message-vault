@@ -50,6 +50,38 @@ describe("CheckedContactsPanel", () => {
     ]);
   });
 
+  // The app's own :focus-visible outline loses to the outline-none utility, so
+  // a sortable header draws the style guide's ring itself.
+  it("draws the focus ring on every sortable column header", () => {
+    render(<CheckedContactsPanel contacts={[{ id: "1", name: "Ada" }]} onClear={() => {}} />);
+    const sortable = screen
+      .getAllByRole("columnheader")
+      .filter((header) => header.hasAttribute("aria-sort"));
+    expect(sortable).toHaveLength(6);
+    for (const header of sortable) {
+      expect(header.className).toContain("focus-visible:ring-2 focus-visible:ring-accent");
+    }
+  });
+
+  it("draws the focus ring on every contact's row", () => {
+    render(
+      <CheckedContactsPanel
+        contacts={[
+          { id: "1", name: "Ada" },
+          { id: "2", name: "Bob" },
+        ]}
+        onClear={() => {}}
+      />,
+    );
+    const bodyRows = screen.getAllByRole("row").slice(1);
+    expect(bodyRows).toHaveLength(2);
+    for (const row of bodyRows) {
+      expect(row.className).toContain(
+        "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
+      );
+    }
+  });
+
   it("says the figures could not be loaded and loads them on Try again", async () => {
     summaries.mockRejectedValueOnce(new Error("The server could not answer."));
     summaries.mockResolvedValueOnce({

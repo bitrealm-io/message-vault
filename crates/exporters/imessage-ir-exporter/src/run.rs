@@ -11,13 +11,14 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow, bail};
 use imessage_reader_protocol::{ExportRequest, Platform, Request, Source};
+use ios_backup::{Helper, ScratchDir, ios_backup_encrypted_flag};
 use message_crate_core::{
     AppleConfig, ApplePlatform, CancelFlag, ExportTransforms, ExporterConfig, LogSink,
     OutputFormat, ProgressEvent, ProgressSink, RunResult, SourceConfig, emit_progress,
     prepare_outputs,
 };
 
-use crate::{backup::ios_backup_encrypted_flag, convert, helper::Helper, scratch::ScratchDir};
+use crate::convert;
 
 /// User-facing copy when a custom attachment folder is missing.
 pub(crate) const ATTACHMENT_FOLDER_MISSING: &str = "Attachment folder does not exist.";
@@ -571,8 +572,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn rows_the_program_skipped_are_counted_in_the_run_result() {
-        use crate::helper::tests::{fake_helper, source_line, spawn_fake};
         use imessage_reader_protocol::PROTOCOL_VERSION;
+        use ios_backup::testutil::{fake_helper, source_line, spawn_fake};
 
         let dir = tempfile::tempdir().unwrap();
         let chat = dir.path().join("chat.db");
@@ -604,8 +605,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn a_run_with_no_skipped_rows_says_nothing_about_them() {
-        use crate::helper::tests::{fake_helper, source_line, spawn_fake};
         use imessage_reader_protocol::PROTOCOL_VERSION;
+        use ios_backup::testutil::{fake_helper, source_line, spawn_fake};
 
         let dir = tempfile::tempdir().unwrap();
         let chat = dir.path().join("chat.db");
@@ -640,10 +641,10 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn inline_and_missing_attachments_reach_a_file_backed_export() {
-        use crate::helper::tests::{fake_helper, source_line, spawn_fake};
         use imessage_reader_protocol::{
             Attachment, AttachmentSource, Conversation, Event, Message, PROTOCOL_VERSION,
         };
+        use ios_backup::testutil::{fake_helper, source_line, spawn_fake};
         use message_ir_format::read_conversation_json;
 
         const SVG: &str = "<svg></svg>";
@@ -731,8 +732,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn a_jsonl_run_reports_its_conversations_and_messages() {
-        use crate::helper::tests::{fake_helper, source_line, spawn_fake};
         use imessage_reader_protocol::{Conversation, Event, Message, PROTOCOL_VERSION};
+        use ios_backup::testutil::{fake_helper, source_line, spawn_fake};
 
         let message = |guid: &str, timestamp_unix_ms| {
             Event::Message(Box::new(Message {
@@ -872,7 +873,7 @@ done"#
     #[cfg(unix)]
     #[test]
     fn an_attachment_that_fails_to_decrypt_is_counted_apart_from_missing_ones() {
-        use crate::helper::tests::{fake_helper, spawn_fake};
+        use ios_backup::testutil::{fake_helper, spawn_fake};
 
         let dir = tempfile::tempdir().unwrap();
         let chat = dir.path().join("chat.db");
@@ -936,7 +937,7 @@ done"#
     #[cfg(unix)]
     #[test]
     fn the_scratch_folder_is_under_the_output_folder_and_deleted_after() {
-        use crate::helper::tests::{fake_helper, spawn_fake};
+        use ios_backup::testutil::{fake_helper, spawn_fake};
 
         let dir = tempfile::tempdir().unwrap();
         let chat = dir.path().join("chat.db");

@@ -89,13 +89,16 @@ The second check also catches a symbolic link that points at the input folder.
 ## What the output folder may hold
 
 An output folder that does not exist is created.
-An empty folder, or one that holds an earlier export, is used as it is.
+An empty folder, or one an earlier export wrote, is used as it is.
+A folder that holds only the hidden files an operating system leaves behind, such as `.DS_Store`, `Thumbs.db` or `desktop.ini`, counts as empty.
 
-A folder that holds only unrelated files is refused, because the clean-up step deletes only what looks like an export and has no way to know the folder was chosen on purpose.
-The message ends "Use an empty directory or one previously used for exports."
+Any other folder is refused and nothing in it is touched, even when it holds files named like an export, such as a `.csv` or a `.json` file.
+A file's name cannot show that an export wrote it, and the clean-up would delete a person's own `budget.csv` along with an earlier export.
+The message names the folder and ends "Choose an empty folder or one an earlier export wrote."
 
-The clean-up removes earlier export files and the whole `attachments` folder.
-It leaves a hidden file named `.message-crate-export` behind, which marks the folder as one Convert may clear on a later run.
+An export leaves a hidden file named `.message-crate-export` in its output folder, which marks the folder as one Convert may clear on a later run.
+Only a folder with that file is cleaned.
+The clean-up removes earlier export files and the whole `attachments` folder, and leaves every other file in place.
 
 ## Limits
 

@@ -6,67 +6,70 @@ use std::fs;
 use std::path::Path;
 
 /// Sentinel file written into export directories so `clean_previous_ir_output` can
-/// distinguish a real export directory from a user directory that was pointed at
-/// by mistake.
+/// distinguish a real export directory from a person's own folder that was
+/// pointed at by mistake.
 pub const EXPORT_SENTINEL: &str = ".message-crate-export";
 
-/// Write a sentinel file marking `output_dir` as an export target.
-/// Callers should run this after `create_dir_all` on a fresh export.
-///
-/// # Errors
-///
-/// Returns an error when the sentinel cannot be written.
-pub fn write_export_sentinel(output_dir: &Path) -> Result<()> {
+/// Write a sentinel file marking `output_dir` as an export target. Outside
+/// tests, only [`mark_export_folder`] calls it, after checking the folder is
+/// empty.
+fn write_export_sentinel(output_dir: &Path) -> Result<()> {
     fs::write(output_dir.join(EXPORT_SENTINEL), "")?;
     Ok(())
 }
 
-/// Delete previous CSV, JSON, JSON Lines, meta, `smses.xml`, temps, staged
-/// attachments, and mail archives.
+/// Files an operating system leaves in a folder the person opened, such as
+/// Finder's `.DS_Store`. A folder that holds only these looks empty to the
+/// person, so it counts as empty.
+const OPERATING_SYSTEM_FILES: [&str; 3] = [".DS_Store", "Thumbs.db", "desktop.ini"];
+
+/// Mark `output_dir` as a folder an export wrote, unless it already is one.
 ///
-/// Only directories that contain the sentinel file `.message-crate-export`,
-/// are empty, or already contain recognizable export files are cleaned. This
-/// avoids deleting unrelated user files when the output path points at a
-/// non-export directory by mistake.
+/// A folder without the sentinel file `.message-crate-export` is marked only
+/// when it is empty, ignoring the files an operating system leaves behind.
+/// Any other folder belongs to the person who chose it, whatever its files
+/// are named, so it is refused and nothing in it is touched.
 ///
 /// # Errors
 ///
-/// Returns an error when the directory cannot be read, a file cannot be
-/// removed, or the directory looks like it is not an export folder.
-pub fn clean_previous_ir_output(output_dir: &Path) -> Result<()> {
-    if !output_dir.is_dir() {
+/// Returns an error when the directory cannot be read, the sentinel cannot be
+/// written, or the directory has no sentinel and is not empty.
+pub fn mark_export_folder(output_dir: &Path) -> Result<()> {
+    if output_dir.join(EXPORT_SENTINEL).is_file() {
         return Ok(());
     }
-    let has_sentinel = output_dir.join(EXPORT_SENTINEL).is_file();
-    if !has_sentinel {
-        // Check if the directory looks like an export directory (contains files
-        // matching known export patterns) or is empty. If neither, refuse to clean.
-        let mut has_export_files = false;
-        let mut has_other_files = false;
-        for entry in
-            fs::read_dir(output_dir).with_context(|| format!("read {}", output_dir.display()))?
-        {
-            let entry = entry?;
-            let name = entry.file_name();
-            let name = name.to_str().unwrap_or("");
-            if is_export_artifact(name) {
-                has_export_files = true;
-            } else if name != EXPORT_SENTINEL {
-                has_other_files = true;
-            }
-        }
-        if !has_export_files && has_other_files {
+    for entry in read_dir(output_dir)? {
+        let name = entry?.file_name();
+        if !OPERATING_SYSTEM_FILES.contains(&name.to_str().unwrap_or("")) {
             bail!(
-                "output directory {} exists but does not appear to contain export files. \
-                 Refusing to clean unrecognized content. Use an empty directory or one \
-                 previously used for exports.",
+                "{} is not empty and Message Crate did not write it. Refusing to write into it. \
+                 Choose an empty folder or one an earlier export wrote.",
                 output_dir.display()
             );
         }
     }
-    for entry in
-        fs::read_dir(output_dir).with_context(|| format!("read {}", output_dir.display()))?
-    {
+    write_export_sentinel(output_dir)
+}
+
+/// Clean a folder an earlier export marked, or mark an empty one.
+///
+/// A folder that holds the sentinel loses its previous CSV, JSON, JSON Lines,
+/// meta, `smses.xml`, temps, staged attachments, and mail archives, and keeps
+/// every other file. A folder without the sentinel goes through
+/// [`mark_export_folder`], so nothing is removed from it.
+///
+/// # Errors
+///
+/// Returns an error when the directory cannot be read, a file cannot be
+/// removed, or the directory has no sentinel and is not empty.
+pub fn clean_previous_ir_output(output_dir: &Path) -> Result<()> {
+    if !output_dir.is_dir() {
+        return Ok(());
+    }
+    if !output_dir.join(EXPORT_SENTINEL).is_file() {
+        return mark_export_folder(output_dir);
+    }
+    for entry in read_dir(output_dir)? {
         let path = entry?.path();
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
         if !path.is_file() {
@@ -90,10 +93,11 @@ pub fn clean_previous_ir_output(output_dir: &Path) -> Result<()> {
         fs::remove_file(&attachments)
             .with_context(|| format!("remove previous {}", attachments.display()))?;
     }
-    clean_previous_mail_output(output_dir)?;
-    // Write the sentinel so future runs know this is a safe export directory.
-    write_export_sentinel(output_dir)?;
-    Ok(())
+    clean_previous_mail_output(output_dir)
+}
+
+fn read_dir(dir: &Path) -> Result<fs::ReadDir> {
+    fs::read_dir(dir).with_context(|| format!("read {}", dir.display()))
 }
 
 /// Returns true when `name` matches a known export artifact pattern.
@@ -124,13 +128,16 @@ mod tests {
     }
 
     #[test]
-    fn refuses_a_folder_of_the_users_own_files() {
+    fn refuses_a_folder_of_the_persons_own_files() {
         let tmp = tempfile::tempdir().unwrap();
         fs::write(tmp.path().join("notes.txt"), "mine").unwrap();
 
         let err = clean_previous_ir_output(tmp.path()).unwrap_err();
 
-        assert!(err.to_string().contains("Refusing to clean"), "{err}");
+        assert!(
+            err.to_string().contains("Refusing to write into it"),
+            "{err}"
+        );
         assert_eq!(names(tmp.path()), ["notes.txt"]);
     }
 
@@ -173,14 +180,25 @@ mod tests {
     }
 
     #[test]
-    fn cleans_an_unmarked_folder_with_export_files_and_marks_it() {
+    fn refuses_an_unmarked_folder_that_holds_export_like_files() {
         let tmp = tempfile::tempdir().unwrap();
-        fs::write(tmp.path().join("a.jsonl"), "x").unwrap();
+        fs::write(tmp.path().join("budget.csv"), "mine").unwrap();
+        fs::write(tmp.path().join("settings.json"), "{}").unwrap();
         fs::write(tmp.path().join("notes.txt"), "mine").unwrap();
+        fs::create_dir_all(tmp.path().join("attachments")).unwrap();
+        fs::write(tmp.path().join("attachments/holiday.jpg"), "mine").unwrap();
 
-        clean_previous_ir_output(tmp.path()).unwrap();
+        let err = clean_previous_ir_output(tmp.path()).unwrap_err();
 
-        assert_eq!(names(tmp.path()), [EXPORT_SENTINEL, "notes.txt"]);
+        assert!(
+            err.to_string().contains(&tmp.path().display().to_string()),
+            "{err}"
+        );
+        assert_eq!(
+            names(tmp.path()),
+            ["attachments", "budget.csv", "notes.txt", "settings.json"]
+        );
+        assert!(tmp.path().join("attachments/holiday.jpg").exists());
     }
 
     #[test]
@@ -212,5 +230,15 @@ mod tests {
         for name in ["notes.txt", "photo.jpg", "other.xml", "a.csv.bak", ""] {
             assert!(!is_export_artifact(name), "{name} is not an export file");
         }
+    }
+
+    #[test]
+    fn marks_a_folder_that_holds_only_operating_system_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(tmp.path().join(".DS_Store"), "finder").unwrap();
+
+        clean_previous_ir_output(tmp.path()).unwrap();
+
+        assert_eq!(names(tmp.path()), [".DS_Store", EXPORT_SENTINEL]);
     }
 }

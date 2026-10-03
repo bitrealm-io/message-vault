@@ -22,47 +22,32 @@ pub fn write_export_sentinel(output_dir: &Path) -> Result<()> {
 }
 
 /// Delete previous CSV, JSON, JSON Lines, meta, `smses.xml`, temps, staged
-/// attachments, and mail archives.
+/// attachments, and mail archives, then mark the folder with the sentinel.
 ///
-/// Only directories that contain the sentinel file `.message-crate-export`,
-/// are empty, or already contain recognizable export files are cleaned. This
-/// avoids deleting unrelated user files when the output path points at a
-/// non-export directory by mistake.
+/// Only a folder that holds the sentinel file `.message-crate-export` is
+/// cleaned. A folder without the sentinel must be empty, and is then only
+/// marked. Any other folder belongs to the person who chose it, whatever its
+/// files are named, so the export is refused and nothing in it is removed.
 ///
 /// # Errors
 ///
 /// Returns an error when the directory cannot be read, a file cannot be
-/// removed, or the directory looks like it is not an export folder.
+/// removed, or the directory has no sentinel and is not empty.
 pub fn clean_previous_ir_output(output_dir: &Path) -> Result<()> {
     if !output_dir.is_dir() {
         return Ok(());
     }
-    let has_sentinel = output_dir.join(EXPORT_SENTINEL).is_file();
-    if !has_sentinel {
-        // Check if the directory looks like an export directory (contains files
-        // matching known export patterns) or is empty. If neither, refuse to clean.
-        let mut has_export_files = false;
-        let mut has_other_files = false;
-        for entry in
-            fs::read_dir(output_dir).with_context(|| format!("read {}", output_dir.display()))?
-        {
-            let entry = entry?;
-            let name = entry.file_name();
-            let name = name.to_str().unwrap_or("");
-            if is_export_artifact(name) {
-                has_export_files = true;
-            } else if name != EXPORT_SENTINEL {
-                has_other_files = true;
-            }
-        }
-        if !has_export_files && has_other_files {
+    if !output_dir.join(EXPORT_SENTINEL).is_file() {
+        let mut entries =
+            fs::read_dir(output_dir).with_context(|| format!("read {}", output_dir.display()))?;
+        if entries.next().is_some() {
             bail!(
-                "output directory {} exists but does not appear to contain export files. \
-                 Refusing to clean unrecognized content. Use an empty directory or one \
-                 previously used for exports.",
+                "{} is not empty and Message Crate did not write it. Refusing to clean it. \
+                 Choose an empty folder or one an earlier export wrote.",
                 output_dir.display()
             );
         }
+        return write_export_sentinel(output_dir);
     }
     for entry in
         fs::read_dir(output_dir).with_context(|| format!("read {}", output_dir.display()))?
@@ -90,10 +75,7 @@ pub fn clean_previous_ir_output(output_dir: &Path) -> Result<()> {
         fs::remove_file(&attachments)
             .with_context(|| format!("remove previous {}", attachments.display()))?;
     }
-    clean_previous_mail_output(output_dir)?;
-    // Write the sentinel so future runs know this is a safe export directory.
-    write_export_sentinel(output_dir)?;
-    Ok(())
+    clean_previous_mail_output(output_dir)
 }
 
 /// Returns true when `name` matches a known export artifact pattern.
@@ -173,14 +155,25 @@ mod tests {
     }
 
     #[test]
-    fn cleans_an_unmarked_folder_with_export_files_and_marks_it() {
+    fn refuses_an_unmarked_folder_that_holds_export_like_files() {
         let tmp = tempfile::tempdir().unwrap();
-        fs::write(tmp.path().join("a.jsonl"), "x").unwrap();
+        fs::write(tmp.path().join("budget.csv"), "mine").unwrap();
+        fs::write(tmp.path().join("settings.json"), "{}").unwrap();
         fs::write(tmp.path().join("notes.txt"), "mine").unwrap();
+        fs::create_dir_all(tmp.path().join("attachments")).unwrap();
+        fs::write(tmp.path().join("attachments/holiday.jpg"), "mine").unwrap();
 
-        clean_previous_ir_output(tmp.path()).unwrap();
+        let err = clean_previous_ir_output(tmp.path()).unwrap_err();
 
-        assert_eq!(names(tmp.path()), [EXPORT_SENTINEL, "notes.txt"]);
+        assert!(
+            err.to_string().contains(&tmp.path().display().to_string()),
+            "{err}"
+        );
+        assert_eq!(
+            names(tmp.path()),
+            ["attachments", "budget.csv", "notes.txt", "settings.json"]
+        );
+        assert!(tmp.path().join("attachments/holiday.jpg").exists());
     }
 
     #[test]

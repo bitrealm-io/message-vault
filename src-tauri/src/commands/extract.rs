@@ -34,7 +34,7 @@ use super::events;
 use super::events::ExtractProgressEvent;
 use super::jobs::{cancel_running_job, spawn_job, start_job};
 use super::last_log_line_or;
-use crate::staging_folders::{StagingFolders, lock};
+use crate::staging_folders::StagingFolders;
 use crate::state::AppState;
 
 /// Ask this process to stop the job that is running. Does nothing when no
@@ -146,13 +146,13 @@ pub struct ExtractArgs {
 #[tauri::command(async)]
 pub fn extract(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
-    folders: tauri::State<'_, Mutex<StagingFolders>>,
+    folders: tauri::State<'_, StagingFolders>,
     app: tauri::AppHandle,
     args: ExtractArgs,
 ) -> Result<(), String> {
     // The exporter cleans the folder it writes into, so it writes only into
     // one this app made for staging.
-    let output_dir = lock(&folders).folder(&args.output_dir)?;
+    let output_dir = folders.folder(&args.output_dir)?;
     let options = ExtractOptions {
         backup_password: args.backup_password.unwrap_or_default(),
         attachment_media: parse_attachment_media(args.attachment_media.as_deref())?,

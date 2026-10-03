@@ -20,7 +20,6 @@
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use message_ir_format::{EXPORT_SENTINEL, mark_export_folder};
 
@@ -278,22 +277,22 @@ impl StagingFolders {
     /// still there: an unplugged drive, or a folder the app may not read, is
     /// an error, and the folder stays recorded.
     ///
-    /// The record is locked only to check the folder and to forget it, not
-    /// while a folder of several gigabytes is removed.
+    /// The record's lock is held only to check the folder and to forget it,
+    /// not while a folder of several gigabytes is removed.
     ///
     /// # Errors
     ///
     /// Returns an error when the folder fails [`StagingFolders::folder`]'s
     /// checks, cannot be removed, or the record cannot be saved.
-    pub fn delete(shared: &Mutex<Self>, dir: &str) -> Result<(), String> {
+    pub fn delete(&self, dir: &str) -> Result<(), String> {
         let path = absolute(dir)?;
         if is_gone(&path) {
-            return lock(shared).forget(&path);
+            return self.forget(&path);
         }
-        let folder = lock(shared).folder(dir)?;
+        let folder = self.folder(dir)?;
         remove_sentinel_last(&folder)
             .map_err(|error| format!("Could not delete {}: {error}", folder.display()))?;
-        lock(shared).forget(&folder)
+        self.forget(&folder)
     }
 
     /// Drop `folder` from the record.
@@ -331,13 +330,6 @@ impl StagingFolders {
             .and_then(|()| std::fs::rename(&tmp, &self.file))
             .map_err(|error| format!("Could not save {}: {error}", self.file.display()))
     }
-}
-
-/// The record, locked. A thread that panicked while holding it left it
-/// whole, since every change is saved before the lock is released, so a
-/// poisoned lock is used as it is.
-pub fn lock(shared: &Mutex<StagingFolders>) -> MutexGuard<'_, StagingFolders> {
-    shared.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// Whether `path` is known to be gone: not found, in a folder that is still
@@ -419,10 +411,7 @@ impl Scratch {
     pub fn new() -> Self {
         let app_data = tempfile::tempdir().unwrap();
         let home = tempfile::tempdir().unwrap();
-        let folders = StagingFolders::at(
-            app_data.path().join(RECORD_FILE),
-            Some(home.path().to_path_buf()),
-        );
+        let folders = Self::open(&app_data, &home);
         Self {
             folders,
             app_data,
@@ -430,12 +419,17 @@ impl Scratch {
         }
     }
 
+    /// The record kept in `app_data`, with `home` as the home folder.
+    fn open(app_data: &tempfile::TempDir, home: &tempfile::TempDir) -> StagingFolders {
+        StagingFolders::at(
+            app_data.path().join(RECORD_FILE),
+            Some(home.path().to_path_buf()),
+        )
+    }
+
     /// The same record, as another process or a restarted app opens it.
     pub fn reopen(&self) -> StagingFolders {
-        StagingFolders::at(
-            self.app_data.path().join(RECORD_FILE),
-            Some(self.home.path().to_path_buf()),
-        )
+        Self::open(&self.app_data, &self.home)
     }
 }
 
@@ -465,15 +459,15 @@ mod tests {
             .set_root(second.path().to_str().unwrap())
             .unwrap();
         // The app restarts with the new setting.
-        let folders = Mutex::new(scratch.reopen());
+        let folders = scratch.reopen();
 
-        assert_eq!(lock(&folders).folder(run_str).unwrap(), run, "resume");
-        assert!(lock(&folders).openable(run_str).is_ok(), "open the folder");
+        assert_eq!(folders.folder(run_str).unwrap(), run, "resume");
+        assert!(folders.openable(run_str).is_ok(), "open the folder");
         // Discard and the clean-up after a finished run both reach this one
         // delete, which no longer looks at the Staging Directory.
-        StagingFolders::delete(&folders, run_str).unwrap();
+        folders.delete(run_str).unwrap();
         assert!(!run.exists(), "discard and clean up");
-        let next = lock(&folders).create("imessage-ios", NOW).unwrap();
+        let next = folders.create("imessage-ios", NOW).unwrap();
         assert!(next.starts_with(second.path().canonicalize().unwrap()));
     }
 
@@ -516,7 +510,7 @@ mod tests {
 
         let err = scratch.folders.folder(export_str).unwrap_err();
         assert!(err.contains("not a staging folder"), "{err}");
-        assert!(StagingFolders::delete(&Mutex::new(scratch.reopen()), export_str).is_err());
+        assert!(scratch.reopen().delete(export_str).is_err());
         assert!(scratch.folders.openable(export_str).is_err());
         assert!(export.exists());
     }
@@ -527,8 +521,7 @@ mod tests {
         let run = scratch.folders.create("export", NOW).unwrap();
         fs::remove_file(run.join(EXPORT_SENTINEL)).unwrap();
 
-        let err = StagingFolders::delete(&Mutex::new(scratch.reopen()), run.to_str().unwrap())
-            .unwrap_err();
+        let err = scratch.reopen().delete(run.to_str().unwrap()).unwrap_err();
 
         assert!(err.contains(EXPORT_SENTINEL), "{err}");
         assert!(run.exists());
@@ -544,17 +537,17 @@ mod tests {
         let locked = run.join("locked");
         fs::create_dir_all(locked.join("inner")).unwrap();
         fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
-        let folders = Mutex::new(scratch.reopen());
+        let folders = scratch.reopen();
 
-        let result = StagingFolders::delete(&folders, run.to_str().unwrap());
+        let result = folders.delete(run.to_str().unwrap());
 
         // Restore permissions so the tempdir can clean itself up.
         fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
         assert!(result.is_err(), "a failed removal must not be a quiet Ok");
         // The sentinel goes last, whatever order the disk lists the folder
         // in, so a later delete can finish the job.
-        assert!(lock(&folders).folder(run.to_str().unwrap()).is_ok());
-        StagingFolders::delete(&folders, run.to_str().unwrap()).unwrap();
+        assert!(folders.folder(run.to_str().unwrap()).is_ok());
+        folders.delete(run.to_str().unwrap()).unwrap();
         assert!(!run.exists());
     }
 
@@ -564,7 +557,7 @@ mod tests {
         let run = scratch.folders.create("export", NOW).unwrap();
         fs::remove_dir_all(&run).unwrap();
 
-        StagingFolders::delete(&Mutex::new(scratch.reopen()), run.to_str().unwrap()).unwrap();
+        scratch.reopen().delete(run.to_str().unwrap()).unwrap();
 
         assert!(scratch.reopen().read().unwrap().folders.is_empty());
     }
@@ -582,8 +575,7 @@ mod tests {
         let run = scratch.folders.create("export", NOW).unwrap();
         fs::remove_dir_all(drive.path()).unwrap();
 
-        let err = StagingFolders::delete(&Mutex::new(scratch.reopen()), run.to_str().unwrap())
-            .unwrap_err();
+        let err = scratch.reopen().delete(run.to_str().unwrap()).unwrap_err();
 
         assert!(err.contains("Could not find"), "{err}");
         assert_eq!(scratch.reopen().read().unwrap().folders, vec![run]);

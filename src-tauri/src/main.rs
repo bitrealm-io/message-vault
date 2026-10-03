@@ -47,7 +47,7 @@ fn main() {
                 .path()
                 .app_data_dir()?
                 .join(staging_folders::RECORD_FILE);
-            app.manage(Mutex::new(StagingFolders::at(record, dirs::home_dir())));
+            app.manage(StagingFolders::at(record, dirs::home_dir()));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

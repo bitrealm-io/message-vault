@@ -35,7 +35,7 @@ use message_staging::{StagingSummary, TranscodeOptions, TranscodeReport};
 use super::events;
 use super::events::ExtractProgressEvent;
 use super::jobs::{spawn_job, start_job};
-use crate::staging_folders::{self, StagingFolders, StagingRoot, lock};
+use crate::staging_folders::{self, StagingFolders, StagingRoot};
 use crate::state::AppState;
 
 /// The folder `summarize_staging`, `transcode_staging`, `delete_staging`
@@ -53,10 +53,8 @@ pub struct StagingArgs {
 ///
 /// Returns an error when the operating system reports no home folder.
 #[tauri::command]
-pub fn staging_root(
-    folders: tauri::State<'_, Mutex<StagingFolders>>,
-) -> Result<StagingRoot, String> {
-    lock(&folders).describe()
+pub fn staging_root(folders: tauri::State<'_, StagingFolders>) -> Result<StagingRoot, String> {
+    folders.describe()
 }
 
 /// Store the Staging Directory from Settings. An empty value goes back to
@@ -69,10 +67,9 @@ pub fn staging_root(
 /// the setting cannot be saved.
 #[tauri::command]
 pub fn set_staging_root(
-    folders: tauri::State<'_, Mutex<StagingFolders>>,
+    folders: tauri::State<'_, StagingFolders>,
     root: String,
 ) -> Result<StagingRoot, String> {
-    let folders = lock(&folders);
     folders.set_root(&root)?;
     folders.describe()
 }
@@ -86,10 +83,10 @@ pub fn set_staging_root(
 /// Directory is unusable, or the folder cannot be made.
 #[tauri::command(async)]
 pub fn create_staging_dir(
-    folders: tauri::State<'_, Mutex<StagingFolders>>,
+    folders: tauri::State<'_, StagingFolders>,
     label: String,
 ) -> Result<String, String> {
-    let folder = lock(&folders).create(&label, &staging_folders::timestamp_now())?;
+    let folder = folders.create(&label, &staging_folders::timestamp_now())?;
     Ok(folder.display().to_string())
 }
 
@@ -101,10 +98,10 @@ pub fn create_staging_dir(
 /// Returns an error when the folder fails the check, or holds no readable
 /// media settings because its Staging never finished.
 fn staged_folder(
-    folders: &Mutex<StagingFolders>,
+    folders: &StagingFolders,
     staging_dir: &str,
 ) -> Result<(PathBuf, TranscodeOptions), String> {
-    let staging_dir = lock(folders).folder(staging_dir)?;
+    let staging_dir = folders.folder(staging_dir)?;
     let options =
         message_staging::read_media_settings(&staging_dir).map_err(|error| format!("{error:#}"))?;
     Ok((staging_dir, options))
@@ -125,7 +122,7 @@ fn staged_folder(
 #[tauri::command]
 pub async fn summarize_staging(
     app: tauri::AppHandle,
-    folders: tauri::State<'_, Mutex<StagingFolders>>,
+    folders: tauri::State<'_, StagingFolders>,
     args: StagingArgs,
 ) -> Result<StagingSummary, String> {
     let (staging_dir, options) = staged_folder(&folders, &args.staging_dir)?;
@@ -223,7 +220,7 @@ fn transcode_summary(report: &TranscodeReport) -> String {
 #[tauri::command(async)]
 pub fn transcode_staging(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
-    folders: tauri::State<'_, Mutex<StagingFolders>>,
+    folders: tauri::State<'_, StagingFolders>,
     app: tauri::AppHandle,
     args: StagingArgs,
 ) -> Result<(), String> {
@@ -315,10 +312,10 @@ pub fn transcode_staging(
 /// disk.
 #[tauri::command(async)]
 pub fn delete_staging(
-    folders: tauri::State<'_, Mutex<StagingFolders>>,
+    folders: tauri::State<'_, StagingFolders>,
     args: StagingArgs,
 ) -> Result<(), String> {
-    StagingFolders::delete(&folders, &args.staging_dir)
+    folders.delete(&args.staging_dir)
 }
 
 /// File in a staging folder holding the Import Run's record so far: the
@@ -356,10 +353,10 @@ pub struct SaveRunRecordArgs {
 /// or the record cannot be read or is not JSON.
 #[tauri::command(async)]
 pub fn read_import_run_record(
-    folders: tauri::State<'_, Mutex<StagingFolders>>,
+    folders: tauri::State<'_, StagingFolders>,
     args: StagingArgs,
 ) -> Result<Option<serde_json::Value>, String> {
-    let folder = lock(&folders).folder(&args.staging_dir)?;
+    let folder = folders.folder(&args.staging_dir)?;
     read_run_record(&folder)
 }
 
@@ -372,10 +369,10 @@ pub fn read_import_run_record(
 /// or the file cannot be written.
 #[tauri::command(async)]
 pub fn save_import_run_record(
-    folders: tauri::State<'_, Mutex<StagingFolders>>,
+    folders: tauri::State<'_, StagingFolders>,
     args: SaveRunRecordArgs,
 ) -> Result<(), String> {
-    let folder = lock(&folders).folder(&args.staging_dir)?;
+    let folder = folders.folder(&args.staging_dir)?;
     save_run_record(&folder, &args.record)
 }
 
@@ -413,7 +410,7 @@ mod tests {
     /// A record of staging folders in its own temporary folders, and one
     /// folder made in it.
     struct Made {
-        folders: Mutex<StagingFolders>,
+        folders: StagingFolders,
         run: PathBuf,
         _scratch: Scratch,
     }
@@ -425,7 +422,7 @@ mod tests {
             .create("imessage-ios", "261002-101500")
             .unwrap();
         Made {
-            folders: Mutex::new(scratch.reopen()),
+            folders: scratch.reopen(),
             run,
             _scratch: scratch,
         }
@@ -467,16 +464,16 @@ mod tests {
         let record = serde_json::json!({ "phase": "staging_review" });
         save_run_record(&made.run, &record).unwrap();
         let elsewhere = tempfile::tempdir().unwrap();
-        lock(&made.folders)
+        made.folders
             .set_root(elsewhere.path().to_str().unwrap())
             .unwrap();
         let run = made.run.to_str().unwrap();
 
-        let folder = lock(&made.folders).folder(run).unwrap();
+        let folder = made.folders.folder(run).unwrap();
         assert_eq!(read_run_record(&folder).unwrap(), Some(record));
         let (dir, _) = staged_folder(&made.folders, run).unwrap();
         assert_eq!(dir, made.run);
-        StagingFolders::delete(&made.folders, run).unwrap();
+        made.folders.delete(run).unwrap();
         assert!(!made.run.exists());
     }
 

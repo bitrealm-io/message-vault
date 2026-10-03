@@ -57,7 +57,7 @@ beforeEach(() => {
   setStagingRoot.mockReset();
   setStagingRoot.mockImplementation(async (root: string) => {
     // The desktop process refuses a relative folder, as resolve_staging_root does.
-    if (root !== "" && !root.startsWith("/")) throw "Staging directory must be absolute";
+    if (root !== "" && !root.startsWith("/")) throw "The staging directory must be a full path.";
     desktopStaging.root = root === desktopStaging.defaultRoot ? "" : root;
     return {
       root: desktopStaging.root || desktopStaging.defaultRoot,
@@ -232,14 +232,14 @@ describe("SystemSection", () => {
 
     expect(stagingInput).toHaveValue("staging");
     expect(
-      await screen.findByText("Not saved. Staging directory must be absolute"),
+      await screen.findByText("Not saved. The staging directory must be a full path."),
     ).toBeInTheDocument();
     expect(desktopStaging.root).toBe("/srv/staging");
 
     await user.tab();
 
     expect(stagingInput).toHaveValue("/srv/staging");
-    expect(screen.queryByText(/must be absolute/)).toBeNull();
+    expect(screen.queryByText(/must be a full path/)).toBeNull();
   });
 
   it("shows Found lines when both tools are present", async () => {

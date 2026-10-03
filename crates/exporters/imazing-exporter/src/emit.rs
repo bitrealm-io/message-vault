@@ -17,9 +17,8 @@ use message_crate_core::{
 };
 use message_csv::Zone;
 use message_ir::{
-    ConversationKey, ExportMeta, GROUP_CHAT_ID_PREFIX, IrAttachment, IrParticipant, IrService,
-    IrSource, PendingAttachment, PendingConversation, PendingMessage, ProjectedRole,
-    ProjectionHooks,
+    ConversationKey, ExportMeta, IrAttachment, IrParticipant, IrService, IrSource,
+    PendingAttachment, PendingConversation, PendingMessage, ProjectedRole, ProjectionHooks,
 };
 use message_staging::{AttachmentSource, ExportWriter};
 use serde_json::Map;
@@ -153,17 +152,27 @@ struct Conversation {
 
 /// Which pending conversation a session's rows go to.
 ///
-/// A one-to-one chat is one conversation across every CSV that names its
-/// address. A group session is a conversation of its own, even when another
-/// starts with the same row: `separate_groups_with_one_earliest_row` decides
-/// which ones are one group once every CSV is read.
+/// A one-to-one conversation is one conversation across every CSV that
+/// names its address. A group session is a conversation of its own, even
+/// when another starts with the same row: `separate_groups_with_one_earliest_row`
+/// decides which ones are one group once every CSV is read.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct ConvoKey {
-    /// Keeps a Messages chat and a WhatsApp chat with the same peer apart.
+    /// Keeps a Messages conversation and a WhatsApp conversation with the
+    /// same peer apart.
     family: TransportFamily,
     chat_id: String,
-    /// For a group, the CSV it was read from and its session name.
-    group_session: Option<(usize, String)>,
+    /// For a group, the CSV session it was read from.
+    group_session: Option<GroupSession>,
+}
+
+/// The CSV session a group was read from.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct GroupSession {
+    /// The CSV's place in discovery order.
+    csv_index: usize,
+    /// The session's `Chat Session` value.
+    session_name: String,
 }
 
 /// Give every group a key of its own when several start with the same row.
@@ -172,8 +181,10 @@ struct ConvoKey {
 /// row: the account holder sends one message to two new groups in the same
 /// second. Of the groups that share an earliest row:
 ///
-/// - One whose rows are the first rows of another is the same group, read
-///   from an older export in the same input folder, and is merged into it.
+/// - Those with one session name are one group, read from two exports in
+///   the same input folder, and are merged. Groups with different session
+///   names are never merged, even when one's rows are the first rows of the
+///   other's.
 /// - Each other one hashes its earliest rows, as few as tell it apart from
 ///   every one of the others ([`group_vendor_id`]).
 ///
@@ -197,17 +208,19 @@ fn separate_groups_with_one_earliest_row(conversations: &mut BTreeMap<ConvoKey, 
         keys.sort_by_key(|key| std::cmp::Reverse(conversations[key].row_digests.len()));
         let mut kept: Vec<ConvoKey> = Vec::new();
         for key in keys {
-            let digests = &conversations[&key].row_digests;
-            let Some(longer) = kept
+            let Some(same_group) = kept
                 .iter()
-                .find(|held| conversations[*held].row_digests.starts_with(digests))
+                .find(|held| session_name(held) == session_name(&key))
                 .cloned()
             else {
                 kept.push(key);
                 continue;
             };
             let older = conversations.remove(&key).expect("listed above");
-            merge_group_into(conversations.get_mut(&longer).expect("kept above"), older);
+            merge_group_into(
+                conversations.get_mut(&same_group).expect("kept above"),
+                older,
+            );
         }
         if kept.len() < 2 {
             continue;
@@ -228,22 +241,29 @@ fn separate_groups_with_one_earliest_row(conversations: &mut BTreeMap<ConvoKey, 
                     })
                     .max()
                     .unwrap_or(0);
-                // No group's rows are the first rows of another here, so
-                // one row past the longest shared run is one of its own.
+                // One row past the longest shared run is one of its own, or
+                // all its rows when they are the first rows of another.
                 group_vendor_id(digests, shared + 1)
             })
             .collect();
         for (key, id) in kept.iter().zip(ids) {
             let conversation = conversations.get_mut(key).expect("kept above");
-            conversation.convo.chat_id = format!("{GROUP_CHAT_ID_PREFIX}{id}");
             if let ConversationKey::Group { vendor_id, .. } = &mut conversation.key {
                 *vendor_id = id;
             }
+            conversation.convo.chat_id = conversation.key.chat_id();
         }
     }
 }
 
-/// Fold `other`, a group whose rows are the first rows of `into`, into it.
+/// The session name of a group's [`ConvoKey`].
+fn session_name(key: &ConvoKey) -> Option<&str> {
+    key.group_session
+        .as_ref()
+        .map(|session| session.session_name.as_str())
+}
+
+/// Fold `other`, the same group read from another export, into `into`.
 fn merge_group_into(into: &mut Conversation, other: Conversation) {
     into.convo.messages.extend(other.convo.messages);
     if let (
@@ -364,10 +384,10 @@ impl Ingest {
         let convo_key = ConvoKey {
             family: TransportFamily::from_kind(discovered.kind),
             chat_id: chat_id.clone(),
-            group_session: session
-                .key
-                .is_group()
-                .then(|| (csv_index, session_name.to_string())),
+            group_session: session.key.is_group().then(|| GroupSession {
+                csv_index,
+                session_name: session_name.to_string(),
+            }),
         };
         self.conversations
             .entry(convo_key.clone())
@@ -674,7 +694,7 @@ impl ProjectionHooks for ImazingProjection<'_> {
     fn participants(&self, _chat_id: &str, convo: &PendingConversation) -> Vec<IrParticipant> {
         match self.key {
             ConversationKey::Group { members, .. } => members.clone(),
-            ConversationKey::Direct(handle) => vec![IrParticipant {
+            ConversationKey::OneToOne(handle) => vec![IrParticipant {
                 handle: Some(handle.clone()),
                 display_name: convo.first_contact_name(),
                 handle_type: Some(handle_type_for(handle)),

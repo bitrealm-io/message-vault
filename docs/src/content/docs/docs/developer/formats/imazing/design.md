@@ -42,9 +42,9 @@ Discovery walks the selected path recursively without following directory symbol
 - Untitled group files are `group_+A_+B_….csv` (max 10 phones; if more, append a 16-hex hash of
   the full roster). WhatsApp adds `__whatsapp` before `.csv`. The `chat_identifier` cell is unchanged.
 
-## Chat identity and participants
+## Conversation identity and participants
 
-Each chat session has a `message_ir::ConversationKey`: a one-to-one chat with an address, a group, or a one-to-one chat known by a name only.
+Each chat session has a `message_ir::ConversationKey`: a one-to-one conversation with an address, a group conversation, or a one-to-one conversation known by a name only.
 The key's chat id is the conversation's `chat_identifier`.
 The rows of one session in one CSV are one conversation.
 
@@ -53,16 +53,16 @@ The rows of one session in one CSV are one conversation.
 A Messages session named as a roster (`Name A & Name B`) is a group, even when one member wrote.
 Any session in which two or more people wrote is a group.
 The rows decide who is one person.
-In Messages a row's `Sender ID` and `Sender Name` belong to one person, so two addresses under one `Sender Name` are one person: one contact writing from a number and an email address, or from two numbers, is a one-to-one chat.
-Two different people saved under one name in a chat with a typed title are then counted as one person, and the chat is filed as one-to-one.
+In Messages a row's `Sender ID` and `Sender Name` belong to one person, so two addresses under one `Sender Name` are one person: one contact writing from a number and an email address, or from two numbers, is a one-to-one conversation.
+Two different people saved under one name in a conversation with a typed title are then counted as one person, and the conversation is filed as one-to-one.
 A WhatsApp account has one number, so in WhatsApp two numbers are always two people, whatever their `Sender Name`.
 
-### One-to-one chats
+### One-to-one conversations
 
-The chat's address is the number in `Chat Session`, a `Chat Session` that is itself an address, or else the address of the earliest received row that has one, so new messages from a second address do not change it.
-The chat lists that one address as its participant. A person's other address is not a participant: it is the sender of the messages written from it, with the same `Sender Name`.
-Without any of these, the chat is known by its name: its `chat_identifier` is a name stem, it is counted as `name_only_chat`, and the server matches the name to a contact on import.
-A received row with no `Sender ID` is from the chat's number or short code.
+The conversation's address is the number in `Chat Session`, a `Chat Session` that is itself an address, or else the address of the earliest received row that has one, so new messages from a second address do not change it.
+The conversation lists that one address as its participant. A person's other address is not a participant: it is the sender of the messages written from it, with the same `Sender Name`.
+Without any of these, the conversation is known by its name: its `chat_identifier` is a name stem, it is counted as `name_only_chat`, and the server matches the name to a contact on import.
+A received row with no `Sender ID` is from the conversation's number or short code.
 
 ### Groups
 
@@ -73,7 +73,7 @@ The folder name carries the time of the latest message, the file name carries th
 A group's `chat_identifier` is `group:` and the SHA-256 of its earliest row: `Message Date` as written, `Type`, `Sender ID`, `Text` and `Attachment`.
 Where rows share the earliest time, the smallest of them is taken, so the order of the rows does not change the key.
 Two groups can start with the same row, when the account holder sends one message to two new groups in the same second.
-Of the groups that share an earliest row, one whose rows are the first rows of another is the same group read from an older export in the same input folder, and the two are one conversation.
+Of the groups that share an earliest row, those with one session name are the same group read from two exports in the same input folder, and are one conversation. Groups with different session names are never merged, even when the rows of one are the first rows of the other. Two different groups with one name that start with the same row in the same second are merged; the export cannot tell them apart.
 Each other one's key hashes its earliest rows, as few as tell it apart from every one of the others.
 That key changes when a group it was told apart from is gone from the phone, or a new group shares more of its earliest rows.
 The key does not change when someone new writes, and it never equals a person's address.

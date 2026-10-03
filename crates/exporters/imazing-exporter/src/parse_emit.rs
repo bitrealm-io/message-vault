@@ -64,7 +64,7 @@ pub(super) fn session_key(kind: SourceKind, session: &str, rows: &[&RawRow]) -> 
     let session = session.trim();
     let named_by_address = session.contains('@') || sanitize_phone_shaped(session).is_some();
     let key = match direct_handle(session, rows) {
-        Some(handle) => ConversationKey::Direct(handle),
+        Some(handle) => ConversationKey::OneToOne(handle),
         None => ConversationKey::NameOnly(session.to_string()),
     };
     Session {
@@ -471,7 +471,7 @@ pub(super) fn resolve_sender(
         );
     }
     let handle = address.unwrap_or_else(|| match &session.key {
-        ConversationKey::Direct(handle) if !handle.contains('@') => handle.clone(),
+        ConversationKey::OneToOne(handle) if !handle.contains('@') => handle.clone(),
         _ => String::new(),
     });
     let mut display = row.sender_name.trim().to_string();

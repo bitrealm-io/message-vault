@@ -1132,9 +1132,8 @@ Hiking,2020-01-01 12:09:00,iMessage,Incoming,+15555550166,Fay,Read,,,Hi,,,\n",
     assert_eq!(climbing_id(&with_a_third), climbing_id(&in_order));
 }
 
-/// Two exports of one device in one input folder hold one group twice: the
-/// older one's rows are the first rows of the newer one. That is one group,
-/// not two that start with the same row.
+/// Two exports of one device in one input folder hold one group twice under
+/// one session name. That is one group, not two that start with the same row.
 #[test]
 fn one_group_from_two_exports_in_one_folder_is_one_conversation() {
     let older = "Book Club,2020-01-01 12:00:00,iMessage,Incoming,+15555550111,Alice,Read,,,Hi,,,\n\
@@ -1158,5 +1157,66 @@ Book Club,2020-01-01 12:01:00,iMessage,Incoming,+15555550122,Bob,Read,,,Hey,,,\n
     assert_eq!(
         documents[0].conversation.chat_identifier,
         convert_rows(&newer)[0].conversation.chat_identifier
+    );
+}
+
+/// A message deleted between two exports still leaves one group: the copies
+/// share their earliest row and their session name, though neither one's
+/// rows are the first rows of the other.
+#[test]
+fn one_group_from_two_exports_with_a_message_deleted_between_is_one_conversation() {
+    let row = |time: &str, sender: &str, name: &str, text: &str| {
+        format!("Book Club,2020-01-01 {time},iMessage,Incoming,{sender},{name},Read,,,{text},,,\n")
+    };
+    let a = row("12:00:00", "+15555550111", "Alice", "a");
+    let b = row("12:01:00", "+15555550122", "Bob", "b");
+    let c = row("12:02:00", "+15555550111", "Alice", "c");
+    let d = row("12:03:00", "+15555550122", "Bob", "d");
+    let newer = format!("{a}{c}{d}");
+    let documents = convert_files(&[
+        (
+            "2020-01-01 - Book Club/Messages.csv",
+            &format!("{MESSAGES_HEADER}{a}{b}{c}"),
+        ),
+        (
+            "2020-02-01 - Book Club/Messages.csv",
+            &format!("{MESSAGES_HEADER}{newer}"),
+        ),
+    ]);
+    assert_eq!(documents.len(), 1, "{documents:?}");
+    assert_eq!(documents[0].messages.len(), 4);
+    assert_eq!(
+        documents[0].conversation.chat_identifier,
+        convert_rows(&newer)[0].conversation.chat_identifier
+    );
+}
+
+/// Two groups with different names are never merged, even when one's only
+/// row is the first row of the other: the account holder sends one message
+/// to two new groups in the same second, and only one of them goes on.
+#[test]
+fn a_group_whose_only_row_starts_another_group_stays_its_own_conversation() {
+    let first = |session: &str| {
+        format!("{session},2020-01-01 12:00:00,iMessage,Outgoing,,,Sent,,,Happy new year,,,\n")
+    };
+    let quiet = format!("{MESSAGES_HEADER}{}", first("Alice Example & Bob Example"));
+    let busy = format!(
+        "{MESSAGES_HEADER}{}Climbing,2020-01-01 12:07:00,iMessage,Incoming,+15555550133,Carol,Read,,,You too,,,\n\
+Climbing,2020-01-01 12:08:00,iMessage,Incoming,+15555550144,Dan,Read,,,Cheers,,,\n",
+        first("Climbing")
+    );
+    let documents = convert_files(&[
+        ("a - Alice Example & Bob Example/Messages.csv", &quiet),
+        ("b - Climbing/Messages.csv", &busy),
+    ]);
+    assert_eq!(documents.len(), 2, "{documents:?}");
+    assert_ne!(
+        documents[0].conversation.chat_identifier,
+        documents[1].conversation.chat_identifier
+    );
+    let message_counts: Vec<usize> = documents.iter().map(|doc| doc.messages.len()).collect();
+    assert!(
+        message_counts.contains(&1) && message_counts.contains(&3),
+        "{message_counts:?}"
     );
 }

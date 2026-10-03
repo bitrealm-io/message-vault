@@ -16,7 +16,7 @@ pub const GROUP_CHAT_ID_PREFIX: &str = "group:";
 #[derive(Debug, Clone)]
 pub enum ConversationKey {
     /// A one-to-one conversation, keyed by the other person's address.
-    Direct(String),
+    OneToOne(String),
     /// A group, keyed by an id the exporter takes from the source and never
     /// from who wrote in it. The members are data: the key does not change
     /// when they do.
@@ -32,12 +32,12 @@ pub enum ConversationKey {
 }
 
 impl ConversationKey {
-    /// The conversation's chat id: the address for [`Self::Direct`],
+    /// The conversation's chat id: the address for [`Self::OneToOne`],
     /// `group:` and the vendor id for [`Self::Group`], and the name made
     /// filename-safe ([`name_stem`]) for [`Self::NameOnly`].
     pub fn chat_id(&self) -> String {
         match self {
-            Self::Direct(handle) => handle.clone(),
+            Self::OneToOne(handle) => handle.clone(),
             Self::Group { vendor_id, .. } => format!("{GROUP_CHAT_ID_PREFIX}{vendor_id}"),
             Self::NameOnly(name) => name_stem(name),
         }
@@ -94,7 +94,7 @@ mod tests {
         };
         assert_ne!(
             group.chat_id(),
-            ConversationKey::Direct(address.into()).chat_id()
+            ConversationKey::OneToOne(address.into()).chat_id()
         );
         assert_eq!(group.chat_id(), "group:+15555550111");
     }

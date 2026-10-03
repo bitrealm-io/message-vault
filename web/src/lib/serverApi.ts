@@ -521,8 +521,9 @@ export function getContactSummaries(
 /** Which of these identifiers the account has no contact for. */
 export function unmatchedIdentities(
   body: Schema["FindUnmatchedIdentitiesRequest"],
+  opts?: RequestOptions,
 ): Promise<Schema["Page_String"]> {
-  return apiClient.post<Schema["Page_String"]>("/v1/contacts/unmatched-identities", body);
+  return apiClient.post<Schema["Page_String"]>("/v1/contacts/unmatched-identities", body, opts);
 }
 
 /** How a load applies the address book: `append` removes nothing, `edit` makes each contact match its rows. */
@@ -744,11 +745,19 @@ export function discardImport(id: number): Promise<Schema["DiscardImportResponse
   return apiClient.post<Schema["DiscardImportResponse"]>(`/v1/imports/${id}/discard`, {});
 }
 
+/** Which page of an Import Run's contacts to read. Absent values are left off the URL. */
+export type ImportContactsParams = { limit?: number; offset?: number };
+
+/** One page of the contacts an Import Run created or changed. */
 export function getImportContacts(
   id: number,
+  params: ImportContactsParams,
   opts?: RequestOptions,
 ): Promise<Schema["Page_ImportContact"]> {
-  return apiClient.get<Schema["Page_ImportContact"]>(`/v1/imports/${id}/contacts`, opts);
+  return apiClient.get<Schema["Page_ImportContact"]>(
+    withQuery(`/v1/imports/${id}/contacts`, query(params)),
+    opts,
+  );
 }
 
 // ── Export Runs ─────────────────────────────────────────────────────────────

@@ -46,6 +46,13 @@ export const keys = {
      * that marks every contact stale refreshes these figures too.
      */
     summaries: (ids: readonly string[]) => ["contacts", "summaries", ids.join(",")] as const,
+    /**
+     * How many of these identifiers the account has no contact for, as the
+     * Import screen's review counts them. Under `all`, so a write that changes
+     * contacts changes the count.
+     */
+    unmatchedCount: (identifiers: readonly string[]) =>
+      ["contacts", "unmatched-count", identifiers] as const,
   },
   conversations: {
     all: ["conversations"] as const,
@@ -97,6 +104,8 @@ export const keys = {
      * cannot disagree about whether a run is waiting.
      */
     running: ["imports", "running"] as const,
+    /** The contacts one Import Run created or changed, as a paged list. */
+    contacts: (id: number) => ["imports", String(id), "contacts"] as const,
   },
   serverSettings: { all: ["server-settings"] as const },
   /** Where the Demo Account stands, from `GET /v1/server/demo-account`. */

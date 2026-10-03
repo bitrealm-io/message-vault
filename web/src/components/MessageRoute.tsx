@@ -66,7 +66,7 @@ export default function MessageRoute() {
       <ListColumn>
         <ResultsColumn
           query={query}
-          typedSearch={conversationSearch}
+          searchTyped={conversationSearch !== ""}
           selectedConversationId={conversationId}
           onSelectConversation={(c) => {
             // The list is filtered by this location's `q` and `f`, so the

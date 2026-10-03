@@ -195,18 +195,17 @@ describe("AppLayout on a Contact Group or Message Tag page", () => {
     expect(screen.getByTestId("location").textContent).toBe("/tag/%231?q=ada");
   });
 
-  it.each([
-    ["nothing typed asks for a search", "/tag/Holiday?view=messages", "query: "],
-    ["a typed search lists the tag's matches", "/tag/Holiday?q=ada&view=messages", null],
-  ])("on a tag page, the Messages list with %s", (_name, entry, expected) => {
+  it("on a tag page with nothing typed, the Messages list asks for a search", () => {
     sets.tags = ["Holiday"];
-    renderLayout(entry);
+    renderLayout("/tag/Holiday?view=messages");
+    expect(screen.getByTestId("message-search-list").textContent).toBe("query: ");
+  });
+
+  it("on a tag page with a typed search, the Messages list searches the tag", () => {
+    sets.tags = ["Holiday"];
+    renderLayout("/tag/Holiday?q=ada&view=messages");
     const list = screen.getByTestId("message-search-list").textContent ?? "";
-    if (expected === null) {
-      expect(list).toContain("Holiday");
-      expect(list).toContain("ada");
-    } else {
-      expect(list).toBe(expected);
-    }
+    expect(list).toContain("Holiday");
+    expect(list).toContain("ada");
   });
 });

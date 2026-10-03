@@ -310,7 +310,7 @@ export default function AppLayout() {
                   ) : (
                     <ResultsColumn
                       query={threadListQuery}
-                      typedSearch={conversationSearch}
+                      searchTyped={conversationSearch !== ""}
                       selectedConversationId={null}
                       onSelectConversation={handleConversationSelect}
                     />

@@ -62,18 +62,18 @@ export function ResultsViewSwitch({
  */
 export default function ResultsColumn({
   query,
-  typedSearch,
+  searchTyped,
   selectedConversationId,
   onSelectConversation,
 }: {
   /** The search both lists run: the typed search, with a page's tag or filter in it. */
   query: string;
   /**
-   * What the person typed in the header box. With nothing typed the Messages
-   * list asks for a search, even on a tag page whose `query` holds the tag
-   * (#313: an empty search shows no messages).
+   * Whether the header box holds a search. Without one the Messages list asks
+   * for a search, even on a tag page whose `query` holds the tag (#313: an
+   * empty search shows no messages).
    */
-  typedSearch: string;
+  searchTyped: boolean;
   selectedConversationId: number | null;
   onSelectConversation: (conversation: Conversation) => void;
 }) {
@@ -96,7 +96,7 @@ export default function ResultsColumn({
       />
       {view === "messages" ? (
         <MessageSearchList
-          query={typedSearch ? query : ""}
+          query={searchTyped ? query : ""}
           sortPick={pickedMessageSort(searchParams)}
           onSortPick={(next) => setParam(MESSAGE_SORT_PARAM, messageSortParam(next))}
           selectedId={openedAt(searchParams)}

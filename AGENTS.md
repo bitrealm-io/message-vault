@@ -103,7 +103,22 @@ only the user resolves it.
    ```
 
    Never resolve a thread without a reply in it.
-5. **Wait for the required checks.** GitHub moves the pull request's head to
+5. **Merge the base into a conflicting pull request.** The merge queue drops
+   a pull request it cannot merge onto the base, so resolve the conflict on
+   the branch first. Merge rather than rebase: a rebase needs a force-push,
+   and the queue squashes the merge commit away. GitHub reports `UNKNOWN`
+   for a few seconds after a push, so wait for a settled answer:
+
+   ```bash
+   until m=$(gh pr view <N> --json mergeable -q .mergeable) && [ "$m" != UNKNOWN ]; do sleep 10; done
+   echo "$m"                      # CONFLICTING means merge the base
+   git fetch origin <baseRefName>
+   git merge origin/<baseRefName>
+   git show --remerge-diff HEAD   # the conflict resolution alone, for review
+   git push origin HEAD:<headRefName>
+   ```
+
+6. **Wait for the required checks.** GitHub moves the pull request's head to
    a pushed commit a few seconds after the push, and starts its checks after
    that. Until both happen, `gh pr checks` reports the previous head, or exits
    with "no required checks reported". So wait until the head is the pushed

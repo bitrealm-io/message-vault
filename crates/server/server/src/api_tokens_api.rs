@@ -722,7 +722,7 @@ mod tests {
     #[tokio::test]
     async fn a_new_token_is_capped_by_its_accounts_permissions() {
         use crate::db::account_profile::AccountFlags;
-        use crate::test_support::{fixture_with_account, get_json, get_raw, post_created_json};
+        use crate::test_support::{fixture_with_account, get_json, post_created_json};
 
         let (fixture, alice) = fixture_with_account().await;
         set_flags(
@@ -756,7 +756,7 @@ mod tests {
     #[tokio::test]
     async fn the_token_list_follows_the_accounts_permissions_as_they_are_now() {
         use crate::db::account_profile::AccountFlags;
-        use crate::test_support::{fixture_with_account, get_json, get_raw, post_created_json};
+        use crate::test_support::{fixture_with_account, get_json, post_created_json};
 
         let (fixture, alice) = fixture_with_account().await;
         let collection = format!("/v1/accounts/{}/api-tokens", alice.account_id);

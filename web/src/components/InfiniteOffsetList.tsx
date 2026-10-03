@@ -14,8 +14,13 @@ import { groupByLetter } from "../lib/contactSort";
 import { formatVisibleRange } from "../lib/listPaging";
 import { isTauri } from "../lib/tauri-check";
 import { listRowDividersThin, resizeHandleGutter } from "../lib/tw";
+import { Z_LIFT } from "../lib/zLayers";
 import ListRangeHeader, { type SelectAllBox } from "./ListRangeHeader";
-import ListRangePill, { RANGE_PILL_OVERLAY_INSET, RANGE_PILL_SCROLL_PAD } from "./ListRangePill";
+import ListRangePill, {
+  RANGE_PILL_OVERLAY_INSET,
+  RANGE_PILL_SCROLL_PAD_CLASS,
+  RangePillSpacer,
+} from "./ListRangePill";
 import PlainButton from "./PlainButton";
 import VirtualList, { type VisibleRange } from "./VirtualList";
 
@@ -91,7 +96,7 @@ const ROW_BODY_FOCUS_RING =
   "has-[>button:focus-visible]:ring-2 has-[>button:focus-visible]:ring-inset has-[>button:focus-visible]:ring-accent";
 
 /** Lifts the lead cell above the select button's stretched target, so it still takes its own clicks. */
-const ROW_LEAD = "relative z-[1] flex shrink-0 self-center";
+const ROW_LEAD = `relative flex shrink-0 self-center ${Z_LIFT}`;
 
 /** A row is either one button, or a container holding the lead cell plus that button. */
 function Row({
@@ -272,14 +277,7 @@ function RacVirtualList<T extends object>({
         // double click or Enter, so one click would not open the row (#1245).
         // The open row is drawn from selectedId instead, as the browser path does.
         onScroll={scheduleVisibleRange}
-        className={`min-h-0 flex-1 overflow-auto outline-none ${resizeHandleGutter}`}
-        style={{
-          display: "block",
-          paddingTop: 0,
-          paddingRight: 0,
-          paddingBottom: RANGE_PILL_SCROLL_PAD,
-          paddingLeft: 0,
-        }}
+        className={`block min-h-0 flex-1 overflow-auto outline-none ${RANGE_PILL_SCROLL_PAD_CLASS} ${resizeHandleGutter}`}
       >
         {(item) => {
           const id = getId(item);
@@ -345,7 +343,7 @@ function TanStackVirtualList<T>({
         if (hasMore) requestMore();
       }}
       empty={empty}
-      footer={<div aria-hidden className="shrink-0" style={{ height: RANGE_PILL_SCROLL_PAD }} />}
+      footer={<RangePillSpacer />}
       visibleBottomInset={RANGE_PILL_OVERLAY_INSET}
       renderItem={(index) => {
         const item = items[index];
@@ -523,7 +521,7 @@ function SectionedLetterList<T>({
           })}
         </section>
       ))}
-      <div aria-hidden className="shrink-0" style={{ height: RANGE_PILL_SCROLL_PAD }} />
+      <RangePillSpacer />
     </div>
   );
 }

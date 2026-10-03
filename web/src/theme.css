@@ -39,6 +39,38 @@
   --discord-brand: #5865f2;
   /* iMessage screen effects ("sent with Confetti"). */
   --imessage-effect: #8b5cf6;
+
+  /*
+    The attachment lightbox is a dark viewing room in both themes, so a photo
+    is seen against black whichever theme is on.
+  */
+  --lightbox-bg: rgb(0 0 0 / 0.9);
+  --lightbox-control: rgb(255 255 255 / 0.2);
+  --lightbox-text: #ffffff;
+
+  /*
+    Contact avatar colors, picked per person from the name and handle. Each
+    is dark enough to carry white initials on the light and the dark theme,
+    so one set serves both.
+  */
+  --avatar-1: #c45c6a;
+  --avatar-2: #7c6bc4;
+  --avatar-3: #3d8b7a;
+  --avatar-4: #b87a3d;
+  --avatar-5: #4a7eb8;
+  --avatar-6: #9a5fa0;
+  --avatar-7: #5a8f4a;
+  --avatar-8: #b85c8a;
+  --avatar-text: #ffffff;
+
+  /* Shadows, the same in both themes. Mapped to shadow-* utilities below. */
+  --elevation-card: 0 4px 24px rgb(0 0 0 / 0.15);
+  --elevation-popup: 0 10px 32px rgb(0 0 0 / 0.28), 0 2px 8px rgb(0 0 0 / 0.14);
+  --elevation-modal: 0 16px 48px rgb(0 0 0 / 0.25);
+  --elevation-drawer: -2px 0 8px rgb(0 0 0 / 0.1);
+  --elevation-contact-drawer: 2px 0 12px rgb(0 0 0 / 0.18);
+  --elevation-pill: 0 2px 10px rgb(0 0 0 / 0.18);
+  --elevation-bubble: 0 0.5px 0 rgb(0 0 0 / 0.06);
 }
 
 /* Dark: header is chrome; deepen for canvas, lift for elevated */
@@ -153,6 +185,25 @@
   --color-sms-sent-text: var(--sms-sent-text);
   --color-bubble-received: var(--bubble-received);
   --color-bubble-received-text: var(--bubble-received-text);
+  --color-lightbox-bg: var(--lightbox-bg);
+  --color-lightbox-control: var(--lightbox-control);
+  --color-lightbox-text: var(--lightbox-text);
+  --color-avatar-1: var(--avatar-1);
+  --color-avatar-2: var(--avatar-2);
+  --color-avatar-3: var(--avatar-3);
+  --color-avatar-4: var(--avatar-4);
+  --color-avatar-5: var(--avatar-5);
+  --color-avatar-6: var(--avatar-6);
+  --color-avatar-7: var(--avatar-7);
+  --color-avatar-8: var(--avatar-8);
+  --color-avatar-text: var(--avatar-text);
+  --shadow-card: var(--elevation-card);
+  --shadow-popup: var(--elevation-popup);
+  --shadow-modal: var(--elevation-modal);
+  --shadow-drawer: var(--elevation-drawer);
+  --shadow-contact-drawer: var(--elevation-contact-drawer);
+  --shadow-pill: var(--elevation-pill);
+  --shadow-bubble: var(--elevation-bubble);
   --font-sans: system-ui, -apple-system, sans-serif;
 }
 

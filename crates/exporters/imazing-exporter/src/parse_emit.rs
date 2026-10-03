@@ -30,6 +30,10 @@ pub(super) struct Session {
     /// Members a Messages group's session name lists by a name no row pairs
     /// with an address.
     pub(super) unresolved_roster_labels: u64,
+    /// For a group, the digest of each row ([`row_digest`]), earliest first.
+    /// The first one is the group's vendor id; the rest tell apart two groups
+    /// whose earliest rows are the same ([`group_vendor_id`]).
+    pub(super) row_digests: Vec<[u8; 32]>,
 }
 
 /// Work out the key of one chat session from its rows.
@@ -44,15 +48,17 @@ pub(super) struct Session {
 /// group no id, and every name it does give changes or repeats.
 pub(super) fn session_key(kind: SourceKind, session: &str, rows: &[&RawRow]) -> Session {
     let roster = kind == SourceKind::Messages && session.contains(" & ");
-    if roster || people_who_wrote(rows) >= 2 {
+    if roster || people_who_wrote(kind, rows) >= 2 {
         let (members, unresolved_roster_labels) = group_members(roster, session, rows);
+        let row_digests = row_digests(rows);
         return Session {
             key: ConversationKey::Group {
-                vendor_id: group_vendor_id(rows),
+                vendor_id: group_vendor_id(&row_digests, 1),
                 members,
             },
             contact_name: session.trim().to_string(),
             unresolved_roster_labels,
+            row_digests,
         };
     }
     let session = session.trim();
@@ -69,6 +75,7 @@ pub(super) fn session_key(kind: SourceKind, session: &str, rows: &[&RawRow]) -> 
         },
         key,
         unresolved_roster_labels: 0,
+        row_digests: Vec::new(),
     }
 }
 
@@ -103,15 +110,44 @@ fn root(parent: &HashMap<String, String>, node: &str) -> String {
     current
 }
 
-/// How many people wrote the received rows. A row's address and its Sender
-/// Name are one person, so two addresses that share a name are one person.
-fn people_who_wrote(rows: &[&RawRow]) -> usize {
+/// How many people wrote the received rows.
+///
+/// In Messages a row's address and its Sender Name are one person, so two
+/// addresses that share a name are one person: iMazing puts one contact's
+/// number and email address, or two numbers, in one chat. Two different
+/// people saved under one name are then counted as one. A WhatsApp account
+/// has one number, so in WhatsApp two addresses are always two people, and
+/// a name joins only a row that has no address.
+fn people_who_wrote(kind: SourceKind, rows: &[&RawRow]) -> usize {
     // Union-find over the addresses and the names the rows give.
     let mut parent: HashMap<String, String> = HashMap::new();
-    for row in rows.iter().filter(|row| written_by_someone_else(row)) {
+    let mut whatsapp_named: HashSet<String> = HashSet::new();
+    let rows_written: Vec<&RawRow> = rows
+        .iter()
+        .copied()
+        .filter(|row| written_by_someone_else(row))
+        .collect();
+    if kind == SourceKind::WhatsApp {
+        for row in &rows_written {
+            let name = row.sender_name.trim().to_lowercase();
+            if sender_address(&row.sender_id).is_some() && !name.is_empty() {
+                whatsapp_named.insert(name);
+            }
+        }
+    }
+    for row in rows_written {
         let address = sender_address(&row.sender_id).map(|a| format!("address:{a}"));
-        let name = row.sender_name.trim();
-        let name = (!name.is_empty()).then(|| format!("name:{}", name.to_lowercase()));
+        let name = row.sender_name.trim().to_lowercase();
+        let name = if name.is_empty()
+            || (kind == SourceKind::WhatsApp
+                && (address.is_some() || whatsapp_named.contains(&name)))
+        {
+            // A WhatsApp name never joins two addresses, and a row with no
+            // address whose name a row with an address gives is that person.
+            None
+        } else {
+            Some(format!("name:{name}"))
+        };
         let nodes: Vec<String> = address.into_iter().chain(name).collect();
         for node in &nodes {
             parent.entry(node.clone()).or_insert_with(|| node.clone());
@@ -130,20 +166,31 @@ fn people_who_wrote(rows: &[&RawRow]) -> usize {
         .len()
 }
 
-/// The order rows are compared in to find the earliest: by the date as
-/// written, a row with no readable date after every dated row, then by
-/// [`row_fields`].
-type RowOrder<'a> = (bool, Option<NaiveDateTime>, RowFields<'a>);
+/// Where a row sorts when looking for the earliest row: by the date as
+/// written, a row with no readable date after every dated row, then by its
+/// [`RowFields`]. The field order is the comparison order.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+struct RowOrder<'a> {
+    undated: bool,
+    date: Option<NaiveDateTime>,
+    fields: RowFields<'a>,
+}
 
-/// Where `row` sorts when looking for the earliest row.
-fn row_order<'a>(row: &'a RawRow) -> RowOrder<'a> {
-    let date = naive_date(&row.message_date);
-    (date.is_none(), date, row_fields(row))
+impl<'a> RowOrder<'a> {
+    fn of(row: &'a RawRow) -> Self {
+        let date = naive_date(&row.message_date);
+        Self {
+            undated: date.is_none(),
+            date,
+            fields: RowFields::of(row),
+        }
+    }
 }
 
 /// The address of a one-to-one chat: the one its session name gives, else
-/// the address of the earliest received row that has one. `None` when the
-/// source records no address for the person.
+/// the smallest address the received rows give. That is the same address in
+/// every export that holds both of a person's addresses, whichever one wrote
+/// first. `None` when the source records no address for the person.
 fn direct_handle(session: &str, rows: &[&RawRow]) -> Option<String> {
     if let Some(phone) = phones_in_text(session).into_iter().next() {
         return Some(phone);
@@ -158,17 +205,18 @@ fn direct_handle(session: &str, rows: &[&RawRow]) -> Option<String> {
     }
     rows.iter()
         .filter(|row| written_by_someone_else(row))
-        .filter_map(|row| Some((row_order(row), sender_address(&row.sender_id)?)))
-        .min_by(|a, b| a.0.cmp(&b.0))
-        .map(|(_, address)| address)
+        .filter_map(|row| sender_address(&row.sender_id))
+        .min()
 }
 
 /// A group's members: everyone who wrote, every number in the session name,
 /// and for a Messages roster ("A & B & C") every name it lists. A listed
 /// name no row pairs with an address has no address anywhere in the export,
-/// so it becomes an identity of type `other` whose value is the name.
+/// so it is a member with that name and no handle; the server gives such a
+/// person an identity of type `other` holding the name.
 ///
-/// Returns the members sorted by handle, and how many listed names had no
+/// Returns the members with an address sorted by handle, then the members
+/// with a name only in roster order, and how many listed names had no
 /// address.
 fn group_members(roster: bool, session: &str, rows: &[&RawRow]) -> (Vec<IrParticipant>, u64) {
     let mut members: BTreeMap<String, IrParticipant> = BTreeMap::new();
@@ -205,6 +253,7 @@ fn group_members(roster: bool, session: &str, rows: &[&RawRow]) -> (Vec<IrPartic
     }
 
     let mut unresolved = 0u64;
+    let mut named_only: Vec<IrParticipant> = Vec::new();
     if roster {
         for label in session.split(" & ").map(str::trim) {
             if label.is_empty() {
@@ -219,31 +268,89 @@ fn group_members(roster: bool, session: &str, rows: &[&RawRow]) -> (Vec<IrPartic
             } else {
                 // A member who never wrote, shown by name: the export holds
                 // no address for them.
-                unresolved += 1;
-                add(label.to_string(), label, HandleType::Other);
+                let already = named_only.iter().any(|member| {
+                    member
+                        .display_name
+                        .as_deref()
+                        .is_some_and(|name| name.eq_ignore_ascii_case(label))
+                });
+                if !already {
+                    unresolved += 1;
+                    named_only.push(IrParticipant {
+                        handle: None,
+                        display_name: Some(label.to_string()),
+                        handle_type: None,
+                    });
+                }
             }
         }
     }
-    (members.into_values().collect(), unresolved)
+    let mut out: Vec<IrParticipant> = members.into_values().collect();
+    out.extend(named_only);
+    (out, unresolved)
 }
 
-/// The columns that identify a row: Message Date, Type, Sender ID, Text and
-/// Attachment, as the CSV writes them.
-type RowFields<'a> = (&'a str, &'a str, &'a str, &'a str, &'a str);
-
-/// The [`RowFields`] of `row`.
-fn row_fields(row: &RawRow) -> RowFields<'_> {
-    (
-        &row.message_date,
-        &row.msg_type,
-        &row.sender_id,
-        &row.text,
-        &row.attachment,
-    )
+/// The columns that identify a row, as the CSV writes them. The field order
+/// is the comparison order.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+struct RowFields<'a> {
+    message_date: &'a str,
+    msg_type: &'a str,
+    sender_id: &'a str,
+    text: &'a str,
+    attachment: &'a str,
 }
 
-/// A group's vendor id: SHA-256 of the conversation's earliest row
-/// ([`row_fields`]), in lowercase hex.
+impl<'a> RowFields<'a> {
+    fn of(row: &'a RawRow) -> Self {
+        Self {
+            message_date: &row.message_date,
+            msg_type: &row.msg_type,
+            sender_id: &row.sender_id,
+            text: &row.text,
+            attachment: &row.attachment,
+        }
+    }
+}
+
+/// SHA-256 of a row's [`RowFields`], joined by the ASCII unit separator,
+/// which no CSV cell holds.
+fn row_digest(fields: &RowFields<'_>) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    for (index, field) in [
+        fields.message_date,
+        fields.msg_type,
+        fields.sender_id,
+        fields.text,
+        fields.attachment,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        if index > 0 {
+            hasher.update([0x1f]);
+        }
+        hasher.update(field.as_bytes());
+    }
+    hasher.finalize().into()
+}
+
+/// The [`row_digest`] of every row, earliest first ([`RowOrder`]). Where
+/// several rows share the earliest time, the smallest of them comes first,
+/// so the order does not depend on the order the CSV writes them in.
+fn row_digests(rows: &[&RawRow]) -> Vec<[u8; 32]> {
+    let mut ordered: Vec<RowOrder<'_>> = rows.iter().map(|row| RowOrder::of(row)).collect();
+    ordered.sort();
+    ordered
+        .iter()
+        .map(|order| row_digest(&order.fields))
+        .collect()
+}
+
+/// A group's vendor id, in lowercase hex. With `depth` 1 it is the
+/// [`row_digest`] of the conversation's earliest row. A greater `depth`
+/// hashes the digests of the earliest `depth` rows (all of them when there
+/// are fewer), which tells apart two groups whose earliest rows are the same.
 ///
 /// Within one export one CSV file is one conversation, and across exports
 /// its first message stays the same while new ones arrive, so the id stays
@@ -256,23 +363,21 @@ fn row_fields(row: &RawRow) -> RowFields<'_> {
 /// The id changes when the oldest messages are gone from the phone or an
 /// export covers only a date range: the group then comes in as a second
 /// conversation, never merged with another group.
-fn group_vendor_id(rows: &[&RawRow]) -> String {
-    let (date, msg_type, sender_id, text, attachment) = rows
-        .iter()
-        .map(|row| row_order(row))
-        .min()
-        .map(|(_, _, fields)| fields)
-        .unwrap_or_default();
+pub(super) fn group_vendor_id(row_digests: &[[u8; 32]], depth: usize) -> String {
+    if depth <= 1 {
+        return hex::encode(row_digests.first().copied().unwrap_or_else(|| {
+            row_digest(&RowFields {
+                message_date: "",
+                msg_type: "",
+                sender_id: "",
+                text: "",
+                attachment: "",
+            })
+        }));
+    }
     let mut hasher = Sha256::new();
-    for (index, field) in [date, msg_type, sender_id, text, attachment]
-        .into_iter()
-        .enumerate()
-    {
-        if index > 0 {
-            // The ASCII unit separator, which no CSV cell holds.
-            hasher.update([0x1f]);
-        }
-        hasher.update(field.as_bytes());
+    for digest in row_digests.iter().take(depth) {
+        hasher.update(digest);
     }
     hex::encode(hasher.finalize())
 }

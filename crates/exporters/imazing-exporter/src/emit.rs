@@ -7,8 +7,8 @@ use crate::attachments::{
 use crate::attachments_emit::{attachment_digests, pending_attachment_to_ir};
 use crate::parse::{DiscoveredCsv, RawRow, SourceKind, discover_csv_files, parse_csv_file};
 use crate::parse_emit::{
-    Session, handle_type_for, is_notification, is_outgoing, parse_message_date, resolve_sender,
-    session_key,
+    Session, group_vendor_id, handle_type_for, is_notification, is_outgoing, parse_message_date,
+    resolve_sender, session_key,
 };
 use crate::unnamed_files::{FolderRows, UnnamedFile, file_name_second, unnamed_files};
 use anyhow::Result;
@@ -17,8 +17,9 @@ use message_crate_core::{
 };
 use message_csv::Zone;
 use message_ir::{
-    ConversationKey, ExportMeta, IrAttachment, IrParticipant, IrService, IrSource,
-    PendingAttachment, PendingConversation, PendingMessage, ProjectedRole, ProjectionHooks,
+    ConversationKey, ExportMeta, GROUP_CHAT_ID_PREFIX, IrAttachment, IrParticipant, IrService,
+    IrSource, PendingAttachment, PendingConversation, PendingMessage, ProjectedRole,
+    ProjectionHooks,
 };
 use message_staging::{AttachmentSource, ExportWriter};
 use serde_json::Map;
@@ -103,10 +104,11 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
         ingest.attach_unnamed_files();
     }
     let Ingest {
-        conversations,
+        mut conversations,
         mut report,
         ..
     } = ingest;
+    separate_groups_with_one_earliest_row(&mut conversations);
 
     let export = message_crate_core::export_meta(
         EXPORT_SOURCE,
@@ -117,7 +119,7 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
     );
     let mut documents = Vec::new();
     let mut sources = Vec::new();
-    for (_, Conversation { key, mut convo }) in conversations {
+    for (_, Conversation { key, mut convo, .. }) in conversations {
         let hooks = ImazingProjection {
             export: &export,
             key: &key,
@@ -155,6 +157,87 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
 struct Conversation {
     key: ConversationKey,
     convo: PendingConversation,
+    /// For a group, its rows' digests, earliest first (`Session::row_digests`).
+    row_digests: Vec<[u8; 32]>,
+}
+
+/// Give two groups whose earliest rows are the same a key each.
+///
+/// A group's key is its earliest row, and two groups can start with the same
+/// row: the account holder sends one message to two new groups in the same
+/// second. Each such group's vendor id then hashes its earliest rows, as few
+/// as tell every one of them apart. That depends only on the groups' own
+/// rows, so the next export gives each the same key while its earliest rows
+/// are in it. Groups whose rows are all the same cannot be told apart and
+/// stay one conversation.
+fn separate_groups_with_one_earliest_row(conversations: &mut BTreeMap<String, Conversation>) {
+    let mut by_chat_id: BTreeMap<(String, String), Vec<String>> = BTreeMap::new();
+    for (map_key, conversation) in conversations.iter() {
+        if conversation.key.is_group() {
+            let kind = conversation.convo.extra_str("source_kind").to_string();
+            by_chat_id
+                .entry((kind, conversation.convo.chat_id.clone()))
+                .or_default()
+                .push(map_key.clone());
+        }
+    }
+    for map_keys in by_chat_id.into_values().filter(|keys| keys.len() > 1) {
+        let deepest = map_keys
+            .iter()
+            .map(|key| conversations[key].row_digests.len())
+            .max()
+            .unwrap_or(1);
+        let mut ids: Vec<String> = Vec::new();
+        for depth in 2..=deepest.max(2) {
+            ids = map_keys
+                .iter()
+                .map(|key| group_vendor_id(&conversations[key].row_digests, depth))
+                .collect();
+            if ids.iter().collect::<HashSet<_>>().len() == ids.len() {
+                break;
+            }
+        }
+        let mut first_with_id: HashMap<String, String> = HashMap::new();
+        for (map_key, id) in map_keys.into_iter().zip(ids) {
+            if let Some(first) = first_with_id.get(&id) {
+                let duplicate = conversations
+                    .remove(&map_key)
+                    .expect("the key was listed above");
+                merge_group_into(conversations.get_mut(first).expect("kept above"), duplicate);
+                continue;
+            }
+            let conversation = conversations
+                .get_mut(&map_key)
+                .expect("the key was listed above");
+            conversation.convo.chat_id = format!("{GROUP_CHAT_ID_PREFIX}{id}");
+            if let ConversationKey::Group { vendor_id, .. } = &mut conversation.key {
+                vendor_id.clone_from(&id);
+            }
+            first_with_id.insert(id, map_key);
+        }
+    }
+}
+
+/// Fold `other`, a group with the same rows as `into`, into it.
+fn merge_group_into(into: &mut Conversation, other: Conversation) {
+    into.convo.messages.extend(other.convo.messages);
+    if let (
+        ConversationKey::Group { members, .. },
+        ConversationKey::Group {
+            members: other_members,
+            ..
+        },
+    ) = (&mut into.key, other.key)
+    {
+        for member in other_members {
+            let same = |held: &IrParticipant| {
+                held.handle == member.handle && held.display_name == member.display_name
+            };
+            if !members.iter().any(same) {
+                members.push(member);
+            }
+        }
+    }
 }
 
 /// Parse-time state shared across every CSV file in one export.
@@ -256,7 +339,16 @@ impl Ingest {
         );
         let family = TransportFamily::from_kind(discovered.kind);
         let chat_id = session.key.chat_id();
-        let convo_key = format!("{}|{chat_id}", family.key_prefix());
+        // A group session is a conversation of its own, even when another
+        // starts with the same row (`separate_groups_with_one_earliest_row`).
+        let convo_key = if session.key.is_group() {
+            format!(
+                "{}|{chat_id}|{csv_index}|{session_name}",
+                family.key_prefix()
+            )
+        } else {
+            format!("{}|{chat_id}", family.key_prefix())
+        };
         self.conversations
             .entry(convo_key.clone())
             .or_insert_with(|| {
@@ -278,6 +370,7 @@ impl Ingest {
                 Conversation {
                     key: session.key.clone(),
                     convo,
+                    row_digests: session.row_digests.clone(),
                 }
             });
         for &(row_index, row) in rows {

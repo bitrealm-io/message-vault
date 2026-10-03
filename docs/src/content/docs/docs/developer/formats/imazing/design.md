@@ -52,12 +52,15 @@ The rows of one session in one CSV are one conversation.
 
 A Messages session named as a roster (`Name A & Name B`) is a group, even when one member wrote.
 Any session in which two or more people wrote is a group.
-The rows decide who is one person: a row's `Sender ID` and `Sender Name` belong to one person, so two addresses under one `Sender Name` are one person.
-One contact writing from a number and an email address, or from two numbers, is a one-to-one chat.
+The rows decide who is one person.
+In Messages a row's `Sender ID` and `Sender Name` belong to one person, so two addresses under one `Sender Name` are one person: one contact writing from a number and an email address, or from two numbers, is a one-to-one chat.
+Two different people saved under one name in a chat with a typed title are then counted as one person, and the chat is filed as one-to-one.
+A WhatsApp account has one number, so in WhatsApp two numbers are always two people, whatever their `Sender Name`.
 
 ### One-to-one chats
 
-The chat's address is the number in `Chat Session`, a `Chat Session` that is itself an address, or the address of the earliest received row that has one.
+The chat's address is the number in `Chat Session`, a `Chat Session` that is itself an address, or else the smallest address the received rows give, so that it does not depend on which of a person's addresses wrote first.
+The chat lists that one address as its participant. A person's other address is not a participant: it is the sender of the messages written from it, with the same `Sender Name`.
 Without any of these, the chat is known by its name: its `chat_identifier` is a name stem, it is counted as `name_only_chat`, and the server matches the name to a contact on import.
 A received row with no `Sender ID` is from the chat's number or short code.
 
@@ -69,6 +72,9 @@ The folder name carries the time of the latest message, the file name carries th
 
 A group's `chat_identifier` is `group:` and the SHA-256 of its earliest row: `Message Date` as written, `Type`, `Sender ID`, `Text` and `Attachment`.
 Where rows share the earliest time, the smallest of them is taken, so the order of the rows does not change the key.
+Two groups can start with the same row, when the account holder sends one message to two new groups in the same second.
+Each such group's key then hashes its earliest rows, as few as tell the groups apart, so every one keeps its own key in the next export.
+Groups whose rows are all the same cannot be told apart and come in as one.
 The key does not change when someone new writes, and it never equals a person's address.
 Its limit is in [input format](/docs/developer/formats/imazing/input/#source-limitations).
 
@@ -77,7 +83,7 @@ A group's members are data on the conversation, never read back out of its `chat
 1. Every address that sent a row, with its `Sender Name`.
 2. Every `+digits` number in the session name.
 3. For a Messages roster, every label split on ` & `. A label that is an address is that address. A name-only label resolves through the rows: a row whose `Sender Name` matches the label gives its `Sender ID`.
-4. A label no row matches is a member who never wrote. The export holds no address for them, so the member's identity is of type `other` and holds the name. Each is counted as `unresolved_group_participants`.
+4. A label no row matches is a member who never wrote. The export holds no address for them, so the member has the name and no handle, and the server gives them an identity of type `other` holding the name. Each is counted as `unresolved_group_participants`.
 
 A group message's sender comes only from its row. A received row with no `Sender ID` has no sender.
 

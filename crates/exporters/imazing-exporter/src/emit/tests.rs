@@ -667,10 +667,11 @@ fn a_same_named_file_in_two_chat_folders_goes_to_its_own_chat() {
 
 /// A Messages chat named "A & B" whose rows carry no address is a group of
 /// people the source named and recorded no address for. Each is a
-/// participant whose identity is of type `other` and holds the name. The
-/// chat id is the group's own key, never made from the names.
+/// participant with the name and no handle, which the server gives an
+/// identity of type `other`. The chat id is the group's own key, never made
+/// from the names.
 #[test]
-fn a_group_known_only_by_names_gives_each_named_person_an_other_identity() {
+fn a_group_known_only_by_names_lists_each_named_person_without_a_handle() {
     let documents = convert_rows(
         "Alice Example & Bob Example,2020-01-01 12:00:00,iMessage,Incoming,,Alice Example,Read,,,Hi,,,\n\
 Alice Example & Bob Example,2020-01-01 12:01:00,iMessage,Outgoing,,,Sent,,,Hey,,,\n",
@@ -702,16 +703,8 @@ Alice Example & Bob Example,2020-01-01 12:01:00,iMessage,Outgoing,,,Sent,,,Hey,,
     assert_eq!(
         participants,
         vec![
-            (
-                Some("Alice Example"),
-                Some("Alice Example"),
-                Some(message_ir::HandleType::Other)
-            ),
-            (
-                Some("Bob Example"),
-                Some("Bob Example"),
-                Some(message_ir::HandleType::Other)
-            ),
+            (None, Some("Alice Example"), None),
+            (None, Some("Bob Example"), None),
         ]
     );
 }
@@ -863,7 +856,7 @@ Bob,2020-01-01 12:00:00,iMessage,Incoming,+15555550100,Bob,Read,,,second,,IMG_00
     );
 }
 
-/// E2-2: a group's key is not built from who wrote, so a group in which one
+/// #1080: a group's key is not built from who wrote, so a group in which one
 /// other person wrote is not that person's one-to-one conversation.
 #[test]
 fn a_group_where_one_person_wrote_is_not_their_direct_chat() {
@@ -878,7 +871,7 @@ Alice Example,2020-01-01 12:01:00,iMessage,Incoming,+15555550111,Alice Example,R
     );
 }
 
-/// E2-3: a group keeps its chat id, and so every message keeps its `guid`,
+/// #1080: a group keeps its chat id, and so every message keeps its `guid`,
 /// when someone new writes in a later export.
 #[test]
 fn a_group_keeps_its_chat_id_when_someone_new_writes() {
@@ -898,7 +891,7 @@ Book Club,2020-02-01 12:00:00,iMessage,Incoming,+15555550133,Carol,Read,,,Hello,
     assert_eq!(before[0].messages[0].guid, after[0].messages[0].guid);
 }
 
-/// E2-7: a group message's sender comes only from its row. A received row
+/// #1080: a group message's sender comes only from its row. A received row
 /// with no Sender ID has no sender, and none is made up from the chat id.
 #[test]
 fn an_incoming_group_row_without_a_sender_has_no_made_up_sender() {
@@ -918,9 +911,10 @@ fn an_incoming_group_row_without_a_sender_has_no_made_up_sender() {
     }
 }
 
-/// E2-8: one person writing from a number and an email address is one
+/// #1080: one person writing from a number and an email address is one
 /// person, so the conversation is one-to-one and not a group. The same holds
-/// for one contact's two numbers in one chat.
+/// for one contact's two numbers in one chat. The chat's address is the
+/// smallest of them, whichever wrote first.
 #[test]
 fn one_person_from_two_addresses_is_not_a_group() {
     for second in ["bob@icloud.com", "+15555550199"] {
@@ -941,9 +935,10 @@ Bob,2020-01-01 12:01:00,iMessage,Incoming,{second},Bob,Read,,,From the other,,,\
 
 /// A Messages group's session name lists every member. A member who never
 /// wrote, shown by name, has no address anywhere in the export, so they are
-/// a member with an identity of type `other` whose value is the name.
+/// a member with the name and no handle; the server gives them an identity
+/// of type `other`.
 #[test]
-fn a_member_who_never_wrote_is_a_member_with_an_other_identity() {
+fn a_member_who_never_wrote_is_a_member_without_a_handle() {
     let documents = convert_rows(
         "Alice Example & Bob Example & Carol Silent,2020-01-01 12:00:00,iMessage,Incoming,+15555550111,Alice Example,Read,,,Hi,,,\n\
 Alice Example & Bob Example & Carol Silent,2020-01-01 12:01:00,iMessage,Incoming,+15555550122,Bob Example,Read,,,Hey,,,\n",
@@ -973,11 +968,7 @@ Alice Example & Bob Example & Carol Silent,2020-01-01 12:01:00,iMessage,Incoming
                 Some("Bob Example"),
                 Some(message_ir::HandleType::Phone)
             ),
-            (
-                Some("Carol Silent"),
-                Some("Carol Silent"),
-                Some(message_ir::HandleType::Other)
-            ),
+            (None, Some("Carol Silent"), None),
         ]
     );
 }
@@ -1035,4 +1026,122 @@ fn a_groups_chat_id_does_not_depend_on_row_order() {
         chat_id(format!("{alice}{bob}")),
         chat_id(format!("{bob}{alice}"))
     );
+}
+
+/// The address of a one-to-one chat in which one person wrote from two
+/// addresses does not depend on which one wrote first, so an export that
+/// starts later in the chat gives it the same key.
+#[test]
+fn a_direct_chats_address_does_not_depend_on_which_address_wrote_first() {
+    let phone_first = "Alice,2020-01-01 12:00:00,iMessage,Incoming,+15555550111,Alice,Read,,,One,,,\n\
+Alice,2020-01-01 12:01:00,iMessage,Incoming,alice@example.com,Alice,Read,,,Two,,,\n";
+    let email_first = "Alice,2020-01-01 12:00:00,iMessage,Incoming,alice@example.com,Alice,Read,,,One,,,\n\
+Alice,2020-01-01 12:01:00,iMessage,Incoming,+15555550111,Alice,Read,,,Two,,,\n";
+    let chat_id = |rows: &str| convert_rows(rows)[0].conversation.chat_identifier.clone();
+    assert_eq!(chat_id(phone_first), "+15555550111");
+    assert_eq!(chat_id(email_first), "+15555550111");
+}
+
+const WHATSAPP_HEADER: &str = "Chat Session,Message Date,Sent Date,Type,Sender ID,Sender Name,Status,Forwarded,Text,Attachment info\n";
+
+/// A WhatsApp account has one number, so two numbers under one Sender Name
+/// are two people, and the chat they wrote in is a group.
+#[test]
+fn two_whatsapp_people_with_one_name_make_a_group() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("in");
+    fs::create_dir(&input).unwrap();
+    fs::write(
+        input.join("WhatsApp - Climbing.csv"),
+        format!(
+            "{WHATSAPP_HEADER}Climbing,2020-01-01 12:00:00,,Incoming,+15555550111,Chris,Read,,Hi,\n\
+Climbing,2020-01-01 12:01:00,,Incoming,+15555550122,Chris,Read,,Hey,\n"
+        ),
+    )
+    .unwrap();
+    let out = dir.path().join("out");
+    convert_export(ConvertExportArgs {
+        input: &input,
+        output: &out,
+        timezone: Some("UTC"),
+        transforms: ExportTransforms::none(),
+        output_format: OutputFormat::Json,
+        cancel: None,
+        resume: false,
+    })
+    .unwrap();
+    let documents: Vec<_> = fs::read_dir(&out)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "json"))
+        .map(|path| message_ir_format::read_conversation_json(&path).unwrap())
+        .collect();
+    assert_eq!(documents.len(), 1);
+    let conversation = &documents[0].conversation;
+    assert_eq!(
+        conversation.conversation_type,
+        message_ir::IrConversationType::Group
+    );
+    assert_eq!(conversation.participants.len(), 2);
+}
+
+/// Two groups can start with the same row: the account holder sends one
+/// message to two new groups in the same second. They stay two
+/// conversations, and each keeps its key whichever file is read first.
+#[test]
+fn two_groups_that_start_with_one_row_stay_two_conversations() {
+    let first = "Hi all,2020-01-01 12:00:00,iMessage,Outgoing,,,Sent,,,Happy new year,,,\n";
+    let book_club = format!(
+        "{}Book Club,2020-01-01 12:05:00,iMessage,Incoming,+15555550111,Alice,Read,,,Thanks,,,\n\
+Book Club,2020-01-01 12:06:00,iMessage,Incoming,+15555550122,Bob,Read,,,Same,,,\n",
+        first.replace("Hi all", "Book Club")
+    );
+    let climbing = format!(
+        "{}Climbing,2020-01-01 12:07:00,iMessage,Incoming,+15555550133,Carol,Read,,,You too,,,\n\
+Climbing,2020-01-01 12:08:00,iMessage,Incoming,+15555550144,Dan,Read,,,Cheers,,,\n",
+        first.replace("Hi all", "Climbing")
+    );
+    let ids = |files: [(&str, &str); 2]| {
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("in");
+        for (folder, rows) in files {
+            let chat = input.join(folder);
+            fs::create_dir_all(&chat).unwrap();
+            fs::write(
+                chat.join("Messages.csv"),
+                format!("{MESSAGES_HEADER}{rows}"),
+            )
+            .unwrap();
+        }
+        let out = dir.path().join("out");
+        convert_export(ConvertExportArgs {
+            input: &input,
+            output: &out,
+            timezone: Some("UTC"),
+            transforms: ExportTransforms::none(),
+            output_format: OutputFormat::Json,
+            cancel: None,
+            resume: false,
+        })
+        .unwrap();
+        let mut ids: Vec<(String, String)> = fs::read_dir(&out)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| path.extension().is_some_and(|ext| ext == "json"))
+            .map(|path| message_ir_format::read_conversation_json(&path).unwrap())
+            .map(|doc| {
+                (
+                    doc.conversation.group_title.clone().unwrap_or_default(),
+                    doc.conversation.chat_identifier.clone(),
+                )
+            })
+            .collect();
+        ids.sort();
+        ids
+    };
+    let in_order = ids([("a - Book Club", &book_club), ("b - Climbing", &climbing)]);
+    let swapped = ids([("a - Climbing", &climbing), ("b - Book Club", &book_club)]);
+    assert_eq!(in_order.len(), 2, "{in_order:?}");
+    assert_ne!(in_order[0].1, in_order[1].1);
+    assert_eq!(in_order, swapped);
 }

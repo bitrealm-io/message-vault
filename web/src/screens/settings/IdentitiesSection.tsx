@@ -90,14 +90,41 @@ export function IdentitiesSection({
     [rows],
   );
 
-  const confirmAdd = async ({ address, service }: { address: string; service: HandleService }) => {
+  /**
+   * Send `body`, then read the identities list again and require that it now
+   * holds `address` on `service` (`listed`) or no longer does. The change is
+   * judged by the list, not by the profile the server answered, because the
+   * profile names no service for a number.
+   *
+   * A list that cannot be read after the server took the change says so,
+   * rather than showing the list's error as though the change had failed.
+   */
+  const changeAndCheck = async (
+    body: Parameters<typeof updateProfile.mutateAsync>[0],
+    { address, service }: { address: string; service: string },
+    { listed, refused, unread }: { listed: boolean; refused: string; unread: string },
+  ) => {
+    await updateProfile.mutateAsync(body);
+    let rows: Identity[];
+    try {
+      rows = (await identities.refetch({ throwOnError: true })).data ?? [];
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : String(e);
+      throw new Error(`${unread} ${reason}`);
+    }
+    if (listsIdentity(rows, address, service) !== listed) {
+      throw new Error(refused);
+    }
+  };
+
+  const confirmAdd = async (identity: { address: string; service: HandleService }) => {
     setAddError("");
     try {
-      await updateProfile.mutateAsync({ identities: [{ address, service }] });
-      const { data } = await identities.refetch({ throwOnError: true });
-      if (!listsIdentity(data ?? [], address, service)) {
-        throw new Error("The server did not add that identity.");
-      }
+      await changeAndCheck({ identities: [identity] }, identity, {
+        listed: true,
+        refused: "The server did not add that identity.",
+        unread: "The identity was added, but the list could not be loaded again.",
+      });
       setAdding(false);
     } catch (e) {
       setAddError(e instanceof Error ? e.message : String(e));
@@ -109,11 +136,11 @@ export function IdentitiesSection({
     const { address, service } = removeTarget;
     setRemoveError("");
     try {
-      await updateProfile.mutateAsync({ remove_identities: [{ address, service }] });
-      const { data } = await identities.refetch({ throwOnError: true });
-      if (listsIdentity(data ?? [], address, service)) {
-        throw new Error("The server did not remove that identity.");
-      }
+      await changeAndCheck({ remove_identities: [{ address, service }] }, removeTarget, {
+        listed: false,
+        refused: "The server did not remove that identity.",
+        unread: "The identity was removed, but the list could not be loaded again.",
+      });
       setRemoveTarget(null);
     } catch (e) {
       setRemoveError(e instanceof Error ? e.message : String(e));

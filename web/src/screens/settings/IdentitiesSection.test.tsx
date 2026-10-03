@@ -202,6 +202,28 @@ describe("IdentitiesSection", () => {
   const whatsapp: Identity = { ...identities[0], service: "whatsapp" };
   const listed = (items: Identity[]) => items;
 
+  it("says the identity was added when only reading the list again failed", async () => {
+    const user = userEvent.setup({ delay: null });
+    listAccountIdentities
+      .mockResolvedValueOnce(identities)
+      .mockRejectedValue(new Error("Service Unavailable"));
+    mutateAsync.mockResolvedValue(profile);
+    render(<IdentitiesSection profile={profile} />);
+
+    await user.click(await screen.findByRole("button", { name: "Add identity" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add identity" });
+    await user.type(within(dialog).getByRole("textbox", { name: "Identity" }), "+1 555 555 0199");
+    await user.click(within(dialog).getByRole("button", { name: "Add" }));
+
+    expect(
+      await within(dialog).findByText(
+        "The identity was added, but the list could not be loaded again. Service Unavailable",
+        {},
+        { timeout: 5000 },
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("keeps the dialog open when a WhatsApp add of a number on Text Message added nothing", async () => {
     const user = userEvent.setup({ delay: null });
     // The profile lists the Text Message number in `phones` with no service,

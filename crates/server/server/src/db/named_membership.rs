@@ -97,7 +97,7 @@ pub fn tag_spec() -> &'static MembershipSpec {
         member_column: "conversation_id",
         member_table: "conversations",
         label: "tag",
-        reserved_label: "tag",
+        reserved_label: "Message Tag",
         member_label: "conversation",
         max_name_len: MAX_NAME_LEN,
         reserved: &[
@@ -178,16 +178,6 @@ pub fn group_spec() -> &'static MembershipSpec {
             ("trash", "Trash is a reserved Contact Group"),
             ("no messages", "No messages is a reserved Contact Group"),
             ("no-messages", "No messages is a reserved Contact Group"),
-            ("groups", "Group Messages is a reserved name"),
-            ("group", "Group Messages is a reserved name"),
-            ("group chats", "Group Messages is a reserved name"),
-            ("group-chats", "Group Messages is a reserved name"),
-            ("group chats 2", "Group Messages is a reserved name"),
-            ("group-chats-2", "Group Messages is a reserved name"),
-            ("group messages", "Group Messages is a reserved name"),
-            ("group-messages", "Group Messages is a reserved name"),
-            ("group messages 2", "Group Messages is a reserved name"),
-            ("group-messages-2", "Group Messages is a reserved name"),
         ],
         // A name holding `;` would come back from an address book export
         // and load as two Contact Groups.

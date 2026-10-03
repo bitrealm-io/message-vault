@@ -27,7 +27,7 @@ export { composeCountComparison };
  * `contacts` the contact-list form. Trash sends one query to both the
  * contacts and the conversations list, so it may only offer words both
  * accept: it shows the contacts form, every word of which (`name:`,
- * `handle:`, `first-message:`, `last-message:`, `messages:`, `service:`) is
+ * `identity:`, `first-message:`, `last-message:`, `messages:`, `service:`) is
  * registered on both lists, while the messages form's `participants:` is
  * conversations-only.
  */

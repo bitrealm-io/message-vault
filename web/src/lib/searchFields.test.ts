@@ -21,7 +21,7 @@ describe("hasFieldToken", () => {
 describe("stripFieldTokens", () => {
   it("keeps the words and drops the tokens", () => {
     expect(stripFieldTokens("ana group:Family")).toBe("ana");
-    expect(stripFieldTokens('handle:"+1 555" bo -tag:x')).toBe("bo");
+    expect(stripFieldTokens('identity:"+1 555" bo -tag:x')).toBe("bo");
     expect(stripFieldTokens("just words")).toBe("just words");
   });
   it("drops a token a bracket opens too", () => {

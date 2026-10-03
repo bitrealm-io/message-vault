@@ -349,7 +349,7 @@ function OneContactDrawer({
             )}
             <div className="mb-1.5">
               <span className="text-[0.75rem] font-semibold uppercase tracking-[0.04em] text-muted">
-                Contact groups
+                Contact Groups
               </span>
             </div>
             <div className="flex min-h-6 flex-wrap items-center gap-1.5">
@@ -367,7 +367,9 @@ function OneContactDrawer({
                   </span>
                 ))
               ) : (
-                <span className="py-0.5 text-[0.75rem] leading-4 text-muted">No groups</span>
+                <span className="py-0.5 text-[0.75rem] leading-4 text-muted">
+                  No Contact Groups
+                </span>
               )}
             </div>
           </div>

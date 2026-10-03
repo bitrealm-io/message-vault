@@ -35,12 +35,12 @@ The username of the logged-in account is always shown beside that button, on eve
 ## The conversation list
 
 Each row is one Conversation.
-A group chat and a one-to-one Conversation appear in the same list.
+A group Conversation and a one-to-one Conversation appear in the same list.
 
 A row shows four things:
 
-- The title. A Conversation without a title shows the other person's name, or every participant's name for a group chat.
-- The number of participants, for a group chat.
+- The title. A Conversation without a title shows the other person's name, or every participant's name for a group Conversation.
+- The number of participants, for a group Conversation.
 - How the messages travelled. iMessage, SMS, and MMS all read **Text Message**, and WhatsApp keeps its own name.
 - The days of the first and the last message.
 
@@ -53,7 +53,7 @@ The count at the bottom of the list reads like `1–12 of 382`: the rows on scre
 More rows load as the list scrolls.
 
 The search box at the top narrows the list.
-`kind:group` leaves only group chats, and `source:whatsapp` leaves only Conversations with messages from a WhatsApp backup.
+`kind:group` leaves only group Conversations, and `source:whatsapp` leaves only Conversations with messages from a WhatsApp backup.
 [Search](/docs/user/features/messages/search/) lists every search word.
 
 Each row has a checkbox, and the checkbox above the list ticks every row loaded so far.
@@ -62,7 +62,7 @@ The tag button acts on the ticked rows.
 
 ## The open conversation
 
-The header shows the title, or the number of participants for an untitled group chat.
+The header shows the title, or the number of participants for an untitled group Conversation.
 Selecting the title folds the participant names away and back.
 A participant's name opens that Contact.
 
@@ -71,7 +71,7 @@ Up to three buttons follow:
 
 - **Sources** lists each backup the Conversation's messages were imported from, with a message count for each.
 - **Move to trash** moves the Conversation to the Trash and returns to the list.
-- **Make a Contact Group** makes a Contact Group from the people in a group chat. It appears only when the group chat has two or more participants who are Contacts, because a Contact Group holds Contacts.
+- **Make a Contact Group** makes a Contact Group from the people in a group Conversation. It appears only when the group Conversation has two or more participants who are Contacts, because a Contact Group holds Contacts.
 
 Messages appear 50 to a page.
 **Previous** and **Next** turn the page, and the label between them reads like `Messages 1–50 of 1395`.

@@ -63,7 +63,7 @@ Example: `<sms address="+15555550101" date="1400773261000" type="1" body="hello 
 - Every `<mms>` / `<part>` / `<addr>` attribute → `source_fields_json`
 - Empty participant lists are skipped and counted in the run report. A part whose `data` is not base64 is dropped and counted as `skipped_unreadable_part`
 
-Example group address string: `+15555550101~+15555550102` with two From/To addrs becomes a group chat titled from those two numbers.
+Example group address string: `+15555550101~+15555550102` with two From/To addrs becomes a group conversation titled from those two numbers.
 
 **Group chat identity limitation:** the format has no stable thread ID, so a group conversation is keyed by the sorted set of participant numbers (`chat-group-…`). When the roster changes (someone is added or removed), messages before and after the change are grouped into two separate conversations. This is inherent to the source data and cannot be recovered.
 

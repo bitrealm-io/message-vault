@@ -36,6 +36,7 @@ import type { components } from "../lib/serverApi.types";
 import { useTimeZone } from "../lib/timeZone";
 import { UNKNOWN_GROUP } from "../lib/unknownGroup";
 import { useContactGroups } from "../lib/useContactGroups";
+import { useResetOnChange } from "../lib/useResetOnChange";
 import { useSelectAll } from "../lib/useSelectAll";
 
 const FILTER_DEBOUNCE_MS = 300;
@@ -194,13 +195,10 @@ export default function ContactList({
   const advancedActive = hasFieldToken(filter);
 
   // A new filter or group unticks every row, so a tick never applies to a row the list no longer shows.
-  const filterKey = JSON.stringify([filter, groupFilter]);
-  const [checkedForFilter, setCheckedForFilter] = useState(filterKey);
-  if (checkedForFilter !== filterKey) {
-    setCheckedForFilter(filterKey);
+  useResetOnChange([filter, groupFilter], () => {
     setRangeAnchor(null);
     setCheckedIds(new Set());
-  }
+  });
 
   useEffect(() => {
     if (clearCheckedRev === 0) return;

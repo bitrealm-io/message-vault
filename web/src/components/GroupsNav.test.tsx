@@ -94,6 +94,19 @@ describe("GroupsNav", () => {
     expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Delete" }));
   });
 
+  it("walks a menu opened with the pointer from its first item", async () => {
+    const user = userEvent.setup();
+    renderNav("/contacts");
+    await user.click(screen.getByRole("button", { name: "Contact Group options for College" }));
+
+    // Opened with the pointer, the menu itself has focus, and the first arrow
+    // press lands on the first item.
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Rename…" }));
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Delete" }));
+  });
+
   it("returns focus to the trigger when the menu closes", async () => {
     const user = userEvent.setup();
     renderNav("/contacts");

@@ -24,6 +24,7 @@ import { hasFieldToken } from "../lib/searchFields";
 import { listConversations } from "../lib/serverApi";
 import type { Conversation } from "../lib/types";
 import { useMessageTags } from "../lib/useMessageTags";
+import { useResetOnChange } from "../lib/useResetOnChange";
 import { useSelectAll } from "../lib/useSelectAll";
 
 const QUERY_DEBOUNCE_MS = 300;
@@ -47,11 +48,7 @@ export default function ConversationList({
   const setRightToolbar = useSetRightToolbar();
 
   // A new query unticks every row, so a tick never applies to a row the list no longer shows.
-  const [checkedForQuery, setCheckedForQuery] = useState(query);
-  if (checkedForQuery !== query) {
-    setCheckedForQuery(query);
-    setCheckedIds(new Set());
-  }
+  useResetOnChange([query], () => setCheckedIds(new Set()));
 
   useEffect(() => {
     // A query that names a word applies at once, so the list does not flash empty.

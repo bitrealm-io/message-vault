@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { apiErrorMessage } from "./apiErrorMessage";
+import { useResetOnChange } from "./useResetOnChange";
 
 /**
  * Select all on a paged list: load every page the list has not read yet,
@@ -26,11 +27,7 @@ export function useSelectAll<T>(
   const selecting = selectingFor === scopeKey;
   // A failure is for the list as it was: leaving it clears the message, so
   // coming back to the same search does not show it again.
-  const [failureScope, setFailureScope] = useState(scopeKey);
-  if (failureScope !== scopeKey) {
-    setFailureScope(scopeKey);
-    if (failure) setFailure(null);
-  }
+  useResetOnChange(scope, () => setFailure(null));
 
   const selectAll = async () => {
     if (selecting) return;

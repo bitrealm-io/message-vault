@@ -206,5 +206,33 @@ describe("ConversationList", () => {
         Array.from({ length: 120 }, (_, i) => i + 1),
       );
     });
+
+    it("keeps every conversation selected when the list reloads after an action", async () => {
+      serveConversations(1200);
+      vi.mocked(updateMessageTagMembers).mockResolvedValue({ added: 1200, removed: 0 });
+      renderList();
+      const user = userEvent.setup({ delay: null });
+      await screen.findByRole("checkbox", { name: "Select Chat 1" });
+
+      const box = screen.getByRole("checkbox", { name: "Select all conversations" });
+      await user.click(box);
+      await waitFor(() => expect(box).toBeChecked());
+
+      await user.click(screen.getByRole("button", { name: "Message Tags" }));
+      await user.click(await screen.findByRole("checkbox", { name: "Holiday" }));
+      await waitFor(() => expect(vi.mocked(updateMessageTagMembers)).toHaveBeenCalledTimes(1));
+      // Setting a Message Tag reloads the list, every page of it.
+      const lastPageReads = () =>
+        vi.mocked(listConversations).mock.calls.filter(([params]) => params.offset === 1040)
+          .length;
+      await waitFor(() => expect(lastPageReads()).toBe(2));
+      await waitFor(() => expect(box).toBeChecked());
+
+      await user.click(await screen.findByRole("checkbox", { name: "Receipts" }));
+      await waitFor(() => expect(vi.mocked(updateMessageTagMembers)).toHaveBeenCalledTimes(2));
+      const [id, body] = vi.mocked(updateMessageTagMembers).mock.calls[1] ?? [];
+      expect(id).toBe(2);
+      expect(body?.add).toHaveLength(1200);
+    });
   });
 });

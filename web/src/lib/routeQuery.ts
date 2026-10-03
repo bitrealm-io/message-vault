@@ -234,9 +234,13 @@ export function useRoutePagedList<T extends { id: string | number }>(
   const account = useAccountScope();
   const firstPageSize = opts?.firstPageSize ?? PAGE_SIZE_FIRST;
   const fillPageSize = opts?.fillPageSize ?? PAGE_SIZE_FILL;
-  // `loadAll` reads the rest of the list in the largest pages the server
-  // answers; a page loaded because the person scrolled stays small.
-  const loadingAll = useRef(false);
+  const queryKey = routeQueryKey(account, key);
+  // Once `loadAll` has run for this list, its pages after the first are the
+  // largest the server answers, and stay so: a refetch reads as many pages as
+  // it holds, and pages of another size would hold fewer rows than were
+  // selected. A list that only scrolls keeps small pages.
+  const keyText = JSON.stringify(queryKey);
+  const largePagesFor = useRef<string | null>(null);
 
   const query = useInfiniteQuery<
     OffsetPage<T>,
@@ -245,12 +249,17 @@ export function useRoutePagedList<T extends { id: string | number }>(
     unknown[],
     number
   >({
-    queryKey: routeQueryKey(account, key),
+    queryKey,
     enabled: opts?.enabled ?? true,
     initialPageParam: 0,
     queryFn: ({ pageParam, signal }) =>
       fetchPage({
-        limit: pageParam === 0 ? firstPageSize : loadingAll.current ? PAGE_SIZE_MAX : fillPageSize,
+        limit:
+          pageParam === 0
+            ? firstPageSize
+            : largePagesFor.current === keyText
+              ? PAGE_SIZE_MAX
+              : fillPageSize,
         offset: pageParam,
         signal,
       }),
@@ -289,17 +298,13 @@ export function useRoutePagedList<T extends { id: string | number }>(
       if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage();
     },
     loadAll: async () => {
-      loadingAll.current = true;
-      try {
-        let result = query;
-        while (result.hasNextPage) {
-          result = await result.fetchNextPage();
-          if (result.isError) throw result.error;
-        }
-        return distinctRows(result.data?.pages ?? []);
-      } finally {
-        loadingAll.current = false;
+      largePagesFor.current = keyText;
+      let result = query;
+      while (result.hasNextPage) {
+        result = await result.fetchNextPage();
+        if (result.isError) throw result.error;
       }
+      return distinctRows(result.data?.pages ?? []);
     },
   };
 }

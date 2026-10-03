@@ -163,10 +163,10 @@ only the user resolves it.
    finished run only. Then sort every failed job: any that failed because of
    the pull request is fixed and pushed, which replaces the rerun; only when
    every failure is outside does the run get its rerun. Before the rerun,
-   look at the latest run on `main`: if the same job fails there, `main` is
-   red, so do not rerun, and report the pull request as blocked on `main`. A
-   job that fails outside the pull request again after its rerun also stops
-   the review, with a report. The run is green only
+   look at the last finished run on `main`: a rerun cannot pass while `main`
+   fails the same job, so the review stops there and reports the pull request
+   as blocked on `main`. A job that fails outside the pull request again after
+   its rerun also stops the review, with a report. The run is green only
    when its conclusion is `success`. A `cancelled` run means something pushed
    over it, so check the head. Green counts only while the pull request's
    head is still the commit you pushed: a push from another session moves it,

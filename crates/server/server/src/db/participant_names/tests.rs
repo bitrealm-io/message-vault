@@ -112,7 +112,7 @@ async fn contact_name_wins_over_the_backup_name() {
         .unwrap();
     let p = &loaded[&conversation_id][0];
     assert_eq!(p.name, "Robert Smith");
-    assert_eq!(p.handle, Some("+15555550100".to_string()));
+    assert_eq!(p.identity, Some("+15555550100".to_string()));
     assert_eq!(p.service, Some("imessage".to_string()));
     assert_eq!(p.contact_id, Some(contact_id));
 }
@@ -165,7 +165,7 @@ async fn the_chat_handle_takes_the_contact_name_and_id() {
     let loaded = loaded.get(&conversation_id).expect("chat-handle fallback");
     assert_eq!(loaded.len(), 1);
     assert_eq!(loaded[0].name, "Robert Smith");
-    assert_eq!(loaded[0].handle, Some("+15555550500".to_string()));
+    assert_eq!(loaded[0].identity, Some("+15555550500".to_string()));
     assert_eq!(loaded[0].service, Some("imessage".to_string()));
     assert_eq!(loaded[0].contact_id, Some(contact_id));
 }
@@ -241,7 +241,7 @@ async fn an_address_less_participant_appears_in_their_conversation() {
         .unwrap();
     let p = &loaded[&conversation_id][0];
     assert_eq!(p.name, "Sarah Vale");
-    assert_eq!(p.handle, Some("Sarah Vale".to_string()));
+    assert_eq!(p.identity, Some("Sarah Vale".to_string()));
     assert_eq!(p.service, Some("phone".to_string()));
     assert_eq!(p.contact_id, Some(contact_id));
 }
@@ -263,9 +263,9 @@ async fn addressed_and_address_less_participants_both_return_in_id_order() {
     let participants = &loaded[&conversation_id];
     assert_eq!(participants.len(), 2);
     assert_eq!(participants[0].name, "Bobby");
-    assert_eq!(participants[0].handle, Some("+15555550800".to_string()));
+    assert_eq!(participants[0].identity, Some("+15555550800".to_string()));
     assert_eq!(participants[1].name, "Sarah Vale");
-    assert_eq!(participants[1].handle, Some("Sarah Vale".to_string()));
+    assert_eq!(participants[1].identity, Some("Sarah Vale".to_string()));
     assert_eq!(participants[1].contact_id, Some(address_less_contact));
 }
 

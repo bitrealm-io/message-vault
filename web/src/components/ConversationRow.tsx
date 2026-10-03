@@ -38,7 +38,7 @@ function GroupNames({ conv }: { conv: Conversation }) {
         // recorded address, so neither alone is safe as a key; name is never
         // empty (server rule), so the combination is always present, and
         // distinct unless two addressless, unlinked participants share a name.
-        <span key={`${p.contact_id ?? ""}:${p.handle ?? ""}:${p.name}`}>
+        <span key={`${p.contact_id ?? ""}:${p.identity ?? ""}:${p.name}`}>
           {i > 0 ? ", " : null}
           <span className="whitespace-nowrap">{p.name}</span>
         </span>

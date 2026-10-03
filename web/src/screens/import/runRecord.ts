@@ -58,7 +58,7 @@ function isIssue(value: unknown): value is ImportIssue {
   const r = value as Record<string, unknown>;
   return (
     typeof r.kind === "string" &&
-    typeof r.step === "string" &&
+    (r.stage === "staging" || r.stage === "media" || r.stage === "upload") &&
     typeof r.item === "string" &&
     typeof r.reason === "string"
   );
@@ -131,7 +131,7 @@ export function wholeRun(carried: RunRecord, part: RunPart): RunRecord {
   return {
     issues: [
       ...carried.issues,
-      ...part.issues.filter((issue) => !(issue.step === "upload" && skipped.has(issue.item))),
+      ...part.issues.filter((issue) => !(issue.stage === "upload" && skipped.has(issue.item))),
     ],
     durationMs: sum(carried.durationMs, part.durationMs),
     parseMs: sum(carried.parseMs, part.parseMs),
@@ -168,7 +168,7 @@ export function recordToCarry(carried: RunRecord, part: RunPart): RunRecord {
   const issues = part.issues.filter(
     (issue) =>
       !(issue.kind === "error" && issue.item === RUN_ERROR_ITEM) &&
-      !(issue.step === "upload" && conversations.has(issue.item)),
+      !(issue.stage === "upload" && conversations.has(issue.item)),
   );
   return wholeRun(carried, { ...part, issues });
 }

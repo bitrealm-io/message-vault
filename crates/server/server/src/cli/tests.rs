@@ -313,7 +313,7 @@ async fn imports_discard_clears_a_stranded_session_so_the_next_import_runs() {
     assert!(
         blocked
             .to_string()
-            .contains("already has an active import session"),
+            .contains("already has a running Import Run"),
         "{blocked}"
     );
     assert!(

@@ -1,9 +1,12 @@
 import StepProgress, { type Step, type StepStatus } from "../StepProgress";
 import VirtualizedImportIssuesTable from "./VirtualizedImportIssuesTable";
 
+/** The Stage (CONTEXT.md) an issue came from, as the server records it. */
+export type ImportIssueStage = "staging" | "media" | "upload";
+
 export type ImportIssue = {
   kind: string;
-  step: string;
+  stage: ImportIssueStage;
   item: string;
   reason: string;
 };

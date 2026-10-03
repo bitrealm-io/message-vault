@@ -124,7 +124,7 @@ async fn list_conversations_returns_summary() {
     assert!(!page.items[0].is_group);
     assert_eq!(page.items[0].participants.len(), 1);
     assert_eq!(
-        page.items[0].participants[0].handle,
+        page.items[0].participants[0].identity,
         Some("+15555550200".to_string())
     );
 }
@@ -596,7 +596,7 @@ fn find_participant<'a>(
     page.items
         .iter()
         .flat_map(|c| c.participants.iter())
-        .find(|p| p.handle.as_deref() == Some(handle))
+        .find(|p| p.identity.as_deref() == Some(handle))
         .expect("participant is in the page")
 }
 
@@ -2539,7 +2539,7 @@ async fn conversation_messages_name_the_person_a_thread_has_no_participants_row_
         "the message page names the same people the conversation does: {page}"
     );
     assert_eq!(
-        from_messages[0]["handle"].as_str().unwrap(),
+        from_messages[0]["identity"].as_str().unwrap(),
         format!("+1555{}", user.account_id),
         "and names them by the thread's own address: {page}"
     );

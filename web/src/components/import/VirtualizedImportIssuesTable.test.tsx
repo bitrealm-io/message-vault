@@ -30,27 +30,26 @@ afterEach(() => {
 function issue(partial: Partial<ImportIssue> & Pick<ImportIssue, "item" | "reason">): ImportIssue {
   return {
     kind: "error",
-    step: "upload",
+    stage: "upload",
     ...partial,
   };
 }
 
 describe("VirtualizedImportIssuesTable", () => {
-  it("names the Stage an error happened in, not the internal step", () => {
+  it("names the Stage an error happened in", () => {
     render(
       <VirtualizedImportIssuesTable
         issues={[
-          issue({ item: "a.jsonl", reason: "could not read", step: "parse" }),
-          issue({ item: "b.jsonl", reason: "HTTP 500 from server", step: "upload" }),
-          issue({ item: "c.jsonl", reason: "new kind of step", step: "reindex" }),
+          issue({ item: "a.jsonl", reason: "could not read", stage: "staging" }),
+          issue({ item: "b.jpg", reason: "ffmpeg failed", stage: "media" }),
+          issue({ item: "c.jsonl", reason: "HTTP 500 from server", stage: "upload" }),
         ]}
       />,
     );
     expect(screen.getByRole("columnheader", { name: "Stage" })).toBeInTheDocument();
     expect(screen.getByText("Staging")).toBeInTheDocument();
+    expect(screen.getByText("Media")).toBeInTheDocument();
     expect(screen.getByText("Upload")).toBeInTheDocument();
-    // A step this build does not know shows as it arrived.
-    expect(screen.getByText("reindex")).toBeInTheDocument();
   });
 
   it("shows the filename for a unique issue", () => {

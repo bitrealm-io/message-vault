@@ -461,7 +461,7 @@ pub(crate) async fn get_export(
 /// a time, oldest first unless `sort` says otherwise. An import, a trash or
 /// a new day since creation changes nothing here. A message deleted since
 /// leaves its place empty: `total` stays `message_count`, a page can hold
-/// fewer than `limit` items, and a client steps `offset` by `limit`. Each
+/// fewer than `limit` items, and a client advances `offset` by `limit`. Each
 /// page read raises the run's `messages_delivered` to the places reached.
 #[utoipa::path(
     get,
@@ -471,7 +471,7 @@ pub(crate) async fn get_export(
     params(
         ("id" = i64, Path, description = "Export Run id"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
-        ("offset" = Option<usize>, Query, description = "Places to skip in the run's list; a client steps it by `limit`. No cap, an offset past the end is an empty page"),
+        ("offset" = Option<usize>, Query, description = "Places to skip in the run's list; a client advances it by `limit`. No cap, an offset past the end is an empty page"),
         ("sort" = Option<String>, Query, description = "`date` or `-date`. Default `date`, oldest first.")
     ),
     responses(

@@ -205,7 +205,7 @@ describe("logging out during an Upload", () => {
     // The run stays at its Upload stage: it is paused, not completed, and no
     // conversation was recorded as failed.
     expect(completeImportMock).not.toHaveBeenCalled();
-    expect(setImportStageMock.mock.calls.map((call) => call[1])).toEqual(["pushing"]);
+    expect(setImportStageMock.mock.calls.map((call) => call[1])).toEqual(["upload"]);
     expect(getToken()).toBeNull();
     expect(result.current.auth.isAuthenticated).toBe(false);
     // The paused run is the account's (#1085): logged out, the screen shows

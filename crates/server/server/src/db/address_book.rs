@@ -29,7 +29,7 @@ pub const COLUMNS: [&str; 6] = [
     "display_name",
     "groups",
     "service",
-    "handle_type",
+    "identity_type",
     "identity",
 ];
 
@@ -129,7 +129,7 @@ struct FileRow {
     display_name: String,
     groups: String,
     service: String,
-    handle_type: String,
+    identity_type: String,
     identity: String,
 }
 
@@ -423,14 +423,14 @@ fn read_rows(csv_text: &str) -> Result<Vec<FileRow>, Vec<String>> {
             display_name: field(1),
             groups: field(2),
             service: field(3),
-            handle_type: field(4),
+            identity_type: field(4),
             identity: field(5),
         };
         let blank = row.contact_id.is_empty()
             && row.display_name.is_empty()
             && row.groups.is_empty()
             && row.service.is_empty()
-            && row.handle_type.is_empty()
+            && row.identity_type.is_empty()
             && row.identity.is_empty();
         if !blank {
             rows.push(row);
@@ -445,7 +445,7 @@ fn read_rows(csv_text: &str) -> Result<Vec<FileRow>, Vec<String>> {
 
 /// The identity a row lists, keyed the way the `handles` table keys it.
 /// `Ok(None)` for a row that lists no identity: one that leaves `service`,
-/// `handle_type` and `identity` all blank, which is how a contact with no
+/// `identity_type` and `identity` all blank, which is how a contact with no
 /// identity is written.
 ///
 /// `contact` is the contact the row names, when the account holds it. A
@@ -460,7 +460,7 @@ fn row_identity(
     snapshot: &Snapshot,
 ) -> Result<Option<FileIdentity>, String> {
     let n = row.number;
-    if row.service.is_empty() && row.handle_type.is_empty() && row.identity.is_empty() {
+    if row.service.is_empty() && row.identity_type.is_empty() && row.identity.is_empty() {
         return Ok(None);
     }
     let Some(service) = parse_service(&row.service) else {
@@ -469,10 +469,10 @@ fn row_identity(
             row.service
         ));
     };
-    let Some(handle_type) = parse_handle_type(&row.handle_type) else {
+    let Some(handle_type) = parse_handle_type(&row.identity_type) else {
         return Err(format!(
-            "row {n}: handle_type \"{}\" is not one Message Crate stores; use phone, email, username or other",
-            row.handle_type
+            "row {n}: identity_type \"{}\" is not one Message Crate stores; use phone, email, username or other",
+            row.identity_type
         ));
     };
     if row.identity.is_empty() {

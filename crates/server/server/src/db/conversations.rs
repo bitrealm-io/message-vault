@@ -67,7 +67,7 @@ fn conversation_order_by(keys: &[SortKey<ConversationSort>]) -> String {
 pub struct ConversationSummary {
     /// The conversation's id; search for it as `in:#<id>`.
     pub id: i64,
-    /// Participants with names and handles.
+    /// Participants with names and identities.
     pub participants: Vec<Participant>,
     /// Messages in the conversation (excluding hidden duplicates).
     pub message_count: u64,

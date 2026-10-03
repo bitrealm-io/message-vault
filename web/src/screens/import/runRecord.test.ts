@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
+import type { ImportIssue } from "../../components/import/ImportSummaryPanel";
 import type { PushFinishedReport } from "../../lib/tauri";
 import {
   EMPTY_RUN_RECORD,
   filesSkippedOverRun,
   parseRunRecord,
   type RunPart,
+  type RunRecord,
   recordToCarry,
   wholeRun,
 } from "./runRecord";
@@ -46,7 +48,7 @@ function part(overrides: Partial<RunPart> = {}): RunPart {
 describe("parseRunRecord", () => {
   it("reads a record back field by field", () => {
     const record = {
-      issues: [{ kind: "skip", step: "parse", item: "a.jpg", reason: "missing" }],
+      issues: [{ kind: "skip", stage: "staging", item: "a.jpg", reason: "missing" }],
       parseMs: 10,
       uploadMs: 20,
       bytesUploaded: 30,
@@ -63,17 +65,17 @@ describe("parseRunRecord", () => {
   it("leaves out a malformed issue and a field that is not a number", () => {
     expect(
       parseRunRecord({
-        issues: [{ kind: "skip" }, { kind: "error", step: "upload", item: "x", reason: "y" }],
+        issues: [{ kind: "skip" }, { kind: "error", stage: "upload", item: "x", reason: "y" }],
         uploadMs: "soon",
       }),
-    ).toEqual({ issues: [{ kind: "error", step: "upload", item: "x", reason: "y" }] });
+    ).toEqual({ issues: [{ kind: "error", stage: "upload", item: "x", reason: "y" }] });
   });
 });
 
 describe("wholeRun", () => {
   it("adds this part's times, bytes and Upload counts to the earlier parts'", () => {
-    const carried = {
-      issues: [{ kind: "skip", step: "parse", item: "a.jpg", reason: "missing" }],
+    const carried: RunRecord = {
+      issues: [{ kind: "skip", stage: "staging", item: "a.jpg", reason: "missing" }],
       durationMs: 5_000,
       parseMs: 100,
       attachmentsMs: 200,
@@ -91,7 +93,7 @@ describe("wholeRun", () => {
     const whole = wholeRun(
       carried,
       part({
-        issues: [{ kind: "skip", step: "upload", item: "c.jsonl:big.mov", reason: "too large" }],
+        issues: [{ kind: "skip", stage: "upload", item: "c.jsonl:big.mov", reason: "too large" }],
         uploadMs: 600.6,
         report: report({ conversations_ok: 1, conversations_skipped: 2, conversations_total: 3 }),
       }),
@@ -99,8 +101,8 @@ describe("wholeRun", () => {
 
     expect(whole).toEqual({
       issues: [
-        { kind: "skip", step: "parse", item: "a.jpg", reason: "missing" },
-        { kind: "skip", step: "upload", item: "c.jsonl:big.mov", reason: "too large" },
+        { kind: "skip", stage: "staging", item: "a.jpg", reason: "missing" },
+        { kind: "skip", stage: "upload", item: "c.jsonl:big.mov", reason: "too large" },
       ],
       // Whole milliseconds, which is what the server stores.
       durationMs: 6_000,
@@ -125,7 +127,7 @@ describe("wholeRun", () => {
       EMPTY_RUN_RECORD,
       part({
         issues: [
-          { kind: "skip", step: "upload", item: "a.jsonl", reason: "already imported or skipped" },
+          { kind: "skip", stage: "upload", item: "a.jsonl", reason: "already imported or skipped" },
         ],
         report: report({
           results: [{ file: "a.jsonl", status: "skipped", messages: 0, attachments: 0 }],
@@ -142,12 +144,12 @@ describe("wholeRun", () => {
 
 describe("recordToCarry", () => {
   it("keeps the attachment skips of a stopped Upload and drops what the resume reports again", () => {
-    const issues = [
-      { kind: "skip", step: "parse", item: "a.jpg", reason: "missing" },
-      { kind: "skip", step: "upload", item: "a.jsonl:big.mov", reason: "too large" },
-      { kind: "error", step: "upload", item: "b.jsonl", reason: "connection refused" },
-      { kind: "skip", step: "upload", item: "c.jsonl", reason: "the Upload was stopped" },
-      { kind: "error", step: "upload", item: "Import", reason: "the server went away" },
+    const issues: ImportIssue[] = [
+      { kind: "skip", stage: "staging", item: "a.jpg", reason: "missing" },
+      { kind: "skip", stage: "upload", item: "a.jsonl:big.mov", reason: "too large" },
+      { kind: "error", stage: "upload", item: "b.jsonl", reason: "connection refused" },
+      { kind: "skip", stage: "upload", item: "c.jsonl", reason: "the Upload was stopped" },
+      { kind: "error", stage: "upload", item: "Import", reason: "the server went away" },
     ];
     const carried = recordToCarry(
       EMPTY_RUN_RECORD,
@@ -164,8 +166,8 @@ describe("recordToCarry", () => {
       }),
     );
     expect(carried.issues).toEqual([
-      { kind: "skip", step: "parse", item: "a.jpg", reason: "missing" },
-      { kind: "skip", step: "upload", item: "a.jsonl:big.mov", reason: "too large" },
+      { kind: "skip", stage: "staging", item: "a.jpg", reason: "missing" },
+      { kind: "skip", stage: "upload", item: "a.jsonl:big.mov", reason: "too large" },
     ]);
   });
 });

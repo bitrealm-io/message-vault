@@ -18,7 +18,7 @@ function session(overrides: Partial<ActiveImportSession> = {}): ActiveImportSess
     mode: "append",
     status: "running",
     started_at: "2026-08-30T00:00:00Z",
-    stage: "pushing",
+    stage: "upload",
     staging_dir: "/home/u/message-crate/staging-260830",
     device_id: "this-device",
     form: { source: "imessage-ios" },
@@ -90,7 +90,7 @@ describe("ResumeImportPanel", () => {
     const onDiscard = vi.fn();
     const decision: ResumeDecision = {
       kind: "resume_gate",
-      session: session({ stage: "awaiting_gate_1" }),
+      session: session({ stage: "staging_review" }),
     };
     render(<ResumeImportPanel decision={decision} onResume={onResume} onDiscard={onDiscard} />);
 
@@ -114,7 +114,7 @@ describe("ResumeImportPanel", () => {
     const onDiscard = vi.fn();
     const decision: ResumeDecision = {
       kind: "resume_media",
-      session: session({ stage: "transcode" }),
+      session: session({ stage: "media" }),
     };
     render(<ResumeImportPanel decision={decision} onResume={onResume} onDiscard={onDiscard} />);
 
@@ -254,7 +254,7 @@ describe("ResumeImportPanel", () => {
   it("says nothing extra when there is no error to report", () => {
     const decision: ResumeDecision = {
       kind: "resume_gate",
-      session: session({ stage: "awaiting_gate_1" }),
+      session: session({ stage: "staging_review" }),
     };
     render(<ResumeImportPanel decision={decision} onResume={vi.fn()} onDiscard={vi.fn()} />);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -265,7 +265,7 @@ describe("ResumeImportPanel", () => {
     const onResume = vi.fn();
     const decision: ResumeDecision = {
       kind: "resume_gate",
-      session: session({ stage: "awaiting_gate_1" }),
+      session: session({ stage: "staging_review" }),
     };
     render(
       <ResumeImportPanel

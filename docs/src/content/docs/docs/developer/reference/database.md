@@ -128,7 +128,7 @@ tables and reads back into them, one row per `contact_handles` link:
 | `display_name` | `contacts.preferred_name`, trimmed |
 | `groups` | the names of the contact's `contact_groups`, joined with `;` |
 | `service` | `handles.service` |
-| `handle_type` | `handles.handle_type` |
+| `identity_type` | `handles.handle_type` |
 | `identity` | `handles.normalized` |
 
 `POST /v1/contacts/address-book` writes it and `POST /v1/contacts` loads it;

@@ -98,7 +98,7 @@ describe("Import history", () => {
     const running = {
       ...anImport(1),
       status: "running",
-      stage: "awaiting_gate_1",
+      stage: "staging_review",
       started_at: "2024-01-01T00:00:00Z",
       finished_at: null,
       summary: null,

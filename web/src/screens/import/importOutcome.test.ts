@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ImportIssue } from "../../components/import/ImportSummaryPanel";
 import type {
   AttachmentForecast,
   PushFinishedReport,
@@ -32,10 +33,10 @@ function report(overrides: Partial<PushFinishedReport> = {}): PushFinishedReport
  * the `"{conversationFile}:{relativePath}"` shape `message-crate-push` actually
  * emits (`AttachmentSkip`, built in `crates/libs/push/src/prepare.rs`), not
  * a bare path. */
-function tooLargeIssues(n: number): { kind: string; step: string; item: string; reason: string }[] {
+function tooLargeIssues(n: number): ImportIssue[] {
   return Array.from({ length: n }, (_, i) => ({
     kind: "skip",
-    step: "upload",
+    stage: "upload",
     item: `conversation.jsonl:attachments/2024-01-15-toolarge${i}.jpg`,
     reason: "attachment is 200000000 bytes (200 MiB), over the configured asset max of 100 MiB",
   }));
@@ -165,7 +166,7 @@ describe("importOutcome", () => {
       importOutcome({
         report: report(),
         threw: false,
-        issues: [{ kind: "skip", step: "upload", item: "attachments/a.jpg", reason: "not found" }],
+        issues: [{ kind: "skip", stage: "upload", item: "attachments/a.jpg", reason: "not found" }],
       }),
     ).toBe("completed_with_issues");
   });
@@ -235,7 +236,7 @@ describe("importOutcome against an approved plan", () => {
       threw: false,
       // The issue's item is the bare forecast name, no conversation-file
       // prefix and no path.
-      issues: [{ kind: "skip", step: "upload", item: "special-name.heic", reason: "too large" }],
+      issues: [{ kind: "skip", stage: "upload", item: "special-name.heic", reason: "too large" }],
       approved,
     });
     expect(outcome).toBe("completed");
@@ -260,7 +261,7 @@ describe("importOutcome against an approved plan", () => {
       issues: [
         {
           kind: "skip",
-          step: "upload",
+          stage: "upload",
           // The committed derivative after the media pass: same stem,
           // "-mv" suffix, new extension.
           item: "conversation.jsonl:attachments/2024-01-15-9f2a3b4c-mv.jpg",
@@ -279,7 +280,7 @@ describe("importOutcome against an approved plan", () => {
       issues: [
         {
           kind: "skip",
-          step: "upload",
+          stage: "upload",
           item: "conversation.jsonl:attachments/2024-02-02-unrelated.jpg",
           reason: "attachment file not found on disk",
         },
@@ -308,7 +309,7 @@ describe("importOutcome against an approved plan", () => {
       issues: [
         {
           kind: "error",
-          step: "upload",
+          stage: "upload",
           item: "conversation.jsonl:attachments/2024-01-15-toolarge0.jpg",
           reason: "upload failed",
         },
@@ -340,7 +341,7 @@ describe("importOutcome against an approved plan", () => {
       issues: [
         {
           kind: "skip",
-          step: "upload",
+          stage: "upload",
           item: "conversation.jsonl:attachments/2024-01-15-fine.jpg",
           reason: "attachment file not found on disk",
         },

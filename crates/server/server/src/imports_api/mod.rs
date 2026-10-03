@@ -145,7 +145,7 @@ pub struct ImportStats {
     pub messages_appended: u64,
     /// Import mode.
     pub mode: ImportMode,
-    /// Flagged phone handles (ambiguous; review note set) inserted by this import.
+    /// Flagged phone identities (ambiguous; review note set) inserted by this import.
     pub phones_needing_review: u64,
     /// Identities of type `other` this import met for people: a name the
     /// backup gave with no address, or a sender such as `AMAZON`. Each one is
@@ -612,11 +612,12 @@ pub(crate) struct CompleteImportRequest {
     pub(crate) issues: Vec<CompleteImportIssueRequest>,
 }
 
-/// One parse/convert/upload issue from the import.
+/// One error or skip a Stage of the Import Run reported.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub(crate) struct CompleteImportIssueRequest {
     pub(crate) kind: String,
-    pub(crate) step: String,
+    /// Stage the issue came from.
+    pub(crate) stage: crate::db::imports::ImportIssueStage,
     pub(crate) item: String,
     pub(crate) reason: String,
 }
@@ -708,7 +709,8 @@ pub(crate) struct ListImportsQuery {
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct ImportIssue {
     pub(crate) kind: String,
-    pub(crate) step: String,
+    /// Stage the issue came from.
+    pub(crate) stage: crate::db::imports::ImportIssueStage,
     item: String,
     reason: String,
 }
@@ -984,11 +986,8 @@ pub(crate) async fn create_import(
     let account = resolve_import_account(&auth);
     let stage = match body.stage.as_deref() {
         None => crate::db::imports::ImportStage::Parse,
-        Some(raw) => crate::db::imports::ImportStage::parse(raw).ok_or_else(|| {
-            ApiError::validation(format!(
-                "invalid import stage '{raw}'; expected one of parse, write, awaiting_gate_1, transcode, awaiting_gate_2, pushing"
-            ))
-        })?,
+        Some(raw) => crate::db::imports::ImportStage::parse(raw)
+            .ok_or_else(|| ApiError::validation(crate::db::imports::ImportStage::unknown(raw)))?,
     };
     // Credentials never reach the row, whoever the client is.
     let form = body.form.as_ref().map(strip_form_credentials);
@@ -1066,7 +1065,7 @@ pub(crate) async fn complete_import(
             .into_iter()
             .map(|issue| crate::db::imports::ImportIssueInput {
                 kind: issue.kind,
-                step: issue.step,
+                stage: issue.stage,
                 item: issue.item,
                 reason: issue.reason,
             })
@@ -1268,7 +1267,7 @@ fn import_detail_response(
         .into_iter()
         .map(|issue| ImportIssue {
             kind: issue.kind,
-            step: issue.step,
+            stage: issue.stage,
             item: issue.item,
             reason: issue.reason,
         })
@@ -1297,14 +1296,15 @@ fn import_detail_response(
     }
 }
 
-/// New stage for a running Import Run.
+/// New stage for a running Import Run: `parse`, `write`, `staging_review`,
+/// `media`, `media_review` or `upload`.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub(crate) struct UpdateImportRequest {
     pub(crate) stage: String,
-    /// What the user approved at the gate they just passed, when they passed one.
+    /// What the user approved at the Review they just passed, when they passed one.
     ///
     /// Recorded here rather than at completion so an approval survives a
-    /// reload: the summary shown at a gate is recomputed from the folder, but
+    /// reload: the summary shown at a Review is recomputed from the folder, but
     /// what was approved is a different question and only the run
     /// remembers it. Absent leaves the stored `summary_json` untouched —
     /// most stage changes carry nothing, and treating absent as null would
@@ -1341,10 +1341,7 @@ pub(crate) async fn update_import(
 ) -> Result<Json<ImportRun>, ApiError> {
     let account = resolve_import_account(&auth);
     let stage = crate::db::imports::ImportStage::parse(&body.stage).ok_or_else(|| {
-        ApiError::validation(format!(
-            "invalid import stage '{}'; expected one of parse, write, awaiting_gate_1, transcode, awaiting_gate_2, pushing",
-            body.stage
-        ))
+        ApiError::validation(crate::db::imports::ImportStage::unknown(&body.stage))
     })?;
     let summary_json = optional_json_string(body.summary.as_ref(), "summary")?;
     let mut conn = state.db.acquire().await?;

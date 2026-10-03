@@ -2,7 +2,7 @@ import type { ImportIssue } from "./ImportSummaryPanel";
 
 export type ImportIssueGroup = {
   kind: string;
-  step: string;
+  stage: string;
   reason: string;
   items: string[];
 };
@@ -12,13 +12,13 @@ export function groupImportIssues(issues: ImportIssue[]): ImportIssueGroup[] {
   const indexByKey = new Map<string, number>();
 
   for (const issue of issues) {
-    const key = `${issue.kind}\0${issue.step}\0${issue.reason}`;
+    const key = `${issue.kind}\0${issue.stage}\0${issue.reason}`;
     const existing = indexByKey.get(key);
     if (existing == null) {
       indexByKey.set(key, groups.length);
       groups.push({
         kind: issue.kind,
-        step: issue.step,
+        stage: issue.stage,
         reason: issue.reason,
         items: [issue.item],
       });

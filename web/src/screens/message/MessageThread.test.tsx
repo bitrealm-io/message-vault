@@ -31,7 +31,7 @@ function message(partial: Partial<Message> = {}): Message {
       chat_identifier: "x",
       conversation_type: "individual",
       group_title: null,
-      participants: [{ handle: "+1555", name: "Ada", contact_id: null }],
+      participants: [{ identity: "+1555", name: "Ada", contact_id: null }],
     },
     ...partial,
   };
@@ -87,8 +87,8 @@ describe("MessageThread", () => {
       conversation_type: "group",
       group_title: null,
       participants: [
-        { handle: "+15555550101", name: "Ada", contact_id: null },
-        { handle: "+15555550102", name: "Bo", contact_id: null },
+        { identity: "+15555550101", name: "Ada", contact_id: null },
+        { identity: "+15555550102", name: "Bo", contact_id: null },
       ],
     };
     const from = (id: number, sender: string, timestamp: string) =>

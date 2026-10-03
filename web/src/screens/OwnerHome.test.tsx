@@ -77,7 +77,7 @@ const anAccount = {
   storage_bytes: 2048,
   last_login_at: null,
   app: null,
-  app_version: null,
+  app_build: null,
 };
 
 /** The owner's own row, which leads the list and is account 1, the one logged in. */
@@ -494,7 +494,7 @@ describe("OwnerHome", () => {
       ...anAccount,
       last_login_at: "2026-09-01T10:00:00Z",
       app: "desktop",
-      app_version: "0.9.0+aaaa1111",
+      app_build: "0.9.0+aaaa1111",
     });
     const user = userEvent.setup({ delay: null });
     renderHome(["/owner/accounts/101"]);

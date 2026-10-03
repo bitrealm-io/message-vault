@@ -48,7 +48,7 @@ async fn complete_import_persists_timings_and_issues() {
             summary_json: Some(r#"{"parse":{"messages":10}}"#.into()),
             issues: vec![ImportIssueInput {
                 kind: "skip".into(),
-                step: "convert".into(),
+                stage: crate::db::imports::ImportIssueStage::Media,
                 item: "photo.heic".into(),
                 reason: "convert failed".into(),
             }],
@@ -101,7 +101,7 @@ async fn complete_import_rejects_invalid_issue_kind() {
             summary_json: None,
             issues: vec![ImportIssueInput {
                 kind: "warning".into(),
-                step: "upload".into(),
+                stage: crate::db::imports::ImportIssueStage::Upload,
                 item: "archive.zip".into(),
                 reason: "not allowed".into(),
             }],
@@ -187,13 +187,13 @@ async fn get_import_detail_returns_issues() {
             issues: vec![
                 ImportIssueInput {
                     kind: "skip".into(),
-                    step: "convert".into(),
+                    stage: crate::db::imports::ImportIssueStage::Media,
                     item: "photo.heic".into(),
                     reason: "convert failed".into(),
                 },
                 ImportIssueInput {
                     kind: "error".into(),
-                    step: "upload".into(),
+                    stage: crate::db::imports::ImportIssueStage::Upload,
                     item: "archive.zip".into(),
                     reason: "upload failed".into(),
                 },
@@ -210,9 +210,15 @@ async fn get_import_detail_returns_issues() {
     assert_eq!(detail.row.parse_ms, Some(18_000));
     assert_eq!(detail.issues.len(), 2);
     assert_eq!(detail.issues[0].kind, "skip");
-    assert_eq!(detail.issues[0].step, "convert");
+    assert_eq!(
+        detail.issues[0].stage,
+        crate::db::imports::ImportIssueStage::Media
+    );
     assert_eq!(detail.issues[1].kind, "error");
-    assert_eq!(detail.issues[1].step, "upload");
+    assert_eq!(
+        detail.issues[1].stage,
+        crate::db::imports::ImportIssueStage::Upload
+    );
 }
 
 #[tokio::test]
@@ -375,11 +381,11 @@ async fn stage_advances_and_discard_frees_the_slot() {
     let args = StartImportArgs::new(account, "imessage", "append", None);
     let id = start_import(&mut conn, &args).await.unwrap();
 
-    set_import_stage(&mut conn, account, id, ImportStage::Pushing, None)
+    set_import_stage(&mut conn, account, id, ImportStage::Upload, None)
         .await
         .unwrap();
     let active = running_import(&mut conn, account).await.unwrap();
-    assert_eq!(active.stage.as_deref(), Some("pushing"));
+    assert_eq!(active.stage.as_deref(), Some("upload"));
 
     discard_import(&mut conn, account, id).await.unwrap();
     assert!(
@@ -481,10 +487,10 @@ fn every_stage_round_trips_through_its_string() {
     for stage in [
         ImportStage::Parse,
         ImportStage::Write,
-        ImportStage::AwaitingGate1,
-        ImportStage::Transcode,
-        ImportStage::AwaitingGate2,
-        ImportStage::Pushing,
+        ImportStage::StagingReview,
+        ImportStage::Media,
+        ImportStage::MediaReview,
+        ImportStage::Upload,
     ] {
         assert_eq!(ImportStage::parse(stage.as_str()), Some(stage));
     }
@@ -502,7 +508,7 @@ async fn complete_import_refuses_a_run_that_has_finished() {
         status: "completed_with_issues".into(),
         issues: vec![ImportIssueInput {
             kind: "skip".into(),
-            step: "convert".into(),
+            stage: crate::db::imports::ImportIssueStage::Media,
             item: "photo.heic".into(),
             reason: "convert failed".into(),
         }],
@@ -602,7 +608,7 @@ async fn a_stage_change_that_lands_after_the_run_completed_is_refused() {
     complete_elsewhere(&mut other, id).await;
     let err = crate::db::write_tx::commit_during(
         other,
-        set_import_stage(&mut conn, ACCOUNT_ID, id, ImportStage::Pushing, None),
+        set_import_stage(&mut conn, ACCOUNT_ID, id, ImportStage::Upload, None),
     )
     .await
     .unwrap_err();

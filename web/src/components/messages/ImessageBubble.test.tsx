@@ -31,7 +31,7 @@ function message(partial: Partial<Message> = {}): Message {
       chat_identifier: "x",
       conversation_type: "individual",
       group_title: null,
-      participants: [{ handle: "+1555", name: "Ada", contact_id: null }],
+      participants: [{ identity: "+1555", name: "Ada", contact_id: null }],
     },
     ...partial,
   };

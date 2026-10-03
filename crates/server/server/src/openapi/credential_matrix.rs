@@ -665,7 +665,7 @@ pub(super) fn body_for(op: &Operation, n: usize) -> Option<(&'static str, Vec<u8
         }
         ("post", "/v1/contacts") => Some((
             "text/csv",
-            b"contact_id,display_name,groups,service,handle_type,identity\n,Robin,,phone,phone,+15555550199\n"
+            b"contact_id,display_name,groups,service,identity_type,identity\n,Robin,,phone,phone,+15555550199\n"
                 .to_vec(),
         )),
         ("post", "/v1/contacts/address-book") => json(json!({})),

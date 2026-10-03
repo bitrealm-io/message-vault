@@ -193,14 +193,14 @@ The file has one row for each identity, and six columns.
 | `display_name` | The contact's name. Blank for a contact with no name. |
 | `groups` | The contact's Contact Groups, separated by `;`. A Contact Group's name can't hold `;`, so the cell never needs escaping. |
 | `service` | `phone` for a text message identity, `whatsapp` for a WhatsApp one. |
-| `handle_type` | `phone`, `email`, `username`, or `other`. |
+| `identity_type` | `phone`, `email`, `username`, or `other`. |
 | `identity` | The phone number, email address, or username. |
 
 A contact with three identities is three rows, and its name and Contact Groups repeat on each.
 A contact with no identity is one row with the last three columns blank.
 
 ```csv title="address-book.csv"
-contact_id,display_name,groups,service,handle_type,identity
+contact_id,display_name,groups,service,identity_type,identity
 12,Ada Lovelace,Family;Work,phone,phone,'+15555550100
 12,Ada Lovelace,Family;Work,whatsapp,phone,'+15555550100
 12,Ada Lovelace,Family;Work,phone,email,ada@example.com
@@ -257,7 +257,7 @@ A load refuses:
 - A row with more cells than the header, most often a name with a comma that is not in double quotes. A row with fewer cells reads the missing ones at its end as blank.
 - A phone number that is not 4 to 15 digits, or holds anything but digits, spaces, and `+ - ( ) .`
 - An email address without exactly one `@` and text on both sides of it.
-- A `service` or `handle_type` that is not one of the values in the table above.
+- A `service` or `identity_type` that is not one of the values in the table above.
 - Two rows of one contact that give different names or different Contact Groups.
 - One identity listed under two contacts.
 - A Contact Group name the product reserves, such as `Unknown`.

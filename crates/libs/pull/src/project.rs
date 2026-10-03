@@ -156,7 +156,7 @@ fn participants_from_seed(seed: &Message) -> Vec<IrParticipant> {
     let mut participants = Vec::with_capacity(seed.conversation.participants.len());
     for p in &seed.conversation.participants {
         participants.push(IrParticipant {
-            handle: p.handle.clone(),
+            handle: p.identity.clone(),
             // `name` falls back to the raw handle when nothing names the
             // person (ADR-0006). Carrying a bare handle through as a display
             // name would let a later import write it onto a Contact as that
@@ -164,7 +164,7 @@ fn participants_from_seed(seed: &Message) -> Vec<IrParticipant> {
             // wrongly-named one — so only a name distinct from the handle
             // counts as a display name here. A participant with no handle at
             // all has nothing to be identical to, so their name always counts.
-            display_name: (p.handle.as_deref() != Some(p.name.as_str())).then(|| p.name.clone()),
+            display_name: (p.identity.as_deref() != Some(p.name.as_str())).then(|| p.name.clone()),
             handle_type: None,
         });
     }
@@ -329,7 +329,7 @@ mod tests {
     /// One page of `GET /v1/exports/{id}/messages` exactly as the server serializes
     /// it: `service` on the message rather than on the conversation, an
     /// attachment with no byte length, and a participant the source named
-    /// without recording an address, whose `handle` and `service` are `null`.
+    /// without recording an address, whose `identity` and `service` are `null`.
     ///
     /// This is a string literal on purpose. Every other fixture in this module
     /// builds the `message_crate_api_types` shapes in Rust, which is what let
@@ -362,9 +362,9 @@ mod tests {
             "conversation_type": "group",
             "group_title": "Book Club",
             "participants": [
-              { "name": "Robert Smith", "handle": "+15555550100", "service": "imessage", "contact_id": 3 },
-              { "name": "Sarah Vale", "handle": null, "service": null, "contact_id": 7 },
-              { "name": "+15555550200", "handle": "+15555550200", "service": "imessage" }
+              { "name": "Robert Smith", "identity": "+15555550100", "service": "imessage", "contact_id": 3 },
+              { "name": "Sarah Vale", "identity": null, "service": null, "contact_id": 7 },
+              { "name": "+15555550200", "identity": "+15555550200", "service": "imessage" }
             ]
           },
           "attachments": [
@@ -433,7 +433,7 @@ mod tests {
     #[test]
     fn each_message_keeps_its_owner_and_a_split_conversation_names_none_in_the_header() {
         let mut by_phone = seed_message_with_participant(Participant {
-            handle: Some("+15555550101".into()),
+            identity: Some("+15555550101".into()),
             name: "Sam".into(),
             service: None,
             contact_id: None,
@@ -488,7 +488,7 @@ mod tests {
     #[test]
     fn a_reply_with_tapbacks_keeps_its_threading_and_reactions() {
         let mut msg = seed_message_with_participant(Participant {
-            handle: Some("+1".into()),
+            identity: Some("+1".into()),
             name: "Sam".into(),
             service: None,
             contact_id: None,
@@ -538,7 +538,7 @@ mod tests {
     #[test]
     fn an_sms_with_a_file_is_an_mms_and_counts_toward_the_document() {
         let mut sms = seed_message_with_participant(Participant {
-            handle: Some("+1".into()),
+            identity: Some("+1".into()),
             name: "Sam".into(),
             service: None,
             contact_id: None,
@@ -561,7 +561,7 @@ mod tests {
     #[test]
     fn an_announcement_keeps_its_text() {
         let mut msg = seed_message_with_participant(Participant {
-            handle: Some("+1".into()),
+            identity: Some("+1".into()),
             name: "Sam".into(),
             service: None,
             contact_id: None,
@@ -611,7 +611,7 @@ mod tests {
                 conversation_type: "individual".into(),
                 group_title: None,
                 participants: vec![Participant {
-                    handle: Some("+1".into()),
+                    identity: Some("+1".into()),
                     name: "Sam".into(),
                     service: None,
                     contact_id: None,
@@ -631,7 +631,7 @@ mod tests {
     #[test]
     fn participants_from_seed_carries_a_real_name() {
         let seed = seed_message_with_participant(Participant {
-            handle: Some("+1".into()),
+            identity: Some("+1".into()),
             name: "Sam".into(),
             service: None,
             contact_id: None,
@@ -647,7 +647,7 @@ mod tests {
     #[test]
     fn participants_from_seed_drops_a_name_that_is_just_the_handle() {
         let seed = seed_message_with_participant(Participant {
-            handle: Some("+1".into()),
+            identity: Some("+1".into()),
             name: "+1".into(),
             service: None,
             contact_id: None,

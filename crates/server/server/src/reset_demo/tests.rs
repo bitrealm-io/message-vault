@@ -22,7 +22,7 @@ username = "demo"
     .expect("write seed.toml");
     fs::write(
         root.join("config/contacts.csv"),
-        "contact_id,display_name,groups,service,handle_type,identity\n\
+        "contact_id,display_name,groups,service,identity_type,identity\n\
          test,Test,,phone,phone,+15555550100\n",
     )
     .expect("write contacts");

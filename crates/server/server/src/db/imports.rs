@@ -9,51 +9,65 @@ use sqlx::{Row, SqliteConnection};
 use crate::db::begin_write;
 use crate::paging::{Direction, SortKey};
 
-/// Where a live import session is in its lifecycle.
+/// Where a running Import Run is: a part of one of its Stages, or a Review
+/// between them (`CONTEXT.md`).
 ///
 /// `status` records how a run ended; this records where it is. Both are
-/// needed: a session can sit at `Write` while running, and at `Write`
-/// having failed.
+/// needed: a run can sit at `Write` while running, and at `Write` having
+/// failed. `Parse` and `Write` are the two parts of the Staging Stage.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportStage {
-    /// Reading the backup. Nothing durable exists yet.
+    /// Staging, reading the backup. Nothing durable exists yet.
     Parse,
-    /// Writing conversation files and staging attachments.
+    /// Staging, writing conversation files and staging attachments.
     Write,
-    /// Waiting for the user to approve spending time on the media step.
-    AwaitingGate1,
-    /// Converting or compressing staged media.
-    Transcode,
-    /// Waiting for the user to approve what lands in the database.
-    AwaitingGate2,
-    /// Uploading to the server.
-    Pushing,
+    /// The Staging Review: waiting for the person to approve the Media Stage.
+    StagingReview,
+    /// The Media Stage: converting or compressing staged attachments.
+    Media,
+    /// The Media Review: waiting for the person to approve what lands in the
+    /// database.
+    MediaReview,
+    /// The Upload Stage: writing the staged messages into Message Crate.
+    Upload,
 }
 
 impl ImportStage {
+    /// Every stage, in the order a run passes through them.
+    pub const ALL: [Self; 6] = [
+        Self::Parse,
+        Self::Write,
+        Self::StagingReview,
+        Self::Media,
+        Self::MediaReview,
+        Self::Upload,
+    ];
+
     /// Stored spelling of this stage.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Parse => "parse",
             Self::Write => "write",
-            Self::AwaitingGate1 => "awaiting_gate_1",
-            Self::Transcode => "transcode",
-            Self::AwaitingGate2 => "awaiting_gate_2",
-            Self::Pushing => "pushing",
+            Self::StagingReview => "staging_review",
+            Self::Media => "media",
+            Self::MediaReview => "media_review",
+            Self::Upload => "upload",
         }
     }
 
     /// Parse a stored spelling, or `None` when it is not one of the six.
     pub fn parse(s: &str) -> Option<Self> {
-        match s {
-            "parse" => Some(Self::Parse),
-            "write" => Some(Self::Write),
-            "awaiting_gate_1" => Some(Self::AwaitingGate1),
-            "transcode" => Some(Self::Transcode),
-            "awaiting_gate_2" => Some(Self::AwaitingGate2),
-            "pushing" => Some(Self::Pushing),
-            _ => None,
-        }
+        Self::ALL.into_iter().find(|stage| stage.as_str() == s)
+    }
+
+    /// The problem detail for a stage the server does not know, listing
+    /// the six spellings it does.
+    pub fn unknown(raw: &str) -> String {
+        let expected: Vec<&str> = Self::ALL.iter().map(|stage| stage.as_str()).collect();
+        format!(
+            "invalid import stage '{raw}'; expected one of {}",
+            expected.join(", ")
+        )
     }
 }
 
@@ -106,6 +120,41 @@ impl ImportStatus {
 impl std::fmt::Display for ImportStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_str())
+    }
+}
+
+/// The Stage of an Import Run an issue came from: the values
+/// `import_issues.stage` holds and every issue on the wire carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ImportIssueStage {
+    /// Reading the backup and writing its messages and attachments into the
+    /// Staging Directory.
+    Staging,
+    /// Converting or compressing the staged attachments.
+    Media,
+    /// Writing the staged messages and attachments into Message Crate.
+    Upload,
+}
+
+impl ImportIssueStage {
+    /// Every stage, in the order a run passes through them.
+    pub const ALL: [Self; 3] = [Self::Staging, Self::Media, Self::Upload];
+
+    /// The value as the wire and the database spell it.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Staging => "staging",
+            Self::Media => "media",
+            Self::Upload => "upload",
+        }
+    }
+
+    /// The stage `value` spells, or `None` for any other word.
+    #[must_use]
+    pub fn parse(value: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|s| s.as_str() == value)
     }
 }
 
@@ -214,8 +263,8 @@ impl CompleteImportArgs {
 pub struct ImportIssueInput {
     /// Issue category: `error` or `skip`.
     pub kind: String,
-    /// Pipeline stage that reported it.
-    pub step: String,
+    /// Stage the issue came from.
+    pub stage: ImportIssueStage,
     /// The file or message the issue is about.
     pub item: String,
     /// Human-readable explanation.
@@ -231,8 +280,8 @@ pub struct ImportIssueRow {
     pub import_id: i64,
     /// Issue category: `error` or `skip`.
     pub kind: String,
-    /// Pipeline stage that reported it.
-    pub step: String,
+    /// Stage the issue came from.
+    pub stage: ImportIssueStage,
     /// The file or message the issue is about.
     pub item: String,
     /// Human-readable explanation.
@@ -336,7 +385,7 @@ pub enum StartImportError {
     /// resume or discard it; `message-crate-server imports discard` can
     /// discard it without the app.
     #[error(
-        "this account already has an active import session; open Import in the desktop app to resume or discard it, or run `message-crate-server imports discard --account <account>`"
+        "this account already has a running Import Run; open Import in the desktop app to resume or discard it, or run `message-crate-server imports discard --account <account>`"
     )]
     AlreadyActive,
     /// Anything else.
@@ -483,7 +532,7 @@ pub async fn require_running_import(
 }
 
 /// Move a live session to another stage, optionally recording what the user
-/// approved at the gate they just passed.
+/// approved at the Review they just passed.
 ///
 /// `summary_json` is written to `imports.summary_json` only when
 /// `Some`; `None` leaves whatever is already stored there untouched. Most
@@ -713,13 +762,13 @@ async fn insert_issues(
         sqlx::query(
             r"
             INSERT INTO import_issues (
-                import_id, kind, step, item, reason, created_at
+                import_id, kind, stage, item, reason, created_at
             ) VALUES ($1, $2, $3, $4, $5, $6)
             ",
         )
         .bind(import_id)
         .bind(&issue.kind)
-        .bind(&issue.step)
+        .bind(issue.stage.as_str())
         .bind(&issue.item)
         .bind(&issue.reason)
         .bind(Utc::now().to_rfc3339())
@@ -746,7 +795,7 @@ pub async fn get_import_detail(
     let row = get_owned_import(conn, account_id, import_id).await?;
     let issue_rows: Vec<(i64, i64, String, String, String, String, String)> = sqlx::query_as(
         r"
-        SELECT id, import_id, kind, step, item, reason, created_at
+        SELECT id, import_id, kind, stage, item, reason, created_at
         FROM import_issues
         WHERE import_id = $1
         ORDER BY id ASC
@@ -757,18 +806,23 @@ pub async fn get_import_detail(
     .await?;
     let issues = issue_rows
         .into_iter()
-        .map(
-            |(id, import_id, kind, step, item, reason, created_at)| ImportIssueRow {
+        .map(|(id, import_id, kind, stage, item, reason, created_at)| {
+            let stage = ImportIssueStage::parse(&stage).ok_or_else(|| {
+                sqlx::Error::Decode(
+                    format!("import_issues.stage holds unknown value '{stage}'").into(),
+                )
+            })?;
+            Ok(ImportIssueRow {
                 id,
                 import_id,
                 kind,
-                step,
+                stage,
                 item,
                 reason,
                 created_at,
-            },
-        )
-        .collect();
+            })
+        })
+        .collect::<std::result::Result<Vec<_>, sqlx::Error>>()?;
     Ok(ImportDetail { row, issues })
 }
 
@@ -812,7 +866,7 @@ pub struct ImportSummary {
     pub source_fingerprint: serde_json::Value,
     /// Addresses the backup's device sent from (JSON array), or null.
     pub source_identities: serde_json::Value,
-    /// What the user approved at the last gate they passed, or null. The
+    /// What the user approved at the last Review they passed, or null. The
     /// column `PATCH /v1/imports/{id}` writes with its `summary`.
     pub summary: serde_json::Value,
 }
@@ -972,7 +1026,7 @@ pub struct TopAttachment {
     /// Conversation label, when set.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub conversation_title: Option<String>,
-    /// Raw text of the conversation's chat handle (via `handles`).
+    /// Raw text of the identity that keys the conversation.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chat_identifier: Option<String>,
 }

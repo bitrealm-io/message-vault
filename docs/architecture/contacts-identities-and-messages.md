@@ -162,13 +162,13 @@ backup with a different spelling does not. See
 Contacts and identities arrive with message imports; the address book is
 how a person takes what the account holds out to a spreadsheet, corrects it,
 and puts it back. The file is Message Crate's own CSV, one row per identity:
-`contact_id, display_name, groups, service, handle_type, identity`. Export
+`contact_id, display_name, groups, service, identity_type, identity`. Export
 fills `contact_id` from `contacts.id`; on load, rows that share an id are one
 contact, a blank id makes a new contact, and any other text groups new rows
 under a key of the person's choosing. `display_name` and `groups` (Contact
 Group names, separated by `;`) describe the contact, so they repeat on each
 of its rows and must agree or be blank; two rows of one contact that disagree
-refuse the load. `service` and `handle_type` take the values the `handles`
+refuse the load. `service` and `identity_type` take the values the `handles`
 table stores. Why: an address book from a phone puts every number and email
 on the card into the database as a text-message identity whether or not a
 message ever used it, cannot say which service an address belongs to, and
@@ -197,7 +197,7 @@ add would leave a wrongly linked address unfixable from the sheet.
 
 **A load is strict, and refuses whole.** A phone is keyed by the one rule
 above, an email is lowercased and must be one `@` with text on both sides,
-an unknown `service` or `handle_type` is an error, and so is a row with more
+an unknown `service` or `identity_type` is an error, and so is a row with more
 fields than the header, whose cells cannot be matched to the columns. A row
 with fewer fields reads its missing trailing cells as blank, because a
 spreadsheet can drop empty cells at the end of a row and no column moves.

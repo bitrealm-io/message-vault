@@ -4,7 +4,7 @@
 //! Two crates sit on either side of these shapes: `message-crate-server`
 //! serializes them, and `message-crate-pull` deserializes them on its way to
 //! `message-ir`. While each kept its own struct, the two could disagree
-//! silently and did, three times: `message-crate-pull` declared `handle` a `String`
+//! silently and did, three times: `message-crate-pull` declared a participant's address a `String`
 //! after the server started sending `null` for a participant a backup named
 //! without an address, kept `#[serde(default)]` on a field the server had
 //! removed, and read a `service` off the conversation the server has never
@@ -326,20 +326,21 @@ api_shape! {
 api_shape! {
     /// One participant of a conversation, carrying the name to show for them:
     /// the Contact's name, else what that backup called them in that
-    /// conversation, else the handle.
+    /// conversation, else the identity.
     pub struct Participant {
         /// What to show for this person. Never empty — the server falls back to
-        /// the handle when nothing else names them, and to the name alone for
+        /// the identity when nothing else names them, and to the name alone for
         /// someone a backup named without recording any address.
         pub name: String,
-        /// Raw handle value (phone, email, or username). `None` when the source
+        /// The identity as the source wrote it: a phone number, email address
+        /// or username. `None` when the source
         /// named this person without recording any address for them.
-        pub handle: Option<String>,
+        pub identity: Option<String>,
         /// Platform service, e.g. `imessage`. `None` for the same reason as
-        /// `handle`: with no address there is nothing to carry a service on.
+        /// `identity`: with no address there is nothing to carry a service on.
         pub service: Option<String>,
-        /// Linked contact id: when the handle is on a Contact, or — for a
-        /// participant with no handle — the contact the server bound the name to
+        /// Linked contact id: when the identity is on a Contact, or — for a
+        /// participant with no identity — the contact the server bound the name to
         /// directly, since that is the only place the link is recorded for
         /// them. Matches the `id` every other contact shape uses, so a caller
         /// can compare the two without converting either.
@@ -370,7 +371,7 @@ api_shape! {
         pub sort_order: i64,
         /// True for messages sent by the account owner.
         pub is_from_me: bool,
-        /// Sender handle for incoming messages.
+        /// The sender's identity, for incoming messages.
         pub sender: Option<String>,
         /// The account holder's own address on this message: the one it was
         /// sent from, or the one it was received at. `None` when the backup
@@ -458,7 +459,7 @@ api_shape! {
         pub emoji: Option<String>,
         /// True when the account owner reacted.
         pub is_from_me: bool,
-        /// Reactor handle for incoming reactions.
+        /// The identity that reacted, for incoming reactions.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub sender: Option<String>,
     }
@@ -514,7 +515,7 @@ mod tests {
                 group_title: None,
                 participants: vec![Participant {
                     name: "Sarah Vale".into(),
-                    handle: None,
+                    identity: None,
                     service: None,
                     contact_id: None,
                 }],
@@ -553,7 +554,7 @@ mod tests {
         let read: Message = serde_json::from_str(&json).expect("reads back");
         assert_eq!(read.id, 1);
         assert_eq!(read.conversation.participants[0].name, "Sarah Vale");
-        assert_eq!(read.conversation.participants[0].handle, None);
+        assert_eq!(read.conversation.participants[0].identity, None);
         assert_eq!(read.attachments.len(), 1);
         assert_eq!(read.tapbacks[0].kind, "loved");
     }

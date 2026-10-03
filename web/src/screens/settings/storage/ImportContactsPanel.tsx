@@ -16,7 +16,7 @@ const REASON_LABEL: Record<ContactReason, string> = {
   created: "New",
   replaced_trashed: "New, replaces a trashed contact",
   named: "Named",
-  handle_added: "Identity added",
+  identity_added: "Identity added",
 };
 
 /** How close to the end of the list, in pixels, scrolling asks for the next page. */

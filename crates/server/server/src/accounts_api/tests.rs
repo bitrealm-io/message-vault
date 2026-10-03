@@ -155,7 +155,7 @@ fn sorted_keys(v: &serde_json::Value) -> Vec<&str> {
 const ACCOUNT_FIELDS: [&str; 19] = [
     "account_id",
     "app",
-    "app_version",
+    "app_build",
     "can_delete",
     "can_export",
     "can_import",
@@ -2466,10 +2466,10 @@ async fn the_account_list_shows_the_app_each_account_connects_with() {
         row("bob").app,
         Some(crate::db::session_tokens::AppKind::Desktop)
     );
-    assert_eq!(row("bob").app_version.as_deref(), Some("0.8.0+1234abcd"));
+    assert_eq!(row("bob").app_build.as_deref(), Some("0.8.0+1234abcd"));
     // The owner's own requests here named no app.
     assert_eq!(row("keeper").app, None);
-    assert_eq!(row("keeper").app_version, None);
+    assert_eq!(row("keeper").app_build, None);
 }
 
 // ---------------------------------------------------------------------------
@@ -2630,7 +2630,7 @@ async fn c2_1_the_owner_reads_no_address_or_search_text_in_the_history() {
         &format!("/v1/imports/{}", import["id"]),
         &alice.token,
         serde_json::json!({
-            "stage": "awaiting_gate_1",
+            "stage": "staging_review",
             "summary": { "conversations": 1, "messages": 3,
                          "contactIdentifiers": ["+15557654321"] }
         }),

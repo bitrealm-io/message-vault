@@ -40,7 +40,7 @@ describe("ImportContactsPanel", () => {
         { id: 1, name: "Ada Lovelace", reason: "replaced_trashed" },
         { id: 2, name: "Grace Hopper", reason: "created" },
         { id: 3, name: "Mary Jackson", reason: "named" },
-        { id: 4, name: "Katherine Johnson", reason: "handle_added" },
+        { id: 4, name: "Katherine Johnson", reason: "identity_added" },
       ],
       total: 4,
       limit: 40,

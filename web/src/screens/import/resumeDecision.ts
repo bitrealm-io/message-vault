@@ -65,13 +65,13 @@ export function resumeDecisionFor(args: {
   if (folder === "unknown") {
     return { kind: "folder_unknown", session };
   }
-  if (session.stage === "pushing") {
+  if (session.stage === "upload") {
     return { kind: "resume_push", session };
   }
-  if (session.stage === "awaiting_gate_1" || session.stage === "awaiting_gate_2") {
+  if (session.stage === "staging_review" || session.stage === "media_review") {
     return { kind: "resume_gate", session };
   }
-  if (session.stage === "transcode") {
+  if (session.stage === "media") {
     return { kind: "resume_media", session };
   }
   // Only the copy cares whether the backup still matches: every later stage

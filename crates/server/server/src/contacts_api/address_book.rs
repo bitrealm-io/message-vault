@@ -45,7 +45,7 @@ impl From<LoadError> for ApiError {
 
 /// Load an address book into this account. The body is the file itself:
 /// Message Crate's own CSV, one row per identity, with the columns
-/// `contact_id`, `display_name`, `groups`, `service`, `handle_type` and
+/// `contact_id`, `display_name`, `groups`, `service`, `identity_type` and
 /// `identity`, as `POST /v1/contacts/address-book` writes it.
 ///
 /// Rows that share a `contact_id` are one contact. An id the account holds
@@ -128,7 +128,7 @@ pub(crate) struct ExportAddressBookRequest {
 /// ones among them, or every contact when the body names neither.
 ///
 /// The answer is `text/csv`, not JSON: one row per identity, with the
-/// columns `contact_id`, `display_name`, `groups`, `service`, `handle_type`
+/// columns `contact_id`, `display_name`, `groups`, `service`, `identity_type`
 /// and `identity`. A contact's name and its Contact Group names, separated
 /// by `;`, repeat on each of its rows. A contact with no name has a blank
 /// `display_name`, and a contact with no identity is one row with the last

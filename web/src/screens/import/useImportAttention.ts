@@ -8,7 +8,7 @@ import { isReviewPhase, useImportRunState } from "./importRunStore";
 export type ImportAttention = "waiting" | "paused" | "failed";
 
 /** The server's stages at which a run is waiting for the person. */
-const WAITING_STAGES = new Set(["awaiting_gate_1", "awaiting_gate_2"]);
+const WAITING_STAGES = new Set(["staging_review", "media_review"]);
 
 /**
  * The badge for the run this window drives (`phase`, `status`) and the
@@ -30,7 +30,7 @@ export function importAttentionFor(
   if (phase === "done" && status === "paused") return "paused";
   if (phase !== "form" || !serverStage) return null;
   if (WAITING_STAGES.has(serverStage)) return "waiting";
-  return serverStage === "pushing" ? "paused" : null;
+  return serverStage === "upload" ? "paused" : null;
 }
 
 /**

@@ -14,7 +14,7 @@ fn write_jsonl(dir: &Path, name: &str, body: &str) -> PathBuf {
     path
 }
 
-/// A fixture holding one live import session at `awaiting_gate_1` whose
+/// A fixture holding one live import session at `staging_review` whose
 /// `summary_json` already carries `summary` — as if an earlier
 /// `PATCH /v1/imports/{id}` recorded a gate approval.
 async fn session_with_summary(summary: serde_json::Value) -> (TestFixture, RegisteredAccount, i64) {
@@ -32,7 +32,7 @@ async fn session_with_summary(summary: serde_json::Value) -> (TestFixture, Regis
         &mut conn,
         account.account_id,
         import_id,
-        crate::db::imports::ImportStage::AwaitingGate1,
+        crate::db::imports::ImportStage::StagingReview,
         Some(&summary.to_string()),
     )
     .await
@@ -72,7 +72,7 @@ async fn a_stage_change_with_a_summary_stores_it() {
         &fixture.state,
         &format!("/v1/imports/{import_id}"),
         &account.token,
-        serde_json::json!({"stage": "awaiting_gate_1", "summary": {"approved": true}}),
+        serde_json::json!({"stage": "staging_review", "summary": {"approved": true}}),
     )
     .await;
 
@@ -111,7 +111,7 @@ async fn a_stage_change_without_a_summary_does_not_erase_the_stored_one() {
         &fixture.state,
         &format!("/v1/imports/{import_id}"),
         &account.token,
-        serde_json::json!({"stage": "pushing"}),
+        serde_json::json!({"stage": "upload"}),
     )
     .await;
     assert_eq!(
@@ -124,6 +124,84 @@ async fn a_stage_change_without_a_summary_does_not_erase_the_stored_one() {
         stored_summary(&fixture, import_id).await,
         Some(serde_json::json!({"approved": true}))
     );
+}
+
+#[tokio::test]
+async fn a_stage_answers_by_the_words_of_context_md_only() {
+    // The stages and Reviews of an Import Run are named as CONTEXT.md names
+    // them. The old spellings are refused, not read as aliases.
+    let (fixture, account) = fixture_with_account().await;
+    let (_, created): (String, serde_json::Value) = post_created_json(
+        &fixture.state,
+        "/v1/imports",
+        &account.token,
+        serde_json::json!({ "source": "imessage" }),
+    )
+    .await;
+    let path = format!("/v1/imports/{}", created["id"]);
+
+    let (status, sentence) = crate::test_support::patch_failure(
+        &fixture.state,
+        &path,
+        &account.token,
+        serde_json::json!({"stage": "awaiting_gate_1"}),
+    )
+    .await;
+    assert_eq!(status, axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(
+        sentence
+            .contains("expected one of parse, write, staging_review, media, media_review, upload"),
+        "the refusal lists the stages the server knows: {sentence}"
+    );
+
+    let run: serde_json::Value = patch_json(
+        &fixture.state,
+        &path,
+        &account.token,
+        serde_json::json!({"stage": "staging_review"}),
+    )
+    .await;
+    assert_eq!(run["id"], created["id"]);
+}
+
+#[tokio::test]
+async fn an_issue_names_the_stage_it_came_from() {
+    let (fixture, account) = fixture_with_account().await;
+    let (_, created): (String, serde_json::Value) = post_created_json(
+        &fixture.state,
+        "/v1/imports",
+        &account.token,
+        serde_json::json!({ "source": "imessage" }),
+    )
+    .await;
+    let id = created["id"].as_i64().unwrap();
+    let issue = |stage: &str| {
+        serde_json::json!({
+            "status": "completed_with_issues",
+            "issues": [{ "kind": "skip", "stage": stage, "item": "a.jpg", "reason": "missing" }],
+        })
+    };
+
+    // A finer step of the desktop app is not a Stage.
+    let refused = crate::test_support::post_status(
+        &fixture.state,
+        &format!("/v1/imports/{id}/complete"),
+        &account.token,
+        issue("parse"),
+    )
+    .await;
+    assert_eq!(refused, axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+
+    let _: serde_json::Value = post_json(
+        &fixture.state,
+        &format!("/v1/imports/{id}/complete"),
+        &account.token,
+        issue("staging"),
+    )
+    .await;
+    let run: serde_json::Value =
+        get_json(&fixture.state, &format!("/v1/imports/{id}"), &account.token).await;
+    assert_eq!(run["issues"][0]["stage"], "staging");
 }
 
 /// Open a verify connection to an on-disk test database.
@@ -2307,7 +2385,7 @@ async fn every_route_on_another_accounts_run_is_not_found_and_changes_nothing() 
                 state,
                 &run,
                 token,
-                serde_json::json!({ "stage": "pushing", "summary": { "approved": true } }),
+                serde_json::json!({ "stage": "upload", "summary": { "approved": true } }),
             )
             .await,
         ),
@@ -3551,7 +3629,7 @@ async fn s6_1_with_follows_an_identity_an_address_book_moved() {
         &mut conn,
         TEST_ACCOUNT,
         &format!(
-            "contact_id,display_name,groups,service,handle_type,identity\n\
+            "contact_id,display_name,groups,service,identity_type,identity\n\
              {a},Ada,,,,\n\
              ,Bea,,phone,phone,+15555550123\n"
         ),

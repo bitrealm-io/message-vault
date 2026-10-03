@@ -15,7 +15,7 @@ vi.mock("../../lib/routeQuery", () => ({
 
 const post = vi.mocked(loadAddressBook);
 
-const FILE = "contact_id,display_name,groups,service,handle_type,identity\n";
+const FILE = "contact_id,display_name,groups,service,identity_type,identity\n";
 
 const NOTHING = {
   contacts_created: 0,

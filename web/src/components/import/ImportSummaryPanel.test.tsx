@@ -56,7 +56,7 @@ describe("ImportSummaryPanel", () => {
           issues: [
             {
               kind: "error",
-              step: "upload",
+              stage: "upload",
               item: "thread.jsonl",
               reason: "HTTP 500 from server",
             },

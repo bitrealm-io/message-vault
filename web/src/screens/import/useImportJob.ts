@@ -1,6 +1,7 @@
 import {
   completionTextFor,
   type ImportIssue,
+  type ImportIssueStage,
   type ImportSummaryView,
 } from "../../components/import/ImportSummaryPanel";
 import { getAccountId, getBaseUrl } from "../../lib/api";
@@ -60,12 +61,14 @@ import {
   EMPTY_TIMING,
   type ImportStep,
   isProgressStepComplete,
+  issueFromEvent,
   MEDIA_LABEL,
   recordStageTime,
   STAGING_LABEL,
   type StageTiming,
   setupDetail,
   stageDurations,
+  stageForStep,
   stepIndexFor,
   stepsFor,
   UPLOAD_LABEL,
@@ -180,7 +183,7 @@ function initialSteps(
  * already done (nothing here re-extracts), Upload is always still pending
  * (nothing here has uploaded yet), and Media (when this mode has it) is done
  * only when `mediaDone` says the pass already finished in an earlier run. A
- * resume at `transcode` passes `mediaDone: false` and then calls
+ * resume at `media` passes `mediaDone: false` and then calls
  * `runMediaPass`, which marks that same row active once it starts.
  */
 function resumeSteps(attachmentMedia: AttachmentMediaMode, mediaDone: boolean): ImportStep[] {
@@ -330,7 +333,7 @@ export function parseStoredStagingSummary(raw: unknown): StagingSummary | undefi
 type RunScratch = {
   /** The submitted form, parked while the identity stop is showing. */
   pendingIdentityForm: ImportJobFormValues | null;
-  activeStep: ImportIssue["step"];
+  activeStage: ImportIssueStage;
   issues: ImportIssue[];
   counts: { filesParsed?: number; messagesParsed?: number };
   timing: StageTiming;
@@ -369,7 +372,7 @@ type RunScratch = {
 function freshScratch(): RunScratch {
   return {
     pendingIdentityForm: null,
-    activeStep: "parse",
+    activeStage: "staging",
     issues: [],
     counts: {},
     timing: { ...EMPTY_TIMING },
@@ -492,9 +495,9 @@ function returnToForm(): void {
 }
 
 /** Start a run's bookkeeping from nothing. */
-function beginRun(form: ImportJobFormValues, firstStep: ImportIssue["step"]): void {
+function beginRun(form: ImportJobFormValues, firstStage: ImportIssueStage): void {
   scratch.importStartedAt = performance.now();
-  scratch.activeStep = firstStep;
+  scratch.activeStage = firstStage;
   scratch.issues = [];
   scratch.counts = {};
   scratch.timing = { ...EMPTY_TIMING };
@@ -574,12 +577,12 @@ function applyProgress(event: ImportProgressEvent): void {
 
   const stepIndex = stepIndexFor(event.step, scratch.attachmentMode);
   // No row for this step in the current mode (or an unrecognised step off
-  // the wire): leave activeStep pointing at whatever step has a row, so a
+  // the wire): leave activeStage pointing at the stage of whatever step has a row, so a
   // dropped event here never mislabels the next error.
   if (stepIndex < 0) return;
   // An issue raised during setup is a problem reading the backup, which is
-  // what "parse" names in the Import Errors list.
-  scratch.activeStep = event.step === "setup" ? "parse" : event.step;
+  // Staging in the Import Errors list.
+  scratch.activeStage = stageForStep(event.step);
 
   const detail = rowDetail(event);
   const done = isProgressStepComplete(event.step, event.done, event.total);
@@ -650,14 +653,14 @@ function progressDetail(event: ImportProgressEvent): string {
   return `${progressLabel(event.step, scratch.attachmentMode)}: ${counts}`;
 }
 
-function recordIssue(issue: ImportIssueEvent): void {
-  scratch.issues = [...scratch.issues, issue];
+function recordIssue(event: ImportIssueEvent): void {
+  scratch.issues = [...scratch.issues, issueFromEvent(event)];
 }
 
-function recordError(step: ImportIssue["step"], message: string): void {
+function recordError(stage: ImportIssueStage, message: string): void {
   scratch.issues = [
     ...scratch.issues,
-    { kind: "error", step, item: RUN_ERROR_ITEM, reason: message },
+    { kind: "error", stage, item: RUN_ERROR_ITEM, reason: message },
   ];
 }
 
@@ -739,7 +742,7 @@ async function moveStage(
  */
 async function moveStageAtReview(
   sessionId: number,
-  stage: "awaiting_gate_1" | "awaiting_gate_2",
+  stage: "staging_review" | "media_review",
   approvedPlan?: StagingSummary,
 ): Promise<boolean> {
   try {
@@ -882,7 +885,7 @@ async function finishImport(args: {
       ...finalSummary.issues,
       {
         kind: "error",
-        step: "upload",
+        stage: "upload",
         item: RUN_ERROR_ITEM,
         reason: `Message Crate didn't record the import as finished: ${completeRefused}`,
       },
@@ -960,10 +963,10 @@ async function uploadAndFinish(
   approvedPlan?: StagingSummary,
 ): Promise<void> {
   store.set({ running: true, phase: "running" });
-  scratch.activeStep = "upload";
+  scratch.activeStage = "upload";
   setRowByLabel(UPLOAD_LABEL, { status: "active", detail: "Uploading to Message Crate…" });
   try {
-    await moveStage(sessionId, "pushing", approvedPlan);
+    await moveStage(sessionId, "upload", approvedPlan);
   } catch (e: unknown) {
     // The server still has the run at its review, so the run stays there
     // and is not completed: a later visit offers that review again.
@@ -1009,14 +1012,14 @@ async function uploadAndFinish(
       pausedBeforeStart = true;
     } else {
       threw = true;
-      recordError(scratch.activeStep, msg);
+      recordError(scratch.activeStage, msg);
       failActiveStep();
     }
   }
   const uploadMs = performance.now() - uploadStartedAt;
   const report = pushResult?.report ?? null;
   // An Upload that did not send every conversation, paused or failed, is
-  // paused: the run stays at `pushing` with its folder, and resuming it
+  // paused: the run stays at `upload` with its folder, and resuming it
   // sends only what the push journal does not list.
   const status = pausedBeforeStart
     ? "paused"
@@ -1058,14 +1061,14 @@ async function runMediaPass(
   approvedSummary?: StagingSummary,
 ): Promise<void> {
   store.set({ running: true, phase: "running" });
-  scratch.activeStep = "media";
+  scratch.activeStage = "media";
   setRowByLabel(MEDIA_LABEL, { status: "active", detail: `${mediaVerb(form.attachmentMedia)}…` });
 
   // Carries the plan approved at the Staging Review even on this stage: a
   // crash mid-pass must not leave `summary_json` null with no baseline for
   // a later resume to diff against.
   try {
-    await moveStage(sessionId, "transcode", approvedSummary);
+    await moveStage(sessionId, "media", approvedSummary);
   } catch (e: unknown) {
     // The server still has the run at the Staging Review, so the run stays
     // there and is not completed: a later visit offers that review again.
@@ -1095,14 +1098,14 @@ async function runMediaPass(
       cancelled = true;
     } else {
       threw = true;
-      recordError(scratch.activeStep, msg);
+      recordError(scratch.activeStage, msg);
     }
   }
   const mediaMs = performance.now() - mediaStartedAt;
 
   if (threw || cancelled) {
     failActiveStep();
-    // Neither path writes another stage: the run stays at `transcode`,
+    // Neither path writes another stage: the run stays at `media`,
     // which is exactly where it got to. A cancellation also skips
     // `/complete` outright (see finishImport), so the run stays running and
     // resumable instead of completing and freeing the slot out from under a
@@ -1129,7 +1132,7 @@ async function runMediaPass(
   try {
     const actual = await summarizeStagingWithProgress({ staging_dir: outputDir });
     store.set({ mediaSummary: actual, mediaFailedCount: transcodeReport?.failed ?? null });
-    await moveStageAtReview(sessionId, "awaiting_gate_2", approvedSummary);
+    await moveStageAtReview(sessionId, "media_review", approvedSummary);
     await saveCarriedRecord();
     waitAtReview("media_review");
   } catch (e: unknown) {
@@ -1200,7 +1203,7 @@ async function runImport(
 ): Promise<void> {
   if (!isTauri()) return;
   let form = withShownAttachmentMode(submitted);
-  beginRun(form, "parse");
+  beginRun(form, "staging");
   store.set({
     running: true,
     phase: "running",
@@ -1332,7 +1335,7 @@ async function runImport(
       computingSummary: true,
     });
 
-    await moveStageAtReview(sessionId, "awaiting_gate_1");
+    await moveStageAtReview(sessionId, "staging_review");
     // Staging's issues and times are only in memory until now, and the run
     // may be resumed from this Review after the app closes.
     await saveCarriedRecord();
@@ -1342,7 +1345,7 @@ async function runImport(
     // `/complete` and end the run, stranding that work with no way back to
     // it. This mirrors `resumeAtGate`'s landing exactly: return to the form
     // instead, surfacing the failure on `resumeError`. The stage already
-    // written above (`awaiting_gate_1`) stays as it is: the next visit's
+    // written above (`staging_review`) stays as it is: the next visit's
     // resume check finds the same run and offers this recompute again.
     try {
       const summary = await summarizeStagingWithProgress({ staging_dir: outputDir });
@@ -1367,7 +1370,7 @@ async function runImport(
     // completes: a broken backup must not lock the account out of importing.
     const cancelled = msg === CANCELLED_MESSAGE;
     const stageNotRecorded = e instanceof StageNotRecordedError;
-    if (!cancelled) recordError(scratch.activeStep, msg);
+    if (!cancelled) recordError(scratch.activeStage, msg);
     failActiveStep();
     store.set({ computingSummary: false });
     await finishImport({
@@ -1538,8 +1541,8 @@ export function useImportJob() {
         if (reviewError != null) {
           const recorded =
             phase === "media_review"
-              ? await moveStageAtReview(sessionId, "awaiting_gate_2", stagingSummary ?? undefined)
-              : await moveStageAtReview(sessionId, "awaiting_gate_1");
+              ? await moveStageAtReview(sessionId, "media_review", stagingSummary ?? undefined)
+              : await moveStageAtReview(sessionId, "staging_review");
           if (!recorded) return;
         }
         if (phase === "staging_review" && mediaJobVerb(form.attachmentMedia) !== null) {
@@ -1554,8 +1557,8 @@ export function useImportJob() {
   }
 
   /**
-   * Resume a run the server reports waiting at a review (`awaiting_gate_1`
-   * / `awaiting_gate_2`) or mid Media (`transcode`).
+   * Resume a run the server reports waiting at a review (`staging_review`
+   * / `media_review`) or mid Media (`media`).
    *
    * `approve` can't do this itself: it depends on what the store holds
    * (`stagingSummary`, the form, `stagingDir`, `importSessionId`) that a
@@ -1594,9 +1597,9 @@ export function useImportJob() {
     resumedForm: ImportJobFormValues,
   ): Promise<void> {
     if (
-      session.stage !== "awaiting_gate_1" &&
-      session.stage !== "awaiting_gate_2" &&
-      session.stage !== "transcode"
+      session.stage !== "staging_review" &&
+      session.stage !== "media_review" &&
+      session.stage !== "media"
     ) {
       return;
     }
@@ -1606,7 +1609,7 @@ export function useImportJob() {
     const outputDir = session.staging_dir;
     const approved = parseStoredStagingSummary(session.summary);
 
-    beginRun(resumedForm, session.stage === "transcode" ? "media" : "parse");
+    beginRun(resumedForm, session.stage === "media" ? "media" : "staging");
     await loadCarriedRecord(outputDir);
     store.set({
       resumeError: null,
@@ -1665,11 +1668,11 @@ export function useImportJob() {
       }
     }
 
-    if (session.stage === "awaiting_gate_1") {
+    if (session.stage === "staging_review") {
       await landOn("staging_review", false);
       return;
     }
-    if (session.stage === "awaiting_gate_2") {
+    if (session.stage === "media_review") {
       await landOn("media_review", false);
       return;
     }

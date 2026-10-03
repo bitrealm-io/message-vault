@@ -1,14 +1,14 @@
 import { discardImport, listImports, setImportStage as setStage } from "./serverApi";
 import type { PathStat } from "./tauri";
 
-/** Where a live import session is. Mirrors the server's `ImportStage`. */
+/** Where a running Import Run is. Mirrors the server's `ImportStage`. */
 export const IMPORT_STAGES = [
   "parse",
   "write",
-  "awaiting_gate_1",
-  "transcode",
-  "awaiting_gate_2",
-  "pushing",
+  "staging_review",
+  "media",
+  "media_review",
+  "upload",
 ] as const;
 
 export type ImportStage = (typeof IMPORT_STAGES)[number];

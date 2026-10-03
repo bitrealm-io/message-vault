@@ -11,4 +11,4 @@ editUrl: false
 | Status | `403 Forbidden` |
 | Type | `https://messagecrate.app/docs/developer/reference/errors/not-the-owner` |
 
-This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates. Ask the owner to do it, or to give you what you need.
+This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do. Ask the owner to do it, or to give you what you need.

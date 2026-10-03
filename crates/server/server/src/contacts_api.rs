@@ -273,7 +273,7 @@ pub(crate) async fn summarize_contacts(
     Ok(Json(whole_page(items, MAX_CONTACT_SUMMARY_IDS)))
 }
 
-/// Full contact view: per-handle services, message stats, and group
+/// Full contact view: per-identity services, message stats, and group
 /// memberships.
 #[utoipa::path(
     get,
@@ -382,7 +382,7 @@ pub(crate) async fn restore_contact(
 /// Delete a trashed contact the way a phone's Delete Contact does: the name
 /// and the person's edits go, the contact becomes Unknown again and leaves
 /// the trash, and every conversation it was in stays as it is, showing the
-/// handle. Conversations are never deleted with a contact. A contact that is
+/// identity. Conversations are never deleted with a contact. A contact that is
 /// not in the trash answers 409.
 #[utoipa::path(
     delete,

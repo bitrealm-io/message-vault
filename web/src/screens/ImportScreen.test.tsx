@@ -192,7 +192,7 @@ function session(overrides: Partial<ActiveImportSession> = {}): ActiveImportSess
     mode: "append",
     status: "running",
     started_at: "2026-08-30T00:00:00Z",
-    stage: "pushing",
+    stage: "upload",
     staging_dir: "/home/u/message-crate/staging-260830",
     device_id: "this-device",
     form: { source: "imessage-ios" },
@@ -318,7 +318,7 @@ describe("ImportScreen entering Import", () => {
   });
 
   it("shows the resume panel instead of the form for a resumable session", async () => {
-    getActiveImportSessionMock.mockResolvedValue(session({ stage: "pushing" }));
+    getActiveImportSessionMock.mockResolvedValue(session({ stage: "upload" }));
     renderWithProviders(<ImportScreen />);
 
     expect(await screen.findByTestId("resume-panel")).toBeInTheDocument();
@@ -327,7 +327,7 @@ describe("ImportScreen entering Import", () => {
   });
 
   it("says the staging folder could not be checked, not that it is gone, when the stat fails", async () => {
-    getActiveImportSessionMock.mockResolvedValue(session({ stage: "pushing" }));
+    getActiveImportSessionMock.mockResolvedValue(session({ stage: "upload" }));
     invokePathStatMock.mockRejectedValue(new Error("ipc down"));
     renderWithProviders(<ImportScreen />);
 
@@ -337,7 +337,7 @@ describe("ImportScreen entering Import", () => {
 
   it("discards the session and drops through to the form", async () => {
     const user = userEvent.setup();
-    getActiveImportSessionMock.mockResolvedValue(session({ stage: "pushing" }));
+    getActiveImportSessionMock.mockResolvedValue(session({ stage: "upload" }));
     renderWithProviders(<ImportScreen />);
 
     await screen.findByTestId("resume-panel");
@@ -352,7 +352,7 @@ describe("ImportScreen entering Import", () => {
     // only on the server, so the badge reads it from there. Discard ends it,
     // and the badge must go at once rather than on a later refetch.
     const user = userEvent.setup();
-    let running: ActiveImportSession | null = session({ stage: "awaiting_gate_1" });
+    let running: ActiveImportSession | null = session({ stage: "staging_review" });
     getActiveImportSessionMock.mockImplementation(async () => running);
     listImportsMock.mockImplementation(async () => ({
       items: running ? [running] : [],
@@ -390,7 +390,7 @@ describe("ImportScreen entering Import", () => {
     const user = userEvent.setup();
     getActiveImportSessionMock.mockResolvedValue(
       session({
-        stage: "pushing",
+        stage: "upload",
         device_id: "this-device",
         staging_dir: "/home/u/message-crate/staging-260830",
       }),
@@ -414,7 +414,7 @@ describe("ImportScreen entering Import", () => {
     const user = userEvent.setup();
     getActiveImportSessionMock.mockResolvedValue(
       session({
-        stage: "pushing",
+        stage: "upload",
         device_id: "another-device",
         staging_dir: "/home/u/message-crate/staging-260830",
       }),
@@ -434,7 +434,7 @@ describe("ImportScreen entering Import", () => {
     const user = userEvent.setup();
     getActiveImportSessionMock.mockResolvedValue(
       session({
-        stage: "pushing",
+        stage: "upload",
         staging_dir: "/home/u/message-crate/staging-260830",
         form: {
           source: "imessage-ios",
@@ -498,9 +498,9 @@ describe("ImportScreen entering Import", () => {
   };
 
   it.each([
-    ["awaiting_gate_1", "resume_gate"],
-    ["awaiting_gate_2", "resume_gate"],
-    ["transcode", "resume_media"],
+    ["staging_review", "resume_gate"],
+    ["media_review", "resume_gate"],
+    ["media", "resume_media"],
   ] as const)(
     "routes a session at %s through resumeAtGate, not startImport or discard",
     async (stage, kind) => {
@@ -541,7 +541,7 @@ describe("ImportScreen entering Import", () => {
     // check, and since nothing was touched server-side, it finds the exact
     // same session and shows the panel again -- this is the retry.
     getActiveImportSessionMock.mockResolvedValue(
-      session({ stage: "awaiting_gate_1", form: restorableForm }),
+      session({ stage: "staging_review", form: restorableForm }),
     );
     const { rerender } = renderWithProviders(<ImportScreen />);
 
@@ -731,7 +731,7 @@ describe("ImportScreen entering Import", () => {
     });
     expect(getActiveImportSessionMock).toHaveBeenCalledTimes(1);
 
-    getActiveImportSessionMock.mockResolvedValue(session({ stage: "pushing" }));
+    getActiveImportSessionMock.mockResolvedValue(session({ stage: "upload" }));
     hookState.phase = "form";
     await act(async () => {
       rerender(<ImportScreen />);
@@ -797,7 +797,7 @@ describe("ImportScreen entering Import", () => {
   it("falls back to a settings-unreadable panel when the stored form snapshot is malformed", async () => {
     const user = userEvent.setup();
     getActiveImportSessionMock.mockResolvedValue(
-      session({ stage: "pushing", form: { nonsense: true } }),
+      session({ stage: "upload", form: { nonsense: true } }),
     );
     renderWithProviders(<ImportScreen />);
 
@@ -811,7 +811,7 @@ describe("ImportScreen entering Import", () => {
 
   it("still drops to the form when discarding from the panel fails server-side", async () => {
     const user = userEvent.setup();
-    getActiveImportSessionMock.mockResolvedValue(session({ stage: "pushing" }));
+    getActiveImportSessionMock.mockResolvedValue(session({ stage: "upload" }));
     discardImportSessionMock.mockRejectedValue(new Error("network down"));
     renderWithProviders(<ImportScreen />);
 
@@ -964,7 +964,7 @@ describe("ImportScreen entering Import", () => {
   it("asks for nothing on a resume into Upload, which reads no backup", async () => {
     const user = userEvent.setup();
     getActiveImportSessionMock.mockResolvedValue(
-      session({ stage: "pushing", form: storedForm({ backupPasswordGiven: true }) }),
+      session({ stage: "upload", form: storedForm({ backupPasswordGiven: true }) }),
     );
     renderWithProviders(<ImportScreen />);
 

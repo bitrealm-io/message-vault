@@ -384,13 +384,13 @@ async fn imports_complete_and_detail_surface_timings_and_issues() {
         issues: vec![
             CompleteImportIssueRequest {
                 kind: "skip".into(),
-                step: "convert".into(),
+                stage: crate::db::imports::ImportIssueStage::Media,
                 item: "photo.heic".into(),
                 reason: "convert failed".into(),
             },
             CompleteImportIssueRequest {
                 kind: "error".into(),
-                step: "upload".into(),
+                stage: crate::db::imports::ImportIssueStage::Upload,
                 item: "archive.zip".into(),
                 reason: "upload failed".into(),
             },
@@ -428,9 +428,15 @@ async fn imports_complete_and_detail_surface_timings_and_issues() {
     assert_eq!(value.summary["parse"]["messages"], 10);
     assert_eq!(value.issues.len(), 2);
     assert_eq!(value.issues[0].kind, "skip");
-    assert_eq!(value.issues[0].step, "convert");
+    assert_eq!(
+        value.issues[0].stage,
+        crate::db::imports::ImportIssueStage::Media
+    );
     assert_eq!(value.issues[1].kind, "error");
-    assert_eq!(value.issues[1].step, "upload");
+    assert_eq!(
+        value.issues[1].stage,
+        crate::db::imports::ImportIssueStage::Upload
+    );
 }
 
 #[tokio::test]
@@ -506,7 +512,7 @@ async fn imports_complete_rejects_invalid_issue_kind_before_db_write() {
         summary: None,
         issues: vec![CompleteImportIssueRequest {
             kind: "warning".into(),
-            step: "upload".into(),
+            stage: crate::db::imports::ImportIssueStage::Upload,
             item: "archive.zip".into(),
             reason: "not allowed".into(),
         }],
@@ -744,7 +750,7 @@ async fn stage_endpoint_advances_and_rejects_an_unknown_stage() {
         import_access(&state, &token).await,
         AxumPath(import_id),
         Json(UpdateImportRequest {
-            stage: "pushing".into(),
+            stage: "upload".into(),
             summary: None,
         }),
     )
@@ -756,7 +762,7 @@ async fn stage_endpoint_advances_and_rejects_an_unknown_stage() {
             .unwrap()
             .stage
             .as_deref(),
-        Some("pushing")
+        Some("upload")
     );
 
     let err = update_import(

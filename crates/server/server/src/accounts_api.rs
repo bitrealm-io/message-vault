@@ -82,7 +82,7 @@ pub struct Account {
     pub app: Option<crate::db::session_tokens::AppKind>,
     /// The Build that app reported, such as `0.9.0+343fe0d8`. Present exactly
     /// when `app` is.
-    pub app_version: Option<String>,
+    pub app_build: Option<String>,
     /// May call the import endpoints.
     pub can_import: bool,
     /// May call the export endpoints.
@@ -131,7 +131,7 @@ async fn load_account(
         has_password: has_password(password_hash.as_deref()),
         last_login_at,
         app: app.as_ref().map(|app| app.kind),
-        app_version: app.map(|app| app.build),
+        app_build: app.map(|app| app.build),
         can_import: auth.permissions.import,
         can_export: auth.permissions.export,
         can_delete: auth.permissions.delete,
@@ -511,8 +511,8 @@ impl UpdateAccountRequest {
 /// Why a profile update was refused.
 #[derive(Debug, thiserror::Error)]
 enum ProfileUpdateError {
-    /// The client named a handle service the profile does not support.
-    #[error("unsupported handle service: {0}")]
+    /// The client named an identity service the profile does not support.
+    #[error("unsupported identity service: {0}")]
     UnsupportedService(String),
     /// The client named a time zone chrono-tz does not know.
     #[error("unknown time zone: {0}; use an IANA name such as America/New_York")]

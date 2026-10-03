@@ -127,7 +127,7 @@ describe("ContactList", () => {
   });
 
   it("exports the group the list shows, or the checked rows when there are any", async () => {
-    exportMock.mockResolvedValue("contact_id,display_name,groups,service,handle_type,identity\n");
+    exportMock.mockResolvedValue("contact_id,display_name,groups,service,identity_type,identity\n");
     render(
       <Providers>
         <RightToolbarProvider>

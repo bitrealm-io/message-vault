@@ -11,6 +11,7 @@
 //! `commands::jobs`). The exporter checks it between steps through
 //! `ExporterConfig.cancel`.
 
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use media::{CompressOptions, MaxResolution};
@@ -18,6 +19,7 @@ use message_crate_core::{
     ApplePlatform, AttachmentMedia, Exporter, ExporterConfig, Form, LogSink, OutputFormat,
     ProgressSink, RunResult, SourceConfig, WhatsappPlatform,
 };
+use message_staging::TranscodeOptions;
 
 // Short names so the match in `run_exporter` stays easy to read.
 use go_sms_pro_exporter::run as run_go_sms_pro;
@@ -113,6 +115,11 @@ pub struct ExtractArgs {
     /// Continue an interrupted export in the same output folder: previous
     /// output is kept and conversations already written are skipped.
     pub resume: Option<bool>,
+    /// The server's attachment size limit, in bytes, as the app read it from
+    /// `GET /v1/server` when the Import Run was created. Staging records it
+    /// with the run's media settings, where the Staging Review's forecast
+    /// and the Media stage read it.
+    pub asset_max_bytes: u64,
 }
 
 /// Ask this process to parse a phone backup and write conversation files.
@@ -121,6 +128,12 @@ pub struct ExtractArgs {
 /// the final summary are sent as `extract:log`, `extract:progress`,
 /// `extract:finished`, and `extract:error`. Output is JSON Lines (one JSON
 /// object per line) so the Import screen's upload step can read it later.
+///
+/// This is where an Import Run's media settings are decided: the mode the
+/// person chose and the compress fields are parsed here, before anything is
+/// staged, and recorded in the staging folder once Staging finishes (see
+/// [`run_staging`]). `summarize_staging` and `transcode_staging` read them
+/// from there and are never given them again.
 ///
 /// # Errors
 ///
@@ -154,6 +167,7 @@ pub fn extract(
         whatsapp_business: args.whatsapp_business.unwrap_or(false),
     };
 
+    let media_settings = media_settings_for(&options, args.asset_max_bytes)?;
     let output_dir = args.output_dir;
     let mut config = build_exporter_config(&args.source, &args.path, &output_dir, &options)?;
     config.resume = args.resume.unwrap_or(false);
@@ -179,7 +193,7 @@ pub fn extract(
     }));
 
     spawn_job(app, job, move || {
-        let run_result = run_exporter(&config)?;
+        let run_result = run_staging(&config, Path::new(&output_dir), &media_settings)?;
         let payload = finished_payload(&run_result);
         for line in run_result.messages {
             events::emit(&app_handle, events::LOG, line);
@@ -227,7 +241,7 @@ struct ExtractOptions {
 /// # Errors
 ///
 /// Returns an error if the string is not copy, convert, compress, or skip.
-pub(crate) fn parse_attachment_media(raw: Option<&str>) -> Result<AttachmentMedia, String> {
+fn parse_attachment_media(raw: Option<&str>) -> Result<AttachmentMedia, String> {
     let Some(raw) = raw.and_then(message_ir::trimmed) else {
         return Ok(AttachmentMedia::default());
     };
@@ -247,7 +261,7 @@ pub(crate) fn parse_attachment_media(raw: Option<&str>) -> Result<AttachmentMedi
 /// # Errors
 ///
 /// Returns an error if the string is not 720p, 1080p, or 4k.
-pub(crate) fn parse_max_resolution(raw: Option<&str>) -> Result<MaxResolution, String> {
+fn parse_max_resolution(raw: Option<&str>) -> Result<MaxResolution, String> {
     let Some(raw) = raw.and_then(message_ir::trimmed) else {
         return Ok(MaxResolution::default());
     };
@@ -273,20 +287,20 @@ fn exporter_attachment_media(chosen: AttachmentMedia) -> AttachmentMedia {
     }
 }
 
-/// Build the `CompressOptions` a media pass will use, from the same
+/// Build the `CompressOptions` the Media stage will use, from the
 /// max-resolution/fps/min-size fields the Import form sends.
 ///
 /// `CompressOptions` only takes effect under [`media::MediaMode::Compress`],
 /// so the real options are built only when `Compress` was chosen and
-/// `CompressOptions::default()` is returned otherwise. Shared so the
-/// desktop's own media pass (`commands::staging`) parses these fields the
-/// same way Extract does, rather than re-deriving the parsing.
+/// `CompressOptions::default()` is returned otherwise. The errors name the
+/// form's fields, because the Import Run shows them to the person as they
+/// are.
 ///
 /// # Errors
 ///
-/// Returns an error if `max_fps` is not a number or `min_size` cannot be
-/// parsed as a byte size.
-pub(crate) fn parse_compress_options(
+/// Returns an error if `max_fps` is not a positive number or `min_size`
+/// cannot be parsed as a byte size.
+fn parse_compress_options(
     chosen: AttachmentMedia,
     max_resolution: MaxResolution,
     max_fps: &str,
@@ -295,11 +309,71 @@ pub(crate) fn parse_compress_options(
     if !matches!(chosen, AttachmentMedia::Compress) {
         return Ok(CompressOptions::default());
     }
+    let max_fps = max_fps.trim();
     let fps = max_fps
         .parse::<f32>()
-        .map_err(|_| format!("invalid media_max_fps '{max_fps}'"))?;
+        .ok()
+        .filter(|fps| fps.is_finite() && *fps > 0.0)
+        .ok_or_else(|| {
+            if max_fps.is_empty() {
+                "Max FPS is empty. It must be a number of frames per second, such as 30."
+                    .to_string()
+            } else {
+                format!(
+                    "Max FPS must be a number of frames per second above 0, such as 30, not '{max_fps}'."
+                )
+            }
+        })?;
     media::compress_options_from_form(max_resolution, fps, min_size, true)
-        .map_err(|e| format!("{e:#}"))
+        .map_err(|e| format!("Minimum Video File Size is not a size: {e:#}"))
+}
+
+/// The media settings an Import Run works to, decided once when its Staging
+/// starts: the mode the person chose, the compress options parsed from the
+/// form's fields, and the server's attachment size limit.
+///
+/// A bad compress field fails here, before anything is staged, rather than
+/// at the summary after hours of Staging.
+///
+/// # Errors
+///
+/// Returns an error if a compress field is invalid (see
+/// [`parse_compress_options`]).
+fn media_settings_for(
+    options: &ExtractOptions,
+    asset_max_bytes: u64,
+) -> Result<TranscodeOptions, String> {
+    Ok(TranscodeOptions {
+        mode: options.attachment_media.media_mode(),
+        compress: parse_compress_options(
+            options.attachment_media,
+            options.media_max_resolution,
+            &options.media_max_fps,
+            &options.media_min_size,
+        )?,
+        asset_max_bytes,
+    })
+}
+
+/// Run the exporter into `output_dir`, then record the run's media settings
+/// beside the export sentinel it wrote.
+///
+/// The record is written after the exporter and not before, because a fresh
+/// export refuses a folder that already holds files it does not recognise.
+/// A Staging that is interrupted leaves no record. Nothing reads one until
+/// Staging finishes, and the resumed Staging writes it.
+///
+/// # Errors
+///
+/// Returns an error if the exporter fails or the record cannot be written.
+fn run_staging(
+    config: &ExporterConfig,
+    output_dir: &Path,
+    media_settings: &TranscodeOptions,
+) -> anyhow::Result<RunResult> {
+    let run_result = run_exporter(config)?;
+    message_staging::write_media_settings(output_dir, media_settings)?;
+    Ok(run_result)
 }
 
 /// Build the exporter config the background thread will run.
@@ -311,30 +385,17 @@ pub(crate) fn parse_compress_options(
 ///
 /// # Errors
 ///
-/// Returns an error if the source is unknown, compress options are invalid,
-/// or `Form::to_config` rejects the form (missing input path, missing owner
-/// phones, …). Multiple validation problems are joined with `; `.
+/// Returns an error if the source is unknown or `Form::to_config` rejects
+/// the form (missing input path, missing owner phones, …). Multiple
+/// validation problems are joined with `; `. The compress fields are not
+/// checked here: `Form` sees Clone for a real Compress choice, and
+/// [`media_settings_for`] checks them against the real one.
 fn build_exporter_config(
     source: &str,
     path: &str,
     output_dir: &str,
     options: &ExtractOptions,
 ) -> Result<ExporterConfig, String> {
-    // `Form`'s own compress validation only fires when `Form.attachment_media`
-    // is `Compress` — and that field reads `Clone` for a real Convert/Compress
-    // choice (see `exporter_attachment_media`'s docs), so it would otherwise
-    // stay silent about a malformed `media_max_fps`/`media_min_size` until the
-    // desktop's own media pass parses the same fields again at the review,
-    // hours later. Validate against the REAL chosen mode here so a bad
-    // value still fails immediately; the parsed value itself is unused here —
-    // the exporter's own media step is a no-op under Clone.
-    parse_compress_options(
-        options.attachment_media,
-        options.media_max_resolution,
-        &options.media_max_fps,
-        &options.media_min_size,
-    )?;
-
     let mut form = Form {
         output: output_dir.to_string(),
         // See `exporter_attachment_media`'s docs: the exporter is asked for

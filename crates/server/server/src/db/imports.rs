@@ -4,9 +4,9 @@ use anyhow::{Result, bail};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqliteRow;
-use sqlx::{Connection, Row, SqliteConnection};
+use sqlx::{Row, SqliteConnection};
 
-use crate::db::dialect;
+use crate::db::begin_write;
 use crate::paging::{Direction, SortKey};
 
 /// Where a live import session is in its lifecycle.
@@ -501,30 +501,40 @@ pub async fn set_import_stage(
     stage: ImportStage,
     summary_json: Option<&str>,
 ) -> std::result::Result<(), ImportLookupError> {
-    require_running_import(conn, account_id, import_id).await?;
-    match summary_json {
-        Some(summary) => {
-            sqlx::query(
-                "UPDATE imports SET stage = $1, summary_json = $2
-                 WHERE id = $3 AND account_id = $4",
-            )
-            .bind(stage.as_str())
-            .bind(summary)
-            .bind(import_id)
-            .bind(account_id)
-            .execute(&mut *conn)
-            .await?;
-        }
-        None => {
-            sqlx::query("UPDATE imports SET stage = $1 WHERE id = $2 AND account_id = $3")
-                .bind(stage.as_str())
-                .bind(import_id)
-                .bind(account_id)
-                .execute(&mut *conn)
-                .await?;
-        }
+    // `COALESCE` keeps the stored summary when none is given. The status
+    // check is in the update, so a run that finished after the caller read it
+    // is never given a stage.
+    let updated = sqlx::query(
+        "UPDATE imports SET stage = $1, summary_json = COALESCE($2, summary_json)
+         WHERE id = $3 AND account_id = $4 AND status = 'running'",
+    )
+    .bind(stage.as_str())
+    .bind(summary_json)
+    .bind(import_id)
+    .bind(account_id)
+    .execute(&mut *conn)
+    .await?;
+    if updated.rows_affected() == 0 {
+        return Err(not_running(conn, account_id, import_id).await);
     }
     Ok(())
+}
+
+/// Why a write guarded by `status = 'running'` changed no row: the account
+/// owns no such run, or the run has finished.
+async fn not_running(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    import_id: i64,
+) -> ImportLookupError {
+    match require_running_import(conn, account_id, import_id).await {
+        Err(err) => err,
+        // Running again cannot happen: a run that has finished stays
+        // finished. Reported as finished, which it was at the write.
+        Ok(_) => ImportLookupError::InvalidSession {
+            message: format!("import {import_id} is not running"),
+        },
+    }
 }
 
 /// Close a live session the user gave up on.
@@ -542,17 +552,21 @@ pub async fn discard_import(
     account_id: i64,
     import_id: i64,
 ) -> std::result::Result<(), ImportLookupError> {
-    require_running_import(conn, account_id, import_id).await?;
-    sqlx::query(
+    // The status check is in the update, so a run that completed after the
+    // caller read it keeps its record instead of being rewritten as cancelled.
+    let updated = sqlx::query(
         "UPDATE imports
          SET status = 'cancelled', stage = NULL, finished_at = $1
-         WHERE id = $2 AND account_id = $3",
+         WHERE id = $2 AND account_id = $3 AND status = 'running'",
     )
     .bind(Utc::now().to_rfc3339())
     .bind(import_id)
     .bind(account_id)
     .execute(&mut *conn)
     .await?;
+    if updated.rows_affected() == 0 {
+        return Err(not_running(conn, account_id, import_id).await);
+    }
     Ok(())
 }
 
@@ -602,13 +616,17 @@ pub async fn complete_import(
     import_id: i64,
     args: &CompleteImportArgs,
 ) -> Result<ImportRow> {
-    let existing = require_running_import(&mut *conn, account_id, import_id).await?;
-    let finished_at = Utc::now().to_rfc3339();
-    let status = args.status.as_str();
-
     for issue in &args.issues {
         validate_issue_kind(&issue.kind)?;
     }
+
+    // The check, the counts, the update and the issue inserts are one write
+    // transaction: the counts are of the run the update closes, and a failed
+    // commit rolls back (sqlx drops the transaction).
+    let mut tx = begin_write(conn).await?;
+    let existing = require_running_import(&mut tx, account_id, import_id).await?;
+    let finished_at = Utc::now().to_rfc3339();
+    let status = args.status.as_str();
 
     let message_count = if let Some(n) = args.message_count {
         n
@@ -618,7 +636,7 @@ pub async fn complete_import(
         )
         .bind(import_id)
         .bind(account_id)
-        .fetch_one(&mut *conn)
+        .fetch_one(&mut *tx)
         .await?;
         n
     };
@@ -634,15 +652,12 @@ pub async fn complete_import(
         )
         .bind(import_id)
         .bind(account_id)
-        .fetch_one(&mut *conn)
+        .fetch_one(&mut *tx)
         .await?;
         n
     };
     let bytes_uploaded = args.bytes_uploaded.unwrap_or(existing.bytes_uploaded);
 
-    // The update and the issue inserts land as one unit, and a failed
-    // commit rolls back (sqlx drops the transaction).
-    let mut tx = conn.begin_with(dialect::BEGIN_IMMEDIATE_SQL).await?;
     let updated = sqlx::query(
         r"
         UPDATE imports

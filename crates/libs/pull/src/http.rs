@@ -203,8 +203,9 @@ pub fn download_asset(
         )
         .into());
     }
-    std::fs::rename(&tmp, dest)
-        .with_context(|| format!("rename {} -> {}", tmp.display(), dest.display()))?;
+    // Synced, because the pull journal records the asset as fetched next,
+    // and a resumed Pull skips an asset the journal names.
+    message_ir::rename_into_place(&tmp, dest)?;
     Ok(())
 }
 

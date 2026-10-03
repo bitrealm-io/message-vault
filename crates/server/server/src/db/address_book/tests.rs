@@ -1444,3 +1444,26 @@ async fn an_export_libreoffice_saved_again_changes_nothing() {
         assert_eq!(picture(&mut conn).await, before, "{mode:?}");
     }
 }
+
+// --- Another write at the same time ---
+
+/// An import that commits while a load reads the account's contacts made the
+/// load's first write fail with `SQLITE_BUSY_SNAPSHOT`, and the load answered
+/// `500`. The load waits for the other write instead and then runs.
+#[tokio::test]
+async fn a_write_that_commits_while_the_load_reads_does_not_fail_it() {
+    let (mut conn, pool, _dir) = account().await;
+    let mut other_conn = pool.acquire().await.unwrap();
+    let mut other = crate::db::begin_write(&mut other_conn).await.unwrap();
+    crate::db::account_profile::ensure_account_row(&mut other, ACCOUNT + 1)
+        .await
+        .unwrap();
+    let text = file(&["ada,Ada,Family,phone,phone,+15555550100"]);
+    let counts = crate::db::write_tx::commit_during(
+        other,
+        load(&mut conn, ACCOUNT, &text, LoadMode::Append),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("load failed: {e}"));
+    assert_eq!(counts.contacts_created, 1);
+}

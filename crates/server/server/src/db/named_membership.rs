@@ -13,9 +13,9 @@ use std::future::Future;
 use std::pin::Pin;
 
 use anyhow::Result as AnyResult;
-use sqlx::{Connection, SqliteConnection};
+use sqlx::SqliteConnection;
 
-use crate::db::dialect::{name_eq_ci, order_by_name_ci};
+use crate::db::begin_write;
 
 /// Longest allowed name for either kind of set (characters).
 pub const MAX_NAME_LEN: usize = 80;
@@ -97,7 +97,7 @@ pub fn tag_spec() -> &'static MembershipSpec {
         member_column: "conversation_id",
         member_table: "conversations",
         label: "tag",
-        reserved_label: "tag",
+        reserved_label: "Message Tag",
         member_label: "conversation",
         max_name_len: MAX_NAME_LEN,
         reserved: &[
@@ -178,16 +178,6 @@ pub fn group_spec() -> &'static MembershipSpec {
             ("trash", "Trash is a reserved Contact Group"),
             ("no messages", "No messages is a reserved Contact Group"),
             ("no-messages", "No messages is a reserved Contact Group"),
-            ("groups", "Group Messages is a reserved name"),
-            ("group", "Group Messages is a reserved name"),
-            ("group chats", "Group Messages is a reserved name"),
-            ("group-chats", "Group Messages is a reserved name"),
-            ("group chats 2", "Group Messages is a reserved name"),
-            ("group-chats-2", "Group Messages is a reserved name"),
-            ("group messages", "Group Messages is a reserved name"),
-            ("group-messages", "Group Messages is a reserved name"),
-            ("group messages 2", "Group Messages is a reserved name"),
-            ("group-messages-2", "Group Messages is a reserved name"),
         ],
         // A name holding `;` would come back from an address book export
         // and load as two Contact Groups.
@@ -219,9 +209,8 @@ async fn find_id(
     name: &str,
 ) -> Result<Option<i64>, MembershipError> {
     let sql = format!(
-        "SELECT id FROM {table} WHERE account_id = $1 AND {name_eq}",
+        "SELECT id FROM {table} WHERE account_id = $1 AND lower(name) = lower($2)",
         table = spec.table,
-        name_eq = name_eq_ci("name", "$2"),
     );
     let id = sqlx::query_scalar::<_, i64>(&sql)
         .bind(account_id)
@@ -435,9 +424,8 @@ pub async fn list_sets(
     conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<Vec<(i64, String)>, MembershipError> {
-    let order = order_by_name_ci("name");
     let sql = format!(
-        "SELECT id, name FROM {table} WHERE account_id = $1 {order}",
+        "SELECT id, name FROM {table} WHERE account_id = $1 ORDER BY lower(name)",
         table = spec.table
     );
     let rows = sqlx::query_as::<_, (i64, String)>(&sql)
@@ -488,22 +476,17 @@ pub async fn create_set(
     name: &str,
 ) -> Result<(i64, String), MembershipError> {
     let name = normalize_name(spec, name)?;
-    if find_id(spec, conn, account_id, &name).await?.is_some() {
-        return Err(MembershipError::Conflict(format!(
+    // One statement checks the name and inserts the row, so a set created
+    // under the name meanwhile, in any letter case, makes this a conflict.
+    match crate::db::free_name::insert_if_name_free(conn, spec.table, account_id, &name, &[])
+        .await?
+    {
+        Some(id) => Ok((id, name)),
+        None => Err(MembershipError::Conflict(format!(
             "{} already exists",
             spec.label
-        )));
+        ))),
     }
-    let sql = format!(
-        "INSERT INTO {table} (account_id, name) VALUES ($1, $2) RETURNING id",
-        table = spec.table
-    );
-    let id: i64 = sqlx::query_scalar(&sql)
-        .bind(account_id)
-        .bind(&name)
-        .fetch_one(&mut *conn)
-        .await?;
-    Ok((id, name))
 }
 
 /// Rename a set by id. A case-only change of its own name is allowed; another
@@ -515,12 +498,15 @@ pub async fn rename_set(
     id: i64,
     name: &str,
 ) -> Result<String, MembershipError> {
-    let (_, old_name) = get_set(spec, conn, account_id, id).await?;
     let new_name = normalize_name(spec, name)?;
+    // The checks and the update are one write transaction, so the name
+    // cannot be taken, nor the set deleted, between them.
+    let mut tx = begin_write(conn).await?;
+    let (_, old_name) = get_set(spec, &mut tx, account_id, id).await?;
     if old_name == new_name {
         return Ok(new_name);
     }
-    if let Some(other) = find_id(spec, conn, account_id, &new_name).await?
+    if let Some(other) = find_id(spec, &mut tx, account_id, &new_name).await?
         && other != id
     {
         return Err(MembershipError::Conflict(format!(
@@ -536,8 +522,9 @@ pub async fn rename_set(
         .bind(&new_name)
         .bind(id)
         .bind(account_id)
-        .execute(&mut *conn)
+        .execute(&mut *tx)
         .await?;
+    tx.commit().await?;
     Ok(new_name)
 }
 
@@ -550,8 +537,8 @@ pub async fn delete_set(
     account_id: i64,
     id: i64,
 ) -> Result<(), MembershipError> {
-    get_set(spec, conn, account_id, id).await?;
-    let mut tx = conn.begin().await?;
+    let mut tx = begin_write(conn).await?;
+    get_set(spec, &mut tx, account_id, id).await?;
     let members_sql = format!(
         "DELETE FROM {mt} WHERE {nc} = $1 RETURNING {mc}",
         mt = spec.members_table,
@@ -620,6 +607,11 @@ pub async fn patch_members(
     add: &[i64],
     remove: &[i64],
 ) -> Result<(u64, u64), MembershipError> {
+    // The checks and the writes are one write transaction: the set and every
+    // id to add are as they were checked when the rows go in, and a failure
+    // part-way leaves the set as it was.
+    let mut tx = begin_write(conn).await?;
+    let conn: &mut SqliteConnection = &mut tx;
     get_set(spec, conn, account_id, id).await?;
     let remove = clean_ids(remove);
     let add: Vec<i64> = clean_ids(add)
@@ -687,6 +679,7 @@ pub async fn patch_members(
             }
         }
     }
+    tx.commit().await?;
     Ok((added, removed))
 }
 
@@ -697,13 +690,12 @@ pub async fn names_for_item(
     account_id: i64,
     item_id: i64,
 ) -> AnyResult<Vec<String>> {
-    let order = order_by_name_ci("n.name");
     let sql = format!(
         "SELECT n.name
          FROM {table} n
          JOIN {members} m ON m.{name_col} = n.id
          WHERE n.account_id = $1 AND m.{member_col} = $2
-         {order}",
+         ORDER BY lower(n.name)",
         table = spec.table,
         members = spec.members_table,
         name_col = spec.name_column,
@@ -728,13 +720,12 @@ pub async fn names_for_items(
     fold_in_id_chunks(conn, item_ids, |conn, chunk| {
         Box::pin(async move {
             let placeholders = in_placeholders(2, chunk.len());
-            let order = order_by_name_ci("n.name");
             let sql = format!(
                 "SELECT m.{member_col}, n.name
                  FROM {members} m
                  JOIN {table} n ON n.id = m.{name_col}
                  WHERE n.account_id = $1 AND m.{member_col} IN ({placeholders})
-                 {order}",
+                 ORDER BY lower(n.name)",
                 table = spec.table,
                 members = spec.members_table,
                 name_col = spec.name_column,

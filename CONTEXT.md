@@ -194,7 +194,7 @@ _Avoid_: Member, Recipient
 When a contact last sent a message: the newest message any of the contact's
 identities was the sender of, shown on the contact list and one of the two ways
 the list can be ordered. It is not the contact's last activity. A message the
-account owner sent to the contact, or one another member of a group chat
+account owner sent to the contact, or one another member of a group conversation
 sent, does not move it, because neither is hearing from the contact. A
 message in a conversation in the Trash does not move it either: the column
 is not asked for the Trash, so it leaves the Trash out, and `last-message:`
@@ -311,7 +311,7 @@ both. A program holding one can bring messages in, or take them out
 through an Export Run it starts, but it can never browse: reading messages
 outside a run needs a Session. The secret is shown once when the token is
 made; afterwards the account sees only its name, a masked hint, and when it
-was last used.
+was last used. The owner sees the same without the hint, and may revoke it.
 _Avoid_: App password, Key, Credential, Session
 
 **User**:
@@ -423,9 +423,10 @@ _Avoid_: Data Folder, DB Directory, Database Directory
 The directory where Message Crate writes intermediate files that neither the
 person nor Message Crate keeps — a backup being prepared for import, or JSON
 Lines waiting to be converted into the format an export asked for. It is
-deleted when the job succeeds or is cancelled, the import log and resume
-journal with it; a failed import leaves it in place, since the staged files
-are what a retry reads.
+deleted when the job ends, whether it succeeded, failed or was cancelled,
+the import log, resume journal and run record with it. An Import Run that
+can still be resumed, paused or waiting at a Review, keeps it, since the
+staged files are what Resume reads.
 _Avoid_: Import Staging Directory, Temp Folder, Working Directory
 
 **Tools Directory**:

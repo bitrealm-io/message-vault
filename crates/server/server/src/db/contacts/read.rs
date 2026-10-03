@@ -9,7 +9,6 @@ use serde::Serialize;
 use sqlx::SqliteConnection;
 
 use crate::db::contacts::UNKNOWN_CONTACT_SQL;
-use crate::db::dialect::{group_concat_unit_separator, name_ci_expr};
 use crate::db::handles::{infer_handle_type_from_shape, normalize_handle};
 use crate::db::sql::{SqlParam, bind_args, in_placeholders};
 use crate::paging::{Direction, MAX_CONTACT_SUMMARY_IDS, Page, SortKey};
@@ -140,7 +139,7 @@ fn contact_order_by(keys: &[SortKey<ContactSort>]) -> String {
         .iter()
         .map(|k| match k.key {
             ContactSort::Name => {
-                format!("{} {}", name_ci_expr("name"), k.direction.sql())
+                format!("lower(name) {}", k.direction.sql())
             }
             ContactSort::LastHeard => format!(
                 "(last_heard_at IS NULL) ASC, last_heard_at {}",
@@ -196,7 +195,7 @@ pub async fn list_contacts_sorted(
                 (SELECT COUNT(*)
                  FROM contact_handles ch
                  WHERE ch.account_id = ct.account_id AND ch.contact_id = ct.id) AS identity_count,
-                (SELECT {addresses_agg}
+                (SELECT GROUP_CONCAT(val, char(31))
                  FROM (
                    SELECT DISTINCT h.normalized AS val
                    FROM contact_handles ch
@@ -212,7 +211,7 @@ pub async fn list_contacts_sorted(
                  )) AS addresses,
                 ct.last_modified,
                 (SELECT MAX(m.timestamp) {sent}) AS last_heard_at,
-                (SELECT {groups_agg}
+                (SELECT GROUP_CONCAT(cl.name, char(31))
                  FROM contact_group_members clm
                  JOIN contact_groups cl ON cl.id = clm.group_id
                  WHERE clm.contact_id = ct.id AND cl.account_id = ct.account_id) AS groups
@@ -221,9 +220,7 @@ pub async fn list_contacts_sorted(
          {order_by}
          LIMIT ? OFFSET ?",
         unknown = UNKNOWN_CONTACT_SQL,
-        addresses_agg = group_concat_unit_separator("val"),
         sent = contact_sent_messages(TrashScope::LeftOut),
-        groups_agg = group_concat_unit_separator("cl.name"),
     );
     let mut params = filter.params().to_vec();
     params.push(SqlParam::Int(limit as i64));

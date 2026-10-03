@@ -1,4 +1,7 @@
-import { useEffect, useState } from "react";
+import { type UIEvent, useCallback } from "react";
+import { apiErrorMessage } from "../../../lib/apiErrorMessage";
+import { keys } from "../../../lib/queryKeys";
+import { type PagedFetchPage, useRoutePagedList } from "../../../lib/routeQuery";
 import { getImportContacts } from "../../../lib/serverApi";
 import type { components } from "../../../lib/serverApi.types";
 
@@ -6,11 +9,7 @@ import type { components } from "../../../lib/serverApi.types";
 type ContactReason = components["schemas"]["ContactReason"];
 
 /** One contact an import run created or changed, and why it is listed. */
-type ImportContactRow = {
-  id: number;
-  name: string;
-  reason: ContactReason;
-};
+type ImportContact = components["schemas"]["ImportContact"];
 
 /** The reason as the person reads it. */
 const REASON_LABEL: Record<ContactReason, string> = {
@@ -20,13 +19,8 @@ const REASON_LABEL: Record<ContactReason, string> = {
   handle_added: "Identity added",
 };
 
-/** One page of them, as every list route answers. */
-type ImportContactsPage = {
-  items: ImportContactRow[];
-  total: number;
-  limit: number;
-  offset: number;
-};
+/** How close to the end of the list, in pixels, scrolling asks for the next page. */
+const NEAR_END_PX = 48;
 
 /** A contact the run learned an address for but no name yet. */
 const UNNAMED = "(unknown)";
@@ -49,34 +43,30 @@ export default function ImportContactsPanel({
   newCount: number;
   changedCount: number;
 }) {
-  const [data, setData] = useState<ImportContactsPage | null>(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const fetchPage = useCallback<PagedFetchPage<ImportContact>>(
+    ({ limit, offset, signal }) => getImportContacts(importId, { limit, offset }, { signal }),
+    [importId],
+  );
+  const { items, total, loading, filling, error, loadMore } = useRoutePagedList(
+    keys.imports.contacts(importId),
+    fetchPage,
+  );
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError("");
-    getImportContacts(importId)
-      .then((res) => {
-        if (!cancelled) setData(res);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Could not load contacts for this import.");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [importId]);
+  /** Ask for the next page once the person scrolls near the end of the rows loaded. */
+  const onScroll = (e: UIEvent<HTMLUListElement>) => {
+    const el = e.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR_END_PX) loadMore();
+  };
 
   if (loading) return <div className="text-[0.813rem] text-muted">Loading contacts…</div>;
-  if (error) return <div className="text-[0.813rem] text-danger">{error}</div>;
-  if (!data || data.items.length === 0) {
+  if (error && items.length === 0) {
+    return (
+      <div className="text-[0.813rem] text-danger">
+        {apiErrorMessage(error, "Could not load contacts for this import.")}
+      </div>
+    );
+  }
+  if (items.length === 0) {
     return <div className="text-[0.813rem] text-muted">This import changed no contacts.</div>;
   }
 
@@ -85,8 +75,8 @@ export default function ImportContactsPanel({
       <p className="mb-2 text-[0.813rem] text-muted">
         {newCount.toLocaleString()} new, {changedCount.toLocaleString()} changed
       </p>
-      <ul className="max-h-48 overflow-y-auto text-[0.813rem]">
-        {data.items.map((c) => (
+      <ul className="max-h-48 overflow-y-auto text-[0.813rem]" onScroll={onScroll}>
+        {items.map((c) => (
           <li key={c.id} className="flex items-center justify-between gap-3 py-0.5">
             <span className={c.name.trim() ? "truncate" : "truncate text-muted"}>
               {c.name.trim() || UNNAMED}
@@ -95,6 +85,17 @@ export default function ImportContactsPanel({
           </li>
         ))}
       </ul>
+      {filling ? <p className="mt-1 text-[0.813rem] text-muted">Loading more contacts…</p> : null}
+      {error ? (
+        <p className="mt-1 text-[0.813rem] text-danger">
+          {apiErrorMessage(error, "Could not load more contacts for this import.")}
+        </p>
+      ) : null}
+      {items.length < total && !filling && !error ? (
+        <p className="mt-1 text-[0.813rem] text-muted">
+          {items.length.toLocaleString()} of {total.toLocaleString()} listed. Scroll for more.
+        </p>
+      ) : null}
     </div>
   );
 }

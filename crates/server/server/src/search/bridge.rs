@@ -3,7 +3,6 @@
 //! each list's base row. Every emitter is written once against the alias it
 //! needs and asks the context to wrap it.
 
-use crate::db::dialect::like_ci;
 use crate::db::sql::SqlParam;
 
 use super::ListKind;
@@ -33,21 +32,20 @@ impl Sql {
         self.params.push(SqlParam::Int(v));
     }
 
-    /// Bind a text value for a `?` a dialect helper already wrote into
-    /// `text` (for example `db::dialect::name_eq_ci`'s own placeholder).
-    /// Unlike `bind_text`, this does not write the `?` itself — the helper
-    /// already did — so call it immediately after pushing that helper's SQL.
-    pub fn param_text(&mut self, v: impl Into<String>) {
-        self.params.push(SqlParam::Text(v.into()));
-    }
-
-    /// `column LIKE ?` case-insensitively
-    /// ([`db::dialect::like_ci`](crate::db::dialect::like_ci)), binding
-    /// `pattern` as it is. In the pattern `%` and `_` are wildcards and `\`
-    /// escapes, so text a person typed reaches here only through
-    /// `emit::like_contains`, which escapes it.
+    /// `column LIKE ?` case-insensitively, binding `pattern` as it is. Both
+    /// sides go through `lower()`, so a non-ASCII capital folds the same way
+    /// an ASCII one does. SQLite's own `lower()` folds only ASCII, so the
+    /// server registers a Unicode one on every connection
+    /// ([`crate::db::sqlite_functions`]). `COLLATE NOCASE` is not used,
+    /// because it folds only ASCII.
+    ///
+    /// In the pattern `%` and `_` are wildcards and `\` escapes. SQLite has
+    /// no escape character unless told, so the clause names it. Text a
+    /// person typed reaches here only through `emit::like_contains`, which
+    /// escapes it.
     pub fn like(&mut self, column: &str, pattern: &str) {
-        self.text.push_str(&like_ci(column));
+        self.text
+            .push_str(&format!(r"lower({column}) LIKE lower(?) ESCAPE '\'"));
         self.params.push(SqlParam::Text(pattern.to_string()));
     }
 }

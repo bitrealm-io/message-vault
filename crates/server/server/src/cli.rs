@@ -31,7 +31,7 @@ pub struct Cli {
 /// One subcommand per CLI operation: import, serve, and maintenance.
 #[derive(Debug, Subcommand)]
 pub enum Commands {
-    /// Import a message-ir JSONL folder (source from export.source unless --source)
+    /// Import a message-ir JSONL folder, one Import Run per source (source from export.source unless --source)
     Import(ImportArgs),
 
     /// Work on an account's import sessions (`discard` clears a stranded one)
@@ -355,7 +355,7 @@ fn validate_window_secs(window_secs: i64) -> Result<()> {
 
 /// Import a folder of conversation files, then print the counts.
 async fn run_import(args: ImportArgs) -> Result<()> {
-    let cfg = Config::load(&args.config)?.with_db_override(args.db);
+    let cfg = Config::load_with_db(&args.config, args.db)?;
     validate_window_secs(args.window_secs)?;
     if let Some(ref source) = args.source {
         validate_source_id(source)?;
@@ -403,7 +403,7 @@ async fn run_import(args: ImportArgs) -> Result<()> {
 /// Discard the account's active import session and say which one it was,
 /// or that there was none.
 async fn run_imports_discard(args: ImportsDiscardArgs) -> Result<()> {
-    let cfg = Config::load(&args.config)?.with_db_override(args.db);
+    let cfg = Config::load_with_db(&args.config, args.db)?;
     let opened = OpenDb::open(cfg).await?;
     let account = opened.account_id(&args.account).await?;
     let mut conn = opened.conn().await?;
@@ -494,7 +494,7 @@ fn format_dedupe_stats(stats: &DedupeStats) -> String {
 
 /// Run the cross-source dedupe pass on its own and print the counts.
 async fn run_dedupe(args: DedupeArgs) -> Result<()> {
-    let cfg = Config::load(&args.config)?.with_db_override(args.db);
+    let cfg = Config::load_with_db(&args.config, args.db)?;
     validate_window_secs(args.window_secs)?;
     let opened = OpenDb::open(cfg).await?;
     let account = opened.account_id(&args.account).await?;
@@ -578,7 +578,7 @@ async fn run_reset_demo(args: ResetDemoArgs) -> Result<()> {
 async fn run_create_database(args: CreateDatabaseArgs) -> Result<()> {
     let cfg = Config::load(&args.config)?;
     let is_new = crate::reset_demo::database_is_new(&cfg).await?;
-    let opened = OpenDb::open(cfg).await?;
+    let opened = OpenDb::create_or_open(cfg).await?;
     if is_new {
         println!("Empty database created at {}.", opened.location().display());
     } else {
@@ -599,22 +599,29 @@ async fn run_serve(args: ServeArgs) -> Result<()> {
 }
 
 /// The config `serve` runs on: the folder `--data-dir` names, or else the
-/// config file, with the other flags applied over either.
+/// config file, with the other flags applied over either. A relative
+/// `--static-dir` resolves where the config file's paths do; with
+/// `--data-dir`, which reads no config file, that is the working directory,
+/// as for `--data-dir` itself.
 fn serve_config(args: ServeArgs) -> Result<Config> {
-    let cfg = match &args.data_dir {
+    let (cfg, root) = match &args.data_dir {
         Some(data_dir) => {
             // Made absolute so nothing later depends on the directory the
             // server was started in.
+            let cwd = std::env::current_dir()?;
             let data_dir = if data_dir.is_absolute() {
                 data_dir.clone()
             } else {
-                std::env::current_dir()?.join(data_dir)
+                cwd.join(data_dir)
             };
-            Config::for_data_dir(&data_dir)
+            (Config::for_data_dir(&data_dir), cwd)
         }
-        None => Config::load(&args.config)?,
+        None => (
+            Config::load(&args.config)?,
+            crate::config::config_root(&args.config)?,
+        ),
     };
-    Ok(cfg.with_serve_overrides(args.bind, args.static_dir, args.cors_origins))
+    Ok(cfg.with_serve_overrides(&root, args.bind, args.static_dir, args.cors_origins))
 }
 
 /// Convert stored media into browser previews.
@@ -624,7 +631,7 @@ fn serve_config(args: ServeArgs) -> Result<Config> {
 /// Returns an error after the summary line when any conversion failed, so a
 /// cron job or script that runs the command sees a non-zero exit status.
 async fn run_process_assets(args: ProcessAssetsArgs) -> Result<()> {
-    let cfg = Config::load(&args.config)?.with_db_override(args.db);
+    let cfg = Config::load_with_db(&args.config, args.db)?;
     if let Some(ref source) = args.source {
         validate_source_id(source)?;
     }

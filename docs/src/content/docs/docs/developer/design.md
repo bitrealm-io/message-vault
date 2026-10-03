@@ -54,6 +54,7 @@ and its amendment.
 |--------|------------|-----|
 | `imessage-ir-exporter`, `sms-backup-restore-exporter`, `whatsapp-exporter` | `crates/exporters/` | Supported extract → JSONL |
 | `go-sms-pro-exporter`, `imazing-exporter`, `openextract-exporter`, `sms-backup-plus-exporter` | `crates/exporters/` | Rescue / experimental extract |
+| `ios-backup` | `crates/libs/ios-backup/` | Check an iPhone backup before an import and decrypt one of its domains, through `imessage-reader` |
 | `message-reexport` | `crates/libs/reexport/` | Convert an existing export folder |
 | `message-crate-push` / `message-crate-pull` | `crates/libs/` | JSONL → running server / server → JSONL |
 

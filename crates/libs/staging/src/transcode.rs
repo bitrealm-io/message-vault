@@ -104,7 +104,12 @@ const TOO_LARGE_SUFFIX: &str = ".too_large";
 pub(crate) const COMMITTED_SUFFIX: &str = "-mv";
 
 /// What the media pass should do.
-#[derive(Debug, Clone)]
+///
+/// Staging records these in the staging folder
+/// ([`write_media_settings`](crate::write_media_settings)), and the summary
+/// and the pass read them back from there, so the whole Import Run works to
+/// one set of values.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TranscodeOptions {
     /// Convert or Compress. Clone and Disabled make the pass a no-op.
     pub mode: MediaMode,
@@ -659,7 +664,9 @@ fn apply_transcode(
                 src,
                 "final derivative name collided with the source"
             );
-            std::fs::rename(&marker, &final_path)
+            // Synced before the original goes, so a power loss cannot
+            // leave an empty derivative and no original.
+            message_ir::rename_into_place(&marker, &final_path)
                 .with_context(|| format!("commit {}", final_path.display()))?;
             let _ = std::fs::remove_file(src);
             // A note from an earlier run under a lower limit no longer

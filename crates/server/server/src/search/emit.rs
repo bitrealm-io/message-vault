@@ -4,7 +4,6 @@
 use chrono::NaiveDate;
 
 use crate::db::contacts::UNKNOWN_CONTACT_SQL;
-use crate::db::dialect::name_eq_ci;
 
 use super::bridge::{ListCtx, MessageAgg, Sql, TrashScope};
 use super::error::{QueryError, QueryErrorKind};
@@ -160,7 +159,7 @@ fn emit_expr(ctx: &ListCtx, out: &mut Sql, expr: &Expr) -> Result<(), QueryError
 /// (`free_text_match`) and the text words (`text_match`) both go through it.
 /// It escapes the text first, so a `%`, `_`, or `\` a person types is that
 /// character and never a wildcard: `filename:IMG_0001` does not find
-/// `IMGX0001`. `like_ci` names `\` as the escape character.
+/// `IMGX0001`. `Sql::like` names `\` as the escape character.
 fn like_contains(out: &mut Sql, column: &str, text: &str, prefix: bool) {
     let text = like_escape(text);
     if prefix {
@@ -293,7 +292,7 @@ fn emit_field(ctx: &ListCtx, out: &mut Sql, term: &FieldTerm) -> Result<(), Quer
 /// One value of one word, written against the innermost alias it needs.
 fn emit_one(ctx: &ListCtx, out: &mut Sql, term: &FieldTerm, v: &Value) -> Result<(), QueryError> {
     match term.spec.word {
-        "body" | "subject" | "name" | "title" | "handle" | "filename" => {
+        "body" | "subject" | "name" | "title" | "identity" | "filename" => {
             emit_text_word(ctx, out, term, v)
         }
         "with" | "from" | "to" | "in" | "group" | "tag" | "import" => {
@@ -355,7 +354,7 @@ fn text_match(out: &mut Sql, column: &str, term: &FieldTerm, v: &Value) -> Resul
     }
 }
 
-/// The six text words. On Contacts, `name:` and `handle:` look at the
+/// The six text words. On Contacts, `name:` and `identity:` look at the
 /// contact itself; everywhere else they look at the conversation's
 /// participants. `body:`, `subject:`, and `filename:` always look at
 /// messages (and their attachments); `title:` always looks at the
@@ -388,7 +387,7 @@ fn emit_text_word(
             result = text_match(o, PARTICIPANT_NAME, term, v);
             o.push(")");
         }),
-        ("handle", ListKind::Contacts) => match v {
+        ("identity", ListKind::Contacts) => match v {
             Value::Keyword("none") => out.push(
                 "NOT EXISTS (SELECT 1 FROM contact_handles ch WHERE ch.account_id = ct.account_id AND ch.contact_id = ct.id)",
             ),
@@ -410,7 +409,7 @@ fn emit_text_word(
                 result = Err(bad_value(term, "needs text, a prefix, or none/any."));
             }
         },
-        ("handle", _) => ctx.conversation(out, |o| match v {
+        ("identity", _) => ctx.conversation(out, |o| match v {
             Value::Keyword("none") => o.push(
                 "NOT EXISTS (SELECT 1 FROM participants p WHERE p.conversation_id = c.id AND p.handle_id IS NOT NULL)",
             ),
@@ -490,7 +489,7 @@ fn person_matches(
             out.push("))");
             Ok(())
         }
-        _ => Err(bad_value(term, "needs a name, a handle, or #id.")),
+        _ => Err(bad_value(term, "needs a name, an identity, or #id.")),
     }
 }
 
@@ -523,7 +522,7 @@ fn participant_matches(
             like_contains(out, PARTICIPANT_NAME, t, prefix);
             Ok(())
         }
-        _ => Err(bad_value(term, "needs a name, a handle, or #id.")),
+        _ => Err(bad_value(term, "needs a name, an identity, or #id.")),
     }
 }
 
@@ -626,8 +625,9 @@ impl NamedSet {
                 Ok(())
             }
             Value::Text(t) => {
-                out.push(&name_eq_ci("ns.name", "?"));
-                out.param_text(t.clone());
+                out.push("lower(ns.name) = lower(");
+                out.bind_text(t.clone());
+                out.push(")");
                 Ok(())
             }
             Value::Prefix(t) => {

@@ -19,16 +19,16 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use message_ir::{HandleService, HandleType};
 use serde::{Deserialize, Serialize};
-use sqlx::{Connection, SqliteConnection};
+use sqlx::SqliteConnection;
 
 use crate::credentials::{
     change_password_on_conn, check_auth_rate_limit, count_auth_failure, hash_owner_password,
     hash_user_password, password_bucket, passwords_match, refuse_when_rate_limited,
     require_username_free, require_valid_username,
 };
-use crate::db::dialect::BEGIN_IMMEDIATE_SQL;
 use crate::db::handles::{self, Identity};
 use crate::db::storage::{self, Scope};
+use crate::db::{WriteTx, begin_write};
 use crate::db::{account_profile, imports, server_settings, session_tokens};
 use crate::exports_api::OwnerExportRun;
 use crate::extract::{Json, Path, Query};
@@ -358,11 +358,10 @@ pub async fn create_account(
 
     // The insert, the phone, and the profile-setup mark land together: a
     // failure between them would leave an account that owes profile setup
-    // without being marked for it. The transaction takes the write lock
-    // before the username check (`BEGIN_IMMEDIATE_SQL`, as imports and
-    // exports begin), so two registrations of one name cannot both pass the
-    // check and then race to the insert.
-    let mut tx = conn.begin_with(BEGIN_IMMEDIATE_SQL).await?;
+    // without being marked for it. The write transaction takes the write
+    // lock before the username check, so two registrations of one name
+    // cannot both pass the check and then race to the insert.
+    let mut tx = begin_write(&mut conn).await?;
     require_username_free(&mut tx, &username).await?;
     let account_id = account_profile::insert_account(
         &mut tx,
@@ -627,16 +626,28 @@ async fn apply_profile_update(
     Ok(())
 }
 
-/// Apply a profile update in one transaction.
+/// Apply a profile update in one write transaction.
 async fn update_profile_on_conn(
     conn: &mut SqliteConnection,
     account_id: i64,
     req: &UpdateAccountRequest,
     completes_setup: bool,
 ) -> std::result::Result<(), ProfileUpdateError> {
-    let mut tx = conn.begin().await?;
+    let mut tx = begin_write(conn).await?;
+    update_profile_in(&mut tx, account_id, req, completes_setup).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Apply a profile update inside the caller's write transaction.
+async fn update_profile_in(
+    tx: &mut WriteTx<'_>,
+    account_id: i64,
+    req: &UpdateAccountRequest,
+    completes_setup: bool,
+) -> std::result::Result<(), ProfileUpdateError> {
     apply_profile_update(
-        &mut tx,
+        tx,
         account_id,
         req.preferred_name.as_ref().map(Option::as_deref),
         req.time_zone.as_deref(),
@@ -649,9 +660,8 @@ async fn update_profile_on_conn(
     // describes, so the flag cannot outlive the fact it stands for. The
     // owner filling a profile in ahead of time is not the holder's setup.
     if completes_setup {
-        account_profile::set_must_set_up_profile(&mut tx, account_id, false).await?;
+        account_profile::set_must_set_up_profile(tx, account_id, false).await?;
     }
-    tx.commit().await?;
     Ok(())
 }
 
@@ -743,11 +753,14 @@ pub async fn update_account(
         }
         Reach::Owner => {
             // The owner sets up an account for its holder: the name, zone and
-            // handles as well as the flags.
+            // handles as well as the flags, in one write transaction, so a
+            // failed flag leaves the profile as it was too.
+            let mut tx = begin_write(&mut conn).await?;
             if req.touches_profile() {
-                update_profile_on_conn(&mut conn, target, &req, false).await?;
+                update_profile_in(&mut tx, target, &req, false).await?;
             }
-            apply_flags(&mut conn, target, &req).await?;
+            apply_flags(&mut tx, target, &req).await?;
+            tx.commit().await?;
         }
     }
     Ok(Json(require_account(&mut conn, target).await?))

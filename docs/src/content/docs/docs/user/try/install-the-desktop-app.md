@@ -13,11 +13,11 @@ The installers are on the [latest release on GitHub](https://github.com/messagec
 | Computer | File |
 |---|---|
 | Windows, 64-bit Intel or AMD | `.msi` |
-| Linux, Debian or Ubuntu | `.deb` |
-| Linux, any other distribution | `.AppImage` |
+| Linux on 64-bit Intel or AMD, Debian or Ubuntu | `.deb` |
+| Linux on 64-bit Intel or AMD, any other distribution | `.AppImage` |
 | Mac with Apple Silicon | `.dmg` |
 
-There is no build for a Mac with an Intel processor.
+There is no build for a Mac with an Intel processor, and none for Linux on ARM.
 
 ## Install
 

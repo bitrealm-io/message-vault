@@ -1041,6 +1041,7 @@ name = "go-sms-mms"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "mms-parts",
  "phone",
  "regex",
  "tempfile",
@@ -1545,11 +1546,11 @@ dependencies = [
  "anyhow",
  "chat-db-fixture",
  "imessage-reader-protocol",
+ "ios-backup",
  "message-crate-core",
  "message-ir",
  "message-ir-format",
  "message-staging",
- "plist",
  "serde_json",
  "tempfile",
 ]
@@ -1602,6 +1603,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ios-backup"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chat-db-fixture",
+ "imessage-reader-protocol",
+ "message-crate-core",
+ "plist",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "ipnet"
 version = "2.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1624,6 +1638,7 @@ name = "journal"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "message-ir",
  "serde",
  "serde_json",
  "tempfile",
@@ -1950,11 +1965,13 @@ dependencies = [
 name = "message-ir"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "chrono",
  "hex",
  "serde",
  "serde_json",
  "sha2 0.11.0",
+ "tempfile",
 ]
 
 [[package]]
@@ -2001,6 +2018,7 @@ dependencies = [
  "message-ir",
  "message-ir-format",
  "serde",
+ "serde_json",
  "sha2 0.11.0",
  "tempfile",
 ]
@@ -2040,6 +2058,13 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "mms-parts"
+version = "0.1.0"
+dependencies = [
+ "regex",
 ]
 
 [[package]]
@@ -2798,9 +2823,9 @@ dependencies = [
  "hex",
  "html-escape",
  "message-ir",
+ "mms-parts",
  "phone",
  "quick-xml 0.42.0",
- "regex",
  "serde",
  "sha2 0.11.0",
  "tempfile",
@@ -3023,6 +3048,7 @@ dependencies = [
  "message-ir",
  "message-ir-format",
  "message-staging",
+ "mms-parts",
  "phone",
  "rayon",
  "regex",
@@ -3042,6 +3068,7 @@ dependencies = [
  "message-ir",
  "message-ir-format",
  "message-staging",
+ "mms-parts",
  "phone",
  "sbr",
  "serde_json",
@@ -3994,7 +4021,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "hex",
- "imessage-ir-exporter",
+ "ios-backup",
  "media",
  "message-crate-core",
  "message-csv",

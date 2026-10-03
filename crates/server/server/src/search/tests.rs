@@ -1073,17 +1073,17 @@ mod text_words {
             sorted(vec![f.ana, f.bo, f.cy, f.jane, f.sam])
         );
         assert_eq!(
-            run(&mut conn, ListKind::Contacts, "handle:gmail").await,
+            run(&mut conn, ListKind::Contacts, "identity:gmail").await,
             vec![f.jane]
         );
         assert_eq!(
-            run(&mut conn, ListKind::Contacts, "handle:+1555*")
+            run(&mut conn, ListKind::Contacts, "identity:+1555*")
                 .await
                 .len(),
             4
         );
         assert_eq!(
-            run(&mut conn, ListKind::Contacts, "handle:none").await,
+            run(&mut conn, ListKind::Contacts, "identity:none").await,
             Vec::<i64>::new()
         );
     }
@@ -1097,7 +1097,7 @@ mod text_words {
             sorted(vec![f.jane_direct, f.big_group])
         );
         assert_eq!(
-            run(&mut conn, ListKind::Conversations, "handle:icloud").await,
+            run(&mut conn, ListKind::Conversations, "identity:icloud").await,
             sorted(vec![f.sam_direct, f.archive_group, f.big_group])
         );
         assert_eq!(
@@ -1217,8 +1217,8 @@ mod unicode_case {
             "name:ÉLODIE",
             "name:\"élodie ünal\"",
             "name:élod*",
-            "handle:élodie.ünal",
-            "handle:ÉLODIE*",
+            "identity:élodie.ünal",
+            "identity:ÉLODIE*",
             "élodie",
             "ÜNAL",
             "élod*",
@@ -1299,7 +1299,7 @@ mod unicode_case {
             "title:ålesund",
             "title:ÅLESUND",
             "name:øystein",
-            "handle:ØYSTEIN",
+            "identity:ØYSTEIN",
             "with:øystein",
             "ålesund",
             "øystein",
@@ -2618,7 +2618,7 @@ mod measure_words {
             run(
                 &mut conn,
                 ListKind::Contacts,
-                "first-message:<2020 last-message:>=2024-01-01 handle:@gmail.com"
+                "first-message:<2020 last-message:>=2024-01-01 identity:@gmail.com"
             )
             .await,
             vec![f.jane]
@@ -3548,6 +3548,23 @@ mod refusals {
                 assert_eq!(e.kind, QueryErrorKind::EmptyValue, "{list:?} {query}");
                 assert_eq!(e.span, span, "{list:?} {query}");
                 assert_eq!(e.field, None, "{list:?} {query}");
+            }
+        }
+    }
+
+    /// Issue #1109: the word for a phone number, email, or username is
+    /// `identity:`, the name a person reads. `handle:`, the code's name for
+    /// the same thing, is refused on every list like any unknown word.
+    #[test]
+    fn handle_is_not_a_search_word() {
+        for list in [
+            ListKind::Contacts,
+            ListKind::Conversations,
+            ListKind::Messages,
+        ] {
+            for query in ["handle:gmail", "handle:none"] {
+                let e = err(list, query);
+                assert_eq!(e.kind, QueryErrorKind::UnknownWord, "{list:?} {query}");
             }
         }
     }

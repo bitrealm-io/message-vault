@@ -167,10 +167,9 @@ async fn append_skips_existing_guids_and_keeps_id_map() {
     let second = write_jsonl(
         tmp.path(),
         "b.jsonl",
-        r#"{"schema_version":4,"export":{"source":"sms-backup-restore","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+14075551234","conversation_type":"individual","group_title":null,"participants":[{"handle":"+14075551234","display_name":null}],"stats":{"message_count":3,"attachment_count":0,"first_timestamp_unix_ms":1426183522000,"last_timestamp_unix_ms":1426183642000}}}
+        r#"{"schema_version":4,"export":{"source":"sms-backup-restore","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+14075551234","conversation_type":"individual","group_title":null,"participants":[{"handle":"+14075551234","display_name":null}],"stats":{"message_count":2,"attachment_count":0,"first_timestamp_unix_ms":1426183522000,"last_timestamp_unix_ms":1426183582000}}}
 {"guid":"g-dup","timestamp_unix_ms":1426183522000,"direction":"outgoing","service":"sms","message_kind":"sms","sender_handle":null,"sender_display_name":null,"subject":null,"text":"two again","attachments":[],"imessage":null,"source":null}
 {"guid":"g-new","timestamp_unix_ms":1426183582000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+14075551234","sender_display_name":null,"subject":null,"text":"three","attachments":[],"imessage":null,"source":null}
-{"guid":"","timestamp_unix_ms":1426183642000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+14075551234","sender_display_name":null,"subject":null,"text":"empty guid always inserts","attachments":[],"imessage":null,"source":null}
 "#,
     );
     let second_stats = import_jsonl_files(
@@ -188,11 +187,11 @@ async fn append_skips_existing_guids_and_keeps_id_map() {
     )
     .await
     .unwrap();
-    assert_eq!(second_stats.messages_appended, 2);
+    assert_eq!(second_stats.messages_appended, 1);
     assert_eq!(second_stats.messages_deduped, 1);
     assert_eq!(
-        second_stats.messages, 2,
-        "an append reports the messages it added, not the three it read"
+        second_stats.messages, 1,
+        "an append reports the messages it added, not the two it read"
     );
 
     let (_pool, mut conn) = open_verify(&db).await;
@@ -200,7 +199,7 @@ async fn append_skips_existing_guids_and_keeps_id_map() {
         .fetch_one(&mut *conn)
         .await
         .unwrap();
-    assert_eq!(n, 4);
+    assert_eq!(n, 3);
     let dup_body: String = sqlx::query_scalar("SELECT body FROM messages WHERE guid = 'g-dup'")
         .fetch_one(&mut *conn)
         .await
@@ -1421,7 +1420,7 @@ async fn claimed_import_rejects_corrupt_existing_asset() {
     let tmp = TempDir::new().unwrap();
     let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
-    let sha = assets_api::sha256_hex(b"expected-asset");
+    let sha = assets_api::Sha256::of_bytes(b"expected-asset");
     let corrupt = assets.join(assets_api::shard_rel_path(&sha, ""));
     fs::create_dir_all(corrupt.parent().unwrap()).unwrap();
     fs::write(&corrupt, b"corrupt-asset").unwrap();
@@ -1755,27 +1754,37 @@ async fn http_import_of_a_schema_3_file_is_a_400_naming_both_versions() {
     let err: serde_json::Value = serde_json::from_str(&text).unwrap();
     assert_eq!(
         err["detail"],
-        "This file is schema version 3; Message Crate reads version 4 (line 1)."
+        "This file is schema version 3; Message Crate reads version 4 (line 1 of the batch)."
     );
+    assert_eq!(err["line"], 1, "{text}");
 }
 
+/// A batch is a request body, not a file the sender has: Upload packs it
+/// from parts of one or more staged files. The failure names the line of the
+/// batch, in the sentence and as `line`, so the client can turn it into the
+/// line of the file it came from.
 #[tokio::test]
-async fn http_import_of_a_line_that_is_not_json_is_a_400_naming_the_line() {
+async fn http_import_of_a_line_that_is_not_json_is_a_400_naming_the_line_of_the_batch() {
     let (state, _fixture, token) = importer().await;
     let path = batches_path(&state, &token, "whatsapp").await;
-    let (status, text) = crate::test_support::post_raw(
-        &state,
-        &path,
-        &token,
-        "application/jsonl",
+    let body = concat!(
+        r#"{"schema_version":4,"export":{"source":"whatsapp","tool":"t","tool_version":"1","owner_handle":"+15550000001","owner_display_name":"Me"},"#,
+        r#""conversation":{"chat_identifier":"+15550000002","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15550000002","display_name":"Sam"}],"#,
+        r#""stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1400773261000,"last_timestamp_unix_ms":1400773261000}}}"#,
+        "\n\n",
         "this is not json\n",
-    )
-    .await;
-    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST, "{text}");
-    let err: serde_json::Value = serde_json::from_str(&text).unwrap();
-    let message = err["detail"].as_str().unwrap();
+    );
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &token, "application/jsonl", body).await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::MalformedBody,
+    );
+    assert_eq!(problem.line, Some(3), "{text}");
+    let message = problem.detail.unwrap();
     assert!(
-        message.starts_with("Could not read line 1 of the file:"),
+        message.starts_with("Could not read line 3 of the batch:"),
         "{message}"
     );
 }
@@ -1812,6 +1821,57 @@ async fn a_batch_into_a_run_that_is_not_running_is_a_state_conflict() {
     );
 }
 
+/// A run discarded while a batch uploads: the batch passed the check before
+/// its body, and its messages were then stored under a cancelled run. The
+/// run is checked again inside the import's write transaction, and the batch
+/// is refused the same way.
+#[tokio::test]
+async fn a_batch_into_a_run_discarded_while_it_uploads_is_a_state_conflict() {
+    let (state, fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+    let id: i64 = path
+        .trim_start_matches("/v1/imports/")
+        .trim_end_matches("/batches")
+        .parse()
+        .unwrap();
+
+    let mut other_conn = fixture.conn().await;
+    let mut other = crate::db::begin_write(&mut other_conn).await.unwrap();
+    sqlx::query("UPDATE imports SET status = 'cancelled', stage = NULL WHERE id = $1")
+        .bind(id)
+        .execute(&mut *other)
+        .await
+        .unwrap();
+    let (status, text) = crate::db::write_tx::commit_during(
+        other,
+        crate::test_support::post_raw(
+            &state,
+            &path,
+            &token,
+            "application/jsonl",
+            replace_run_batch("+15550000002", &["g1"]),
+        ),
+    )
+    .await;
+
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::StateConflict,
+    );
+    assert_eq!(
+        problem.detail.as_deref(),
+        Some(format!("import {id} is not running (status=cancelled)").as_str())
+    );
+    let mut conn = fixture.conn().await;
+    let stored: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE import_id = $1")
+        .bind(id)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(stored, 0);
+}
+
 /// One conversation with `chat`, holding one message per guid, as a
 /// replace run's batch.
 fn replace_run_batch(chat: &str, guids: &[&str]) -> String {
@@ -1839,9 +1899,8 @@ fn replace_run_batch(chat: &str, guids: &[&str]) -> String {
 /// nothing. This guards both against a change to how a batch picks wipe
 /// or append (today: whether the run has stamped a message yet).
 ///
-/// Every message carries a guid, as every exporter writes one. A message
-/// with an empty guid would be inserted again by the retry, in a replace
-/// run or an append run alike, because append skips by guid only.
+/// The retry adds nothing because append skips a guid the source already
+/// holds, and the import refuses a message without one.
 #[tokio::test]
 async fn a_retried_batch_in_a_replace_run_keeps_every_message_once() {
     let (state, _fixture, token) = importer().await;
@@ -1870,6 +1929,106 @@ async fn a_retried_batch_in_a_replace_run_keeps_every_message_once() {
             .await
             .unwrap();
     assert_eq!(guids, ["g-1a", "g-1b", "g-2a", "g-2b"]);
+}
+
+/// A message without a guid is outside the guid index, so a retried batch
+/// would store it a second time (#1162). The batch is refused with `422`,
+/// naming the line, and nothing in it is stored.
+#[tokio::test]
+async fn a_batch_with_a_message_without_a_guid_is_refused_and_stores_nothing() {
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+    let body = replace_run_batch("+15550000002", &["g-1", "", "g-2"]);
+
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &token, "application/jsonl", body).await;
+
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    assert_eq!(
+        problem.errors.as_deref(),
+        Some(
+            &[
+                "The message on line 3 of the batch has no guid; every message needs one."
+                    .to_string()
+            ][..]
+        )
+    );
+    assert_eq!(
+        problem.line,
+        Some(3),
+        "Upload maps the line back to its file"
+    );
+    let mut conn = state.db.acquire().await.unwrap();
+    let stored: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(stored, 0);
+}
+
+/// The steps in #1162: a proxy in front of the server times out while the
+/// server commits a batch, answers `504 Gateway Timeout`, and Upload posts
+/// the batch again. The second post finds every message already stored by
+/// its guid, so each message is stored once.
+#[tokio::test]
+async fn a_batch_posted_again_after_a_gateway_timeout_stores_each_message_once() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+
+    // Stands in for the proxy: the first batch reaches the server and is
+    // committed, and the client is told 504 instead of the server's answer.
+    let timed_out = Arc::new(AtomicBool::new(false));
+    let app = crate::server::http_app(state.clone()).layer(axum::middleware::from_fn(
+        move |request: axum::extract::Request, next: axum::middleware::Next| {
+            let timed_out = Arc::clone(&timed_out);
+            async move {
+                let is_batch = request.uri().path().ends_with("/batches");
+                let response = next.run(request).await;
+                if is_batch
+                    && response.status().is_success()
+                    && !timed_out.swap(true, Ordering::SeqCst)
+                {
+                    return axum::response::IntoResponse::into_response(
+                        axum::http::StatusCode::GATEWAY_TIMEOUT,
+                    );
+                }
+                response
+            }
+        },
+    ));
+    let server = crate::test_support::serve_router(app).await;
+    let body = replace_run_batch("+15550000002", &["g-a", "g-b", "g-c"]);
+    let post = || {
+        reqwest::Client::new()
+            .post(format!("{}{path}", server.base()))
+            .bearer_auth(&token)
+            .header(reqwest::header::CONTENT_TYPE, "application/jsonl")
+            .body(body.clone())
+            .send()
+    };
+
+    let first = post().await.unwrap();
+    assert_eq!(first.status(), reqwest::StatusCode::GATEWAY_TIMEOUT);
+    let second = post().await.unwrap();
+    assert_eq!(second.status(), reqwest::StatusCode::OK);
+    let answer: serde_json::Value = second.json().await.unwrap();
+    assert_eq!(answer["messages_appended"], 0, "{answer}");
+    assert_eq!(answer["messages_deduped"], 3, "{answer}");
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let guids: Vec<String> =
+        sqlx::query_scalar("SELECT guid FROM messages WHERE source = 'whatsapp' ORDER BY guid")
+            .fetch_all(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(guids, ["g-a", "g-b", "g-c"]);
 }
 
 /// One `source` conversation with `+15550000002`, one message per guid. The
@@ -2108,6 +2267,108 @@ async fn a_batch_into_another_accounts_run_is_not_found() {
     )
     .await;
     assert_ne!(status, axum::http::StatusCode::NOT_FOUND);
+}
+
+/// What a request can change on an Import Run: status, stage, approved plan
+/// and finish time.
+async fn run_state(
+    state: &crate::server::AppState,
+    import_id: i64,
+) -> (String, Option<String>, Option<String>, Option<String>) {
+    let mut conn = state.db.acquire().await.unwrap();
+    sqlx::query_as("SELECT status, stage, summary_json, finished_at FROM imports WHERE id = $1")
+        .bind(import_id)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap()
+}
+
+/// The desktop app sends every call of an Import Run with the session logged
+/// in at the time, so a run whose account logged out while it ran reaches
+/// the server with the next account's session (#1085). Every route on a
+/// run refuses another account's session as if the run did not exist, and
+/// leaves the run as it was.
+#[tokio::test]
+async fn every_route_on_another_accounts_run_is_not_found_and_changes_nothing() {
+    let (fixture, alice) = crate::test_support::fixture_with_account().await;
+    let bob = crate::test_support::register_via_api(&fixture.state, "bob", "hunter2hunter2").await;
+    let (_, created): (String, serde_json::Value) = post_created_json(
+        &fixture.state,
+        "/v1/imports",
+        &bob.token,
+        serde_json::json!({ "source": "imessage" }),
+    )
+    .await;
+    let bobs_run = created["id"].as_i64().unwrap();
+    let run = format!("/v1/imports/{bobs_run}");
+    let before = run_state(&fixture.state, bobs_run).await;
+
+    let state = &fixture.state;
+    let token = alice.token.as_str();
+    let refusals = [
+        (
+            "PATCH stage",
+            crate::test_support::patch_raw(
+                state,
+                &run,
+                token,
+                serde_json::json!({ "stage": "pushing", "summary": { "approved": true } }),
+            )
+            .await,
+        ),
+        (
+            "POST complete",
+            crate::test_support::post_raw(
+                state,
+                &format!("{run}/complete"),
+                token,
+                "application/json",
+                r#"{"status":"completed"}"#,
+            )
+            .await,
+        ),
+        (
+            "POST discard",
+            crate::test_support::post_raw(
+                state,
+                &format!("{run}/discard"),
+                token,
+                "application/json",
+                "{}",
+            )
+            .await,
+        ),
+        (
+            "POST batches",
+            crate::test_support::post_raw(
+                state,
+                &format!("{run}/batches"),
+                token,
+                "application/jsonl",
+                "{}\n",
+            )
+            .await,
+        ),
+        (
+            "GET run",
+            crate::test_support::get_raw(state, &run, token).await,
+        ),
+        (
+            "GET contacts",
+            crate::test_support::get_raw(state, &format!("{run}/contacts"), token).await,
+        ),
+    ];
+    for (route, (status, text)) in refusals {
+        assert_eq!(
+            status,
+            axum::http::StatusCode::NOT_FOUND,
+            "{route} on another account's run: {text}"
+        );
+        crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
+    }
+
+    assert_eq!(run_state(&fixture.state, bobs_run).await, before);
+    assert_eq!(before.0, "running");
 }
 
 /// The account that owns Import Run `import_id`.
@@ -3169,4 +3430,35 @@ async fn a_participant_listed_twice_under_one_identity_is_listed_once() {
         ["+15551234567"],
         "the one number is listed once"
     );
+}
+
+/// #1163: the batch answer counts the contacts the batch made. Staging makes
+/// one for a person the account has no contact for, and that count reaches
+/// the answer beside the participant row promote added.
+#[tokio::test]
+async fn the_batch_answer_counts_the_contacts_it_created() {
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "imessage").await;
+    let (status, text) = crate::test_support::post_raw(
+        &state,
+        &path,
+        &token,
+        "application/jsonl",
+        format!(
+            "{S1_HEADER_1}\n{}\n",
+            s1_message("g1", "+15551234567", 1426183462000, "hi")
+        ),
+    )
+    .await;
+    assert_eq!(status, axum::http::StatusCode::OK, "{text}");
+    let mut conn = state.db.acquire().await.unwrap();
+    let bobs: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM contacts WHERE preferred_name = 'Bob'")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(bobs, 1, "the batch made Bob's contact");
+    let answer: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(answer["contacts_created"], 1, "{text}");
+    assert_eq!(answer["participants"], 1, "{text}");
 }

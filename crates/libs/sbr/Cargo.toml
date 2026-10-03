@@ -7,13 +7,13 @@ license = "LicenseRef-FCL-1.0-ALv2"
 
 [dependencies]
 message-ir = { workspace = true }
+mms-parts = { path = "../mms-parts" }
 anyhow = { workspace = true }
 base64 = "0.23.1"
 hex = { workspace = true }
 html-escape = "0.2.14"
 phone = { path = "../phone" }
 quick-xml = { workspace = true }
-regex = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true }
 

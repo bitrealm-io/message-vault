@@ -89,7 +89,7 @@ describe("ResumeImportPanel", () => {
     const onResume = vi.fn();
     const onDiscard = vi.fn();
     const decision: ResumeDecision = {
-      kind: "resume_gate",
+      kind: "resume_review",
       session: session({ stage: "staging_review" }),
     };
     render(<ResumeImportPanel decision={decision} onResume={onResume} onDiscard={onDiscard} />);
@@ -253,7 +253,7 @@ describe("ResumeImportPanel", () => {
 
   it("says nothing extra when there is no error to report", () => {
     const decision: ResumeDecision = {
-      kind: "resume_gate",
+      kind: "resume_review",
       session: session({ stage: "staging_review" }),
     };
     render(<ResumeImportPanel decision={decision} onResume={vi.fn()} onDiscard={vi.fn()} />);
@@ -264,7 +264,7 @@ describe("ResumeImportPanel", () => {
     const user = userEvent.setup();
     const onResume = vi.fn();
     const decision: ResumeDecision = {
-      kind: "resume_gate",
+      kind: "resume_review",
       session: session({ stage: "staging_review" }),
     };
     render(

@@ -956,6 +956,18 @@ pub(crate) async fn import_detail(
     Ok(import_detail_response(detail, contacts))
 }
 
+/// The stage `raw` spells, or a `422` naming the six stages the server knows.
+fn parse_stage(raw: &str) -> Result<crate::db::imports::ImportStage, ApiError> {
+    use crate::db::imports::ImportStage;
+    ImportStage::parse(raw).ok_or_else(|| {
+        let expected: Vec<&str> = ImportStage::ALL.iter().map(|s| s.as_str()).collect();
+        ApiError::validation(format!(
+            "invalid import stage '{raw}'; expected one of {}",
+            expected.join(", ")
+        ))
+    })
+}
+
 /// Start an Import Run and return its id. Finish the run at
 /// POST /v1/imports/{id}/complete.
 #[utoipa::path(
@@ -986,8 +998,7 @@ pub(crate) async fn create_import(
     let account = resolve_import_account(&auth);
     let stage = match body.stage.as_deref() {
         None => crate::db::imports::ImportStage::Parse,
-        Some(raw) => crate::db::imports::ImportStage::parse(raw)
-            .ok_or_else(|| ApiError::validation(crate::db::imports::ImportStage::unknown(raw)))?,
+        Some(raw) => parse_stage(raw)?,
     };
     // Credentials never reach the row, whoever the client is.
     let form = body.form.as_ref().map(strip_form_credentials);
@@ -1340,9 +1351,7 @@ pub(crate) async fn update_import(
     Json(body): Json<UpdateImportRequest>,
 ) -> Result<Json<ImportRun>, ApiError> {
     let account = resolve_import_account(&auth);
-    let stage = crate::db::imports::ImportStage::parse(&body.stage).ok_or_else(|| {
-        ApiError::validation(crate::db::imports::ImportStage::unknown(&body.stage))
-    })?;
+    let stage = parse_stage(&body.stage)?;
     let summary_json = optional_json_string(body.summary.as_ref(), "summary")?;
     let mut conn = state.db.acquire().await?;
     crate::db::imports::set_import_stage(

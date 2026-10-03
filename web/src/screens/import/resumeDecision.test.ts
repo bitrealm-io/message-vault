@@ -109,7 +109,7 @@ describe("resumeDecisionFor", () => {
         folder: "present",
         fingerprint: "unknown",
       });
-      expect(decision.kind).toBe("resume_gate");
+      expect(decision.kind).toBe("resume_review");
     }
   });
 

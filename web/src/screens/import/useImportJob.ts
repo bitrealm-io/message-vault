@@ -1343,7 +1343,7 @@ async function runImport(
     // failed read of a folder that already holds the staged work, not a run
     // that failed. Routing it through the outer catch (below) would post
     // `/complete` and end the run, stranding that work with no way back to
-    // it. This mirrors `resumeAtGate`'s landing exactly: return to the form
+    // it. This mirrors `resumeAtReview`'s landing exactly: return to the form
     // instead, surfacing the failure on `resumeError`. The stage already
     // written above (`staging_review`) stays as it is: the next visit's
     // resume check finds the same run and offers this recompute again.
@@ -1582,17 +1582,17 @@ export function useImportJob() {
    * (the resume check there re-runs and finds the same run, so the panel
    * reappears; that is the retry) and leaves the failure on `resumeError`.
    */
-  async function resumeAtGate(
+  async function resumeAtReview(
     session: ActiveImportSession,
     resumedForm: ImportJobFormValues,
   ): Promise<void> {
     if (!isTauri()) return;
     await takeRunFor(accountId);
-    await asWork(() => resumeRunAtGate(session, resumedForm));
+    await asWork(() => resumeRunAtReview(session, resumedForm));
   }
 
-  /** `resumeAtGate`, once the store is this account's. */
-  async function resumeRunAtGate(
+  /** `resumeAtReview`, once the store is this account's. */
+  async function resumeRunAtReview(
     session: ActiveImportSession,
     resumedForm: ImportJobFormValues,
   ): Promise<void> {
@@ -1717,7 +1717,7 @@ export function useImportJob() {
     cancelRun: async () => {
       if (ownsRun()) await asWork(cancelRun);
     },
-    resumeAtGate,
+    resumeAtReview,
     cancel: async () => {
       if (ownsRun()) await cancel();
     },

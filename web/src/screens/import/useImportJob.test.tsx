@@ -2160,7 +2160,7 @@ function activeSession(overrides: Partial<ActiveImportSession> = {}): ActiveImpo
   };
 }
 
-describe("useImportJob resumeAtGate", () => {
+describe("useImportJob resumeAtReview", () => {
   beforeEach(() => {
     resetImportRun();
     runMock.mockReset();
@@ -2191,7 +2191,7 @@ describe("useImportJob resumeAtGate", () => {
     const { result } = renderHook(() => useImportJob());
 
     await act(async () => {
-      await result.current.resumeAtGate(activeSession({ stage: "staging_review" }), form());
+      await result.current.resumeAtReview(activeSession({ stage: "staging_review" }), form());
     });
 
     expect(invokeSummarizeStagingMock).toHaveBeenCalledTimes(1);
@@ -2220,7 +2220,7 @@ describe("useImportJob resumeAtGate", () => {
     const { result } = renderHook(() => useImportJob());
 
     await act(async () => {
-      await result.current.resumeAtGate(activeSession({ stage: "staging_review" }), form());
+      await result.current.resumeAtReview(activeSession({ stage: "staging_review" }), form());
     });
     await act(() => result.current.approve());
 
@@ -2235,7 +2235,7 @@ describe("useImportJob resumeAtGate", () => {
     const { result } = renderHook(() => useImportJob());
 
     await act(async () => {
-      await result.current.resumeAtGate(
+      await result.current.resumeAtReview(
         activeSession({ stage: "staging_review" }),
         form({ attachmentMedia: "convert" }),
       );
@@ -2259,7 +2259,7 @@ describe("useImportJob resumeAtGate", () => {
 
     const { result } = renderHook(() => useImportJob());
     await act(async () => {
-      await result.current.resumeAtGate(
+      await result.current.resumeAtReview(
         activeSession({ stage: "media_review", summary: approved }),
         form({ attachmentMedia: "convert" }),
       );
@@ -2291,7 +2291,7 @@ describe("useImportJob resumeAtGate", () => {
 
     const { result } = renderHook(() => useImportJob());
     await act(async () => {
-      await result.current.resumeAtGate(
+      await result.current.resumeAtReview(
         activeSession({ stage: "media", summary: approved }),
         form({ attachmentMedia: "convert" }),
       );
@@ -2323,7 +2323,7 @@ describe("useImportJob resumeAtGate", () => {
     const { result } = renderHook(() => useImportJob());
     let resumed!: Promise<void>;
     await act(async () => {
-      resumed = result.current.resumeAtGate(
+      resumed = result.current.resumeAtReview(
         activeSession({ stage: "media" }),
         form({ attachmentMedia: "convert" }),
       );
@@ -2354,7 +2354,7 @@ describe("useImportJob resumeAtGate", () => {
 
     const { result } = renderHook(() => useImportJob());
     await act(async () => {
-      await result.current.resumeAtGate(
+      await result.current.resumeAtReview(
         activeSession({ stage: "media" }),
         form({ attachmentMedia: "convert" }),
       );
@@ -2386,7 +2386,7 @@ describe("useImportJob resumeAtGate", () => {
 
     const { result } = renderHook(() => useImportJob());
     await act(async () => {
-      await result.current.resumeAtGate(
+      await result.current.resumeAtReview(
         activeSession({ stage: "media_review", summary: "not a valid staging summary" }),
         form({ attachmentMedia: "convert" }),
       );
@@ -2402,7 +2402,7 @@ describe("useImportJob resumeAtGate", () => {
   it("does nothing for a session at a stage this function doesn't handle", async () => {
     const { result } = renderHook(() => useImportJob());
     await act(async () => {
-      await result.current.resumeAtGate(activeSession({ stage: "upload" }), form());
+      await result.current.resumeAtReview(activeSession({ stage: "upload" }), form());
     });
 
     expect(invokeSummarizeStagingMock).not.toHaveBeenCalled();
@@ -2416,7 +2416,7 @@ describe("useImportJob resumeAtGate", () => {
 
       const { result } = renderHook(() => useImportJob());
       await act(async () => {
-        await result.current.resumeAtGate(
+        await result.current.resumeAtReview(
           activeSession({ stage, summary: stagingSummary() }),
           form({ attachmentMedia: "convert" }),
         );
@@ -2436,7 +2436,7 @@ describe("useImportJob resumeAtGate", () => {
     invokeSummarizeStagingMock.mockRejectedValueOnce(new Error("disk unavailable"));
     const { result } = renderHook(() => useImportJob());
     await act(async () => {
-      await result.current.resumeAtGate(
+      await result.current.resumeAtReview(
         activeSession({ stage: "staging_review" }),
         form({ attachmentMedia: "convert" }),
       );
@@ -2445,7 +2445,7 @@ describe("useImportJob resumeAtGate", () => {
 
     invokeSummarizeStagingMock.mockResolvedValueOnce(stagingSummary());
     await act(async () => {
-      await result.current.resumeAtGate(
+      await result.current.resumeAtReview(
         activeSession({ stage: "staging_review" }),
         form({ attachmentMedia: "convert" }),
       );

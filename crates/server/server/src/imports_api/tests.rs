@@ -14,9 +14,9 @@ fn write_jsonl(dir: &Path, name: &str, body: &str) -> PathBuf {
     path
 }
 
-/// A fixture holding one live import session at `staging_review` whose
+/// A fixture holding one running Import Run at `staging_review` whose
 /// `summary_json` already carries `summary` — as if an earlier
-/// `PATCH /v1/imports/{id}` recorded a gate approval.
+/// `PATCH /v1/imports/{id}` recorded the Staging Review approval.
 async fn session_with_summary(summary: serde_json::Value) -> (TestFixture, RegisteredAccount, i64) {
     let (fixture, account) = fixture_with_account().await;
     let (_, created): (String, serde_json::Value) = post_created_json(
@@ -54,7 +54,7 @@ async fn stored_summary(fixture: &TestFixture, import_id: i64) -> Option<serde_j
 
 #[tokio::test]
 async fn a_stage_change_with_a_summary_stores_it() {
-    // The gate screen posts what the user approved so it survives a
+    // The Review screen posts what the user approved so it survives a
     // reload — recomputing the summary from the folder is a different
     // question from what was actually approved.
     let (fixture, account) = fixture_with_account().await;

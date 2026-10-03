@@ -30,7 +30,7 @@ const hookState = vi.hoisted(() => ({
   sourceIdentities: null as string[] | null,
 }));
 const startImportMock = vi.hoisted(() => vi.fn());
-const resumeAtGateMock = vi.hoisted(() => vi.fn());
+const resumeAtReviewMock = vi.hoisted(() => vi.fn());
 const approveMock = vi.hoisted(() => vi.fn());
 const cancelRunMock = vi.hoisted(() => vi.fn());
 const cancelMock = vi.hoisted(() => vi.fn());
@@ -71,7 +71,7 @@ vi.mock("./import/useImportJob", async (importOriginal) => {
       computingSummary: false,
       completionText: undefined,
       startImport: startImportMock,
-      resumeAtGate: resumeAtGateMock,
+      resumeAtReview: resumeAtReviewMock,
       approve: approveMock,
       cancelRun: cancelRunMock,
       cancel: cancelMock,
@@ -253,8 +253,8 @@ describe("ImportScreen entering Import", () => {
     hookState.resumeError = null;
     hookState.sourceIdentities = null;
     startImportMock.mockReset();
-    resumeAtGateMock.mockReset();
-    resumeAtGateMock.mockResolvedValue(undefined);
+    resumeAtReviewMock.mockReset();
+    resumeAtReviewMock.mockResolvedValue(undefined);
     approveMock.mockReset();
     cancelRunMock.mockReset();
     cancelMock.mockReset();
@@ -498,11 +498,11 @@ describe("ImportScreen entering Import", () => {
   };
 
   it.each([
-    ["staging_review", "resume_gate"],
-    ["media_review", "resume_gate"],
+    ["staging_review", "resume_review"],
+    ["media_review", "resume_review"],
     ["media", "resume_media"],
   ] as const)(
-    "routes a session at %s through resumeAtGate, not startImport or discard",
+    "routes a session at %s through resumeAtReview, not startImport or discard",
     async (stage, kind) => {
       const user = userEvent.setup();
       getActiveImportSessionMock.mockResolvedValue(
@@ -518,8 +518,8 @@ describe("ImportScreen entering Import", () => {
       expect(screen.getByTestId("resume-kind")).toHaveTextContent(kind);
       await user.click(screen.getByText("resume-action"));
 
-      expect(resumeAtGateMock).toHaveBeenCalledTimes(1);
-      const [resumedSession, resumedForm] = resumeAtGateMock.mock.calls[0] as [
+      expect(resumeAtReviewMock).toHaveBeenCalledTimes(1);
+      const [resumedSession, resumedForm] = resumeAtReviewMock.mock.calls[0] as [
         ActiveImportSession,
         unknown,
       ];
@@ -535,7 +535,7 @@ describe("ImportScreen entering Import", () => {
 
   it("re-fetches and reshows the resume panel with the failure surfaced when a gate resume's recompute fails", async () => {
     // Decision 37: only an explicit discard ends a waiting session, so a
-    // failed recompute (useImportJob's resumeAtGate) never completes or
+    // failed recompute (useImportJob's resumeAtReview) never completes or
     // discards it -- it returns to the form phase instead. That phase
     // transition is what re-triggers this screen's own active-session
     // check, and since nothing was touched server-side, it finds the exact
@@ -546,10 +546,10 @@ describe("ImportScreen entering Import", () => {
     const { rerender } = renderWithProviders(<ImportScreen />);
 
     await screen.findByTestId("resume-panel");
-    expect(screen.getByTestId("resume-kind")).toHaveTextContent("resume_gate");
+    expect(screen.getByTestId("resume-kind")).toHaveTextContent("resume_review");
     expect(getActiveImportSessionMock).toHaveBeenCalledTimes(1);
 
-    // Simulate resumeAtGate's failure path from inside the (mocked) hook:
+    // Simulate resumeAtReview's failure path from inside the (mocked) hook:
     // phase moves to "running" while it recomputes, then back to "form"
     // with the failure left on `resumeError`.
     hookState.phase = "running";
@@ -564,7 +564,7 @@ describe("ImportScreen entering Import", () => {
 
     expect(getActiveImportSessionMock).toHaveBeenCalledTimes(2);
     expect(await screen.findByTestId("resume-panel")).toBeInTheDocument();
-    expect(screen.getByTestId("resume-kind")).toHaveTextContent("resume_gate");
+    expect(screen.getByTestId("resume-kind")).toHaveTextContent("resume_review");
     expect(screen.getByTestId("resume-error")).toHaveTextContent("disk unavailable");
   });
 
@@ -992,8 +992,8 @@ describe("ImportScreen gates", () => {
     hookState.resumeError = null;
     hookState.sourceIdentities = null;
     startImportMock.mockReset();
-    resumeAtGateMock.mockReset();
-    resumeAtGateMock.mockResolvedValue(undefined);
+    resumeAtReviewMock.mockReset();
+    resumeAtReviewMock.mockResolvedValue(undefined);
     approveMock.mockReset();
     cancelRunMock.mockReset();
     cancelMock.mockReset();

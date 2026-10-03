@@ -1,4 +1,4 @@
-//! Per-account import session records (one row per message-crate-push / CLI import run).
+//! Per-account Import Run records (one row per Import Run).
 
 use anyhow::{Result, bail};
 use chrono::Utc;
@@ -58,16 +58,6 @@ impl ImportStage {
     /// Parse a stored spelling, or `None` when it is not one of the six.
     pub fn parse(s: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|stage| stage.as_str() == s)
-    }
-
-    /// The problem detail for a stage the server does not know, listing
-    /// the six spellings it does.
-    pub fn unknown(raw: &str) -> String {
-        let expected: Vec<&str> = Self::ALL.iter().map(|stage| stage.as_str()).collect();
-        format!(
-            "invalid import stage '{raw}'; expected one of {}",
-            expected.join(", ")
-        )
     }
 }
 
@@ -159,13 +149,13 @@ impl ImportIssueStage {
 }
 
 #[derive(Debug, Clone, Serialize)]
-/// One row of `imports`: a per-account import session record.
+/// One row of `imports`: a per-account Import Run record.
 pub struct ImportRow {
-    /// Import session id.
+    /// Import Run id.
     pub id: i64,
-    /// Account that owns the session.
+    /// Account that owns the run.
     pub account_id: i64,
-    /// Source id the session imports.
+    /// Source id the run imports.
     pub source: String,
     /// Importing tool, e.g. `message-crate-push`.
     pub tool: Option<String>,
@@ -197,11 +187,11 @@ pub struct ImportRow {
     pub upload_ms: Option<i64>,
     /// Client-provided summary payload.
     pub summary_json: Option<String>,
-    /// Lifecycle stage while the session is live; `None` once it is over.
+    /// Lifecycle stage while the run is live; `None` once it is over.
     pub stage: Option<String>,
     /// Absolute path to the staging folder on the client that owns it.
     pub staging_dir: Option<String>,
-    /// Which install created the session.
+    /// Which install created the run.
     pub device_id: Option<String>,
     /// Import form snapshot, for restoring the screen.
     pub form_json: Option<String>,
@@ -211,7 +201,7 @@ pub struct ImportRow {
     pub source_identities: Option<String>,
 }
 
-/// Outcome fields written when a session completes.
+/// Outcome fields written when a run completes.
 #[derive(Debug, Clone, Default)]
 pub struct CompleteImportArgs {
     /// How the run ended: `completed`, `completed_with_issues` or `failed`.
@@ -234,7 +224,7 @@ pub struct CompleteImportArgs {
     pub upload_ms: Option<i64>,
     /// Client-provided summary payload.
     pub summary_json: Option<String>,
-    /// Per-file issues to record against the session.
+    /// Per-file issues to record against the run.
     pub issues: Vec<ImportIssueInput>,
 }
 
@@ -258,7 +248,7 @@ impl CompleteImportArgs {
     }
 }
 
-/// One problem to record against an import session.
+/// One problem to record against an Import Run.
 #[derive(Debug, Clone)]
 pub struct ImportIssueInput {
     /// Issue category: `error` or `skip`.
@@ -276,7 +266,7 @@ pub struct ImportIssueInput {
 pub struct ImportIssueRow {
     /// Issue row id.
     pub id: i64,
-    /// Session the issue belongs to.
+    /// Run the issue belongs to.
     pub import_id: i64,
     /// Issue category: `error` or `skip`.
     pub kind: String,
@@ -290,28 +280,28 @@ pub struct ImportIssueRow {
     pub created_at: String,
 }
 
-/// An import session row plus its recorded issues.
+/// An Import Run row plus its recorded issues.
 #[derive(Debug, Clone, Serialize)]
 pub struct ImportDetail {
-    /// The session.
+    /// The run.
     pub row: ImportRow,
     /// Issues recorded for it.
     pub issues: Vec<ImportIssueRow>,
 }
 
-/// Failure looking up or reusing an import session.
+/// Failure looking up or reusing an Import Run.
 #[derive(Debug, thiserror::Error)]
 pub enum ImportLookupError {
-    /// No session with this id for this account.
+    /// No run with this id for this account.
     #[error("import {import_id} not found for this account")]
     NotFound {
-        /// The session id that was looked up.
+        /// The run id that was looked up.
         import_id: i64,
     },
-    /// Session exists but cannot be reused (wrong status/source/mode).
+    /// Run exists but cannot be reused (wrong status/source/mode).
     #[error("{message}")]
     InvalidSession {
-        /// Why the session cannot be reused.
+        /// Why the run cannot be reused.
         message: String,
     },
     /// Database failure.
@@ -325,7 +315,7 @@ impl From<sqlx::Error> for ImportLookupError {
     }
 }
 
-/// Everything recorded when a session begins.
+/// Everything recorded when a run begins.
 pub struct StartImportArgs<'a> {
     /// Owning account.
     pub account_id: i64,
@@ -337,11 +327,11 @@ pub struct StartImportArgs<'a> {
     pub dedupe: bool,
     /// Client/tool name, when the caller names one.
     pub tool: Option<&'a str>,
-    /// Stage the session opens at.
+    /// Stage the run opens at.
     pub stage: ImportStage,
     /// Absolute staging path on the client.
     pub staging_dir: Option<&'a str>,
-    /// Which install is creating this session.
+    /// Which install is creating this run.
     pub device_id: Option<&'a str>,
     /// Import form snapshot as JSON.
     pub form_json: Option<&'a str>,
@@ -352,7 +342,7 @@ pub struct StartImportArgs<'a> {
 }
 
 impl<'a> StartImportArgs<'a> {
-    /// A session opening at [`ImportStage::Parse`] with nothing recorded
+    /// A run opening at [`ImportStage::Parse`] with nothing recorded
     /// about the client: no staging folder, device, form snapshot,
     /// fingerprint, or identities. The CLI importer and most tests start
     /// here; a caller with more to record uses struct update syntax on
@@ -374,13 +364,13 @@ impl<'a> StartImportArgs<'a> {
     }
 }
 
-/// Why a session could not be started.
+/// Why a run could not be started.
 #[derive(Debug, thiserror::Error)]
 pub enum StartImportError {
-    /// This account already has a live session. The partial unique index
+    /// This account already has a running Import Run. The partial unique index
     /// rejected the insert, so this holds even against a racing client.
     ///
-    /// Naming the way out matters: a killed CLI import leaves a session open
+    /// Naming the way out matters: a killed CLI import leaves a run open
     /// that blocks every later one. The desktop app's Import screen can
     /// resume or discard it; `message-crate-server imports discard` can
     /// discard it without the app.
@@ -393,11 +383,11 @@ pub enum StartImportError {
     Db(anyhow::Error),
 }
 
-/// Open a new import session.
+/// Open a new Import Run.
 ///
 /// # Errors
 ///
-/// [`StartImportError::AlreadyActive`] when a live session already exists
+/// [`StartImportError::AlreadyActive`] when a running Import Run already exists
 /// for this account; [`StartImportError::Db`] for any other failure.
 pub async fn start_import(
     conn: &mut SqliteConnection,
@@ -531,7 +521,7 @@ pub async fn require_running_import(
     Ok(existing)
 }
 
-/// Move a live session to another stage, optionally recording what the user
+/// Move a running Import Run to another stage, optionally recording what the user
 /// approved at the Review they just passed.
 ///
 /// `summary_json` is written to `imports.summary_json` only when
@@ -586,10 +576,10 @@ async fn not_running(
     }
 }
 
-/// Close a live session the user gave up on.
+/// Close a running Import Run the user gave up on.
 ///
 /// Records `cancelled` and clears `stage`, which frees the account's
-/// single active slot. Nothing reclaims a session on a timer — a session
+/// single active slot. Nothing reclaims a run on a timer — a run
 /// is broken by an explicit discard or not at all.
 ///
 /// # Errors
@@ -619,14 +609,14 @@ pub async fn discard_import(
     Ok(())
 }
 
-/// Discard the account's live session, whichever it is, and return the row
+/// Discard the account's running Import Run, whichever it is, and return the row
 /// as it was before the discard; `None` when the account has no live
-/// session.
+/// run.
 ///
 /// This is the way out for a command-line operator: a killed
-/// `message-crate-server import` leaves its session running, and the
+/// `message-crate-server import` leaves its run open, and the
 /// partial unique index then refuses every later import. The operator knows
-/// the account, not the session id, so the lookup happens here rather than
+/// the account, not the run id, so the lookup happens here rather than
 /// making them find the id first.
 ///
 /// # Errors

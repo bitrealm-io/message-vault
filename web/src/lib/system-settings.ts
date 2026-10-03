@@ -22,20 +22,6 @@ export function stripTrailingPathSeparators(path: string): string {
   return stripped;
 }
 
-/**
- * True for an absolute folder that is not the filesystem root.
- * Relative paths and `/` would write or open next to the process cwd, or anywhere on disk.
- */
-export function isUsableStagingParent(path: string): boolean {
-  const parent = stripTrailingPathSeparators(path);
-  if (!parent || parent === "/") return false;
-  if (/^[A-Za-z]:$/.test(parent)) return false;
-  if (parent.startsWith("/")) return true;
-  if (/^[A-Za-z]:[\\/]/.test(path.trim())) return true;
-  if (parent.startsWith("\\\\")) return true;
-  return false;
-}
-
 /** True when Import should reuse the last backup folder for each source. */
 export function getRememberImporterPaths(): boolean {
   return readPref(REMEMBER_IMPORTER_PATHS_KEY) === "1";

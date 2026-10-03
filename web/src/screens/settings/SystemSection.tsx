@@ -14,11 +14,7 @@ import {
   setOpenToNetwork,
 } from "../../lib/localServer";
 import { readPref, removePref, writePref } from "../../lib/storage";
-import {
-  getRememberImporterPaths,
-  isUsableStagingParent,
-  setRememberImporterPaths,
-} from "../../lib/system-settings";
+import { getRememberImporterPaths, setRememberImporterPaths } from "../../lib/system-settings";
 import {
   type FfmpegToolsProbe,
   invokeSetStagingRoot,
@@ -278,44 +274,35 @@ export function SystemSection() {
     };
   }, [runFfmpegApply]);
 
-  // The desktop process keeps the setting. A run already staged keeps the
-  // folder it was made in; the new setting applies to runs started after it.
-  const saveStagingRoot = (root: string) => {
-    invokeSetStagingRoot(root).then(
+  // The desktop process keeps the setting and decides what it takes: every
+  // value typed is sent, and a refusal is shown as the desktop process gave
+  // it, so the window holds no rule of its own. An empty value goes back to
+  // the default. A run already staged keeps the folder it was made in; the
+  // new setting applies to runs started after it.
+  const stagingSaveGen = useRef(0);
+  const onStagingPathChange = (next: string) => {
+    setStagingPath(next);
+    const gen = ++stagingSaveGen.current;
+    invokeSetStagingRoot(next.trim()).then(
       (saved) => {
+        if (gen !== stagingSaveGen.current) return;
         setSavedStagingPath(saved.root);
         setStagingError(null);
       },
       (caught: unknown) => {
-        setStagingError(caught instanceof Error ? caught.message : String(caught));
+        if (gen !== stagingSaveGen.current) return;
+        setStagingError(`Not saved. ${caught instanceof Error ? caught.message : String(caught)}`);
       },
     );
   };
 
-  const onStagingPathChange = (next: string) => {
-    setStagingPath(next);
-    const trimmed = next.trim();
-    // Empty → the default.
-    if (!trimmed) {
-      saveStagingRoot("");
-      return;
-    }
-    // Relative / filesystem root while typing: keep the field, do not persist yet.
-    if (!isUsableStagingParent(trimmed)) {
-      return;
-    }
-    saveStagingRoot(trimmed);
-  };
-
-  // A typed value that is neither empty, the default, nor usable is kept in the field but not saved.
-  const stagingTrimmed = stagingPath.trim();
-  const stagingNotSaved =
-    stagingTrimmed !== "" &&
-    stagingTrimmed !== defaultStagingPath &&
-    !isUsableStagingParent(stagingTrimmed);
-
+  // A value the desktop process refused stays in the field until it is left,
+  // then the field shows the folder in use again.
   const onStagingPathBlur = () => {
-    if (stagingNotSaved) setStagingPath(savedStagingPath);
+    if (stagingError === null) return;
+    stagingSaveGen.current += 1;
+    setStagingPath(savedStagingPath);
+    setStagingError(null);
   };
 
   const onFfmpegPathChange = (next: string) => {
@@ -357,11 +344,6 @@ export function SystemSection() {
             placeholder={defaultStagingPath || "~/message-crate"}
           />
         </div>
-        {stagingNotSaved ? (
-          <p className="col-start-2 m-0 pl-2 text-[0.75rem] text-danger">
-            Not saved. The staging directory must be a full path, and not the root of a drive.
-          </p>
-        ) : null}
         {stagingError ? (
           <p className="col-start-2 m-0 pl-2 text-[0.75rem] text-danger" role="alert">
             {stagingError}

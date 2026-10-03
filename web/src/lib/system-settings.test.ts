@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getImporterExtraPaths,
   getImporterPath,
-  isUsableStagingParent,
   loadRememberedImportPaths,
   setImporterExtraPath,
   setImporterPath,
@@ -32,22 +31,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-});
-
-describe("isUsableStagingParent", () => {
-  it("accepts an absolute folder", () => {
-    expect(isUsableStagingParent("/data/imports")).toBe(true);
-  });
-
-  it("rejects the filesystem root", () => {
-    expect(isUsableStagingParent("/")).toBe(false);
-    expect(isUsableStagingParent("///")).toBe(false);
-  });
-
-  it("rejects a relative folder", () => {
-    expect(isUsableStagingParent("message-crate")).toBe(false);
-    expect(isUsableStagingParent("")).toBe(false);
-  });
 });
 
 describe("remembered importer extra paths", () => {

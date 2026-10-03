@@ -72,7 +72,6 @@ Defined as named constants in `src/lib/zLayers.ts`. Use those rather than a bare
 | 60 | `Z_RESIZE_HANDLE` | Column resize handles |
 | 70 | `Z_INLINE_PANEL` | Inline overlays (advanced search panel) — clears the resize handle |
 | 71 | `Z_INLINE_PANEL_TAIL` | The pointer tail on an inline panel |
-| 80 | `Z_ROW_MENU` | Sidebar row action menus |
 | 100 | `Z_POPOVER` | Select/ComboBox popovers, menus, the contact-search popdown |
 | 200 | `Z_MODAL` | Modal dialogs, lightbox |
 | 250 | `Z_POPOVER_IN_MODAL` | A select popover opened inside a modal |

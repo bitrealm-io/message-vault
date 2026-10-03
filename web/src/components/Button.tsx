@@ -1,4 +1,4 @@
-import { Button as RACButton } from "react-aria-components";
+import PlainButton, { type PlainButtonProps } from "./PlainButton";
 
 export type ButtonVariant =
   | "primary"
@@ -48,27 +48,18 @@ export default function Button({
   children,
   disabled,
   isDisabled,
-  title,
-  style,
   className,
   ...rest
-}: Omit<React.ComponentProps<typeof RACButton>, "className"> & {
+}: Omit<PlainButtonProps, "className"> & {
   variant?: ButtonVariant;
   size?: ButtonSize;
   className?: string;
   disabled?: boolean;
-  onClick?: React.MouseEventHandler<HTMLButtonElement>;
-  title?: string;
 }) {
   return (
-    <RACButton
+    <PlainButton
       {...rest}
-      ref={(el) => {
-        // The menu library strips `title`. Set it on the element so hover text still works.
-        if (el && el.title !== title) el.title = title ?? "";
-      }}
       isDisabled={disabled ?? isDisabled}
-      style={style}
       className={`
         box-border inline-flex cursor-pointer select-none items-center justify-center
         rounded-md text-center leading-[1.25]
@@ -82,6 +73,6 @@ export default function Button({
       `}
     >
       {children}
-    </RACButton>
+    </PlainButton>
   );
 }

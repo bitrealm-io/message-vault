@@ -1,9 +1,8 @@
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { apiErrorMessage } from "../lib/apiErrorMessage";
 import { slugFromPath, slugPath } from "../lib/contactGroups";
 import { type NameCollection, useNameCollectionActions } from "../lib/nameCollection";
-import { Z_ROW_MENU } from "../lib/zLayers";
 import ConfirmDialog from "./ConfirmDialog";
 import GroupNameDialog from "./GroupNameDialog";
 import { EllipsisIcon } from "./icons";
@@ -78,8 +77,6 @@ export default function NavEntityList({
   const [createOpen, setCreateOpen] = useState(false);
   const [renameFor, setRenameFor] = useState<string | null>(null);
   const [deleteFor, setDeleteFor] = useState<string | null>(null);
-  const [menuFor, setMenuFor] = useState<string | null>(null);
-  const menuTriggerRef = useRef<HTMLButtonElement>(null);
   // The slug of the set whose page is open, decoded, so a name with spaces
   // or other escaped characters compares as itself.
   const openSlug = slugFromPath(location.pathname, copy.routeBase);
@@ -137,7 +134,6 @@ export default function NavEntityList({
         addLabel={copy.addLabel}
         addDisabled={busy}
         onAdd={() => {
-          setMenuFor(null);
           setError(null);
           setCreateOpen(true);
         }}
@@ -157,7 +153,6 @@ export default function NavEntityList({
         {names.map((name) => {
           const href = slugPath(copy.routeBase, slug(name));
           const active = openSlug === slug(name);
-          const menuOpen = menuFor === name;
           return (
             <div key={name} className="relative w-full">
               <div className={navGlyphRowClass(active)}>
@@ -169,56 +164,40 @@ export default function NavEntityList({
                   <span className={NAV_LEADING_GLYPH_CLASS}>{icon}</span>
                   <span className="min-w-0 truncate">{name}</span>
                 </button>
-                <NavGlyphButton
-                  aria-label={copy.optionsLabel(name)}
-                  aria-haspopup="menu"
-                  aria-expanded={menuOpen}
-                  disabled={busy}
-                  active={menuOpen}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    // Captured here rather than through a conditional `ref`,
-                    // which would detach before the menu's close effect runs
-                    // and leave nothing to return focus to.
-                    menuTriggerRef.current = e.currentTarget;
-                    setMenuFor(menuOpen ? null : name);
-                  }}
-                  className={
-                    active || menuOpen
-                      ? ""
-                      : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                <PopupMenu
+                  trigger={
+                    <NavGlyphButton
+                      aria-label={copy.optionsLabel(name)}
+                      disabled={busy}
+                      className={
+                        active ? "" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                      }
+                    >
+                      <EllipsisIcon size={15} />
+                    </NavGlyphButton>
                   }
-                >
-                  <EllipsisIcon size={15} />
-                </NavGlyphButton>
+                  label={copy.optionsLabel(name)}
+                  items={[
+                    {
+                      label: "Rename…",
+                      onSelect: () => {
+                        setError(null);
+                        setRenameFor(name);
+                      },
+                    },
+                    {
+                      label: "Delete",
+                      disabled: busy,
+                      // Deleting takes the name off everything that carried it,
+                      // so it is confirmed first.
+                      onSelect: () => {
+                        setError(null);
+                        setDeleteFor(name);
+                      },
+                    },
+                  ]}
+                />
               </div>
-              <PopupMenu
-                open={menuOpen}
-                onClose={() => setMenuFor(null)}
-                triggerRef={menuTriggerRef}
-                label={copy.optionsLabel(name)}
-                className={`absolute top-full right-0 mt-0.5 ${Z_ROW_MENU}`}
-                items={[
-                  {
-                    label: "Rename…",
-                    onSelect: () => {
-                      setError(null);
-                      setRenameFor(name);
-                    },
-                  },
-                  {
-                    label: "Delete",
-                    disabled: busy,
-                    // Deleting takes the name off everything that carried it,
-                    // so it is confirmed first.
-                    onSelect: () => {
-                      setError(null);
-                      setDeleteFor(name);
-                    },
-                  },
-                ]}
-              />
             </div>
           );
         })}

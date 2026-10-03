@@ -1,3 +1,5 @@
+import { Z_POPOVER } from "./zLayers";
+
 /** Shared theme-aware Tailwind class strings using the tokens from theme.css. */
 
 /**
@@ -67,3 +69,10 @@ export const accentLink =
 
 /** Floating panels / menus (advanced search, selects, date pickers, recent searches). */
 export const popupShadow = "shadow-[0_10px_32px_rgba(0,0,0,0.28),0_2px_8px_rgba(0,0,0,0.14)]";
+
+/** A menu item without its text colour. The focused one (arrow keys or hover) takes the hover background. */
+export const menuItemClass =
+  "flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[0.813rem] outline-none data-focused:bg-hover data-disabled:cursor-not-allowed data-disabled:opacity-40";
+
+/** The popover a menu opens in, below its trigger. */
+export const menuPopoverClass = `min-w-[7.5rem] rounded-lg border border-border bg-popover py-1 outline-none ${popupShadow} ${Z_POPOVER}`;

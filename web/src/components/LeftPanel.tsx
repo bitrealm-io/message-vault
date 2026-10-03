@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { apiErrorMessage } from "../lib/apiErrorMessage";
 import { canUseImportExportWithProfile } from "../lib/desktopFeatures";
@@ -8,7 +8,6 @@ import { resizeHandleGutter } from "../lib/tw";
 import { useAccountProfile } from "../lib/useAccountProfile";
 import { useContactGroups } from "../lib/useContactGroups";
 import { useMessageTags } from "../lib/useMessageTags";
-import { Z_ROW_MENU } from "../lib/zLayers";
 import { type ImportAttention, useImportAttention } from "../screens/import/useImportAttention";
 import ColumnResizeHandle from "./ColumnResizeHandle";
 import { useReportColumnResizing } from "./columnResizeState";
@@ -164,12 +163,10 @@ export default function LeftPanel({
   const savedSearchActions = useSavedSearchActions();
   const [showGroupForm, setShowGroupForm] = useState(false);
   const [editFor, setEditFor] = useState<SavedSearch | null>(null);
-  const [menuFor, setMenuFor] = useState<number | null>(null);
   // Why the open form's last save was refused, and why the last delete failed.
   // A delete has no dialog to show it in, so it is shown under the list.
   const [formError, setFormError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const savedSearchMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const { groups: contactGroups } = useContactGroups();
   const { tags: messageTags } = useMessageTags();
 
@@ -303,7 +300,6 @@ export default function LeftPanel({
           title="Saved Searches"
           addLabel="Create saved search"
           onAdd={() => {
-            setMenuFor(null);
             setEditFor(null);
             setFormError(null);
             setShowGroupForm(true);
@@ -320,7 +316,6 @@ export default function LeftPanel({
               const active =
                 location.pathname === "/" &&
                 location.search === `?q=${encodeURIComponent(g.query)}`;
-              const menuOpen = menuFor === g.id;
               return (
                 <div key={g.id} className="relative w-full">
                   <div className={navGlyphRowClass(active)}>
@@ -334,48 +329,37 @@ export default function LeftPanel({
                       </span>
                       <span className="min-w-0 truncate">{g.name}</span>
                     </button>
-                    <NavGlyphButton
-                      aria-label={`Saved search options for ${g.name}`}
-                      aria-haspopup="menu"
-                      aria-expanded={menuOpen}
-                      active={menuOpen}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        savedSearchMenuTriggerRef.current = e.currentTarget;
-                        setDeleteError(null);
-                        setMenuFor(menuOpen ? null : g.id);
-                      }}
-                      className={
-                        active || menuOpen
-                          ? ""
-                          : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                    <PopupMenu
+                      trigger={
+                        <NavGlyphButton
+                          aria-label={`Saved search options for ${g.name}`}
+                          onPress={() => setDeleteError(null)}
+                          className={
+                            active
+                              ? ""
+                              : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                          }
+                        >
+                          <EllipsisIcon size={15} />
+                        </NavGlyphButton>
                       }
-                    >
-                      <EllipsisIcon size={15} />
-                    </NavGlyphButton>
-                  </div>
-                  <PopupMenu
-                    open={menuOpen}
-                    onClose={() => setMenuFor(null)}
-                    triggerRef={savedSearchMenuTriggerRef}
-                    label={`Saved search options for ${g.name}`}
-                    className={`absolute top-full right-0 mt-0.5 ${Z_ROW_MENU}`}
-                    items={[
-                      {
-                        label: "Rename…",
-                        onSelect: () => {
-                          setShowGroupForm(false);
-                          setFormError(null);
-                          setEditFor(g);
+                      label={`Saved search options for ${g.name}`}
+                      items={[
+                        {
+                          label: "Rename…",
+                          onSelect: () => {
+                            setShowGroupForm(false);
+                            setFormError(null);
+                            setEditFor(g);
+                          },
                         },
-                      },
-                      {
-                        label: "Delete",
-                        onSelect: () => void removeSavedSearch(g.id),
-                      },
-                    ]}
-                  />
+                        {
+                          label: "Delete",
+                          onSelect: () => void removeSavedSearch(g.id),
+                        },
+                      ]}
+                    />
+                  </div>
                 </div>
               );
             })

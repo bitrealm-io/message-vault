@@ -1,6 +1,6 @@
-import { type ReactNode, type RefObject, useRef } from "react";
-import { popupShadow } from "../lib/uiStyles";
-import { useMenuKeyboard } from "../lib/useMenuKeyboard";
+import type { ReactElement, ReactNode } from "react";
+import { Menu, MenuItem, MenuTrigger, Popover, type PopoverProps } from "react-aria-components";
+import { menuItemClass, menuPopoverClass } from "../lib/uiStyles";
 
 export type PopupMenuItem = {
   /** Stable key and default accessible name. */
@@ -12,74 +12,65 @@ export type PopupMenuItem = {
   danger?: boolean;
 };
 
-const ITEM_CLASS =
-  "block w-full cursor-pointer border-none bg-transparent px-3 py-1.5 text-left text-[0.813rem] text-text outline-none hover:bg-hover focus-visible:bg-hover disabled:cursor-not-allowed disabled:opacity-40";
-
 /**
- * A menu popup with the keyboard behaviour the role implies.
+ * A button that opens a menu: React Aria's `MenuTrigger`, `Popover` and `Menu`.
  *
- * The hand-rolled menus this replaces declared `aria-haspopup="menu"` on their
- * triggers, but several rendered a plain `<div>` of `<button>`s underneath with
- * no `role="menu"` at all, and none of them moved focus into the popup,
- * responded to arrow keys, or put focus back on the trigger when they closed.
+ * React Aria gives the menu what the pattern expects: focus moves into it on
+ * open, the arrow keys, Home, End and typing a letter move between items,
+ * Enter or a click runs an item and closes the menu, Escape or a press outside
+ * closes it, and focus goes back to the trigger.
  *
- * Positioning stays with the caller — these menus are absolutely positioned
- * against a row or toolbar that already establishes the containing block.
+ * `trigger` must be a React Aria button (`Button` or `PlainButton`), which the
+ * menu wires up: `aria-haspopup`, `aria-expanded`, and opening on press or
+ * with the arrow keys. `aria-expanded` is the hook for a trigger's open look.
  */
 export default function PopupMenu({
-  open,
-  onClose,
-  triggerRef,
+  trigger,
   label,
   items,
   header,
+  placement = "bottom end",
   className = "",
 }: {
-  open: boolean;
-  onClose: () => void;
-  /** Focus returns here when the menu closes. */
-  triggerRef?: RefObject<HTMLElement | null>;
+  trigger: ReactElement;
   /** Accessible name for the menu itself. */
   label: string;
   items: PopupMenuItem[];
   /** Read-only block above the items, such as who is logged in. Not a focus stop. */
   header?: ReactNode;
+  placement?: PopoverProps["placement"];
+  /** Extra classes for the popover. */
   className?: string;
 }) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const { onKeyDown } = useMenuKeyboard(open, rootRef, onClose, triggerRef);
-
-  if (!open) return null;
-
   return (
-    <div
-      ref={rootRef}
-      role="menu"
-      aria-label={label}
-      data-mc-overlay=""
-      onKeyDown={onKeyDown}
-      className={`min-w-[7.5rem] rounded-lg border border-border bg-popover py-1 ${popupShadow} ${className}`}
-    >
-      {header ? (
-        <div className="mb-1 border-b border-border px-3 pt-1 pb-2 text-[0.813rem] text-text">
-          {header}
-        </div>
-      ) : null}
-      {items.map((item) => (
-        <button
-          key={item.label}
-          type="button"
-          role="menuitem"
-          disabled={item.disabled}
-          onClick={() => {
-            onClose();
-            item.onSelect();
-          }}
-          className={`${ITEM_CLASS} ${item.danger ? "!text-danger" : ""}`}
-        >
-          {item.children ?? item.label}
-        </button>
-      ))}
-    </div>
+    <MenuTrigger>
+      {trigger}
+      <Popover
+        placement={placement}
+        offset={2}
+        data-mc-overlay=""
+        className={`${menuPopoverClass} ${className}`}
+      >
+        {header ? (
+          <div className="mb-1 border-b border-border px-3 pt-1 pb-2 text-[0.813rem] text-text">
+            {header}
+          </div>
+        ) : null}
+        <Menu aria-label={label} shouldFocusWrap className="outline-none">
+          {items.map((item) => (
+            <MenuItem
+              key={item.label}
+              id={item.label}
+              textValue={item.label}
+              isDisabled={item.disabled}
+              onAction={item.onSelect}
+              className={`${menuItemClass} ${item.danger ? "text-danger" : "text-text"}`}
+            >
+              {item.children ?? item.label}
+            </MenuItem>
+          ))}
+        </Menu>
+      </Popover>
+    </MenuTrigger>
   );
 }

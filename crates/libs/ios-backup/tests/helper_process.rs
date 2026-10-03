@@ -1,77 +1,17 @@
 //! The identities read through the real `imessage-reader` process.
 //!
 //! The test writes the small `chat.db` from `chat-db-fixture`, builds the
-//! program, and asks it which addresses the device sent from. A test binary
-//! runs from `target/<profile>/deps/`, not beside the program in
-//! `target/<profile>/`, so the build names the program through
-//! `MESSAGE_CRATE_IMESSAGE_READER`.
+//! program ([`build_imessage_reader`]), and asks it which addresses the
+//! device sent from.
 
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    process::Command,
-    sync::OnceLock,
-};
+use std::fs;
 
 use chat_db_fixture::{OWNER, OWNER_EMAIL, write_chat_db};
-
-/// Build `imessage-reader` once per test binary, into the target directory
-/// this test binary came from (cargo-llvm-cov uses its own), and name it in
-/// `MESSAGE_CRATE_IMESSAGE_READER`, where [`ios_backup::Helper`] looks.
-fn build_helper() {
-    static BUILT: OnceLock<()> = OnceLock::new();
-    BUILT.get_or_init(|| {
-        let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-        let mut command = Command::new(cargo);
-        command
-            .args([
-                "build",
-                "-p",
-                "imessage-reader",
-                "--message-format=json-render-diagnostics",
-            ])
-            .current_dir(env!("CARGO_MANIFEST_DIR"));
-        if let Some(target_dir) = target_dir() {
-            command.arg("--target-dir").arg(target_dir);
-        }
-        if !cfg!(debug_assertions) {
-            command.arg("--release");
-        }
-        let output = command
-            .output()
-            .expect("run cargo build for imessage-reader");
-        assert!(
-            output.status.success(),
-            "cargo build -p imessage-reader failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        // Where cargo put the program, as it reports it, so a run for
-        // another target or profile finds it too.
-        let program = String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
-            .filter(|message| message["reason"] == "compiler-artifact")
-            .filter(|message| message["target"]["name"] == "imessage-reader")
-            .find_map(|message| message["executable"].as_str().map(PathBuf::from))
-            .expect("cargo reported the imessage-reader executable");
-        // SAFETY: the one test calls `build_helper` before it starts the
-        // program, and nothing else reads the environment meanwhile.
-        unsafe {
-            std::env::set_var("MESSAGE_CRATE_IMESSAGE_READER", program);
-        }
-    });
-}
-
-/// The target directory this test binary was built into: it runs from
-/// `<target>/<profile>/deps/`, so three levels up.
-fn target_dir() -> Option<PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    exe.ancestors().nth(3).map(Path::to_path_buf)
-}
+use ios_backup::reader_build::build_imessage_reader;
 
 #[test]
 fn identities_come_back_cleaned_from_the_helper_process() {
-    build_helper();
+    build_imessage_reader();
     let dir = tempfile::tempdir().unwrap();
     let db_path = write_chat_db(dir.path());
     let scratch_root = tempfile::tempdir().unwrap();

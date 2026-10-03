@@ -1611,6 +1611,7 @@ dependencies = [
  "anyhow",
  "chat-db-fixture",
  "imessage-reader-protocol",
+ "ios-backup",
  "message-crate-core",
  "plist",
  "serde_json",

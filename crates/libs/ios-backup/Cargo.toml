@@ -11,8 +11,8 @@ name = "ios_backup"
 path = "src/lib.rs"
 
 [features]
-# Fake `imessage-reader` programs for tests (Unix only); the exporter's
-# tests use them too.
+# Fake `imessage-reader` programs for tests (Unix only), and a build of the
+# real one (every platform); the exporter's tests use them too.
 testutil = []
 
 # No GPL code here. Opening a backup's databases and decrypting its files is
@@ -30,6 +30,9 @@ tempfile = { workspace = true }
 
 [dev-dependencies]
 chat-db-fixture = { path = "../../helpers/chat-db-fixture" }
+# This crate's own integration tests build the real program through
+# `reader_build`, which the feature opens.
+ios-backup = { path = ".", features = ["testutil"] }
 
 [lints]
 workspace = true

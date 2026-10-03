@@ -30,10 +30,13 @@ fixed, never declined for being small.
 
 ## Pushing and posting
 
-The PR is a draft until step 5, so the review's pushes before then start no
-CI. Before CI, the PR is pushed at most twice: in step 1, to bring it up to
-date, and in step 5, with every fix. Step 5 marks it ready just before its
-push, and CI is watched on that head alone (AGENTS.md step 6).
+The PR is a draft until step 5. Before CI, it is pushed at most twice: in
+step 1, to bring it up to date, and in step 5, with every fix. Step 5 marks it
+ready after its push, and CI is watched on that head alone (AGENTS.md
+step 6).
+
+**Every call that posts** (a review, a comment, a reply) goes one at a time,
+and a refusal is retried as AGENTS.md says before its step 1.
 
 **Before every push**, run the local checks (AGENTS.md step 3).
 
@@ -69,10 +72,10 @@ Take `<N>` from the argument, or from the PR for the current branch. With no
 PR, stop and say to open one ("Submitting Work").
 
 Make the PR a draft if it is not one (AGENTS.md step 1). Make the detached
-worktree at the PR head (AGENTS.md step 3) and merge the base into it whenever the PR is behind, whether or not it conflicts
-(AGENTS.md step 5). A conflict gets the merge review. Push the merge without
-waiting for its checks: the review must be pinned to a commit GitHub has. A
-PR already up to date is not pushed.
+worktree at the PR head (AGENTS.md step 3) and merge the base into it
+whenever the PR is behind, whether or not it conflicts (AGENTS.md step 5). A
+conflict gets the merge review. Push the merge: the review must be pinned to
+a commit GitHub has. A PR already up to date is not pushed.
 
 Then gather, once (AGENTS.md step 1):
 
@@ -146,7 +149,7 @@ Done when every re-review finding is fixed or has its reason ready.
 ### 5. Push once
 
 Fetch the base. If it moved since step 1, merge it in (a conflict gets the
-merge review). Run the local checks, mark the PR ready, then push
+merge review). Run the local checks, push, then mark the PR ready
 (AGENTS.md step 6). With nothing to push, marking it ready starts CI.
 
 After the push, close everything on the PR, using the pushed SHAs:
@@ -161,8 +164,8 @@ resolved, and every user thread has a reply.
 
 ### 6. Green CI
 
-Watch the CI run that started after step 5, stopping at its first failed job
-(AGENTS.md step 6). A job that fails because of the PR is a finding: fix it,
+Watch the CI run that marking the PR ready started, stopping at its first
+failed job (AGENTS.md step 6). A job that fails because of the PR is a finding: fix it,
 run the local checks, push, and watch the new run.
 
 A check that fails for a reason outside the PR (a red `main`, a runner fault,
@@ -171,8 +174,8 @@ and report it without changing the code for it.
 
 A failed check is sorted, and the run rerun, as AGENTS.md step 6 says.
 
-Done when the CI run on the commit you pushed has passed, and it is still the
-PR head (_Another session's commits_).
+Done when the CI run on the commit you pushed ended in `success`, and it is
+still the PR head (_Another session's commits_).
 
 ### 7. Summarise and queue
 

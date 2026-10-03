@@ -29,6 +29,9 @@ function participantItems(
     const contactId = p.contact_id;
     return {
       label,
+      // A person may be named like a fixed row ("Sources"); the menu keys
+      // rows by id, so a person's row has one no fixed row can share.
+      id: `participant:${label}`,
       disabled: !contactId,
       onSelect: () => {
         if (contactId) onOpenContact?.(contactId);

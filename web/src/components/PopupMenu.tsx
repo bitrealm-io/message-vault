@@ -3,8 +3,11 @@ import { Menu, MenuItem, MenuTrigger, Popover, type PopoverProps } from "react-a
 import { menuItemClass, menuPopoverClass } from "../lib/uiStyles";
 
 export type PopupMenuItem = {
-  /** Stable key and default accessible name. */
+  /** Default accessible name, and the row's key unless `id` is given. */
   label: string;
+  /** The row's key when its label can repeat another row's, such as a
+   * person's name beside a fixed action. React Aria keeps one row per key. */
+  id?: string;
   onSelect: () => void;
   disabled?: boolean;
   /** Replaces `label` in the rendered row when the row needs more than text. */
@@ -59,8 +62,8 @@ export default function PopupMenu({
         <Menu aria-label={label} shouldFocusWrap className="outline-none">
           {items.map((item) => (
             <MenuItem
-              key={item.label}
-              id={item.label}
+              key={item.id ?? item.label}
+              id={item.id ?? item.label}
               textValue={item.label}
               isDisabled={item.disabled}
               onAction={item.onSelect}

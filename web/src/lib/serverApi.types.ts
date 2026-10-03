@@ -490,6 +490,10 @@ export interface paths {
          *     US number, any other count as bare digits. `notes` names each row read
          *     with its `+` back, and each such number that became a new identity.
          *
+         *     One `'` before a cell that starts with `=`, `+`, `-`, `@`, a tab or a
+         *     carriage return is taken off, in any column, which undoes the `'` the
+         *     export writes there.
+         *
          *     The load is one transaction. A file that breaks a rule is refused whole
          *     with `422 Unprocessable Entity`, and `errors` holds one sentence for each
          *     bad row, starting with its row number.
@@ -518,7 +522,11 @@ export interface paths {
          *     by `;`, repeat on each of its rows. A contact with no name has a blank
          *     `display_name`, and a contact with no identity is one row with the last
          *     three columns blank. Contacts in the trash are left out.
-         *     `POST /v1/contacts` loads the file back.
+         *
+         *     A cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return
+         *     is written with a `'` in front, in every column, because a spreadsheet
+         *     runs such a cell as a formula and drops the `+` of a phone number.
+         *     `POST /v1/contacts` loads the file back and takes that `'` off.
          */
         post: operations["export_address_book"];
         delete?: never;

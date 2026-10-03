@@ -138,6 +138,14 @@ export default function SearchBar({
   advancedMode,
   onOpenChange,
 }: {
+  /**
+   * The search as the parent holds it. The box keeps its own text: a `value`
+   * equal to one the box sent through `onChange` is taken as its echo, and any
+   * other `value` replaces the text. A parent that rewrites what it is sent
+   * (trimmed, lowercased) would overwrite the text as it is typed. Echoes
+   * must arrive in the order they were sent, or merged into the latest one,
+   * as React Router delivers the address.
+   */
   value: string;
   onChange: (v: string) => void;
   /** Runs the search. */
@@ -153,6 +161,39 @@ export default function SearchBar({
   /** True while the popdown or advanced panel is open (for list-column stacking). */
   onOpenChange?: (open: boolean) => void;
 }) {
+  // The box holds its own text. `value` reaches it later than a key or a
+  // paste does (the Messages box's value is the address, which React Router
+  // updates as a transition), so a box drawn from `value` alone lost keys and
+  // ran Enter on the old text (#1000).
+  const [text, setText] = useState(value);
+  /** What the box sent to `onChange` and `value` has not echoed back yet. */
+  const [pending, setPending] = useState<readonly string[]>([]);
+  const [seenValue, setSeenValue] = useState(value);
+  // Adjusted while rendering, so an outside value never paints a frame of
+  // the old text. A `value` that echoes what the box sent is dropped; any
+  // other replaces the text: a Saved Search, Clear, or a route change.
+  if (value !== seenValue) {
+    setSeenValue(value);
+    const echoed = pending.indexOf(value);
+    if (echoed >= 0) {
+      setPending(pending.slice(echoed + 1));
+    } else {
+      setPending([]);
+      setText(value);
+    }
+  } else if (value === text && pending.length > 0) {
+    // The parent has caught up, even when it merged changes into none, so
+    // nothing still pending can be mistaken for an echo later.
+    setPending([]);
+  }
+
+  /** Puts `q` in the box and sends it to `onChange`. */
+  const editText = (q: string) => {
+    setPending((sent) => [...sent, q]);
+    setText(q);
+    onChange(q);
+  };
+
   const [popdownOpen, setPopdownOpen] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [recents, setRecents] = useState(() => loadRecentSearches(scope));
@@ -162,7 +203,7 @@ export default function SearchBar({
    * run the typed text. Cleared as each key press starts. */
   const ranRowRef = useRef(false);
 
-  const suggestions = useSearchSuggestions(value, list);
+  const suggestions = useSearchSuggestions(text, list);
 
   const notifyOpen = useEffectEvent((open: boolean) => {
     onOpenChange?.(open);
@@ -177,7 +218,7 @@ export default function SearchBar({
   useDismissable(showAdvanced, rootRef, closeAdvanced);
 
   const applyQuery = (q: string, { save }: { save: boolean }) => {
-    onChange(q);
+    editText(q);
     onSubmit(q);
     if (save && q.trim()) {
       pushRecentSearch(scope, q);
@@ -188,7 +229,7 @@ export default function SearchBar({
 
   /** Autocomplete edits the query in place; it never runs the search. */
   const applySuggestion = (s: Suggestion) => {
-    onChange(applySuggestionToQuery(value, s));
+    editText(applySuggestionToQuery(text, s));
     inputRef.current?.focus();
   };
 
@@ -232,8 +273,8 @@ export default function SearchBar({
       <ComboBox
         aria-label={placeholder}
         items={options}
-        inputValue={value}
-        onInputChange={onChange}
+        inputValue={text}
+        onInputChange={editText}
         allowsCustomValue
         menuTrigger="focus"
         shouldFocusWrap
@@ -266,19 +307,19 @@ export default function SearchBar({
               if (e.key !== "Enter") return;
               // React Aria has already run the active row, if there was one.
               if (ranRowRef.current) return;
-              applyQuery(value, { save: true });
+              applyQuery(text, { save: true });
             }}
             // The bar has a Clear search button of its own, so the one the browser
             // draws inside a search input is hidden; otherwise there are two.
             className="min-w-0 flex-1 border-none bg-transparent px-2 py-2.5 text-[0.875rem] text-text outline-none [&::-webkit-search-cancel-button]:appearance-none"
           />
-          {value ? (
+          {text ? (
             <PlainButton
               aria-label="Clear search"
               // Not React Aria's combobox button: that one would open the popdown.
               slot={null}
               onPress={() => {
-                onChange("");
+                editText("");
                 onSubmit("");
                 inputRef.current?.focus();
               }}

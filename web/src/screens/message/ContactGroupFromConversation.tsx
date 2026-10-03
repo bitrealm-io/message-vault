@@ -59,7 +59,7 @@ export default function ContactGroupFromConversation({
       {open ? (
         <GroupNameDialog
           title="Make a Contact Group from these people"
-          placeholder="Group name"
+          placeholder="Contact Group name"
           confirmLabel="Create"
           initial={conversation.label ?? ""}
           error={actions.error?.message ?? null}

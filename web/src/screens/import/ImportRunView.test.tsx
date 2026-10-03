@@ -155,7 +155,7 @@ const WAITING_MEDIA = "Media Review";
 describe("runHeading and the operation line", () => {
   it("names the source while the run is going", () => {
     expect(runHeading("running", form(), null, undefined)).toBe(
-      "Importing from iMessage · iPhone backup",
+      "Importing from Apple Messages · iPhone backup",
     );
     expect(sourceDisplayName("whatsapp-android")).toBe("WhatsApp · Android");
     expect(sourceDisplayName("sms-backup-restore")).toBe("SMS Backup & Restore");
@@ -222,7 +222,7 @@ describe("ImportRunView", () => {
     const staging = "/home/sam/message-crate/staging-iphone";
     renderView({ stagingDir: staging });
 
-    expect(screen.getByRole("heading", { name: "Importing from iMessage · iPhone backup" }));
+    expect(screen.getByRole("heading", { name: "Importing from Apple Messages · iPhone backup" }));
     expect(screen.getByText("/backups/iphone")).toBeInTheDocument();
     expect(screen.queryByText("What you asked for")).not.toBeInTheDocument();
 
@@ -486,7 +486,9 @@ describe("ImportRunView", () => {
     });
 
     expect(screen.getByRole("heading", { name: "Imported 47,910 messages" })).toBeInTheDocument();
-    expect(screen.getByText("iMessage · iPhone backup · /backups/iphone")).toBeInTheDocument();
+    expect(
+      screen.getByText("Apple Messages · iPhone backup · /backups/iphone"),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Import another" })).not.toBeInTheDocument();
 
     const upload = within(stageRow("Upload"));

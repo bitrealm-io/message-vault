@@ -218,7 +218,7 @@ describe("ContactDrawer", () => {
     expect(heading.querySelector("em")?.textContent).toBe("+15550005");
     expect(screen.getByRole("dialog", { name: "+15550005" })).toBeTruthy();
     expect(screen.getByText("Unknown")).toBeTruthy();
-    expect(screen.queryByText("No groups")).toBeNull();
+    expect(screen.queryByText("No Contact Groups")).toBeNull();
   });
 
   it("sets a preferred name upright and leaves Unknown off a known contact", async () => {
@@ -229,10 +229,10 @@ describe("ContactDrawer", () => {
     const heading = await screen.findByRole("heading", { name: "Grace" });
     expect(heading.querySelector("em")).toBeNull();
     expect(screen.queryByText("Unknown")).toBeNull();
-    expect(screen.getByText("No groups")).toBeTruthy();
+    expect(screen.getByText("No Contact Groups")).toBeTruthy();
   });
 
-  it("does not claim No groups while loading without preview groups", async () => {
+  it("does not claim No Contact Groups while loading without preview groups", async () => {
     let resolveDetail!: (d: ContactDetail) => void;
     const pending = new Promise<ContactDetail>((resolve) => {
       resolveDetail = resolve;
@@ -243,14 +243,14 @@ describe("ContactDrawer", () => {
 
     const dialog = screen.getByRole("dialog", { name: "Loading…" });
     expect(dialog.getAttribute("aria-busy")).toBe("true");
-    expect(screen.queryByText("No groups")).toBeNull();
+    expect(screen.queryByText("No Contact Groups")).toBeNull();
     expect(screen.getByText("…")).toBeTruthy();
 
     resolveDetail(detail(26, { name: "Zed", groups: ["Work"] }));
     await waitFor(() => {
       expect(screen.getByRole("dialog", { name: "Zed" })).toBeTruthy();
       expect(screen.getByText("Work")).toBeTruthy();
-      expect(screen.queryByText("No groups")).toBeNull();
+      expect(screen.queryByText("No Contact Groups")).toBeNull();
     });
   });
 
@@ -582,12 +582,12 @@ describe("ContactDrawer", () => {
     expect(screen.getByRole("button", { name: "Edit name" })).toBeTruthy();
   });
 
-  it("cancels name edit when clicking Contact groups without saving", async () => {
+  it("cancels name edit when clicking Contact Groups without saving", async () => {
     const user = userEvent.setup();
     const input = await openNameEditor(user);
     await user.clear(input);
     await user.type(input, "Renamed");
-    await user.click(screen.getByText("Contact groups"));
+    await user.click(screen.getByText("Contact Groups"));
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "Contact a" })).toBeTruthy();
     });
@@ -664,7 +664,7 @@ describe("ContactDrawer", () => {
     expect(headers[headers.length - 1].textContent).toBe("");
     // Once the detail is in, the row carries its service and counts.
     await waitFor(() => expect(screen.getAllByText("42").length).toBeGreaterThan(0));
-    const remove = screen.getByRole("button", { name: "Remove +15550001 (Text message)" });
+    const remove = screen.getByRole("button", { name: "Remove +15550001 (Text Message)" });
     expect(remove.closest("[role=row]")?.lastElementChild).toContainElement(remove);
     expect(screen.getByText("Summary")).toBeTruthy();
   });

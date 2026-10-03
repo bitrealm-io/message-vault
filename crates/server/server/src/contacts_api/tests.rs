@@ -367,7 +367,7 @@ async fn list_contacts_filters_and_paginates() {
     let by_handle = list_contacts_sorted(
         &mut conn,
         account,
-        "handle:5555550200",
+        "identity:5555550200",
         &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
         0,
@@ -1988,7 +1988,7 @@ async fn list_contacts_filters_no_handle() {
     let page = list_contacts_sorted(
         &mut conn,
         account,
-        "handle:none",
+        "identity:none",
         &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
         0,

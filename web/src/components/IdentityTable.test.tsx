@@ -183,7 +183,7 @@ describe("IdentityTable", () => {
     const cells = within(row).getAllByRole("gridcell");
     expect(cells.slice(1, 6).map((c) => c.textContent)).toEqual(["—", "—", "—", "—", "—"]);
     expect(
-      screen.getByRole("button", { name: "Remove +15555550100 (Text message)" }),
+      screen.getByRole("button", { name: "Remove +15555550100 (Text Message)" }),
     ).toBeDisabled();
   });
 

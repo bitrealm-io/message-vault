@@ -36,7 +36,7 @@ The search bar at the top narrows the list as text is typed.
 Plain text matches a contact's name or any of its identities.
 When the match is an identity, that identity appears under the name in the row.
 
-The list also takes search words such as `name:`, `handle:`, `group:`, `messages:`, and `last-message:`.
+The list also takes search words such as `name:`, `identity:`, `group:`, `messages:`, and `last-message:`.
 [Search](/docs/user/features/messages/search/) lists every word and the lists it works on.
 
 ## One contact

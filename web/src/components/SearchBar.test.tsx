@@ -180,10 +180,10 @@ describe("SearchBar", () => {
   });
 
   it("shows word autocomplete instead of recents while a token is being typed", async () => {
-    suggestionsMock.current = [{ id: "handle:", label: "handle:", insert: "handle: " }];
+    suggestionsMock.current = [{ id: "identity:", label: "identity:", insert: "identity: " }];
     const user = userEvent.setup();
     const { input } = renderSearch({
-      value: "han",
+      value: "ide",
       scope: "message",
       placeholder: "Search messages",
       advancedMode: "messages",
@@ -191,14 +191,14 @@ describe("SearchBar", () => {
 
     await user.click(input);
     const labels = screen.getAllByRole("option").map((el) => el.textContent);
-    expect(labels).toEqual(["handle:"]);
+    expect(labels).toEqual(["identity:"]);
   });
 
   it("inserts a suggestion into the query without running the search", async () => {
-    suggestionsMock.current = [{ id: "handle:", label: "handle:", insert: "handle: " }];
+    suggestionsMock.current = [{ id: "identity:", label: "identity:", insert: "identity: " }];
     const user = userEvent.setup();
     const { input, onChange, onSubmit } = renderSearch({
-      value: "han",
+      value: "ide",
       scope: "message",
       placeholder: "Search messages",
       advancedMode: "messages",
@@ -207,7 +207,7 @@ describe("SearchBar", () => {
     await user.click(input);
     await user.keyboard("{ArrowDown}{Enter}");
 
-    expect(onChange).toHaveBeenCalledWith("handle: ");
+    expect(onChange).toHaveBeenCalledWith("identity: ");
     expect(onSubmit).not.toHaveBeenCalled();
   });
 });

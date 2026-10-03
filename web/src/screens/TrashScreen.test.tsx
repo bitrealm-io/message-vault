@@ -52,8 +52,8 @@ function profile(can_delete: boolean): Awaited<ReturnType<typeof getAccountProfi
 /** The words each list accepts, as `GET /v1/search-fields/{list}` would say: enough of
  * the registry (search/fields.rs) to tell a shared word from a one-list word. */
 const FIELD_WORDS = {
-  contacts: ["name", "handle", "messages", "conversations", "trashed"],
-  conversations: ["name", "handle", "messages", "participants", "trashed"],
+  contacts: ["name", "identity", "messages", "conversations", "trashed"],
+  conversations: ["name", "identity", "messages", "participants", "trashed"],
   messages: ["body", "from", "to", "in", "trashed"],
 } as const;
 

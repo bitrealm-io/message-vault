@@ -343,7 +343,7 @@ describe("OwnerHome", () => {
 
     // The owner holds no messages, so nothing that frames messages belongs here.
     expect(screen.queryByRole("combobox", { name: "Search messages" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Tags" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Message Tags" })).not.toBeInTheDocument();
     expect(screen.queryByText("Conversations")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Import" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Export" })).not.toBeInTheDocument();
@@ -463,7 +463,7 @@ describe("OwnerHome", () => {
     getAccount.mockResolvedValue({ ...anAccount, phones: [] });
     listAccountIdentities.mockResolvedValue({ items: [], total: 0, limit: 40, offset: 0 });
     // Remove asks first; the identity goes only once the dialog agrees.
-    await user.click(screen.getByRole("button", { name: "Remove +15555550100 (Text message)" }));
+    await user.click(screen.getByRole("button", { name: "Remove +15555550100 (Text Message)" }));
     expect(updateAccount).not.toHaveBeenCalledWith(
       101,
       expect.objectContaining({ remove_identities: expect.anything() }),

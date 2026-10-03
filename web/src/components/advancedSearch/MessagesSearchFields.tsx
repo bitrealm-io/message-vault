@@ -81,14 +81,14 @@ export default function MessagesSearchFields({
             All
           </SelectListBoxItem>
           <SelectListBoxItem id="direct" className={compactSelectItemClassName}>
-            Direct
+            One-to-one conversation
           </SelectListBoxItem>
           <SelectListBoxItem id="group" className={compactSelectItemClassName}>
-            Group
+            Group conversation
           </SelectListBoxItem>
         </Select>
       </div>
-      <CountField label="Group participants" value={participants} onChange={onParticipantsChange} />
+      <CountField label="Participants" value={participants} onChange={onParticipantsChange} />
       {/* `source:` takes the id an import writes on each message, and the
           backups Import reads are named here as Import names them. */}
       <ChoiceMultiSelect

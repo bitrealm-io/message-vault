@@ -136,7 +136,7 @@ async fn list_conversations_filters_by_handle() {
     let hit = list_conversations(
         &mut conn,
         account,
-        "handle:+15555550200",
+        "identity:+15555550200",
         DEFAULT_LIST_LIMIT,
         0,
     )
@@ -147,7 +147,7 @@ async fn list_conversations_filters_by_handle() {
     let miss = list_conversations(
         &mut conn,
         account,
-        "handle:+19999999999",
+        "identity:+19999999999",
         DEFAULT_LIST_LIMIT,
         0,
     )
@@ -199,7 +199,7 @@ async fn list_conversations_finds_a_handle_across_platforms() {
     .await
     .unwrap();
 
-    // `handle:` matches the raw value on any platform; it does not
+    // `identity:` matches the raw value on any platform; it does not
     // distinguish which platform a handle belongs to (there is no search
     // word for that in the current language — `service:` filters by a
     // message's own transport, imessage/sms/mms/rcs/whatsapp, which is a
@@ -207,7 +207,7 @@ async fn list_conversations_finds_a_handle_across_platforms() {
     let any_platform = list_conversations(
         &mut conn,
         account,
-        "handle:+15555550200",
+        "identity:+15555550200",
         DEFAULT_LIST_LIMIT,
         0,
     )

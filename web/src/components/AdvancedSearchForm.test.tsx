@@ -16,7 +16,7 @@ describe("AdvancedSearchForm on Messages", () => {
 
     const names = screen.getAllByRole("option").map((o) => o.textContent?.replace("✓", "").trim());
     expect(names).toEqual([
-      "iMessage",
+      "Apple Messages",
       "WhatsApp",
       "SMS Backup & Restore",
       "GO SMS Pro",

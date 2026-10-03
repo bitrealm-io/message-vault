@@ -324,19 +324,9 @@ impl Shared {
         let owner_session = insert_account_session_token(&mut conn, OWNER_ACCOUNT_ID)
             .await
             .unwrap();
-        // The Demo Account, with the schema's default row: every permission
-        // on, so whatever refuses it does so by its id
-        // (`document_rules`, ADR 0016).
-        account_profile::insert_account_at(
-            &mut conn,
-            account_profile::DEMO_ACCOUNT_ID,
-            account_profile::DEMO_USERNAME,
-            None,
-            None,
-        )
-        .await
-        .unwrap();
         drop(conn);
+        // The Demo Account, whose row grants everything, for `document_rules`.
+        fixture.demo_account().await;
         let server = crate::test_support::serve(&fixture.state).await;
         Self {
             fixture,

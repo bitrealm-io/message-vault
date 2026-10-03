@@ -1561,9 +1561,7 @@ async fn the_owner_deletes_any_account_outright() {
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let victim = register_via_api(&state, "bob", "hunter2hunter2").await;
     seed_one_message(&state, victim.account_id).await;
-    let demo = fixture
-        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
-        .await;
+    let demo = fixture.demo_account().await;
 
     assert_eq!(
         delete_status(&state, &member(victim.account_id), &owner.token).await,
@@ -1657,13 +1655,7 @@ async fn an_account_deletes_itself_with_its_password_and_the_demo_account_refuse
         "the other account is untouched"
     );
 
-    let demo = fixture
-        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
-        .await;
-    let demo_token = log_in(&state, "demo", "").await["token"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    let (demo, demo_token) = fixture.demo_account_session().await;
     let (status, text) = crate::test_support::delete_raw_with_body(
         &state,
         &member(demo),
@@ -1743,13 +1735,7 @@ async fn the_demo_account_refuses_what_would_shut_or_empty_it_from_anyone() {
     let fixture = test_fixture().await;
     let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
-    let demo = fixture
-        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
-        .await;
-    let demo_token = log_in(&state, "demo", "").await["token"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    let (demo, demo_token) = fixture.demo_account_session().await;
     let path = member(demo);
 
     for (who, token) in [("the owner", &owner.token), ("the account", &demo_token)] {

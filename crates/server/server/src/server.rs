@@ -260,8 +260,9 @@ pub fn require_delete_access(auth: &AuthIdentity) -> Result<(), ApiError> {
 ///
 /// # Errors
 ///
-/// Returns `demo-account-protected` for the Demo Account, and forbidden when
-/// the credential is an API token or the account may not delete.
+/// Returns forbidden when the credential is an API token,
+/// `demo-account-protected` for a Demo Account session, and forbidden when
+/// the account may not delete.
 pub fn require_full_delete_access(auth: &AuthIdentity) -> Result<(), ApiError> {
     require_full_access(auth)?;
     require_delete_access(auth)

@@ -125,7 +125,7 @@ async fn close_test_db(pool: sqlx::SqlitePool, conn: sqlx::pool::PoolConnection<
 }
 
 #[tokio::test]
-async fn the_demo_account_may_export_and_not_import_or_delete() {
+async fn the_demo_account_row_says_the_grant_its_id_gives() {
     let temp = tempfile::tempdir().expect("create test directory");
     let db = temp.path().join("messagecrate.db");
     let (pool, mut conn) = test_db(&db).await;
@@ -153,7 +153,7 @@ async fn the_demo_account_may_export_and_not_import_or_delete() {
     assert_eq!(
         (import, export, delete),
         (0, 1, 0),
-        "anyone can enter the Demo Account, so it may export and may not import or delete for good"
+        "the seeded row says the grant the server takes from the Demo Account's id (DEMO_ACCOUNT_PERMISSIONS)"
     );
 
     close_test_db(pool, conn).await;

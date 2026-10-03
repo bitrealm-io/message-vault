@@ -1477,9 +1477,10 @@ async fn seed_demo_account_on_conn(
     }
 
     // The Demo Account has no password, so anyone at the login card can enter
-    // it. It may export, and trash and restore; it may not import, so a
-    // person's own messages never land in Demo Data, and it may not delete
-    // for good, so one visitor cannot empty it for the next
+    // it. The server takes its grant from its id (`DEMO_ACCOUNT_PERMISSIONS`)
+    // and does not read these flags for it. The row still says the same
+    // grant, export and neither import nor delete, so the database matches
+    // what the server applies
     // (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`).
     sqlx::query(
         r"

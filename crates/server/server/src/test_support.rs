@@ -154,18 +154,25 @@ impl TestFixture {
         id
     }
 
+    /// Insert the Demo Account at its fixed id, with the schema's default row:
+    /// every permission on, so whatever refuses it does so by its id
+    /// (ADR 0016). Returns its id.
+    pub async fn demo_account(&self) -> i64 {
+        use crate::db::account_profile::{DEMO_ACCOUNT_ID, DEMO_USERNAME};
+        self.account_with_id(DEMO_ACCOUNT_ID, DEMO_USERNAME).await
+    }
+
     /// The Demo Account at its fixed id, logged in with its empty password,
     /// with a row that grants every permission. A test uses it to show that
     /// the server refuses the Demo Account by its id, whatever the row says
     /// (ADR 0016). Returns its id and session token.
     pub async fn demo_account_session(&self) -> (i64, String) {
-        use crate::db::account_profile::{DEMO_ACCOUNT_ID, DEMO_USERNAME};
-        // A new row's flags default to every permission on.
-        let id = self.account_with_id(DEMO_ACCOUNT_ID, DEMO_USERNAME).await;
-        let token = log_in(&self.state, DEMO_USERNAME, "").await["token"]
-            .as_str()
-            .unwrap()
-            .to_string();
+        let id = self.demo_account().await;
+        let token =
+            log_in(&self.state, crate::db::account_profile::DEMO_USERNAME, "").await["token"]
+                .as_str()
+                .unwrap()
+                .to_string();
         (id, token)
     }
 

@@ -91,7 +91,7 @@ async fn reserved_names_rejected_with_exact_messages() {
         .await
         .unwrap_err();
     match err {
-        MembershipError::BadRequest(msg) => assert_eq!(msg, "\"Trash\" is a reserved tag"),
+        MembershipError::BadRequest(msg) => assert_eq!(msg, "\"Trash\" is a reserved Message Tag"),
         other => panic!("expected BadRequest, got {other:?}"),
     }
     let err = create_set(group_spec(), &mut conn, account, "Trash")
@@ -106,7 +106,7 @@ async fn reserved_names_rejected_with_exact_messages() {
         .unwrap_err();
     match err {
         MembershipError::BadRequest(msg) => {
-            assert_eq!(msg, "Group Messages is a reserved name");
+            assert_eq!(msg, "\"Group Chats\" is a reserved Contact Group");
         }
         other => panic!("expected BadRequest, got {other:?}"),
     }
@@ -157,7 +157,7 @@ async fn a_message_tag_cannot_be_named_none() {
         .await
         .unwrap();
     for name in ["none", "None", "NONE"] {
-        let expected = format!("\"{name}\" is a reserved tag");
+        let expected = format!("\"{name}\" is a reserved Message Tag");
         match create_set(tag_spec(), &mut conn, account, name)
             .await
             .unwrap_err()

@@ -57,20 +57,6 @@ export function reservedGroupError(name: string): string {
   if (key === "no messages" || key === "no-messages") {
     return "No messages is a reserved Contact Group";
   }
-  if (
-    key === "groups" ||
-    key === "group" ||
-    key === "group chats" ||
-    key === "group-chats" ||
-    key === "group chats 2" ||
-    key === "group-chats-2" ||
-    key === "group messages" ||
-    key === "group-messages" ||
-    key === "group messages 2" ||
-    key === "group-messages-2"
-  ) {
-    return "Group Messages is a reserved name";
-  }
   return `"${name.trim()}" is a reserved Contact Group`;
 }
 

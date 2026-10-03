@@ -74,9 +74,9 @@ impl SharedJournal {
     }
 
     /// Clear the claim and record the digest as present on the server.
-    fn asset_uploaded(&mut self, source: &str, digest: &str) -> Result<()> {
+    fn asset_uploaded(&mut self, digest: &str) -> Result<()> {
         self.assets_in_flight.remove(digest);
-        self.journal.asset_ok(source, digest)
+        self.journal.asset_ok(digest)
     }
 }
 
@@ -227,7 +227,7 @@ pub(crate) fn prepare_file(
     };
     if !ctx.cfg.skip_attachments {
         let upload_started = Instant::now();
-        let uploaded = upload_assets(ctx, name, &source, &scan.unique)?;
+        let uploaded = upload_assets(ctx, name, &scan.unique)?;
         profile.asset_upload_ms = elapsed_ms(upload_started);
         profile.asset_bytes = uploaded.bytes;
         assets.add(AssetTotals {
@@ -666,7 +666,6 @@ struct AssetUploadStats {
 fn upload_assets(
     ctx: &PrepareContext<'_>,
     name: &str,
-    source: &str,
     unique: &BTreeMap<String, (String, Option<String>)>,
 ) -> Result<AssetUploadStats> {
     let mut stats = AssetUploadStats::default();
@@ -674,7 +673,7 @@ fn upload_assets(
     while !pending.is_empty() {
         let mut claims = AssetClaims::new(ctx);
         let (jobs, busy) = claim_upload_jobs(ctx, name, unique, &pending, &mut claims, &mut stats)?;
-        upload_claimed(ctx, name, source, &jobs, &mut claims, &mut stats)?;
+        upload_claimed(ctx, name, &jobs, &mut claims, &mut stats)?;
         drop(claims);
         wait_for_claims(ctx, &busy)?;
         pending = busy;
@@ -691,7 +690,6 @@ fn upload_assets(
 fn upload_claimed(
     ctx: &PrepareContext<'_>,
     name: &str,
-    source: &str,
     jobs: &[AssetUploadJob],
     claims: &mut AssetClaims<'_, '_>,
     stats: &mut AssetUploadStats,
@@ -713,7 +711,7 @@ fn upload_claimed(
     for (job, result) in jobs.iter().zip(results) {
         match result {
             Ok(response) => {
-                claims.uploaded(source, &job.digest)?;
+                claims.uploaded(&job.digest)?;
                 let outcome = if response.already_present {
                     stats.skipped += 1;
                     "skip"
@@ -832,9 +830,9 @@ impl<'c, 'a> AssetClaims<'c, 'a> {
     /// # Errors
     ///
     /// Returns an error when the journal file cannot be appended to.
-    fn uploaded(&mut self, source: &str, digest: &str) -> Result<()> {
+    fn uploaded(&mut self, digest: &str) -> Result<()> {
         self.held.retain(|held| held != digest);
-        let recorded = self.ctx.lock_journal().asset_uploaded(source, digest);
+        let recorded = self.ctx.lock_journal().asset_uploaded(digest);
         self.ctx.claim_ended.notify_all();
         recorded
     }

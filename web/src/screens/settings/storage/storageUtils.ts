@@ -168,30 +168,30 @@ export function importStatusLabel(status: Schema["ImportStatus"]): string {
 }
 
 /** Build the import summary panel model from an Account Import Run. */
-export function toImportSummaryView(detail: AccountImportRun): ImportSummaryView {
+export function toImportSummaryView(run: AccountImportRun): ImportSummaryView {
   // The owner reads the summary's counts and nothing else of it.
   const summary: Record<string, unknown> =
-    "counts" in detail
-      ? detail.counts
-      : detail.summary && typeof detail.summary === "object"
-        ? (detail.summary as Record<string, unknown>)
+    "counts" in run
+      ? run.counts
+      : run.summary && typeof run.summary === "object"
+        ? (run.summary as Record<string, unknown>)
         : {};
   const hasAnyStageTiming =
-    detail.parse_ms != null ||
-    detail.attachments_ms != null ||
-    detail.prepare_ms != null ||
-    detail.upload_ms != null;
+    run.parse_ms != null ||
+    run.attachments_ms != null ||
+    run.prepare_ms != null ||
+    run.upload_ms != null;
   const durationMs =
-    detail.duration_ms ??
+    run.duration_ms ??
     (hasAnyStageTiming
-      ? (detail.parse_ms ?? 0) +
-        (detail.attachments_ms ?? 0) +
-        (detail.prepare_ms ?? 0) +
-        (detail.upload_ms ?? 0)
+      ? (run.parse_ms ?? 0) +
+        (run.attachments_ms ?? 0) +
+        (run.prepare_ms ?? 0) +
+        (run.upload_ms ?? 0)
       : null);
 
   return {
-    status: toSummaryStatus(detail.status),
+    status: toSummaryStatus(run.status),
     filesTotal: toNumber(summary.files_total ?? summary.filesTotal),
     filesSucceeded: toNumber(summary.files_succeeded ?? summary.filesSucceeded),
     filesFailed: toNumber(summary.files_failed ?? summary.filesFailed),
@@ -204,14 +204,14 @@ export function toImportSummaryView(detail: AccountImportRun): ImportSummaryView
     ),
     messagesAttempted: toNumber(summary.messages_attempted ?? summary.messagesAttempted),
     messagesInserted:
-      toNumber(summary.messages_inserted ?? summary.messagesInserted) ?? detail.message_count,
+      toNumber(summary.messages_inserted ?? summary.messagesInserted) ?? run.message_count,
     messagesDeduped: toNumber(summary.messages_deduped ?? summary.messagesDeduped),
     messagesFailed: toNumber(summary.messages_failed ?? summary.messagesFailed),
-    parseMs: detail.parse_ms,
-    attachmentsMs: detail.attachments_ms,
-    prepareMs: detail.prepare_ms,
-    uploadMs: detail.upload_ms,
+    parseMs: run.parse_ms,
+    attachmentsMs: run.attachments_ms,
+    prepareMs: run.prepare_ms,
+    uploadMs: run.upload_ms,
     durationMs,
-    issues: "issues" in detail ? detail.issues : [],
+    issues: "issues" in run ? run.issues : [],
   };
 }

@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useMemo } from "react";
 import ListRangeHeader from "../components/ListRangeHeader";
 import MessageSearchRow from "../components/MessageSearchRow";
 import SortMenu, { type SortField } from "../components/SortMenu";
@@ -15,11 +15,10 @@ import {
 } from "../lib/messageSearchSort";
 import { keys } from "../lib/queryKeys";
 import { type PagedFetchPage, useRoutePagedList } from "../lib/routeQuery";
-import { hasFieldToken } from "../lib/searchFields";
 import { listMessages } from "../lib/serverApi";
 import type { Message } from "../lib/types";
+import { useDebouncedQuery } from "../lib/useDebouncedQuery";
 
-const QUERY_DEBOUNCE_MS = 300;
 /** Rows read at a time as the person scrolls. */
 const PAGE_SIZE = 40;
 
@@ -50,16 +49,7 @@ export default function MessageSearchList({
   selectedId: number | null;
   onSelect: (message: Message) => void;
 }) {
-  const [debouncedQ, setDebouncedQ] = useState(query);
-  useEffect(() => {
-    // A query that names a word applies at once, so the list does not flash empty.
-    if (hasFieldToken(query)) {
-      setDebouncedQ(query);
-      return;
-    }
-    const t = window.setTimeout(() => setDebouncedQ(query), QUERY_DEBOUNCE_MS);
-    return () => window.clearTimeout(t);
-  }, [query]);
+  const debouncedQ = useDebouncedQuery(query);
 
   const q = debouncedQ.trim();
   const terms = useMemo(() => freeTextTerms(q), [q]);

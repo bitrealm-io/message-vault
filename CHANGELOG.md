@@ -793,14 +793,14 @@ released versions carry their date on the heading.
   it again: use **Delete all messages** in Settings first, then import it.
 - A Saved Search that uses `source:sms` is refused. Edit it to
   `source:sms-backup-restore`.
-- Photos and files imported by an earlier 0.10.0 build are not shown,
-  because each account now keeps them in one folder for every source, and
-  the server no longer reads the folder an earlier build made for each
-  source. **Delete all messages** leaves those old folders on disk. Use
-  **Delete all messages** in Settings, delete the folder named after each
-  source inside each account's folder in the data folder, then import those
-  backups again. Deleting the whole data folder does the same for every
-  account at once, and also starts a new, empty Message Crate.
+- Photos and files imported by an earlier 0.10.0 build are not shown.
+  Each account now keeps them in one folder, `data/<account_id>/assets/`,
+  and the server no longer reads the folder an earlier build made for each
+  source, such as `data/1/imessage/`. **Delete all messages** leaves those
+  old folders on disk. To bring the photos back:
+  1. Use **Delete all messages** in Settings.
+  2. Delete each `data/<account_id>/<source>/` folder.
+  3. Import those backups again.
 - The server's `process-assets` command no longer takes `--source`: it
   makes previews for every attachment of each account.
 - An Import Run left waiting at a Staging Review or at its Media stage by an

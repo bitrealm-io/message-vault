@@ -105,17 +105,18 @@ fn contact_name_from_subject(subject: &str) -> Option<String> {
     Some(name.to_string())
 }
 
-/// Unix seconds from the SMS Backup+ date header (milliseconds or seconds), else the `Date` header.
-fn timestamp_seconds(headers: &MailHeaders) -> Option<f64> {
+/// Unix seconds from the SMS Backup+ date header (milliseconds or seconds), else the `Date` header,
+/// and whether the time carries milliseconds.
+fn timestamp_seconds(headers: &MailHeaders) -> Option<(f64, bool)> {
     let raw = &headers.smssync_date;
     if !raw.is_empty() && raw.chars().all(|c| c.is_ascii_digit()) {
         let value: i64 = raw.parse().ok()?;
         // Android uses epoch ms (~1e12 today). Seconds stay ~1e9 until year 5138.
         // Threshold 1e11 catches pre-2001 ms timestamps that the old 1e12 cutoff missed.
         return Some(if value >= 100_000_000_000 {
-            value as f64 / 1000.0
+            (value as f64 / 1000.0, true)
         } else {
-            value as f64
+            (value as f64, false)
         });
     }
     if headers.date.is_empty() {
@@ -124,7 +125,7 @@ fn timestamp_seconds(headers: &MailHeaders) -> Option<f64> {
     // mailparse does not parse Date headers; try chrono RFC2822.
     chrono::DateTime::parse_from_rfc2822(&headers.date)
         .ok()
-        .map(|d| d.timestamp() as f64)
+        .map(|d| (d.timestamp() as f64, false))
 }
 
 /// `owner_emails` must already be trimmed + lowercased.
@@ -204,7 +205,7 @@ pub(crate) fn parse_flat_eml_mail(
     if !is_single_sms_eml(headers) {
         return None;
     }
-    let timestamp_secs = timestamp_seconds(headers)?;
+    let (timestamp_secs, has_milliseconds) = timestamp_seconds(headers)?;
     let name_alias = contact_name_from_subject(&headers.subject);
     let addresses = FlatAddresses::from_headers(headers, owners);
     let sent = is_sent(headers, owner_emails);
@@ -222,6 +223,7 @@ pub(crate) fn parse_flat_eml_mail(
         group_title: conversation.group_title,
         participants: conversation.participants,
         timestamp_secs,
+        has_milliseconds,
         is_from_me: sent,
         sender: conversation.sender,
         text: extract_body_text(mail),
@@ -468,7 +470,7 @@ old message\r\n"
             to: String::new(),
             date: "Fri, 01 Jan 2021 00:00:00 +0000".into(),
         };
-        assert_eq!(timestamp_seconds(&headers), Some(1_609_459_200.0));
+        assert_eq!(timestamp_seconds(&headers), Some((1_609_459_200.0, false)));
     }
 
     #[test]

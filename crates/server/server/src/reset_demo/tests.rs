@@ -8,11 +8,6 @@ pub(crate) fn write_tiny_reset_bundle(root: &Path) {
     fs::create_dir_all(root.join("staging").join(SBR_SOURCE)).expect("sbr dir");
     fs::create_dir_all(root.join("staging").join(WHATSAPP_SOURCE)).expect("whatsapp dir");
     fs::write(
-        root.join("config/config.toml"),
-        "[paths]\ndb = \"data/messagecrate.db\"\ndata_dir = \"data\"\n",
-    )
-    .expect("write bundle config");
-    fs::write(
         root.join("config/seed.toml"),
         r#"
 [owner]
@@ -198,58 +193,32 @@ async fn a_build_refused_by_another_account_named_demo_names_that_account() {
     close_test_db(pool, conn).await;
 }
 
+/// A reset that fails after it has wiped the Demo Account, here on the last
+/// source's file, leaves the previous Demo Account whole: every row in the
+/// active database and the file in its data folder. The wipe ran on the
+/// prepared copy, and the copy is never installed.
 #[tokio::test]
 async fn failed_reset_preserves_existing_demo_account() {
     let temp = tempfile::tempdir().expect("create test directory");
     let db = temp.path().join("messagecrate.db");
     let data_dir = temp.path().join("data");
-    let account_root = data_dir.join(DEMO_ACCOUNT_ID.to_string());
-    fs::create_dir_all(&account_root).expect("create account data directory");
-    let sentinel = account_root.join("existing.bin");
-    let original_data = b"existing account data\n";
-    fs::write(&sentinel, original_data).expect("write account data sentinel");
-
-    {
-        let (pool, mut conn) = test_db(&db).await;
-        account_profile::ensure_account_row(&mut conn, DEMO_ACCOUNT_ID)
-            .await
-            .expect("seed account");
-        let handle_id: i64 = sqlx::query_scalar(
-            "INSERT INTO handles (
-                account_id, raw, normalized, handle_type, service
-             ) VALUES ($1, '+15555550100', '+15555550100', 'phone', 'phone')
-             RETURNING id",
-        )
-        .bind(DEMO_ACCOUNT_ID)
-        .fetch_one(&mut *conn)
+    let previous_file = seed_previous_demo(&db, &data_dir).await;
+    let (pool, mut conn) = test_db(&db).await;
+    seed_other_account_rows(&mut conn, DEMO_ACCOUNT_ID).await;
+    close_test_db(pool, conn).await;
+    checkpoint_and_clean_sidecars(&db, "while seeding the previous demo")
         .await
-        .expect("insert handle");
-        let conversation_id: i64 = sqlx::query_scalar(
-            "INSERT INTO conversations (
-                account_id, chat_handle_id, conversation_type, source_file
-             ) VALUES ($1, $2, 'individual', 'existing.jsonl')
-             RETURNING id",
-        )
-        .bind(DEMO_ACCOUNT_ID)
-        .bind(handle_id)
-        .fetch_one(&mut *conn)
-        .await
-        .expect("insert conversation");
-        sqlx::query(
-            "INSERT INTO messages (
-                conversation_id, account_id, source, guid, timestamp,
-                is_from_me, body, sort_order
-             ) VALUES ($1, $2, 'imessage', 'existing-message',
-                       '2026-01-01T00:00:00Z', 0, 'keep me', 0)",
-        )
-        .bind(conversation_id)
-        .bind(DEMO_ACCOUNT_ID)
-        .execute(&mut *conn)
-        .await
-        .expect("insert message");
-        close_test_db(pool, conn).await;
-    }
-
+        .expect("checkpoint the previous demo");
+    let every_row_before = non_demo_state(&db, NO_ACCOUNT).await.expect("read rows");
+    let bundle = temp.path().join("bundle");
+    write_tiny_reset_bundle(&bundle);
+    // WhatsApp is imported last, so the wipe and the other two imports have
+    // run when this file fails.
+    fs::write(
+        bundle.join("staging").join(WHATSAPP_SOURCE).join("a.jsonl"),
+        "not a conversation\n",
+    )
+    .expect("write unreadable jsonl");
     let cfg = Config {
         paths: PathsConfig {
             db: db.clone(),
@@ -259,38 +228,38 @@ async fn failed_reset_preserves_existing_demo_account() {
         },
         server: None,
     };
-    let invalid_bundle = temp.path().join("invalid-bundle");
-    fs::create_dir_all(invalid_bundle.join("staging").join(IMESSAGE_SOURCE))
-        .expect("create iMessage tree");
-    fs::create_dir_all(invalid_bundle.join("staging").join(SBR_SOURCE))
-        .expect("create Android tree");
 
-    let result = reset_prepared_bundle(
-        &cfg,
-        &invalid_bundle,
-        DEMO_ACCOUNT_ID,
-        &temp.path().join("config/config.toml"),
-        &temp.path().join("prepared-config.toml"),
+    let result = reset_prepared_bundle(&cfg, &bundle, DEMO_ACCOUNT_ID).await;
+
+    let error = format!(
+        "{:#}",
+        result
+            .err()
+            .expect("an unreadable WhatsApp file fails the reset")
+    );
+    assert!(
+        error.contains("a.jsonl"),
+        "the import of the file failed: {error}"
+    );
+    assert_eq!(
+        non_demo_state(&db, NO_ACCOUNT).await.expect("read rows"),
+        every_row_before,
+        "every row of the active database is as it was"
+    );
+    let mut conn = test_db_conn(&db).await;
+    let previous_messages = count(
+        &mut conn,
+        "SELECT COUNT(*) FROM messages WHERE account_id = $1 AND guid = 'previous-demo-message'",
     )
     .await;
-
-    assert!(result.is_err());
-    let mut conn = test_db_conn(&db).await;
-    let account_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM accounts WHERE id = $1")
-        .bind(DEMO_ACCOUNT_ID)
-        .fetch_one(&mut *conn)
-        .await
-        .expect("count account");
-    let message_count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE guid = 'existing-message'")
-            .fetch_one(&mut *conn)
-            .await
-            .expect("count message");
-    assert_eq!(account_count, 1);
-    assert_eq!(message_count, 1);
     assert_eq!(
-        fs::read(&sentinel).expect("read account sentinel"),
-        original_data
+        previous_messages, 1,
+        "the previous Demo Account keeps its message"
+    );
+    assert_eq!(
+        fs::read(&previous_file).expect("read the previous demo's file"),
+        b"previous demo attachment",
+        "the previous Demo Account keeps its file"
     );
 }
 
@@ -319,14 +288,7 @@ async fn a_reset_whose_rebuild_fails_leaves_the_database_and_server_ready_in_pla
         server: None,
     };
 
-    let result = reset_prepared_bundle(
-        &cfg,
-        &bundle,
-        DEMO_ACCOUNT_ID,
-        &temp.path().join("config/config.toml"),
-        &temp.path().join("prepared-config.toml"),
-    )
-    .await;
+    let result = reset_prepared_bundle(&cfg, &bundle, DEMO_ACCOUNT_ID).await;
 
     assert!(
         result.is_err(),
@@ -339,52 +301,49 @@ async fn a_reset_whose_rebuild_fails_leaves_the_database_and_server_ready_in_pla
     assert_reset_test_database(&db).await;
 }
 
+/// `reset-demo` builds the Demo Account in the database the operator's
+/// config names, wherever that is, and leaves the config file as it was,
+/// `[server]` section and all (#1216).
 #[tokio::test]
-async fn failed_preparation_preserves_active_config() {
-    let temp = tempfile::tempdir().expect("create test directory");
-    let config_dest = temp.path().join("config/config.toml");
-    fs::create_dir_all(config_dest.parent().expect("config parent")).expect("create config parent");
-    let original = b"active configuration\n";
-    fs::write(&config_dest, original).expect("write active config");
-    let invalid_bundle = temp.path().join("invalid-bundle");
-    fs::create_dir_all(&invalid_bundle).expect("create invalid bundle");
-
-    let result = prepare_config_and_reset(&invalid_bundle, &config_dest, DEMO_ACCOUNT_ID).await;
-
-    assert!(result.is_err());
-    assert_eq!(
-        fs::read(&config_dest).expect("read active config"),
-        original
-    );
-}
-
-/// A complete bundle: the reset runs, the bundle's
-/// config becomes the active one, and the database it names holds the demo.
-#[tokio::test]
-async fn a_complete_bundle_resets_and_its_config_becomes_the_active_one() {
+async fn a_reset_builds_in_the_configured_database_and_leaves_the_config_as_it_is() {
     let temp = tempfile::tempdir().expect("create test directory");
     let bundle = temp.path().join("bundle");
     write_tiny_reset_bundle(&bundle);
-    let config_dest = temp.path().join("config/config.toml");
+    let elsewhere = temp.path().join("srv/mc");
+    let config_path = temp.path().join("config/config.toml");
+    fs::create_dir_all(config_path.parent().expect("config parent")).expect("create config parent");
+    let config_text = format!(
+        "[paths]\ndb = '{}'\ndata_dir = '{}'\n\n[server]\nbind = \"127.0.0.1:8080\"\n",
+        elsewhere.join("messagecrate.db").display(),
+        elsewhere.join("data").display()
+    );
+    fs::write(&config_path, &config_text).expect("write the operator's config");
 
-    let stats = prepare_config_and_reset(&bundle, &config_dest, DEMO_ACCOUNT_ID)
+    let cfg = Config::load(&config_path).expect("load the operator's config");
+    let stats = reset_prepared_bundle(&cfg, &bundle, DEMO_ACCOUNT_ID)
         .await
         .expect("a complete bundle resets");
 
     assert_eq!(stats.import.messages, 3, "one message from each source");
     assert_eq!(
-        fs::read(&config_dest).expect("read active config"),
-        fs::read(bundle.join("config/config.toml")).expect("read bundle config")
+        fs::read_to_string(&config_path).expect("read the config"),
+        config_text,
+        "the config file is unchanged"
     );
-    // The bundle's config names the database relative to the folder above
-    // the active config's.
-    let mut conn = test_db_conn(&temp.path().join("data/messagecrate.db")).await;
+    assert!(
+        !temp.path().join("data/messagecrate.db").exists(),
+        "nothing is built at the default database path"
+    );
+    let mut conn = test_db_conn(&elsewhere.join("messagecrate.db")).await;
     let demo_messages = count(
         &mut conn,
         &format!("SELECT COUNT(*) FROM messages WHERE account_id = {DEMO_ACCOUNT_ID}"),
     )
     .await;
-    assert_eq!(demo_messages, 3);
+    assert_eq!(
+        demo_messages, 3,
+        "the Demo Account is in the configured database"
+    );
 }
 
 #[tokio::test]
@@ -438,8 +397,8 @@ async fn reset_check_refuses_a_prepared_database_with_fewer_non_demo_messages() 
         .to_string();
 
     assert!(
-        error.contains("active={9: 1}, prepared={9: 0}"),
-        "the error must name account 9 and both counts: {error}"
+        error.contains("messages (active rows=1, prepared rows=0)"),
+        "the error names the table and both counts: {error}"
     );
 }
 
@@ -457,30 +416,148 @@ async fn reset_check_refuses_a_prepared_database_with_more_non_demo_messages() {
         .to_string();
 
     assert!(
-        error.contains("active={9: 1}, prepared={9: 1, 10: 1}"),
-        "the error must name account 10: {error}"
+        error.contains("accounts (active rows=1, prepared rows=2)"),
+        "the error names the accounts table and both counts: {error}"
     );
 }
 
-#[test]
-fn reset_refuses_while_server_holds_database_lock() {
+/// The check compares every row another account holds, not its message
+/// count, and the Server Settings: each change here leaves the counts of
+/// messages as they were and is refused, naming its table (#1225).
+#[tokio::test]
+async fn reset_check_refuses_a_prepared_database_that_changed_another_accounts_rows_or_the_server_settings()
+ {
+    let changes = [
+        (
+            "UPDATE contacts SET preferred_name = 'Renamed' WHERE account_id = 9",
+            "contacts (active rows=1, prepared rows=1)",
+        ),
+        (
+            "DELETE FROM contact_group_members
+             WHERE contact_id IN (SELECT id FROM contacts WHERE account_id = 9)",
+            "contact_group_members (active rows=1, prepared rows=0)",
+        ),
+        (
+            "UPDATE saved_searches SET query = 'bob' WHERE account_id = 9",
+            "saved_searches (active rows=1, prepared rows=1)",
+        ),
+        (
+            "UPDATE server_settings SET public_registration = 1",
+            "server_settings (active rows=1, prepared rows=1)",
+        ),
+    ];
+    for (change, named) in changes {
+        let temp = tempfile::tempdir().expect("create test directory");
+        let (active, prepared) = active_and_prepared_reset_databases(temp.path()).await;
+        let (pool, mut conn) = test_db(&prepared).await;
+        sqlx::query(change)
+            .execute(&mut *conn)
+            .await
+            .unwrap_or_else(|error| panic!("{change}: {error}"));
+        close_test_db(pool, conn).await;
+
+        let error = verify_non_demo_state_preserved(&active, &prepared, DEMO_ACCOUNT_ID)
+            .await
+            .err()
+            .unwrap_or_else(|| panic!("the check refuses {change}"))
+            .to_string();
+
+        assert!(
+            error.ends_with(&format!("outside the Demo Account in: {named}")),
+            "{change} is refused naming its table alone: {error}"
+        );
+    }
+}
+
+/// A reset whose rebuild changed another account's contact is refused, and
+/// the active database keeps the contact's name (#1225).
+#[tokio::test]
+async fn a_reset_that_renames_another_accounts_contact_is_refused() {
     let temp = tempfile::tempdir().expect("create test directory");
     let db = temp.path().join("messagecrate.db");
+    seed_reset_test_database(&db).await;
+    let bundle = temp.path().join("bundle");
+    write_tiny_reset_bundle(&bundle);
+    let cfg = Config {
+        paths: PathsConfig {
+            db: db.clone(),
+            data_dir: temp.path().join("data"),
+            assets_dir: "assets".into(),
+            assets_converted_dir: "assets_converted".into(),
+        },
+        server: None,
+    };
+
+    let result = reset_prepared_bundle_with(&cfg, &bundle, DEMO_ACCOUNT_ID, async |db| {
+        sqlx::query("UPDATE contacts SET preferred_name = 'Renamed' WHERE account_id = 9")
+            .execute(db)
+            .await?;
+        Ok(())
+    })
+    .await;
+
+    let error = format!("{:#}", result.err().expect("the reset is refused"));
+    assert!(error.contains("in: contacts "), "{error}");
+    assert_reset_test_database(&db).await;
+    let mut conn = test_db_conn(&db).await;
+    let name: String =
+        sqlx::query_scalar("SELECT preferred_name FROM contacts WHERE account_id = 9")
+            .fetch_one(&mut *conn)
+            .await
+            .expect("read account 9's contact");
+    assert_eq!(
+        name, "Alice",
+        "the active database keeps the contact's name"
+    );
+}
+
+/// While a server holds the database, a reset is refused before it reads or
+/// writes anything: the database, the account folder and `server.ready`
+/// stay as they were.
+#[tokio::test]
+async fn reset_refuses_while_server_holds_database_lock() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let db = temp.path().join("messagecrate.db");
+    seed_reset_test_database(&db).await;
+    crate::operation_lock::mark_ready(&db).expect("write server.ready");
+    let data_dir = temp.path().join("data");
+    let demo_file = data_dir.join(DEMO_ACCOUNT_ID.to_string()).join("keep.bin");
+    fs::create_dir_all(demo_file.parent().expect("account folder")).expect("create account folder");
+    fs::write(&demo_file, b"keep").expect("write demo file");
+    let bundle = temp.path().join("bundle");
+    write_tiny_reset_bundle(&bundle);
+    let cfg = Config {
+        paths: PathsConfig {
+            db: db.clone(),
+            data_dir,
+            assets_dir: "assets".into(),
+            assets_converted_dir: "assets_converted".into(),
+        },
+        server: None,
+    };
     let _serve_lock = crate::operation_lock::acquire_for_serve(&db).expect("acquire server lock");
 
-    let error = crate::operation_lock::acquire_for_reset(&db)
-        .expect_err("reset lock must conflict with active server")
-        .to_string();
+    let result = reset_prepared_bundle(&cfg, &bundle, DEMO_ACCOUNT_ID).await;
 
+    let error = format!(
+        "{:#}",
+        result.err().expect("the reset is refused while serve runs")
+    );
     assert!(error.contains("serve is active"), "{error}");
     assert!(error.contains("offline"), "{error}");
+    assert_reset_test_database(&db).await;
+    assert_eq!(fs::read(&demo_file).expect("read demo file"), b"keep");
+    assert!(
+        crate::operation_lock::ready_path(&db).is_file(),
+        "server.ready is left in place"
+    );
 }
 
 #[tokio::test]
-async fn failures_after_database_and_account_install_restore_all_active_state() {
+async fn failures_during_the_install_restore_all_active_state() {
     for failure_point in [
+        ResetInstallFailure::AtDatabase,
         ResetInstallFailure::AfterDatabase,
-        ResetInstallFailure::AfterAccount,
     ] {
         let temp = tempfile::tempdir().expect("create test directory");
         let active_db = temp.path().join("active/messagecrate.db");
@@ -503,31 +580,20 @@ async fn failures_after_database_and_account_install_restore_all_active_state() 
         fs::write(active_account.join("sentinel"), b"old data").expect("write old data");
         fs::write(prepared_account.join("sentinel"), b"new data").expect("write new data");
 
-        let active_config = temp.path().join("config/config.toml");
-        let prepared_config = temp.path().join("prepared-config/config.toml");
-        fs::create_dir_all(active_config.parent().expect("active config parent"))
-            .expect("create active config parent");
-        fs::create_dir_all(prepared_config.parent().expect("prepared config parent"))
-            .expect("create prepared config parent");
-        fs::write(&active_config, b"old config").expect("write old config");
-        fs::write(&prepared_config, b"new config").expect("write new config");
-
         let result = replace_reset_state_with(
             &ResetPaths {
                 active_db: &active_db,
                 prepared_db: &prepared_db,
                 active_account: &active_account,
                 prepared_account: &prepared_account,
-                active_config: &active_config,
-                prepared_config: &prepared_config,
             },
             |source, destination| {
+                if failure_point == ResetInstallFailure::AtDatabase && source == prepared_db {
+                    bail!("injected failure at the database rename");
+                }
                 if failure_point == ResetInstallFailure::AfterDatabase && source == prepared_account
                 {
                     bail!("injected failure after database rename");
-                }
-                if failure_point == ResetInstallFailure::AfterAccount && source == prepared_config {
-                    bail!("injected failure after account-directory rename");
                 }
                 fs::rename(source, destination).map_err(Into::into)
             },
@@ -538,10 +604,6 @@ async fn failures_after_database_and_account_install_restore_all_active_state() 
         assert_eq!(
             fs::read(active_account.join("sentinel")).expect("read data sentinel"),
             b"old data"
-        );
-        assert_eq!(
-            fs::read(&active_config).expect("read active config"),
-            b"old config"
         );
     }
 }
@@ -565,14 +627,6 @@ async fn active_sidecars_are_cleaned_immediately_before_database_rename() {
         .join(DEMO_ACCOUNT_ID.to_string());
     fs::create_dir_all(&active_account).expect("create active account");
     fs::create_dir_all(&prepared_account).expect("create prepared account");
-    let active_config = temp.path().join("config/config.toml");
-    let prepared_config = temp.path().join("prepared-config/config.toml");
-    fs::create_dir_all(active_config.parent().expect("active config parent"))
-        .expect("create active config parent");
-    fs::create_dir_all(prepared_config.parent().expect("prepared config parent"))
-        .expect("create prepared config parent");
-    fs::write(&active_config, b"old config").expect("write active config");
-    fs::write(&prepared_config, b"new config").expect("write prepared config");
 
     {
         let (pool, mut conn) = test_db(&active_db).await;
@@ -595,8 +649,6 @@ async fn active_sidecars_are_cleaned_immediately_before_database_rename() {
             prepared_db: &prepared_db,
             active_account: &active_account,
             prepared_account: &prepared_account,
-            active_config: &active_config,
-            prepared_config: &prepared_config,
         },
         |source, destination| {
             if source == active_db {
@@ -624,15 +676,11 @@ fn reset_rollback_attempts_remaining_restorations_after_one_fails() {
     let prepared_db = temp.path().join("prepared/messagecrate.db");
     let active_account = temp.path().join("data/demo");
     let prepared_account = temp.path().join("prepared-data/demo");
-    let active_config = temp.path().join("config/config.toml");
-    let prepared_config = temp.path().join("prepared-config/config.toml");
     for parent in [
         active_db.parent().expect("active db parent"),
         prepared_db.parent().expect("prepared db parent"),
         &active_account,
         &prepared_account,
-        active_config.parent().expect("active config parent"),
-        prepared_config.parent().expect("prepared config parent"),
     ] {
         fs::create_dir_all(parent).expect("create replacement fixture directory");
     }
@@ -640,8 +688,6 @@ fn reset_rollback_attempts_remaining_restorations_after_one_fails() {
     fs::write(&prepared_db, b"new db").expect("write prepared db");
     fs::write(active_account.join("sentinel"), b"old").expect("write active account");
     fs::write(prepared_account.join("sentinel"), b"new").expect("write prepared account");
-    fs::write(&active_config, b"old config").expect("write active config");
-    fs::write(&prepared_config, b"new config").expect("write prepared config");
     let mut database_restore_attempted = false;
 
     let result = replace_reset_state_with(
@@ -650,12 +696,10 @@ fn reset_rollback_attempts_remaining_restorations_after_one_fails() {
             prepared_db: &prepared_db,
             active_account: &active_account,
             prepared_account: &prepared_account,
-            active_config: &active_config,
-            prepared_config: &prepared_config,
         },
         |source, destination| {
-            if source == prepared_config {
-                bail!("injected config install failure");
+            if source == prepared_account {
+                bail!("injected account install failure");
             }
             if source.ends_with("previous-account") {
                 bail!("injected account restore failure");
@@ -684,8 +728,8 @@ fn reset_rollback_attempts_remaining_restorations_after_one_fails() {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ResetInstallFailure {
+    AtDatabase,
     AfterDatabase,
-    AfterAccount,
 }
 
 async fn seed_reset_test_database(path: &Path) {
@@ -695,6 +739,12 @@ async fn seed_reset_test_database(path: &Path) {
         .expect("create reset test schema");
     seed_reset_test_account(&mut conn, DEMO_ACCOUNT_ID, "demo-existing").await;
     seed_reset_test_account(&mut conn, 9, "non-demo-existing").await;
+    for account_id in [DEMO_ACCOUNT_ID, 9] {
+        seed_other_account_rows(&mut conn, account_id).await;
+    }
+    crate::db::server_settings::set_asset_max_bytes(&mut conn, 1024)
+        .await
+        .expect("write the server settings");
     close_test_db(pool, conn).await;
     // Pool close does not reliably checkpoint WAL sidecars, so an
     // fs::copy of this file would miss everything written to the -wal.
@@ -716,6 +766,19 @@ async fn make_prepared_reset_database_observably_different(path: &Path) {
         .execute(&mut *conn)
         .await
         .expect("delete prepared demo message");
+    sqlx::query("UPDATE contacts SET preferred_name = 'Renamed' WHERE account_id = $1")
+        .bind(DEMO_ACCOUNT_ID)
+        .execute(&mut *conn)
+        .await
+        .expect("rename the demo contact");
+    sqlx::query(
+        "DELETE FROM contact_group_members
+         WHERE contact_id IN (SELECT id FROM contacts WHERE account_id = $1)",
+    )
+    .bind(DEMO_ACCOUNT_ID)
+    .execute(&mut *conn)
+    .await
+    .expect("remove the demo contact from its group");
     sqlx::query("DELETE FROM accounts WHERE id = 'non-demo-account'")
         .execute(&mut *conn)
         .await
@@ -746,6 +809,43 @@ async fn make_prepared_reset_database_observably_different(path: &Path) {
     assert_eq!(demo_messages, 0);
     assert_eq!(non_demo_accounts, 0);
     close_test_db(pool, conn).await;
+}
+
+/// An account id no row belongs to: [`non_demo_state`] with it reads every
+/// row of the database.
+const NO_ACCOUNT: i64 = -1;
+
+/// Give `account_id` what a person makes beside their messages: a contact in
+/// a Contact Group, and a Saved Search. The group membership has no
+/// `account_id` of its own, so it belongs to the account through its contact.
+async fn seed_other_account_rows(conn: &mut SqliteConnection, account_id: i64) {
+    let contact_id: i64 = sqlx::query_scalar(
+        "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Alice') RETURNING id",
+    )
+    .bind(account_id)
+    .fetch_one(&mut *conn)
+    .await
+    .expect("insert contact");
+    let group_id: i64 = sqlx::query_scalar(
+        "INSERT INTO contact_groups (account_id, name) VALUES ($1, 'Family') RETURNING id",
+    )
+    .bind(account_id)
+    .fetch_one(&mut *conn)
+    .await
+    .expect("insert contact group");
+    sqlx::query("INSERT INTO contact_group_members (contact_id, group_id) VALUES ($1, $2)")
+        .bind(contact_id)
+        .bind(group_id)
+        .execute(&mut *conn)
+        .await
+        .expect("insert contact group member");
+    sqlx::query(
+        "INSERT INTO saved_searches (account_id, name, query) VALUES ($1, 'Mine', 'alice')",
+    )
+    .bind(account_id)
+    .execute(&mut *conn)
+    .await
+    .expect("insert saved search");
 }
 
 async fn seed_reset_test_account(conn: &mut SqliteConnection, account_id: i64, guid: &str) {
@@ -941,17 +1041,10 @@ async fn a_successful_install_removes_the_work_directories() {
     let prepared_account = data_work.path().join(DEMO_ACCOUNT_ID.to_string());
     fs::create_dir_all(&prepared_account).expect("create prepared account");
     fs::write(prepared_account.join("sentinel"), b"new data").expect("write new data");
-    let prepared_config = temp.path().join("prepared-config/config.toml");
-    fs::create_dir_all(prepared_config.parent().expect("prepared config parent"))
-        .expect("create prepared config parent");
-    fs::write(&prepared_config, b"new config").expect("write prepared config");
     let active_db = temp.path().join("active/messagecrate.db");
     fs::create_dir_all(active_db.parent().expect("active database parent"))
         .expect("create active database parent");
     let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID.to_string());
-    let active_config = temp.path().join("config/config.toml");
-    fs::create_dir_all(active_config.parent().expect("active config parent"))
-        .expect("create active config parent");
 
     install_reset_state_or_keep_work(
         &ResetPaths {
@@ -959,8 +1052,6 @@ async fn a_successful_install_removes_the_work_directories() {
             prepared_db: &prepared_db,
             active_account: &active_account,
             prepared_account: &prepared_account,
-            active_config: &active_config,
-            prepared_config: &prepared_config,
         },
         db_work,
         data_work,
@@ -974,10 +1065,6 @@ async fn a_successful_install_removes_the_work_directories() {
     assert_eq!(
         fs::read(active_account.join("sentinel")).expect("read installed account"),
         b"new data"
-    );
-    assert_eq!(
-        fs::read(&active_config).expect("read installed config"),
-        b"new config"
     );
     assert!(
         !db_work_path.exists(),
@@ -995,14 +1082,12 @@ async fn a_failed_install_with_nothing_left_in_the_work_directories_removes_them
     let (db_work, data_work) = reset_work_dirs(temp.path());
     let db_work_path = db_work.path().to_path_buf();
     let data_work_path = data_work.path().to_path_buf();
-    // No prepared database, account or config: the install refuses before
+    // No prepared database or account: the install refuses before
     // any rename, so there is no rollback and nothing to keep.
     let prepared_db = db_work.path().join("messagecrate.db");
     let prepared_account = data_work.path().join(DEMO_ACCOUNT_ID.to_string());
-    let prepared_config = temp.path().join("prepared-config/config.toml");
     let active_db = temp.path().join("active/messagecrate.db");
     let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID.to_string());
-    let active_config = temp.path().join("config/config.toml");
 
     let mut ready =
         crate::operation_lock::ReadyWhileRebuilding::clear(&active_db).expect("clear server.ready");
@@ -1012,8 +1097,6 @@ async fn a_failed_install_with_nothing_left_in_the_work_directories_removes_them
             prepared_db: &prepared_db,
             active_account: &active_account,
             prepared_account: &prepared_account,
-            active_config: &active_config,
-            prepared_config: &prepared_config,
         },
         db_work,
         data_work,
@@ -1052,10 +1135,8 @@ async fn a_failed_install_that_left_previous_state_in_the_work_directories_keeps
     .expect("write leftover backup");
     let prepared_db = db_work.path().join("messagecrate.db");
     let prepared_account = data_work.path().join(DEMO_ACCOUNT_ID.to_string());
-    let prepared_config = temp.path().join("prepared-config/config.toml");
     let active_db = temp.path().join("active/messagecrate.db");
     let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID.to_string());
-    let active_config = temp.path().join("config/config.toml");
 
     let mut ready =
         crate::operation_lock::ReadyWhileRebuilding::clear(&active_db).expect("clear server.ready");
@@ -1065,8 +1146,6 @@ async fn a_failed_install_that_left_previous_state_in_the_work_directories_keeps
             prepared_db: &prepared_db,
             active_account: &active_account,
             prepared_account: &prepared_account,
-            active_config: &active_config,
-            prepared_config: &prepared_config,
         },
         db_work,
         data_work,
@@ -1670,15 +1749,6 @@ async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
     let bundle = temp.path().join("bundle");
     write_tiny_reset_bundle(&bundle);
     write_overlap_conversation(&bundle);
-    let config_dest = temp.path().join("config").join("config.toml");
-    fs::create_dir_all(config_dest.parent().expect("config parent")).expect("create config parent");
-    let prepared_config = temp.path().join("prepared-config.toml");
-    let config_text = format!(
-        "[paths]\ndb = \"{}\"\ndata_dir = \"{}\"\n",
-        db.display(),
-        data_dir.display()
-    );
-    fs::write(&prepared_config, &config_text).expect("write prepared config");
     let cfg = Config {
         paths: PathsConfig {
             db: db.clone(),
@@ -1699,21 +1769,10 @@ async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
         close_test_db(pool, conn).await;
     }
 
-    let stats = reset_prepared_bundle(
-        &cfg,
-        &bundle,
-        DEMO_ACCOUNT_ID,
-        &config_dest,
-        &prepared_config,
-    )
-    .await
-    .expect("reset the demo");
+    let stats = reset_prepared_bundle(&cfg, &bundle, DEMO_ACCOUNT_ID)
+        .await
+        .expect("reset the demo");
 
-    assert_eq!(
-        fs::read_to_string(&config_dest).expect("read installed config"),
-        config_text,
-        "the prepared config is installed as the active config"
-    );
     assert!(
         !previous_file.exists(),
         "the previous demo's file is gone: {}",

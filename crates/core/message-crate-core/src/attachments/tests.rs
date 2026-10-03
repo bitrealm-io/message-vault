@@ -1,16 +1,14 @@
-//! Content-addressed naming, and the two writes that must not overwrite.
+//! Content-addressed naming.
 //!
 //! This module had no tests at all, which mutation testing showed plainly:
 //! every function in it could be replaced with a constant — `digest_prefix`
-//! with `""`, `attachment_dest_name` with `"xyzzy"`, `write_if_missing` and
-//! `copy_if_missing` with `Ok(true)` or `Ok(false)` — and the whole workspace
-//! suite stayed green.
+//! with `""`, `attachment_dest_name` with `"xyzzy"` — and the whole
+//! workspace suite stayed green.
 //!
 //! What breaks if it does: the destination name is what makes an attachment
-//! content-addressed, so two exports of the same photo land on the same file
-//! and neither is written twice. A constant name collapses every attachment in
-//! an export onto one file; a `write_if_missing` that always writes overwrites
-//! a file another conversation is already using.
+//! content-addressed, so two exports of the same photo land on the same
+//! file. A constant name collapses every attachment in an export onto one
+//! file.
 
 use super::*;
 
@@ -119,59 +117,4 @@ fn an_unrepresentable_timestamp_falls_back_to_its_seconds() {
     let name = attachment_dest_name(i64::MIN, DIGEST, ".jpg");
     assert!(name.starts_with(&i64::MIN.to_string()), "got {name}");
     assert!(name.ends_with("-4d1d2c17461355ae.jpg"), "got {name}");
-}
-
-#[test]
-fn writing_is_skipped_when_the_file_is_already_there() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let path = dir.path().join("a.bin");
-
-    assert!(write_if_missing(&path, b"first").expect("write"), "written");
-    assert_eq!(std::fs::read(&path).expect("read"), b"first");
-
-    assert!(
-        !write_if_missing(&path, b"second").expect("write"),
-        "the second write must be skipped, not performed"
-    );
-    assert_eq!(
-        std::fs::read(&path).expect("read"),
-        b"first",
-        "the file another conversation is using must survive"
-    );
-}
-
-#[test]
-fn copying_is_skipped_when_the_destination_is_already_there() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let src = dir.path().join("src.bin");
-    let dest = dir.path().join("dest.bin");
-    std::fs::write(&src, b"source bytes").expect("write source");
-
-    assert!(copy_if_missing(&src, &dest).expect("copy"), "copied");
-    assert_eq!(std::fs::read(&dest).expect("read"), b"source bytes");
-
-    std::fs::write(&src, b"changed source").expect("rewrite source");
-    assert!(
-        !copy_if_missing(&src, &dest).expect("copy"),
-        "the second copy must be skipped"
-    );
-    assert_eq!(
-        std::fs::read(&dest).expect("read"),
-        b"source bytes",
-        "the destination must not be replaced"
-    );
-}
-
-/// A missing source is an error naming both paths, not a silent `false` that
-/// would leave an attachment recorded but absent.
-#[test]
-fn copying_a_missing_source_names_both_paths() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let src = dir.path().join("gone.bin");
-    let dest = dir.path().join("dest.bin");
-
-    let err = copy_if_missing(&src, &dest).expect_err("a missing source is an error");
-    let text = format!("{err:#}");
-    assert!(text.contains("gone.bin"), "{text}");
-    assert!(text.contains("dest.bin"), "{text}");
 }

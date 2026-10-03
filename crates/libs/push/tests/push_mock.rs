@@ -261,9 +261,10 @@ fn reuses_supplied_import_session_without_starting_or_completing_one() {
 }
 
 /// A push that started its own Import Run completes it once, with the
-/// message count, attachment count and bytes the push sent.
+/// bytes the push sent. The server counts the run's messages and
+/// attachments itself.
 #[test]
-fn a_push_completes_its_import_run_with_the_counts_it_sent() {
+fn a_push_completes_its_import_run_with_the_bytes_it_sent() {
     const PHOTO: &[u8] = b"photo bytes";
     let server = MockServer::start();
     let _auth = mock_session(&server);
@@ -291,8 +292,6 @@ fn a_push_completes_its_import_run_with_the_counts_it_sent() {
             .path("/v1/imports/42/complete")
             .json_body(json!({
                 "status": "completed",
-                "message_count": 1,
-                "attachment_count": 1,
                 "bytes_uploaded": PHOTO.len(),
             }));
         then.status(200).json_body(json!({ "id": 42 }));

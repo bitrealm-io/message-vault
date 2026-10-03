@@ -555,15 +555,13 @@ pub(crate) struct CreateImportResponse {
 }
 
 /// Final stats and issues for a running Import Run. The outcome is stated
-/// once, as `status`.
+/// once, as `status`. The run's message and attachment counts are not part
+/// of it: the server counts what the run holds, since a resumed Upload's
+/// client knows only what the resume sent.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub(crate) struct CompleteImportRequest {
     /// How the run ended: `completed`, `completed_with_issues` or `failed`.
     pub(crate) status: String,
-    #[serde(default)]
-    pub(crate) message_count: Option<i64>,
-    #[serde(default)]
-    pub(crate) attachment_count: Option<i64>,
     #[serde(default)]
     pub(crate) bytes_uploaded: Option<i64>,
     #[serde(default)]
@@ -921,8 +919,8 @@ pub(crate) async fn complete_import(
         };
     let args = crate::db::imports::CompleteImportArgs {
         status: body.status,
-        message_count: body.message_count,
-        attachment_count: body.attachment_count,
+        message_count: None,
+        attachment_count: None,
         bytes_uploaded: body.bytes_uploaded,
         duration_ms: body.duration_ms,
         parse_ms: body.parse_ms,

@@ -90,6 +90,16 @@ its source's ids are, and the shape does not. A WhatsApp group id
 `@`, and typed by shape each became an email identity that reaches nobody
 ([#1141](https://github.com/messagecrate/message-crate/issues/1141)).
 
+**A sender's type never depends on the message's service.** A sender the
+header does not list is typed by `phone::Handle::parse` alone, the rule
+below. A phone number is a phone number on any service, including one the
+model does not know. Why: identities of one address are linked as siblings
+only when their types are equal. A number typed `other` because its message
+came over an unknown service, such as Apple Messages by satellite, became a
+second identity on a new contact with no name, and the real contact's counts
+left the message out
+([#1144](https://github.com/messagecrate/message-crate/issues/1144)).
+
 **One number is one person on every service.** iMessage, SMS, MMS and RCS are
 all text messages, so a phone number that arrives over any of them is one
 `handles` row with the service `phone`. The same number on WhatsApp is a

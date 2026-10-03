@@ -82,8 +82,9 @@ pub(crate) fn compile(
                 out.push(NOT_TRASHED_CONVERSATION);
             }
             // A thread with only duplicate messages is hidden, unless the
-            // query is about an Import Run, whose threads may be exactly that.
-            if !uses("import") {
+            // query is about one source or one Import Run, whose threads may
+            // be exactly that.
+            if !uses("source") && !uses("import") {
                 out.push(
                     " AND EXISTS (SELECT 1 FROM messages m0 WHERE m0.conversation_id = c.id AND m0.duplicate_of IS NULL)",
                 );
@@ -848,16 +849,6 @@ fn attachment_kind_sql(kind: &str) -> String {
     }
 }
 
-/// The `source` word's values, mapped to the id an importer writes onto the
-/// message row it wrote.
-fn source_id(choice: &str) -> &'static str {
-    match choice {
-        "imessage" => "imessage",
-        "whatsapp" => "whatsapp",
-        _ => "sms-backup-restore",
-    }
-}
-
 /// The six kind-and-attachment words: `kind`, `service`, `source`,
 /// `attachment`, `size`, `trashed`. `kind:`, `service:`, and `source:` bind
 /// their mapped value with `bind_text` rather than interpolating it, even
@@ -894,11 +885,20 @@ fn emit_kind_word(
             Ok(())
         }
         ("source", Value::Choice(s)) => {
-            let id = source_id(s);
-            ctx.message(out, |o| {
-                o.push("m.source = ");
-                o.bind_text(id);
-            });
+            // Never through `ctx.message`, for the reason `emit_import`
+            // gives: a backup source is often nothing but duplicates of
+            // messages a later import kept, so a search about one must see
+            // them. Messages skips its duplicate default for `source:` in
+            // `compile`, and Conversations reads every message here.
+            let id = s.to_string();
+            if ctx.list == ListKind::Messages {
+                out.push("m.source = ");
+                out.bind_text(id);
+            } else {
+                out.push("EXISTS (SELECT 1 FROM messages ms WHERE ms.conversation_id = c.id AND ms.source = ");
+                out.bind_text(id);
+                out.push(")");
+            }
             Ok(())
         }
         ("attachment", Value::Choice("any")) => {

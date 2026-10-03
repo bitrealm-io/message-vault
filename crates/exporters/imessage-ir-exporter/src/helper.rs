@@ -22,7 +22,9 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow, bail};
-use imessage_reader_protocol::{Event, HELPER_NAME, PROTOCOL_VERSION, Progress, Request};
+use imessage_reader_protocol::{
+    AttachmentFile, Event, HELPER_NAME, PROTOCOL_VERSION, Progress, Request,
+};
 use message_crate_core::{LogSink, ProgressEvent, ProgressSink, emit_log, emit_progress};
 
 /// Names the helper executable outright, bypassing the search.
@@ -244,18 +246,18 @@ impl Helper {
     }
 
     /// Ask the program to decrypt one attachment of the streamed export.
-    /// `None` means the backup does not hold it.
     ///
     /// # Errors
     ///
     /// Returns an error when the program fails or answers with the wrong
-    /// event.
-    pub fn decrypt_attachment(&mut self, path: &Path) -> Result<Option<PathBuf>> {
+    /// event. One attachment that cannot be decrypted is not an error here:
+    /// it is [`AttachmentFile::Failed`].
+    pub fn decrypt_attachment(&mut self, path: &Path) -> Result<AttachmentFile> {
         self.send(&Request::Attachment {
             path: path.to_path_buf(),
         })?;
         match self.next_event()? {
-            Event::Attachment { path } => Ok(path),
+            Event::Attachment(file) => Ok(file),
             other => bail!("expected an attachment answer, got {other:?}"),
         }
     }

@@ -289,14 +289,7 @@ pub fn run(cfg: &PushConfig, progress: Option<&mut ProgressFn<'_>>) -> Result<Pu
     };
     write_report(&paths.report, &report)?;
     if cfg.import_id.is_none() {
-        complete_import_session(
-            &session,
-            import_id,
-            &report,
-            counted.attachments,
-            aborted,
-            &mut out,
-        );
+        complete_import_session(&session, import_id, &report, aborted, &mut out);
     }
     out.log("");
     out.log(&format_push_summary(&report));
@@ -574,7 +567,6 @@ fn complete_import_session(
     session: &Session,
     import_id: i64,
     report: &PushReport,
-    attachment_count: u64,
     aborted: bool,
     out: &mut Reporter<'_, '_>,
 ) {
@@ -582,8 +574,6 @@ fn complete_import_session(
         import_id,
         &ImportOutcome {
             status: outcome_status(report, aborted),
-            message_count: report.messages,
-            attachment_count,
             bytes_uploaded: report.assets_bytes,
         },
     );

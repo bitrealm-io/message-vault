@@ -42,7 +42,7 @@ The box keeps the 10 most recent searches for each screen, in the browser, and *
 The **×** in the box clears the search.
 
 **Advanced search**, at the bottom of the list that opens under the box, is a form that writes the search.
-On **Messages** it has four fields.
+On **Messages** it has five fields.
 
 | Field | Writes |
 |---|---|
@@ -50,6 +50,7 @@ On **Messages** it has four fields.
 | **Identity** | `handle:` |
 | **Conversation type** | `kind:direct` or `kind:group` |
 | **Group participants** | `participants:` |
+| **Source** | `source:`, one value for each kind of backup ticked |
 
 On **Contacts** the form holds fields about a Contact, among them **Name**, **Identity**, **First message**, and **Last message**.
 **Search** puts the finished search in the box and runs it.
@@ -93,7 +94,7 @@ Everything in the Trash is left out until the search uses `trashed:`, and that h
 A Conversation in the Trash does not count for a Contact's `kind:`, `tag:`, `date:`, `messages:` or `conversations:`, and a Contact in the Trash does not count for a Conversation's `group:` or `name:`.
 Once the search uses `trashed:`, the Trash counts on both sides.
 On Messages, a copy of a message a later import already had is left out until the search uses `source:` or `import:`.
-On Conversations, a Conversation holding only such copies is left out until the search uses `import:`.
+On Conversations, a Conversation holding only such copies is left out until the search uses `source:` or `import:`.
 
 On Contacts, a word that counts or dates messages counts only the messages the Contact sent, in a direct or a group Conversation.
 The Account holder's own messages and other people's messages in a shared group chat do not count.
@@ -119,7 +120,7 @@ The tiles mark which lists accept the word: <ListTiles on="C" /> Contacts, <List
 | `tag:` | the conversation carries this Message Tag; on Contacts, one of the contact's conversations does | name, `pre*`, `#id`, `none` | <ListTiles on="C V M" /> |
 | `kind:` | direct or group conversation | `direct`, `group` | <ListTiles on="C V M" /> |
 | `service:` | how the message travelled | `imessage`, `sms`, `mms`, `rcs`, `whatsapp` | <ListTiles on="C V M" /> |
-| `source:` | which backup it was imported from | `imessage`, `whatsapp`, `sms` | <ListTiles on="V M" /> |
+| `source:` | which kind of backup it was imported from | `imessage`, `whatsapp`, `sms-backup-restore`, `imazing`, `openextract`, `go-sms-pro`, `sms-backup-plus` | <ListTiles on="V M" /> |
 | `import:` | brought in by this Import Run | `#id`, `last` | <ListTiles on="V M" /> |
 | `date:` | when a message was sent; on Contacts, the contact sent a message then; on Conversations, the conversation has a message from then | date | <ListTiles on="C V M" /> |
 | `first-message:` | the date of the first message: on Contacts, the first the contact sent; elsewhere, the conversation's first | date | <ListTiles on="C V M" /> |

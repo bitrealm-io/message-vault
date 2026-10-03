@@ -14,7 +14,7 @@ use message_ir::{
 use message_staging::{AttachmentSource, ExportWriter};
 use phone::sanitize_number;
 use serde_json::{Map, json};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
 const EXPORT_SOURCE: &str = "openextract";
@@ -98,8 +98,6 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
 #[derive(Default)]
 struct Ingest {
     conversations: BTreeMap<String, PendingConversation>,
-    /// Dedupe duplicate CSV rows: same chat + second + direction + text.
-    seen_keys: HashSet<String>,
     report: ExportReport,
 }
 
@@ -143,25 +141,13 @@ impl Ingest {
             },
             resolved => resolved,
         };
-        let Some((secs, date_ms)) = parse_timestamp(&row.date) else {
+        let Some(secs) = parse_timestamp(&row.date) else {
             self.report.skipped_invalid_date += 1;
             return;
         };
         let is_from_me = resolve_is_from_me(&row);
         let (sender_handle, sender_display_name) =
             resolve_sender(&row, is_from_me, &chat_id, &contact_name);
-
-        let dedupe_key = format!(
-            "{}|{}|{}|{}",
-            chat_id,
-            secs,
-            if is_from_me { "1" } else { "0" },
-            row.text
-        );
-        if !self.seen_keys.insert(dedupe_key) {
-            self.report.duplicates_dropped += 1;
-            return;
-        }
 
         let convo = ensure_conversation(&mut self.conversations, &chat_id, false, None, Vec::new());
         if name_only
@@ -175,7 +161,6 @@ impl Ingest {
         }
         let mut extra = BTreeMap::new();
         extra.insert("contact_name".into(), contact_name);
-        extra.insert("date_ms".into(), date_ms);
         extra.insert(
             "has_attachments".into(),
             if row.has_attachments { "true" } else { "false" }.into(),
@@ -323,20 +308,18 @@ fn resolve_sender(
 
 /// Unix seconds, and the same instant in milliseconds as a string, for a row's
 /// date in RFC 3339 or OpenExtract's local formats.
-fn parse_timestamp(raw: &str) -> Option<(i64, String)> {
+fn parse_timestamp(raw: &str) -> Option<i64> {
     let raw = raw.trim();
     if raw.is_empty() {
         return None;
     }
     // RFC3339 / ISO-8601 with offset (OpenExtract style).
     if let Ok(dt) = DateTime::parse_from_rfc3339(raw) {
-        let secs = dt.timestamp();
-        return Some((secs, (secs * 1000).to_string()));
+        return Some(dt.timestamp());
     }
     // Fallback without fractional seconds.
     if let Ok(dt) = DateTime::parse_from_str(raw, "%Y-%m-%dT%H:%M:%S%z") {
-        let secs = dt.timestamp();
-        return Some((secs, (secs * 1000).to_string()));
+        return Some(dt.timestamp());
     }
     None
 }

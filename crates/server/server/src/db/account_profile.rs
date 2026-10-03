@@ -2,10 +2,10 @@
 
 use anyhow::{Context, Result, bail};
 use message_ir::{HandleService, HandleType};
-use sqlx::SqliteConnection;
+use sqlx::{Connection, SqliteConnection};
 
 use crate::db::handles::{normalize_handle, upsert_handle_row};
-use crate::db::schema;
+use crate::db::{dialect, schema};
 
 /// Contact points linked to an account, for profile display.
 #[derive(Debug, Clone)]
@@ -337,16 +337,22 @@ pub struct DeletedMessagesStats {
     pub conversations: u64,
     /// Attachment rows deleted (files on disk are removed by the caller).
     pub attachments: u64,
+    /// The account had a running Import Run when the delete committed. The
+    /// run may have uploaded files that no row names yet, so the caller
+    /// leaves the account's files on disk.
+    pub import_running: bool,
 }
 
 /// Permanently delete one account's conversations (cascades to messages,
-/// attachments, participants, tapbacks), staging rows, and trash markers.
+/// attachments, participants, tapbacks), staging rows, and trash markers,
+/// in one write transaction: all of it is deleted or none of it.
 /// Contacts, groups, login details, and import tokens are retained.
 pub async fn delete_all_messages_for_account(
     conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<DeletedMessagesStats> {
     schema::ensure_schema(conn).await?;
+    let mut tx = conn.begin_with(dialect::BEGIN_IMMEDIATE_SQL).await?;
     let attachment_count: i64 = sqlx::query_scalar(
         r"
         SELECT COUNT(*)
@@ -357,25 +363,28 @@ pub async fn delete_all_messages_for_account(
         ",
     )
     .bind(account_id)
-    .fetch_one(&mut *conn)
+    .fetch_one(&mut *tx)
     .await?;
+    let import_running = crate::db::imports::has_running_import(&mut tx, account_id).await?;
     let conversations = sqlx::query("DELETE FROM conversations WHERE account_id = $1")
         .bind(account_id)
-        .execute(&mut *conn)
+        .execute(&mut *tx)
         .await
         .with_context(|| format!("delete conversations for {account_id}"))?
         .rows_affected();
     sqlx::query("DELETE FROM staging_conversations WHERE account_id = $1")
         .bind(account_id)
-        .execute(&mut *conn)
+        .execute(&mut *tx)
         .await
         .with_context(|| format!("delete staging conversations for {account_id}"))?;
-    crate::db::trash::purge_account(conn, account_id)
+    crate::db::trash::purge_account(&mut tx, account_id)
         .await
         .with_context(|| format!("purge trash markers for {account_id}"))?;
+    tx.commit().await?;
     Ok(DeletedMessagesStats {
         conversations,
         attachments: u64::try_from(attachment_count).unwrap_or(0),
+        import_running,
     })
 }
 
@@ -891,6 +900,56 @@ mod tests {
                 .unwrap();
         assert_eq!(linked_ids.len(), 2);
         assert!(linked_ids.contains(&email));
+    }
+
+    /// The delete is one transaction: when a statement after the
+    /// conversations' delete fails, the conversations are still there.
+    #[tokio::test]
+    async fn a_failed_delete_of_all_messages_leaves_the_conversations() {
+        let fixture = crate::test_support::test_fixture().await;
+        fixture.account_with_id(ACCOUNT_ID, "Alice").await;
+        let mut conn = fixture.conn().await;
+        let handle_id =
+            link_account_handle(&mut conn, ACCOUNT_ID, "+15555550100", HandleType::Phone)
+                .await
+                .unwrap();
+        sqlx::query(
+            "INSERT INTO conversations (account_id, chat_handle_id, conversation_type, source_file)
+             VALUES ($1, $2, 'individual', 'c.jsonl')",
+        )
+        .bind(ACCOUNT_ID)
+        .bind(handle_id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO staging_conversations (
+                account_id, chat_handle_id, conversation_type, source_file
+             ) VALUES ($1, $2, 'individual', 'c.jsonl')",
+        )
+        .bind(ACCOUNT_ID)
+        .bind(handle_id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+        sqlx::query(
+            "CREATE TEMP TRIGGER fail_staging_delete BEFORE DELETE ON staging_conversations
+             BEGIN SELECT RAISE(ABORT, 'staging delete fails'); END",
+        )
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+
+        let result = delete_all_messages_for_account(&mut conn, ACCOUNT_ID).await;
+
+        assert!(result.is_err(), "the staging delete was made to fail");
+        let left: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM conversations WHERE account_id = $1")
+                .bind(ACCOUNT_ID)
+                .fetch_one(&mut *conn)
+                .await
+                .unwrap();
+        assert_eq!(left, 1, "the conversations' delete was rolled back");
     }
 
     #[tokio::test]

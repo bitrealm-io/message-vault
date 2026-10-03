@@ -8,7 +8,7 @@
 //! bytes with a concurrent append.
 
 use std::fs::{self, File, OpenOptions};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -20,15 +20,18 @@ use serde::de::DeserializeOwned;
 /// or rewrite the file while another thread is appending.
 static JOURNAL_WRITE_LOCK: Mutex<()> = Mutex::new(());
 
-/// Append one event as a single JSON Lines row and flush it to disk.
+/// Append one event as a single JSON Lines row and sync it to disk.
 ///
 /// The event is serialized to a buffer first so a serialization failure cannot
-/// tear a half-written row.
+/// tear a half-written row. When a crash cut the last row short, the new row
+/// starts on a line of its own: joined to the partial row it would be one
+/// corrupt line, skipped on every later load.
 ///
 /// # Errors
 ///
 /// Returns an error when the parent folder cannot be created, the file cannot
-/// be opened, the event cannot be serialized, or the write fails.
+/// be opened, read or synced, the event cannot be serialized, or the write
+/// fails.
 pub fn append<E: Serialize>(label: &str, path: &Path, event: &E) -> Result<()> {
     let _guard = JOURNAL_WRITE_LOCK
         .lock()
@@ -38,14 +41,33 @@ pub fn append<E: Serialize>(label: &str, path: &Path, event: &E) -> Result<()> {
     }
     let mut file = OpenOptions::new()
         .create(true)
+        .read(true)
         .append(true)
         .open(path)
         .with_context(|| format!("open {label} for append {}", path.display()))?;
-    let mut buf = serde_json::to_vec(event).context("serialize journal event")?;
+    let mut buf = Vec::new();
+    if ends_in_a_torn_row(&mut file)
+        .with_context(|| format!("read the end of {label} {}", path.display()))?
+    {
+        buf.push(b'\n');
+    }
+    serde_json::to_writer(&mut buf, event).context("serialize journal event")?;
     buf.push(b'\n');
     file.write_all(&buf)?;
-    file.flush()?;
+    file.sync_data()
+        .with_context(|| format!("sync {label} {}", path.display()))?;
     Ok(())
+}
+
+/// Whether the journal is not empty and its last byte is not a newline.
+fn ends_in_a_torn_row(file: &mut File) -> std::io::Result<bool> {
+    if file.metadata()?.len() == 0 {
+        return Ok(false);
+    }
+    let mut last = [0_u8; 1];
+    file.seek(SeekFrom::End(-1))?;
+    file.read_exact(&mut last)?;
+    Ok(last[0] != b'\n')
 }
 
 /// Parse every event from a journal file.
@@ -106,20 +128,16 @@ where
     write_unlocked(path, &events)
 }
 
-/// Write `events` to a temp file and rename over the journal (lock held).
+/// Write `events` to a temp file and rename it over the journal (lock held),
+/// synced, so a power loss leaves the old journal or the whole new one.
 fn write_unlocked<E: Serialize>(path: &Path, events: &[E]) -> Result<()> {
-    let tmp = path.with_extension("jsonl.tmp");
-    {
-        let mut out = File::create(&tmp)?;
+    message_ir::write_atomic(path, |out| {
         for event in events {
-            let mut buf = serde_json::to_vec(event).context("serialize journal event")?;
-            buf.push(b'\n');
-            out.write_all(&buf)?;
+            serde_json::to_writer(&mut *out, event).context("serialize journal event")?;
+            out.write_all(b"\n")?;
         }
-        out.flush()?;
-    }
-    fs::rename(&tmp, path)?;
-    Ok(())
+        Ok(())
+    })
 }
 
 #[cfg(test)]
@@ -273,5 +291,25 @@ mod tests {
             lines += 1;
         }
         assert_eq!(lines, 4 * 25);
+    }
+
+    #[test]
+    fn an_append_after_a_torn_last_line_is_not_lost() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("j.jsonl");
+        // A crash cut the previous row short: no closing brace, no newline.
+        fs::write(&path, b"{\"url\":\"u\",\"us").unwrap();
+        let event = TestEvent {
+            url: "u".into(),
+            user: "me".into(),
+            key: "file-1".into(),
+        };
+        append("test", &path, &event).unwrap();
+        let events: Vec<TestEvent> = load_events("test", &path, &mut |_, _| {}).unwrap();
+        assert_eq!(
+            events,
+            vec![event],
+            "the event appended after the torn row is lost"
+        );
     }
 }

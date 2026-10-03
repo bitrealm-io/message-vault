@@ -218,7 +218,7 @@ describe("ContactDrawer", () => {
     expect(heading.querySelector("em")?.textContent).toBe("+15550005");
     expect(screen.getByRole("dialog", { name: "+15550005" })).toBeTruthy();
     expect(screen.getByText("Unknown")).toBeTruthy();
-    expect(screen.queryByText("No groups")).toBeNull();
+    expect(screen.queryByText("No Contact Groups")).toBeNull();
   });
 
   it("sets a preferred name upright and leaves Unknown off a known contact", async () => {
@@ -229,10 +229,10 @@ describe("ContactDrawer", () => {
     const heading = await screen.findByRole("heading", { name: "Grace" });
     expect(heading.querySelector("em")).toBeNull();
     expect(screen.queryByText("Unknown")).toBeNull();
-    expect(screen.getByText("No groups")).toBeTruthy();
+    expect(screen.getByText("No Contact Groups")).toBeTruthy();
   });
 
-  it("does not claim No groups while loading without preview groups", async () => {
+  it("does not claim No Contact Groups while loading without preview groups", async () => {
     let resolveDetail!: (d: ContactDetail) => void;
     const pending = new Promise<ContactDetail>((resolve) => {
       resolveDetail = resolve;
@@ -243,14 +243,14 @@ describe("ContactDrawer", () => {
 
     const dialog = screen.getByRole("dialog", { name: "Loading…" });
     expect(dialog.getAttribute("aria-busy")).toBe("true");
-    expect(screen.queryByText("No groups")).toBeNull();
+    expect(screen.queryByText("No Contact Groups")).toBeNull();
     expect(screen.getByText("…")).toBeTruthy();
 
     resolveDetail(detail(26, { name: "Zed", groups: ["Work"] }));
     await waitFor(() => {
       expect(screen.getByRole("dialog", { name: "Zed" })).toBeTruthy();
       expect(screen.getByText("Work")).toBeTruthy();
-      expect(screen.queryByText("No groups")).toBeNull();
+      expect(screen.queryByText("No Contact Groups")).toBeNull();
     });
   });
 
@@ -292,6 +292,33 @@ describe("ContactDrawer", () => {
     expect(screen.queryByText("Loading…")).toBeNull();
     expect(screen.getByRole("dialog").getAttribute("aria-busy")).toBeNull();
     expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+  });
+
+  // The app's own :focus-visible outline loses to the outline-none utility, so
+  // each close button draws the style guide's ring itself.
+  it("draws the focus ring on the close button and sortable headers of a loaded contact", async () => {
+    seed(detail(6, { name: "Grace", groups: [] }));
+    render(<ContactDrawer variant="docked" contactId="6" preview={null} onClose={() => {}} />);
+    await screen.findByRole("heading", { name: "Grace" });
+    expect(screen.getByRole("button", { name: "Close" }).className).toContain(
+      "focus-visible:ring-2 focus-visible:ring-accent",
+    );
+    const sortable = screen
+      .getAllByRole("columnheader")
+      .filter((header) => header.hasAttribute("aria-sort"));
+    expect(sortable.length).toBeGreaterThan(0);
+    for (const header of sortable) {
+      expect(header.className).toContain("focus-visible:ring-2 focus-visible:ring-accent");
+    }
+  });
+
+  it("draws the focus ring on the close button of a contact that failed to load", async () => {
+    get.mockRejectedValue(new ApiError(404, "No contact with id 26."));
+    render(<ContactDrawer variant="overlay" contactId="26" preview={null} onClose={() => {}} />);
+    await screen.findByRole("alert");
+    expect(screen.getByRole("button", { name: "Close" }).className).toContain(
+      "focus-visible:ring-2 focus-visible:ring-accent",
+    );
   });
 
   it("stubs one handle row when preview lists raw and normalized forms of the same identity", async () => {
@@ -582,12 +609,12 @@ describe("ContactDrawer", () => {
     expect(screen.getByRole("button", { name: "Edit name" })).toBeTruthy();
   });
 
-  it("cancels name edit when clicking Contact groups without saving", async () => {
+  it("cancels name edit when clicking Contact Groups without saving", async () => {
     const user = userEvent.setup();
     const input = await openNameEditor(user);
     await user.clear(input);
     await user.type(input, "Renamed");
-    await user.click(screen.getByText("Contact groups"));
+    await user.click(screen.getByText("Contact Groups"));
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "Contact a" })).toBeTruthy();
     });
@@ -664,7 +691,7 @@ describe("ContactDrawer", () => {
     expect(headers[headers.length - 1].textContent).toBe("");
     // Once the detail is in, the row carries its service and counts.
     await waitFor(() => expect(screen.getAllByText("42").length).toBeGreaterThan(0));
-    const remove = screen.getByRole("button", { name: "Remove +15550001 (Text message)" });
+    const remove = screen.getByRole("button", { name: "Remove +15550001 (Text Message)" });
     expect(remove.closest("[role=row]")?.lastElementChild).toContainElement(remove);
     expect(screen.getByText("Summary")).toBeTruthy();
   });

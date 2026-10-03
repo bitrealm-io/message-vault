@@ -12,7 +12,6 @@ mod parse;
 mod run;
 mod wtsexporter;
 
-pub use message_crate_core::RunResult;
 pub use run::run;
 
 #[cfg(test)]

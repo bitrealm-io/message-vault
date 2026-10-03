@@ -8,23 +8,23 @@ const COPY: NavEntityCopy = {
   title: "Contact Groups",
   routeBase: "/group",
   emptyRoute: "/no-group",
-  emptyLabel: "No group",
+  emptyLabel: "No Contact Group",
   // Unknown is a permanent group the server computes from contact state: a
   // contact with no identity, or with identities and no preferred name. It
   // empties as the person names or links what is in it.
   permanentRoute: "/unknown",
   permanentLabel: UNKNOWN_GROUP_LABEL,
   fallbackRoute: "/contacts",
-  addLabel: "Create contact group",
-  createTitle: "Create contact group",
-  renameTitle: "Rename group",
-  namePlaceholder: "Group name",
-  optionsLabel: (name) => `Group options for ${name}`,
+  addLabel: "Create Contact Group",
+  createTitle: "Create Contact Group",
+  renameTitle: "Rename Contact Group",
+  namePlaceholder: "Contact Group name",
+  optionsLabel: (name) => `Contact Group options for ${name}`,
   deleteBody: (name) =>
     `Removes the Contact Group ${name} and takes every contact out of it. The contacts themselves stay in your Message Crate.`,
-  createError: "Could not create group",
-  renameError: "Could not rename group",
-  deleteError: "Could not delete group",
+  createError: "Could not create Contact Group",
+  renameError: "Could not rename Contact Group",
+  deleteError: "Could not delete Contact Group",
 };
 
 export default function GroupsNav({ groups }: { groups: string[] }) {

@@ -53,7 +53,7 @@ pub struct ReadReport {
     /// MMS dropped with no participants.
     pub skipped_empty_participants: u64,
     /// Parts with undecodable base64.
-    pub skipped_bad_attachment: u64,
+    pub skipped_unreadable_part: u64,
     /// Character references dropped because they are not a character.
     pub dropped_character_references: u64,
     /// Per-file error messages from parsing/staging.
@@ -150,7 +150,7 @@ fn merge_stats(report: &mut ReadReport, stats: ParseStats) {
     report.skipped_unknown_type += stats.skipped_unknown_type;
     report.skipped_draft_or_outbox += stats.skipped_draft_or_outbox;
     report.skipped_empty_participants += stats.skipped_empty_participants;
-    report.skipped_bad_attachment += stats.skipped_bad_attachment;
+    report.skipped_unreadable_part += stats.skipped_unreadable_part;
     report.dropped_character_references += stats.dropped_character_references;
 }
 
@@ -679,6 +679,29 @@ mod tests {
         let xml = fs::read_to_string(writer.finish().unwrap()).unwrap();
         // Both payload parts carry the decoded bytes; the empty part does not.
         assert_eq!(xml.match_indices(r#"data="aGVsbG8=""#).count(), 2);
+    }
+
+    /// A contact card is a text type with its content in `data`. It is read
+    /// as an attachment and written back into its part.
+    #[test]
+    fn a_contact_card_is_read_as_an_attachment_and_written_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("input.xml");
+        fs::write(
+            &input,
+            r#"<smses><mms date="1400773400000" msg_box="2" address="+15555550101"><parts><part seq="0" ct="text/plain" text="card"/><part seq="1" ct="text/x-vcard" name="sam.vcf" text="null" data="QkVHSU46VkNBUkQ="/></parts><addrs><addr address="+15555550100" type="137" charset="106"/><addr address="+15555550101" type="151"/></addrs></mms></smses>"#,
+        )
+        .unwrap();
+        let output = dir.path().join("output");
+        let stage = output.join("attachments");
+        let spool = AttachmentSpool::open(dir.path()).unwrap();
+        let (docs, report) = read_backup(&input, opts(&[], Some(&stage), Some(&spool))).unwrap();
+        assert_eq!(report.attachments_saved, 1);
+        assert_eq!(docs[0].messages[0].text, "card");
+        let mut writer = SbrBackupSession::create(&output).unwrap();
+        writer.append_document(&docs[0]).unwrap();
+        let xml = fs::read_to_string(writer.finish().unwrap()).unwrap();
+        assert!(xml.contains(r#"data="QkVHSU46VkNBUkQ=""#), "{xml}");
     }
 
     /// A group MMS is credited to the `type="137"` addr, whichever position

@@ -18,11 +18,8 @@ function missingWhy(reason: string | null | undefined): string {
   if (reason === "too_large") return "missing — too large";
   if (reason === "file_missing") return "missing — file not found";
   // Chosen on import ("Do not copy"), so the file is absent by request, not
-  // lost. Writers say "not_copied"; older exports stored "skipped" (shared
-  // exporters) or "embed_disabled" (iMessage).
-  if (reason === "not_copied" || reason === "skipped" || reason === "embed_disabled") {
-    return "skipped";
-  }
+  // lost.
+  if (reason === "not_copied") return "skipped";
   if (reason.startsWith("convert_failed: ")) {
     const detail = reason.slice("convert_failed: ".length);
     return detail ? `could not be converted — ${detail}` : "could not be converted";

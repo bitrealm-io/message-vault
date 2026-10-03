@@ -3,7 +3,9 @@
 //! A [`ConversationDocument`] is the in-memory form of one chat: export
 //! metadata, participants, and messages. Backup converters parse vendor
 //! formats into this type. Writing files (JSON, CSV, EML, and so on) lives
-//! in `message-ir-format`. Converting an existing export directory lives in
+//! in `message-ir-format`. The atomic, synced write those files go through
+//! ([`write_atomic`]) lives here, so attachment staging, the media pass and
+//! the journal use the same one. Converting an existing export directory lives in
 //! `message-reexport`. See the [common message](https://messagecrate.app/docs/developer/architecture/common-message/) page.
 //!
 //! Converters stage parsed rows in [`PendingMessage`] and
@@ -16,6 +18,8 @@ use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 
 mod attachment_path;
+mod conversation_key;
+mod durable;
 mod identity;
 mod projection;
 mod schema_version;
@@ -23,6 +27,8 @@ mod schema_version;
 pub mod testutil;
 
 pub use attachment_path::{UNSAFE_ATTACHMENT_PATH, UnsafeAttachmentPath, safe_attachment_path};
+pub use conversation_key::{ConversationKey, GROUP_CHAT_ID_PREFIX, name_stem};
+pub use durable::{rename_into_place, write_atomic, write_atomic_via};
 pub use identity::{
     MessageCopy, MessageGuid, MessageIdentity, TimePrecision, collapse_whitespace,
     one_copy_per_message,
@@ -402,6 +408,25 @@ pub enum IrDirection {
     Outgoing,
 }
 
+impl IrMessage {
+    /// Whether this is an SMS or an MMS, from any source, iMessage's SMS
+    /// fallback included. An MMS carries the `Sms` service with the `Mms`
+    /// kind. A message whose service is unknown (a Mac `chat.db` row with no
+    /// service, or one pulled back from the server as `unknown`) is one when
+    /// its kind says SMS or MMS, as every other layer reads it. RCS and every
+    /// other service are not. The SMS Backup & Restore and SMS Backup+
+    /// exports hold these and leave every other message out.
+    pub fn is_sms_or_mms(&self) -> bool {
+        match self.service {
+            IrService::Sms => true,
+            IrService::Unknown => {
+                matches!(self.message_kind, IrMessageKind::Sms | IrMessageKind::Mms)
+            }
+            _ => false,
+        }
+    }
+}
+
 impl IrDirection {
     /// Lowercase storage id (`incoming` / `outgoing`).
     pub fn as_str(self) -> &'static str {
@@ -473,9 +498,7 @@ pub struct IrAttachment {
     pub size_bytes: Option<u64>,
     /// None when the attachment was imported; set only when bytes were
     /// skipped, to one of a closed set: `file_missing`, `too_large`,
-    /// `not_copied`, `convert_failed: <detail>`, or `unknown: <raw>`. Older
-    /// exports may still carry the retired `skipped` / `embed_disabled`
-    /// spellings of `not_copied`; readers keep recognizing them.
+    /// `not_copied`, `convert_failed: <detail>`, or `unknown: <raw>`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub missing_reason: Option<String>,
     /// In-memory bytes for EML embedding; never written to JSON.
@@ -893,17 +916,14 @@ impl ConversationHeader {
 
     /// The document a reader builds from a header and the messages that
     /// followed it, at the current schema version, with its stats computed.
-    pub fn into_document(
-        self,
-        messages: Vec<IrMessage>,
-        packaging_stem_suffix: Option<String>,
-    ) -> ConversationDocument {
+    /// It has no stem suffix: a reader recovers that from the file name.
+    pub fn into_document(self, messages: Vec<IrMessage>) -> ConversationDocument {
         let mut doc = ConversationDocument {
             schema_version: SCHEMA_VERSION,
             export: self.export,
             conversation: self.conversation,
             messages,
-            packaging_stem_suffix,
+            packaging_stem_suffix: None,
         };
         doc.finalize_stats();
         doc

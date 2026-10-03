@@ -36,6 +36,7 @@ import type { components } from "../lib/serverApi.types";
 import { useTimeZone } from "../lib/timeZone";
 import { UNKNOWN_GROUP } from "../lib/unknownGroup";
 import { useContactGroups } from "../lib/useContactGroups";
+import { useSelectAll } from "../lib/useSelectAll";
 
 const FILTER_DEBOUNCE_MS = 300;
 /** Fixed row height keeps virtualization slots aligned with flex-centered content. */
@@ -53,13 +54,13 @@ type Contact = Omit<ContactSummary, "id"> & { id: string };
 
 type FilterNeedles = { text: string; handle: string | null };
 
-/** Pull plain name text and a handle:"…" value out of the filter for local matching. */
+/** Pull plain name text and an identity:"…" value out of the filter for local matching. */
 function filterNeedles(raw: string): FilterNeedles {
   const q = raw.trim();
   if (!q) return { text: "", handle: null };
 
   let handle: string | null = null;
-  const found = q.match(/(^|\s)handle:("([^"]+)"|(\S+))/i);
+  const found = q.match(/(^|\s)identity:("([^"]+)"|(\S+))/i);
   if (found) handle = found[3] ?? found[4].replace(/^"|"$/g, "");
 
   return { text: stripFieldTokens(q), handle };
@@ -166,8 +167,23 @@ export default function ContactList({
     error,
     hasMore,
     loadMore: requestMore,
+    loadAll,
   } = useRoutePagedList(keys.contacts.list(serverQ), fetchPage, {
     firstPageSize: serverQ.trim() ? PAGE_SIZE_FIRST : PAGE_SIZE_CONTACTS_FIRST,
+  });
+
+  // Select all ticks every contact the list holds, so it loads the pages not
+  // yet on screen first: Export and the Contact Groups menu then reach all of
+  // them, not the page in hand (issue #1145). It ticks only the contacts the
+  // list shows, by the same test as the rows on screen (`shows`, below).
+  const {
+    selectAll,
+    cancel: cancelSelectAll,
+    selecting: selectingAll,
+    error: selectAllError,
+  } = useSelectAll(loadAll, [serverQ, filter, groupFilter, clearCheckedRev], (rows: Contact[]) => {
+    const ids = new Set(rows.filter(shows).map((c) => c.id));
+    startTransition(() => setCheckedIds(ids));
   });
 
   const catalogComplete =
@@ -220,24 +236,21 @@ export default function ContactList({
   const handleMarkTerm = highlightNeedle(filter);
 
   // Filter by name and handle in the browser. Server results are used when the
-  // filter has search words the client cannot apply.
-  // Memoized: a fresh array here would invalidate `displayContacts` and
-  // `checkedContacts` on every render, and the `onCheckedChange` effect below
-  // would then re-render the parent in a loop.
-  const filteredContacts = useMemo(
-    () =>
-      filterActive && !advancedActive
-        ? contacts.filter((c) => contactMatchesFilter(c, filter))
-        : contacts,
-    [contacts, filter, filterActive, advancedActive],
+  // filter has search words the client cannot apply. Select all applies the
+  // same test to the rows it loads, so it ticks what the list shows.
+  // Memoized so `displayContacts` keeps its identity: a fresh array there
+  // would invalidate `checkedContacts` on every render, and the
+  // `onCheckedChange` effect below would then re-render the parent in a loop.
+  const shows = useCallback(
+    (c: Contact) =>
+      (!filterActive || advancedActive || contactMatchesFilter(c, filter)) &&
+      contactBelongsToGroup(c, groupFilter),
+    [filter, filterActive, advancedActive, groupFilter],
   );
 
   const displayContacts = useMemo(
-    () =>
-      [...filteredContacts]
-        .filter((c) => contactBelongsToGroup(c, groupFilter))
-        .sort((a, b) => compareContacts(a, b, sortState)),
-    [filteredContacts, sortState, groupFilter],
+    () => contacts.filter(shows).sort((a, b) => compareContacts(a, b, sortState)),
+    [contacts, shows, sortState],
   );
 
   const selectedContact = displayContacts.find((c) => c.id === selectedId) ?? null;
@@ -250,8 +263,10 @@ export default function ContactList({
     () => checkedContacts.map((c) => Number(c.id)).filter((id) => Number.isFinite(id) && id > 0),
     [checkedContacts],
   );
+  // Ticked only when every contact the list holds is ticked, which needs every
+  // page loaded: contacts not yet fetched are not ticked.
   const selectAllChecked =
-    displayContacts.length > 0 && displayContacts.every((c) => checkedIds.has(c.id));
+    !hasMore && displayContacts.length > 0 && displayContacts.every((c) => checkedIds.has(c.id));
   const selectAllIndeterminate =
     !selectAllChecked && displayContacts.some((c) => checkedIds.has(c.id));
   const targetContacts = useMemo(() => {
@@ -427,15 +442,22 @@ export default function ContactList({
         onSelect(c);
       }}
       isRowHighlighted={(c) => (checkedIds.size > 0 ? checkedIds.has(c.id) : c.id === selectedId)}
-      selectAllChecked={selectAllChecked}
-      selectAllIndeterminate={selectAllIndeterminate}
-      onSelectAllChange={(on) => {
-        setRangeAnchor(null);
-        startTransition(() => {
-          setCheckedIds(on ? new Set(displayContacts.map((c) => c.id)) : new Set());
-        });
+      selectAll={{
+        checked: selectAllChecked,
+        indeterminate: selectAllIndeterminate,
+        onChange: (on) => {
+          setRangeAnchor(null);
+          if (on) {
+            void selectAll();
+            return;
+          }
+          cancelSelectAll();
+          startTransition(() => setCheckedIds(new Set()));
+        },
+        label: "Select all contacts",
+        disabled: selectingAll,
+        error: selectAllError,
       }}
-      selectAllLabel="Select all contacts"
       getId={(c) => c.id}
       getTextValue={(c) => contactLabelText(c.name, c.addresses)}
       ariaLabel="Contacts"
@@ -456,11 +478,11 @@ export default function ContactList({
             {filterActive
               ? "No contacts match this filter"
               : groupFilter === "none"
-                ? "Every contact has a group"
+                ? "Every contact is in a Contact Group"
                 : groupFilter === UNKNOWN_GROUP
                   ? "Every contact has a name and a way to reach them"
                   : groupFilter
-                    ? "No contacts in this group"
+                    ? "No contacts in this Contact Group"
                     : "No contacts"}
           </div>
         ) : null

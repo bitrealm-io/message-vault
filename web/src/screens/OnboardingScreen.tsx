@@ -142,7 +142,7 @@ export default function OnboardingScreen() {
   // service, as many as the card has room for; any beyond that are left as they
   // are, for Settings. They come from the account's identity list rather than
   // the profile's `phones`, which holds a number once per service and names no
-  // service, so a number on Text message and WhatsApp would read as one repeated.
+  // service, so a number on Text Message and WhatsApp would read as one repeated.
   const identities = useRouteQuery(keys.accountProfile.identities, (signal) =>
     listAccountIdentities({ signal }),
   );
@@ -154,13 +154,13 @@ export default function OnboardingScreen() {
     if (!listed || identitiesSeeded.current) return;
     identitiesSeeded.current = true;
 
-    const shown = listed.items
+    const shown = listed
       .slice(0, MAX_ACCOUNT_ROWS)
       .map(({ address, service }) =>
         newHandleRow(address, parseSelectKey(service, HANDLE_SERVICES) ?? "phone"),
       );
     if (shown.length === 0) return;
-    setHiddenIdentities(listed.total - shown.length);
+    setHiddenIdentities(listed.length - shown.length);
     setSeededRows(shown);
     setHandles((rows) => (rows.some((row) => row.handle.trim()) ? rows : shown));
   }, [identities.data]);

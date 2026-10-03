@@ -21,8 +21,9 @@ use crate::state::AppState;
 /// # Errors
 ///
 /// Returns an error if `output_format` is not one of json, jsonl, csv, eml,
-/// mbox, or xml, if another job is running, or if another thread panicked
-/// while holding the shared state lock. Failures during conversion are sent as `extract:error`.
+/// mbox, xml, or sms-backup-plus, if another job is running, or if another
+/// thread panicked while holding the shared state lock. Failures during
+/// conversion are sent as `extract:error`.
 #[tauri::command(async)]
 pub fn format(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
@@ -30,6 +31,7 @@ pub fn format(
     input_dir: String,
     output_dir: String,
     output_format: String,
+    run_started_ms: Option<i64>,
 ) -> Result<(), String> {
     let fmt = match output_format.as_str() {
         "json" => OutputFormat::Json,
@@ -38,8 +40,15 @@ pub fn format(
         "eml" => OutputFormat::Eml,
         "mbox" => OutputFormat::Mbox,
         "xml" => OutputFormat::Xml,
+        "sms-backup-plus" => OutputFormat::SmsBackupPlus,
         _ => return Err(format!("unsupported output format '{output_format}'")),
     };
+    let run_started = run_started_ms
+        .map(|ms| {
+            chrono::DateTime::from_timestamp_millis(ms)
+                .ok_or_else(|| format!("{ms} is not a time the Export Run could have started"))
+        })
+        .transpose()?;
 
     let job = start_job(&state, "a format conversion")?;
     let cancel = job.cancel_flag();
@@ -61,7 +70,7 @@ pub fn format(
             progress: None,
             output_format: fmt,
             resume: false,
-            source: SourceConfig::Format(FormatConfig {}),
+            source: SourceConfig::Format(FormatConfig { run_started }),
         };
 
         let run_result = message_reexport::run(&config)?;

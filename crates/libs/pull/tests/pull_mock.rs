@@ -57,7 +57,7 @@ fn photo_attachment() -> Value {
 
 /// One exported message as `GET /v1/exports/{id}/messages` serializes it: an
 /// individual SMS conversation with Sam, `service` on the message rather than
-/// on the conversation.
+/// on the conversation, received at the holder's own `+15555550100`.
 fn message(
     id: i64,
     source: &str,
@@ -75,6 +75,7 @@ fn message(
         "sort_order": id,
         "is_from_me": false,
         "sender": "+15555550101",
+        "owner": "+15555550100",
         "subject": null,
         "text": text,
         "is_announcement": false,
@@ -315,6 +316,16 @@ fn a_pull_records_one_run_and_writes_the_conversation_and_every_asset_once_acros
         ["guid-1", "guid-2", "guid-3"]
     );
     assert_eq!(doc.messages[0].text, "dinner at seven?");
+    // The address the server holds each message at comes out on the message,
+    // and on the header since every message shares it (#1098).
+    assert_eq!(
+        doc.messages
+            .iter()
+            .map(|m| m.owner_handle.as_deref())
+            .collect::<Vec<_>>(),
+        [Some("+15555550100"); 3]
+    );
+    assert_eq!(doc.export.owner_handle.as_deref(), Some("+15555550100"));
     assert_eq!(
         doc.messages[0].attachments[0].digest_sha256.as_deref(),
         Some(MENU_SHA)
@@ -874,4 +885,52 @@ fn a_blank_key_or_output_folder_is_refused_before_login() {
         run(&blank_out_dir, None).unwrap_err().to_string(),
         "output directory is required"
     );
+}
+
+/// Staging names a file by date and fingerprint, so one menu sent on two days
+/// has two paths on the server. The menu downloads once, and every path a
+/// message names exists after the pull holding the menu's bytes.
+#[test]
+fn every_path_a_message_names_exists_after_a_pull() {
+    let server = MockServer::start();
+    let _auth = mock_auth(&server);
+    let (_create, _complete) = mock_run(&server);
+    let _page = server.mock(|when, then| {
+        when.method(GET)
+            .path(format!("/v1/exports/{EXPORT_ID}/messages"))
+            .query_param("limit", "2")
+            .query_param("offset", "0");
+        then.status(200).json_body(json!({
+            "items": [
+                message(
+                    1, "sms-backup-restore", "guid-1", "2015-03-12T18:05:01Z", "menu",
+                    json!([menu_attachment(json!("attachments/20150312_180501-0a0a0a0a0a0a0a0a.pdf"))])
+                ),
+                message(
+                    2, "sms-backup-restore", "guid-2", "2016-04-01T10:00:00Z", "menu again",
+                    json!([menu_attachment(json!("attachments/20160401_100000-0a0a0a0a0a0a0a0a.pdf"))])
+                )
+            ],
+            "total": 2,
+            "limit": 2,
+            "offset": 0
+        }));
+    });
+    let menu = mock_asset(&server, MENU_SHA, "sms-backup-restore", MENU_BYTES);
+    let dir = tempdir().unwrap();
+    let out = dir.path().join("pulled");
+
+    run(&config(&out, server.base_url()), None).unwrap();
+
+    menu.assert_calls(1);
+    let doc = read_conversation_jsonl(&out.join(CONVERSATION_FILE)).unwrap();
+    for msg in &doc.messages {
+        let rel = msg.attachments[0].path.as_deref().unwrap();
+        assert_eq!(
+            fs::read(out.join(rel)).ok().as_deref(),
+            Some(MENU_BYTES),
+            "message {} names {rel}, which the pull never wrote",
+            msg.guid
+        );
+    }
 }

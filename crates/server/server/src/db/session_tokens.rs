@@ -105,10 +105,9 @@ pub async fn lookup_session(conn: &mut SqliteConnection, token: &str) -> Result<
     let Some((account_id, expires_at, app_kind, app_build)) = found else {
         return Ok(None);
     };
-    let expires = expires_at.parse::<u64>().unwrap_or(0);
     let now = now_unix_secs();
-    // An `expires_at` of 0, or one that does not parse, counts as expired.
-    if expires == 0 || expires <= now {
+    // An `expires_at` that does not parse counts as expired.
+    if !expires_at.parse::<u64>().is_ok_and(|expires| expires > now) {
         let _ = sqlx::query("DELETE FROM account_session_tokens WHERE token_hash = $1")
             .bind(token_hash.as_str())
             .execute(&mut *conn)
@@ -168,6 +167,10 @@ pub async fn connecting_app_for_account(
 }
 
 /// Create or replace the account's session token hash; returns plaintext once.
+///
+/// One upsert, never a lookup and then an insert: two logins at once both
+/// find no row, and the second insert would break the `account_id` primary
+/// key. The later login's token replaces the earlier one's.
 ///
 /// # Errors
 ///
@@ -238,26 +241,6 @@ pub async fn insert_account_session_token_with_ttl(
     .await
     .with_context(|| format!("insert session token for {account_id}"))?;
     Ok(token)
-}
-
-/// Session token for GUI: if a row exists, rotate it; otherwise insert.
-///
-/// # Errors
-///
-/// Returns an error when the lookup or token write fails.
-pub async fn get_or_create_session_token(
-    conn: &mut SqliteConnection,
-    account_id: i64,
-) -> Result<String> {
-    let existing: Option<String> =
-        sqlx::query_scalar("SELECT token_hash FROM account_session_tokens WHERE account_id = $1")
-            .bind(account_id)
-            .fetch_optional(&mut *conn)
-            .await?;
-    match existing {
-        Some(_) => rotate_account_session_token(conn, account_id).await,
-        None => insert_account_session_token(conn, account_id).await,
-    }
 }
 
 /// Revoke the presented session token (logout). Returns whether a row was deleted.

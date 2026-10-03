@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActiveImportSession } from "../lib/importSession";
 import type { StagingSummary } from "../lib/tauri";
 import { mockedAuth, renderWithProviders } from "../test/providers";
+import type { StagingDeleteFailure } from "./import/importRunStore";
 import type { ResumeDecision } from "./import/resumeDecision";
 
 const hookState = vi.hoisted(() => ({
@@ -28,7 +29,9 @@ const hookState = vi.hoisted(() => ({
   mediaPartiallyRan: false,
   resumeError: null as string | null,
   sourceIdentities: null as string[] | null,
+  stagingDeleteFailure: null as StagingDeleteFailure | null,
 }));
+const dismissStagingDeleteFailureMock = vi.hoisted(() => vi.fn());
 const startImportMock = vi.hoisted(() => vi.fn());
 const resumeAtGateMock = vi.hoisted(() => vi.fn());
 const approveMock = vi.hoisted(() => vi.fn());
@@ -78,6 +81,17 @@ vi.mock("./import/useImportJob", async (importOriginal) => {
       returnToForm: returnToFormMock,
       continueAfterIdentityStop: continueAfterIdentityStopMock,
       cancelIdentityStop: cancelIdentityStopMock,
+      stagingDeleteFailure: hookState.stagingDeleteFailure,
+      // The real one never throws: a failed delete is kept for the notice.
+      discardStagingFolder: async (stagingDir: string) => {
+        try {
+          await invokeDeleteStagingMock({ staging_dir: stagingDir });
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      dismissStagingDeleteFailure: dismissStagingDeleteFailureMock,
     }),
   };
 });
@@ -122,6 +136,7 @@ vi.mock("./import/ImportRunView", () => ({
   default: (props: {
     reviewWaiting: string | null;
     unknownContacts: number | null;
+    unknownContactsError: string | null;
     identityPanel?: unknown;
     onApprove: () => void;
     onCancelRun: () => void;
@@ -130,6 +145,7 @@ vi.mock("./import/ImportRunView", () => ({
     <div data-testid="import-run">
       <span data-testid="run-review-waiting">{String(props.reviewWaiting)}</span>
       <span data-testid="run-unknown-contacts">{String(props.unknownContacts)}</span>
+      <span data-testid="run-unknown-contacts-error">{String(props.unknownContactsError)}</span>
       <span data-testid="run-has-identities">{String(props.identityPanel != null)}</span>
       <button type="button" onClick={props.onApprove}>
         run-approve
@@ -250,6 +266,7 @@ describe("ImportScreen entering Import", () => {
     hookState.mediaPartiallyRan = false;
     hookState.resumeError = null;
     hookState.sourceIdentities = null;
+    hookState.stagingDeleteFailure = null;
     startImportMock.mockReset();
     resumeAtGateMock.mockReset();
     resumeAtGateMock.mockResolvedValue(undefined);
@@ -403,6 +420,24 @@ describe("ImportScreen entering Import", () => {
       staging_dir: "/home/u/message-crate/staging-260830",
     });
     expect(await screen.findByTestId("import-form")).toBeInTheDocument();
+  });
+
+  it("says which staging folder could not be deleted, until dismissed", async () => {
+    // A discard used to drop a refused delete without a word, leaving a
+    // folder of several gigabytes on disk (#1154).
+    const user = userEvent.setup();
+    getActiveImportSessionMock.mockResolvedValue(null);
+    hookState.stagingDeleteFailure = {
+      path: "/home/u/message-crate/staging-260830",
+      reason: "Permission denied",
+    };
+    renderWithProviders(<ImportScreen />);
+
+    const notice = await screen.findByRole("alert");
+    expect(notice).toHaveTextContent("/home/u/message-crate/staging-260830");
+    expect(notice).toHaveTextContent("Permission denied");
+    await user.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(dismissStagingDeleteFailureMock).toHaveBeenCalledTimes(1);
   });
 
   it("never touches disk when discarding another device's session", async () => {
@@ -989,6 +1024,7 @@ describe("ImportScreen gates", () => {
     hookState.mediaPartiallyRan = false;
     hookState.resumeError = null;
     hookState.sourceIdentities = null;
+    hookState.stagingDeleteFailure = null;
     startImportMock.mockReset();
     resumeAtGateMock.mockReset();
     resumeAtGateMock.mockResolvedValue(undefined);
@@ -1077,8 +1113,12 @@ describe("ImportScreen gates", () => {
     });
 
     expect(apiPostMock).toHaveBeenCalledTimes(1);
-    expect(apiPostMock).toHaveBeenCalledWith({ identifiers: ["a", "b", "c"] });
-    expect(screen.getByTestId("run-unknown-contacts")).toHaveTextContent("2");
+    expect(apiPostMock).toHaveBeenCalledWith(
+      { identifiers: ["a", "b", "c"] },
+      { signal: expect.any(AbortSignal) },
+    );
+    await waitFor(() => expect(screen.getByTestId("run-unknown-contacts")).toHaveTextContent("2"));
+    expect(screen.getByTestId("run-unknown-contacts-error")).toHaveTextContent("null");
   });
 
   it("batches the contact-match lookup at 500 identifiers per request and sums unknown across batches", async () => {
@@ -1109,20 +1149,21 @@ describe("ImportScreen gates", () => {
     const bodies = apiPostMock.mock.calls.map(([body]) => body as { identifiers: string[] });
     expect(bodies[0]?.identifiers).toHaveLength(500);
     expect(bodies[1]?.identifiers).toHaveLength(120);
-    expect(screen.getByTestId("run-unknown-contacts")).toHaveTextContent("430");
+    await waitFor(() =>
+      expect(screen.getByTestId("run-unknown-contacts")).toHaveTextContent("430"),
+    );
   });
 
-  it("renders the review without the unknown-contact count when the lookup fails", async () => {
+  it("shows why the unknown-contact count is missing when the lookup fails", async () => {
     hookState.phase = "staging_review";
     hookState.stagingSummary = stagingSummary({ contactIdentifiers: ["a"] });
     apiPostMock.mockRejectedValue(new Error("network down"));
     renderWithProviders(<ImportScreen />);
 
     await screen.findByTestId("import-run");
-    await act(async () => {
-      await Promise.resolve();
-    });
-
+    await waitFor(() =>
+      expect(screen.getByTestId("run-unknown-contacts-error")).toHaveTextContent("network down"),
+    );
     expect(screen.getByTestId("run-unknown-contacts")).toHaveTextContent("null");
   });
 

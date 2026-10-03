@@ -10,9 +10,12 @@ anyhow = { workspace = true }
 chrono = { workspace = true }
 csv = { workspace = true }
 hex = { workspace = true }
+mail = { path = "../../libs/mail" }
+mail-builder = "1.0.0"
 mailparse = "0.17.0"
 message-crate-core = { path = "../../core/message-crate-core" }
 message-ir = { path = "../../libs/ir" }
+mms-parts = { path = "../../libs/mms-parts" }
 message-ir-format = { path = "../../libs/ir-format" }
 message-staging = { path = "../../libs/staging" }
 media = { path = "../../libs/media" }
@@ -24,6 +27,7 @@ sha2 = { workspace = true }
 
 [dev-dependencies]
 message-crate-core = { path = "../../core/message-crate-core", features = ["testutil"] }
+message-ir = { path = "../../libs/ir", features = ["testutil"] }
 tempfile = { workspace = true }
 
 [lints]

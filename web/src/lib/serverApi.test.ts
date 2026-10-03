@@ -59,7 +59,8 @@ import {
 
 vi.mock("./api", () => ({
   apiClient: {
-    get: vi.fn().mockResolvedValue({}),
+    // An empty page, so a list read whole stops after one request.
+    get: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     post: vi.fn().mockResolvedValue({}),
     put: vi.fn().mockResolvedValue({}),
     patch: vi.fn().mockResolvedValue({}),
@@ -125,9 +126,10 @@ describe("browse routes", () => {
 
   it("reads each list's search words at its own path, with no list parameter", async () => {
     await listSearchFields("contacts");
-    expect(get).toHaveBeenLastCalledWith("/v1/search-fields/contacts", undefined);
+    expect(lastPath(get)).toBe("/v1/search-fields/contacts");
+    expect(lastQuery(get)).toEqual({ limit: "500", offset: "0" });
     await listSearchFields("conversations");
-    expect(get).toHaveBeenLastCalledWith("/v1/search-fields/conversations", undefined);
+    expect(lastPath(get)).toBe("/v1/search-fields/conversations");
   });
 });
 
@@ -308,5 +310,12 @@ describe("accounts are one collection", () => {
     expect(lastPath(get)).toBe("/v1/accounts/7/api-tokens");
     await createApiToken({ label: "cli" });
     expect(post).toHaveBeenCalledWith("/v1/accounts/7/api-tokens", { label: "cli" });
+  });
+
+  it("lists and revokes another account's API tokens as the owner", async () => {
+    await listApiTokens(undefined, 12);
+    expect(lastPath(get)).toBe("/v1/accounts/12/api-tokens");
+    await deleteApiToken(3, 12);
+    expect(del).toHaveBeenCalledWith("/v1/accounts/12/api-tokens/3");
   });
 });

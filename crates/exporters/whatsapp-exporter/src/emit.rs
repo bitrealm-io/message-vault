@@ -303,7 +303,7 @@ fn queue_media(
     }
     let src_path = resolve_media_file(src, media_base, media_search_roots);
     if src_path.is_none() {
-        report.bump("attachments_missing", 1);
+        report.bump(message_crate_core::ATTACHMENTS_MISSING, 1);
     }
     (vec![pending], src_path)
 }

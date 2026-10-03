@@ -1,0 +1,24 @@
+From: "Alice" <+15555550101@unknown.email>
+To: owner@example.com
+Subject: SMS with Alice
+Date: Fri, 01 Jan 2021 00:02:00 +0000
+Message-ID: <a3@sms-backup-plus.local>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mc-part"
+X-smssync-datatype: MMS
+X-smssync-type: 132
+X-smssync-address: +15555550101
+X-smssync-date: 1609459320789
+X-smssync-id: 103
+
+--mc-part
+Content-Type: text/plain; charset=utf-8
+
+Picture from Alice
+--mc-part
+Content-Type: image/jpeg; name="photo.jpg"
+Content-Disposition: attachment; filename="photo.jpg"
+Content-Transfer-Encoding: base64
+
+/9j/4AAQSkZJRgABAQAAAQABAAD/2Q==
+--mc-part--

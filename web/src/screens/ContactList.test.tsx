@@ -77,9 +77,7 @@ beforeEach(() => {
         offset: 0,
       }) as unknown as Awaited<ReturnType<typeof listContacts>>,
   );
-  listContactGroupsMock.mockResolvedValue({
-    items: [{ id: 10, name: "Family" }],
-  } as unknown as Awaited<ReturnType<typeof listContactGroups>>);
+  listContactGroupsMock.mockResolvedValue([{ id: 10, name: "Family" }]);
 });
 
 afterEach(() => {
@@ -279,5 +277,98 @@ describe("ContactList", () => {
       widths.mockRestore();
       tauriMock.current = false;
     }
+  });
+
+  describe("Select all over more contacts than the first page", () => {
+    const everyone = Array.from({ length: 120 }, (_, i) => ({
+      id: i + 1,
+      name: `Person ${String(i + 1).padStart(4, "0")}`,
+      identity_count: 1,
+      addresses: [],
+      groups: ["Family"],
+    }));
+
+    beforeEach(() => {
+      // The server's paging: a group page's first page holds 40 of 120.
+      listContactsMock.mockImplementation(
+        async ({ limit = 40, offset = 0 }) =>
+          ({
+            items: everyone.slice(offset, offset + limit),
+            total: everyone.length,
+            limit,
+            offset,
+          }) as unknown as Awaited<ReturnType<typeof listContacts>>,
+      );
+      exportMock.mockResolvedValue("contact_id,display_name\n");
+    });
+
+    function renderAll() {
+      render(
+        <Providers>
+          <RightToolbarProvider>
+            <RightPane>
+              <ContactList groupFilter="Family" onSelect={() => {}} />
+            </RightPane>
+          </RightToolbarProvider>
+        </Providers>,
+      );
+    }
+
+    it("does not read as all while contacts past the loaded ones are unticked", async () => {
+      renderAll();
+      await screen.findByRole("checkbox", { name: "Select Person 0001" });
+      // Every loaded row, 40 of 120, ticked by hand with one Shift + click.
+      const rows = screen.getAllByRole("checkbox", { name: /^Select Person/ });
+      fireEvent.click(rows[0]);
+      fireEvent.click(rows[rows.length - 1], { shiftKey: true });
+      await waitFor(() => expect(rows[rows.length - 1]).toBeChecked());
+      expect(screen.getByRole("checkbox", { name: "Select all contacts" })).not.toBeChecked();
+    });
+
+    it("exports every contact the list holds", async () => {
+      renderAll();
+      await screen.findByRole("checkbox", { name: "Select Person 0001" });
+
+      const box = screen.getByRole("checkbox", { name: "Select all contacts" });
+      fireEvent.click(box);
+      await waitFor(() => expect(box).toBeChecked());
+
+      fireEvent.click(screen.getByRole("button", { name: "Export" }));
+      await waitFor(() => expect(exportMock).toHaveBeenCalled());
+      const body = exportMock.mock.calls.at(-1)?.[0] as { ids?: number[] } | undefined;
+      const ids = body?.ids ?? [];
+      expect([...ids].sort((a, b) => a - b)).toEqual(everyone.map((c) => c.id));
+    });
+
+    it("waits while the pages load, and says why when they do not", async () => {
+      let refuse!: (error: Error) => void;
+      listContactsMock.mockImplementation(async ({ limit = 40, offset = 0 }) => {
+        if (offset > 0) {
+          return new Promise((_, reject) => {
+            refuse = reject;
+          });
+        }
+        return {
+          items: everyone.slice(offset, offset + limit),
+          total: everyone.length,
+          limit,
+          offset,
+        } as unknown as Awaited<ReturnType<typeof listContacts>>;
+      });
+      renderAll();
+      await screen.findByRole("checkbox", { name: "Select Person 0001" });
+
+      const box = screen.getByRole("checkbox", { name: "Select all contacts" });
+      fireEvent.click(box);
+      await waitFor(() => expect(box).toBeDisabled());
+
+      refuse(new Error("offset is past the end of the list"));
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Select all could not read every row: offset is past the end of the list",
+      );
+      expect(box).not.toBeDisabled();
+      expect(box).not.toBeChecked();
+      expect(screen.getByRole("checkbox", { name: "Select Person 0001" })).not.toBeChecked();
+    });
   });
 });

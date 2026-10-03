@@ -60,12 +60,7 @@ const identities: Identity[] = [
 beforeEach(() => {
   mutateAsync.mockReset();
   listAccountIdentities.mockReset();
-  listAccountIdentities.mockResolvedValue({
-    items: identities,
-    total: identities.length,
-    limit: 40,
-    offset: 0,
-  });
+  listAccountIdentities.mockResolvedValue(identities);
 });
 afterEach(cleanup);
 
@@ -92,7 +87,7 @@ describe("IdentitiesSection", () => {
     ]) {
       expect(within(table).getByRole("columnheader", { name })).toBeInTheDocument();
     }
-    expect(within(table).getByText("Text message")).toBeInTheDocument();
+    expect(within(table).getByText("Text Message")).toBeInTheDocument();
     expect(within(table).getByText("bob@example.com")).toBeInTheDocument();
     // The counts are the server's answer, read for this account.
     expect(await within(table).findByText("30")).toBeInTheDocument();
@@ -125,7 +120,7 @@ describe("IdentitiesSection", () => {
   });
 
   it("says so when there are no identities, and still offers to add one", () => {
-    listAccountIdentities.mockResolvedValue({ items: [], total: 0, limit: 40, offset: 0 });
+    listAccountIdentities.mockResolvedValue([]);
     render(<IdentitiesSection profile={{ ...profile, phones: [], emails: [] }} />);
 
     expect(screen.queryByRole("grid")).not.toBeInTheDocument();
@@ -174,7 +169,7 @@ describe("IdentitiesSection", () => {
     render(<IdentitiesSection profile={profile} />);
 
     await screen.findByText("30");
-    const remove = screen.getByRole("button", { name: "Remove +15555550100 (Text message)" });
+    const remove = screen.getByRole("button", { name: "Remove +15555550100 (Text Message)" });
     expect(remove.className).not.toMatch(/opacity-0/);
     await user.click(remove);
     const dialog = await screen.findByRole("dialog", { name: "Remove identity?" });
@@ -189,7 +184,7 @@ describe("IdentitiesSection", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(mutateAsync).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "Remove +15555550100 (Text message)" }));
+    await user.click(screen.getByRole("button", { name: "Remove +15555550100 (Text Message)" }));
     const again = await screen.findByRole("dialog", { name: "Remove identity?" });
     await user.click(within(again).getByRole("button", { name: "Remove" }));
     expect(mutateAsync).toHaveBeenCalledWith({
@@ -197,13 +192,13 @@ describe("IdentitiesSection", () => {
     });
   });
 
-  // One number on Text message and on WhatsApp: the profile's `phones` lists it
+  // One number on Text Message and on WhatsApp: the profile's `phones` lists it
   // twice with no service, so only the identities say which one went.
   const both = { ...profile, phones: ["+15555550100", "+15555550100"] } as AccountProfile;
   const whatsapp: Identity = { ...identities[0], service: "whatsapp" };
-  const listed = (items: Identity[]) => ({ items, total: items.length, limit: 40, offset: 0 });
+  const listed = (items: Identity[]) => items;
 
-  it("closes the dialog when the WhatsApp identity of a number also on Text message is gone", async () => {
+  it("closes the dialog when the WhatsApp identity of a number also on Text Message is gone", async () => {
     const user = userEvent.setup({ delay: null });
     listAccountIdentities
       .mockResolvedValueOnce(listed([identities[0], whatsapp]))

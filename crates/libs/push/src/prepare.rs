@@ -12,9 +12,9 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, SyncSender};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread::Scope;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use message_crate_core::{check_cancel, parallel_for_each};
@@ -32,7 +32,8 @@ use crate::run::{MAX_IMPORT_BODY_BYTES, PushConfig, Session};
 /// Journal state shared by every prepare worker and the import pipeline.
 ///
 /// `assets_in_flight` stops two workers from uploading the same sha256 at once
-/// when two chats share a file that is not in the journal yet.
+/// when two chats share a file that is not in the journal yet. A worker that
+/// finds a sha256 claimed waits until the claim ends (#1076).
 #[derive(Debug)]
 pub(crate) struct SharedJournal {
     pub journal: RunJournal,
@@ -48,14 +49,22 @@ impl SharedJournal {
         }
     }
 
-    /// Try to reserve this sha256 for upload. Returns false if another worker
-    /// already uploaded it or is uploading it (unless `force`).
-    fn claim_asset(&mut self, digest: &str, force: bool) -> bool {
-        if !force && (self.journal.has_asset(digest) || self.assets_in_flight.contains(digest)) {
-            return false;
+    /// Try to reserve this sha256 for upload. `force` ignores the journal,
+    /// never another worker's claim.
+    fn claim_asset(&mut self, digest: &str, force: bool) -> AssetClaim {
+        if self.assets_in_flight.contains(digest) {
+            return AssetClaim::Busy;
+        }
+        if !force && self.journal.has_asset(digest) {
+            return AssetClaim::OnServer;
         }
         self.assets_in_flight.insert(digest.to_string());
-        true
+        AssetClaim::Claimed
+    }
+
+    /// True while some worker holds a claim on this sha256.
+    fn asset_in_flight(&self, digest: &str) -> bool {
+        self.assets_in_flight.contains(digest)
     }
 
     /// Give up a claim without marking the digest uploaded, so a retry (or
@@ -71,6 +80,19 @@ impl SharedJournal {
     }
 }
 
+/// What [`SharedJournal::claim_asset`] found for one sha256.
+enum AssetClaim {
+    /// This worker now holds the claim and must upload the file.
+    Claimed,
+    /// The journal says the server already has the file.
+    OnServer,
+    /// Another worker is uploading the file now.
+    Busy,
+}
+
+/// How often a worker waiting on another worker's upload checks for a cancel.
+const CLAIM_WAIT_POLL: Duration = Duration::from_millis(100);
+
 /// Shared map: absolute file path → sha256 hex string.
 ///
 /// The same attachment file can appear in many chats. Caching the hash means
@@ -85,6 +107,9 @@ pub(crate) struct PrepareContext<'a> {
     pub journal: &'a Mutex<SharedJournal>,
     pub batch_size: usize,
     digests: DigestResolver,
+    /// Notified, after the journal lock is released, whenever a claim on a
+    /// sha256 ends.
+    claim_ended: Condvar,
     /// Set once any HEAD or PUT reports the server already has an asset. From
     /// then on workers HEAD before PUT so a re-import sends no bodies.
     probe_existing: AtomicBool,
@@ -112,6 +137,7 @@ impl<'a> PrepareContext<'a> {
                 verify_digests: cfg.verify_digests,
                 trust_export: cfg.trust_export,
             },
+            claim_ended: Condvar::new(),
             probe_existing: AtomicBool::new(false),
             preflight_done: Mutex::new(false),
         }
@@ -303,8 +329,8 @@ fn scan_one_attachment(
 ) -> Result<AttachmentProjection> {
     let Some(rel) = att.path.as_deref().and_then(message_ir::trimmed) else {
         // No path means the bytes were never staged. "Do not copy" exports
-        // look like this, and the reason the exporter set ("not_copied";
-        // older exports say "skipped" or "embed_disabled") explains why.
+        // look like this, and the reason the exporter set ("not_copied")
+        // explains why.
         // Keep the metadata so the thread still shows the file was there.
         scan.skipped += 1;
         if att.missing_reason.is_none() {
@@ -626,10 +652,17 @@ struct AssetUploadStats {
 /// If that HEAD reports `already_present`, later files HEAD and skip the body
 /// (re-import). If it misses, this run PUTs until a response sets the flag.
 ///
+/// A file another conversation is uploading is waited for once this
+/// conversation's own uploads have ended, so no worker holds a claim while
+/// it waits. When that other upload fails, the next round claims the file
+/// and uploads it here. The messages are built only after every file they
+/// name has settled, so the server never stores an attachment whose file is
+/// still on its way (#1076).
+///
 /// # Errors
 ///
 /// Returns an error when a file is missing, when HEAD/PUT fails after
-/// retries, or when a worker panics.
+/// retries, when a worker panics, or when the run is cancelled.
 fn upload_assets(
     ctx: &PrepareContext<'_>,
     name: &str,
@@ -637,15 +670,40 @@ fn upload_assets(
     unique: &BTreeMap<String, (String, Option<String>)>,
 ) -> Result<AssetUploadStats> {
     let mut stats = AssetUploadStats::default();
-    let jobs = claim_upload_jobs(ctx, name, unique, &mut stats)?;
+    let mut pending: Vec<&String> = unique.keys().collect();
+    while !pending.is_empty() {
+        let mut claims = AssetClaims::new(ctx);
+        let (jobs, busy) = claim_upload_jobs(ctx, name, unique, &pending, &mut claims, &mut stats)?;
+        upload_claimed(ctx, name, source, &jobs, &mut claims, &mut stats)?;
+        drop(claims);
+        wait_for_claims(ctx, &busy)?;
+        pending = busy;
+    }
+    Ok(stats)
+}
+
+/// HEAD/PUT every claimed job, then record each success in the journal.
+///
+/// # Errors
+///
+/// Returns the first failed job's error. Dropping `claims` gives up every
+/// claim not recorded as uploaded.
+fn upload_claimed(
+    ctx: &PrepareContext<'_>,
+    name: &str,
+    source: &str,
+    jobs: &[AssetUploadJob],
+    claims: &mut AssetClaims<'_, '_>,
+    stats: &mut AssetUploadStats,
+) -> Result<()> {
     let Some(first) = jobs.first() else {
-        return Ok(stats);
+        return Ok(());
     };
     preflight_existing_asset(ctx, source, &first.digest)?;
 
     // Work-stealing style: workers pull the next job index from a shared counter.
     let results = parallel_for_each(
-        &jobs,
+        jobs,
         ctx.cfg.asset_upload_workers,
         ctx.cfg.cancel.as_ref(),
         |job| upload_one_asset(ctx, source, job).map_err(|error| error.to_string()),
@@ -655,7 +713,7 @@ fn upload_assets(
     for (job, result) in jobs.iter().zip(results) {
         match result {
             Ok(response) => {
-                ctx.lock_journal().asset_uploaded(source, &job.digest)?;
+                claims.uploaded(source, &job.digest)?;
                 let outcome = if response.already_present {
                     stats.skipped += 1;
                     "skip"
@@ -667,46 +725,47 @@ fn upload_assets(
                     .log_lines
                     .push(format!("asset {outcome} {}", job.digest));
             }
-            Err(error) => {
-                // Release every in-flight claim so a retry is not stuck forever.
-                let mut guard = ctx.lock_journal();
-                for job in &jobs {
-                    guard.release_asset(&job.digest);
-                }
-                bail!("{name}: {error}");
-            }
+            // The caller drops `claims`, which gives up the rest, so a retry
+            // or a waiting conversation is not stuck forever.
+            Err(error) => bail!("{name}: {error}"),
         }
     }
-    Ok(stats)
+    Ok(())
 }
 
-/// Build the upload work list, claiming each digest in the shared journal and
-/// skipping the ones another chat already uploaded or is uploading.
+/// Build the upload work list, claiming each pending digest in the shared
+/// journal. Returns the claimed jobs and the digests another conversation
+/// is uploading now. A digest the journal already holds counts as skipped.
 ///
 /// # Errors
 ///
-/// Returns an error when a claimed file is missing or unreadable. The claim
-/// is released before returning.
-fn claim_upload_jobs(
+/// Returns an error when a claimed file is missing or unreadable, or when
+/// the run is cancelled. Dropping `claims` gives up what was claimed.
+fn claim_upload_jobs<'u>(
     ctx: &PrepareContext<'_>,
     name: &str,
     unique: &BTreeMap<String, (String, Option<String>)>,
+    pending: &[&'u String],
+    claims: &mut AssetClaims<'_, '_>,
     stats: &mut AssetUploadStats,
-) -> Result<Vec<AssetUploadJob>> {
-    let mut jobs = Vec::with_capacity(unique.len());
-    for (digest, (rel, mime)) in unique {
+) -> Result<(Vec<AssetUploadJob>, Vec<&'u String>)> {
+    let mut jobs = Vec::with_capacity(pending.len());
+    let mut busy = Vec::new();
+    for &digest in pending {
         check_cancel(ctx.cfg.cancel.as_ref())?;
-        if !ctx.lock_journal().claim_asset(digest, ctx.cfg.force) {
-            stats.skipped += 1;
-            continue;
-        }
-        let (path, file_len) = match check_upload_file(ctx, name, rel) {
-            Ok(checked) => checked,
-            Err(error) => {
-                ctx.lock_journal().release_asset(digest);
-                return Err(error);
+        match claims.claim(digest) {
+            AssetClaim::Claimed => {}
+            AssetClaim::OnServer => {
+                stats.skipped += 1;
+                continue;
             }
-        };
+            AssetClaim::Busy => {
+                busy.push(digest);
+                continue;
+            }
+        }
+        let (rel, mime) = &unique[digest];
+        let (path, file_len) = check_upload_file(ctx, name, rel)?;
         stats.bytes = stats.bytes.saturating_add(file_len);
         jobs.push(AssetUploadJob {
             digest: digest.clone(),
@@ -714,7 +773,91 @@ fn claim_upload_jobs(
             mime: mime.clone(),
         });
     }
-    Ok(jobs)
+    Ok((jobs, busy))
+}
+
+/// Block until no worker holds a claim on any of `digests`. The caller holds
+/// no claim of its own while it waits, so two conversations never wait on
+/// each other.
+///
+/// # Errors
+///
+/// Returns an error when the run is cancelled while waiting.
+fn wait_for_claims(ctx: &PrepareContext<'_>, digests: &[&String]) -> Result<()> {
+    let mut journal = ctx.lock_journal();
+    while digests.iter().any(|digest| journal.asset_in_flight(digest)) {
+        check_cancel(ctx.cfg.cancel.as_ref())?;
+        journal = ctx
+            .claim_ended
+            .wait_timeout(journal, CLAIM_WAIT_POLL)
+            .expect("journal mutex poisoned")
+            .0;
+    }
+    Ok(())
+}
+
+/// The sha256 claims one conversation holds and has not yet settled.
+///
+/// Dropping it gives up every claim still held and wakes the workers waiting
+/// on them, so a conversation that fails or is cancelled never leaves
+/// another one waiting on a file nobody is uploading.
+struct AssetClaims<'c, 'a> {
+    ctx: &'c PrepareContext<'a>,
+    held: Vec<String>,
+}
+
+impl<'c, 'a> AssetClaims<'c, 'a> {
+    /// Start with no claims.
+    fn new(ctx: &'c PrepareContext<'a>) -> Self {
+        Self {
+            ctx,
+            held: Vec::new(),
+        }
+    }
+
+    /// Try to claim one sha256 for this conversation.
+    fn claim(&mut self, digest: &str) -> AssetClaim {
+        let claim = self
+            .ctx
+            .lock_journal()
+            .claim_asset(digest, self.ctx.cfg.force);
+        if matches!(claim, AssetClaim::Claimed) {
+            self.held.push(digest.to_string());
+        }
+        claim
+    }
+
+    /// End one claim with the file on the server.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the journal file cannot be appended to.
+    fn uploaded(&mut self, source: &str, digest: &str) -> Result<()> {
+        self.held.retain(|held| held != digest);
+        let recorded = self.ctx.lock_journal().asset_uploaded(source, digest);
+        self.ctx.claim_ended.notify_all();
+        recorded
+    }
+}
+
+impl Drop for AssetClaims<'_, '_> {
+    fn drop(&mut self) {
+        if self.held.is_empty() {
+            return;
+        }
+        // A panic here during unwinding would abort, so a poisoned lock is
+        // used as it is.
+        let mut journal = self
+            .ctx
+            .journal
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        for digest in &self.held {
+            journal.release_asset(digest);
+        }
+        drop(journal);
+        self.ctx.claim_ended.notify_all();
+    }
 }
 
 /// Locate one attachment on disk. Returns the path and its size in bytes.

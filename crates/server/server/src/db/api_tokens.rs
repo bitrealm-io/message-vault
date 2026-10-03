@@ -31,26 +31,21 @@ pub struct ApiTokenRow {
 pub const DEFAULT_API_TOKEN_TTL_SECS: u64 = 365 * 24 * 60 * 60;
 
 const API_TOKEN_PREFIX: &str = "mc-api-";
-const LEGACY_APP_PASSWORD_PREFIX: &str = "mc-app-";
 const HINT_HEAD: usize = 2;
 const HINT_TAIL: usize = 2;
 
-/// Mask a plaintext API token for list display (keeps `mc-api-` or legacy `mc-app-` + ends).
+/// Mask a plaintext API token for list display (keeps `mc-api-` and the ends).
 /// Format: `mc-api-xx..yy`.
 pub fn mask_api_token(token: &str) -> String {
-    let (prefix, secret) = if let Some(s) = token.strip_prefix(API_TOKEN_PREFIX) {
-        (API_TOKEN_PREFIX, s)
-    } else if let Some(s) = token.strip_prefix(LEGACY_APP_PASSWORD_PREFIX) {
-        (LEGACY_APP_PASSWORD_PREFIX, s)
-    } else {
+    let Some(secret) = token.strip_prefix(API_TOKEN_PREFIX) else {
         return format!("{API_TOKEN_PREFIX}..");
     };
     if secret.len() < HINT_HEAD + HINT_TAIL {
-        return format!("{prefix}..");
+        return format!("{API_TOKEN_PREFIX}..");
     }
     let head = &secret[..HINT_HEAD];
     let tail = &secret[secret.len() - HINT_TAIL..];
-    format!("{prefix}{head}..{tail}")
+    format!("{API_TOKEN_PREFIX}{head}..{tail}")
 }
 
 /// Account + permissions for a presented API token Bearer value.
@@ -238,6 +233,33 @@ type ApiTokenRowRaw = (
     i64,
 );
 
+impl From<ApiTokenRowRaw> for ApiTokenRow {
+    fn from(
+        (
+            id,
+            label,
+            can_import,
+            can_export,
+            token_hint,
+            created_at,
+            last_accessed_at,
+            expires_at,
+            disabled,
+        ): ApiTokenRowRaw,
+    ) -> Self {
+        Self {
+            id,
+            label,
+            permissions: Permissions::token(can_import != 0, can_export != 0),
+            token_hint,
+            created_at,
+            last_accessed_at,
+            expires_at,
+            disabled: disabled != 0,
+        }
+    }
+}
+
 /// List API tokens for an account (no secrets).
 ///
 /// # Errors
@@ -256,31 +278,30 @@ pub async fn list_api_tokens(
     .bind(account_id)
     .fetch_all(&mut *conn)
     .await?;
-    let mut out = Vec::with_capacity(rows.len());
-    for (
-        id,
-        label,
-        can_import,
-        can_export,
-        token_hint,
-        created_at,
-        last_accessed_at,
-        expires_at,
-        disabled,
-    ) in rows
-    {
-        out.push(ApiTokenRow {
-            id,
-            label,
-            permissions: Permissions::token(can_import != 0, can_export != 0),
-            token_hint,
-            created_at,
-            last_accessed_at,
-            expires_at,
-            disabled: disabled != 0,
-        });
-    }
-    Ok(out)
+    Ok(rows.into_iter().map(ApiTokenRow::from).collect())
+}
+
+/// One of the account's API tokens (no secret), or `None` when the account
+/// holds no token with that id.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn get_api_token(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    id: i64,
+) -> Result<Option<ApiTokenRow>> {
+    let row: Option<ApiTokenRowRaw> = sqlx::query_as(
+        "SELECT id, label, can_import, can_export, token_hint, created_at, last_accessed_at, expires_at, disabled
+         FROM account_api_tokens
+         WHERE account_id = $1 AND id = $2",
+    )
+    .bind(account_id)
+    .bind(id)
+    .fetch_optional(&mut *conn)
+    .await?;
+    Ok(row.map(ApiTokenRow::from))
 }
 
 /// Delete one API token if it belongs to the account.
@@ -404,10 +425,6 @@ mod tests {
         assert_eq!(
             mask_api_token("mc-api-Sd1abcdefghijklmnopqrsmtuvwxyZmE"),
             "mc-api-Sd..mE"
-        );
-        assert_eq!(
-            mask_api_token("mc-app-Sd1abcdefghijklmnopqrsmtuvwxyZmE"),
-            "mc-app-Sd..mE"
         );
 
         let listed = list_api_tokens(&mut conn, account_id).await.unwrap();

@@ -4,13 +4,12 @@ use anyhow::{Context, Result, bail};
 use base64::Engine;
 use phone::{Handle, OwnerHandleSet};
 use quick_xml::{Reader, events::Event};
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::io::BufRead;
 use std::path::Path;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
 use message_ir::{HandleType, valid_filename};
 
@@ -44,6 +43,8 @@ pub struct MmsPart {
     pub cl: String,
     /// Filename from the XML `fn` attribute (not a function attribute).
     pub filename_attr: String,
+    /// Content-ID from the `cid` attribute, angle brackets and all.
+    pub cid: String,
     /// Text body (SMIL) when present.
     pub text: String,
     /// Base64 payload when present.
@@ -158,7 +159,7 @@ pub struct ParseStats {
     /// MMS records dropped with no participants.
     pub skipped_empty_participants: u64,
     /// Parts with undecodable base64 `data`.
-    pub skipped_bad_attachment: u64,
+    pub skipped_unreadable_part: u64,
     /// Character references dropped from an attribute because they are not
     /// a character, such as `&#0;` or a lone surrogate.
     pub dropped_character_references: u64,
@@ -257,6 +258,7 @@ fn part(attrs: &HashMap<String, String>) -> MmsPart {
         name: get(attrs, "name").into(),
         cl: get(attrs, "cl").into(),
         filename_attr: get(attrs, "fn").into(),
+        cid: get(attrs, "cid").into(),
         text: get(attrs, "text").into(),
         data: get(attrs, "data").into(),
         attrs: btree(attrs),
@@ -314,57 +316,6 @@ fn non_null(value: &str) -> String {
     } else {
         value.into()
     }
-}
-
-/// Every name a part goes by (name, location, file name), for SMIL matching.
-fn content_keys(part: &MmsPart) -> BTreeSet<String> {
-    let mut keys = BTreeSet::new();
-    for raw in [&part.name, &part.cl, &part.filename_attr] {
-        let value = raw.trim();
-        if value.is_empty()
-            || value.eq_ignore_ascii_case("null")
-            || value.eq_ignore_ascii_case("none")
-        {
-            continue;
-        }
-        keys.insert(value.into());
-        if let Some(base) = value.rsplit('/').next().filter(|s| !s.is_empty()) {
-            keys.insert(base.into());
-        }
-    }
-    keys
-}
-
-static TEXT_SRC: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r#"(?i)<text[^>]+src=["']([^"']+)["']"#).expect("valid regex"));
-static IMG_SRC: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r#"(?i)<img[^>]+src=["']([^"']+)["']"#).expect("valid regex"));
-
-/// The text and media part names a SMIL part refers to, in order.
-fn smil_refs(parts: &[MmsPart], decoded: &[DecodedPartData]) -> (Vec<String>, Vec<String>) {
-    let smil = parts
-        .iter()
-        .zip(decoded.iter())
-        .find(|(p, _)| p.ct.eq_ignore_ascii_case("application/smil"))
-        .map(|(p, payload)| {
-            if !p.text.trim().is_empty() {
-                html_escape::decode_html_entities(p.text.trim()).into_owned()
-            } else {
-                match payload {
-                    DecodedPartData::Ok { bytes, .. } => {
-                        String::from_utf8_lossy(bytes).into_owned()
-                    }
-                    _ => String::new(),
-                }
-            }
-        })
-        .unwrap_or_default();
-    let captures = |re: &Regex| {
-        re.captures_iter(&smil)
-            .filter_map(|c| c.get(1).map(|m| m.as_str().to_string()))
-            .collect()
-    };
-    (captures(&TEXT_SRC), captures(&IMG_SRC))
 }
 
 /// File extension for a part's content type.
@@ -440,67 +391,84 @@ fn decode_part_data(raw: &str) -> DecodedPartData {
     }
 }
 
-/// Attachment blobs from the MMS parts, in SMIL order when SMIL names them, counting the ones that failed to decode.
-fn attachments(
+/// What a part holds, for [`mms_parts::body_of`].
+///
+/// A `text/plain` part's words are in `text`. Any other part's content is
+/// in `data`, base64-encoded, and a contact card is written as
+/// `ct="text/x-vcard" text="null" data="…"`. A part with no `data` but a
+/// `text` holds that text.
+fn part_content<'a>(part: &MmsPart, decoded: &'a DecodedPartData) -> mms_parts::Content<'a> {
+    use mms_parts::Content;
+    let text = decode_body(&part.text);
+    let text = if text.eq_ignore_ascii_case("null") {
+        String::new()
+    } else {
+        text
+    };
+    if mms_parts::is_text(&part.ct) && !text.is_empty() {
+        return Content::Text(text);
+    }
+    match decoded {
+        DecodedPartData::Ok { bytes, .. } if !bytes.is_empty() => Content::Bytes(bytes),
+        DecodedPartData::Err { .. } => Content::Unreadable,
+        DecodedPartData::Ok { .. } | DecodedPartData::Absent if text.is_empty() => Content::None,
+        DecodedPartData::Ok { .. } | DecodedPartData::Absent => Content::Text(text),
+    }
+}
+
+/// The message text and attachment blobs the MMS parts make, by the rules of
+/// [`mms_parts`]. A part whose `data` is not base64 is counted in `stats`.
+fn mms_body(
     parts: &[MmsPart],
     decoded: &[DecodedPartData],
-    refs: &[String],
     stats: &mut ParseStats,
-) -> Vec<AttachmentBlob> {
-    let mut by_key = HashMap::new();
-    let mut order = Vec::new();
-    for (part, payload) in parts.iter().zip(decoded.iter()) {
-        let ct = part.ct.to_ascii_lowercase();
-        if ct.starts_with("text/") || ct == "application/smil" {
-            continue;
-        }
-        let (bytes, digest) = match payload {
-            DecodedPartData::Ok { bytes, digest_hex } if !bytes.is_empty() => {
-                (Arc::clone(bytes), digest_hex.clone())
-            }
-            DecodedPartData::Err { .. } => {
-                stats.skipped_bad_attachment += 1;
-                continue;
-            }
-            DecodedPartData::Absent | DecodedPartData::Ok { .. } => continue,
-        };
-        let original = valid_filename(&part.name)
-            .or_else(|| valid_filename(&part.cl))
-            .or_else(|| valid_filename(&part.filename_attr));
-        let ext = extension(part);
-        let filename = format!("{digest}{ext}");
-        let blob = AttachmentBlob {
-            filename: filename.clone(),
-            original_name: original,
-            mime_type: Some(if part.ct.trim().is_empty() {
-                "application/octet-stream".into()
-            } else {
-                part.ct.clone()
-            }),
-            data: bytes,
-            digest_hex: digest,
-        };
-        let keys = content_keys(part);
-        if keys.is_empty() {
-            order.push(filename.clone());
-            by_key.insert(filename, blob);
-        } else {
-            for (index, key) in keys.into_iter().enumerate() {
-                if index == 0 {
-                    order.push(key.clone());
+) -> (String, Vec<AttachmentBlob>) {
+    let shaped: Vec<mms_parts::Part<'_>> = parts
+        .iter()
+        .zip(decoded)
+        .map(|(part, payload)| mms_parts::Part {
+            content_type: &part.ct,
+            keys: vec![&part.name, &part.cl, &part.cid, &part.filename_attr],
+            content: part_content(part, payload),
+        })
+        .collect();
+    let body = mms_parts::body_of(&shaped);
+    stats.skipped_unreadable_part += body.unreadable.len() as u64;
+    let attachments = body
+        .attachments
+        .iter()
+        .filter_map(|&index| {
+            let (bytes, digest_hex) = match (&shaped[index].content, &decoded[index]) {
+                (mms_parts::Content::Bytes(_), DecodedPartData::Ok { bytes, digest_hex }) => {
+                    (Arc::clone(bytes), digest_hex.clone())
                 }
-                by_key.entry(key).or_insert_with(|| blob.clone());
-            }
-        }
+                (mms_parts::Content::Text(text), _) => (
+                    Arc::from(text.as_bytes()),
+                    hex::encode(Sha256::digest(text.as_bytes())),
+                ),
+                _ => return None,
+            };
+            Some(attachment_blob(&parts[index], bytes, digest_hex))
+        })
+        .collect();
+    (body.text, attachments)
+}
+
+/// One attachment blob, named by its digest and the extension its type gives.
+fn attachment_blob(part: &MmsPart, data: Arc<[u8]>, digest_hex: String) -> AttachmentBlob {
+    AttachmentBlob {
+        filename: format!("{digest_hex}{}", extension(part)),
+        original_name: valid_filename(&part.name)
+            .or_else(|| valid_filename(&part.cl))
+            .or_else(|| valid_filename(&part.filename_attr)),
+        mime_type: Some(if part.ct.trim().is_empty() {
+            "application/octet-stream".into()
+        } else {
+            part.ct.clone()
+        }),
+        data,
+        digest_hex,
     }
-    let mut seen = HashSet::new();
-    refs.iter()
-        .chain(order.iter())
-        .filter_map(|k| by_key.get(k))
-        .chain(by_key.values())
-        .filter(|b| seen.insert(b.filename.clone()))
-        .cloned()
-        .collect()
 }
 
 /// A part's attributes for the vendor bag, with the base64 data replaced by a marker.
@@ -638,7 +606,7 @@ fn parse_mms(
         mms_sender(addrs, &peers, owners)
     };
     let decoded: Vec<DecodedPartData> = parts.iter().map(|p| decode_part_data(&p.data)).collect();
-    let (text_refs, image_refs) = smil_refs(parts, &decoded);
+    let (text, attachments) = mms_body(parts, &decoded, stats);
     let raw_name = raw_name(attrs);
     let conversation = MmsConversation::for_peers(peers, &raw_name);
     let hint = contact_name(&raw_name, conversation.kind).map(String::from);
@@ -651,9 +619,9 @@ fn parse_mms(
         is_from_me,
         sender,
         sender_display_name: if is_from_me { None } else { hint },
-        text: mms_text(parts, &text_refs),
+        text,
         subject: non_null(get(attrs, "sub")),
-        attachments: attachments(parts, &decoded, &image_refs, stats),
+        attachments,
         message_kind: "mms",
         date_ms,
         contact_name: raw_name,
@@ -731,39 +699,6 @@ fn mms_peers(participants: Vec<Handle>, owners: Option<&OwnerHandleSet>) -> Vec<
 /// Whether an address is one of the owner's; with no owner given, none is.
 fn is_owner(owners: Option<&OwnerHandleSet>, address: &Handle) -> bool {
     owners.is_some_and(|o| o.is_owner(address))
-}
-
-/// The message text: the text parts the SMIL references, in its order, or
-/// when there is no SMIL every text part sorted and de-duplicated.
-fn mms_text(parts: &[MmsPart], text_refs: &[String]) -> String {
-    let mut texts = Vec::new();
-    let mut text_by_key = HashMap::new();
-    for part in parts
-        .iter()
-        .filter(|p| p.ct.to_ascii_lowercase().starts_with("text/"))
-    {
-        let text = decode_body(&part.text);
-        if !text.is_empty() && !text.eq_ignore_ascii_case("null") {
-            for key in content_keys(part) {
-                text_by_key.entry(key).or_insert_with(|| text.clone());
-            }
-            // A part with no name, cl or fn has no key, but without SMIL its
-            // text still belongs in the message.
-            texts.push(text);
-        }
-    }
-    if text_refs.is_empty() {
-        let mut values = texts;
-        values.sort();
-        values.dedup();
-        return values.join("\n");
-    }
-    text_refs
-        .iter()
-        .filter_map(|r| text_by_key.get(r))
-        .cloned()
-        .collect::<Vec<_>>()
-        .join("\n")
 }
 
 /// Where an MMS lands: a one-to-one conversation keyed by the peer's handle
@@ -1233,11 +1168,17 @@ mod tests {
         assert_eq!(addrs[0].get("charset").map(String::as_str), Some("106"));
     }
 
+    /// The same picture sent twice is two attachments, which share one file
+    /// because the file is named by its content.
     #[test]
     fn attachment_filename_is_content_addressed() {
         let xml = br#"<smses><mms date="1" msg_box="1" address="+15555550101"><parts><part ct="image/jpeg" name="first.jpg" data="aGVsbG8="/><part ct="image/jpeg" name="second.jpg" data="aGVsbG8="/></parts><addrs><addr address="+15555550101" type="137"/></addrs></mms></smses>"#;
         let (records, _) = parse_reader(xml.as_slice(), None).unwrap();
-        assert_eq!(records[0].attachments.len(), 1);
+        assert_eq!(records[0].attachments.len(), 2);
+        assert_eq!(
+            records[0].attachments[0].filename,
+            records[0].attachments[1].filename
+        );
         let attachment = &records[0].attachments[0];
         assert!(attachment.filename.starts_with(&attachment.digest_hex));
         assert_eq!(attachment.digest_hex.len(), 64);
@@ -1271,10 +1212,10 @@ mod tests {
     }
 
     #[test]
-    fn skipped_bad_attachment_records_decode_error() {
+    fn skipped_unreadable_part_records_decode_error() {
         let xml = br#"<smses><mms date="1" msg_box="1" address="+15555550101"><parts><part ct="image/jpeg" name="pic.jpg" data="@@@not-base64@@@"/></parts><addrs><addr address="+15555550101" type="137"/></addrs></mms></smses>"#;
         let (records, stats) = parse_reader(xml.as_slice(), None).unwrap();
-        assert_eq!(stats.skipped_bad_attachment, 1);
+        assert_eq!(stats.skipped_unreadable_part, 1);
         assert!(records[0].attachments.is_empty());
         let SourceFields::Mms { parts, .. } = &records[0].source_fields else {
             panic!("mms")
@@ -1449,5 +1390,84 @@ mod tests {
         let (records, _) = parse_reader(xml.as_slice(), None).unwrap();
         assert_eq!(records[0].sender_display_name.as_deref(), Some("Sam"));
         assert_eq!(records[0].participants[0].1.as_deref(), Some("Sam"));
+    }
+
+    /// Two pictures with one name are two attachments: parts are told apart
+    /// by position, not by name.
+    #[test]
+    fn two_parts_with_one_name_are_two_attachments() {
+        let record = mms_with_parts(
+            r#"<part ct="image/jpeg" name="image.jpg" cl="image.jpg" data="aGVsbG8="/><part ct="image/jpeg" name="image.jpg" cl="image.jpg" data="d29ybGQ="/>"#,
+        );
+        let data: Vec<&[u8]> = record.attachments.iter().map(|a| a.data.as_ref()).collect();
+        assert_eq!(data, vec![b"hello".as_slice(), b"world".as_slice()]);
+    }
+
+    /// The SMIL may name a text part by its Content-ID.
+    #[test]
+    fn a_text_part_the_smil_names_by_cid_is_the_text() {
+        let smil = html_escape::encode_double_quoted_attribute(
+            r#"<smil><body><par><text src="cid:text_0"/></par></body></smil>"#,
+        );
+        let record = mms_with_parts(&format!(
+            r#"<part ct="application/smil" text="{smil}"/><part ct="text/plain" cid="&lt;text_0&gt;" cl="text_0.txt" text="hello there"/>"#
+        ));
+        assert_eq!(record.text, "hello there");
+    }
+
+    /// A text part the SMIL does not name is still the message's text, after
+    /// the parts the SMIL names.
+    #[test]
+    fn a_text_part_the_smil_does_not_name_is_kept_after_the_named_ones() {
+        let smil = html_escape::encode_double_quoted_attribute(
+            r#"<smil><body><par><text src="b.txt"/></par></body></smil>"#,
+        );
+        let record = mms_with_parts(&format!(
+            r#"<part ct="application/smil" text="{smil}"/><part ct="text/plain" cl="a.txt" text="later"/><part ct="text/plain" cl="b.txt" text="first"/>"#
+        ));
+        assert_eq!(record.text, "first\nlater");
+    }
+
+    /// A contact card is a text type whose content is in `data`; it is an
+    /// attachment.
+    #[test]
+    fn a_contact_card_with_data_is_an_attachment() {
+        let data = crate::encode_part_data(b"BEGIN:VCARD\r\nFN:Sam\r\nEND:VCARD\r\n");
+        let record = mms_with_parts(&format!(
+            r#"<part ct="text/plain" text="card"/><part ct="text/x-vcard" name="sam.vcf" text="null" data="{data}"/>"#
+        ));
+        assert_eq!(record.text, "card");
+        assert_eq!(record.attachments.len(), 1);
+        assert_eq!(
+            record.attachments[0].mime_type.as_deref(),
+            Some("text/x-vcard")
+        );
+        assert_eq!(
+            record.attachments[0].original_name.as_deref(),
+            Some("sam.vcf")
+        );
+    }
+
+    /// Without a SMIL part the text parts are joined in the order they are
+    /// written, and a text that repeats another is kept.
+    #[test]
+    fn text_parts_without_smil_keep_their_order_and_their_repeats() {
+        let record = mms_with_parts(
+            r#"<part ct="text/plain" text="Tickets attached"/><part ct="text/plain" text="All three are for Friday"/><part ct="text/plain" text="ha"/><part ct="text/plain" text="ha"/>"#,
+        );
+        assert_eq!(
+            record.text,
+            "Tickets attached\nAll three are for Friday\nha\nha"
+        );
+    }
+
+    /// A contact card whose `data` is not base64 is neither text nor an
+    /// attachment, and it is counted.
+    #[test]
+    fn a_part_whose_data_cannot_be_decoded_is_counted() {
+        let xml = br#"<smses><mms date="1" msg_box="1" address="+15555550101"><parts><part ct="text/x-vcard" name="sam.vcf" data="@@@@"/></parts><addrs><addr address="+15555550101" type="137"/></addrs></mms></smses>"#;
+        let (records, stats) = parse_reader(xml.as_slice(), None).unwrap();
+        assert!(records[0].attachments.is_empty());
+        assert_eq!(stats.skipped_unreadable_part, 1);
     }
 }

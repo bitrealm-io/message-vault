@@ -88,4 +88,23 @@ describe("ProfileSettingsPanel", () => {
     });
     expect(nameField().value).toBe("");
   });
+
+  it("shows the Demo Account's name and zone as fixed and offers no address book load", async () => {
+    getAccountProfile.mockImplementation(async () => ({
+      ...stored,
+      username: "demo",
+      preferred_name: "Demo User",
+      is_owner: false,
+      is_demo: true,
+    }));
+    render(<ProfileSettingsPanel />);
+    await waitFor(() => expect(nameField().value).toBe("Demo User"));
+
+    // The server refuses each of these for the Demo Account, so none is offered.
+    expect(nameField().readOnly).toBe(true);
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(zoneField().disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Choose a file" })).toBeNull();
+    expect(screen.getByText(/display name and time zone are fixed/)).toBeTruthy();
+  });
 });

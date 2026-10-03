@@ -52,9 +52,7 @@ function LocationDisplay() {
 }
 
 function renderGroups(path: string, groups: string[]) {
-  routes.listContactGroups.mockResolvedValue({
-    items: groups.map((name, i) => ({ id: i + 1, name })),
-  });
+  routes.listContactGroups.mockResolvedValue(groups.map((name, i) => ({ id: i + 1, name })));
   return render(
     <Providers>
       <MemoryRouter initialEntries={[path]}>
@@ -66,9 +64,7 @@ function renderGroups(path: string, groups: string[]) {
 }
 
 function renderTags(path: string, tags: string[]) {
-  routes.listMessageTags.mockResolvedValue({
-    items: tags.map((name, i) => ({ id: i + 1, name })),
-  });
+  routes.listMessageTags.mockResolvedValue(tags.map((name, i) => ({ id: i + 1, name })));
   return render(
     <Providers>
       <MemoryRouter initialEntries={[path]}>
@@ -84,9 +80,11 @@ describe("NavEntityList row menu", () => {
     const user = userEvent.setup();
     renderGroups("/contacts", ["Family"]);
 
-    const options = screen.getByRole("button", { name: "Group options for Family" });
+    const options = screen.getByRole("button", { name: "Contact Group options for Family" });
     await user.click(options);
-    expect(screen.getByRole("menu", { name: "Group options for Family" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("menu", { name: "Contact Group options for Family" }),
+    ).toBeInTheDocument();
 
     await user.click(options);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
@@ -99,9 +97,9 @@ describe("NavEntityList navigation", () => {
     const user = userEvent.setup();
     renderGroups("/group/Family", ["Family"]);
 
-    await user.click(screen.getByRole("button", { name: "Group options for Family" }));
+    await user.click(screen.getByRole("button", { name: "Contact Group options for Family" }));
     await user.click(screen.getByRole("menuitem", { name: "Rename…" }));
-    const input = screen.getByPlaceholderText("Group name");
+    const input = screen.getByPlaceholderText("Contact Group name");
     await user.clear(input);
     await user.type(input, "Fam");
     await user.click(screen.getByRole("button", { name: "Save" }));
@@ -114,7 +112,7 @@ describe("NavEntityList navigation", () => {
     const user = userEvent.setup();
     renderGroups("/group/Family", ["Family"]);
 
-    await user.click(screen.getByRole("button", { name: "Group options for Family" }));
+    await user.click(screen.getByRole("button", { name: "Contact Group options for Family" }));
     await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     await user.click(screen.getByRole("button", { name: "Delete" }));
 
@@ -126,9 +124,9 @@ describe("NavEntityList navigation", () => {
     const user = userEvent.setup();
     renderTags("/tag/Holiday", ["Holiday"]);
 
-    await user.click(screen.getByRole("button", { name: "Tag options for Holiday" }));
+    await user.click(screen.getByRole("button", { name: "Message Tag options for Holiday" }));
     await user.click(screen.getByRole("menuitem", { name: "Rename…" }));
-    const input = screen.getByPlaceholderText("Tag name");
+    const input = screen.getByPlaceholderText("Message Tag name");
     await user.clear(input);
     await user.type(input, "Vacation");
     await user.click(screen.getByRole("button", { name: "Save" }));
@@ -141,7 +139,7 @@ describe("NavEntityList navigation", () => {
     const user = userEvent.setup();
     renderTags("/tag/Holiday", ["Holiday"]);
 
-    await user.click(screen.getByRole("button", { name: "Tag options for Holiday" }));
+    await user.click(screen.getByRole("button", { name: "Message Tag options for Holiday" }));
     await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     await user.click(screen.getByRole("button", { name: "Delete" }));
 
@@ -152,7 +150,7 @@ describe("NavEntityList navigation", () => {
     const user = userEvent.setup();
     renderGroups("/group/Family", ["Family"]);
 
-    await user.click(screen.getByRole("button", { name: "Group options for Family" }));
+    await user.click(screen.getByRole("button", { name: "Contact Group options for Family" }));
     await user.click(screen.getByRole("menuitem", { name: "Delete" }));
 
     const dialog = screen.getByRole("dialog", { name: "Delete Family?" });
@@ -166,7 +164,7 @@ describe("NavEntityList navigation", () => {
     const user = userEvent.setup();
     renderTags("/tag/Holiday", ["Holiday"]);
 
-    await user.click(screen.getByRole("button", { name: "Tag options for Holiday" }));
+    await user.click(screen.getByRole("button", { name: "Message Tag options for Holiday" }));
     await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     expect(screen.getByRole("dialog", { name: "Delete Holiday?" })).toHaveTextContent(
       "Removes the Message Tag Holiday and takes it off every conversation that carries it. The conversations themselves stay in your Message Crate.",
@@ -183,7 +181,7 @@ describe("NavEntityList navigation", () => {
     const user = userEvent.setup();
     renderGroups("/contacts", ["Family"]);
 
-    await user.click(screen.getByRole("button", { name: "Group options for Family" }));
+    await user.click(screen.getByRole("button", { name: "Contact Group options for Family" }));
     await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     await user.click(screen.getByRole("button", { name: "Delete" }));
 
@@ -196,7 +194,7 @@ describe("NavEntityList navigation", () => {
     const user = userEvent.setup();
     renderGroups("/group/Family", ["Family"]);
 
-    await user.click(screen.getByRole("button", { name: "Group options for Family" }));
+    await user.click(screen.getByRole("button", { name: "Contact Group options for Family" }));
     await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     await user.click(screen.getByRole("button", { name: "Delete" }));
 
@@ -222,9 +220,11 @@ describe("NavEntityList navigation", () => {
     const user = userEvent.setup();
     renderGroups("/group/Work%20Friends", ["Work Friends"]);
 
-    await user.click(screen.getByRole("button", { name: "Group options for Work Friends" }));
+    await user.click(
+      screen.getByRole("button", { name: "Contact Group options for Work Friends" }),
+    );
     await user.click(screen.getByRole("menuitem", { name: "Rename…" }));
-    const input = screen.getByPlaceholderText("Group name");
+    const input = screen.getByPlaceholderText("Contact Group name");
     await user.clear(input);
     await user.type(input, "Old Friends");
     await user.click(screen.getByRole("button", { name: "Save" }));

@@ -1,8 +1,12 @@
-import { useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import type { ImportSummaryView } from "../../components/import/ImportSummaryPanel";
+import { useAuth } from "../../lib/auth";
 import type { StagingSummary } from "../../lib/tauri";
-import type { ImportPhase, ImportStep } from "./importProgressState";
+import { type ImportPhase, type ImportStep, stepsFor } from "./importProgressState";
 import type { ImportJobFormValues } from "./useImportJob";
+
+/** A staging folder Message Crate could not delete, and the reason it gave. */
+export type StagingDeleteFailure = { path: string; reason: string };
 
 /**
  * Everything the Import screen shows about the account's one Import Run.
@@ -13,8 +17,16 @@ import type { ImportJobFormValues } from "./useImportJob";
  * the run wherever it has got to (CONTEXT.md, "Import Run"). React state in
  * the screen was lost on every navigation; this store is read by the screen
  * and by the sidebar badge, and written only by `useImportJob`.
+ *
+ * The store is named with the account that started the run, the rule ADR 0002
+ * sets for every cache entry: another account logged in on the same desktop
+ * app reads a fresh form from it, and its actions leave the run alone (#1085).
+ * Nothing has to clear it on logout, and the account that started the run
+ * finds it again when it logs back in.
  */
 export type ImportRunState = {
+  /** The account that started the run; null for the fresh form no one has started. */
+  accountId: number | null;
   phase: ImportPhase;
   /** True while a stage is doing work, or a probe is running before one. */
   running: boolean;
@@ -63,10 +75,18 @@ export type ImportRunState = {
    */
   computingSummary: boolean;
   sourceIdentities: string[] | null;
+  /**
+   * A staging folder Message Crate could not delete, and why: from a
+   * discarded or cancelled run, or the cleanup after a finished one. Shown
+   * until the person dismisses it or a later delete of the folder succeeds,
+   * so a folder of several gigabytes is never left behind unsaid.
+   */
+  stagingDeleteFailure: StagingDeleteFailure | null;
 };
 
 export function initialImportRunState(steps: ImportStep[]): ImportRunState {
   return {
+    accountId: null,
     phase: "form",
     running: false,
     steps,
@@ -83,6 +103,7 @@ export function initialImportRunState(steps: ImportStep[]): ImportRunState {
     reviewError: null,
     computingSummary: false,
     sourceIdentities: null,
+    stagingDeleteFailure: null,
   };
 }
 
@@ -104,7 +125,7 @@ function createImportRunStore(initial: ImportRunState) {
         listeners.delete(listener);
       };
     },
-    /** Back to a fresh form. Tests call it between cases; nothing else does. */
+    /** Back to a fresh form: between tests, and when another account takes the store over. */
     reset: (fresh: ImportRunState): void => {
       state = fresh;
       for (const listener of listeners) listener();
@@ -115,9 +136,25 @@ function createImportRunStore(initial: ImportRunState) {
 /** The one store. There is one Import Run per account, and one account logged in. */
 export const importRunStore = createImportRunStore(initialImportRunState([]));
 
-/** The run as it stands, re-rendering the caller whenever any of it changes. */
+/** The fresh form, as an account that has no run in the store reads it. */
+const FRESH_RUN = initialImportRunState(stepsFor("copy"));
+
+/**
+ * The run in the store when `accountId` started it, and the fresh form when
+ * another account did.
+ */
+export function importRunFor(state: ImportRunState, accountId: number | null): ImportRunState {
+  return state.accountId === accountId ? state : FRESH_RUN;
+}
+
+/**
+ * The logged-in account's run as it stands, re-rendering the caller whenever
+ * any of it changes.
+ */
 export function useImportRunState(): ImportRunState {
-  return useSyncExternalStore(importRunStore.subscribe, importRunStore.get, importRunStore.get);
+  const accountId = useAuth().accountId ?? null;
+  const read = useCallback(() => importRunFor(importRunStore.get(), accountId), [accountId]);
+  return useSyncExternalStore(importRunStore.subscribe, read, read);
 }
 
 /** True at either review: the run is waiting for the person to decide. */

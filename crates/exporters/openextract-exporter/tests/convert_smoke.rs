@@ -342,12 +342,11 @@ fn an_all_conversations_group_is_apart_from_its_senders() {
     assert_eq!(roster(sam), vec!["+15555550122"]);
 }
 
-/// A group's key comes from its rows, not from its file's name or folder.
 /// OpenExtract numbers its files, so `conversation_7.csv` in two exports is
 /// two conversations, and the same file is the same conversation wherever
 /// the export is put.
 #[test]
-fn a_per_chat_groups_key_comes_from_its_rows_not_its_file() {
+fn a_per_chat_groups_key_comes_from_its_rows_and_name_not_its_folder() {
     let group = |text: &str| {
         format!(
             "Date,Sender,Text,Is From Me,Has Attachments\n\
@@ -363,7 +362,7 @@ fn a_per_chat_groups_key_comes_from_its_rows_not_its_file() {
     ]);
     assert_eq!(two_exports.len(), 2);
 
-    let (_, moved) = convert_to_documents(&[("elsewhere/conversation_9.csv", &trip)]);
+    let (_, moved) = convert_to_documents(&[("elsewhere/conversation_7.csv", &trip)]);
     let trip_key = |documents: &std::collections::BTreeMap<String, _>| {
         documents
             .iter()
@@ -376,28 +375,62 @@ fn a_per_chat_groups_key_comes_from_its_rows_not_its_file() {
     assert_eq!(trip_key(&two_exports), trip_key(&moved));
 }
 
-/// One person writing from their number and their Apple ID is one person, so
-/// the conversation stays one-to-one with their number. The message from
-/// the email address keeps that address as its sender.
+/// A number and an email address are two people. They may be one person's
+/// phone and Apple ID, but the export does not say, and taking them for one
+/// would put the second person's messages in the first one's one-to-one
+/// conversation. The email address is an address, typed email.
 #[test]
-fn a_number_and_an_email_of_one_person_are_one_to_one() {
+fn a_number_and_an_email_are_two_people() {
     let (_, documents) = convert_to_documents(&[(
-        "all_conversations.csv",
-        "Date,Conversation,Direction,Sender,Text,Is From Me,Has Attachments\n\
-2020-01-01T17:00:00+00:00,Sam Example,Received,+15555550122,From the phone,False,False\n\
-2020-01-01T17:01:00+00:00,Sam Example,Received,Sam@Example.com,From the Mac,False,False\n\
-2020-01-01T17:02:00+00:00,Sam Example,Received,5555550122,Again,False,False\n",
+        "conversation_3.csv",
+        "Date,Sender,Text,Is From Me,Has Attachments\n\
+2020-01-01T17:00:00+00:00,+15555550122,Hi from Jo,False,False\n\
+2020-01-01T17:01:00+00:00,Pat@Example.com,Hi from Pat,False,False\n\
+2020-01-01T17:02:00+00:00,5555550122,Jo again,False,False\n",
     )]);
-    let keys: Vec<_> = documents.keys().map(String::as_str).collect();
-    assert_eq!(keys, vec!["+15555550122"]);
-    let sam = &documents["+15555550122"];
-    assert_eq!(roster(sam), vec!["+15555550122"]);
+    assert_eq!(documents.len(), 1);
+    let doc = documents.values().next().unwrap();
+    assert!(doc.conversation.chat_identifier.starts_with("group:"));
+    let members: Vec<_> = doc
+        .conversation
+        .participants
+        .iter()
+        .map(|p| (p.handle.as_deref(), p.handle_type))
+        .collect();
     assert_eq!(
-        senders(sam),
+        members,
+        vec![
+            (Some("+15555550122"), Some(message_ir::HandleType::Phone)),
+            (Some("pat@example.com"), Some(message_ir::HandleType::Email)),
+        ]
+    );
+    assert_eq!(
+        senders(doc),
         vec![
             Some("+15555550122"),
-            Some("sam@example.com"),
+            Some("pat@example.com"),
             Some("+15555550122")
         ]
+    );
+}
+
+/// A group's key depends on its own file alone. A file of one sent message
+/// gets the same key imported alone as beside another file with the same
+/// rows, and two such files in one export get two keys.
+#[test]
+fn a_groups_key_does_not_depend_on_the_other_files() {
+    let sent_only = "Date,Sender,Text,Is From Me,Has Attachments\n\
+2020-01-01T00:00:00+00:00,Me,Happy new year,True,False\n";
+    let (_, alone) = convert_to_documents(&[("conversation_1.csv", sent_only)]);
+    let (_, together) = convert_to_documents(&[
+        ("conversation_1.csv", sent_only),
+        ("conversation_2.csv", sent_only),
+    ]);
+    assert_eq!(together.len(), 2);
+    let key = alone.keys().next().unwrap();
+    assert!(
+        together.contains_key(key),
+        "{key} not in {:?}",
+        together.keys()
     );
 }

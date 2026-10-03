@@ -294,6 +294,33 @@ describe("ContactDrawer", () => {
     expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
   });
 
+  // The app's own :focus-visible outline loses to the outline-none utility, so
+  // each close button draws the style guide's ring itself.
+  it("draws the focus ring on the close button and sortable headers of a loaded contact", async () => {
+    seed(detail(6, { name: "Grace", groups: [] }));
+    render(<ContactDrawer variant="docked" contactId="6" preview={null} onClose={() => {}} />);
+    await screen.findByRole("heading", { name: "Grace" });
+    expect(screen.getByRole("button", { name: "Close" }).className).toContain(
+      "focus-visible:ring-2 focus-visible:ring-accent",
+    );
+    const sortable = screen
+      .getAllByRole("columnheader")
+      .filter((header) => header.hasAttribute("aria-sort"));
+    expect(sortable.length).toBeGreaterThan(0);
+    for (const header of sortable) {
+      expect(header.className).toContain("focus-visible:ring-2 focus-visible:ring-accent");
+    }
+  });
+
+  it("draws the focus ring on the close button of a contact that failed to load", async () => {
+    get.mockRejectedValue(new ApiError(404, "No contact with id 26."));
+    render(<ContactDrawer variant="overlay" contactId="26" preview={null} onClose={() => {}} />);
+    await screen.findByRole("alert");
+    expect(screen.getByRole("button", { name: "Close" }).className).toContain(
+      "focus-visible:ring-2 focus-visible:ring-accent",
+    );
+  });
+
   it("stubs one handle row when preview lists raw and normalized forms of the same identity", async () => {
     let resolveDetail!: (d: ContactDetail) => void;
     const pending = new Promise<ContactDetail>((resolve) => {

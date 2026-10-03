@@ -20,8 +20,10 @@ export type { IdentityRow } from "./identityRows";
 // One padding for every cell, so the columns line up under their headers.
 const cellClass = "px-2 py-1.5 align-middle text-[0.813rem] leading-snug text-text";
 const numberCellClass = `${cellClass} whitespace-nowrap text-right tabular-nums`;
+// The focus ring is drawn inside the header: the table's scroll region clips a
+// ring drawn outside it.
 const headerClass =
-  "px-2 py-1.5 text-[0.688rem] font-semibold uppercase tracking-[0.04em] text-muted outline-none cursor-pointer hover:text-accent data-hovered:text-accent whitespace-nowrap";
+  "px-2 py-1.5 text-[0.688rem] font-semibold uppercase tracking-[0.04em] text-muted outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset cursor-pointer hover:text-accent data-hovered:text-accent whitespace-nowrap";
 const mutedClass = "text-muted";
 const linkClass =
   "border-none bg-transparent p-0 text-[0.813rem] font-semibold leading-snug text-accent underline decoration-accent/80 underline-offset-2 cursor-pointer outline-none hover:decoration-accent focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";

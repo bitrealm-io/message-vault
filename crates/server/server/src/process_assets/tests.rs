@@ -502,7 +502,8 @@ pub(crate) async fn attach_stored_blob(
     .unwrap()
 }
 
-/// A database with one account with one PNG attachment on a message of `source`.
+/// A database with one account and one PNG attachment on a message of
+/// `source`.
 async fn fixture_with_png(source: &str) -> (OpenDb, tempfile::TempDir, i64) {
     let (opened, dir) = open_db().await;
     let mut conn = opened.conn().await.unwrap();

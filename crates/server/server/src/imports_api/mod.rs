@@ -60,7 +60,9 @@ pub struct ImportOptions<'a> {
     pub asset_root: &'a Path,
     /// Import mode: replace or append.
     pub mode: ImportMode,
-    /// Fixed source id (HTTP / `--source` override). Ignored when `source_from_jsonl`.
+    /// Fixed source id (HTTP / `--source` override). Ignored when
+    /// `source_from_jsonl`. The source is stamped on each message and does
+    /// not decide where files go: every source shares [`Self::assets_dir`].
     pub source: &'a str,
     /// Account the import writes into.
     pub account_id: i64,

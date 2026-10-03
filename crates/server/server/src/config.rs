@@ -164,7 +164,8 @@ pub struct PathsConfig {
     /// Root for per-account data (`data/<account_id>/…`).
     #[serde(default = "default_data_dir")]
     pub data_dir: PathBuf,
-    /// Directory name for an account's originals, one per account (default `assets`).
+    /// Directory name for an account's originals, one per account (default
+    /// `assets`).
     #[serde(default = "default_assets_dir_name")]
     pub assets_dir: String,
     /// Directory name for an account's converted media, one per account.

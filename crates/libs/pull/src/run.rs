@@ -655,9 +655,9 @@ impl<'a> Pull<'a> {
 ///
 /// The first message to mention a sha256 decides the path it downloads to;
 /// the server stores one blob per fingerprint for the account, whatever the
-/// source, so later mentions are the same file. A later mention under another path goes into
-/// `other_paths`, because staging names a file by date and fingerprint and
-/// one file sent on two days has two paths.
+/// source, so later mentions are the same file. A later mention under
+/// another path goes into `other_paths`, because staging names a file by
+/// date and fingerprint and one file sent on two days has two paths.
 fn note_asset_refs(
     msg: &Message,
     assets: &mut HashMap<String, String>,

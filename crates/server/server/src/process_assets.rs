@@ -89,9 +89,10 @@ impl AssetRow {
 ///
 /// # Errors
 ///
-/// Returns an error when no account is named and the database has none, a query fails, or an
-/// account's asset folders cannot be prepared. A conversion that fails for one
-/// attachment is counted in `errors` and printed, and the run goes on.
+/// Returns an error when no account is named and the database has none, a
+/// query fails, or an account's asset folders cannot be prepared. A
+/// conversion that fails for one attachment is counted in `errors` and
+/// printed, and the run goes on.
 pub async fn run(opened: &OpenDb, opts: &ProcessAssetsOptions) -> Result<ProcessAssetsStats> {
     let cfg = &opened.cfg;
     let mut conn = opened.conn().await?;
@@ -324,7 +325,8 @@ async fn list_account_ids(conn: &mut SqliteConnection, data_dir: &Path) -> Resul
     Ok(ids)
 }
 
-/// One row per stored blob of this account, from every source, with the names that could hint at its media type.
+/// One row per stored blob of this account, from every source, with the
+/// names that could hint at its media type.
 async fn list_attachments(conn: &mut SqliteConnection, account_id: i64) -> Result<Vec<AssetRow>> {
     // One row per stored blob. Several messages, from one source or several,
     // can share a blob under different names, and only one derived file per

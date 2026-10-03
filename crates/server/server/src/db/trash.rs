@@ -266,8 +266,9 @@ pub enum DeleteOutcome {
 /// one source or several — can point at the same file. A file is therefore
 /// reported here only after the delete has run and a lookup for the same
 /// sha256 finds no attachment of the account left, from any source, in the
-/// promoted tables or in staging. Paths are relative to the account's
-/// directory; the caller joins them.
+/// promoted tables or in staging. An original's path is relative to the
+/// account's originals folder (`<assets_dir>`), a Preview's to its Previews
+/// folder (`<assets_converted_dir>`); the caller joins them.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum OrphanedFile {
     /// The original bytes: `assets_path` under the account's assets

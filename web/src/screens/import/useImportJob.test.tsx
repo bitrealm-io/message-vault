@@ -143,7 +143,7 @@ function runResult(result: TauriJobResult) {
  * does this from the job's own event stream, which the mock above otherwise
  * never exercises. Needed to simulate a push that reports a skip.
  */
-function runResultWithIssue(result: TauriJobResult, issue: ImportIssueEvent) {
+function runResultWithIssue(result: TauriJobResult, ...issues: ImportIssueEvent[]) {
   return async (
     fn: () => Promise<unknown>,
     _onLog?: (line: string) => void,
@@ -151,7 +151,7 @@ function runResultWithIssue(result: TauriJobResult, issue: ImportIssueEvent) {
     onIssue?: (event: ImportIssueEvent) => void,
   ) => {
     await fn();
-    onIssue?.(issue);
+    for (const issue of issues) onIssue?.(issue);
     return result;
   };
 }
@@ -893,14 +893,19 @@ describe("useImportJob wiring", () => {
   });
 
   it("keeps a paused Upload's Import Errors in its folder, leaving out what the resume reports again", async () => {
-    const stagingIssue = { kind: "skip", step: "parse", item: "IMG_1.HEIC", reason: "missing" };
-    const attachmentSkip = {
+    const stagingIssue: ImportIssueEvent = {
+      kind: "skip",
+      step: "parse",
+      item: "IMG_1.HEIC",
+      reason: "missing",
+    };
+    const attachmentSkip: ImportIssueEvent = {
       kind: "skip",
       step: "upload",
       item: "a.jsonl:attachments/big.mov",
       reason: "too large",
     };
-    const conversationRow = {
+    const conversationRow: ImportIssueEvent = {
       kind: "error",
       step: "upload",
       item: "b.jsonl",
@@ -908,31 +913,32 @@ describe("useImportJob wiring", () => {
     };
     runMock.mockReset();
     runMock.mockImplementationOnce(runResultWithIssue(EXTRACT_RESULT, stagingIssue));
-    runMock.mockImplementationOnce(async (fn, _onLog, _onProgress, onIssue) => {
-      await fn();
-      onIssue?.(attachmentSkip);
-      onIssue?.(conversationRow);
-      return {
-        summary: "Push finished.",
-        report: okReport({
-          ok: false,
-          conversations_total: 2,
-          conversations_ok: 1,
-          conversations_failed: 1,
-          assets_bytes: 4_096,
-          results: [
-            { file: "a.jsonl", status: "ok", messages: 5, attachments: 1 },
-            {
-              file: "b.jsonl",
-              status: "failed",
-              error: "connection refused",
-              messages: 0,
-              attachments: 0,
-            },
-          ],
-        }),
-      };
-    });
+    runMock.mockImplementationOnce(
+      runResultWithIssue(
+        {
+          summary: "Push finished.",
+          report: okReport({
+            ok: false,
+            conversations_total: 2,
+            conversations_ok: 1,
+            conversations_failed: 1,
+            assets_bytes: 4_096,
+            results: [
+              { file: "a.jsonl", status: "ok", messages: 5, attachments: 1 },
+              {
+                file: "b.jsonl",
+                status: "failed",
+                error: "connection refused",
+                messages: 0,
+                attachments: 0,
+              },
+            ],
+          }),
+        },
+        attachmentSkip,
+        conversationRow,
+      ),
+    );
     const { result } = renderHook(() => useImportJob());
     await act(() => result.current.startImport(form({ attachmentMedia: "copy" })));
     await act(() => result.current.approve());
@@ -950,7 +956,7 @@ describe("useImportJob wiring", () => {
   });
 
   it("keeps the Staging issues in the folder when the run stops at the Staging Review", async () => {
-    const stagingIssue = {
+    const stagingIssue: ImportIssueEvent = {
       kind: "error",
       step: "attachments",
       item: "IMG_2.HEIC",
@@ -2013,28 +2019,29 @@ describe("useImportJob resume path", () => {
   });
 
   it("finishes a resumed Upload clean when the only rows are for conversations an earlier part sent", async () => {
-    const alreadySent = {
+    const alreadySent: ImportIssueEvent = {
       kind: "skip",
       step: "upload",
       item: "a.jsonl",
       reason: "already imported or skipped",
     };
-    runMock.mockImplementation(async (fn, _onLog, _onProgress, onIssue) => {
-      await fn();
-      onIssue?.(alreadySent);
-      return {
-        summary: "Push finished.",
-        report: okReport({
-          conversations_total: 2,
-          conversations_ok: 1,
-          conversations_skipped: 1,
-          results: [
-            { file: "a.jsonl", status: "skipped", messages: 0, attachments: 0 },
-            { file: "b.jsonl", status: "ok", messages: 10, attachments: 0 },
-          ],
-        }),
-      };
-    });
+    runMock.mockImplementation(
+      runResultWithIssue(
+        {
+          summary: "Push finished.",
+          report: okReport({
+            conversations_total: 2,
+            conversations_ok: 1,
+            conversations_skipped: 1,
+            results: [
+              { file: "a.jsonl", status: "skipped", messages: 0, attachments: 0 },
+              { file: "b.jsonl", status: "ok", messages: 10, attachments: 0 },
+            ],
+          }),
+        },
+        alreadySent,
+      ),
+    );
     const { result } = renderHook(() => useImportJob());
     await act(async () => {
       await result.current.startImport(baseForm, {

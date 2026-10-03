@@ -358,17 +358,10 @@ fn delete_staging_dir(staging_root: &str, staging_dir: &str) -> Result<(), Strin
 /// push journal, and reads it back when the run resumes, so the completion
 /// it finally posts covers the whole run. The leading dot keeps it out of
 /// every listing of conversation files, and it is deleted with the folder.
-pub const RUN_RECORD_NAME: &str = ".import-run.json";
-
-/// Arguments for [`read_import_run_record`].
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ReadRunRecordArgs {
-    /// Staging folder of the Import Run.
-    pub staging_dir: String,
-    /// Staging Directory root the folder must live under.
-    pub staging_root: String,
-}
+/// It has no `.json` extension, for the reason the media settings file has
+/// none (`message_staging::MEDIA_SETTINGS_FILE`): a fresh export into the
+/// folder would delete it as an earlier run's output.
+pub const RUN_RECORD_NAME: &str = ".message-crate-run";
 
 /// Arguments for [`save_import_run_record`].
 #[derive(Debug, serde::Deserialize)]
@@ -392,9 +385,7 @@ pub struct SaveRunRecordArgs {
 /// Returns an error when the folder fails the staging-child guard, or the
 /// record cannot be read or is not JSON.
 #[tauri::command(async)]
-pub fn read_import_run_record(
-    args: ReadRunRecordArgs,
-) -> Result<Option<serde_json::Value>, String> {
+pub fn read_import_run_record(args: StagingArgs) -> Result<Option<serde_json::Value>, String> {
     read_run_record(&args.staging_root, &args.staging_dir)
 }
 

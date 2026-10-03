@@ -1,12 +1,12 @@
 //! What every test that runs the real `imessage-reader` shares: the build
 //! of the program and the exporter's config for the `chat.db` fixture.
 //!
-//! The build is a no-op once the program is built. The exporter finds the
-//! program in `target/<profile>/` because a test binary runs from
-//! `target/<profile>/deps/`. The build is sent to the same target directory
-//! the test binary came from, so a run under another one (cargo-llvm-cov
-//! uses `target/llvm-cov-target/`) still puts the program where the
-//! exporter looks.
+//! The build is a no-op once the program is built. A test binary runs from
+//! `target/<profile>/deps/`, not beside the program, so the build names the
+//! program through `MESSAGE_CRATE_IMESSAGE_READER`. The build is sent to the
+//! same target directory the test binary came from, so a run under another
+//! one (cargo-llvm-cov uses `target/llvm-cov-target/`) uses the program
+//! built for it.
 
 use std::{
     path::{Path, PathBuf},
@@ -18,7 +18,9 @@ use message_crate_core::{
     AppleConfig, ApplePlatform, ExporterConfig, MediaConfig, OutputFormat, SourceConfig,
 };
 
-/// Build `imessage-reader` once per test binary and return its path.
+/// Build `imessage-reader` once per test binary, name it in
+/// `MESSAGE_CRATE_IMESSAGE_READER` for the exporter, and return its path.
+/// Every test calls this before it runs the exporter.
 pub fn helper_binary() -> &'static Path {
     static PATH: OnceLock<PathBuf> = OnceLock::new();
     PATH.get_or_init(|| {
@@ -46,13 +48,20 @@ pub fn helper_binary() -> &'static Path {
             "cargo build -p imessage-reader failed: {}",
             String::from_utf8_lossy(&output.stderr)
         );
-        String::from_utf8_lossy(&output.stdout)
+        let program = String::from_utf8_lossy(&output.stdout)
             .lines()
             .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
             .filter(|message| message["reason"] == "compiler-artifact")
             .filter(|message| message["target"]["name"] == "imessage-reader")
             .find_map(|message| message["executable"].as_str().map(PathBuf::from))
-            .expect("cargo reported the imessage-reader executable")
+            .expect("cargo reported the imessage-reader executable");
+        // SAFETY: every test calls `helper_binary` first, and the others wait
+        // on this `OnceLock` while it runs, so no test thread reads the
+        // environment until the variable is set.
+        unsafe {
+            std::env::set_var("MESSAGE_CRATE_IMESSAGE_READER", &program);
+        }
+        program
     })
 }
 

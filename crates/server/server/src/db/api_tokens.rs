@@ -31,26 +31,21 @@ pub struct ApiTokenRow {
 pub const DEFAULT_API_TOKEN_TTL_SECS: u64 = 365 * 24 * 60 * 60;
 
 const API_TOKEN_PREFIX: &str = "mc-api-";
-const LEGACY_APP_PASSWORD_PREFIX: &str = "mc-app-";
 const HINT_HEAD: usize = 2;
 const HINT_TAIL: usize = 2;
 
-/// Mask a plaintext API token for list display (keeps `mc-api-` or legacy `mc-app-` + ends).
+/// Mask a plaintext API token for list display (keeps `mc-api-` and the ends).
 /// Format: `mc-api-xx..yy`.
 pub fn mask_api_token(token: &str) -> String {
-    let (prefix, secret) = if let Some(s) = token.strip_prefix(API_TOKEN_PREFIX) {
-        (API_TOKEN_PREFIX, s)
-    } else if let Some(s) = token.strip_prefix(LEGACY_APP_PASSWORD_PREFIX) {
-        (LEGACY_APP_PASSWORD_PREFIX, s)
-    } else {
+    let Some(secret) = token.strip_prefix(API_TOKEN_PREFIX) else {
         return format!("{API_TOKEN_PREFIX}..");
     };
     if secret.len() < HINT_HEAD + HINT_TAIL {
-        return format!("{prefix}..");
+        return format!("{API_TOKEN_PREFIX}..");
     }
     let head = &secret[..HINT_HEAD];
     let tail = &secret[secret.len() - HINT_TAIL..];
-    format!("{prefix}{head}..{tail}")
+    format!("{API_TOKEN_PREFIX}{head}..{tail}")
 }
 
 /// Account + permissions for a presented API token Bearer value.
@@ -404,10 +399,6 @@ mod tests {
         assert_eq!(
             mask_api_token("mc-api-Sd1abcdefghijklmnopqrsmtuvwxyZmE"),
             "mc-api-Sd..mE"
-        );
-        assert_eq!(
-            mask_api_token("mc-app-Sd1abcdefghijklmnopqrsmtuvwxyZmE"),
-            "mc-app-Sd..mE"
         );
 
         let listed = list_api_tokens(&mut conn, account_id).await.unwrap();

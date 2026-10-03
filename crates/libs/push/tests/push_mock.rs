@@ -375,7 +375,6 @@ fn aggregates_multiple_conversations_into_one_import_request() {
 
     assert!(report.ok);
     assert_eq!(report.conversations_ok, 2);
-    assert_eq!(report.messages, 2);
     assert_eq!(report.messages_attempted, 2);
     assert_eq!(report.messages_inserted, 1);
     assert_eq!(report.messages_deduped, 1);
@@ -650,7 +649,7 @@ fn resumes_message_batches_from_compacted_journal() {
     let resumed = run(&cfg, None).unwrap();
     assert!(resumed.ok);
     assert_eq!(resumed.conversations_ok, 1);
-    assert_eq!(resumed.messages, 0);
+    assert_eq!(resumed.messages_attempted, 0);
     assert_eq!(import.calls(), 1);
 }
 
@@ -1747,7 +1746,7 @@ fn keeps_conversation_ok_when_skipped_attachment_has_no_path() {
     let import = server.mock(|when, then| {
         when.method(POST)
             .path("/v1/imports/7/batches")
-            .body_includes(r#""missing_reason":"skipped""#)
+            .body_includes(r#""missing_reason":"not_copied""#)
             .body_includes("IMG_0421.HEIC")
             .body_includes("image/heic");
         then.status(200).json_body(json!({
@@ -1767,7 +1766,7 @@ fn keeps_conversation_ok_when_skipped_attachment_has_no_path() {
         transcription: None,
         sticker_effect: None,
         size_bytes: Some(2048),
-        missing_reason: Some("skipped".into()),
+        missing_reason: Some("not_copied".into()),
         bytes: None,
     }];
     write_jsonl(dir.path(), &doc);

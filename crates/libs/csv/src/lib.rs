@@ -59,22 +59,13 @@ pub struct ParticipantCell {
     /// Display name; empty string when unknown.
     #[serde(default)]
     pub display_name: String,
-    /// Absent (legacy cells) → `Some(HandleType::Other)`; explicit `null` →
-    /// `None`; any other string is parsed leniently via
-    /// [`message_ir::HandleType::parse`].
-    #[serde(
-        default = "default_participant_handle_type",
-        deserialize_with = "deserialize_handle_type"
-    )]
+    /// Explicit `null` → `None`; any string is parsed leniently via
+    /// [`message_ir::HandleType::parse`]. The writer always writes the field.
+    #[serde(deserialize_with = "deserialize_handle_type")]
     pub handle_type: Option<message_ir::HandleType>,
 }
 
-/// serde default for a participant cell's handle type: `Other`.
-fn default_participant_handle_type() -> Option<message_ir::HandleType> {
-    Some(message_ir::HandleType::Other)
-}
-
-/// Parse a handle type cell, accepting a missing cell.
+/// Parse a handle type cell, accepting `null`.
 fn deserialize_handle_type<'de, D>(de: D) -> Result<Option<message_ir::HandleType>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -184,14 +175,6 @@ mod tests {
         serde_json::from_str::<ParticipantCell>(json)
             .unwrap()
             .handle_type
-    }
-
-    #[test]
-    fn a_participant_cell_without_a_handle_type_is_other() {
-        assert_eq!(
-            handle_type_of(r#"{"handle": "+15555550101"}"#),
-            Some(HandleType::Other)
-        );
     }
 
     #[test]

@@ -107,7 +107,6 @@ fn command_runs(bin: &Path, args: &[&str]) -> bool {
 
 /// Resolve `ffmpeg` / `ffprobe`: tools-dir override, then beside the running
 /// executable, `lib/` under its directory, `lib/` under its parent directory,
-/// the parent directory itself (legacy flat-root archives),
 /// `MESSAGE_CRATE_BIN`, then PATH.
 fn resolve_tool(name: &str) -> Option<PathBuf> {
     if !matches!(name, "ffmpeg" | "ffprobe") {
@@ -203,10 +202,6 @@ fn find_tool_with_override(name: &str, override_dir: Option<&Path>) -> Option<Pa
             dir.join("lib").join(&executable),
             dir.parent()
                 .map(|p| p.join("lib").join(&executable))
-                .unwrap_or_default(),
-            // Legacy flat-root archives.
-            dir.parent()
-                .map(|p| p.join(&executable))
                 .unwrap_or_default(),
         ];
         for candidate in candidates {

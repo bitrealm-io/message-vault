@@ -1,13 +1,8 @@
-/** Show a stored API Token hint as `mc-api-xx..yy`, including older starred forms. */
 import { formatUnixDate } from "../../lib/formatDate";
 
+/** Show a stored API Token hint, which the server writes as `mc-api-xx..yy`. */
 export function displayTokenHint(hint: string | null | undefined): string {
-  const raw = (hint ?? "").trim();
-  if (!raw) return "mc-api-..";
-  if (/^(mc-api-|mc-app-).{2}\.\..{2}$/.test(raw)) return raw;
-  const stars = raw.match(/^(mc-api-|mc-app-)(.{2}).*\*{2,}(.{2})$/);
-  if (stars) return `${stars[1]}${stars[2]}..${stars[3]}`;
-  return raw;
+  return hint?.trim() || "mc-api-..";
 }
 
 /** Date a token was created, was last used, or expires: "Never" when there is none. */

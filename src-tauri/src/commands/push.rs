@@ -41,7 +41,6 @@ fn finished_push_events(
         ),
         "ok": report.ok,
         "cancelled": report.cancelled,
-        "messages": report.messages,
         "messages_attempted": report.messages_attempted,
         "messages_inserted": report.messages_inserted,
         "messages_deduped": report.messages_deduped,
@@ -368,7 +367,6 @@ mod tests {
             messages_inserted: 42,
             messages_deduped: 2,
             messages_failed: 1,
-            messages: 42,
             assets_uploaded: 4,
             assets_skipped: 1,
             assets_bytes: 12_345,
@@ -387,7 +385,7 @@ mod tests {
         assert_eq!(progress.step, "upload");
         assert_eq!(progress.done, 3);
         assert_eq!(progress.total, 3);
-        assert_eq!(summary["messages"], 42);
+        assert!(summary.get("messages").is_none());
         assert_eq!(summary["messages_attempted"], 45);
         assert_eq!(summary["messages_inserted"], 42);
         assert_eq!(summary["messages_deduped"], 2);

@@ -193,8 +193,6 @@ export interface PushFinishedReport {
   ok: boolean;
   /** The cancel flag stopped the push: a pause the run resumes from, not a failure. */
   cancelled: boolean;
-  /** Older field: messages counted in successful HTTP requests. */
-  messages: number;
   messages_attempted: number;
   messages_inserted: number;
   messages_deduped: number;
@@ -467,7 +465,6 @@ function isPushFinishedReport(value: unknown): value is PushFinishedReport {
   return (
     typeof value.ok === "boolean" &&
     typeof value.cancelled === "boolean" &&
-    typeof value.messages === "number" &&
     typeof value.messages_attempted === "number" &&
     typeof value.messages_inserted === "number" &&
     typeof value.messages_deduped === "number" &&

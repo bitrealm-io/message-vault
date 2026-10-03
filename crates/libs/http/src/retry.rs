@@ -5,6 +5,7 @@ use std::thread;
 use std::time::Duration;
 
 use anyhow::Result;
+use message_crate_api_types::Problem;
 
 use crate::AuthError;
 
@@ -21,12 +22,15 @@ pub enum RetryKind {
 /// An HTTP-status failure with its human-readable message.
 ///
 /// `Display` prints only the message, so error text stays exactly what the
-/// call site wrote; the status travels typed for [`classify_retry`].
+/// call site wrote; the status travels typed for [`classify_retry`], and the
+/// server's problem document, when the body was one, travels for a caller
+/// that reads one of its members.
 #[derive(Debug, thiserror::Error)]
 #[error("{message}")]
 pub struct HttpError {
     status: u16,
     message: String,
+    problem: Option<Box<Problem>>,
 }
 
 impl HttpError {
@@ -35,7 +39,21 @@ impl HttpError {
         Self {
             status,
             message: message.into(),
+            problem: None,
         }
+    }
+
+    /// Keep the problem document the server answered with.
+    #[must_use]
+    pub fn with_problem(mut self, problem: Problem) -> Self {
+        self.problem = Some(Box::new(problem));
+        self
+    }
+
+    /// The problem document the server answered with, when the body was one.
+    #[must_use]
+    pub fn problem(&self) -> Option<&Problem> {
+        self.problem.as_deref()
     }
 }
 

@@ -235,6 +235,9 @@ export default function ConversationList({
             onChange={(next) => {
               setSortState(next);
               saveConversationSort(next);
+              // The ticks belong to the list they were made on: a new sort reads
+              // its rows again, and an action must not reach only the ones loaded.
+              setCheckedIds(new Set());
             }}
           />
         }

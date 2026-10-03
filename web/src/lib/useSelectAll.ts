@@ -24,6 +24,13 @@ export function useSelectAll<T>(
   const [failure, setFailure] = useState<{ scope: string; message: string } | null>(null);
 
   const selecting = selectingFor === scopeKey;
+  // A failure is for the list as it was: leaving it clears the message, so
+  // coming back to the same search does not show it again.
+  const [failureScope, setFailureScope] = useState(scopeKey);
+  if (failureScope !== scopeKey) {
+    setFailureScope(scopeKey);
+    if (failure) setFailure(null);
+  }
 
   const selectAll = async () => {
     if (selecting) return;

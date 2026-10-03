@@ -207,6 +207,23 @@ describe("ConversationList", () => {
       );
     });
 
+    it("clears the ticks when the sort changes, so no action reaches part of them", async () => {
+      serveConversations(1200);
+      renderList();
+      const user = userEvent.setup({ delay: null });
+      await screen.findByRole("checkbox", { name: "Select Chat 1" });
+      const box = screen.getByRole("checkbox", { name: "Select all conversations" });
+      await user.click(box);
+      await waitFor(() => expect(box).toBeChecked());
+
+      await user.click(screen.getByRole("button", { name: /^Sort conversations by/ }));
+      await user.click(screen.getByRole("menuitemradio", { name: "Messages" }));
+
+      await waitFor(() => expect(box).not.toBeChecked());
+      expect(box).not.toBePartiallyChecked();
+      expect(screen.getByRole("checkbox", { name: "Select Chat 1" })).not.toBeChecked();
+    });
+
     it("keeps every conversation selected when the list reloads after an action", async () => {
       serveConversations(1200);
       vi.mocked(updateMessageTagMembers).mockResolvedValue({ added: 1200, removed: 0 });

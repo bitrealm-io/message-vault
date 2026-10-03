@@ -22,7 +22,7 @@ Opening it shows a message in place of the form, and nothing is read from a back
 | Account | What the screen says |
 |---|---|
 | An account with **Import** off | The Owner has not allowed this account to import. The Owner turns it on under **Message Permissions**. |
-| The Demo Account with **Import** off | Importing needs a personal account. **Log out** goes to the login card. |
+| The Demo Account, which can never import | Importing needs a personal account. **Log out** goes to the login card. |
 
 An Import Run already in progress when the Owner turns **Import** off stays on screen until it ends.
 A notice above the run says the Owner has turned Import off.

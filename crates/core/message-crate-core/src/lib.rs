@@ -29,8 +29,10 @@ pub use exporters::{
     ApplePlatform, AttachmentMedia, CONVERT_COMPRESS_FFMPEG_REQUIRED, Exporter, Form,
     WhatsappPlatform, ensure_output_dir,
 };
+/// Filename-safe stem of a name; it lives with [`message_ir::ConversationKey`].
+pub use message_ir::name_stem;
 pub use pipeline::{
-    ExportReport, RunIssue, RunResult, discover_files, export_meta, name_stem, prepare_outputs,
+    ExportReport, RunIssue, RunResult, discover_files, export_meta, prepare_outputs,
     project_conversation, prune_and_finish_conversation,
 };
 pub use process::{

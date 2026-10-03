@@ -273,23 +273,6 @@ pub fn project_conversation<H: ProjectionHooks + ?Sized>(
     Some(doc)
 }
 
-/// Filesystem-safe stem from a display name or handle (alnum / `-` / `_` / `+`).
-pub fn name_stem(value: &str) -> String {
-    let mut raw = String::with_capacity(value.len());
-    for c in value.chars() {
-        if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '+' {
-            raw.push(c);
-        } else {
-            raw.push('_');
-        }
-    }
-    if raw.is_empty() || raw.chars().all(|c| c == '_') {
-        "unknown".to_string()
-    } else {
-        raw
-    }
-}
-
 /// Create and canonicalize the output directory, canonicalize every input,
 /// and bail when the output is the same as, or contains, an input.
 ///
@@ -364,14 +347,6 @@ pub fn export_meta(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn name_stem_sanitizes() {
-        assert_eq!(name_stem("Alice Bob"), "Alice_Bob");
-        assert_eq!(name_stem("+15555550100"), "+15555550100");
-        assert_eq!(name_stem("!!!"), "unknown");
-        assert_eq!(name_stem(""), "unknown");
-    }
 
     #[test]
     fn discover_files_walks_and_filters() {

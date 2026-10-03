@@ -44,24 +44,44 @@ Discovery walks the selected path recursively without following directory symbol
 
 ## Chat identity and participants
 
-### Individual chats
+Each chat session has a `message_ir::ConversationKey`: a one-to-one chat with an address, a group, or a one-to-one chat known by a name only.
+The key's chat id is the conversation's `chat_identifier`.
+The rows of one session in one CSV are one conversation.
 
-Prefer `Sender ID` phones/emails; else normalize a phone-like `Chat Session`; else a sanitized
-name stem (reported as unresolved). The name stays on the conversation, and the server matches it
-to a contact by that name on import.
+### Group or one-to-one
 
-### Messages groups
+A Messages session named as a roster (`Name A & Name B`) is a group, even when one member wrote.
+Any session in which two or more people wrote is a group.
+The rows decide who is one person: a row's `Sender ID` and `Sender Name` belong to one person, so two addresses under one `Sender Name` are one person.
+One contact writing from a number and an email address, or from two numbers, is a one-to-one chat.
 
-`Chat Session` often encodes a roster as `Name A & Name B & Name C`.
+### One-to-one chats
 
-1. Collect phones/emails from sender rows and `+digits` in the session string.
-2. Split roster labels on ` & `.
-3. Resolve a name-only label through the rows: a row whose `Sender Name` matches the label gives its `Sender ID`. A label no row matches is counted as unresolved.
-4. Group `chat_identifier` = sorted, comma-joined resolved handles when any exist.
+The chat's address is the number in `Chat Session`, a `Chat Session` that is itself an address, or the address of the earliest received row that has one.
+Without any of these, the chat is known by its name: its `chat_identifier` is a name stem, it is counted as `name_only_chat`, and the server matches the name to a contact on import.
+A received row with no `Sender ID` is from the chat's number or short code.
 
-### WhatsApp groups
+### Groups
 
-`Chat Session` is a **title**, not a roster. Participants are inferred only from distinct senders.
+iMazing gives a group no id, and nothing it names is a usable key.
+A session name repeats across different groups, and it changes when a contact is renamed or a member joins or leaves.
+The folder name carries the time of the latest message, the file name carries the export's own time, and both cut the label at 40 characters.
+
+A group's `chat_identifier` is `group:` and the SHA-256 of its earliest row: `Message Date` as written, `Type`, `Sender ID`, `Text` and `Attachment`.
+Where rows share the earliest time, the smallest of them is taken, so the order of the rows does not change the key.
+The key does not change when someone new writes, and it never equals a person's address.
+Its limit is in [input format](/docs/developer/formats/imazing/input/#source-limitations).
+
+A group's members are data on the conversation, never read back out of its `chat_identifier`:
+
+1. Every address that sent a row, with its `Sender Name`.
+2. Every `+digits` number in the session name.
+3. For a Messages roster, every label split on ` & `. A label that is an address is that address. A name-only label resolves through the rows: a row whose `Sender Name` matches the label gives its `Sender ID`.
+4. A label no row matches is a member who never wrote. The export holds no address for them, so the member's identity is of type `other` and holds the name. Each is counted as `unresolved_group_participants`.
+
+A group message's sender comes only from its row. A received row with no `Sender ID` has no sender.
+
+WhatsApp `Chat Session` is a **title**, not a roster, so a WhatsApp group's members are the people who wrote.
 Non-senders are invisible in the CSV.
 
 ## Validation matrix
@@ -70,6 +90,7 @@ Non-senders are invisible in the CSV.
 |------|---------|--------|--------|
 | 2026-07-19 | 3.5.5 | Full device export (Messages + WhatsApp + Contacts) | Headers/layout confirmed; silent-roster limitation quantified on Messages groups; WhatsApp schema differs as above |
 | 2026-07-19 | 3.5.5 | Synthetic fixtures in `tests/fixtures/` | Recursive discovery, service separation, silent-member contact recovery |
+| 2026-10-02 | 3.5.5 | Full device export, read only (681 Messages and 66 WhatsApp conversations) | One CSV per conversation; five pairs of different groups share a session name; the earliest-row group key has no collision among the 747 conversations |
 
 ## Future work (not yet implemented)
 

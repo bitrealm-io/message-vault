@@ -89,5 +89,5 @@ These limitations come from the exported files. The importer cannot recover info
 8. Contacts can omit phone columns and retain a phone only in `Notes`.
 9. Replies and reactions are free text instead of structured records. Observed reaction timestamps use the US `M/D/YYYY` format.
 10. Edited and deleted details are limited to rare columns and statuses such as `Recently deleted`.
-11. Group conversations have no stable group identifier.
+11. Group conversations have no stable group identifier. A group's key is made from its earliest message instead (see [design](/docs/developer/formats/imazing/design/#groups)). The key changes when the oldest messages are gone from the phone, for instance under **Keep Messages: 1 year**, or when an export covers only a date range. The group then comes in as a second conversation beside the first, with a second copy of the messages both exports hold. Two groups are never merged. Only one iMazing export has been measured, so the behaviour across two exports is reasoned, not observed.
 12. `Sender ID` can contain an email address for an iMessage conversation.

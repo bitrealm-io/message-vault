@@ -140,14 +140,19 @@ async fn a_stage_answers_by_the_words_of_context_md_only() {
     .await;
     let path = format!("/v1/imports/{}", created["id"]);
 
-    let (status, sentence) = crate::test_support::patch_failure(
+    let (status, text) = crate::test_support::patch_raw(
         &fixture.state,
         &path,
         &account.token,
         serde_json::json!({"stage": "awaiting_gate_1"}),
     )
     .await;
-    assert_eq!(status, axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+    let sentence = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    )
+    .sentence();
     assert!(
         sentence
             .contains("expected one of parse, write, staging_review, media, media_review, upload"),
@@ -183,14 +188,19 @@ async fn an_issue_names_the_stage_it_came_from() {
     };
 
     // A finer step of the desktop app is not a Stage.
-    let refused = crate::test_support::post_status(
+    let (status, text) = crate::test_support::post_raw(
         &fixture.state,
         &format!("/v1/imports/{id}/complete"),
         &account.token,
-        issue("parse"),
+        "application/json",
+        issue("parse").to_string(),
     )
     .await;
-    assert_eq!(refused, axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
 
     let _: serde_json::Value = post_json(
         &fixture.state,

@@ -3060,6 +3060,158 @@ async fn a_long_comma_list_is_refused_as_too_many_parts() {
     assert_eq!(body["detail"], "The search has too many parts.", "{body}");
 }
 
+// --- #1105: an identity in a conversation never leaves its contact for no
+// contact ---
+
+/// A one-to-one conversation with Ada at +15555550123, imported into
+/// `account`, and Ada's contact id.
+async fn ada_in_a_conversation(conn: &mut sqlx::SqliteConnection, account: i64) -> i64 {
+    crate::test_support::import_jsonl_text(
+        conn,
+        account,
+        "imessage",
+        r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550123","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550123","display_name":"Ada"}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}
+{"guid":"g-ada-1105","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550123","sender_display_name":null,"subject":null,"text":"hi","attachments":[],"imessage":null,"source":null}
+"#,
+    )
+    .await;
+    sqlx::query_scalar("SELECT id FROM contacts WHERE account_id = $1 AND preferred_name = 'Ada'")
+        .bind(account)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap()
+}
+
+/// The name of the contact `raw` is on.
+async fn holder_name(conn: &mut sqlx::SqliteConnection, raw: &str) -> Vec<String> {
+    sqlx::query_scalar(
+        "SELECT ct.preferred_name FROM handles h
+         JOIN contact_handles ch ON ch.handle_id = h.id
+         JOIN contacts ct ON ct.id = ch.contact_id
+         WHERE h.raw = $1",
+    )
+    .bind(raw)
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn removing_an_identity_in_a_conversation_puts_it_on_a_new_unknown_contact() {
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
+    let ada = ada_in_a_conversation(&mut conn, account).await;
+
+    mutate_committed(
+        &mut conn,
+        account,
+        ada,
+        &UpdateContactRequest {
+            name: None,
+            add_identity: None,
+            update_identity: None,
+            remove_identity: Some(RemoveContactIdentityRequest {
+                address: "+15555550123".into(),
+                service: None,
+            }),
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        holder_name(&mut conn, "+15555550123").await,
+        [String::new()]
+    );
+    crate::test_support::assert_every_person_is_on_a_contact(&mut conn, "remove_identity").await;
+}
+
+#[tokio::test]
+async fn replacing_an_identity_in_a_conversation_puts_the_old_one_on_a_new_unknown_contact() {
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
+    let ada = ada_in_a_conversation(&mut conn, account).await;
+
+    mutate_committed(
+        &mut conn,
+        account,
+        ada,
+        &UpdateContactRequest {
+            name: None,
+            add_identity: None,
+            update_identity: Some(UpdateContactIdentityRequest {
+                previous_address: "+15555550123".into(),
+                address: "+15555550199".into(),
+                service: None,
+            }),
+            remove_identity: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(holder_name(&mut conn, "+15555550199").await, ["Ada"]);
+    assert_eq!(
+        holder_name(&mut conn, "+15555550123").await,
+        [String::new()]
+    );
+    crate::test_support::assert_every_person_is_on_a_contact(&mut conn, "update_identity").await;
+}
+
+/// Two contacts that are one person are joined by removing an identity from
+/// one and adding it to the other. The removed identity, which a
+/// conversation uses, waits on a new contact with no name, and adding it to
+/// the other contact takes it from there and leaves no empty contact behind.
+#[tokio::test]
+async fn an_identity_removed_from_one_contact_can_be_added_to_another() {
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
+    let ada = ada_in_a_conversation(&mut conn, account).await;
+    let lovelace: i64 = sqlx::query_scalar(
+        "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Ada Lovelace') RETURNING id",
+    )
+    .bind(account)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    let edit = |remove: bool| UpdateContactRequest {
+        name: None,
+        add_identity: (!remove).then(|| AddContactIdentityRequest {
+            address: "+15555550123".into(),
+            service: None,
+        }),
+        update_identity: None,
+        remove_identity: remove.then(|| RemoveContactIdentityRequest {
+            address: "+15555550123".into(),
+            service: None,
+        }),
+    };
+
+    mutate_committed(&mut conn, account, ada, &edit(true))
+        .await
+        .unwrap();
+    mutate_committed(&mut conn, account, lovelace, &edit(false))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        holder_name(&mut conn, "+15555550123").await,
+        ["Ada Lovelace"]
+    );
+    let nameless: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM contacts WHERE account_id = $1 AND trim(preferred_name) = ''",
+    )
+    .bind(account)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(nameless, 0, "the contact the identity waited on is gone");
+    crate::test_support::assert_every_person_is_on_a_contact(&mut conn, "a move by hand").await;
+}
+
 /// [`mutate_contact`] in a write transaction of its own, committed when the
 /// edit succeeds, as `update_contact` runs it.
 async fn mutate_committed(

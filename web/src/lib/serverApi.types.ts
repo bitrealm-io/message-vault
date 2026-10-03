@@ -2279,6 +2279,14 @@ export interface components {
             mode: components["schemas"]["ImportMode"];
             /**
              * Format: int64
+             * @description Identities of type `other` this import met for people: a name the
+             *     backup gave with no address, or a sender such as `AMAZON`. Each one is
+             *     a person the exporter could not tie to an address, so a count above
+             *     zero says the import is incomplete.
+             */
+            other_identities: number;
+            /**
+             * Format: int64
              * @description Participant rows imported.
              */
             participants: number;

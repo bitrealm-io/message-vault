@@ -178,6 +178,12 @@ to decide which messages are the holder's own rather than someone else's. A
 backup's owner address becomes an account identity only when the person adds it;
 an import never adds one.
 
+A person a backup names with no address has an identity of type `other`
+whose value is the name, one for each service. It is a sign the import was
+incomplete, and a contact whose only identities are of that type is Unknown.
+Every identity a conversation or a message uses is on a contact; one taken
+off its contact goes to a new contact with no name.
+
 Handle is the word in the code and the database for the same thing.
 _Avoid_: Handle, Address, Number
 
@@ -185,7 +191,10 @@ _Avoid_: Handle, Address, Number
 Another person in a Conversation, as the account holder sees it. The account
 holder is never a participant: every conversation in an account is the holder's
 own, so Message Crate knows they are in it without listing them. Which of the
-holder's identities a message used is recorded on the message. A conversation
+holder's identities a message used is recorded on the message. Every
+participant has exactly one identity, an identity of type `other` holding the
+name when the backup named the person with no address, and the participant's
+contact is the one that identity is on. A conversation
 the holder has with themselves, notes sent to their own address, therefore has
 no participants and makes no contact; it goes by the account's display name.
 _Avoid_: Member, Recipient
@@ -211,7 +220,8 @@ _Avoid_: First seen, First active, First message
 
 **Unknown**:
 The Contact Group Message Crate computes from contacts that have no name or no
-identity. It has no members of its own and empties as a person names people.
+address. An identity of type `other` holds a name, not an address, so a
+contact whose only identities are of that type is Unknown. It has no members of its own and empties as a person names people.
 _Avoid_: Unnamed, Unresolved, Uncategorised
 
 **Trash**:

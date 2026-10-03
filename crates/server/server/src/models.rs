@@ -41,12 +41,12 @@ pub struct ConversationRecord {
 /// One participant of an imported conversation.
 #[derive(Debug, Clone)]
 pub struct ParticipantRecord {
-    /// Raw identity value. `None` when the source named this person and
-    /// recorded no address for them; `name_alias` then carries who they are.
-    pub handle: Option<String>,
+    /// Raw identity value. For a person the source named with no address it
+    /// is the name, and `handle_type` is `Other`.
+    pub handle: String,
     /// Display-name alias, when the export supplied one.
     pub name_alias: Option<String>,
-    /// Handle type (phone, email, or username).
+    /// Handle type (phone, email, username, or other).
     pub handle_type: Option<HandleType>,
 }
 
@@ -61,7 +61,9 @@ pub struct MessageRecord {
     pub timestamp: String,
     /// True for messages sent by the account owner.
     pub is_from_me: bool,
-    /// Sender handle for incoming messages.
+    /// Sender handle for incoming messages: the address, or the name when the
+    /// source named the sender with no address (`sender_handle_type` is then
+    /// `Other`).
     pub sender: Option<String>,
     /// The sender's identity type read from the address alone (phone, email
     /// or other). Staging prefers the type the header gives a participant
@@ -273,11 +275,7 @@ fn conversation_from_ir(header: &ConversationHeader) -> ConversationRecord {
             .conversation
             .participants
             .iter()
-            .map(|p| ParticipantRecord {
-                handle: p.handle.clone(),
-                name_alias: p.display_name.clone(),
-                handle_type: p.handle_type,
-            })
+            .filter_map(participant_from_ir)
             .collect(),
         exported_at: None,
         export_source,
@@ -305,21 +303,21 @@ fn message_from_ir(msg: &IrMessage, header_owner: Option<&str>) -> Result<Messag
         }
     };
     let tapbacks = tapbacks_from_im(im);
+    let sender = if is_from_me {
+        None
+    } else {
+        sender_identity(
+            msg.sender_handle.as_deref(),
+            msg.sender_display_name.as_deref(),
+        )
+    };
 
     Ok(MessageRecord {
         guid: msg.guid.clone(),
         timestamp,
         is_from_me,
-        sender: if is_from_me {
-            None
-        } else {
-            msg.sender_handle.clone()
-        },
-        sender_handle_type: if is_from_me {
-            None
-        } else {
-            sender_handle_type(msg.sender_handle.as_deref())
-        },
+        sender: sender.as_ref().map(|(value, _)| value.clone()),
+        sender_handle_type: sender.and_then(|(_, kind)| kind),
         owner: msg
             .owner_handle
             .as_deref()
@@ -338,6 +336,46 @@ fn message_from_ir(msg: &IrMessage, header_owner: Option<&str>) -> Result<Messag
         thread_originator_part: im.and_then(|i| i.thread_originator_part.map(i64::from)),
         num_replies: im.and_then(|i| i.num_replies.map(i64::from)).unwrap_or(0),
     })
+}
+
+/// One header participant as a record, or `None` for one that gives neither
+/// an address nor a name and so says nothing.
+///
+/// Every participant is an identity. A person the source names with no
+/// address gets an identity of type `other` whose value is the name, so the
+/// same name on one service is one identity and one contact on every import
+/// (`docs/architecture/contacts-identities-and-messages.md`).
+fn participant_from_ir(p: &message_ir::IrParticipant) -> Option<ParticipantRecord> {
+    let name_alias = p.display_name.clone();
+    if let Some(handle) = p.handle.as_deref().and_then(message_ir::nonempty) {
+        return Some(ParticipantRecord {
+            handle,
+            name_alias,
+            handle_type: p.handle_type,
+        });
+    }
+    let name = p.display_name.as_deref().and_then(message_ir::nonempty)?;
+    Some(ParticipantRecord {
+        handle: name,
+        name_alias,
+        handle_type: Some(HandleType::Other),
+    })
+}
+
+/// An incoming message's sender as an identity value and, when known, its
+/// type: the address, else the name the source gave with no address as an
+/// identity of type `other`, the rule [`participant_from_ir`] applies.
+/// `None` when the message names neither.
+fn sender_identity(
+    address: Option<&str>,
+    name: Option<&str>,
+) -> Option<(String, Option<HandleType>)> {
+    if let Some(address) = address.and_then(message_ir::nonempty) {
+        let kind = sender_handle_type(Some(address.as_str()));
+        return Some((address, kind));
+    }
+    let name = name.and_then(message_ir::nonempty)?;
+    Some((name, Some(HandleType::Other)))
 }
 
 /// The type of a sender's identity, read from the address alone.

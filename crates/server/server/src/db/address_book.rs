@@ -839,16 +839,8 @@ async fn apply(
             match holder_of.insert(handle_id, contact_id) {
                 Some(holder) if holder == contact_id => {}
                 Some(holder) => {
-                    sqlx::query(
-                        "UPDATE contact_handles SET contact_id = $1, origin = $2
-                         WHERE account_id = $3 AND handle_id = $4",
-                    )
-                    .bind(contact_id)
-                    .bind(Origin::AddressBook.as_str())
-                    .bind(account_id)
-                    .bind(handle_id)
-                    .execute(&mut *conn)
-                    .await?;
+                    let goes = contacts::IdentityGoes::To(contact_id, Origin::AddressBook);
+                    contacts::move_identity(conn, account_id, handle_id, goes).await?;
                     counts.identities_moved += 1;
                     lost_identity.insert(holder);
                     changed.insert(holder);
@@ -922,17 +914,19 @@ async fn apply(
     }
 
     // Edit: an identity a file contact still holds and no row of it lists
-    // comes off the contact. The identity's own row stays, because its
-    // conversations cite it.
+    // comes off the contact, the one way an identity leaves a contact: one in
+    // a conversation goes to a new contact with no name, so the person is
+    // Unknown for it again, and one nothing uses is deleted.
     if mode == LoadMode::Edit {
         for (contact_id, listed) in &placed {
-            let unlisted: Vec<i64> = holder_of
+            let mut unlisted: Vec<i64> = holder_of
                 .iter()
                 .filter(|&(handle_id, holder)| holder == contact_id && !listed.contains(handle_id))
                 .map(|(&handle_id, _)| handle_id)
                 .collect();
+            unlisted.sort_unstable();
+            contacts::take_identities_off(conn, account_id, &unlisted).await?;
             for handle_id in unlisted {
-                contacts::unlink_handle(conn, account_id, *contact_id, handle_id).await?;
                 holder_of.remove(&handle_id);
                 counts.identities_removed += 1;
                 lost_identity.insert(*contact_id);
@@ -944,23 +938,7 @@ async fn apply(
     // A contact this load left with neither a name nor an identity is one
     // nothing could ever reach, so it goes.
     for contact_id in lost_identity {
-        let deleted = sqlx::query(
-            "DELETE FROM contacts
-             WHERE account_id = $1 AND id = $2 AND trim(preferred_name) = ''
-               AND NOT EXISTS (SELECT 1 FROM contact_handles ch
-                               WHERE ch.account_id = $1 AND ch.contact_id = $2)",
-        )
-        .bind(account_id)
-        .bind(contact_id)
-        .execute(&mut *conn)
-        .await?
-        .rows_affected();
-        if deleted > 0 {
-            sqlx::query("DELETE FROM trashed_contacts WHERE account_id = $1 AND contact_id = $2")
-                .bind(account_id)
-                .bind(contact_id)
-                .execute(&mut *conn)
-                .await?;
+        if contacts::delete_if_empty(conn, account_id, contact_id).await? {
             changed.remove(&contact_id);
             counts.contacts_deleted += 1;
         }
@@ -980,8 +958,6 @@ async fn apply(
         }
     }
 
-    remove_unused_book_handles(conn, account_id).await?;
-
     // The notes in the order of the file's rows, which a contact's rows need
     // not be.
     let mut notes: Vec<(usize, &String)> = file
@@ -992,31 +968,6 @@ async fn apply(
     notes.sort_by_key(|&(row, _)| row);
     counts.notes = notes.into_iter().map(|(_, note)| note.clone()).collect();
     Ok(counts)
-}
-
-/// Remove the identities a load made that no contact holds and nothing
-/// refers to.
-///
-/// An identity a conversation, a message, a reaction, or the account's own
-/// profile uses stays when Edit takes it off its contact, the same way
-/// deleting a contact keeps its conversations. One that only ever came from
-/// a file and is on no contact appears in no list, so it goes.
-async fn remove_unused_book_handles(conn: &mut SqliteConnection, account_id: i64) -> Result<()> {
-    sqlx::query(
-        "DELETE FROM handles
-         WHERE account_id = $1 AND origin = 'address_book'
-           AND NOT EXISTS (SELECT 1 FROM contact_handles ch WHERE ch.handle_id = handles.id)
-           AND NOT EXISTS (SELECT 1 FROM participants p WHERE p.handle_id = handles.id)
-           AND NOT EXISTS (SELECT 1 FROM conversations c WHERE c.chat_handle_id = handles.id)
-           AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.sender_handle_id = handles.id)
-           AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.owner_handle_id = handles.id)
-           AND NOT EXISTS (SELECT 1 FROM tapbacks t WHERE t.sender_handle_id = handles.id)
-           AND NOT EXISTS (SELECT 1 FROM account_handles ah WHERE ah.handle_id = handles.id)",
-    )
-    .bind(account_id)
-    .execute(&mut *conn)
-    .await?;
-    Ok(())
 }
 
 /// One row of [`export_csv`]'s query: the contact's id and name, and one of

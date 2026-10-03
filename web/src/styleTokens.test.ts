@@ -34,16 +34,26 @@ const HEX_DATA_FILES = new Set(["lib/theme.ts", "components/theme/ThemeColorRow.
 
 describe("colors are theme tokens", () => {
   it("no component writes a hex color, an rgb() color or a palette color", () => {
-    // A hex color counts after a quote, a backtick or a bracket. After a space,
-    // a parenthesis, a comma or a colon, `(#1245)` is an issue number, so a
-    // short hex counts there only when it holds a letter.
-    const hex =
-      /["'`[]#[0-9a-fA-F]{3,8}\b|[\s(,:]#([0-9a-fA-F]{6}|[0-9a-fA-F]{8}|(?=\d*[a-fA-F])[0-9a-fA-F]{3,4})\b/;
+    // A hex color in code counts wherever a value can start. A comment names
+    // issues as `(#1245)`, so there a short hex counts only when it holds a
+    // letter, and a long one always does.
+    const hexInCode = /(^|["'`[\s(,:])#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/;
+    const hexInComment =
+      /(^|["'`[\s(,:])#([0-9a-fA-F]{6}|[0-9a-fA-F]{8}|(?=\d*[a-fA-F])[0-9a-fA-F]{3,4})\b/;
+    const comment = /^\s*(\/\/|\/\*|\*)/;
+    const hexHits = (path: string, text: string) =>
+      text
+        .split("\n")
+        .flatMap((line, i) =>
+          (comment.test(line) ? hexInComment : hexInCode).test(line)
+            ? [`${path}:${i + 1}: ${line.trim()}`]
+            : [],
+        );
     const rgb = /(?<![a-zA-Z])(rgba?|hsla?)\(/;
     const palette =
       /\b(bg|text|border|ring|outline|fill|stroke|shadow|from|to|via|decoration)-(white|black|(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3})\b/;
     const found = sources().flatMap(([path, text]) => [
-      ...(HEX_DATA_FILES.has(path) ? [] : hits(path, text, hex)),
+      ...(HEX_DATA_FILES.has(path) ? [] : hexHits(path, text)),
       ...hits(path, text, rgb),
       ...hits(path, text, palette),
     ]);
@@ -76,8 +86,8 @@ describe("z-index values come from the ladder", () => {
     expect(found).toEqual([]);
   });
 
-  it("no source writes an inline zIndex", () => {
-    const found = sources().flatMap(([path, text]) => hits(path, text, /\bzIndex\s*:/));
+  it("no source sets a z-index inline", () => {
+    const found = sources().flatMap(([path, text]) => hits(path, text, /\bzIndex\b|z-index\s*:/));
     expect(found).toEqual([]);
   });
 
@@ -96,8 +106,8 @@ describe("the range pill's room", () => {
   // the two must match, or one kind of list hides its last row under the pill.
   it("is the same size as padding and as a spacer", () => {
     const size = RANGE_PILL_SCROLL_PAD_CLASS.replace(/^pb-/, "");
-    expect(renderToStaticMarkup(createElement(RangePillSpacer))).toMatch(
-      new RegExp(`class="[^"]*\\bh-${size}\\b`),
-    );
+    const markup = renderToStaticMarkup(createElement(RangePillSpacer));
+    const classes = /class="([^"]*)"/.exec(markup)?.[1]?.split(" ") ?? [];
+    expect(classes).toContain(`h-${size}`);
   });
 });

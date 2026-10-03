@@ -126,7 +126,7 @@ export function OnboardingForm() {
                   />
                 </div>
                 <p className="mt-1 text-[12px] text-muted">
-                  Include the country code (saved like +15551234567).
+                  Include the country code (saved like +15555550119).
                 </p>
               </div>
 

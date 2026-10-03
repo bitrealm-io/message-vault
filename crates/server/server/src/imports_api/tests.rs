@@ -142,8 +142,8 @@ async fn append_skips_existing_guids_and_keeps_id_map() {
     let first = write_jsonl(
         tmp.path(),
         "a.jsonl",
-        r#"{"schema_version":4,"export":{"source":"sms-backup-restore","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+14075551234","conversation_type":"individual","group_title":null,"participants":[{"handle":"+14075551234","display_name":null}],"stats":{"message_count":2,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183522000}}}
-{"guid":"g-keep","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+14075551234","sender_display_name":null,"subject":null,"text":"one","attachments":[],"imessage":null,"source":null}
+        r#"{"schema_version":4,"export":{"source":"sms-backup-restore","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+14075550107","conversation_type":"individual","group_title":null,"participants":[{"handle":"+14075550107","display_name":null}],"stats":{"message_count":2,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183522000}}}
+{"guid":"g-keep","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+14075550107","sender_display_name":null,"subject":null,"text":"one","attachments":[],"imessage":null,"source":null}
 {"guid":"g-dup","timestamp_unix_ms":1426183522000,"direction":"outgoing","service":"sms","message_kind":"sms","sender_handle":null,"sender_display_name":null,"subject":null,"text":"two","attachments":[],"imessage":null,"source":null}
 "#,
     );
@@ -167,9 +167,9 @@ async fn append_skips_existing_guids_and_keeps_id_map() {
     let second = write_jsonl(
         tmp.path(),
         "b.jsonl",
-        r#"{"schema_version":4,"export":{"source":"sms-backup-restore","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+14075551234","conversation_type":"individual","group_title":null,"participants":[{"handle":"+14075551234","display_name":null}],"stats":{"message_count":2,"attachment_count":0,"first_timestamp_unix_ms":1426183522000,"last_timestamp_unix_ms":1426183582000}}}
+        r#"{"schema_version":4,"export":{"source":"sms-backup-restore","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+14075550107","conversation_type":"individual","group_title":null,"participants":[{"handle":"+14075550107","display_name":null}],"stats":{"message_count":2,"attachment_count":0,"first_timestamp_unix_ms":1426183522000,"last_timestamp_unix_ms":1426183582000}}}
 {"guid":"g-dup","timestamp_unix_ms":1426183522000,"direction":"outgoing","service":"sms","message_kind":"sms","sender_handle":null,"sender_display_name":null,"subject":null,"text":"two again","attachments":[],"imessage":null,"source":null}
-{"guid":"g-new","timestamp_unix_ms":1426183582000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+14075551234","sender_display_name":null,"subject":null,"text":"three","attachments":[],"imessage":null,"source":null}
+{"guid":"g-new","timestamp_unix_ms":1426183582000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+14075550107","sender_display_name":null,"subject":null,"text":"three","attachments":[],"imessage":null,"source":null}
 "#,
     );
     let second_stats = import_jsonl_files(
@@ -247,10 +247,10 @@ fn missing_attachment_json(name: &str) -> String {
     )
 }
 
-const TAPBACK_IMESSAGE: &str = r#"{"is_reply":false,"in_reply_to_guid":null,"thread_originator_part":null,"num_replies":null,"is_deleted":false,"send_effect":null,"shared_location":null,"announcement":null,"read_receipt_rfc3339":null,"parts":null,"edits":null,"tapbacks":[{"emoji":null,"is_from_me":false,"kind":"liked","part_index":0,"reactor_handle":"+15555550999"}],"app":null,"balloon_bundle_id":null,"balloon_kind":null,"associated_guid":null,"associated_part":null,"tapback_kind":null,"tapback_emoji":null,"tapback_action":null}"#;
+const TAPBACK_IMESSAGE: &str = r#"{"is_reply":false,"in_reply_to_guid":null,"thread_originator_part":null,"num_replies":null,"is_deleted":false,"send_effect":null,"shared_location":null,"announcement":null,"read_receipt_rfc3339":null,"parts":null,"edits":null,"tapbacks":[{"emoji":null,"is_from_me":false,"kind":"liked","part_index":0,"reactor_handle":"+15555550167"}],"app":null,"balloon_bundle_id":null,"balloon_kind":null,"associated_guid":null,"associated_part":null,"tapback_kind":null,"tapback_emoji":null,"tapback_action":null}"#;
 
 fn chunk_boundary_jsonl() -> String {
-    let header = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550123","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550123","display_name":null},{"handle":"+15555550999","display_name":null}],"stats":{"message_count":56,"attachment_count":2,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183517000}}}"#;
+    let header = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550123","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550123","display_name":null},{"handle":"+15555550167","display_name":null}],"stats":{"message_count":56,"attachment_count":2,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183517000}}}"#;
     let mut lines = vec![header.to_string()];
     for i in 0..56 {
         let guid = format!("g-{i:02}");
@@ -360,7 +360,7 @@ async fn staging_skips_duplicate_guid_in_same_file_and_keeps_first_attachment() 
     let tmp = TempDir::new().unwrap();
     let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
-    let header = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550123","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550123","display_name":null},{"handle":"+15555550999","display_name":null}],"stats":{"message_count":2,"attachment_count":2,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183463000}}}"#;
+    let header = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550123","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550123","display_name":null},{"handle":"+15555550167","display_name":null}],"stats":{"message_count":2,"attachment_count":2,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183463000}}}"#;
     let first = format!(
         r#"{{"guid":"g-once","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550123","sender_display_name":null,"subject":null,"text":"first","attachments":{},"imessage":null,"source":null}}"#,
         missing_attachment_json("first.bin")
@@ -448,7 +448,7 @@ async fn append_existing_guid_adds_missing_children() {
     let tmp = TempDir::new().unwrap();
     let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
-    let header = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550123","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550123","display_name":null},{"handle":"+15555550999","display_name":null}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}"#;
+    let header = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550123","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550123","display_name":null},{"handle":"+15555550167","display_name":null}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}"#;
     let first = write_jsonl(
         tmp.path(),
         "children-first.jsonl",
@@ -473,7 +473,7 @@ async fn append_existing_guid_adds_missing_children() {
         "children-second.jsonl",
         &format!(
             "{header}\n{}\n",
-            r#"{"guid":"g-children","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550123","sender_display_name":null,"subject":null,"text":"replacement body","attachments":[{"path":"attachments/missing.bin","original_name":"zqinvoice.pdf","mime_type":"application/octet-stream","digest_sha256":null,"is_sticker":false,"transcription":null,"sticker_effect":null,"size_bytes":12,"missing_reason":"not_found"}],"imessage":{"is_reply":false,"in_reply_to_guid":null,"thread_originator_part":null,"num_replies":null,"is_deleted":false,"send_effect":null,"shared_location":null,"announcement":null,"read_receipt_rfc3339":null,"parts":null,"edits":null,"tapbacks":[{"emoji":null,"is_from_me":false,"kind":"liked","part_index":0,"reactor_handle":"+15555550999"}],"app":null,"balloon_bundle_id":null,"balloon_kind":null,"associated_guid":null,"associated_part":null,"tapback_kind":null,"tapback_emoji":null,"tapback_action":null},"source":null}"#
+            r#"{"guid":"g-children","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550123","sender_display_name":null,"subject":null,"text":"replacement body","attachments":[{"path":"attachments/missing.bin","original_name":"zqinvoice.pdf","mime_type":"application/octet-stream","digest_sha256":null,"is_sticker":false,"transcription":null,"sticker_effect":null,"size_bytes":12,"missing_reason":"not_found"}],"imessage":{"is_reply":false,"in_reply_to_guid":null,"thread_originator_part":null,"num_replies":null,"is_deleted":false,"send_effect":null,"shared_location":null,"announcement":null,"read_receipt_rfc3339":null,"parts":null,"edits":null,"tapbacks":[{"emoji":null,"is_from_me":false,"kind":"liked","part_index":0,"reactor_handle":"+15555550167"}],"app":null,"balloon_bundle_id":null,"balloon_kind":null,"associated_guid":null,"associated_part":null,"tapback_kind":null,"tapback_emoji":null,"tapback_action":null},"source":null}"#
         ),
     );
 
@@ -1197,7 +1197,7 @@ async fn a_group_chat_identifier_never_becomes_a_contact() {
     let path = write_jsonl(
         tmp.path(),
         "group.jsonl",
-        r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"chat1000000005","conversation_type":"group","group_title":"Trip","participants":[{"handle":"+15555550123","display_name":null},{"handle":"+15555550999","display_name":null}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}
+        r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"chat1000000005","conversation_type":"group","group_title":"Trip","participants":[{"handle":"+15555550123","display_name":null},{"handle":"+15555550167","display_name":null}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}
 {"guid":"g-group","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550123","sender_display_name":null,"subject":null,"text":"hi","attachments":[],"imessage":null,"source":null}
 "#,
     );
@@ -1216,7 +1216,7 @@ async fn a_group_chat_identifier_never_becomes_a_contact() {
     .fetch_all(&mut *conn)
     .await
     .unwrap();
-    assert_eq!(linked, ["+15555550123", "+15555550999"]);
+    assert_eq!(linked, ["+15555550123", "+15555550167"]);
 
     let contacts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM contacts WHERE account_id = $1")
         .bind(TEST_ACCOUNT)
@@ -1507,8 +1507,8 @@ async fn failed_replace_keeps_existing_messages() {
     let first = write_jsonl(
         &export_dir,
         "ok.jsonl",
-        r#"{"schema_version":4,"export":{"source":"sms-backup-restore","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+14075551234","conversation_type":"individual","group_title":null,"participants":[{"handle":"+14075551234","display_name":null}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}
-{"guid":"g-keep-replace","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+14075551234","sender_display_name":null,"subject":null,"text":"keep me","attachments":[],"imessage":null,"source":null}
+        r#"{"schema_version":4,"export":{"source":"sms-backup-restore","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+14075550107","conversation_type":"individual","group_title":null,"participants":[{"handle":"+14075550107","display_name":null}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}
+{"guid":"g-keep-replace","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+14075550107","sender_display_name":null,"subject":null,"text":"keep me","attachments":[],"imessage":null,"source":null}
 "#,
     );
     import_jsonl_files(
@@ -1530,8 +1530,8 @@ async fn failed_replace_keeps_existing_messages() {
     let bad = write_jsonl(
         &export_dir,
         "bad.jsonl",
-        r#"{"schema_version":4,"export":{"source":"sms-backup-restore","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+14075551234","conversation_type":"individual","group_title":null,"participants":[{"handle":"+14075551234","display_name":null}],"stats":{"message_count":1,"attachment_count":1,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}
-{"guid":"g-bad","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"sms","message_kind":"mms","sender_handle":"+14075551234","sender_display_name":null,"subject":null,"text":"nope","attachments":[{"path":"../secret.txt","original_name":"secret.txt","mime_type":"text/plain","digest_sha256":null,"is_sticker":false,"transcription":null,"sticker_effect":null,"size_bytes":1,"missing_reason":null}],"imessage":null,"source":null}
+        r#"{"schema_version":4,"export":{"source":"sms-backup-restore","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+14075550107","conversation_type":"individual","group_title":null,"participants":[{"handle":"+14075550107","display_name":null}],"stats":{"message_count":1,"attachment_count":1,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}
+{"guid":"g-bad","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"sms","message_kind":"mms","sender_handle":"+14075550107","sender_display_name":null,"subject":null,"text":"nope","attachments":[{"path":"../secret.txt","original_name":"secret.txt","mime_type":"text/plain","digest_sha256":null,"is_sticker":false,"transcription":null,"sticker_effect":null,"size_bytes":1,"missing_reason":null}],"imessage":null,"source":null}
 "#,
     );
     let err = import_jsonl_files(
@@ -1614,7 +1614,7 @@ async fn failed_promote_keeps_the_trashed_contact_and_adds_no_contacts() {
     let first = write_jsonl(
         &export_dir,
         "ada.jsonl",
-        &one_message_conversation("g-ada-1", "+15555550960"),
+        &one_message_conversation("g-ada-1", "+15555550165"),
     );
     import_jsonl_files_on_conn(&mut conn, &[first], &opts, ImportSchemaMode::Ensure)
         .await
@@ -1657,12 +1657,12 @@ async fn failed_promote_keeps_the_trashed_contact_and_adds_no_contacts() {
     let again = write_jsonl(
         &export_dir,
         "ada-again.jsonl",
-        &one_message_conversation("g-ada-2", "+15555550960"),
+        &one_message_conversation("g-ada-2", "+15555550165"),
     );
     let newcomer = write_jsonl(
         &export_dir,
         "newcomer.jsonl",
-        &one_message_conversation("g-new-1", "+15555550961"),
+        &one_message_conversation("g-new-1", "+15555550166"),
     );
     let err = import_jsonl_files_on_conn(
         &mut conn,
@@ -1739,8 +1739,8 @@ async fn http_import_of_a_schema_3_file_is_a_400_naming_both_versions() {
     let (state, _fixture, token) = importer().await;
     let path = batches_path(&state, &token, "whatsapp").await;
     let body = concat!(
-        r#"{"schema_version":3,"export":{"source":"whatsapp","tool":"t","owner_handle":"+15550000001","owner_display_name":"Me"},"#,
-        r#""conversation":{"chat_identifier":"+15550000002","conversation_type":"individual","participants":[{"handle":"+15550000002","display_name":"Sam"}]}}"#,
+        r#"{"schema_version":3,"export":{"source":"whatsapp","tool":"t","owner_handle":"+15555550106","owner_display_name":"Me"},"#,
+        r#""conversation":{"chat_identifier":"+15555550107","conversation_type":"individual","participants":[{"handle":"+15555550107","display_name":"Sam"}]}}"#,
         "\n",
     );
     let (status, text) =
@@ -1763,8 +1763,8 @@ async fn http_import_of_a_line_that_is_not_json_is_a_400_naming_the_line_of_the_
     let (state, _fixture, token) = importer().await;
     let path = batches_path(&state, &token, "whatsapp").await;
     let body = concat!(
-        r#"{"schema_version":4,"export":{"source":"whatsapp","tool":"t","tool_version":"1","owner_handle":"+15550000001","owner_display_name":"Me"},"#,
-        r#""conversation":{"chat_identifier":"+15550000002","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15550000002","display_name":"Sam"}],"#,
+        r#"{"schema_version":4,"export":{"source":"whatsapp","tool":"t","tool_version":"1","owner_handle":"+15555550106","owner_display_name":"Me"},"#,
+        r#""conversation":{"chat_identifier":"+15555550107","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550107","display_name":"Sam"}],"#,
         r#""stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1400773261000,"last_timestamp_unix_ms":1400773261000}}}"#,
         "\n\n",
         "this is not json\n",
@@ -1844,7 +1844,7 @@ async fn a_batch_into_a_run_discarded_while_it_uploads_is_a_state_conflict() {
             &path,
             &token,
             "application/jsonl",
-            replace_run_batch("+15550000002", &["g1"]),
+            replace_run_batch("+15555550107", &["g1"]),
         ),
     )
     .await;
@@ -1872,7 +1872,7 @@ async fn a_batch_into_a_run_discarded_while_it_uploads_is_a_state_conflict() {
 fn replace_run_batch(chat: &str, guids: &[&str]) -> String {
     let mut lines = vec![format!(
         concat!(
-            r#"{{"schema_version":4,"export":{{"source":"whatsapp","tool":"t","tool_version":"0","owner_handle":"+15550000001","owner_display_name":"Me"}},"#,
+            r#"{{"schema_version":4,"export":{{"source":"whatsapp","tool":"t","tool_version":"0","owner_handle":"+15555550106","owner_display_name":"Me"}},"#,
             r#""conversation":{{"chat_identifier":"{chat}","conversation_type":"individual","group_title":null,"#,
             r#""participants":[{{"handle":"{chat}","display_name":null}}],"#,
             r#""stats":{{"message_count":{n},"attachment_count":0,"first_timestamp_unix_ms":1700000000000,"last_timestamp_unix_ms":1700000000000}}}}}}"#,
@@ -1908,8 +1908,8 @@ async fn a_retried_batch_in_a_replace_run_keeps_every_message_once() {
     .await;
     let path = format!("/v1/imports/{}/batches", created["id"].as_i64().unwrap());
 
-    let first = replace_run_batch("+15550000002", &["g-1a", "g-1b"]);
-    let second = replace_run_batch("+15550000003", &["g-2a", "g-2b"]);
+    let first = replace_run_batch("+15555550107", &["g-1a", "g-1b"]);
+    let second = replace_run_batch("+15555550108", &["g-2a", "g-2b"]);
     for body in [&first, &second, &second] {
         let (status, text) =
             crate::test_support::post_raw(&state, &path, &token, "application/jsonl", body.clone())
@@ -1933,7 +1933,7 @@ async fn a_retried_batch_in_a_replace_run_keeps_every_message_once() {
 async fn a_batch_with_a_message_without_a_guid_is_refused_and_stores_nothing() {
     let (state, _fixture, token) = importer().await;
     let path = batches_path(&state, &token, "whatsapp").await;
-    let body = replace_run_batch("+15550000002", &["g-1", "", "g-2"]);
+    let body = replace_run_batch("+15555550107", &["g-1", "", "g-2"]);
 
     let (status, text) =
         crate::test_support::post_raw(&state, &path, &token, "application/jsonl", body).await;
@@ -1999,7 +1999,7 @@ async fn a_batch_posted_again_after_a_gateway_timeout_stores_each_message_once()
         },
     ));
     let server = crate::test_support::serve_router(app).await;
-    let body = replace_run_batch("+15550000002", &["g-a", "g-b", "g-c"]);
+    let body = replace_run_batch("+15555550107", &["g-a", "g-b", "g-c"]);
     let post = || {
         reqwest::Client::new()
             .post(format!("{}{path}", server.base()))
@@ -2026,21 +2026,21 @@ async fn a_batch_posted_again_after_a_gateway_timeout_stores_each_message_once()
     assert_eq!(guids, ["g-a", "g-b", "g-c"]);
 }
 
-/// One `source` conversation with `+15550000002`, one message per guid. The
+/// One `source` conversation with `+15555550107`, one message per guid. The
 /// message `g-gone` carries a missing attachment and a tapback, so a wipe
 /// that leaves children behind shows.
 fn wipe_test_batch(source: &str, guids: &[&str]) -> String {
     let mut lines = vec![format!(
         concat!(
-            r#"{{"schema_version":4,"export":{{"source":"{source}","tool":"t","tool_version":"0","owner_handle":"+15550000001","owner_display_name":"Me"}},"#,
-            r#""conversation":{{"chat_identifier":"+15550000002","conversation_type":"individual","group_title":null,"#,
-            r#""participants":[{{"handle":"+15550000002","display_name":null}}],"#,
+            r#"{{"schema_version":4,"export":{{"source":"{source}","tool":"t","tool_version":"0","owner_handle":"+15555550106","owner_display_name":"Me"}},"#,
+            r#""conversation":{{"chat_identifier":"+15555550107","conversation_type":"individual","group_title":null,"#,
+            r#""participants":[{{"handle":"+15555550107","display_name":null}}],"#,
             r#""stats":{{"message_count":{n},"attachment_count":0,"first_timestamp_unix_ms":1700000000000,"last_timestamp_unix_ms":1700000000000}}}}}}"#,
         ),
         source = source,
         n = guids.len(),
     )];
-    let tapback = TAPBACK_IMESSAGE.replace("+15555550999", "+15550000002");
+    let tapback = TAPBACK_IMESSAGE.replace("+15555550167", "+15555550107");
     for guid in guids {
         let (attachments, imessage) = if *guid == "g-gone" {
             (missing_attachment_json("gone.bin"), tapback.as_str())
@@ -2048,7 +2048,7 @@ fn wipe_test_batch(source: &str, guids: &[&str]) -> String {
             ("[]".to_string(), "null")
         };
         lines.push(format!(
-            r#"{{"guid":"{guid}","timestamp_unix_ms":1700000000000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+15550000002","sender_display_name":null,"subject":null,"text":"{guid}","attachments":{attachments},"imessage":{imessage},"source":null}}"#
+            r#"{{"guid":"{guid}","timestamp_unix_ms":1700000000000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+15555550107","sender_display_name":null,"subject":null,"text":"{guid}","attachments":{attachments},"imessage":{imessage},"source":null}}"#
         ));
     }
     lines.join("\n") + "\n"
@@ -2614,7 +2614,7 @@ async fn two_import_runs_from_one_source_on_one_day_make_two_contact_groups() {
     )
     .await;
     // A different person, so the second run has a contact of its own to record.
-    let second_body = wipe_test_batch("whatsapp", &["g-2"]).replace("+15550000002", "+15550000003");
+    let second_body = wipe_test_batch("whatsapp", &["g-2"]).replace("+15555550107", "+15555550108");
     let (second, second_date) = completed_run(&state, &token, "whatsapp", second_body).await;
 
     let mut conn = state.db.acquire().await.unwrap();
@@ -2895,10 +2895,10 @@ async fn a_message_is_held_at_its_own_owner_else_the_headers_and_the_owner_gets_
     let file = write_jsonl(
         tmp.path(),
         "owner.jsonl",
-        r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":"+14155550100","owner_display_name":null},"conversation":{"chat_identifier":"+14075551234","conversation_type":"individual","group_title":null,"participants":[{"handle":"+14075551234","display_name":null}],"stats":{"message_count":3,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183582000}}}
+        r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":"+14155550100","owner_display_name":null},"conversation":{"chat_identifier":"+14075550107","conversation_type":"individual","group_title":null,"participants":[{"handle":"+14075550107","display_name":null}],"stats":{"message_count":3,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183582000}}}
 {"guid":"g-out","timestamp_unix_ms":1426183462000,"direction":"outgoing","service":"imessage","message_kind":"imessage","sender_handle":"+14155550100","sender_display_name":null,"subject":null,"text":"sent from the phone","attachments":[],"imessage":null,"source":null}
-{"guid":"g-email","timestamp_unix_ms":1426183522000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+14075551234","sender_display_name":null,"owner_handle":"me@icloud.com","subject":null,"text":"received at the email","attachments":[],"imessage":null,"source":null}
-{"guid":"g-in","timestamp_unix_ms":1426183582000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+14075551234","sender_display_name":null,"subject":null,"text":"received at the phone","attachments":[],"imessage":null,"source":null}
+{"guid":"g-email","timestamp_unix_ms":1426183522000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+14075550107","sender_display_name":null,"owner_handle":"me@example.com","subject":null,"text":"received at the email","attachments":[],"imessage":null,"source":null}
+{"guid":"g-in","timestamp_unix_ms":1426183582000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+14075550107","sender_display_name":null,"subject":null,"text":"received at the phone","attachments":[],"imessage":null,"source":null}
 "#,
     );
     import_jsonl_files(&db, &[file], &replace_opts(&assets, tmp.path(), "imessage"))
@@ -2918,14 +2918,14 @@ async fn a_message_is_held_at_its_own_owner_else_the_headers_and_the_owner_gets_
         held,
         vec![
             ("g-out".to_string(), Some("+14155550100".to_string())),
-            ("g-email".to_string(), Some("me@icloud.com".to_string())),
+            ("g-email".to_string(), Some("me@example.com".to_string())),
             ("g-in".to_string(), Some("+14155550100".to_string())),
         ]
     );
     let owner_contacts: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM contact_handles ch
          JOIN handles h ON h.id = ch.handle_id
-         WHERE h.normalized IN ('+14155550100', 'me@icloud.com')",
+         WHERE h.normalized IN ('+14155550100', 'me@example.com')",
     )
     .fetch_one(&mut *conn)
     .await
@@ -2934,7 +2934,7 @@ async fn a_message_is_held_at_its_own_owner_else_the_headers_and_the_owner_gets_
     let owner_participants: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM participants p
          JOIN handles h ON h.id = p.handle_id
-         WHERE h.normalized IN ('+14155550100', 'me@icloud.com')",
+         WHERE h.normalized IN ('+14155550100', 'me@example.com')",
     )
     .fetch_one(&mut *conn)
     .await
@@ -2978,7 +2978,7 @@ async fn creating_an_import_with_a_blank_source_is_a_validation_failure() {
 fn one_message_batch(chat: &str, guid: &str, text: &str, attachments: &str) -> String {
     format!(
         concat!(
-            r#"{{"schema_version":4,"export":{{"source":"whatsapp","tool":"t","tool_version":"0","owner_handle":"+15550000001","owner_display_name":"Me"}},"#,
+            r#"{{"schema_version":4,"export":{{"source":"whatsapp","tool":"t","tool_version":"0","owner_handle":"+15555550106","owner_display_name":"Me"}},"#,
             r#""conversation":{{"chat_identifier":"{chat}","conversation_type":"individual","group_title":null,"#,
             r#""participants":[{{"handle":"{chat}","display_name":null}}],"#,
             r#""stats":{{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1700000000000,"last_timestamp_unix_ms":1700000000000}}}}}}"#,
@@ -3048,7 +3048,7 @@ async fn search_forgets_the_attachment_name_of_a_deleted_message() {
         token,
         "append",
         one_message_batch(
-            "+15550000002",
+            "+15555550107",
             "g-old",
             "see attached",
             &missing_attachment_json("zzinvoice.pdf"),
@@ -3073,7 +3073,7 @@ async fn search_forgets_the_attachment_name_of_a_deleted_message() {
         state,
         token,
         "append",
-        one_message_batch("+15550000003", "g-new", "lunch tomorrow", "[]"),
+        one_message_batch("+15555550108", "g-new", "lunch tomorrow", "[]"),
     )
     .await;
     assert_eq!(
@@ -3087,7 +3087,7 @@ async fn search_forgets_the_attachment_name_of_a_deleted_message() {
     );
 }
 
-const S1_HEADER_1: &str = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15551234567","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15551234567","display_name":"Bob"}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}"#;
+const S1_HEADER_1: &str = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550119","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550119","display_name":"Bob"}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}"#;
 
 fn s1_message(guid: &str, sender: &str, ms: i64, text: &str) -> String {
     format!(
@@ -3121,7 +3121,7 @@ async fn a_name_only_participant_matching_a_trashed_contact_does_not_fail_the_im
         "append",
         format!(
             "{S1_HEADER_1}\n{}\n",
-            s1_message("g1", "+15551234567", 1426183462000, "hi")
+            s1_message("g1", "+15555550119", 1426183462000, "hi")
         ),
     )
     .await;
@@ -3135,9 +3135,9 @@ async fn a_name_only_participant_matching_a_trashed_contact_does_not_fail_the_im
         format!(
             "{}\n{}\n",
             S1_HEADER_1
-                .replace("+15551234567", "+15559990000")
+                .replace("+15555550119", "+15555550179")
                 .replace("Bob", "Carol"),
-            s1_message("g0", "+15559990000", 1426183462000, "hey")
+            s1_message("g0", "+15555550179", 1426183462000, "hey")
         ),
     )
     .await;
@@ -3162,7 +3162,7 @@ async fn a_name_only_participant_matching_a_trashed_contact_does_not_fail_the_im
         &path,
         &token,
         "application/jsonl",
-        name_only_group_batch("chat900", "Bob", "+15551234567", "g2"),
+        name_only_group_batch("chat900", "Bob", "+15555550119", "g2"),
     )
     .await;
     assert_eq!(status, axum::http::StatusCode::OK, "{text}");
@@ -3209,7 +3209,7 @@ async fn a_name_only_participant_is_never_bound_to_a_trashed_contact_that_shares
         &token,
         "imessage",
         "append",
-        name_only_group_batch("chat901", "Sarah Vale", "+15557770000", "g3"),
+        name_only_group_batch("chat901", "Sarah Vale", "+15555550177", "g3"),
     )
     .await;
     let mut conn = state.db.acquire().await.unwrap();
@@ -3236,16 +3236,16 @@ async fn a_name_only_participant_is_never_bound_to_a_trashed_contact_that_shares
     assert!(still_trashed, "the trashed contact stays in the Trash");
 }
 
-/// One incoming message of the one-to-one chat with +15551234567, whose text
+/// One incoming message of the one-to-one chat with +15555550119, whose text
 /// is its guid.
 fn same_second_message(guid: &str, ms: i64) -> String {
     format!(
-        r#"{{"guid":"{guid}","timestamp_unix_ms":{ms},"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15551234567","sender_display_name":null,"subject":null,"text":"{guid}","attachments":[],"imessage":null,"source":null}}"#
+        r#"{{"guid":"{guid}","timestamp_unix_ms":{ms},"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550119","sender_display_name":null,"subject":null,"text":"{guid}","attachments":[],"imessage":null,"source":null}}"#
     )
 }
 
-/// The header of the one-to-one chat with +15551234567.
-const SAME_SECOND_HEADER: &str = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15551234567","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15551234567","display_name":"Bob"}],"stats":{"message_count":3,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462900}}}"#;
+/// The header of the one-to-one chat with +15555550119.
+const SAME_SECOND_HEADER: &str = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550119","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550119","display_name":"Bob"}],"stats":{"message_count":3,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462900}}}"#;
 
 /// The account's message guids in the order the conversation page and every
 /// export read them.
@@ -3379,9 +3379,9 @@ async fn two_conversations_on_one_identity_in_one_batch_become_one() {
     let (state, _fixture, token) = importer().await;
     let body = format!(
         "{}\n{}\n{}\n{}\n",
-        one_to_one_header("+15551234567"),
+        one_to_one_header("+15555550119"),
         same_second_message("m1", 1_426_183_462_000),
-        one_to_one_header("5551234567"),
+        one_to_one_header("5555550119"),
         same_second_message("m2", 1_426_183_462_000),
     );
     post_batches_of_one_run(&state, &token, vec![body]).await;
@@ -3415,7 +3415,7 @@ async fn two_conversations_on_one_identity_in_one_batch_become_one() {
 #[tokio::test]
 async fn a_participant_listed_twice_under_one_identity_is_listed_once() {
     let (state, _fixture, token) = importer().await;
-    let header = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"chat1000000172","conversation_type":"group","group_title":"Trip","participants":[{"handle":"+1 (555) 123-4567","display_name":null},{"handle":"5551234567","display_name":null}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}"#;
+    let header = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"chat1000000172","conversation_type":"group","group_title":"Trip","participants":[{"handle":"+1 (555) 555-0119","display_name":null},{"handle":"5555550119","display_name":null}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}"#;
     let body = format!(
         "{header}\n{}\n",
         same_second_message("m1", 1_426_183_462_000)
@@ -3431,7 +3431,7 @@ async fn a_participant_listed_twice_under_one_identity_is_listed_once() {
     .unwrap();
     assert_eq!(
         participants,
-        ["+15551234567"],
+        ["+15555550119"],
         "the one number is listed once"
     );
 }
@@ -3772,7 +3772,7 @@ async fn the_batch_answer_counts_the_contacts_it_created() {
         "application/jsonl",
         format!(
             "{S1_HEADER_1}\n{}\n",
-            s1_message("g1", "+15551234567", 1426183462000, "hi")
+            s1_message("g1", "+15555550119", 1426183462000, "hi")
         ),
     )
     .await;

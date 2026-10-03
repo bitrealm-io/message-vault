@@ -105,7 +105,7 @@ describe("vault search + FTS", () => {
         new Date(Date.now() - days * 86_400_000).toISOString();
 
       const ftsConvId = Number(
-        insertConv.run(accountId, resolveHandle("+15555550999")).lastInsertRowid,
+        insertConv.run(accountId, resolveHandle("+15555550167")).lastInsertRowid,
       );
       insertMsg.run(
         ftsConvId,
@@ -117,9 +117,9 @@ describe("vault search + FTS", () => {
 
       // Long-known + still active: first ~10y ago, last ~5d ago.
       const activeConvId = Number(
-        insertConv.run(accountId, resolveHandle("+15555551001")).lastInsertRowid,
+        insertConv.run(accountId, resolveHandle("+15555550169")).lastInsertRowid,
       );
-      assignContact("+15555551001", "Active");
+      assignContact("+15555550169", "Active");
       insertMsg.run(
         activeConvId,
         accountId,
@@ -137,9 +137,9 @@ describe("vault search + FTS", () => {
 
       // Stale + old: first ~10y ago, last ~400d ago.
       const staleConvId = Number(
-        insertConv.run(accountId, resolveHandle("+15555551002")).lastInsertRowid,
+        insertConv.run(accountId, resolveHandle("+15555550170")).lastInsertRowid,
       );
-      assignContact("+15555551002", "Stale");
+      assignContact("+15555550170", "Stale");
       insertMsg.run(
         staleConvId,
         accountId,
@@ -157,9 +157,9 @@ describe("vault search + FTS", () => {
 
       // Entirely recent: first and last within the last week.
       const recentConvId = Number(
-        insertConv.run(accountId, resolveHandle("+15555551003")).lastInsertRowid,
+        insertConv.run(accountId, resolveHandle("+15555550171")).lastInsertRowid,
       );
-      assignContact("+15555551003", "Recent");
+      assignContact("+15555550171", "Recent");
       insertMsg.run(
         recentConvId,
         accountId,
@@ -177,9 +177,9 @@ describe("vault search + FTS", () => {
 
       // Two labeled contacts, one of them inactive, sharing a group chat.
       labeledConvId = Number(
-        insertConv.run(accountId, resolveHandle("+15555551004")).lastInsertRowid,
+        insertConv.run(accountId, resolveHandle("+15555550172")).lastInsertRowid,
       );
-      const labeledId = assignContact("+15555551004", "Labeled");
+      const labeledId = assignContact("+15555550172", "Labeled");
       addToLabel(labeledId, "Family");
       insertMsg.run(
         labeledConvId,
@@ -190,9 +190,9 @@ describe("vault search + FTS", () => {
       );
 
       const inactiveConvId = Number(
-        insertConv.run(accountId, resolveHandle("+15555551005")).lastInsertRowid,
+        insertConv.run(accountId, resolveHandle("+15555550173")).lastInsertRowid,
       );
-      const inactiveId = assignContact("+15555551005", "Inactive");
+      const inactiveId = assignContact("+15555550173", "Inactive");
       addToLabel(inactiveId, "Family");
       insertMsg.run(
         inactiveConvId,
@@ -216,8 +216,8 @@ describe("vault search + FTS", () => {
         `INSERT INTO participants (conversation_id, handle_id, name_alias)
          VALUES (?, ?, ?)`,
       );
-      insertParticipant.run(groupConvId, resolveHandle("+15555551004"), "Labeled");
-      insertParticipant.run(groupConvId, resolveHandle("+15555551005"), "Inactive");
+      insertParticipant.run(groupConvId, resolveHandle("+15555550172"), "Labeled");
+      insertParticipant.run(groupConvId, resolveHandle("+15555550173"), "Inactive");
       insertMsg.run(
         groupConvId,
         accountId,
@@ -270,7 +270,7 @@ describe("vault search + FTS", () => {
             hit.title.includes("Recent") || hit.chatIdentifier.includes("51003"),
         ),
       );
-      const byPhone = searchVault("phone:+15555551004");
+      const byPhone = searchVault("phone:+15555550172");
       assert.ok(byPhone.totalConversations >= 1);
       assert.ok(
         byPhone.hits.some((hit) => hit.chatIdentifier.includes("51004")),
@@ -295,7 +295,7 @@ describe("vault search + FTS", () => {
       const toMe = searchVault("to:me hello from long");
       assert.ok(toMe.totalConversations >= 1);
 
-      const withHandle = searchVault("with:+15555551001 still");
+      const withHandle = searchVault("with:+15555550169 still");
       assert.ok(withHandle.totalConversations >= 1);
 
       const noAtt = searchVault("has:noattachment still chatting");
@@ -376,7 +376,7 @@ describe("vault search + FTS", () => {
         ["Recent"],
       );
       const byPhone = searchVaultContacts(
-        "search:contacts handle:+15555551004",
+        "search:contacts handle:+15555550172",
       );
       assert.deepEqual(
         byPhone.contacts?.map((hit) => hit.contact.displayName),
@@ -392,7 +392,7 @@ describe("vault search + FTS", () => {
         byFirst.contacts?.map((hit) => hit.contact.displayName),
         ["Recent"],
       );
-      const byPhone = searchVaultContacts("search:contacts phone:+15555551004");
+      const byPhone = searchVaultContacts("search:contacts phone:+15555550172");
       assert.deepEqual(
         byPhone.contacts?.map((hit) => hit.contact.displayName),
         ["Labeled"],
@@ -401,13 +401,13 @@ describe("vault search + FTS", () => {
       const db = new Database(dbPath());
       db.prepare(
         `INSERT INTO handles (account_id, raw, normalized, handle_type, service)
-         VALUES (?, '+15555551999', '+15555551999', 'phone', 'phone'),
-                (?, '+15555551998', '+15555551998', 'phone', 'phone')`,
+         VALUES (?, '+15555550175', '+15555550175', 'phone', 'phone'),
+                (?, '+15555550174', '+15555550174', 'phone', 'phone')`,
       ).run(accountId, accountId);
       const namelessHandleId = Number(
         db
           .prepare(
-            `SELECT id FROM handles WHERE account_id = ? AND raw = '+15555551999'`,
+            `SELECT id FROM handles WHERE account_id = ? AND raw = '+15555550175'`,
           )
           .pluck()
           .get(accountId),
@@ -415,7 +415,7 @@ describe("vault search + FTS", () => {
       const noLastHandleId = Number(
         db
           .prepare(
-            `SELECT id FROM handles WHERE account_id = ? AND raw = '+15555551998'`,
+            `SELECT id FROM handles WHERE account_id = ? AND raw = '+15555550174'`,
           )
           .pluck()
           .get(accountId),
@@ -501,13 +501,13 @@ describe("vault search + FTS", () => {
       const result = searchVault(`last-contact:${cutoff}`);
       const handles = result.hits.map((h) => h.chatIdentifier);
       const selectedHit = result.hits.find(
-        (h) => h.chatIdentifier === "+15555551002",
+        (h) => h.chatIdentifier === "+15555550170",
       );
-      assert.ok(handles.includes("+15555551002"));
+      assert.ok(handles.includes("+15555550170"));
       assert.ok(selectedHit?.contactId != null);
       assert.ok(result.contactIds.includes(selectedHit.contactId));
-      assert.ok(!handles.includes("+15555551001"));
-      assert.ok(!handles.includes("+15555551003"));
+      assert.ok(!handles.includes("+15555550169"));
+      assert.ok(!handles.includes("+15555550171"));
     });
   });
 
@@ -518,9 +518,9 @@ describe("vault search + FTS", () => {
         .slice(0, 10);
       const result = searchVault(`first-contact:${cutoff}`);
       const handles = result.hits.map((h) => h.chatIdentifier);
-      assert.ok(handles.includes("+15555551001"));
-      assert.ok(handles.includes("+15555551002"));
-      assert.ok(!handles.includes("+15555551003"));
+      assert.ok(handles.includes("+15555550169"));
+      assert.ok(handles.includes("+15555550170"));
+      assert.ok(!handles.includes("+15555550171"));
     });
   });
 
@@ -536,9 +536,9 @@ describe("vault search + FTS", () => {
         `last-contact:${lastCutoff} first-contact:${firstCutoff}`,
       );
       const handles = result.hits.map((h) => h.chatIdentifier);
-      assert.ok(handles.includes("+15555551002"));
-      assert.ok(!handles.includes("+15555551001"));
-      assert.ok(!handles.includes("+15555551003"));
+      assert.ok(handles.includes("+15555550170"));
+      assert.ok(!handles.includes("+15555550169"));
+      assert.ok(!handles.includes("+15555550171"));
     });
   });
 
@@ -550,9 +550,9 @@ describe("vault search + FTS", () => {
       const handles = searchVault(`last-contact:>=${cutoff}`).hits.map(
         (h) => h.chatIdentifier,
       );
-      assert.ok(handles.includes("+15555551001"));
-      assert.ok(handles.includes("+15555551003"));
-      assert.ok(!handles.includes("+15555551002"));
+      assert.ok(handles.includes("+15555550169"));
+      assert.ok(handles.includes("+15555550171"));
+      assert.ok(!handles.includes("+15555550170"));
     });
   });
 
@@ -561,9 +561,9 @@ describe("vault search + FTS", () => {
       const handles = searchVault(
         "first-contact:2022-02-01..2022-03-02",
       ).hits.map((h) => h.chatIdentifier);
-      assert.ok(handles.includes("+15555551004"));
-      assert.ok(!handles.includes("+15555551005"));
-      assert.ok(!handles.includes("+15555551001"));
+      assert.ok(handles.includes("+15555550172"));
+      assert.ok(!handles.includes("+15555550173"));
+      assert.ok(!handles.includes("+15555550169"));
     });
   });
 
@@ -572,8 +572,8 @@ describe("vault search + FTS", () => {
       const handles = searchVault("kumquat within:Family").hits.map(
         (h) => h.chatIdentifier,
       );
-      assert.ok(handles.includes("+15555551004"));
-      assert.ok(handles.includes("+15555551005"));
+      assert.ok(handles.includes("+15555550172"));
+      assert.ok(handles.includes("+15555550173"));
       assert.ok(handles.includes("chat-kumquat"));
 
       const other = searchVault("kumquat within:Nobody").hits;

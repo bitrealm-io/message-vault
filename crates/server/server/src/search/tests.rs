@@ -324,8 +324,8 @@ pub(crate) async fn seeded() -> (sqlx::SqlitePool, tempfile::TempDir, Fixture) {
         .unwrap();
     f.ana_handle = handle(&mut conn, a, "+15550001", "imessage").await;
     f.bo_handle = handle(&mut conn, a, "+15550002", "sms").await;
-    f.jane_handle = handle(&mut conn, a, "jane.doe@gmail.com", "imessage").await;
-    f.sam_handle = handle(&mut conn, a, "sam@icloud.com", "imessage").await;
+    f.jane_handle = handle(&mut conn, a, "jane.doe@example.com", "imessage").await;
+    f.sam_handle = handle(&mut conn, a, "sam@example.org", "imessage").await;
     f.nameless_handle = handle(&mut conn, a, "+15550009", "sms").await;
     f.cy_handle = handle(&mut conn, a, "+15550003", "whatsapp").await;
 
@@ -776,7 +776,7 @@ mod free_text {
         // Contacts: name or handle.
         assert_eq!(run(&mut conn, ListKind::Contacts, "ana").await, vec![f.ana]);
         assert_eq!(
-            run(&mut conn, ListKind::Contacts, "gmail").await,
+            run(&mut conn, ListKind::Contacts, "example.com").await,
             vec![f.jane]
         );
         // Conversations: title, or a participant's name or handle.
@@ -1077,7 +1077,7 @@ mod text_words {
             sorted(vec![f.ana, f.bo, f.cy, f.jane, f.sam])
         );
         assert_eq!(
-            run(&mut conn, ListKind::Contacts, "identity:gmail").await,
+            run(&mut conn, ListKind::Contacts, "identity:example.com").await,
             vec![f.jane]
         );
         assert_eq!(
@@ -1101,7 +1101,7 @@ mod text_words {
             sorted(vec![f.jane_direct, f.big_group])
         );
         assert_eq!(
-            run(&mut conn, ListKind::Conversations, "identity:icloud").await,
+            run(&mut conn, ListKind::Conversations, "identity:example.org").await,
             sorted(vec![f.sam_direct, f.archive_group, f.big_group])
         );
         assert_eq!(
@@ -1632,7 +1632,7 @@ mod people_words {
         assert_eq!(run(&mut conn, ListKind::Messages, "from:me").await.len(), 4);
         assert_eq!(run(&mut conn, ListKind::Messages, "to:me").await.len(), 10);
         assert_eq!(
-            run(&mut conn, ListKind::Messages, "from:gmail.com")
+            run(&mut conn, ListKind::Messages, "from:example.com")
                 .await
                 .len(),
             6
@@ -2619,7 +2619,7 @@ mod measure_words {
             run(
                 &mut conn,
                 ListKind::Contacts,
-                "first-message:<2020 last-message:>=2024-01-01 identity:@gmail.com"
+                "first-message:<2020 last-message:>=2024-01-01 identity:@example.com"
             )
             .await,
             vec![f.jane]

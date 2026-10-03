@@ -312,7 +312,7 @@ released versions carry their date on the heading.
   the next step ran to the end.
 - 2026-10-02 **Two conversations with one person in one batch become one.**
   Two conversations whose addresses are the same once written the same way,
-  such as `+15551234567` and `5551234567`, or an iMessage and an SMS
+  such as `+15555550119` and `5555550119`, or an iMessage and an SMS
   conversation with one number, failed the whole batch when they arrived
   together. They now merge, as they did when they arrived apart.
 - 2026-10-02 **Messages sent in the same second keep their order.** When an
@@ -354,7 +354,7 @@ released versions carry their date on the heading.
   no longer fails over leftovers from an earlier run in the backup folder.
 - 2026-10-02 **Phone numbers from Android SMS backups keep their country.**
   The SMS Backup & Restore, GO SMS Pro and SMS Backup+ readers read every
-  number by US rules, so `+6591234567` became a US number and a UK number
+  number by US rules, so `+6595550100` became a US number and a UK number
   matched nobody. An email address became a phone number made of its
   digits, and a message from a sender name such as `AMAZON` was dropped. Your
   own number written without its country code is now recognised as yours,
@@ -510,7 +510,7 @@ released versions carry their date on the heading.
 #### Contacts and identities
 
 - 2026-09-22 **International phone numbers keep their country.** A number
-  written with a country code, such as `+65 9123 4567` in an address book or
+  written with a country code, such as `+65 9555 0100` in an address book or
   `+44 7700 900123` as your own number, is now matched as that number. Before,
   some were read as a US number with the same digits and named the wrong
   person, and some matched nobody.

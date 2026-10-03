@@ -43,12 +43,12 @@ describe("deleteAllMessagesForAccount", () => {
       ensureVaultSchema(db);
       db.prepare(
         `INSERT INTO handles (account_id, raw, normalized, handle_type, service)
-         VALUES (?, '+15555550999', '+15555550999', 'phone', 'phone')`,
+         VALUES (?, '+15555550167', '+15555550167', 'phone', 'phone')`,
       ).run(accountId);
       const handleId = Number(
         db
           .prepare(
-            `SELECT id FROM handles WHERE account_id = ? AND raw = '+15555550999'`,
+            `SELECT id FROM handles WHERE account_id = ? AND raw = '+15555550167'`,
           )
           .pluck()
           .get(accountId),

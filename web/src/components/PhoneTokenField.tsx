@@ -29,7 +29,7 @@ const PhoneTokenField = forwardRef<PhoneTokenFieldHandle, PhoneTokenFieldProps>(
       onChange,
       onDraftChange,
       "aria-label": ariaLabel = "Backup Device Phone Numbers",
-      placeholder = "+1 555-123-4567",
+      placeholder = "+1 555-555-0119",
     },
     ref,
   ) {

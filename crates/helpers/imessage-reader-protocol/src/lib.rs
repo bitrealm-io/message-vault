@@ -53,9 +53,9 @@ pub const PROTOCOL_VERSION: u32 = 6;
 /// The owner address behind a raw `chat.account_login` or
 /// `message.destination_caller_id` value, or `None` when nothing is left.
 ///
-/// Apple stores the owner's addresses three ways: `P:+15550001111` and
+/// Apple stores the owner's addresses three ways: `P:+15555550110` and
 /// `E:owner@example.com` in `chat.account_login`, and bare or as
-/// `tel:+15550001111` in `message.destination_caller_id`. The helper puts
+/// `tel:+15555550110` in `message.destination_caller_id`. The helper puts
 /// every one through this function before it crosses the pipe, so an
 /// identity in [`Event::Identities`] and the owner of a [`Message`] are
 /// spelled the same way and the app can compare them as text. Real backups
@@ -486,20 +486,20 @@ mod tests {
     #[test]
     fn bare_address_strips_each_prefix_and_drops_what_is_then_empty() {
         assert_eq!(
-            bare_address("P:+15550001111").as_deref(),
-            Some("+15550001111")
+            bare_address("P:+15555550110").as_deref(),
+            Some("+15555550110")
         );
         assert_eq!(
             bare_address("E:owner@example.com").as_deref(),
             Some("owner@example.com")
         );
         assert_eq!(
-            bare_address("tel:+15550001111").as_deref(),
-            Some("+15550001111")
+            bare_address("tel:+15555550110").as_deref(),
+            Some("+15555550110")
         );
         assert_eq!(
-            bare_address(" +15550001111 ").as_deref(),
-            Some("+15550001111")
+            bare_address(" +15555550110 ").as_deref(),
+            Some("+15555550110")
         );
         assert_eq!(bare_address("E:"), None);
         assert_eq!(bare_address("tel: "), None);

@@ -78,11 +78,11 @@ fn drains_units_and_writes_conversation_files_last() {
 
     let units = vec![
         unit_from(
-            doc_with("+15550000001", 1),
+            doc_with("+15555550106", 1),
             vec![AttachmentSource::Bytes(b"inline-bytes".to_vec())],
         ),
         unit_from(
-            doc_with("+15550000002", 1),
+            doc_with("+15555550107", 1),
             vec![AttachmentSource::Path(src)],
         ),
     ];
@@ -122,11 +122,11 @@ fn resume_skips_a_unit_whose_conversation_file_exists() {
     let build = || {
         vec![
             unit_from(
-                doc_with("+15550000001", 1),
+                doc_with("+15555550106", 1),
                 vec![AttachmentSource::Bytes(b"a".to_vec())],
             ),
             unit_from(
-                doc_with("+15550000002", 1),
+                doc_with("+15555550107", 1),
                 vec![AttachmentSource::Bytes(b"b".to_vec())],
             ),
         ]
@@ -159,11 +159,11 @@ fn resume_rewrites_a_unit_whose_conversation_file_is_missing() {
     let build = || {
         vec![
             unit_from(
-                doc_with("+15550000001", 1),
+                doc_with("+15555550106", 1),
                 vec![AttachmentSource::Bytes(b"a".to_vec())],
             ),
             unit_from(
-                doc_with("+15550000002", 1),
+                doc_with("+15555550107", 1),
                 vec![AttachmentSource::Bytes(b"b".to_vec())],
             ),
         ]
@@ -172,7 +172,7 @@ fn resume_rewrites_a_unit_whose_conversation_file_is_missing() {
 
     let doomed = out.join(format!(
         "{}.jsonl",
-        doc_with("+15550000002", 0).filename_stem()
+        doc_with("+15555550107", 0).filename_stem()
     ));
     assert!(doomed.is_file());
     fs::remove_file(&doomed).unwrap();
@@ -191,15 +191,15 @@ fn resume_rewrites_a_conversation_file_that_is_empty_or_cut_off() {
     let build = || {
         vec![
             unit_from(
-                doc_with("+15550000001", 1),
+                doc_with("+15555550106", 1),
                 vec![AttachmentSource::Bytes(b"a".to_vec())],
             ),
             unit_from(
-                doc_with("+15550000002", 1),
+                doc_with("+15555550107", 1),
                 vec![AttachmentSource::Bytes(b"b".to_vec())],
             ),
             unit_from(
-                doc_with("+15550000003", 1),
+                doc_with("+15555550108", 1),
                 vec![AttachmentSource::Bytes(b"c".to_vec())],
             ),
         ]
@@ -207,9 +207,9 @@ fn resume_rewrites_a_conversation_file_that_is_empty_or_cut_off() {
     drain(&out, build(), &options(MediaMode::Clone, false)).unwrap();
 
     let file_for = |who: &str| out.join(format!("{}.jsonl", doc_with(who, 0).filename_stem()));
-    let intact = file_for("+15550000001");
-    let cut_off = file_for("+15550000002");
-    let empty = file_for("+15550000003");
+    let intact = file_for("+15555550106");
+    let cut_off = file_for("+15555550107");
+    let empty = file_for("+15555550108");
     let intact_bytes = fs::read(&intact).unwrap();
     let full = fs::read(&cut_off).unwrap();
     // A power loss mid-write leaves the bytes that made it to disk: no
@@ -241,12 +241,12 @@ fn disabled_mode_marks_not_copied_and_clears_paths() {
     let out = tmp.path().join("out");
     fs::create_dir_all(&out).unwrap();
     let units = vec![unit_from(
-        doc_with("+15550000001", 1),
+        doc_with("+15555550106", 1),
         vec![AttachmentSource::Bytes(b"ignored".to_vec())],
     )];
     drain(&out, units, &options(MediaMode::Disabled, false)).unwrap();
 
-    let stem = doc_with("+15550000001", 0).filename_stem();
+    let stem = doc_with("+15555550106", 0).filename_stem();
     let doc = read_conversation_jsonl(&out.join(format!("{stem}.jsonl"))).unwrap();
     let a = &doc.messages[0].attachments[0];
     assert_eq!(a.missing_reason.as_deref(), Some("not_copied"));
@@ -263,7 +263,7 @@ fn missing_source_becomes_file_missing_and_the_drain_continues() {
     let out = tmp.path().join("out");
     fs::create_dir_all(&out).unwrap();
     let units = vec![unit_from(
-        doc_with("+15550000001", 2),
+        doc_with("+15555550106", 2),
         vec![
             AttachmentSource::Missing,
             AttachmentSource::Bytes(b"present".to_vec()),
@@ -272,7 +272,7 @@ fn missing_source_becomes_file_missing_and_the_drain_continues() {
     let report = drain(&out, units, &options(MediaMode::Clone, false)).unwrap();
     assert_eq!(report.conversations_written, 1);
 
-    let stem = doc_with("+15550000001", 0).filename_stem();
+    let stem = doc_with("+15555550106", 0).filename_stem();
     let doc = read_conversation_jsonl(&out.join(format!("{stem}.jsonl"))).unwrap();
     let atts = &doc.messages[0].attachments;
     assert_eq!(atts[0].missing_reason.as_deref(), Some("file_missing"));
@@ -290,11 +290,11 @@ fn progress_lines_cover_all_units_with_global_counts() {
 
     let units = vec![
         unit_from(
-            doc_with("+15550000001", 1),
+            doc_with("+15555550106", 1),
             vec![AttachmentSource::Bytes(b"a".to_vec())],
         ),
         unit_from(
-            doc_with("+15550000002", 1),
+            doc_with("+15555550107", 1),
             vec![AttachmentSource::Bytes(b"b".to_vec())],
         ),
     ];
@@ -337,7 +337,7 @@ fn parallel_drain_writes_every_unit() {
     let units: Vec<_> = (0..12)
         .map(|i| {
             unit_from(
-                doc_with(&format!("+1555000{i:04}"), 1),
+                doc_with(&format!("+155555501{i:02}"), 1),
                 vec![AttachmentSource::Bytes(format!("payload-{i}").into_bytes())],
             )
         })
@@ -365,13 +365,13 @@ fn parallel_drain_stops_on_the_first_error() {
     // A directory sitting where a conversation file must go: the write
     // fails for that unit, and the drain reports it rather than
     // finishing quietly.
-    let blocked = doc_with("+15550000003", 0).filename_stem();
+    let blocked = doc_with("+15555550108", 0).filename_stem();
     fs::create_dir_all(out.join(format!("{blocked}.jsonl"))).unwrap();
 
     let units: Vec<_> = (1..=4)
         .map(|i| {
             unit_from(
-                doc_with(&format!("+1555000000{i}"), 1),
+                doc_with(&format!("+155555501{:02}", i + 5), 1),
                 vec![AttachmentSource::Bytes(b"x".to_vec())],
             )
         })
@@ -393,7 +393,7 @@ fn last_attachment_bytes(writer_count: usize) -> (u64, u64) {
     // Each source claims 100 bytes for a 5-byte file.
     let units: Vec<_> = (1..=3)
         .map(|i| {
-            ConversationUnit::from_doc(doc_with(&format!("+1555000000{i}"), 1), |_, _| {
+            ConversationUnit::from_doc(doc_with(&format!("+155555501{:02}", i + 5), 1), |_, _| {
                 (AttachmentSource::Bytes(b"xxxxx".to_vec()), Some(100))
             })
         })
@@ -451,7 +451,7 @@ fn typed_progress_covers_prepare_and_attachments_across_units() {
     let units: Vec<_> = (1..=4)
         .map(|i| {
             unit_from(
-                doc_with(&format!("+1555000000{i}"), 1),
+                doc_with(&format!("+155555501{:02}", i + 5), 1),
                 vec![AttachmentSource::Bytes(b"x".to_vec())],
             )
         })
@@ -512,11 +512,11 @@ fn sequential_drain_reports_prepare_in_order_and_counts_resumed_units() {
     let build = || {
         vec![
             unit_from(
-                doc_with("+15550000001", 1),
+                doc_with("+15555550106", 1),
                 vec![AttachmentSource::Bytes(b"a".to_vec())],
             ),
             unit_from(
-                doc_with("+15550000002", 1),
+                doc_with("+15555550107", 1),
                 vec![AttachmentSource::Bytes(b"b".to_vec())],
             ),
         ]
@@ -563,7 +563,7 @@ fn an_unreadable_attachment_is_logged_before_it_becomes_a_chip() {
     let sink = LogSink::new(move |l: &str| sink_lines.lock().unwrap().push(l.to_string()));
 
     let units = vec![unit_from(
-        doc_with("+15550000001", 1),
+        doc_with("+15555550106", 1),
         vec![AttachmentSource::Path(missing)],
     )];
     let report = drain_write_queue(
@@ -585,7 +585,7 @@ fn an_unreadable_attachment_is_logged_before_it_becomes_a_chip() {
         "an unreadable attachment says why before it turns into a chip: {lines:?}"
     );
 
-    let stem = doc_with("+15550000001", 0).filename_stem();
+    let stem = doc_with("+15555550106", 0).filename_stem();
     let doc = read_conversation_jsonl(&out.join(format!("{stem}.jsonl"))).unwrap();
     assert_eq!(
         doc.messages[0].attachments[0].missing_reason.as_deref(),
@@ -608,7 +608,7 @@ fn headroom_shortfall_speaks_when_space_is_short() {
 fn a_drain_the_disk_cannot_hold_is_refused_before_anything_is_written() {
     let hinted = || {
         let mut unit = unit_from(
-            doc_with("+15550000001", 1),
+            doc_with("+15555550106", 1),
             vec![AttachmentSource::Bytes(b"small".to_vec())],
         );
         unit.attachments[0].size_hint = Some(u64::MAX / 2);
@@ -764,7 +764,7 @@ fn clone_mode_runs_no_media_pass() {
     let out = tmp.path().join("out");
     fs::create_dir_all(&out).unwrap();
     let units = vec![unit_from(
-        doc_with("+15550000001", 1),
+        doc_with("+15555550106", 1),
         vec![AttachmentSource::Bytes(b"plain".to_vec())],
     )];
     let report = drain(&out, units, &options(MediaMode::Clone, false)).unwrap();
@@ -780,7 +780,7 @@ fn convert_runs_as_a_pass_after_the_drain_stages_originals() {
     let out = tmp.path().join("out");
     fs::create_dir_all(&out).unwrap();
 
-    let mut doc = doc_with("+15550000001", 1);
+    let mut doc = doc_with("+15555550106", 1);
     doc.messages[0].attachments[0].original_name = Some("shot.png".into());
     let units = vec![unit_from(
         doc,
@@ -795,7 +795,7 @@ fn convert_runs_as_a_pass_after_the_drain_stages_originals() {
         "the post-pass converted the staged original"
     );
 
-    let stem = doc_with("+15550000001", 0).filename_stem();
+    let stem = doc_with("+15555550106", 0).filename_stem();
     let written = read_conversation_jsonl(&out.join(format!("{stem}.jsonl"))).unwrap();
     let path = written.messages[0].attachments[0].path.as_deref().unwrap();
     assert!(
@@ -814,7 +814,7 @@ fn convert_runs_as_a_pass_after_the_drain_stages_originals() {
 fn media_disabled_is_not_refused_for_attachments_it_will_not_write() {
     let hinted = || {
         let mut unit = unit_from(
-            doc_with("+15550000001", 1),
+            doc_with("+15555550106", 1),
             vec![AttachmentSource::Bytes(b"small".to_vec())],
         );
         unit.attachments[0].size_hint = Some(u64::MAX / 2);
@@ -847,7 +847,7 @@ fn media_disabled_is_not_refused_for_attachments_it_will_not_write() {
 #[test]
 fn a_missing_attachment_is_not_counted_against_the_disk() {
     let tmp = tempfile::tempdir().unwrap();
-    let mut doc = doc_with("+15550000001", 1);
+    let mut doc = doc_with("+15555550106", 1);
     doc.messages[0].attachments[0].size_bytes = Some(u64::MAX / 2);
     let unit = ConversationUnit::from_doc(doc, |_, att| AttachmentSource::take_bytes(att));
     assert_eq!(unit.attachments[0].size_hint, Some(u64::MAX / 2));

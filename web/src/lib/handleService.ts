@@ -14,9 +14,9 @@ export const HANDLE_SERVICES = [
  * adding its example on the same line — there is no second place to forget.
  */
 export const HANDLE_SERVICE_OPTIONS = [
-  { value: "phone", label: "Text Message", placeholder: "+1 555-123-4567" },
+  { value: "phone", label: "Text Message", placeholder: "+1 555-555-0119" },
   { value: "email", label: "Email", placeholder: "you@example.com" },
-  { value: "whatsapp", label: "WhatsApp", placeholder: "+1 555-123-4567" },
+  { value: "whatsapp", label: "WhatsApp", placeholder: "+1 555-555-0119" },
 ] as const satisfies ReadonlyArray<{
   value: HandleService;
   label: string;
@@ -51,7 +51,7 @@ export function handleValidationError(service: HandleService, value: string): st
   const digits = trimmed.replace(/\D/g, "");
   const onlyNumberCharacters = /^\+?[\d\s().-]+$/.test(trimmed);
   if (!onlyNumberCharacters || digits.length < 7 || digits.length > 15) {
-    return "Enter a phone number like +1 555-123-4567.";
+    return "Enter a phone number like +1 555-555-0119.";
   }
   return null;
 }
@@ -67,7 +67,7 @@ export const DUPLICATE_HANDLE_MESSAGE = "This account is already in the list.";
  * on WhatsApp is two accounts, not one, and listing both is the right thing to
  * do. Within a service the comparison ignores how the value was typed: an
  * email folds to lower case, and a number falls back to its digits so
- * `+1 (555) 123-4567` and `+15551234567` land on the same key.
+ * `+1 (555) 555-0119` and `+15555550119` land on the same key.
  *
  * The digits are compared whole rather than by their last ten, so a number
  * written once with its country code and once without is not caught. That is

@@ -451,8 +451,8 @@ fn read_rows(csv_text: &str) -> Result<Vec<FileRow>, Vec<String>> {
 /// `contact` is the contact the row names, when the account holds it. A
 /// phone number written without `+` that no key matches as written is read
 /// as `+` and its digits when that contact holds that key, because a
-/// spreadsheet that opens the file can save `+6591234567` as the number
-/// `6591234567`. Other contacts' identities are not looked at, so a dropped
+/// spreadsheet that opens the file can save `+6595550100` as the number
+/// `6595550100`. Other contacts' identities are not looked at, so a dropped
 /// `+` never attaches another person's number to this one.
 fn row_identity(
     row: &FileRow,

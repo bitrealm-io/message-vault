@@ -90,7 +90,7 @@ async fn contact_match_collapses_duplicates_by_normalized_form() {
     // person, not two — otherwise Gate 1's "N new" count
     // double-counts a single human written two ways.
     let (fixture, account) = contacts_fixture_with_handles(&[]).await;
-    let body = serde_json::json!({ "identifiers": ["+1 (555) 010-0100", "+15550100100"] });
+    let body = serde_json::json!({ "identifiers": ["+1 (555) 555-0115", "+15555550115"] });
     let response = post_json::<serde_json::Value>(
         &fixture.state,
         "/v1/contacts/unmatched-identities",
@@ -100,7 +100,7 @@ async fn contact_match_collapses_duplicates_by_normalized_form() {
     .await;
     assert_eq!(
         response["items"],
-        serde_json::json!(["+1 (555) 010-0100"]),
+        serde_json::json!(["+1 (555) 555-0115"]),
         "both spellings normalize to the same value, so only the \
          first-seen spelling should come back once"
     );
@@ -187,7 +187,7 @@ async fn a_refused_contact_edit_answers_422_with_the_persons_sentence() {
     let mut conn = fixture.state.db.acquire().await.unwrap();
     let first =
         insert_contact_with_handle(&mut conn, account.account_id, "Ada", "+15555550100").await;
-    insert_contact_with_handle(&mut conn, account.account_id, "Grace", "+15555550200").await;
+    insert_contact_with_handle(&mut conn, account.account_id, "Grace", "+15555550135").await;
     drop(conn);
 
     // Taking an identity that is already another contact’s.
@@ -195,7 +195,7 @@ async fn a_refused_contact_edit_answers_422_with_the_persons_sentence() {
         &fixture.state,
         &format!("/v1/contacts/{first}"),
         &account.token,
-        serde_json::json!({ "add_identity": { "address": "+15555550200" } }),
+        serde_json::json!({ "add_identity": { "address": "+15555550135" } }),
     )
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
@@ -352,8 +352,8 @@ async fn list_contacts_filters_and_paginates() {
     let mut conn = fixture.conn().await;
     for (name, phone) in [
         ("Pat", "+15555550100"),
-        ("Sam", "+15555550200"),
-        ("Alex", "+15555550300"),
+        ("Sam", "+15555550135"),
+        ("Alex", "+15555550143"),
     ] {
         let contact_id: i64 = sqlx::query_scalar(
             "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, $2) RETURNING id",
@@ -396,7 +396,7 @@ async fn list_contacts_filters_and_paginates() {
     let by_handle = list_contacts_sorted(
         &mut conn,
         account,
-        "identity:5555550200",
+        "identity:5555550135",
         &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
         0,
@@ -451,7 +451,7 @@ async fn get_contact_detail_counts_direct_group_and_messages() {
     .await
     .unwrap();
     let peer =
-        account_profile::link_account_handle(&mut conn, account, "+15555550200", HandleType::Phone)
+        account_profile::link_account_handle(&mut conn, account, "+15555550135", HandleType::Phone)
             .await
             .unwrap();
     sqlx::query(
@@ -554,7 +554,7 @@ async fn get_contact_detail_counts_direct_group_and_messages() {
 
     // Unrelated conversation should not be counted.
     let other =
-        account_profile::link_account_handle(&mut conn, account, "+15555550999", HandleType::Phone)
+        account_profile::link_account_handle(&mut conn, account, "+15555550167", HandleType::Phone)
             .await
             .unwrap();
     sqlx::query(
@@ -587,8 +587,8 @@ async fn get_contact_detail_counts_direct_group_and_messages() {
     assert_eq!(detail.total_messages, 3);
     assert_eq!(detail.identities.len(), 1);
     assert!(
-        detail.identities[0].address.contains("5555550200")
-            || detail.identities[0].address.contains("+15555550200"),
+        detail.identities[0].address.contains("5555550135")
+            || detail.identities[0].address.contains("+15555550135"),
         "handle={:?}",
         detail.identities[0].address
     );
@@ -621,7 +621,7 @@ async fn get_contact_summaries_counts_two_contacts_in_one_query() {
     .await
     .unwrap();
     let sam_handle =
-        account_profile::link_account_handle(&mut conn, account, "+15555550200", HandleType::Phone)
+        account_profile::link_account_handle(&mut conn, account, "+15555550135", HandleType::Phone)
             .await
             .unwrap();
     sqlx::query(
@@ -812,7 +812,7 @@ async fn a_conversation_with_two_of_a_contacts_identities_counts_once() {
     .unwrap();
     let mut handles = Vec::new();
     for (raw, handle_type) in [
-        ("+15555550200", HandleType::Phone),
+        ("+15555550135", HandleType::Phone),
         ("sam@example.com", HandleType::Email),
     ] {
         let (handle, _) =
@@ -970,7 +970,7 @@ async fn a_contacts_identity_and_summary_count_the_messages_it_sent() {
     let mut conn = fixture.conn().await;
 
     let mine =
-        account_profile::link_account_handle(&mut conn, account, "+15555550001", HandleType::Phone)
+        account_profile::link_account_handle(&mut conn, account, "+15555550128", HandleType::Phone)
             .await
             .unwrap();
     let jane = insert_contact_with_handle(&mut conn, account, "Jane", "+15555550100").await;
@@ -1000,7 +1000,7 @@ async fn a_contacts_identity_and_summary_count_the_messages_it_sent() {
     .execute(&mut *conn)
     .await
     .unwrap();
-    let bob = insert_contact_with_handle(&mut conn, account, "Bob", "+15555550200").await;
+    let bob = insert_contact_with_handle(&mut conn, account, "Bob", "+15555550135").await;
     let bob_phone: i64 =
         sqlx::query_scalar("SELECT handle_id FROM contact_handles WHERE contact_id = $1")
             .bind(bob)
@@ -1127,7 +1127,7 @@ async fn a_contacts_identity_and_summary_count_the_messages_it_sent() {
         .unwrap();
     let held = own
         .iter()
-        .find(|identity| identity.address == "+15555550001")
+        .find(|identity| identity.address == "+15555550128")
         .expect("the holder's identity");
     assert_eq!(held.conversations, 2);
     assert_eq!(held.direct_messages, 100);
@@ -1157,7 +1157,7 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
             &UpdateContactRequest {
                 name: None,
                 add_identity: Some(AddContactIdentityRequest {
-                    address: "+15555550200".into(),
+                    address: "+15555550135".into(),
                     service: Some("phone".into()),
                 }),
                 update_identity: None,
@@ -1173,7 +1173,7 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
         .unwrap()
         .unwrap();
     assert_eq!(detail.identities.len(), 1);
-    assert!(detail.identities[0].address.contains("5555550200"));
+    assert!(detail.identities[0].address.contains("5555550135"));
 
     assert!(
         mutate_committed(
@@ -1300,11 +1300,11 @@ async fn a_handle_takes_its_type_from_the_service_it_is_added_under() {
     let contact_id = insert_contact_with_handle(&mut conn, account, "Sam", "+15555550100").await;
 
     for (raw, service, expected) in [
-        ("+15555550201", Some("sms"), "phone"),
-        ("+15555550202", Some("imessage"), "phone"),
-        ("+15555550203", Some("whatsapp"), "phone"),
-        ("+15555550204", Some("phone"), "phone"),
-        ("+15555550205", None, "phone"),
+        ("+15555550136", Some("sms"), "phone"),
+        ("+15555550137", Some("imessage"), "phone"),
+        ("+15555550138", Some("whatsapp"), "phone"),
+        ("+15555550139", Some("phone"), "phone"),
+        ("+15555550140", None, "phone"),
         ("sam@example.com", Some("email"), "email"),
         ("sam", None, "other"),
         ("sam#1234", Some("discord"), "other"),
@@ -1330,7 +1330,7 @@ async fn naming_a_handle_again_under_another_transport_keeps_one_row() {
     let account = fixture.account_with_id(101, "alice").await;
     let mut conn = fixture.conn().await;
     let contact_id = insert_contact_with_handle(&mut conn, account, "Sam", "+15555550100").await;
-    add_identity(&mut conn, account, contact_id, "+15555550300", Some("sms")).await;
+    add_identity(&mut conn, account, contact_id, "+15555550143", Some("sms")).await;
 
     assert!(
         mutate_committed(
@@ -1341,8 +1341,8 @@ async fn naming_a_handle_again_under_another_transport_keeps_one_row() {
                 name: None,
                 add_identity: None,
                 update_identity: Some(UpdateContactIdentityRequest {
-                    previous_address: "+15555550300".into(),
-                    address: "+15555550300".into(),
+                    previous_address: "+15555550143".into(),
+                    address: "+15555550143".into(),
                     service: Some("iMessage".into()),
                 }),
                 remove_identity: None,
@@ -1351,13 +1351,13 @@ async fn naming_a_handle_again_under_another_transport_keeps_one_row() {
         .await
         .unwrap()
     );
-    add_identity(&mut conn, account, contact_id, "+15555550300", Some("sms")).await;
+    add_identity(&mut conn, account, contact_id, "+15555550143", Some("sms")).await;
 
     let rows: Vec<(String, Option<String>)> = sqlx::query_as(
         "SELECT handle_type, service FROM handles WHERE account_id = $1 AND raw = $2",
     )
     .bind(account)
-    .bind("+15555550300")
+    .bind("+15555550143")
     .fetch_all(&mut *conn)
     .await
     .unwrap();
@@ -1598,7 +1598,7 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
             &UpdateContactRequest {
                 name: None,
                 add_identity: Some(AddContactIdentityRequest {
-                    address: "+15555550200".into(),
+                    address: "+15555550135".into(),
                     service: Some("phone".into()),
                 }),
                 update_identity: None,
@@ -1621,7 +1621,7 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
             &UpdateContactRequest {
                 name: None,
                 add_identity: Some(AddContactIdentityRequest {
-                    address: "+15555550200".into(),
+                    address: "+15555550135".into(),
                     service: Some("phone".into()),
                 }),
                 update_identity: None,
@@ -1647,7 +1647,7 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
                 add_identity: None,
                 update_identity: None,
                 remove_identity: Some(RemoveContactIdentityRequest {
-                    address: "+15555550200".into(),
+                    address: "+15555550135".into(),
                     service: Some("phone".into()),
                 }),
             },
@@ -1760,7 +1760,7 @@ async fn list_contacts_filters_has_messages_and_never_messaged() {
     let account = fixture.account_with_id(101, "alice").await;
     let mut conn = fixture.conn().await;
     insert_contact_with_handle(&mut conn, account, "Messaged", "+15555550100").await;
-    insert_contact_with_handle(&mut conn, account, "Silent", "+15555550200").await;
+    insert_contact_with_handle(&mut conn, account, "Silent", "+15555550135").await;
     insert_direct_conversation(
         &mut conn,
         account,
@@ -1844,15 +1844,15 @@ async fn list_contacts_sorts_by_last_heard_with_silent_contacts_last() {
     let account = fixture.account_with_id(101, "alice").await;
     let mut conn = fixture.conn().await;
     insert_contact_with_handle(&mut conn, account, "Recent", "+15555550100").await;
-    insert_contact_with_handle(&mut conn, account, "Older", "+15555550200").await;
-    insert_contact_with_handle(&mut conn, account, "Silent", "+15555550300").await;
+    insert_contact_with_handle(&mut conn, account, "Older", "+15555550135").await;
+    insert_contact_with_handle(&mut conn, account, "Silent", "+15555550143").await;
     // A thread per contact; the owner's messages ride on the owner's handle.
-    account_profile::link_account_handle(&mut conn, account, "+15555550001", HandleType::Phone)
+    account_profile::link_account_handle(&mut conn, account, "+15555550128", HandleType::Phone)
         .await
         .unwrap();
     insert_direct_conversation(&mut conn, account, 1, "+15555550100", "imessage", &[]).await;
-    insert_direct_conversation(&mut conn, account, 2, "+15555550200", "imessage", &[]).await;
-    insert_direct_conversation(&mut conn, account, 3, "+15555550300", "imessage", &[]).await;
+    insert_direct_conversation(&mut conn, account, 2, "+15555550135", "imessage", &[]).await;
+    insert_direct_conversation(&mut conn, account, 3, "+15555550143", "imessage", &[]).await;
     insert_message_from(
         &mut conn,
         account,
@@ -1875,7 +1875,7 @@ async fn list_contacts_sorts_by_last_heard_with_silent_contacts_last() {
         &mut conn,
         account,
         2,
-        "+15555550200",
+        "+15555550135",
         "2024-03-01T00:00:00Z",
         false,
     )
@@ -1886,7 +1886,7 @@ async fn list_contacts_sorts_by_last_heard_with_silent_contacts_last() {
         &mut conn,
         account,
         3,
-        "+15555550001",
+        "+15555550128",
         "2023-12-01T00:00:00Z",
         true,
     )
@@ -1895,7 +1895,7 @@ async fn list_contacts_sorts_by_last_heard_with_silent_contacts_last() {
         &mut conn,
         account,
         2,
-        "+15555550001",
+        "+15555550128",
         "2025-01-01T00:00:00Z",
         true,
     )
@@ -1920,7 +1920,7 @@ async fn list_contacts_sorts_by_last_heard_with_silent_contacts_last() {
         &mut conn,
         account,
         4,
-        "+15555550200",
+        "+15555550135",
         "2025-02-01T00:00:00Z",
         false,
     )
@@ -2036,8 +2036,8 @@ async fn list_contacts_filters_service_or() {
     let account = fixture.account_with_id(101, "alice").await;
     let mut conn = fixture.conn().await;
     insert_contact_with_handle(&mut conn, account, "IMsg", "+15555550100").await;
-    insert_contact_with_handle(&mut conn, account, "Sms", "+15555550200").await;
-    insert_contact_with_handle(&mut conn, account, "Wa", "+15555550300").await;
+    insert_contact_with_handle(&mut conn, account, "Sms", "+15555550135").await;
+    insert_contact_with_handle(&mut conn, account, "Wa", "+15555550143").await;
     insert_direct_conversation(
         &mut conn,
         account,
@@ -2051,7 +2051,7 @@ async fn list_contacts_filters_service_or() {
         &mut conn,
         account,
         2,
-        "+15555550200",
+        "+15555550135",
         "sms",
         &["2024-06-01T12:00:00Z"],
     )
@@ -2060,7 +2060,7 @@ async fn list_contacts_filters_service_or() {
         &mut conn,
         account,
         3,
-        "+15555550300",
+        "+15555550143",
         "whatsapp",
         &["2024-06-01T12:00:00Z"],
     )
@@ -2450,7 +2450,7 @@ async fn unknown_group_collects_contacts_missing_a_name_or_an_identity() {
     // Knows who and how to reach them: not Unknown.
     insert_contact_with_handle(&mut conn, account, "Ada", "+15555550100").await;
     // Has an identity, no preferred name: Unknown by the second clause.
-    insert_contact_with_handle(&mut conn, account, "", "+15555550200").await;
+    insert_contact_with_handle(&mut conn, account, "", "+15555550135").await;
     // Has a name, no identity at all: Unknown by the first clause.
     crate::db::contacts::create_contact(
         &mut conn,
@@ -2510,7 +2510,7 @@ async fn list_contacts_filters_by_group_and_no_group() {
     let account = fixture.account_with_id(101, "alice").await;
     let mut conn = fixture.conn().await;
     let family = insert_contact_with_handle(&mut conn, account, "Ada", "+15555550100").await;
-    insert_contact_with_handle(&mut conn, account, "Ben", "+15555550200").await;
+    insert_contact_with_handle(&mut conn, account, "Ben", "+15555550135").await;
     crate::db::named_membership::set_membership(
         crate::db::named_membership::group_spec(),
         &mut conn,

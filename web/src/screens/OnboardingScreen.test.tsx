@@ -90,12 +90,12 @@ describe("OnboardingScreen", () => {
       const user = setupUser();
       render(<OnboardingScreen />);
 
-      await user.type(rowValue(1), "+1 555-123-4567");
+      await user.type(rowValue(1), "+1 555-555-0119");
       await user.click(screen.getByRole("button", { name: "+ Add account" }));
-      await user.type(rowValue(2), "+1 555-123-4568");
+      await user.type(rowValue(2), "+1 555-555-0120");
 
-      expect(rowValue(1)).toHaveValue("+1 555-123-4567");
-      expect(rowValue(2)).toHaveValue("+1 555-123-4568");
+      expect(rowValue(1)).toHaveValue("+1 555-555-0119");
+      expect(rowValue(2)).toHaveValue("+1 555-555-0120");
     } finally {
       // Drop the shadowing property so the real method shows through again.
       delete (crypto as { randomUUID?: unknown }).randomUUID;
@@ -248,7 +248,7 @@ describe("OnboardingScreen", () => {
 
   it("shows an example in the empty value field", () => {
     render(<OnboardingScreen />);
-    expect(rowValue(1)).toHaveAttribute("placeholder", "+1 555-123-4567");
+    expect(rowValue(1)).toHaveAttribute("placeholder", "+1 555-555-0119");
   });
 
   it("changes the placeholder when the service picker changes", async () => {
@@ -267,7 +267,7 @@ describe("OnboardingScreen", () => {
 
     expect(screen.queryByRole("button", { name: "Remove account 1" })).not.toBeInTheDocument();
 
-    await user.type(rowValue(1), "+1 555-123-4567");
+    await user.type(rowValue(1), "+1 555-555-0119");
     await user.click(screen.getByRole("button", { name: "+ Add account" }));
     expect(screen.getByRole("button", { name: "Remove account 1" })).toBeInTheDocument();
     expect(rowValue(2)).toBeInTheDocument();
@@ -317,7 +317,7 @@ describe("OnboardingScreen", () => {
     // was rechecked. Typing is slow enough on a loaded machine to cross that
     // threshold, and a synchronous read lands in the blank window.
     expect(
-      await screen.findByText("Enter a phone number like +1 555-123-4567."),
+      await screen.findByText("Enter a phone number like +1 555-555-0119."),
     ).toBeInTheDocument();
   });
 
@@ -330,7 +330,7 @@ describe("OnboardingScreen", () => {
     expect(screen.queryByRole("textbox", { name: "Account 2 value" })).not.toBeInTheDocument();
 
     await user.clear(rowValue(1));
-    await user.type(rowValue(1), "+1 555-123-4567");
+    await user.type(rowValue(1), "+1 555-555-0119");
     await user.click(screen.getByRole("button", { name: "+ Add account" }));
 
     expect(screen.getByRole("textbox", { name: "Account 2 value" })).toBeInTheDocument();
@@ -351,7 +351,7 @@ describe("OnboardingScreen", () => {
     // was rechecked. Typing is slow enough on a loaded machine to cross that
     // threshold, and a synchronous read lands in the blank window.
     expect(
-      await screen.findByText("Enter a phone number like +1 555-123-4567."),
+      await screen.findByText("Enter a phone number like +1 555-555-0119."),
     ).toBeInTheDocument();
   });
 
@@ -359,7 +359,7 @@ describe("OnboardingScreen", () => {
     const user = setupUser();
     render(<OnboardingScreen />);
 
-    await user.type(rowValue(1), "+1 555-123-4567");
+    await user.type(rowValue(1), "+1 555-555-0119");
     await user.click(screen.getByRole("button", { name: "+ Add account" }));
     await user.type(rowValue(2), "notaphone");
     await user.click(screen.getByRole("button", { name: "+ Add account" }));
@@ -395,7 +395,7 @@ describe("OnboardingScreen", () => {
     await user.type(screen.getByRole("textbox", { name: "Display Name" }), "Matt");
     expect(submit).toBeDisabled();
 
-    await user.type(rowValue(1), "+1 555-123-4567");
+    await user.type(rowValue(1), "+1 555-555-0119");
     expect(submit).toBeEnabled();
   });
 
@@ -406,7 +406,7 @@ describe("OnboardingScreen", () => {
     const add = screen.getByRole("button", { name: "+ Add account" });
     expect(add).toBeDisabled();
 
-    await user.type(rowValue(1), "+1 555-123-4567");
+    await user.type(rowValue(1), "+1 555-555-0119");
     expect(add).toBeEnabled();
 
     await user.clear(rowValue(1));
@@ -417,10 +417,10 @@ describe("OnboardingScreen", () => {
     const user = setupUser();
     render(<OnboardingScreen />);
 
-    await user.type(rowValue(1), "+1 555-123-4567");
+    await user.type(rowValue(1), "+1 555-555-0119");
     await user.click(screen.getByRole("button", { name: "+ Add account" }));
     // The same number, typed the other way — still the same account.
-    await user.type(rowValue(2), "+15551234567");
+    await user.type(rowValue(2), "+15555550119");
     await user.click(screen.getByRole("button", { name: "+ Add account" }));
 
     expect(screen.getByText("This account is already in the list.")).toBeInTheDocument();
@@ -434,11 +434,11 @@ describe("OnboardingScreen", () => {
     const user = setupUser();
     render(<OnboardingScreen />);
 
-    await user.type(rowValue(1), "+1 555-123-4567");
+    await user.type(rowValue(1), "+1 555-555-0119");
     await user.click(screen.getByRole("button", { name: "+ Add account" }));
     await user.click(screen.getByRole("button", { name: "Text Message Account 2 type" }));
     await user.click(screen.getByRole("option", { name: "WhatsApp" }));
-    await user.type(rowValue(2), "+1 555-123-4567");
+    await user.type(rowValue(2), "+1 555-555-0119");
     await user.click(screen.getByRole("button", { name: "+ Add account" }));
 
     expect(screen.queryByText("This account is already in the list.")).not.toBeInTheDocument();
@@ -460,7 +460,7 @@ describe("OnboardingScreen", () => {
     vi.setSystemTime(Date.now());
     render(<OnboardingScreen />);
 
-    const message = "Enter a phone number like +1 555-123-4567.";
+    const message = "Enter a phone number like +1 555-555-0119.";
     await user.type(rowValue(1), "notaphone");
     await user.click(screen.getByRole("button", { name: "+ Add account" }));
     expect(screen.getByText(message)).toBeInTheDocument();
@@ -488,7 +488,7 @@ describe("OnboardingScreen", () => {
     // was rechecked. Typing is slow enough on a loaded machine to cross that
     // threshold, and a synchronous read lands in the blank window.
     expect(
-      await screen.findByText("Enter a phone number like +1 555-123-4567."),
+      await screen.findByText("Enter a phone number like +1 555-555-0119."),
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Text Message Account 1 type" }));

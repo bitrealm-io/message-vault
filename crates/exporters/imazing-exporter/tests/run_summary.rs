@@ -8,9 +8,9 @@ use std::fs;
 
 const MESSAGES_CSV: &str = "\
 Chat Session,Message Date,Delivered Date,Read Date,Edited Date,Deleted Date,Service,Type,Sender ID,Sender Name,Status,Replying to,Subject,Text,Reactions,Attachment,Attachment type
-Bob McRoy,2020-01-01 12:00:00,,,,,SMS,Incoming,+13212462167,Bob McRoy,Read,,,Hello from Bob,,,
-Bob McRoy,sometime,,,,,SMS,Incoming,+13212462167,Bob McRoy,Read,,,Bad date,,,
-Bob McRoy,2020-01-01 12:01:00,,,,,SMS,Outgoing,,,Read,,,Hi Bob,,,
+Bob Sample,2020-01-01 12:00:00,,,,,SMS,Incoming,+13215550100,Bob Sample,Read,,,Hello from Bob,,,
+Bob Sample,sometime,,,,,SMS,Incoming,+13215550100,Bob Sample,Read,,,Bad date,,,
+Bob Sample,2020-01-01 12:01:00,,,,,SMS,Outgoing,,,Read,,,Hi Bob,,,
 ";
 
 #[test]

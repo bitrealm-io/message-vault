@@ -242,7 +242,7 @@ async fn a_phone_is_stored_under_the_key_an_import_gives_the_same_number() {
     let (mut conn, _pool, _dir) = account().await;
     let text = file(&[
         "a,Ada,,phone,phone,(555) 555-0100",
-        "b,Bao,,phone,phone,+65 9123 4567",
+        "b,Bao,,phone,phone,+65 9555 0100",
         "c,Cy,,phone,phone,020 7946 0000",
     ]);
     loaded(&mut conn, &text, LoadMode::Append).await;
@@ -253,10 +253,10 @@ async fn a_phone_is_stored_under_the_key_an_import_gives_the_same_number() {
     .fetch_all(&mut *conn)
     .await
     .unwrap();
-    assert_eq!(keys, ["+15555550100", "+6591234567", "02079460000"]);
+    assert_eq!(keys, ["+15555550100", "+6595550100", "02079460000"]);
     for (raw, key) in [
         ("(555) 555-0100", "+15555550100"),
-        ("+65 9123 4567", "+6591234567"),
+        ("+65 9555 0100", "+6595550100"),
         ("020 7946 0000", "02079460000"),
     ] {
         assert_eq!(
@@ -1019,7 +1019,7 @@ async fn a_row_with_more_fields_than_the_header_is_refused_with_its_row() {
     let ada = imported(
         &mut conn,
         "Ada Lovelace",
-        &[("phone", "phone", "+15550001111")],
+        &[("phone", "phone", "+15555550110")],
     )
     .await;
     join_group(&mut conn, ada, "Family").await;
@@ -1213,9 +1213,9 @@ async fn an_identity_only_a_file_knew_goes_when_edit_takes_it_off() {
 #[tokio::test]
 async fn s4_6_a_number_without_its_plus_keeps_the_real_identity() {
     let (mut conn, _pool, _dir) = account().await;
-    let ada = imported(&mut conn, "Ada", &[("phone", "phone", "+6591234567")]).await;
+    let ada = imported(&mut conn, "Ada", &[("phone", "phone", "+6595550100")]).await;
     let before = identities_of(&mut conn, ada).await;
-    let row = format!("{ada},Ada,,phone,phone,6591234567");
+    let row = format!("{ada},Ada,,phone,phone,6595550100");
     let _ = load(&mut conn, ACCOUNT, &file(&[&row]), LoadMode::Edit).await;
     assert_eq!(identities_of(&mut conn, ada).await, before);
 }
@@ -1225,10 +1225,10 @@ async fn s4_6_a_number_without_its_plus_keeps_the_real_identity() {
 #[tokio::test]
 async fn a_number_read_with_its_plus_back_is_named_in_the_result() {
     let (mut conn, _pool, _dir) = account().await;
-    let ada = imported(&mut conn, "Ada", &[("phone", "phone", "+6591234567")]).await;
+    let ada = imported(&mut conn, "Ada", &[("phone", "phone", "+6595550100")]).await;
     let counts = loaded(
         &mut conn,
-        &file(&[&format!("{ada},Ada,,phone,phone,6591234567")]),
+        &file(&[&format!("{ada},Ada,,phone,phone,6595550100")]),
         LoadMode::Edit,
     )
     .await;
@@ -1236,7 +1236,7 @@ async fn a_number_read_with_its_plus_back_is_named_in_the_result() {
         counts,
         LoadCounts {
             notes: vec![format!(
-                "row 2: 6591234567 has no +, so it was read as +6591234567, \
+                "row 2: 6595550100 has no +, so it was read as +6595550100, \
                  which \"Ada\" (contact {ada}) holds"
             )],
             ..LoadCounts::default()
@@ -1253,21 +1253,21 @@ async fn a_number_without_plus_whose_contact_holds_both_readings_is_refused() {
         &mut conn,
         "Ada",
         &[
-            ("phone", "phone", "+6591234567"),
-            ("phone", "phone", "+16591234567"),
+            ("phone", "phone", "+6595550100"),
+            ("phone", "phone", "+16595550100"),
         ],
     )
     .await;
     let reasons = refused(
         &mut conn,
-        &file(&[&format!("{ada},Ada,,phone,phone,6591234567")]),
+        &file(&[&format!("{ada},Ada,,phone,phone,6595550100")]),
         LoadMode::Edit,
     )
     .await;
     assert_eq!(reasons.len(), 1, "{reasons:?}");
     assert!(reasons[0].starts_with("row 2: "), "{reasons:?}");
-    assert!(reasons[0].contains("+6591234567"), "{reasons:?}");
-    assert!(reasons[0].contains("+16591234567"), "{reasons:?}");
+    assert!(reasons[0].contains("+6595550100"), "{reasons:?}");
+    assert!(reasons[0].contains("+16595550100"), "{reasons:?}");
 }
 
 /// Only the row's own contact is looked at, so a dropped `+` never puts
@@ -1276,25 +1276,25 @@ async fn a_number_without_plus_whose_contact_holds_both_readings_is_refused() {
 #[tokio::test]
 async fn a_number_without_plus_never_takes_another_contacts_identity() {
     let (mut conn, _pool, _dir) = account().await;
-    let bob = imported(&mut conn, "Bob", &[("phone", "phone", "+6591234567")]).await;
+    let bob = imported(&mut conn, "Bob", &[("phone", "phone", "+6595550100")]).await;
     let ada = imported(&mut conn, "Ada", &[]).await;
     let counts = loaded(
         &mut conn,
-        &file(&[&format!("{ada},Ada,,phone,phone,6591234567")]),
+        &file(&[&format!("{ada},Ada,,phone,phone,6595550100")]),
         LoadMode::Append,
     )
     .await;
     assert_eq!(
         identities_of(&mut conn, bob).await,
-        ["phone/phone/+6591234567"]
+        ["phone/phone/+6595550100"]
     );
     assert_eq!(
         identities_of(&mut conn, ada).await,
-        ["phone/phone/+16591234567"]
+        ["phone/phone/+16595550100"]
     );
     assert_eq!(
         counts.notes,
-        ["row 2: 6591234567 has no +, so it became the new identity +16591234567"]
+        ["row 2: 6595550100 has no +, so it became the new identity +16595550100"]
     );
 }
 

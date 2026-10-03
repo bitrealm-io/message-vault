@@ -86,7 +86,7 @@ fn smssync_addresses(raw_address: &str) -> Vec<Handle> {
 }
 
 /// The address in a `From` header, which SMS Backup+ writes as
-/// `"Bob" <+14075555678@unknown.email>`: the part before the `@`.
+/// `"Bob" <+14075550108@unknown.email>`: the part before the `@`.
 fn from_address(from: &str) -> Option<Handle> {
     let addr_spec = from
         .split_once('<')
@@ -316,7 +316,7 @@ mod tests {
 To: me@example.com\r\n\
 Subject: SMS with Alice\r\n\
 X-smssync-type: 1\r\n\
-X-smssync-address: 4075551234\r\n\
+X-smssync-address: 4075550107\r\n\
 X-smssync-date: 1609459200000\r\n\
 Content-Type: text/plain; charset=utf-8\r\n\
 \r\n\
@@ -330,7 +330,7 @@ Hello from Alice\r\n",
         let msg = parse_flat_eml_mail(&path, &mail, &headers, &owners, &[]).unwrap();
         assert!(!msg.is_from_me);
         assert_eq!(msg.text.trim(), "Hello from Alice");
-        assert_eq!(msg.chat_key, "+14075551234");
+        assert_eq!(msg.chat_key, "+14075550107");
         assert!((msg.timestamp_secs - 1_609_459_200.0).abs() < 0.001);
     }
 
@@ -344,7 +344,7 @@ Hello from Alice\r\n",
 To: alice@unknown.email\r\n\
 Subject: SMS with Alice\r\n\
 X-smssync-type: 2\r\n\
-X-smssync-address: 5555550100~4075551234\r\n\
+X-smssync-address: 5555550100~4075550107\r\n\
 X-smssync-date: 1609459200000\r\n\
 Content-Type: text/plain; charset=utf-8\r\n\
 \r\n\
@@ -357,7 +357,7 @@ Hello\r\n",
         let owners = OwnerHandleSet::from_phones(&["5555550100".to_string()]).unwrap();
         let msg = parse_flat_eml_mail(&path, &mail, &headers, &owners, &["me@example.com".into()])
             .unwrap();
-        assert_eq!(msg.chat_key, "+14075551234");
+        assert_eq!(msg.chat_key, "+14075550107");
         assert!(msg.is_from_me);
     }
 
@@ -375,7 +375,7 @@ Hello\r\n",
 To: me@example.com\r\n\
 Subject: SMS with Alice\r\n\
 X-smssync-type: 1\r\n\
-X-smssync-address: 4075551234\r\n\
+X-smssync-address: 4075550107\r\n\
 X-smssync-date: {ms}\r\n\
 Content-Type: text/plain; charset=utf-8\r\n\
 \r\n\
@@ -443,7 +443,7 @@ old message\r\n"
         let headers = MailHeaders {
             smssync_datatype: String::new(),
             smssync_type: "1".into(),
-            smssync_address: "4075551234".into(),
+            smssync_address: "4075550107".into(),
             smssync_date: String::new(),
             smssync_id: String::new(),
             subject: "SMS with Alice".into(),
@@ -476,11 +476,11 @@ old message\r\n"
         parse_flat_eml_mail(&path, &mail, &headers, &owners, &[])
     }
 
-    /// An incoming MMS from 4075551234 whose MIME parts are `body`.
+    /// An incoming MMS from 4075550107 whose MIME parts are `body`.
     fn mms_mail(body: &str) -> ParsedMessage {
         parse(
             &format!(
-                "From: x@unknown.email\nTo: me@example.com\nSubject: SMS with X\nX-smssync-type: 1\nX-smssync-address: 4075551234\nX-smssync-date: 1609459200000\nMIME-Version: 1.0\nContent-Type: multipart/mixed; boundary=\"b\"\n\n{body}--b--\n"
+                "From: x@unknown.email\nTo: me@example.com\nSubject: SMS with X\nX-smssync-type: 1\nX-smssync-address: 4075550107\nX-smssync-date: 1609459200000\nMIME-Version: 1.0\nContent-Type: multipart/mixed; boundary=\"b\"\n\n{body}--b--\n"
             ),
             &["5555550100"],
         )
@@ -529,7 +529,7 @@ old message\r\n"
     #[test]
     fn a_call_log_mail_is_not_a_text_message() {
         let msg = parse(
-            "From: x@unknown.email\nTo: me@example.com\nSubject: Call with Alice\nX-smssync-datatype: CALLLOG\nX-smssync-type: 1\nX-smssync-address: 4075551234\nX-smssync-date: 1609459200000\nContent-Type: text/plain; charset=utf-8\n\n123s (00:02:03)\n4075551234 (incoming call)\n",
+            "From: x@unknown.email\nTo: me@example.com\nSubject: Call with Alice\nX-smssync-datatype: CALLLOG\nX-smssync-type: 1\nX-smssync-address: 4075550107\nX-smssync-date: 1609459200000\nContent-Type: text/plain; charset=utf-8\n\n123s (00:02:03)\n4075550107 (incoming call)\n",
             &["5555550100"],
         );
         assert!(msg.is_none(), "{:?}", msg.map(|m| m.text));
@@ -557,8 +557,8 @@ old message\r\n"
 
     #[test]
     fn an_international_number_keeps_its_country() {
-        let msg = received_from("+6591234567");
-        assert_eq!(crate::identity::chat_id_for(&msg), "+6591234567");
+        let msg = received_from("+6595550100");
+        assert_eq!(crate::identity::chat_id_for(&msg), "+6595550100");
     }
 
     #[test]

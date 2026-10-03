@@ -519,7 +519,7 @@ mod tests {
         let im = message_ir::IrImessage {
             tapbacks: Some(serde_json::json!([
                 {"part_index": 0, "kind": "loved", "is_from_me": false,
-                 "reactor_handle": "+15550001111", "reactor_display_name": "Sam"},
+                 "reactor_handle": "+15555550110", "reactor_display_name": "Sam"},
                 {"part_index": 0, "kind": "liked", "is_from_me": true,
                  "reactor_display_name": "Me"}
             ])),
@@ -529,7 +529,7 @@ mod tests {
         let rows = tapbacks_from_im(Some(&im));
         assert_eq!(
             rows[0].sender.as_deref(),
-            Some("+15550001111"),
+            Some("+15555550110"),
             "Sam's reaction"
         );
         assert!(!rows[0].is_from_me, "Sam's reaction read as the owner's");
@@ -538,7 +538,7 @@ mod tests {
 
         // Sam's message, with the same two reactions.
         let on_sams = message_with("null", &serde_json::to_string(&im).unwrap());
-        assert_eq!(on_sams.tapbacks[0].sender.as_deref(), Some("+15550001111"));
+        assert_eq!(on_sams.tapbacks[0].sender.as_deref(), Some("+15555550110"));
         assert!(!on_sams.tapbacks[0].is_from_me);
         assert_eq!(on_sams.tapbacks[1].sender, None);
         assert!(on_sams.tapbacks[1].is_from_me);

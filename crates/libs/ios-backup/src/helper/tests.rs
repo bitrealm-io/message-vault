@@ -195,7 +195,7 @@ mod faults {
         let dir = tempfile::tempdir().unwrap();
         let path = fake_helper(
             dir.path(),
-            r#"echo '{"event":"identities","values":["P:+15550001111"]}'"#,
+            r#"echo '{"event":"identities","values":["P:+15555550110"]}'"#,
         );
         let mut helper = spawn_fake(&path, &identities_request());
 

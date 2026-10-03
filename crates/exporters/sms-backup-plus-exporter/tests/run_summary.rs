@@ -14,7 +14,7 @@ fn eml(date_ms: &str, text: &str) -> String {
          To: me@example.com\n\
          Subject: SMS with Alice\n\
          X-smssync-type: 1\n\
-         X-smssync-address: 4075551234\n\
+         X-smssync-address: 4075550107\n\
          X-smssync-date: {date_ms}\n\
          Content-Type: text/plain; charset=utf-8\n\
          \n\
@@ -89,12 +89,12 @@ const CALL_LOG_EML: &str = "From: alice@unknown.email\n\
      X-smssync-datatype: CALLLOG\n\
      X-smssync-type: 1\n\
      X-smssync-duration: 123\n\
-     X-smssync-address: 4075551234\n\
+     X-smssync-address: 4075550107\n\
      X-smssync-date: 1609459300000\n\
      Content-Type: text/plain; charset=utf-8\n\
      \n\
      123s (00:02:03)\n\
-     4075551234 (incoming call)\n";
+     4075550107 (incoming call)\n";
 
 /// SMS Backup+ has no text in a call-log mail, only the call's length and
 /// number, and Message Crate has no model for a call.

@@ -118,8 +118,8 @@ struct PduAddresses {
 }
 
 impl PduAddresses {
-    /// A phone writes the same person as `4075551234` on one MMS and
-    /// `+14075551234` on the next; both have one key, so the group they
+    /// A phone writes the same person as `4075550107` on one MMS and
+    /// `+14075550107` on the next; both have one key, so the group they
     /// share has one chat id.
     fn of(parsed: &ParsedPdu) -> Self {
         let sender = parsed.sender.as_deref().and_then(Handle::parse);
@@ -763,7 +763,7 @@ mod tests {
 
     #[test]
     fn a_pdu_number_with_its_country_keeps_it() {
-        assert_eq!(chat_ids_for_received_pdu("+6591234567"), ["+6591234567"]);
+        assert_eq!(chat_ids_for_received_pdu("+6595550100"), ["+6595550100"]);
     }
 
     #[test]

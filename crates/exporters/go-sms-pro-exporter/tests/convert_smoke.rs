@@ -14,7 +14,7 @@ fn write_backup(dir: &Path) {
     let xml = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/sample_export/gosms_sys_smoke.xml");
     fs::copy(xml, dir.join("gosms_sys_smoke.xml")).unwrap();
-    let pdu = PduBuilder::received("+14075551234")
+    let pdu = PduBuilder::received("+14075550107")
         .to("+15555550100")
         .text("Hello one to one")
         .build();
@@ -55,9 +55,9 @@ fn convert_smoke_writes_csv_not_json() {
             // the export must carry the decoded character, not the escape.
             ("text", "smoke hello \u{1f44b}"),
             ("direction", "incoming"),
-            ("sender_handle", "+14075551234"),
+            ("sender_handle", "+14075550107"),
             ("timestamp_unix_ms", "1609459200000"),
-            ("chat_identifier", "+14075551234"),
+            ("chat_identifier", "+14075550107"),
         ],
     );
 
@@ -78,7 +78,7 @@ fn convert_smoke_writes_csv_not_json() {
         &[
             ("text", "Hello one to one"),
             ("direction", "incoming"),
-            ("sender_handle", "+14075551234"),
+            ("sender_handle", "+14075550107"),
         ],
     );
 }

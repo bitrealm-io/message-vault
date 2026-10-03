@@ -32,7 +32,7 @@ pub(super) fn collect_peer_info(kind: SourceKind, session: &str, rows: &[&RawRow
     let mut handles: HashSet<String> = HashSet::new();
     for row in rows {
         let sid = row.sender_id.trim();
-        // Email first: a sender like `bob2024@gmail.com` has 4+ digits and
+        // Email first: a sender like `bob2024@example.com` has 4+ digits and
         // must never be reduced to a phone number.
         if sid.contains('@') {
             handles.insert(sid.to_string());
@@ -198,7 +198,7 @@ fn resolve_chat_identifier(
     if session.is_empty() {
         return ("unknown".to_string(), String::new(), true);
     }
-    // Email first: an address like `bob2024@gmail.com` has 4+ digits and must
+    // Email first: an address like `bob2024@example.com` has 4+ digits and must
     // not be treated as a phone number.
     if session.contains('@') {
         return (session.to_string(), String::new(), false);
@@ -228,7 +228,7 @@ pub(super) fn resolve_sender(
     }
     if is_notification {
         // Keep any available identity from the notification row; often empty.
-        // Email first: an address like `bob2024@gmail.com` has 4+ digits and
+        // Email first: an address like `bob2024@example.com` has 4+ digits and
         // must not be reduced to a phone number.
         let handle = if row.sender_id.contains('@') {
             row.sender_id.trim().to_string()

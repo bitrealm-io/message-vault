@@ -9,19 +9,19 @@ fn parse(name: &str, bytes: &[u8]) -> Result<ParsedPdu, PduError> {
 
 #[test]
 fn a_received_message_names_its_sender_recipients_text_and_picture() {
-    let bytes = PduBuilder::received("+14075551234")
+    let bytes = PduBuilder::received("+14075550107")
         .to("+15555550100")
-        .to("+14075559876")
+        .to("+14075550109")
         .cc("+15555550100")
         .text("Look at this")
         .part(BuildPart::jpeg("IMG_1.jpg", 100))
         .build();
     let p = parse("I_1609459300_1_0.pdu", &bytes).unwrap();
     assert!(!p.is_sent);
-    assert_eq!(p.sender.as_deref(), Some("+14075551234"));
+    assert_eq!(p.sender.as_deref(), Some("+14075550107"));
     assert_eq!(
         p.recipients,
-        ["+15555550100", "+14075559876"],
+        ["+15555550100", "+14075550109"],
         "once each, To before Cc"
     );
     assert_eq!(
@@ -45,16 +45,16 @@ fn a_received_message_names_its_sender_recipients_text_and_picture() {
 
 #[test]
 fn a_sent_message_has_no_sender() {
-    let bytes = PduBuilder::sent().to("+14075551234").text("hi").build();
+    let bytes = PduBuilder::sent().to("+14075550107").text("hi").build();
     let p = parse("S_1609459300_1_0.pdu", &bytes).unwrap();
     assert!(p.is_sent);
     assert_eq!(p.sender, None);
-    assert_eq!(p.recipients, ["+14075551234"]);
+    assert_eq!(p.recipients, ["+14075550107"]);
 }
 
 #[test]
 fn direction_is_the_message_type_not_the_file_name() {
-    let bytes = PduBuilder::received("+14075551234")
+    let bytes = PduBuilder::received("+14075550107")
         .to("+15555550100")
         .text("x")
         .build();
@@ -89,7 +89,7 @@ fn a_broken_pdu_reports_the_shape_and_the_byte() {
 
 #[test]
 fn the_time_falls_back_to_the_file_name_and_then_to_zero() {
-    let bytes = PduBuilder::received("+14075551234")
+    let bytes = PduBuilder::received("+14075550107")
         .date(None)
         .text("x")
         .build();
@@ -107,7 +107,7 @@ fn the_time_falls_back_to_the_file_name_and_then_to_zero() {
 
 #[test]
 fn the_body_is_every_text_part_and_never_the_smil() {
-    let bytes = PduBuilder::received("+14075551234")
+    let bytes = PduBuilder::received("+14075550107")
         .text("first")
         .part(BuildPart::jpeg("a.jpg", 70))
         .text("second +g1f602")
@@ -123,14 +123,14 @@ fn the_body_is_every_text_part_and_never_the_smil() {
 
 #[test]
 fn the_subject_is_the_body_only_when_there_is_no_text_part() {
-    let bytes = PduBuilder::received("+14075551234")
+    let bytes = PduBuilder::received("+14075550107")
         .subject(" Beach day ")
         .part(BuildPart::jpeg("a.jpg", 70))
         .build();
     let p = parse("I_1_1_0.pdu", &bytes).unwrap();
     assert_eq!(p.body, "Beach day");
     assert_eq!(p.fields["subject"], " Beach day ");
-    let bytes = PduBuilder::received("+14075551234")
+    let bytes = PduBuilder::received("+14075550107")
         .subject("Beach day")
         .text("words")
         .build();
@@ -139,13 +139,13 @@ fn the_subject_is_the_body_only_when_there_is_no_text_part() {
 
 #[test]
 fn an_empty_text_part_gives_an_empty_body() {
-    let bytes = PduBuilder::received("+14075551234").text("  \0").build();
+    let bytes = PduBuilder::received("+14075550107").text("  \0").build();
     assert_eq!(parse("I_1_1_0.pdu", &bytes).unwrap().body, "");
 }
 
 #[test]
 fn every_part_that_is_not_text_or_smil_is_an_attachment() {
-    let bytes = PduBuilder::received("+14075551234")
+    let bytes = PduBuilder::received("+14075550107")
         .part(BuildPart {
             content_type: "text/x-vcard",
             name: Some("card.vcf"),
@@ -180,7 +180,7 @@ fn every_part_that_is_not_text_or_smil_is_an_attachment() {
 fn a_ucs2_text_part_is_decoded_by_its_charset() {
     // Content-Type text/plain; Charset UCS-2 (Long-integer 1000).
     let headers = b"\x05\x83\x81\x02\x03\xe8";
-    let mut bytes = PduBuilder::received("+14075551234").no_parts().build();
+    let mut bytes = PduBuilder::received("+14075550107").no_parts().build();
     assert_eq!(bytes.pop(), Some(0), "the part count");
     bytes.push(1);
     bytes.push(headers.len() as u8);
@@ -193,12 +193,12 @@ fn a_ucs2_text_part_is_decoded_by_its_charset() {
 #[test]
 fn addresses_are_kept_as_written_without_their_type() {
     assert_eq!(
-        address_value("+6591234567/TYPE=PLMN").as_deref(),
-        Some("+6591234567")
+        address_value("+6595550100/TYPE=PLMN").as_deref(),
+        Some("+6595550100")
     );
     assert_eq!(
-        address_value("(407) 555-1234").as_deref(),
-        Some("(407) 555-1234")
+        address_value("(407) 555-0107").as_deref(),
+        Some("(407) 555-0107")
     );
     assert_eq!(address_value(" /TYPE=PLMN"), None);
     let bytes = PduBuilder::received("ann2020@example.com")

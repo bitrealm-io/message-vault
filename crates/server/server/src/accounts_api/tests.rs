@@ -1911,7 +1911,7 @@ async fn the_identities_route_counts_the_direct_and_group_messages_held_at_each_
         &fixture.state,
         &SeedConversation {
             account_id: account.account_id,
-            handle: "+15555550200",
+            handle: "+15555550135",
             conversation_type: "individual",
             group_title: None,
             source_file: "seed.jsonl",
@@ -2672,7 +2672,7 @@ async fn c2_1_the_owner_reads_no_address_or_search_text_in_the_history() {
         serde_json::json!({
             "stage": "awaiting_gate_1",
             "summary": { "conversations": 1, "messages": 3,
-                         "contactIdentifiers": ["+15557654321"] }
+                         "contactIdentifiers": ["+15555550176"] }
         }),
     )
     .await;
@@ -2695,7 +2695,7 @@ async fn c2_1_the_owner_reads_no_address_or_search_text_in_the_history() {
     ] {
         let by_owner: serde_json::Value = get_json(&fixture.state, &path, &owner.token).await;
         let text = by_owner.to_string();
-        if text.contains("+15557654321") || text.contains("divorce lawyer") {
+        if text.contains("+15555550176") || text.contains("divorce lawyer") {
             leaks.push(format!("{path}: {text}"));
         }
     }

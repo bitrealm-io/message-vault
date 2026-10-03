@@ -360,11 +360,11 @@ mod tests {
     fn a_phone_number_yields_the_keys_a_lookup_might_use() {
         // A US number is stored both ways, because Apple records it either
         // way depending on how the message was addressed.
-        let us = phone_keys("+1 (555) 123-4567");
-        assert!(us.contains(&"15551234567".to_string()), "{us:?}");
-        assert!(us.contains(&"+15551234567".to_string()), "{us:?}");
-        assert!(us.contains(&"5551234567".to_string()), "{us:?}");
-        assert!(us.contains(&"+5551234567".to_string()), "{us:?}");
+        let us = phone_keys("+1 (555) 555-0119");
+        assert!(us.contains(&"15555550119".to_string()), "{us:?}");
+        assert!(us.contains(&"+15555550119".to_string()), "{us:?}");
+        assert!(us.contains(&"5555550119".to_string()), "{us:?}");
+        assert!(us.contains(&"+5555550119".to_string()), "{us:?}");
 
         // A non-US number keeps its country code and gains no ten-digit form,
         // because the last ten digits of a UK number are not the number.
@@ -430,8 +430,8 @@ mod tests {
 
     #[test]
     fn phone_digits_are_the_digits_and_nothing_else() {
-        assert_eq!(to_phone_digits("+1 (555) 123-4567"), "15551234567");
-        assert_eq!(to_phone_digits("555.123.4567"), "5551234567");
+        assert_eq!(to_phone_digits("+1 (555) 555-0119"), "15555550119");
+        assert_eq!(to_phone_digits("555.555.0119"), "5555550119");
         assert_eq!(to_phone_digits("no digits here"), "");
         assert_eq!(to_phone_digits(""), "");
     }
@@ -471,7 +471,7 @@ mod tests {
     #[test]
     fn an_identifier_is_an_email_when_it_has_an_at_sign() {
         assert!(looks_like_email("alice@example.com"));
-        assert!(!looks_like_email("+15551234567"));
+        assert!(!looks_like_email("+15555550119"));
         assert!(!looks_like_email(""));
     }
 
@@ -541,10 +541,10 @@ mod tests {
     fn a_macos_address_book_is_indexed_by_phone_and_email() {
         let index = ContactsIndex::build_from_macos(&macos_address_book()).unwrap();
 
-        let sam = index.lookup("+15550000002").expect("Sam by full number");
+        let sam = index.lookup("+15555550107").expect("Sam by full number");
         assert_eq!(sam.full, "Sam Example");
         assert_eq!(
-            index.lookup("5550000002").map(|n| n.full),
+            index.lookup("5555550107").map(|n| n.full),
             Some("Sam Example".to_string()),
             "the ten-digit form of a US number"
         );
@@ -558,7 +558,7 @@ mod tests {
             Some("Robin".to_string())
         );
         assert_eq!(
-            index.lookup("+15559990000"),
+            index.lookup("+15555550179"),
             None,
             "a record with no name is not a contact"
         );
@@ -572,8 +572,8 @@ mod tests {
         let index = ContactsIndex::build_from_ios(&ios_address_book()).unwrap();
 
         for handle in [
-            "+15550000002",
-            "5550000002",
+            "+15555550107",
+            "5555550107",
             "sam@example.com",
             "sam@work.example",
         ] {
@@ -587,7 +587,7 @@ mod tests {
             index.lookup("friend@example.com").map(|n| n.full),
             Some("Robin".to_string())
         );
-        assert_eq!(index.lookup("+15559990000"), None);
+        assert_eq!(index.lookup("+15555550179"), None);
     }
 
     /// `build` picks the query by the table it finds, so one path serves a

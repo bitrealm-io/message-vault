@@ -14,27 +14,27 @@ const SKIPS_XML: &str = r#"<?xml version="1.0"?>
 <GoSms>
   <SMSCount>6</SMSCount>
   <SMS>
-    <address>+14075551234</address>
+    <address>+14075550107</address>
     <contactName>Alice</contactName>
     <date>1609459200000</date>
     <type>1</type>
     <body>hello</body>
   </SMS>
   <SMS>
-    <address>+14075551234</address>
+    <address>+14075550107</address>
     <contactName>Alice</contactName>
     <date>1609459260000</date>
     <type>2</type>
     <body>reply</body>
   </SMS>
   <SMS>
-    <address>+14075551234</address>
+    <address>+14075550107</address>
     <date>soon</date>
     <type>1</type>
     <body>bad date</body>
   </SMS>
   <SMS>
-    <address>+14075551234</address>
+    <address>+14075550107</address>
     <type>1</type>
     <body>no date</body>
   </SMS>
@@ -46,7 +46,7 @@ const SKIPS_XML: &str = r#"<?xml version="1.0"?>
     <body>no address</body>
   </SMS>
   <SMS>
-    <address>+14075551234</address>
+    <address>+14075550107</address>
     <date>1609459400000</date>
     <type>5</type>
     <body>unknown type</body>
@@ -130,7 +130,7 @@ fn run_names_the_first_twenty_bad_address_rows_and_counts_the_rest() {
     fs::write(
         input.join("gosms_sys_1.xml"),
         format!(
-            "<?xml version=\"1.0\"?>\n<GoSms>\n<SMS><address>+14075551234</address>\
+            "<?xml version=\"1.0\"?>\n<GoSms>\n<SMS><address>+14075550107</address>\
              <date>1609459200000</date><type>1</type><body>hello</body></SMS>\n\
              {bad_rows}</GoSms>\n"
         ),

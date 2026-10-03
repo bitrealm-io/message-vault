@@ -7,16 +7,19 @@ export const HANDLE_SERVICES = [
   "whatsapp",
 ] as const satisfies readonly HandleService[];
 
+/** The example phone number shown in empty fields and in the validation message. */
+export const EXAMPLE_PHONE = "+1 555-555-0119";
+
 /**
  * The services an identity can be on, offered wherever one is added: setup,
  * the account profile, and the contact drawer. Each carries the example shown
- * in an empty field. The example lives next to the service so adding one means
- * adding its example on the same line — there is no second place to forget.
+ * in an empty field, on the same line as its service. The phone services take
+ * `EXAMPLE_PHONE`, the web app's one phone example; change it there.
  */
 export const HANDLE_SERVICE_OPTIONS = [
-  { value: "phone", label: "Text Message", placeholder: "+1 555-123-4567" },
+  { value: "phone", label: "Text Message", placeholder: EXAMPLE_PHONE },
   { value: "email", label: "Email", placeholder: "you@example.com" },
-  { value: "whatsapp", label: "WhatsApp", placeholder: "+1 555-123-4567" },
+  { value: "whatsapp", label: "WhatsApp", placeholder: EXAMPLE_PHONE },
 ] as const satisfies ReadonlyArray<{
   value: HandleService;
   label: string;
@@ -51,7 +54,7 @@ export function handleValidationError(service: HandleService, value: string): st
   const digits = trimmed.replace(/\D/g, "");
   const onlyNumberCharacters = /^\+?[\d\s().-]+$/.test(trimmed);
   if (!onlyNumberCharacters || digits.length < 7 || digits.length > 15) {
-    return "Enter a phone number like +1 555-123-4567.";
+    return `Enter a phone number like ${EXAMPLE_PHONE}.`;
   }
   return null;
 }
@@ -67,7 +70,7 @@ export const DUPLICATE_HANDLE_MESSAGE = "This account is already in the list.";
  * on WhatsApp is two accounts, not one, and listing both is the right thing to
  * do. Within a service the comparison ignores how the value was typed: an
  * email folds to lower case, and a number falls back to its digits so
- * `+1 (555) 123-4567` and `+15551234567` land on the same key.
+ * `+1 (555) 555-0119` and `+15555550119` land on the same key.
  *
  * The digits are compared whole rather than by their last ten, so a number
  * written once with its country code and once without is not caught. That is

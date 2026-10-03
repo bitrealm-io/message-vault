@@ -15,7 +15,7 @@ import { ensureVaultSchema } from "./vaultSchema";
 
 const OWNER_PHONE = "+15555550100";
 const GROUP_ONLY_PHONE = "+15555550111";
-const DIRECT_PHONE = "+15555550222";
+const DIRECT_PHONE = "+15555550141";
 
 describe("unknown contact backfill", () => {
   const prevVaultDb = process.env.VAULT_DB;

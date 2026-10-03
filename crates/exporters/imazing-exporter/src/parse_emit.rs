@@ -81,7 +81,7 @@ pub(super) fn session_key(kind: SourceKind, session: &str, rows: &[&RawRow]) -> 
 
 /// The address a `Sender ID` holds, or `None` when it holds none.
 ///
-/// Email first: a sender like `bob2024@gmail.com` has 4+ digits and must
+/// Email first: a sender like `bob2024@example.com` has 4+ digits and must
 /// never be reduced to a phone number. A number is formatted as E.164 (the
 /// international phone-number format that starts with +) when unambiguous,
 /// otherwise kept as digits; never an invented `+0…`.
@@ -194,7 +194,7 @@ fn one_to_one_handle(session: &str, rows: &[&RawRow]) -> Option<String> {
     if let Some(phone) = phones_in_text(session).into_iter().next() {
         return Some(phone);
     }
-    // Email first: an address like `bob2024@gmail.com` has 4+ digits and must
+    // Email first: an address like `bob2024@example.com` has 4+ digits and must
     // not be treated as a phone number.
     if session.contains('@') {
         return Some(session.to_string());

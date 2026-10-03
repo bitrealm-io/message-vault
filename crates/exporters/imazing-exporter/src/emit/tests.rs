@@ -67,17 +67,17 @@ fn name_session_uses_the_number_the_rows_carry() {
         &dir,
         "Messages - Bob.csv",
         "Chat Session,Message Date,Service,Type,Sender ID,Sender Name,Status,Replying to,Subject,Text,Reactions,Attachment,Attachment type\n\
-Bob McRoy,2020-01-01 12:00:00,SMS,Incoming,+13212462167,Bob McRoy,Read,,,Hello,,,\n\
-Bob McRoy,2020-01-01 12:01:00,SMS,Outgoing,,,Read,,,Hi,,,\n",
+Bob Sample,2020-01-01 12:00:00,SMS,Incoming,+13215550100,Bob Sample,Read,,,Hello,,,\n\
+Bob Sample,2020-01-01 12:01:00,SMS,Outgoing,,,Read,,,Hi,,,\n",
     );
     let out = dir.path().join("out");
     let report = convert(dir.path(), &out).unwrap();
     assert_eq!(report.conversations, 1);
     assert_eq!(report.extra("name_only_chat"), 0);
     assert_eq!(report.messages, 2);
-    let csv_path = out.join("+13212462167.csv");
+    let csv_path = out.join("+13215550100.csv");
     let body = fs::read_to_string(&csv_path).unwrap();
-    assert!(body.contains("Bob McRoy"));
+    assert!(body.contains("Bob Sample"));
     assert!(body.contains("imazing"));
     assert!(body.contains("iMazing"));
     assert!(body.contains("imazing_type"));
@@ -287,11 +287,11 @@ fn copies_the_file_imazing_named_for_the_row() {
     fs::write(
         &csv,
         "Chat Session,Message Date,Delivered Date,Read Date,Edited Date,Deleted Date,Service,Type,Sender ID,Sender Name,Status,Replying to,Subject,Text,Reactions,Attachment,Attachment type\n\
-Bob McRoy,2020-01-01 12:00:00,,,,,SMS,Incoming,+15555550100,Bob,Read,,,Hi,,image000000.jpg,Image\n",
+Bob Sample,2020-01-01 12:00:00,,,,,SMS,Incoming,+15555550100,Bob,Read,,,Hi,,image000000.jpg,Image\n",
     )
     .unwrap();
     fs::write(
-        chat.join("2020-01-01 12 00 00 - Bob McRoy - image000000.jpg"),
+        chat.join("2020-01-01 12 00 00 - Bob Sample - image000000.jpg"),
         b"fake-jpeg-bytes",
     )
     .unwrap();
@@ -314,15 +314,15 @@ fn email_sender_with_digits_stays_email() {
         &dir,
         "Messages - Bob.csv",
         "Chat Session,Message Date,Service,Type,Sender ID,Sender Name,Status,Replying to,Subject,Text,Reactions,Attachment,Attachment type\n\
-Bob McRoy,2020-01-01 12:00:00,iMessage,Incoming,bob2024@gmail.com,Bob McRoy,Read,,,Hello,,,\n\
-Bob McRoy,2020-01-01 12:01:00,iMessage,Outgoing,,,Read,,,Hi,,,\n",
+Bob Sample,2020-01-01 12:00:00,iMessage,Incoming,bob2024@example.com,Bob Sample,Read,,,Hello,,,\n\
+Bob Sample,2020-01-01 12:01:00,iMessage,Outgoing,,,Read,,,Hi,,,\n",
     );
     let out = dir.path().join("out");
     let report = convert(dir.path(), &out).unwrap();
     assert_eq!(report.conversations, 1);
     assert_eq!(report.messages, 2);
     // Chat id stays the full email; the CSV filename stems `@` to `_`.
-    let csv_path = out.join("bob2024_gmail_com.csv");
+    let csv_path = out.join("bob2024_example_com.csv");
     assert!(
         csv_path.is_file(),
         "expected email chat file; got {}",
@@ -333,7 +333,7 @@ Bob McRoy,2020-01-01 12:01:00,iMessage,Outgoing,,,Read,,,Hi,,,\n",
             .join(", ")
     );
     let body = fs::read_to_string(csv_path).unwrap();
-    assert!(body.contains("bob2024@gmail.com"));
+    assert!(body.contains("bob2024@example.com"));
     assert!(!body.contains("12024"));
 }
 
@@ -360,7 +360,7 @@ fn output_equals_input_bails_before_cleaning() {
         &dir,
         "Messages - Bob.csv",
         "Chat Session,Message Date,Service,Type,Sender ID,Sender Name,Status,Replying to,Subject,Text,Reactions,Attachment,Attachment type\n\
-Bob,2020-01-01 12:00:00,SMS,Incoming,+13212462167,Bob,Read,,,Hello,,,\n",
+Bob,2020-01-01 12:00:00,SMS,Incoming,+13215550100,Bob,Read,,,Hello,,,\n",
     );
     let err = convert(dir.path(), dir.path()).unwrap_err();
     assert!(err.to_string().contains("must not be the same as"), "{err}");
@@ -412,21 +412,21 @@ fn convert_files(files: &[(&str, &str)]) -> Vec<message_ir::ConversationDocument
     documents
 }
 
-/// iMazing names a chat "Bob (+13212462167)" when it knows the number. A
+/// iMazing names a chat "Bob (+13215550100)" when it knows the number. A
 /// chat whose rows are all outgoing carries no sender id, so the number in
 /// the name is the only address the source gives, and it is the roster.
 /// The number is read as written, so a digit elsewhere in the name
 /// ("Bob 2") doesn't join it.
 #[test]
 fn a_number_in_the_chat_name_is_the_roster() {
-    for session in ["Bob (+13212462167)", "Bob 2 (+13212462167)"] {
+    for session in ["Bob (+13215550100)", "Bob 2 (+13215550100)"] {
         let documents = convert_rows(&format!(
             "{session},2020-01-01 12:00:00,SMS,Outgoing,,,Sent,,,Hi Bob,,,\n"
         ));
         assert_eq!(documents.len(), 1, "{session}");
         let doc = &documents[0];
         assert_eq!(
-            doc.conversation.chat_identifier, "+13212462167",
+            doc.conversation.chat_identifier, "+13215550100",
             "{session}"
         );
         let roster: Vec<_> = doc
@@ -435,7 +435,7 @@ fn a_number_in_the_chat_name_is_the_roster() {
             .iter()
             .filter_map(|p| p.handle.as_deref())
             .collect();
-        assert_eq!(roster, vec!["+13212462167"], "{session}");
+        assert_eq!(roster, vec!["+13215550100"], "{session}");
     }
 }
 
@@ -443,8 +443,8 @@ fn a_number_in_the_chat_name_is_the_roster() {
 #[test]
 fn a_subject_reaches_the_message() {
     let documents = convert_rows(
-        "Bob,2020-01-01 12:00:00,SMS,Incoming,+13212462167,Bob,Read,,Dinner,See you at 7,,,\n\
-Bob,2020-01-01 12:01:00,SMS,Incoming,+13212462167,Bob,Read,,,No subject,,,\n",
+        "Bob,2020-01-01 12:00:00,SMS,Incoming,+13215550100,Bob,Read,,Dinner,See you at 7,,,\n\
+Bob,2020-01-01 12:01:00,SMS,Incoming,+13215550100,Bob,Read,,,No subject,,,\n",
     );
     let subjects: Vec<_> = documents[0]
         .messages
@@ -459,8 +459,8 @@ Bob,2020-01-01 12:01:00,SMS,Incoming,+13212462167,Bob,Read,,,No subject,,,\n",
 #[test]
 fn two_same_second_photos_are_two_messages() {
     let documents = convert_rows(
-        "Bob,2020-01-01 12:00:00,iMessage,Incoming,+13212462167,Bob,Read,,,,,IMG_0001.jpg,Image\n\
-Bob,2020-01-01 12:00:00,iMessage,Incoming,+13212462167,Bob,Read,,,,,IMG_0002.jpg,Image\n",
+        "Bob,2020-01-01 12:00:00,iMessage,Incoming,+13215550100,Bob,Read,,,,,IMG_0001.jpg,Image\n\
+Bob,2020-01-01 12:00:00,iMessage,Incoming,+13215550100,Bob,Read,,,,,IMG_0002.jpg,Image\n",
     );
     let messages = &documents[0].messages;
     assert_eq!(messages.len(), 2);
@@ -472,7 +472,7 @@ Bob,2020-01-01 12:00:00,iMessage,Incoming,+13212462167,Bob,Read,,,,,IMG_0002.jpg
 #[test]
 fn a_notification_row_has_no_sender() {
     let documents = convert_rows(
-        "Bob,2020-01-01 12:00:00,SMS,Incoming,+13212462167,Bob,Read,,,Hello,,,\n\
+        "Bob,2020-01-01 12:00:00,SMS,Incoming,+13215550100,Bob,Read,,,Hello,,,\n\
 Bob,2020-01-01 12:01:00,SMS,Notification,,,,,,Bob left the conversation,,,\n",
     );
     let notification = documents[0]
@@ -490,9 +490,9 @@ Bob,2020-01-01 12:01:00,SMS,Notification,,,,,,Bob left the conversation,,,\n",
 #[test]
 fn an_incoming_row_without_a_sender_is_from_the_chats_peer() {
     let documents = convert_rows(
-        "Bob McRoy,2020-01-01 12:00:00,SMS,Incoming,+13212462167,Robert,Read,,,Hello,,,\n\
-Bob McRoy,2020-01-01 12:01:00,SMS,Incoming,,,Read,,,Anyone there,,,\n\
-Bob Mail,2020-01-01 12:00:00,iMessage,Incoming,bob2024@gmail.com,Bob,Read,,,Hi,,,\n\
+        "Bob Sample,2020-01-01 12:00:00,SMS,Incoming,+13215550100,Robert,Read,,,Hello,,,\n\
+Bob Sample,2020-01-01 12:01:00,SMS,Incoming,,,Read,,,Anyone there,,,\n\
+Bob Mail,2020-01-01 12:00:00,iMessage,Incoming,bob2024@example.com,Bob,Read,,,Hi,,,\n\
 Bob Mail,2020-01-01 12:01:00,iMessage,Incoming,,,Read,,,Still me,,,\n",
     );
     let senders: Vec<(&str, Option<&str>, Option<&str>)> = documents
@@ -509,9 +509,9 @@ Bob Mail,2020-01-01 12:01:00,iMessage,Incoming,,,Read,,,Still me,,,\n",
     assert_eq!(
         senders,
         vec![
-            ("Hello", Some("+13212462167"), Some("Robert")),
-            ("Anyone there", Some("+13212462167"), Some("Bob McRoy")),
-            ("Hi", Some("bob2024@gmail.com"), Some("Bob")),
+            ("Hello", Some("+13215550100"), Some("Robert")),
+            ("Anyone there", Some("+13215550100"), Some("Bob Sample")),
+            ("Hi", Some("bob2024@example.com"), Some("Bob")),
             ("Still me", None, Some("Bob Mail")),
         ]
     );
@@ -545,18 +545,18 @@ Group Chat,2020-01-01 12:01:00,iMessage,Incoming,+15555550122,Bob,Read,,,Hey,,,\
 /// number is the chat, whether it is the whole name or the end of it.
 #[test]
 fn a_chat_named_by_a_bare_number_is_that_numbers_chat() {
-    for session in ["+13212462167", "Bob +13212462167"] {
+    for session in ["+13215550100", "Bob +13215550100"] {
         let documents = convert_rows(&format!(
             "{session},2020-01-01 12:00:00,SMS,Outgoing,,,Sent,,,Hi,,,\n"
         ));
         assert_eq!(documents.len(), 1, "{session}");
         assert_eq!(
-            documents[0].conversation.chat_identifier, "+13212462167",
+            documents[0].conversation.chat_identifier, "+13215550100",
             "{session}"
         );
         assert_eq!(
             roster(&documents[0]),
-            vec![Some("+13212462167")],
+            vec![Some("+13215550100")],
             "{session}"
         );
     }
@@ -599,8 +599,8 @@ fn an_incoming_row_without_a_sender_in_a_short_code_chat_is_from_the_short_code(
 #[test]
 fn the_attachment_type_column_reaches_the_attachment() {
     let documents = convert_rows(
-        "Bob,2020-01-01 12:00:00,iMessage,Incoming,+13212462167,Bob,Read,,,,,sticker_0001,Sticker\n\
-Bob,2020-01-01 12:01:00,iMessage,Incoming,+13212462167,Bob,Read,,,,,IMG_0001,Image\n",
+        "Bob,2020-01-01 12:00:00,iMessage,Incoming,+13215550100,Bob,Read,,,,,sticker_0001,Sticker\n\
+Bob,2020-01-01 12:01:00,iMessage,Incoming,+13215550100,Bob,Read,,,,,IMG_0001,Image\n",
     );
     let attachments: Vec<_> = documents[0]
         .messages
@@ -936,7 +936,7 @@ fn an_incoming_group_row_without_a_sender_has_no_made_up_sender() {
 /// for one contact's two numbers in one chat.
 #[test]
 fn one_person_from_two_addresses_is_not_a_group() {
-    for second in ["bob@icloud.com", "+15555550199"] {
+    for second in ["bob@example.com", "+15555550199"] {
         let documents = convert_rows(&format!(
             "Bob,2020-01-01 12:00:00,iMessage,Incoming,+15555550122,Bob,Read,,,From one,,,\n\
 Bob,2020-01-01 12:01:00,iMessage,Incoming,{second},Bob,Read,,,From the other,,,\n"

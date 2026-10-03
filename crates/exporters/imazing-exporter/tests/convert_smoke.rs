@@ -32,7 +32,7 @@ fn convert_messages_keys_the_chat_by_its_number() {
     assert_eq!(report.extra.get("whatsapp_files").copied().unwrap_or(0), 0);
     assert_eq!(report.extra.get("name_only_chat").copied().unwrap_or(0), 0);
 
-    let out = tmp.path().join("+13212462167.csv");
+    let out = tmp.path().join("+13215550100.csv");
     let body = fs::read_to_string(&out).expect("read csv");
     assert!(body.contains("imazing"));
     assert!(body.contains("iMazing"));
@@ -47,7 +47,7 @@ fn convert_messages_keys_the_chat_by_its_number() {
             ("text", "Hello from Bob"),
             ("direction", "incoming"),
             ("service", "sms"),
-            ("sender_display_name", "Bob McRoy"),
+            ("sender_display_name", "Bob Sample"),
         ],
     );
     assert_csv_row(&out, &[("text", "Hi Bob"), ("direction", "outgoing")]);
@@ -79,7 +79,7 @@ fn convert_whatsapp_csv_direct() {
     assert_eq!(report.conversations, 1);
     assert_eq!(report.messages, 3);
     assert_eq!(report.extra.get("whatsapp_files").copied().unwrap_or(0), 1);
-    let out = tmp.path().join("+13212462167__whatsapp.csv");
+    let out = tmp.path().join("+13215550100__whatsapp.csv");
     let body = fs::read_to_string(&out).expect("read csv");
     assert!(body.contains("WhatsApp"));
 
@@ -124,8 +124,8 @@ fn convert_export_root_recursively_keeps_services_separate() {
     assert_eq!(report.extra.get("messages_files").copied().unwrap_or(0), 2);
     assert_eq!(report.extra.get("whatsapp_files").copied().unwrap_or(0), 1);
     assert!(report.conversations >= 3);
-    assert!(tmp.path().join("+13212462167.csv").is_file());
-    assert!(tmp.path().join("+13212462167__whatsapp.csv").is_file());
+    assert!(tmp.path().join("+13215550100.csv").is_file());
+    assert!(tmp.path().join("+13215550100__whatsapp.csv").is_file());
     // Silent Carol never sent a message, so the source records no address for
     // her. She is reported rather than given an invented number.
     let group = fs::read_dir(tmp.path())

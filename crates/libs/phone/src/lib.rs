@@ -37,7 +37,7 @@ impl fmt::Display for PhoneRegion {
 
 impl PhoneRegion {
     /// Region for a raw value: a value with a `+` before its first digit
-    /// names its country, so international rules apply (`+65 9123 4567`,
+    /// names its country, so international rules apply (`+65 9555 0100`,
     /// `(+44) 7700 900123`, `tel:+447700900123`); anything else is treated
     /// as a US national number (this crate's home region).
     pub fn for_raw(raw: &str) -> Self {
@@ -411,7 +411,7 @@ impl OwnerHandleSet {
     /// Every handle matches by handle key. A phone also matches by its
     /// [`sanitize_number`] digits, for sources that record numbers with the
     /// `+` already gone.
-    /// Without the `+`, `6591234567` could be Singapore or the US; the
+    /// Without the `+`, `6595550100` could be Singapore or the US; the
     /// source has already thrown that information away.
     ///
     /// A value written without `+` also matches an owner number given with
@@ -554,14 +554,14 @@ mod tests {
     fn phone_shaped_rejects_prose_and_run_together_numbers() {
         // Written as a number, in every punctuation style a person uses.
         for written in [
-            "+1 (555) 123-4567",
-            "555.123.4567",
-            "(555) 123-4567",
-            "  5551234567  ",
+            "+1 (555) 555-0119",
+            "555.555.0119",
+            "(555) 555-0119",
+            "  5555550119  ",
         ] {
             assert_eq!(
                 sanitize_phone_shaped(written).as_deref(),
-                Some("5551234567"),
+                Some("5555550119"),
                 "{written} is written as a number"
             );
         }
@@ -580,7 +580,7 @@ mod tests {
             None
         );
         assert_eq!(
-            sanitize_phone_shaped("+15551234567 (see also +15557654321)"),
+            sanitize_phone_shaped("+15555550119 (see also +15555550176)"),
             None
         );
         assert_eq!(
@@ -592,7 +592,7 @@ mod tests {
 
         // Two numbers with nothing but permitted punctuation between them are
         // caught by the digit ceiling instead.
-        assert_eq!(sanitize_phone_shaped("+15551234567 +15557654321"), None);
+        assert_eq!(sanitize_phone_shaped("+15555550119 +15555550176"), None);
         assert_eq!(
             sanitize_phone_shaped("123456789012345").as_deref(),
             Some("123456789012345"),
@@ -620,16 +620,16 @@ mod tests {
     #[test]
     fn certain_usa() {
         assert_eq!(
-            normalize_checked("(542).341-2398", PhoneRegion::Usa)
+            normalize_checked("(542).555-0100", PhoneRegion::Usa)
                 .ok()
                 .as_deref(),
-            Some("+15423412398")
+            Some("+15425550100")
         );
         assert_eq!(
-            normalize_checked("1-555-456-7890", PhoneRegion::Usa)
+            normalize_checked("1-555-555-0121", PhoneRegion::Usa)
                 .ok()
                 .as_deref(),
-            Some("+15554567890")
+            Some("+15555550121")
         );
         assert!(
             normalize_checked("1555-4567", PhoneRegion::Usa).is_err(),
@@ -710,14 +710,14 @@ mod tests {
             Some("+442071838750")
         );
         assert!(
-            normalize_checked("(542).341-2398", PhoneRegion::International).is_err(),
+            normalize_checked("(542).555-0100", PhoneRegion::International).is_err(),
             "no leading +"
         );
         assert_eq!(
-            normalize_checked("+1-542-341-2398", PhoneRegion::International)
+            normalize_checked("+1-542-555-0100", PhoneRegion::International)
                 .ok()
                 .as_deref(),
-            Some("+15423412398")
+            Some("+15425550100")
         );
     }
 
@@ -883,8 +883,8 @@ mod tests {
     #[test]
     fn a_number_written_with_plus_keeps_its_country() {
         assert_eq!(
-            parsed("+6591234567"),
-            (HandleType::Phone, "+6591234567".into())
+            parsed("+6595550100"),
+            (HandleType::Phone, "+6595550100".into())
         );
         assert_eq!(
             parsed("+447700900123"),
@@ -931,7 +931,7 @@ mod tests {
     #[test]
     fn a_handle_key_parses_to_itself() {
         for raw in [
-            "+6591234567",
+            "+6595550100",
             "5555550100",
             "7535",
             "jo@example.com",
@@ -982,10 +982,10 @@ mod tests {
 
     #[test]
     fn a_group_title_keeps_each_number_s_country() {
-        let others = ["+6591234567".to_string(), "+447700900123".to_string()];
+        let others = ["+6595550100".to_string(), "+447700900123".to_string()];
         assert_eq!(
             group_chat_id("grp-", &others).1,
-            "Group: +447700900123, +6591234567"
+            "Group: +447700900123, +6595550100"
         );
     }
 

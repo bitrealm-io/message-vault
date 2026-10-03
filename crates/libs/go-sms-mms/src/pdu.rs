@@ -15,8 +15,8 @@
 //!    are To, Cc and Bcc in that order, each address once. A sent message
 //!    has no From (the phone writes the Insert-address-token), so its sender
 //!    is `None` and the caller knows the owner sent it. An address is kept as
-//!    written, less its `/TYPE=` suffix: `+6591234567/TYPE=PLMN` becomes
-//!    `+6591234567` and `ann@example.com` stays as it is. What kind of
+//!    written, less its `/TYPE=` suffix: `+6595550100/TYPE=PLMN` becomes
+//!    `+6595550100` and `ann@example.com` stays as it is. What kind of
 //!    address it is, the caller decides.
 //! 3. **The time is the Date header**, and the file name's seconds when
 //!    the header is absent. Every real PDU has the header.
@@ -182,7 +182,7 @@ pub fn parse_pdu_bytes(path: &Path, data: &[u8]) -> Result<ParsedPdu, PduError> 
 }
 
 /// An address as written, less its `/TYPE=` suffix:
-/// `+6591234567/TYPE=PLMN` gives `+6591234567`. `None` when nothing is left.
+/// `+6595550100/TYPE=PLMN` gives `+6595550100`. `None` when nothing is left.
 fn address_value(addr: &str) -> Option<String> {
     let base = addr.split('/').next().unwrap_or(addr).trim();
     (!base.is_empty()).then(|| base.to_string())

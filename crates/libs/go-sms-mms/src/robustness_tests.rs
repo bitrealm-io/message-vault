@@ -145,7 +145,7 @@ fn seeds() -> Vec<(&'static str, Vec<u8>)> {
     vec![
         (
             "received with picture",
-            PduBuilder::received("+14075551234")
+            PduBuilder::received("+14075550107")
                 .to("+15555550100")
                 .subject("Seed subject")
                 .text("Seed body text")
@@ -155,8 +155,8 @@ fn seeds() -> Vec<(&'static str, Vec<u8>)> {
         (
             "sent to a group",
             PduBuilder::sent()
-                .to("+14075551234")
-                .to("+14075559876")
+                .to("+14075550107")
+                .to("+14075550109")
                 .cc("+15555550100")
                 .text("hello all")
                 .build(),

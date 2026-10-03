@@ -1093,20 +1093,20 @@ mod conversation_stem_tests {
 
     #[test]
     fn untitled_group_lists_sorted_phones() {
-        let peers = vec!["+18285532527".into(), "+14073109632".into()];
+        let peers = vec!["+18285550100".into(), "+14075550100".into()];
         assert_eq!(
             conversation_stem("group", "chat-group-x", None, &peers, None),
-            "group_+14073109632_+18285532527"
+            "group_+14075550100_+18285550100"
         );
     }
 
     #[test]
     fn untitled_group_over_ten_appends_hash() {
-        let peers: Vec<String> = (1..=13).map(|i| format!("+1555555{i:04}")).collect();
+        let peers: Vec<String> = (100..=112).map(|i| format!("+1555555{i:04}")).collect();
         let stem = conversation_stem("group", "chat-x", None, &peers, None);
-        assert!(stem.starts_with("group_+15555550001_"));
-        assert!(stem.contains("+15555550010_"));
-        assert!(!stem.contains("+15555550011"));
+        assert!(stem.starts_with("group_+15555550100_"));
+        assert!(stem.contains("+15555550109_"));
+        assert!(!stem.contains("+15555550110"));
         let hash = stem.rsplit('_').next().unwrap();
         assert_eq!(hash.len(), 16);
         assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));

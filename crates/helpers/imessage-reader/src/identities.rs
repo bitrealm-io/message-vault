@@ -59,7 +59,7 @@ fn sent_from(db: &Connection) -> Vec<String> {
 /// (`chat.account_login`, `message.destination_caller_id`), and the phone
 /// number an iPhone backup's `Info.plist` gives for the device.
 ///
-/// Apple spells one phone several ways (`+15550000001`, `+1 (555)
+/// Apple spells one phone several ways (`+15555550106`, `+1 (555)
 /// 000-0001`), so phone numbers compare by their digits and email
 /// addresses without regard to case.
 #[derive(Debug, Default)]
@@ -148,9 +148,9 @@ mod tests {
         db.execute_batch(
             "CREATE TABLE chat (ROWID INTEGER PRIMARY KEY, account_login TEXT);
              CREATE TABLE message (ROWID INTEGER PRIMARY KEY, destination_caller_id TEXT);
-             INSERT INTO chat (account_login) VALUES ('P:+15550001111'), ('E:');
+             INSERT INTO chat (account_login) VALUES ('P:+15555550110'), ('E:');
              INSERT INTO message (destination_caller_id)
-                 VALUES ('owner@example.com'), ('tel:+15550001111'), (NULL);",
+                 VALUES ('owner@example.com'), ('tel:+15555550110'), (NULL);",
         )
         .unwrap();
         drop(db);
@@ -161,7 +161,7 @@ mod tests {
         values.sort();
         assert_eq!(
             values,
-            vec!["+15550001111", "+15550001111", "owner@example.com"]
+            vec!["+15555550110", "+15555550110", "owner@example.com"]
         );
     }
 
@@ -187,27 +187,27 @@ mod tests {
         db.execute_batch(
             "CREATE TABLE chat (ROWID INTEGER PRIMARY KEY, account_login TEXT);
              CREATE TABLE message (ROWID INTEGER PRIMARY KEY, destination_caller_id TEXT);
-             INSERT INTO chat (account_login) VALUES ('P:+15550001111'), ('E:Owner@Example.com');",
+             INSERT INTO chat (account_login) VALUES ('P:+15555550110'), ('E:Owner@Example.com');",
         )
         .unwrap();
         let mut info = plist::Dictionary::new();
         info.insert(
             "Phone Number".to_string(),
-            plist::Value::String("+1 (555) 000-2222".to_string()),
+            plist::Value::String("+1 (555) 555-0113".to_string()),
         );
         plist::Value::Dictionary(info)
             .to_file_xml(dir.path().join("Info.plist"))
             .unwrap();
 
         let mac = OwnerAddresses::read(&db, None);
-        assert!(mac.contains("+15550001111"));
-        assert!(mac.contains("tel:+1 (555) 000-1111"));
+        assert!(mac.contains("+15555550110"));
+        assert!(mac.contains("tel:+1 (555) 555-0110"));
         assert!(mac.contains("owner@example.com"));
-        assert!(!mac.contains("+15550002222"), "no Info.plist on a Mac");
+        assert!(!mac.contains("+15555550113"), "no Info.plist on a Mac");
         assert!(!mac.contains("friend@example.com"));
 
         let iphone = OwnerAddresses::read(&db, Some(dir.path()));
-        assert!(iphone.contains("+15550002222"));
-        assert!(iphone.contains("+15550001111"));
+        assert!(iphone.contains("+15555550113"));
+        assert!(iphone.contains("+15555550110"));
     }
 }

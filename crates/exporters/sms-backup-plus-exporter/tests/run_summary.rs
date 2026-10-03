@@ -14,7 +14,7 @@ fn eml(date_ms: &str, text: &str) -> String {
          To: me@example.com\n\
          Subject: SMS with Alice\n\
          X-smssync-type: 1\n\
-         X-smssync-address: 4075551234\n\
+         X-smssync-address: 4075550107\n\
          X-smssync-date: {date_ms}\n\
          Content-Type: text/plain; charset=utf-8\n\
          \n\
@@ -89,12 +89,12 @@ const CALL_LOG_EML: &str = "From: alice@unknown.email\n\
      X-smssync-datatype: CALLLOG\n\
      X-smssync-type: 1\n\
      X-smssync-duration: 123\n\
-     X-smssync-address: 4075551234\n\
+     X-smssync-address: 4075550107\n\
      X-smssync-date: 1609459300000\n\
      Content-Type: text/plain; charset=utf-8\n\
      \n\
      123s (00:02:03)\n\
-     4075551234 (incoming call)\n";
+     4075550107 (incoming call)\n";
 
 /// SMS Backup+ has no text in a call-log mail, only the call's length and
 /// number, and Message Crate has no model for a call.
@@ -135,7 +135,7 @@ fn a_group_message_with_no_readable_sender_is_kept_and_counted_once() {
          To: me@example.com\n\
          Subject: SMS with group\n\
          X-smssync-type: 132\n\
-         X-smssync-address: 4075551111~4075555678\n\
+         X-smssync-address: 4075550150~4075550108\n\
          X-smssync-date: 1609459200000\n\
          Content-Type: text/plain; charset=utf-8\n\
          \n\
@@ -180,10 +180,10 @@ fn a_group_message_not_naming_the_owner_is_counted_once() {
     let input = tmp.path().join("backup");
     fs::create_dir_all(&input).unwrap();
     let mail = "From: carol@example.org\n\
-         To: <me@icloud.example>, <+14075551111@unknown.email>\n\
+         To: <me@icloud.example>, <+14075550150@unknown.email>\n\
          Subject: SMS with Alice\n\
          X-smssync-type: 132\n\
-         X-smssync-address: 4075551111\n\
+         X-smssync-address: 4075550150\n\
          X-smssync-date: 1609459200000\n\
          Content-Type: text/plain; charset=utf-8\n\
          \n\

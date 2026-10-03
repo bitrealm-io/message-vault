@@ -13,7 +13,7 @@ const ALICE: i64 = 7;
 
 /// A one-conversation JSON Lines export with no messages, enough for the
 /// import to record a conversation under source `imessage`.
-const CONVERSATION_JSONL: &str = r#"{"schema_version":4,"export":{"source":"imessage","tool":"t","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15551230000","conversation_type":"individual","group_title":null,"participants":[],"stats":{"message_count":0,"attachment_count":0,"first_timestamp_unix_ms":null,"last_timestamp_unix_ms":null}}}
+const CONVERSATION_JSONL: &str = r#"{"schema_version":4,"export":{"source":"imessage","tool":"t","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550118","conversation_type":"individual","group_title":null,"participants":[],"stats":{"message_count":0,"attachment_count":0,"first_timestamp_unix_ms":null,"last_timestamp_unix_ms":null}}}
 "#;
 
 /// A database under `dir`: its config file on disk, the way an operator has

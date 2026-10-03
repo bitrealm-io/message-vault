@@ -137,17 +137,17 @@ mod tests {
 
     #[test]
     fn identity_key_normalizes_phones_and_emails() {
-        assert_eq!(identity_key("+1 (555) 000-1111"), "5550001111");
-        assert_eq!(identity_key("5550001111"), "5550001111");
+        assert_eq!(identity_key("+1 (555) 555-0110"), "5555550110");
+        assert_eq!(identity_key("5555550110"), "5555550110");
         assert_eq!(identity_key("Owner@Example.com"), "owner@example.com");
     }
 
     #[test]
     fn dedupe_keeps_the_first_spelling_and_drops_blanks() {
         let values = vec![
-            "+1 (555) 000-1111".to_string(),
+            "+1 (555) 555-0110".to_string(),
             "Owner@Example.com".to_string(),
-            "+15550001111".to_string(),
+            "+15555550110".to_string(),
             " ".to_string(),
             "owner@example.com".to_string(),
         ];
@@ -156,7 +156,7 @@ mod tests {
         assert_eq!(
             identities,
             vec![
-                "+1 (555) 000-1111".to_string(),
+                "+1 (555) 555-0110".to_string(),
                 "Owner@Example.com".to_string()
             ]
         );
@@ -170,14 +170,14 @@ mod tests {
 <plist version="1.0">
 <dict>
   <key>Phone Number</key>
-  <string>+1 (555) 000-1111</string>
+  <string>+1 (555) 555-0110</string>
 </dict>
 </plist>
 "#;
         std::fs::write(dir.path().join("Info.plist"), body).unwrap();
         assert_eq!(
             ios_backup_phone_number(dir.path()),
-            Some("+1 (555) 000-1111".to_string())
+            Some("+1 (555) 555-0110".to_string())
         );
 
         let missing = tempfile::tempdir().unwrap();
@@ -206,7 +206,7 @@ mod tests {
             })
         }
 
-        const ANSWER: &str = r#"echo '{"event":"identities","values":["+15550001111"]}'"#;
+        const ANSWER: &str = r#"echo '{"event":"identities","values":["+15555550110"]}'"#;
 
         /// Shell lines that keep the request in `<dir>/request.json` and
         /// write a decrypted database into the scratch folder it names, as
@@ -253,7 +253,7 @@ echo decrypted > "$scratch/crabapple-sms-x.db""#,
                 |request| Ok(spawn_fake(&script, request)),
             )
             .unwrap();
-            assert_eq!(values, vec!["+15550001111"]);
+            assert_eq!(values, vec!["+15555550110"]);
 
             let sent = fs::read_to_string(dir.path().join("request.json")).unwrap();
             let Ok(Request::Identities(sent)) = serde_json::from_str::<Request>(&sent) else {
@@ -325,7 +325,7 @@ echo decrypted > "$scratch/crabapple-sms-x.db""#,
             let body = format!("{}\n{ANSWER}", source_line(PROTOCOL_VERSION));
             let helper = spawn_fake(&fake_helper(dir.path(), &body), &request());
 
-            assert_eq!(read_identities(helper).unwrap(), vec!["+15550001111"]);
+            assert_eq!(read_identities(helper).unwrap(), vec!["+15555550110"]);
         }
 
         #[test]

@@ -1,5 +1,6 @@
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { Tag, TagGroup, TagList } from "react-aria-components";
+import { EXAMPLE_PHONE } from "../lib/handleService";
 import { commitPhoneTokens, removePhoneToken } from "../lib/phoneTokens";
 import PlainButton from "./PlainButton";
 import { textInputClassName } from "./TextField";
@@ -30,7 +31,7 @@ const PhoneTokenField = forwardRef<PhoneTokenFieldHandle, PhoneTokenFieldProps>(
       onChange,
       onDraftChange,
       "aria-label": ariaLabel = "Backup Device Phone Numbers",
-      placeholder = "+1 555-123-4567",
+      placeholder = EXAMPLE_PHONE,
     },
     ref,
   ) {

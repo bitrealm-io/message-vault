@@ -55,7 +55,7 @@ pub struct StagingConversation<'a> {
 /// Stage one conversation and return its staging id.
 ///
 /// Two chat ids that differ as written can normalise to one handle, such as
-/// `+15551234567` and `5551234567`. A conversation on a handle the account
+/// `+15555550119` and `5555550119`. A conversation on a handle the account
 /// has already staged in this import merges into that row, the way promote
 /// merges into `conversations` on the same key: the id returned is the
 /// staged row's, and that row keeps its title and export time unless it

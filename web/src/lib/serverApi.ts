@@ -309,11 +309,16 @@ export function deleteAllMessages(
 
 // ── API tokens ──────────────────────────────────────────────────────────────
 //
-// An account's tokens live under its own row, and nobody else's session
-// reaches them.
+// An account's tokens live under its own row. The account makes, renames,
+// lists and revokes them; the owner lists and revokes them too, so it can end
+// a leaked one, and its list carries no `token_hint`.
 
-export function listApiTokens(opts?: RequestOptions): Promise<Schema["Page_ApiToken"]> {
-  return apiClient.get<Schema["Page_ApiToken"]>(`${ownAccountPath()}/api-tokens`, opts);
+/** An account's API tokens: the logged-in one's, or as the owner the one named. */
+export function listApiTokens(
+  opts?: RequestOptions,
+  accountId?: number,
+): Promise<Schema["Page_ApiToken"]> {
+  return apiClient.get<Schema["Page_ApiToken"]>(`${accountBase(accountId)}/api-tokens`, opts);
 }
 
 export function createApiToken(
@@ -332,8 +337,9 @@ export function renameApiToken(
   );
 }
 
-export function deleteApiToken(id: number): Promise<void> {
-  return apiClient.delete<void>(`${ownAccountPath()}/api-tokens/${id}`);
+/** Revoke one API token: the logged-in account's, or as the owner one of the account named. */
+export function deleteApiToken(id: number, accountId?: number): Promise<void> {
+  return apiClient.delete<void>(`${accountBase(accountId)}/api-tokens/${id}`);
 }
 
 // ── Assets ──────────────────────────────────────────────────────────────────

@@ -331,8 +331,8 @@ scheme with its scopes, so every route says which it accepts.
   owner turns off later shows as off. A token never carries `delete`: permanent deletion is a
   person's act, and a leaked or faulty program must not be able to empty an
   archive. A token never signs in and never browses. It is ended by the person
-  revoking it (`DELETE /v1/accounts/{id}/api-tokens/{token_id}`, with a
-  session) or by its expiry, never by the program holding it.
+  or the owner revoking it (`DELETE /v1/accounts/{id}/api-tokens/{token_id}`,
+  with a session) or by its expiry, never by the program holding it.
 - `GET /v1/session` answers whose credential the caller holds — the account's
   id and username — for a session or a token. Why: a program holding a token
   needs to know which account it writes to before it starts, and push and pull
@@ -377,6 +377,15 @@ What each reaches:
 - `/v1/accounts/{id}` and everything under it is read and written by the owner
   or by that account; a `Location` handed to a newly registered account names a
   row it may read.
+- An account's API tokens are listed and revoked by the account and by the
+  owner, and made and renamed by the account alone. The owner's list holds
+  each token's id, label, permissions, creation, last use, expiry and state,
+  and leaves out `token_hint`. Why: the owner must be able to end a
+  credential that has leaked, and a token's label and permissions are not
+  message content (`docs/adr/0008-the-owner-holds-no-messages.md`). The
+  masked hint is part of the secret, and the owner never reads a secret.
+  Making a token answers with its secret, so the owner makes none, and a
+  token is the account's own name for its program, so the owner renames none.
 - An account's history is read under the account:
   `GET /v1/accounts/{id}/imports`, `GET /v1/accounts/{id}/imports/{import_id}`
   and `GET /v1/accounts/{id}/exports`, beside `GET /v1/accounts/{id}/storage`.

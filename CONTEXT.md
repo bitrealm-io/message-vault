@@ -311,7 +311,7 @@ both. A program holding one can bring messages in, or take them out
 through an Export Run it starts, but it can never browse: reading messages
 outside a run needs a Session. The secret is shown once when the token is
 made; afterwards the account sees only its name, a masked hint, and when it
-was last used.
+was last used. The owner sees the same without the hint, and may revoke it.
 _Avoid_: App password, Key, Credential, Session
 
 **User**:

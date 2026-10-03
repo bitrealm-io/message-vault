@@ -11,6 +11,11 @@ import {
   thClass,
 } from "./apiTokensUtils";
 
+/**
+ * An account's API tokens. The account's holder sees each masked secret and
+ * renames and revokes; given no `onRename`, the table is the owner's view of
+ * another account's tokens, which shows no secret and only revokes.
+ */
 export default function ApiTokensTable({
   items,
   busy,
@@ -21,9 +26,10 @@ export default function ApiTokensTable({
   items: ApiTokenItem[];
   busy: boolean;
   composing: boolean;
-  onRename: (item: ApiTokenItem) => void;
+  onRename?: (item: ApiTokenItem) => void;
   onRevoke: (item: ApiTokenItem) => void;
 }) {
+  const holder = onRename !== undefined;
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-elevated">
       <Table
@@ -32,10 +38,10 @@ export default function ApiTokensTable({
         className="w-full table-fixed border-collapse text-left outline-none"
       >
         <TableHeader className="border-b border-border">
-          <Column isRowHeader className={`${thClass} w-[18%]`}>
+          <Column isRowHeader className={`${thClass} ${holder ? "w-[18%]" : "w-[28%]"}`}>
             Name
           </Column>
-          <Column className={`${thClass} w-[18%]`}>Token</Column>
+          {holder ? <Column className={`${thClass} w-[18%]`}>Token</Column> : null}
           <Column className={`${thClass} w-[19%]`}>Permissions</Column>
           <Column className={`${thClass} w-[12%]`}>Created</Column>
           <Column className={`${thClass} w-[13%]`}>Last Used</Column>
@@ -44,7 +50,7 @@ export default function ApiTokensTable({
         </TableHeader>
         <TableBody
           items={items}
-          dependencies={[busy]}
+          dependencies={[busy, holder]}
           renderEmptyState={() =>
             composing ? null : (
               <div className="px-5 py-6 text-[0.75rem] text-muted">No API Tokens yet.</div>
@@ -59,27 +65,31 @@ export default function ApiTokensTable({
                   {item.label}
                 </span>
               </Cell>
-              <Cell className={`${tdMuted} truncate font-mono text-[0.688rem]`}>
-                <span className="block truncate" title="Masked API Token">
-                  {displayTokenHint(item.token_hint)}
-                </span>
-              </Cell>
+              {holder ? (
+                <Cell className={`${tdMuted} truncate font-mono text-[0.688rem]`}>
+                  <span className="block truncate" title="Masked API Token">
+                    {displayTokenHint(item.token_hint)}
+                  </span>
+                </Cell>
+              ) : null}
               <Cell className={tdClass}>{permissionsLabel(item)}</Cell>
               <Cell className={tdMuted}>{formatTokenDate(item.created_at)}</Cell>
               <Cell className={tdMuted}>{formatTokenDate(item.last_accessed_at)}</Cell>
               <Cell className={tdMuted}>{formatTokenDate(item.expires_at)}</Cell>
               <Cell className={`${tdClass}`}>
                 <div className="flex items-center justify-end gap-1">
-                  <Button
-                    variant="ghostNeutral"
-                    size="icon"
-                    disabled={busy}
-                    title="Edit API Token"
-                    aria-label="Edit API Token"
-                    onClick={() => onRename(item)}
-                  >
-                    <PencilIcon />
-                  </Button>
+                  {onRename ? (
+                    <Button
+                      variant="ghostNeutral"
+                      size="icon"
+                      disabled={busy}
+                      title="Edit API Token"
+                      aria-label="Edit API Token"
+                      onClick={() => onRename(item)}
+                    >
+                      <PencilIcon />
+                    </Button>
+                  ) : null}
                   <Button
                     variant="ghostDanger"
                     size="icon"

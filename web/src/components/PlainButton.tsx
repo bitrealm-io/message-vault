@@ -12,8 +12,10 @@ export type PlainButtonProps = RACButtonProps & {
  * completely: a nav row, a glyph, a chip. `Button` is the one with the app's
  * variants and sizes.
  *
- * Every button in `web/src/` is one of the two, so press, hover, focus-visible
- * and disabled behave the same everywhere (`web/STYLE_GUIDE.md`, rule 4). A
+ * Every button in `web/src/` that runs an action is one of the two, so press,
+ * hover, focus-visible and disabled behave the same everywhere
+ * (`web/STYLE_GUIDE.md`, rule 4). A button that stays pressed, such as Find,
+ * is React Aria's `ToggleButton`. A
  * focus ring uses `focus-visible:`, because the button itself takes focus.
  */
 export default function PlainButton({ title, ref, ...rest }: PlainButtonProps) {

@@ -3,7 +3,6 @@ import {
   Cell,
   Column,
   type Key,
-  Button as RACButton,
   Row,
   Table,
   TableBody,
@@ -12,6 +11,7 @@ import {
   Virtualizer,
 } from "react-aria-components";
 import { ChevronDownIcon, ChevronRightIcon } from "../icons";
+import PlainButton from "../PlainButton";
 import { groupImportIssues, type ImportIssueGroup } from "./groupImportIssues";
 import type { ImportIssue } from "./ImportSummaryPanel";
 import {
@@ -119,14 +119,14 @@ export default function VirtualizedImportIssuesTable({ issues }: { issues: Impor
                   <Cell className={cellClass}>
                     <span className="flex min-w-0 items-start gap-1">
                       {/* The row is the press target; this button says the row expands, and whether it is. */}
-                      <RACButton
+                      <PlainButton
                         aria-label={rowAriaLabel(row, expanded)}
                         aria-expanded={expanded}
                         onPress={() => toggleRow(row.id)}
                         className="mt-px flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-sm border-none bg-transparent p-0 text-muted outline-none hover:text-text focus-visible:ring-2 focus-visible:ring-accent"
                       >
                         {expanded ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
-                      </RACButton>
+                      </PlainButton>
                       <span title={fileLabel} className="block truncate">
                         {fileLabel}
                       </span>

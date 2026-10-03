@@ -4,6 +4,8 @@ import { Button as RACButton, type ButtonProps as RACButtonProps } from "react-a
 export type PlainButtonProps = RACButtonProps & {
   /** Hover text. React Aria's Button drops `title`, so it is set on the element here. */
   title?: string;
+  /** Which row or link is the current one. React Aria's Button drops it too. */
+  "aria-current"?: "page" | "step" | "location" | "date" | "time" | "true" | "false";
   ref?: Ref<HTMLButtonElement>;
 };
 
@@ -19,12 +21,21 @@ export type PlainButtonProps = RACButtonProps & {
  *
  * A focus ring uses `focus-visible:`, because the button itself takes focus.
  */
-export default function PlainButton({ title, ref, ...rest }: PlainButtonProps) {
+export default function PlainButton({
+  title,
+  "aria-current": ariaCurrent,
+  ref,
+  ...rest
+}: PlainButtonProps) {
   return (
     <RACButton
       {...rest}
       ref={(el) => {
         if (el && el.title !== (title ?? "")) el.title = title ?? "";
+        if (el && el.getAttribute("aria-current") !== (ariaCurrent ?? null)) {
+          if (ariaCurrent) el.setAttribute("aria-current", ariaCurrent);
+          else el.removeAttribute("aria-current");
+        }
         if (typeof ref === "function") ref(el);
         else if (ref) ref.current = el;
       }}

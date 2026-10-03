@@ -1891,11 +1891,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "imessage-reader-protocol",
+ "ios-backup",
  "message-crate-core",
  "message-ir",
  "message-ir-format",
  "message-staging",
- "plist",
  "serde_json",
  "tempfile",
 ]
@@ -1938,6 +1938,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a588916bfdfd92e71cacef98a63d9b1f0d74d6599980d11894290e7ddefffcf7"
 dependencies = [
  "cfb",
+]
+
+[[package]]
+name = "ios-backup"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "imessage-reader-protocol",
+ "message-crate-core",
+ "plist",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -2284,6 +2296,7 @@ dependencies = [
  "httpmock",
  "imazing-exporter",
  "imessage-ir-exporter",
+ "ios-backup",
  "media",
  "message-crate-core",
  "message-crate-http",
@@ -5241,7 +5254,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "hex",
- "imessage-ir-exporter",
+ "ios-backup",
  "media",
  "message-crate-core",
  "message-csv",

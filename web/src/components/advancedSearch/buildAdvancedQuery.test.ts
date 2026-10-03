@@ -43,6 +43,7 @@ describe("buildMessagesQuery", () => {
         handle: "",
         msgType: "all",
         participants: EMPTY_COUNT,
+        sources: [],
       }),
     ).toBe("");
     expect(
@@ -51,6 +52,7 @@ describe("buildMessagesQuery", () => {
         handle: "",
         msgType: "all",
         participants: EMPTY_COUNT,
+        sources: [],
       }),
     ).toBe(false);
   });
@@ -62,6 +64,7 @@ describe("buildMessagesQuery", () => {
         handle: "",
         msgType: "direct",
         participants: EMPTY_COUNT,
+        sources: [],
       }),
     ).toBe("jane kind:direct");
     expect(
@@ -70,8 +73,21 @@ describe("buildMessagesQuery", () => {
         handle: "+1555",
         msgType: "group",
         participants: { comparator: ">", value: "3" },
+        sources: [],
       }),
     ).toBe("handle:+1555 kind:group participants:>3");
+  });
+
+  it("puts several ticked sources in one word, by the id an import writes", () => {
+    const input = {
+      nameOrHandle: "",
+      handle: "",
+      msgType: "all" as const,
+      participants: EMPTY_COUNT,
+      sources: ["imazing", "go-sms-pro", "sms-backup-plus"],
+    };
+    expect(buildMessagesQuery(input)).toBe("source:imazing,go-sms-pro,sms-backup-plus");
+    expect(canSubmitMessages(input)).toBe(true);
   });
 });
 

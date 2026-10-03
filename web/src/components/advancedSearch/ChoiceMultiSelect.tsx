@@ -12,28 +12,27 @@ import { popupShadow } from "../../lib/uiStyles";
 import { Z_POPOVER } from "../../lib/zLayers";
 import { compactSelectItemClassName, labelClass } from "./advancedSearchStyles";
 
-/** The transports the search language knows, named the way people name them. */
-const SERVICE_ITEMS = [
-  { id: "imessage", name: "iMessage" },
-  { id: "sms", name: "SMS" },
-  { id: "mms", name: "MMS" },
-  { id: "rcs", name: "RCS" },
-  { id: "whatsapp", name: "WhatsApp" },
-] as const;
+/** One value of a Choice word: what the query says, and what the person reads. */
+export type ChoiceItem = { id: string; label: string };
 
 /**
- * Multi-select without search — click the whole field to open.
+ * Multi-select of one Choice word's values, without search — click the
+ * whole field to open.
  *
  * Uses a non-modal popover (no full-screen underlay) plus a controlled open
  * state and document mousedown listener. That lets one click close the list
  * and activate the clicked form control, without the modal underlay racing
  * Advanced Search's own outside-click dismiss handler.
  */
-export default function ServiceMultiSelect({
+export default function ChoiceMultiSelect({
+  label,
+  items,
   value,
   onChange,
   isDisabled = false,
 }: {
+  label: string;
+  items: readonly ChoiceItem[];
   value: Key[];
   onChange: (keys: Key[]) => void;
   isDisabled?: boolean;
@@ -42,8 +41,9 @@ export default function ServiceMultiSelect({
   const selectRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLElement>(null);
 
-  const selectedLabels = SERVICE_ITEMS.filter((item) => value.includes(item.id))
-    .map((item) => item.name)
+  const selectedLabels = items
+    .filter((item) => value.includes(item.id))
+    .map((item) => item.label)
     .join(", ");
 
   useEffect(() => {
@@ -57,7 +57,7 @@ export default function ServiceMultiSelect({
       if (!(target instanceof Node)) return;
       if (selectRef.current?.contains(target)) return;
       if (popoverRef.current?.contains(target)) return;
-      // Close only the Service list. Do not stop the click, so it can still
+      // Close only this list. Do not stop the click, so it can still
       // activate Search, another field, or close Advanced Search.
       setIsOpen(false);
     };
@@ -81,7 +81,7 @@ export default function ServiceMultiSelect({
       placeholder="Any"
       className={`w-full min-w-0 ${isDisabled ? "opacity-40" : ""}`}
     >
-      <Label className={labelClass}>Service</Label>
+      <Label className={labelClass}>{label}</Label>
       <AriaButton
         className={`box-border flex w-full min-w-0 items-center justify-between gap-2 overflow-hidden rounded-md border border-border bg-bg px-2 py-1 text-[0.813rem] text-text outline-none focus:border-accent ${
           isDisabled ? "cursor-not-allowed" : ""
@@ -112,11 +112,11 @@ export default function ServiceMultiSelect({
         className={`box-border w-[var(--trigger-width)] max-w-[var(--trigger-width)] rounded-md border border-border bg-popover p-1 outline-none ${Z_POPOVER} ${popupShadow}`}
       >
         <ListBox className="outline-none">
-          {SERVICE_ITEMS.map((item) => (
+          {items.map((item) => (
             <ListBoxItem
               key={item.id}
               id={item.id}
-              textValue={item.name}
+              textValue={item.label}
               className={compactSelectItemClassName}
             >
               {({ isSelected }) => (
@@ -131,7 +131,7 @@ export default function ServiceMultiSelect({
                   >
                     ✓
                   </span>
-                  {item.name}
+                  {item.label}
                 </div>
               )}
             </ListBoxItem>

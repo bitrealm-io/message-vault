@@ -76,11 +76,18 @@ const SEARCH_TARGETS: Record<
 export default function AppHeader({
   searchQuery,
   searchTarget,
+  fullScreen,
   onSearchChange,
   onSearch,
 }: {
   searchQuery: string;
   searchTarget: HeaderSearchTarget;
+  /**
+   * True on Import, Export and Settings, which have no list: their search is
+   * always empty, so the box starts again when a list comes back rather than
+   * keeping text typed there.
+   */
+  fullScreen: boolean;
   onSearchChange: (v: string) => void;
   onSearch: (q: string) => void;
 }) {
@@ -109,7 +116,7 @@ export default function AppHeader({
         <div className="flex min-w-0 flex-1 items-center justify-center px-3 py-2">
           <div className="w-full max-w-xl">
             <SearchBar
-              key={searchTarget}
+              key={fullScreen ? `${searchTarget}-full-screen` : searchTarget}
               value={searchQuery}
               scope={target.scope}
               list={target.list}

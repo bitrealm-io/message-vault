@@ -289,6 +289,7 @@ export default function AppLayout() {
                   ? "messages"
                   : "conversations"
           }
+          fullScreen={isFullScreen}
           onSearchChange={handleSearchChange}
           onSearch={handleSearch}
         />

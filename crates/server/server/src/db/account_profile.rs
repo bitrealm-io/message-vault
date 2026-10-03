@@ -23,37 +23,28 @@ pub async fn load_account_profile(
     conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<AccountProfile> {
-    let emails = query_account_strings(
-        conn,
-        "SELECT h.normalized FROM handles h
-         JOIN account_handles ah ON ah.handle_id = h.id
-         WHERE ah.account_id = $1 AND h.handle_type = 'email'
-         ORDER BY h.normalized",
-        account_id,
-    )
-    .await?;
-    let phones = query_account_strings(
-        conn,
-        "SELECT h.normalized FROM handles h
-         JOIN account_handles ah ON ah.handle_id = h.id
-         WHERE ah.account_id = $1 AND h.handle_type = 'phone'
-         ORDER BY h.normalized",
-        account_id,
-    )
-    .await?;
+    let emails = account_handle_addresses(conn, account_id, HandleType::Email).await?;
+    let phones = account_handle_addresses(conn, account_id, HandleType::Phone).await?;
     Ok(AccountProfile { emails, phones })
 }
 
-/// Run a one-column query bound to `account_id` and collect the strings.
-async fn query_account_strings(
+/// The addresses of the account's identities of `handle_type`, A to Z, from
+/// `account_handles`, the one store of them.
+async fn account_handle_addresses(
     conn: &mut SqliteConnection,
-    sql: &str,
     account_id: i64,
+    handle_type: HandleType,
 ) -> Result<Vec<String>> {
-    Ok(sqlx::query_scalar::<_, String>(sql)
-        .bind(account_id)
-        .fetch_all(&mut *conn)
-        .await?)
+    Ok(sqlx::query_scalar::<_, String>(
+        "SELECT h.normalized FROM handles h
+         JOIN account_handles ah ON ah.handle_id = h.id
+         WHERE ah.account_id = $1 AND h.handle_type = $2
+         ORDER BY h.normalized",
+    )
+    .bind(account_id)
+    .bind(handle_type.as_str())
+    .fetch_all(&mut *conn)
+    .await?)
 }
 
 /// Ensure an `accounts` row exists at `account_id`, with the id as its stub

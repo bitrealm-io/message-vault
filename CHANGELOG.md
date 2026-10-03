@@ -794,8 +794,13 @@ released versions carry their date on the heading.
 - A Saved Search that uses `source:sms` is refused. Edit it to
   `source:sms-backup-restore`.
 - Photos and files imported by an earlier 0.10.0 build are not shown,
-  because each account now keeps them in one place for every source. Use
-  **Delete all messages** in Settings, then import those backups again.
+  because each account now keeps them in one folder for every source, and
+  the server no longer reads the folder an earlier build made for each
+  source. **Delete all messages** leaves those old folders on disk. Use
+  **Delete all messages** in Settings, delete the folder named after each
+  source inside each account's folder in the data folder, then import those
+  backups again. Deleting the whole data folder does the same for every
+  account at once, and also starts a new, empty Message Crate.
 - The server's `process-assets` command no longer takes `--source`: it
   makes previews for every attachment of each account.
 - An Import Run left waiting at a Staging Review or at its Media stage by an

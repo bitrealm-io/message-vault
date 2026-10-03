@@ -111,8 +111,7 @@ pub fn clean_previous_ir_output(output_dir: &Path) -> Result<()> {
         fs::remove_dir_all(&attachments)
             .with_context(|| format!("remove previous {}", attachments.display()))?;
     } else if attachments.is_file() {
-        fs::remove_file(&attachments)
-            .with_context(|| format!("remove previous {}", attachments.display()))?;
+        remove_previous(&attachments)?;
     }
     clean_previous_mail_output(output_dir)?;
     // Write the sentinel so future runs know this is a safe export directory.

@@ -1,7 +1,7 @@
 use super::*;
 use message_crate_core::{FormatConfig, MediaConfig, ObfuscateConfig, SourceConfig};
 use message_ir::IrAttachment;
-use message_ir_format::{MergedArchive, read_conversation_csv, read_conversation_json};
+use message_ir_format::{read_conversation_csv, read_conversation_json};
 
 fn write_fixture(dir: &Path, format: OutputFormat) {
     fs::create_dir_all(dir).unwrap();
@@ -1007,13 +1007,7 @@ fn convert_removes_the_backup_an_earlier_conversion_wrote() {
     )
     .unwrap();
     // What a conversion stopped before it finished leaves behind.
-    let names = SbrArchive.file_names();
-    for name in &names {
-        let path = destination.path().join(name);
-        if !path.exists() {
-            fs::write(path, "partial").unwrap();
-        }
-    }
+    sms_backup_restore_exporter::testutil::leave_partial_backup(destination.path());
 
     convert_export(
         source.path(),
@@ -1021,12 +1015,7 @@ fn convert_removes_the_backup_an_earlier_conversion_wrote() {
     )
     .unwrap();
 
-    for name in &names {
-        assert!(
-            !destination.path().join(name).exists(),
-            "{name} is left behind"
-        );
-    }
+    sms_backup_restore_exporter::testutil::assert_no_backup_left(destination.path());
 }
 
 /// Two groups with one title are written with a digest suffix each, so

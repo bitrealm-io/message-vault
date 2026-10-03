@@ -78,7 +78,7 @@ export interface paths {
         head?: never;
         /**
          * Change an account.
-         * @description Its display name, time zone and identities are set by the account itself or by the owner; only the owner sets an account's disabled flag and its import, export and delete permissions. A field the caller may not set answers `403 Forbidden`, and the reloaded account is the answer. The Demo Account's status, permissions and identities are fixed for everyone; its display name and time zone are not.
+         * @description Its display name, time zone and identities are set by the account itself or by the owner; only the owner sets an account's disabled flag and its import, export and delete permissions. A field the caller may not set answers `403 Forbidden`, and the reloaded account is the answer. The Demo Account's status, permissions, identities, display name and time zone are fixed for everyone, the owner included: every visitor shares the account, so a change one makes is what the next one finds.
          */
         patch: operations["update_account"];
         trace?: never;
@@ -92,7 +92,7 @@ export interface paths {
         };
         /**
          * List the account's named API tokens with their permissions and masked secrets.
-         * @description Each token's permissions are capped by the account's as they are now.
+         * @description Each token's permissions are capped by the account's as they are now. The owner lists any account's tokens, without their masked secrets.
          */
         get: operations["list_api_tokens"];
         put?: never;
@@ -114,12 +114,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Read one named API token as the list shows it: label, permissions, masked secret and last use.
+         * @description The secret itself is never answered again. The owner reads any account's token, without its masked secret, as its list does.
+         */
+        get: operations["get_api_token"];
         put?: never;
         post?: never;
         /**
          * Delete one named API token.
-         * @description Requests using it start failing on the next call.
+         * @description Requests using it start failing on the next call. The owner revokes any account's token, so a leaked one can be ended without the account's help.
          */
         delete: operations["delete_api_token"];
         options?: never;
@@ -140,7 +144,7 @@ export interface paths {
         };
         /**
          * An account's Export Runs as a page, newest first unless `sort` says otherwise.
-         * @description The owner reads any account's; an account reads its own.
+         * @description The owner reads any account's, each an `OwnerExportRun`; an account reads its own in full.
          */
         get: operations["list_account_exports"];
         put?: never;
@@ -180,7 +184,7 @@ export interface paths {
         };
         /**
          * An account's Import Runs as a page, newest first unless `sort` says otherwise.
-         * @description The owner reads any account's; an account reads its own.
+         * @description The owner reads any account's, each an `OwnerImportRun`; an account reads its own in full.
          */
         get: operations["list_account_imports"];
         put?: never;
@@ -199,7 +203,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * One of an account's Import Runs: status, timings, counts and issues.
+         * One of an account's Import Runs: status, timings and counts, and for the account itself its summary and issues.
          * @description A run that is another account's is a 404.
          */
         get: operations["get_account_import"];
@@ -226,9 +230,10 @@ export interface paths {
          * @description The account itself, its contacts, and its login survive.
          *
          *     The rows go in one transaction, between two batches of a running Import
-         *     Run and never inside one. The attachment files go after it, unless the
-         *     account has a running Import Run: that run may have uploaded files for a
-         *     batch it has not sent yet, so every file stays on disk.
+         *     Run and never inside one. The attachment files go after it. While the
+         *     account has a running Import Run, the originals stay: that run may have
+         *     uploaded files for a batch it has not sent yet. The run's end removes
+         *     the ones no batch named.
          *
          *     The owner may, on any account. The account itself may with a
          *     session that carries the `delete` permission, and confirms in the body.
@@ -364,7 +369,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Read a chunked asset upload in progress: its size, part size and the parts received so far. */
+        get: operations["get_asset_upload"];
         put?: never;
         post?: never;
         /** Abort and delete a chunked asset upload's staging files. */
@@ -497,6 +503,13 @@ export interface paths {
          *     The load is one transaction. A file that breaks a rule is refused whole
          *     with `422 Unprocessable Entity`, and `errors` holds one sentence for each
          *     bad row, starting with its row number.
+         *
+         *     The Demo Account is refused with `demo-account-protected`, in both modes,
+         *     by its id: an Edit load deletes contacts for good and an Append load
+         *     stores real people's names and numbers in an account anyone can enter
+         *     (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`). The import,
+         *     export and delete permissions are not asked for; they govern messages and
+         *     imports, and any other account loads its address book with a session.
          */
         post: operations["create_contacts"];
         delete?: never;
@@ -684,7 +697,15 @@ export interface paths {
         };
         /**
          * A conversation's messages, ascending by timestamp then `sort_order`.
-         * @description The read path a screen uses to open a conversation: no search query to compose, just the conversation id. `offset` has no cap: the conversation page reads a thread by stepping it forward, and every message must be reachable.
+         * @description The read path a screen uses to open a conversation: no search query to compose, just the conversation id.
+         *
+         *     The page starts at `offset`, or beside one message: `around` puts the
+         *     message in the middle of the page, and `before` and `after` answer the
+         *     messages just before or just after it in the page's order, without it.
+         *     The answer's `offset` says where the page sits either way, so a screen
+         *     that jumps to a message (a search result, a Find match, the first message
+         *     of a year) can keep reading in both directions from there. `offset` has
+         *     no cap: every message of a long conversation must be reachable.
          */
         get: operations["list_conversation_messages"];
         put?: never;
@@ -903,7 +924,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Import one message-ir JSONL body. */
+        /**
+         * Import one message-ir JSONL body.
+         * @description Every message needs a non-empty `guid`. A batch with a message without
+         *     one is refused with `422`, naming its lines, and nothing in it is stored.
+         *     A message whose `guid` the source already holds is skipped, so a batch
+         *     sent again after its answer was lost stores nothing twice.
+         */
         post: operations["create_import_batch"];
         delete?: never;
         options?: never;
@@ -1386,6 +1413,11 @@ export interface components {
             /** @description Login username. */
             username: string;
         };
+        /**
+         * @description An account's Export Runs as its reader may see them: in full for the
+         *     account itself, each an `OwnerExportRun` for the owner.
+         */
+        AccountExportRuns: components["schemas"]["Page_ExportRun"] | components["schemas"]["Page_OwnerExportRun"];
         /** @description One identity to link or unlink, with its platform service. */
         AccountIdentityRequest: {
             /** @description The address as typed, e.g. `+15555550100` or `alex@example.com`. */
@@ -1393,6 +1425,13 @@ export interface components {
             /** @description Platform the address belongs to: `phone`, `email`, or `whatsapp`. */
             service: string;
         };
+        /** @description One of an account's Import Runs as its reader may see it. */
+        AccountImportRun: components["schemas"]["ImportRun"] | components["schemas"]["OwnerImportRun"];
+        /**
+         * @description An account's Import Runs as its reader may see them: in full for the
+         *     account itself, each an `OwnerImportRun` for the owner.
+         */
+        AccountImportRuns: components["schemas"]["Page_ImportSummary"] | components["schemas"]["Page_OwnerImportRun"];
         /** @description One account's share of the messages held: an id, a username and numbers. */
         AccountMessages: {
             /** Format: int64 */
@@ -1468,8 +1507,11 @@ export interface components {
             label: string;
             /** @description Unix-seconds string of last use; absent when never used. */
             last_accessed_at?: string | null;
-            /** @description Masked secret for Settings (e.g. `mc-api-Sd..mE`). */
-            token_hint: string;
+            /**
+             * @description Masked secret for Settings (e.g. `mc-api-Sd..mE`). Absent when the
+             *     owner lists another account's tokens: the hint is part of the secret.
+             */
+            token_hint?: string | null;
         };
         /**
          * @description Which app a session's requests come from. The server records it beside the
@@ -1483,6 +1525,24 @@ export interface components {
             already_present: boolean;
             assets_path: string;
             sha256: string;
+        };
+        /**
+         * @description A chunked asset upload in progress: what it is assembling and which parts
+         *     have arrived.
+         */
+        AssetUpload: {
+            /**
+             * Format: int64
+             * @description Size of the whole file in bytes.
+             */
+            bytes: number;
+            /** @description Size of every part but the last, fixed when the upload started. */
+            part_size: number;
+            /** @description Part numbers received so far (1-based), in order. */
+            received_parts: number[];
+            /** @description SHA-256 fingerprint of the file the parts assemble into. */
+            sha256: string;
+            upload_id: string;
         };
         /** @description One attachment of an exported message. */
         Attachment: {
@@ -1914,8 +1974,8 @@ export interface components {
         DeleteMessagesResponse: {
             /**
              * Format: int64
-             * @description Attachment rows deleted. Their files are removed too, unless the
-             *     account has a running Import Run.
+             * @description Attachment rows deleted. Their files are removed too. While the
+             *     account has a running Import Run, the originals stay until it ends.
              */
             attachments: number;
             /**
@@ -2051,6 +2111,12 @@ export interface components {
             /** @description Message ids exported on their own. */
             message_ids?: number[];
         };
+        /**
+         * @description Which of the three forms an Export Run's scope took, without what it
+         *     asked for.
+         * @enum {string}
+         */
+        ExportScopeKind: "everything" | "query" | "selection";
         /**
          * @description How an Export Run stands: the values `exports.status` holds, the values
          *     `GET /v1/exports?status=` accepts, and the word every Export Run carries.
@@ -2244,6 +2310,14 @@ export interface components {
             mode: components["schemas"]["ImportMode"];
             /**
              * Format: int64
+             * @description Identities of type `other` this import met for people: a name the
+             *     backup gave with no address, or a sender such as `AMAZON`. Each one is
+             *     a person the exporter could not tie to an address, so a count above
+             *     zero says the import is incomplete.
+             */
+            other_identities: number;
+            /**
+             * Format: int64
              * @description Participant rows imported.
              */
             participants: number;
@@ -2409,6 +2483,12 @@ export interface components {
              * @description Replies in this thread.
              */
             num_replies: number;
+            /**
+             * @description The account holder's own address on this message: the one it was
+             *     sent from, or the one it was received at. `None` when the backup
+             *     named no owner.
+             */
+            owner?: string | null;
             /** @description Sender handle for incoming messages. */
             sender?: string | null;
             /**
@@ -2469,6 +2549,147 @@ export interface components {
         /** @description A name to create, or the new name for an existing set. */
         NamedSetRequest: {
             name: string;
+        };
+        /**
+         * @description An Export Run as the owner reads it under another account: the form of
+         *     its scope, its tool, times, outcome and counts
+         *     (`docs/adr/0008-the-owner-holds-no-messages.md`, "What the owner may
+         *     see"). A query's text is a search over the account's messages, and a
+         *     selection names its conversations, so neither is here, and a field
+         *     reaches the owner only by being added here.
+         */
+        OwnerExportRun: {
+            /**
+             * Format: int64
+             * @description Distinct attachment fingerprints among the matching messages.
+             */
+            attachment_count: number;
+            /**
+             * Format: int64
+             * @description Distinct conversations with at least one matching message.
+             */
+            conversation_count: number;
+            /** @description UTC time the run finished, when it has. */
+            finished_at?: string | null;
+            /**
+             * Format: int64
+             * @description Export Run id.
+             */
+            id: number;
+            /**
+             * Format: int64
+             * @description Messages the scope matched when the run was created.
+             */
+            message_count: number;
+            /**
+             * Format: int64
+             * @description How far the run's messages have been read, in places.
+             */
+            messages_delivered: number;
+            /** @description The form of the scope the run asked for. */
+            scope_kind: components["schemas"]["ExportScopeKind"];
+            /** @description UTC time the run started. */
+            started_at: string;
+            /** @description Lifecycle status. */
+            status: components["schemas"]["ExportStatus"];
+            /** @description Exporting tool, e.g. `message-crate-pull`, when the client named one. */
+            tool?: string | null;
+            /**
+             * Format: int64
+             * @description Sum of the known sizes of those distinct attachments, in bytes.
+             */
+            total_bytes: number;
+        };
+        /**
+         * @description An Import Run as the owner reads it under another account: its source,
+         *     mode, times, outcome and counts, and nothing of what the backup held
+         *     (`docs/adr/0008-the-owner-holds-no-messages.md`, "What the owner may
+         *     see"). The run's summary, its issues and its form say whom the account
+         *     talks to, so they stay out, and a field reaches the owner only by being
+         *     added here.
+         */
+        OwnerImportRun: {
+            /**
+             * Format: int64
+             * @description Attachments counted for the run.
+             */
+            attachment_count: number;
+            /**
+             * Format: int64
+             * @description Time spent on attachments, when finished.
+             */
+            attachments_ms?: number | null;
+            /**
+             * Format: int64
+             * @description Bytes uploaded so far.
+             */
+            bytes_uploaded: number;
+            /**
+             * Format: int64
+             * @description Contacts it only changed.
+             */
+            contacts_changed: number;
+            /**
+             * Format: int64
+             * @description Contacts this run created.
+             */
+            contacts_new: number;
+            /**
+             * @description The whole numbers the run's summary reported, by name. The summary's
+             *     other values, among them the addresses a staging summary lists, are
+             *     the account's own.
+             */
+            counts: {
+                [key: string]: number;
+            };
+            /**
+             * Format: int64
+             * @description Total wall-clock duration, when finished.
+             */
+            duration_ms?: number | null;
+            /** @description UTC time the run finished, when it has. */
+            finished_at?: string | null;
+            /**
+             * Format: int64
+             * @description Import Run id.
+             */
+            id: number;
+            /**
+             * Format: int64
+             * @description Issues the run recorded. Each names the conversation it was about, so
+             *     the owner reads how many and not which.
+             */
+            issue_count: number;
+            /**
+             * Format: int64
+             * @description Messages counted for the run.
+             */
+            message_count: number;
+            /** @description Import mode (`replace` or `append`). */
+            mode: string;
+            /**
+             * Format: int64
+             * @description Time spent parsing, when finished.
+             */
+            parse_ms?: number | null;
+            /**
+             * Format: int64
+             * @description Time spent preparing conversation files, when finished.
+             */
+            prepare_ms?: number | null;
+            /** @description Source id the run imports. */
+            source: string;
+            /** @description UTC time the run started. */
+            started_at: string;
+            /** @description Lifecycle status. */
+            status: components["schemas"]["ImportStatus"];
+            /** @description Importing tool, e.g. `message-crate-push`. */
+            tool?: string | null;
+            /**
+             * Format: int64
+             * @description Time spent uploading, when finished.
+             */
+            upload_ms?: number | null;
         };
         /** @description One page of a list. */
         Page_Account: {
@@ -2572,8 +2793,11 @@ export interface components {
                 label: string;
                 /** @description Unix-seconds string of last use; absent when never used. */
                 last_accessed_at?: string | null;
-                /** @description Masked secret for Settings (e.g. `mc-api-Sd..mE`). */
-                token_hint: string;
+                /**
+                 * @description Masked secret for Settings (e.g. `mc-api-Sd..mE`). Absent when the
+                 *     owner lists another account's tokens: the hint is part of the secret.
+                 */
+                token_hint?: string | null;
             }[];
             /** @description Page size used. */
             limit: number;
@@ -3016,6 +3240,12 @@ export interface components {
                  * @description Replies in this thread.
                  */
                 num_replies: number;
+                /**
+                 * @description The account holder's own address on this message: the one it was
+                 *     sent from, or the one it was received at. `None` when the backup
+                 *     named no owner.
+                 */
+                owner?: string | null;
                 /** @description Sender handle for incoming messages. */
                 sender?: string | null;
                 /**
@@ -3068,6 +3298,157 @@ export interface components {
                 /** Format: int64 */
                 id: number;
                 name: string;
+            }[];
+            /** @description Page size used. */
+            limit: number;
+            /** @description Page offset used. */
+            offset: number;
+            /**
+             * Format: int64
+             * @description Rows matching the query across every page.
+             */
+            total: number;
+        };
+        /** @description One page of a list. */
+        Page_OwnerExportRun: {
+            /** @description The rows on this page. */
+            items: {
+                /**
+                 * Format: int64
+                 * @description Distinct attachment fingerprints among the matching messages.
+                 */
+                attachment_count: number;
+                /**
+                 * Format: int64
+                 * @description Distinct conversations with at least one matching message.
+                 */
+                conversation_count: number;
+                /** @description UTC time the run finished, when it has. */
+                finished_at?: string | null;
+                /**
+                 * Format: int64
+                 * @description Export Run id.
+                 */
+                id: number;
+                /**
+                 * Format: int64
+                 * @description Messages the scope matched when the run was created.
+                 */
+                message_count: number;
+                /**
+                 * Format: int64
+                 * @description How far the run's messages have been read, in places.
+                 */
+                messages_delivered: number;
+                /** @description The form of the scope the run asked for. */
+                scope_kind: components["schemas"]["ExportScopeKind"];
+                /** @description UTC time the run started. */
+                started_at: string;
+                /** @description Lifecycle status. */
+                status: components["schemas"]["ExportStatus"];
+                /** @description Exporting tool, e.g. `message-crate-pull`, when the client named one. */
+                tool?: string | null;
+                /**
+                 * Format: int64
+                 * @description Sum of the known sizes of those distinct attachments, in bytes.
+                 */
+                total_bytes: number;
+            }[];
+            /** @description Page size used. */
+            limit: number;
+            /** @description Page offset used. */
+            offset: number;
+            /**
+             * Format: int64
+             * @description Rows matching the query across every page.
+             */
+            total: number;
+        };
+        /** @description One page of a list. */
+        Page_OwnerImportRun: {
+            /** @description The rows on this page. */
+            items: {
+                /**
+                 * Format: int64
+                 * @description Attachments counted for the run.
+                 */
+                attachment_count: number;
+                /**
+                 * Format: int64
+                 * @description Time spent on attachments, when finished.
+                 */
+                attachments_ms?: number | null;
+                /**
+                 * Format: int64
+                 * @description Bytes uploaded so far.
+                 */
+                bytes_uploaded: number;
+                /**
+                 * Format: int64
+                 * @description Contacts it only changed.
+                 */
+                contacts_changed: number;
+                /**
+                 * Format: int64
+                 * @description Contacts this run created.
+                 */
+                contacts_new: number;
+                /**
+                 * @description The whole numbers the run's summary reported, by name. The summary's
+                 *     other values, among them the addresses a staging summary lists, are
+                 *     the account's own.
+                 */
+                counts: {
+                    [key: string]: number;
+                };
+                /**
+                 * Format: int64
+                 * @description Total wall-clock duration, when finished.
+                 */
+                duration_ms?: number | null;
+                /** @description UTC time the run finished, when it has. */
+                finished_at?: string | null;
+                /**
+                 * Format: int64
+                 * @description Import Run id.
+                 */
+                id: number;
+                /**
+                 * Format: int64
+                 * @description Issues the run recorded. Each names the conversation it was about, so
+                 *     the owner reads how many and not which.
+                 */
+                issue_count: number;
+                /**
+                 * Format: int64
+                 * @description Messages counted for the run.
+                 */
+                message_count: number;
+                /** @description Import mode (`replace` or `append`). */
+                mode: string;
+                /**
+                 * Format: int64
+                 * @description Time spent parsing, when finished.
+                 */
+                parse_ms?: number | null;
+                /**
+                 * Format: int64
+                 * @description Time spent preparing conversation files, when finished.
+                 */
+                prepare_ms?: number | null;
+                /** @description Source id the run imports. */
+                source: string;
+                /** @description UTC time the run started. */
+                started_at: string;
+                /** @description Lifecycle status. */
+                status: components["schemas"]["ImportStatus"];
+                /** @description Importing tool, e.g. `message-crate-push`. */
+                tool?: string | null;
+                /**
+                 * Format: int64
+                 * @description Time spent uploading, when finished.
+                 */
+                upload_ms?: number | null;
             }[];
             /** @description Page size used. */
             limit: number;
@@ -3176,9 +3557,9 @@ export interface components {
          *     reading the failure and the operator reading the log are looking at the
          *     same request.
          *
-         *     The extension members belong to one type each: `word` and `did_you_mean`
-         *     to `search-query-invalid`, `retry_after` to `rate-limited`, `line` to
-         *     `malformed-body`.
+         *     The extension members belong to the types named here: `word` and
+         *     `did_you_mean` to `search-query-invalid`, `retry_after` to `rate-limited`,
+         *     `line` to `malformed-body` and `validation-failed` from an import batch.
          */
         Problem: {
             /**
@@ -3199,9 +3580,11 @@ export interface components {
             /**
              * Format: int64
              * @description `malformed-body` from an import batch: the line of the request body
-             *     the server could not read, counted from 1 with blank lines included.
-             *     The body is a batch the client packed, so only the client can say
-             *     which file and line of its own that line came from.
+             *     the server could not read; `validation-failed` from an import batch:
+             *     the first line that broke a rule, such as a message without a guid.
+             *     Counted from 1 with blank lines included. The body is a batch the
+             *     client packed, so only the client can say which file and line of its
+             *     own that line came from.
              */
             line?: number | null;
             /** @description The `x-request-id` of the response this came in. */
@@ -3396,14 +3779,17 @@ export interface components {
         /** @description The logged-in credential's account, username, and import sources. */
         Session: {
             /** Format: int64 */
-            account_id?: number | null;
+            account_id: number;
             sources: string[];
             username?: string | null;
         };
         /** @description Body for `POST /v1/contacts/summaries`. */
         SummarizeContactsRequest: {
-            /** @description Contact ids to summarize; an empty list covers every contact. */
-            ids?: number[];
+            /**
+             * @description Contact ids to summarize: at least one, and at most 500. Every
+             *     contact is listed by `GET /v1/contacts`.
+             */
+            ids: number[];
         };
         /** @description One tapback reaction on an exported message. */
         Tapback: {
@@ -3635,6 +4021,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -3670,7 +4065,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateAccountResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3698,6 +4093,15 @@ export interface operations {
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3806,6 +4210,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -3841,7 +4254,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3889,7 +4302,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, a delete on something not yet trashed, or an asset upload that another request to it is still writing. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3961,7 +4383,7 @@ export interface operations {
                     "application/json": components["schemas"]["Account"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3998,6 +4420,15 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4044,7 +4475,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                /** @description Account id; must be the caller's own */
+                /** @description Account id; the caller's own, or any for the owner */
                 id: number;
             };
             cookie?: never;
@@ -4070,7 +4501,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -4084,6 +4517,15 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4129,7 +4571,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateApiTokenResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4169,6 +4611,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
@@ -4198,12 +4649,88 @@ export interface operations {
             };
         };
     };
+    get_api_token: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account id; the caller's own, or any for the owner */
+                id: number;
+                /** @description API token id */
+                token_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiToken"];
+                };
+            };
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     delete_api_token: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description Account id; must be the caller's own */
+                /** @description Account id; the caller's own, or any for the owner */
                 id: number;
                 /** @description API token id */
                 token_id: number;
@@ -4229,7 +4756,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -4243,6 +4772,15 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4288,7 +4826,7 @@ export interface operations {
                     "application/json": components["schemas"]["UpdateApiTokenResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4321,6 +4859,15 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4384,7 +4931,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Page_ExportRun"];
+                    "application/json": components["schemas"]["AccountExportRuns"];
                 };
             };
             /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
@@ -4413,6 +4960,15 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4490,6 +5046,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -4528,7 +5093,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Page_ImportSummary"];
+                    "application/json": components["schemas"]["AccountImportRuns"];
                 };
             };
             /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
@@ -4557,6 +5122,15 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4595,7 +5169,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImportRun"];
+                    "application/json": components["schemas"]["AccountImportRun"];
                 };
             };
             /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
@@ -4624,6 +5198,15 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4668,7 +5251,7 @@ export interface operations {
                     "application/json": components["schemas"]["DeleteMessagesResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4705,6 +5288,15 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4773,7 +5365,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4814,6 +5406,15 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4913,6 +5514,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -4938,13 +5548,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Raw asset bytes */
+            /** @description The asset's bytes, in the media type it was stored with, or `application/octet-stream` when none was stored */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/octet-stream": unknown;
+                    "*/*": unknown;
                 };
             };
             /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
@@ -5028,7 +5638,7 @@ export interface operations {
                     "application/json": components["schemas"]["Asset"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5047,7 +5657,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -5061,6 +5673,15 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5089,7 +5710,7 @@ export interface operations {
             /**
              * @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
              *
-             *     [`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the server expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.
+             *     [`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the server expected: the bytes do not hash to the claimed SHA-256, a part number is out of range or a part the wrong length, or a completion names parts that never arrived.
              */
             422: {
                 headers: {
@@ -5115,14 +5736,12 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description The asset is stored; a HEAD answer has no body */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["Asset"];
-                };
+                content?: never;
             };
             /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
@@ -5148,6 +5767,15 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5180,13 +5808,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Raw preview bytes */
+            /** @description The preview's bytes, in the preview's own media type, or `application/octet-stream` when none is stored */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/octet-stream": unknown;
+                    "*/*": unknown;
                 };
             };
             /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
@@ -5269,7 +5897,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateAssetUploadResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5288,7 +5916,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -5302,6 +5932,15 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5330,7 +5969,88 @@ export interface operations {
             /**
              * @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
              *
-             *     [`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the server expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.
+             *     [`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the server expected: the bytes do not hash to the claimed SHA-256, a part number is out of range or a part the wrong length, or a completion names parts that never arrived.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_asset_upload: {
+        parameters: {
+            query: {
+                source: string;
+            };
+            header?: never;
+            path: {
+                /** @description Content SHA-256 hex */
+                sha256: string;
+                upload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetUpload"];
+                };
+            };
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
+             *
+             *     [`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the server expected: the bytes do not hash to the claimed SHA-256, a part number is out of range or a part the wrong length, or a completion names parts that never arrived.
              */
             422: {
                 headers: {
@@ -5374,7 +6094,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -5395,10 +6117,28 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, a delete on something not yet trashed, or an asset upload that another request to it is still writing. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /**
              * @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
              *
-             *     [`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the server expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.
+             *     [`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the server expected: the bytes do not hash to the claimed SHA-256, a part number is out of range or a part the wrong length, or a completion names parts that never arrived.
              */
             422: {
                 headers: {
@@ -5455,7 +6195,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -5476,10 +6218,28 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, a delete on something not yet trashed, or an asset upload that another request to it is still writing. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /**
              * @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
              *
-             *     [`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the server expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.
+             *     [`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the server expected: the bytes do not hash to the claimed SHA-256, a part number is out of range or a part the wrong length, or a completion names parts that never arrived.
              */
             422: {
                 headers: {
@@ -5521,7 +6281,7 @@ export interface operations {
                     "application/json": components["schemas"]["ReplaceAssetUploadPartResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5540,7 +6300,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -5554,6 +6316,24 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, a delete on something not yet trashed, or an asset upload that another request to it is still writing. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5582,7 +6362,7 @@ export interface operations {
             /**
              * @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
              *
-             *     [`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the server expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.
+             *     [`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the server expected: the bytes do not hash to the claimed SHA-256, a part number is out of range or a part the wrong length, or a completion names parts that never arrived.
              */
             422: {
                 headers: {
@@ -5639,6 +6419,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -5674,7 +6463,7 @@ export interface operations {
                     "application/json": components["schemas"]["NamedSet"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5698,6 +6487,15 @@ export interface operations {
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5793,6 +6591,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -5829,7 +6636,7 @@ export interface operations {
                     "application/json": components["schemas"]["NamedSet"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5862,6 +6669,15 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5964,6 +6780,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -6000,7 +6825,7 @@ export interface operations {
                     "application/json": components["schemas"]["UpdateMembersResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6033,6 +6858,15 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6118,6 +6952,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /**
              * @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
              *
@@ -6159,7 +7002,7 @@ export interface operations {
                     "application/json": components["schemas"]["LoadCounts"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6178,11 +7021,22 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6243,7 +7097,7 @@ export interface operations {
                     "text/csv": string;
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6329,7 +7183,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_ContactSelectionSummary"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6353,6 +7207,15 @@ export interface operations {
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6411,7 +7274,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_String"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6435,6 +7298,15 @@ export interface operations {
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6523,6 +7395,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -6563,7 +7444,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -6584,7 +7467,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, a delete on something not yet trashed, or an asset upload that another request to it is still writing. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -6629,7 +7521,7 @@ export interface operations {
                     "application/json": components["schemas"]["Contact"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6662,6 +7554,15 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6748,6 +7649,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -6809,6 +7719,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -6862,6 +7781,15 @@ export interface operations {
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6936,6 +7864,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -6976,7 +7913,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -6997,7 +7936,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, a delete on something not yet trashed, or an asset upload that another request to it is still writing. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7022,10 +7970,16 @@ export interface operations {
             query?: {
                 /** @description Page size, default 40, max 500 */
                 limit?: number;
-                /** @description Page offset, no maximum */
+                /** @description Page offset, no maximum. Not with `around`, `before` or `after`. */
                 offset?: number;
                 /** @description `date` or `-date`. Default `date`, oldest first. */
                 sort?: string;
+                /** @description Message id: the page with this message in the middle. Not with `offset`, `before` or `after`. */
+                around?: number;
+                /** @description Message id: the page just before this message in the page's order, without it. Not with `offset`, `around` or `after`. */
+                before?: number;
+                /** @description Message id: the page just after this message in the page's order, without it. Not with `offset`, `around` or `before`. */
+                after?: number;
             };
             header?: never;
             path: {
@@ -7069,6 +8023,15 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7130,6 +8093,15 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7205,6 +8177,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -7259,6 +8240,15 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7326,6 +8316,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -7361,7 +8360,7 @@ export interface operations {
                     "application/json": components["schemas"]["ExportRun"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7385,6 +8384,15 @@ export interface operations {
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7477,6 +8485,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -7540,7 +8557,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, a delete on something not yet trashed, or an asset upload that another request to it is still writing. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7612,7 +8638,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, a delete on something not yet trashed, or an asset upload that another request to it is still writing. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7691,7 +8726,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, a delete on something not yet trashed, or an asset upload that another request to it is still writing. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7748,11 +8792,22 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7795,7 +8850,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateImportResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7814,7 +8869,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -7826,7 +8883,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, a delete on something not yet trashed, or an asset upload that another request to it is still writing. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7895,7 +8961,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -7909,6 +8977,15 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7952,7 +9029,7 @@ export interface operations {
                     "application/json": components["schemas"]["ImportRun"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7971,7 +9048,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -7992,7 +9071,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, a delete on something not yet trashed, or an asset upload that another request to it is still writing. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -8057,7 +9145,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateImportBatchResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8076,7 +9164,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -8097,7 +9187,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, a delete on something not yet trashed, or an asset upload that another request to it is still writing. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -8160,7 +9259,7 @@ export interface operations {
                     "application/json": components["schemas"]["CompleteImportResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8179,7 +9278,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -8200,7 +9301,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, a delete on something not yet trashed, or an asset upload that another request to it is still writing. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -8274,7 +9384,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -8288,6 +9400,15 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8337,7 +9458,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -8358,7 +9481,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, a delete on something not yet trashed, or an asset upload that another request to it is still writing. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -8423,6 +9555,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -8458,7 +9599,7 @@ export interface operations {
                     "application/json": components["schemas"]["NamedSet"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8482,6 +9623,15 @@ export interface operations {
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8577,6 +9727,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -8613,7 +9772,7 @@ export interface operations {
                     "application/json": components["schemas"]["NamedSet"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8646,6 +9805,15 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8748,6 +9916,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -8784,7 +9961,7 @@ export interface operations {
                     "application/json": components["schemas"]["UpdateMembersResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8817,6 +9994,15 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8902,6 +10088,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /**
              * @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
              *
@@ -8969,6 +10164,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -9025,6 +10229,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -9060,7 +10273,7 @@ export interface operations {
                     "application/json": components["schemas"]["SavedSearch"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9084,6 +10297,15 @@ export interface operations {
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9179,6 +10401,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -9215,7 +10446,7 @@ export interface operations {
                     "application/json": components["schemas"]["SavedSearch"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9248,6 +10479,15 @@ export interface operations {
             };
             /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9338,6 +10578,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -9394,6 +10643,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -9421,6 +10679,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ServerInfo"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
@@ -9458,7 +10725,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateSessionResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9467,7 +10734,20 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description [`username-taken`](https://messagecrate.app/docs/developer/reference/errors/username-taken): The username already belongs to an account on this server.
+             *
+             *     [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, a delete on something not yet trashed, or an asset upload that another request to it is still writing.
+             */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -9556,6 +10836,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -9589,7 +10878,7 @@ export interface operations {
                     "application/json": components["schemas"]["DemoAccount"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9622,7 +10911,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, a delete on something not yet trashed, or an asset upload that another request to it is still writing. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -9702,6 +11000,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -9735,7 +11042,7 @@ export interface operations {
                     "application/json": components["schemas"]["ServerSettings"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9761,6 +11068,15 @@ export interface operations {
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9839,6 +11155,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -9890,6 +11215,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -9925,7 +11259,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateSessionResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9945,6 +11279,15 @@ export interface operations {
             };
             /** @description [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10028,6 +11371,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
@@ -10065,11 +11417,22 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
+            406: {
                 headers: {
                     [name: string]: unknown;
                 };

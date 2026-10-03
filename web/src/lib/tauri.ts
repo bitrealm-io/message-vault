@@ -2,7 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { type DesktopJobName, holdDesktopJob } from "./desktopJob";
 import type { components } from "./serverApi.types";
-import { resolveStagingParent } from "./system-settings";
 import type {
   ExtractConfig,
   ExtractErrorEvent,
@@ -51,26 +50,40 @@ export async function invokeCancel(): Promise<void> {
  * and both commands read them from there, so they work to the values the
  * Import Run was started with.
  *
- * There is no `staging_root` field: the wrappers below resolve it themselves
- * via `resolveStagingParent`, the same source `openPathInExplorer`
- * uses, so no caller can pass a root that disagrees with the Rust-side
- * containment guard.
+ * It carries no Staging Directory either. The desktop process keeps the
+ * setting and the folders it made under it, and acts on a folder it made
+ * wherever the setting points now, so changing the setting never strands a
+ * run that started under the earlier one.
  */
 export interface StagingConfig {
   staging_dir: string;
 }
 
+/** The Staging Directory, and the folder used when Settings name none. */
+export interface StagingRoot {
+  root: string;
+  defaultRoot: string;
+}
+
+/** The Staging Directory the desktop process keeps. */
+export async function invokeStagingRoot(): Promise<StagingRoot> {
+  return invoke("staging_root");
+}
+
 /**
- * Resolve the Staging Directory root every staging command must
- * check `staging_dir` against, throwing when it cannot be determined —
- * mirrors `openPathInExplorer`'s own resolution and error.
+ * Store the Staging Directory. An empty string goes back to the default.
+ * Folders made under the earlier setting keep working.
  */
-async function resolveStagingRoot(): Promise<string> {
-  const root = await resolveStagingParent();
-  if (!root) {
-    throw new Error("Could not determine the staging directory");
-  }
-  return root;
+export async function invokeSetStagingRoot(root: string): Promise<StagingRoot> {
+  return invoke("set_staging_root", { root });
+}
+
+/**
+ * Make a new staging folder under the Staging Directory and return its path.
+ * `label` is the Import source, or `export` for Export.
+ */
+export async function invokeCreateStagingDir(label: string): Promise<string> {
+  return invoke("create_staging_dir", { label });
 }
 
 /** How a staged attachment is expected to land against the size limit. */
@@ -113,12 +126,8 @@ export interface StagingSummary {
 
 /** Recompute what a staged folder holds, for the first review. */
 export async function invokeSummarizeStaging(config: StagingConfig): Promise<StagingSummary> {
-  const stagingRoot = await resolveStagingRoot();
   return invoke("summarize_staging", {
-    args: {
-      stagingDir: config.staging_dir,
-      stagingRoot,
-    },
+    args: { stagingDir: config.staging_dir },
   });
 }
 
@@ -128,12 +137,8 @@ export async function invokeSummarizeStaging(config: StagingConfig): Promise<Sta
  * job, so `awaitTauriJob` drives it exactly as it drives extract and push.
  */
 export async function invokeTranscodeStaging(config: StagingConfig): Promise<void> {
-  const stagingRoot = await resolveStagingRoot();
   return invoke("transcode_staging", {
-    args: {
-      stagingDir: config.staging_dir,
-      stagingRoot,
-    },
+    args: { stagingDir: config.staging_dir },
   });
 }
 
@@ -142,12 +147,8 @@ export async function invokeTranscodeStaging(config: StagingConfig): Promise<voi
  * review without approving deletes the folder outright.
  */
 export async function invokeDeleteStaging(config: { staging_dir: string }): Promise<void> {
-  const stagingRoot = await resolveStagingRoot();
   return invoke("delete_staging", {
-    args: {
-      stagingDir: config.staging_dir,
-      stagingRoot,
-    },
+    args: { stagingDir: config.staging_dir },
   });
 }
 
@@ -159,9 +160,8 @@ export async function invokeDeleteStaging(config: { staging_dir: string }): Prom
 export async function invokeReadImportRunRecord(config: {
   staging_dir: string;
 }): Promise<unknown | null> {
-  const stagingRoot = await resolveStagingRoot();
   return invoke("read_import_run_record", {
-    args: { stagingDir: config.staging_dir, stagingRoot },
+    args: { stagingDir: config.staging_dir },
   });
 }
 
@@ -170,9 +170,8 @@ export async function invokeSaveImportRunRecord(config: {
   staging_dir: string;
   record: unknown;
 }): Promise<void> {
-  const stagingRoot = await resolveStagingRoot();
   return invoke("save_import_run_record", {
-    args: { stagingDir: config.staging_dir, stagingRoot, record: config.record },
+    args: { stagingDir: config.staging_dir, record: config.record },
   });
 }
 

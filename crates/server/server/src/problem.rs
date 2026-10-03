@@ -177,11 +177,18 @@ impl ProblemType {
     pub fn page(self) -> String {
         match self {
             Self::ValidationFailed => "A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.\n\n\
-`errors` lists every rule the request broke, one sentence each, not only the first. Fix each one and send the request again.".to_string(),
-            Self::MalformedBody => "The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. Nothing was parsed, so nothing is reported field by field; `detail` says where reading stopped.\n\n\
+`errors` lists every rule the request broke, one sentence each, not only the first. Fix each one and send the request again.\n\n\
+For an import batch, a line that is JSON and breaks a rule of message-ir (a wrong field, a message before any header, a message without a `guid`, an old `schema_version`) answers this type, and `line` carries the first such line of the request body, counted from 1 with blank lines included. It is a line of the batch, not of any file: a client that packed the batch from several files turns it into the file and line it came from. An unsafe attachment path, a stated SHA-256 that is not 64 hex digits, and an attachment whose bytes do not match its stated SHA-256 answer this type too, and `line` carries the line of the message the attachment is on. An empty batch answers this type without `line`.".to_string(),
+            Self::MalformedBody => "The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. Nothing was parsed, so nothing is reported field by field; `detail` says where reading stopped.\n\n\
 For an import batch, `line` carries the line of the request body that could not be read, counted from 1 with blank lines included. It is a line of the batch, not of any file: a client that packed the batch from several files turns it into the file and line it came from.".to_string(),
             Self::UnsupportedMediaType => "The request's `Content-Type` is absent or not one this route accepts. An import body is `application/x-ndjson` or `application/jsonl`; a JSON route takes `application/json`. Send the right header with the same body.".to_string(),
-            Self::PayloadTooLarge => "The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading. `PUT /v1/assets/{sha256}` caps at the attachment size limit, which the owner sets in Server Settings and `GET /v1/server` reports as `asset_max_bytes`. Each part of a multipart upload caps at the part size the upload was given when it started. Auth routes cap at 32 KiB, and every other route at a cap fixed in the server, 512 MiB at most. Send less, or, for an attachment, have the owner raise the limit.".to_string(),
+            Self::PayloadTooLarge => format!(
+                "The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading. `PUT /v1/assets/{{sha256}}` caps at the attachment size limit, which the owner sets in Server Settings and `GET /v1/server` reports as `asset_max_bytes`. Each part of a multipart upload caps at the part size the upload was given when it started. Every other cap is fixed in the server: `POST /v1/session`, `POST /v1/accounts` and `POST /v1/server/claim` at {}, any other JSON body at {}, an address book loaded with `POST /v1/contacts` at {}, and an import batch, or any other body, at {}. Send less, or, for an attachment, have the owner raise the limit.",
+                byte_size(crate::server::MAX_AUTH_BODY_BYTES),
+                byte_size(crate::server::MAX_JSON_BODY_BYTES),
+                byte_size(crate::contacts_api::address_book::MAX_ADDRESS_BOOK_BYTES),
+                byte_size(crate::server::MAX_REQUEST_BODY_BYTES),
+            ),
             Self::InvalidCredentials => "The username or password did not match an account, or the current password given to confirm deleting an account or changing the owner's password was wrong. The server does not say which half failed. Check both and try again; repeated attempts are rate limited.".to_string(),
             Self::AuthenticationRequired => "The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. Log in again, or issue a new API token, and send the new token.".to_string(),
             Self::RateLimited => format!(
@@ -197,9 +204,9 @@ For an import batch, `line` carries the line of the request body that could not 
             Self::InsufficientScope => "The credential was accepted but may not do this. An API token carries import and export permissions and never a logged-in session's full access; an account may be restricted from import, export or deletion by the owner. Use a session, a token with the right scope, or ask the owner.".to_string(),
             Self::AccountDisabled => "The account exists but the owner has disabled it, so it may not log in or act. Ask the owner to enable it.".to_string(),
             Self::SearchQueryInvalid => "The search language refused the query. `detail` names the word and the list it was used on; `word` carries the word, and `did_you_mean` a word the language does have when one is close. The query language is documented in the search reference.".to_string(),
-            Self::StateConflict => "The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed. `detail` says which. Read the resource's current state and choose the operation it allows.".to_string(),
-            Self::AssetUploadInvalid => "Something about the upload does not match what the server expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived. `detail` says which. Start the upload again.".to_string(),
-            Self::NotFound => "No resource at that address exists for this account. An id that belongs to another account answers this too, so an unknown id and a forbidden one look the same.".to_string(),
+            Self::StateConflict => "The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, a delete on something not yet trashed, or an asset upload that another request to it is still writing. `detail` says which. Read the resource's current state and choose the operation it allows.".to_string(),
+            Self::AssetUploadInvalid => "Something about the upload does not match what the server expected: the bytes do not hash to the claimed SHA-256, a part number is out of range or a part the wrong length, or a completion names parts that never arrived. `detail` says which. Start the upload again. An upload id that names no upload answers `not-found`, and a server that cannot store the file answers `500`.".to_string(),
+            Self::NotFound => "No resource at that address exists for this account. An id that belongs to another account answers this too, so an unknown id and a forbidden one look the same, with one exception: the `{id}` of `/v1/accounts/{id}` itself. A caller who is neither the owner nor the account it names gets `403 Forbidden` there, whether or not the account exists. An id nested under it, such as another account's API token, still answers this.".to_string(),
             Self::MethodNotAllowed => "The path exists but does not take this method. The OpenAPI document lists each route's methods.".to_string(),
             Self::NotAcceptable => "The request's `Accept` header named nothing this route can produce. Every `/v1` route but the asset download, its preview and the address book export answers `application/json`, and a failure `application/problem+json`; send `Accept: application/json`, `*/*`, or no `Accept` at all.".to_string(),
         }
@@ -262,11 +269,42 @@ pub mod openapi {
     );
 }
 
+/// A body cap as a page states it: whole mebibytes as `MiB`, anything
+/// smaller as whole kibibytes.
+fn byte_size(bytes: usize) -> String {
+    const KIB: usize = 1024;
+    const MIB: usize = 1024 * KIB;
+    if bytes >= MIB {
+        format!("{} MiB", bytes / MIB)
+    } else {
+        format!("{} KiB", bytes / KIB)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
 
     use super::*;
+
+    /// The `payload-too-large` page states each body cap as the code
+    /// applies it, so a cap that changes in the code changes on the page.
+    #[test]
+    fn the_payload_too_large_page_names_each_body_cap() {
+        let page = ProblemType::PayloadTooLarge.page();
+        for (cap, text) in [
+            (crate::server::MAX_AUTH_BODY_BYTES, "32 KiB"),
+            (crate::server::MAX_JSON_BODY_BYTES, "32 MiB"),
+            (
+                crate::contacts_api::address_book::MAX_ADDRESS_BOOK_BYTES,
+                "8 MiB",
+            ),
+            (crate::server::MAX_REQUEST_BODY_BYTES, "512 MiB"),
+        ] {
+            assert_eq!(byte_size(cap), text);
+            assert!(page.contains(text), "the page does not name {text}: {page}");
+        }
+    }
 
     #[test]
     fn every_type_has_a_distinct_slug_and_a_page() {

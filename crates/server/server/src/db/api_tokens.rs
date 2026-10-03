@@ -233,6 +233,33 @@ type ApiTokenRowRaw = (
     i64,
 );
 
+impl From<ApiTokenRowRaw> for ApiTokenRow {
+    fn from(
+        (
+            id,
+            label,
+            can_import,
+            can_export,
+            token_hint,
+            created_at,
+            last_accessed_at,
+            expires_at,
+            disabled,
+        ): ApiTokenRowRaw,
+    ) -> Self {
+        Self {
+            id,
+            label,
+            permissions: Permissions::token(can_import != 0, can_export != 0),
+            token_hint,
+            created_at,
+            last_accessed_at,
+            expires_at,
+            disabled: disabled != 0,
+        }
+    }
+}
+
 /// List API tokens for an account (no secrets).
 ///
 /// # Errors
@@ -251,31 +278,30 @@ pub async fn list_api_tokens(
     .bind(account_id)
     .fetch_all(&mut *conn)
     .await?;
-    let mut out = Vec::with_capacity(rows.len());
-    for (
-        id,
-        label,
-        can_import,
-        can_export,
-        token_hint,
-        created_at,
-        last_accessed_at,
-        expires_at,
-        disabled,
-    ) in rows
-    {
-        out.push(ApiTokenRow {
-            id,
-            label,
-            permissions: Permissions::token(can_import != 0, can_export != 0),
-            token_hint,
-            created_at,
-            last_accessed_at,
-            expires_at,
-            disabled: disabled != 0,
-        });
-    }
-    Ok(out)
+    Ok(rows.into_iter().map(ApiTokenRow::from).collect())
+}
+
+/// One of the account's API tokens (no secret), or `None` when the account
+/// holds no token with that id.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn get_api_token(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    id: i64,
+) -> Result<Option<ApiTokenRow>> {
+    let row: Option<ApiTokenRowRaw> = sqlx::query_as(
+        "SELECT id, label, can_import, can_export, token_hint, created_at, last_accessed_at, expires_at, disabled
+         FROM account_api_tokens
+         WHERE account_id = $1 AND id = $2",
+    )
+    .bind(account_id)
+    .bind(id)
+    .fetch_optional(&mut *conn)
+    .await?;
+    Ok(row.map(ApiTokenRow::from))
 }
 
 /// Delete one API token if it belongs to the account.

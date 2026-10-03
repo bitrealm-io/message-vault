@@ -94,7 +94,7 @@ fn locate_in(places: &Places<'_>) -> Result<PathBuf> {
 }
 
 /// A running `imessage-reader` serving one request.
-pub(crate) struct Helper {
+pub struct Helper {
     child: Child,
     stdin: Option<ChildStdin>,
     stdout: Lines<BufReader<ChildStdout>>,
@@ -319,4 +319,4 @@ fn tail(stderr: &str) -> String {
 }
 
 #[cfg(test)]
-pub(crate) mod tests;
+mod tests;

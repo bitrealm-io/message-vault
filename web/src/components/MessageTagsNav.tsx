@@ -7,18 +7,18 @@ const COPY: NavEntityCopy = {
   title: "Message Tags",
   routeBase: "/tag",
   emptyRoute: "/no-tag",
-  emptyLabel: "No tag",
+  emptyLabel: "No Message Tag",
   fallbackRoute: "/",
-  addLabel: "Create message tag",
-  createTitle: "Create message tag",
-  renameTitle: "Rename tag",
-  namePlaceholder: "Tag name",
-  optionsLabel: (name) => `Tag options for ${name}`,
+  addLabel: "Create Message Tag",
+  createTitle: "Create Message Tag",
+  renameTitle: "Rename Message Tag",
+  namePlaceholder: "Message Tag name",
+  optionsLabel: (name) => `Message Tag options for ${name}`,
   deleteBody: (name) =>
     `Removes the Message Tag ${name} and takes it off every conversation that carries it. The conversations themselves stay in your Message Crate.`,
-  createError: "Could not create tag",
-  renameError: "Could not rename tag",
-  deleteError: "Could not delete tag",
+  createError: "Could not create Message Tag",
+  renameError: "Could not rename Message Tag",
+  deleteError: "Could not delete Message Tag",
 };
 
 export default function MessageTagsNav({ tags }: { tags: string[] }) {

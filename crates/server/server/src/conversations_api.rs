@@ -11,7 +11,7 @@ use axum::http::StatusCode;
 use serde::Deserialize;
 
 use crate::db::conversation_messages::{
-    DEFAULT_MESSAGE_SORT, MESSAGE_SORT_KEYS, Message, get_conversation_messages,
+    DEFAULT_MESSAGE_SORT, MESSAGE_SORT_KEYS, Message, MessageWindow, get_conversation_messages,
 };
 use crate::db::conversations::{
     CONVERSATION_SORT_KEYS, ConversationSource, ConversationSummary, DEFAULT_CONVERSATION_SORT,
@@ -22,7 +22,6 @@ use crate::paging::{
     DEFAULT_LIST_LIMIT, ListRequest, Page, PageQuery, page_of, page_params, parse_sort,
 };
 use crate::server::{ApiError, AppState, FullAccess, FullDeleteAccess};
-use crate::trash_api::remove_orphaned_files;
 
 /// Page through conversations with participants, message counts, and tags.
 /// Newest activity first unless `sort` says otherwise.
@@ -134,12 +133,54 @@ pub(crate) struct ListConversationMessagesQuery {
     offset: Option<usize>,
     #[serde(default)]
     sort: Option<String>,
+    #[serde(default)]
+    around: Option<i64>,
+    #[serde(default)]
+    before: Option<i64>,
+    #[serde(default)]
+    after: Option<i64>,
+}
+
+impl ListConversationMessagesQuery {
+    /// Where the page sits: at `offset`, or beside the message `around`,
+    /// `before` or `after` names. At most one of the four may be sent,
+    /// because each one alone says where the page starts.
+    fn window(&self) -> Result<MessageWindow, ApiError> {
+        let sent: Vec<&str> = [
+            ("offset", self.offset.is_some()),
+            ("around", self.around.is_some()),
+            ("before", self.before.is_some()),
+            ("after", self.after.is_some()),
+        ]
+        .into_iter()
+        .filter_map(|(name, sent)| sent.then_some(name))
+        .collect();
+        if sent.len() > 1 {
+            return Err(ApiError::validation(format!(
+                "{} each say where the page starts; send at most one of offset, around, before and after",
+                sent.join(" and ")
+            )));
+        }
+        Ok(match (self.around, self.before, self.after) {
+            (Some(id), _, _) => MessageWindow::Around(id),
+            (_, Some(id), _) => MessageWindow::Before(id),
+            (_, _, Some(id)) => MessageWindow::After(id),
+            _ => MessageWindow::Offset(self.offset.unwrap_or(0)),
+        })
+    }
 }
 
 /// A conversation's messages, ascending by timestamp then `sort_order`. The
 /// read path a screen uses to open a conversation: no search query to compose,
-/// just the conversation id. `offset` has no cap: the conversation page reads
-/// a thread by stepping it forward, and every message must be reachable.
+/// just the conversation id.
+///
+/// The page starts at `offset`, or beside one message: `around` puts the
+/// message in the middle of the page, and `before` and `after` answer the
+/// messages just before or just after it in the page's order, without it.
+/// The answer's `offset` says where the page sits either way, so a screen
+/// that jumps to a message (a search result, a Find match, the first message
+/// of a year) can keep reading in both directions from there. `offset` has
+/// no cap: every message of a long conversation must be reachable.
 #[utoipa::path(
     get,
     path = "/v1/conversations/{id}/messages",
@@ -148,8 +189,11 @@ pub(crate) struct ListConversationMessagesQuery {
     params(
         ("id" = i64, Path, description = "Conversation id"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
-        ("offset" = Option<usize>, Query, description = "Page offset, no maximum"),
-        ("sort" = Option<String>, Query, description = "`date` or `-date`. Default `date`, oldest first.")
+        ("offset" = Option<usize>, Query, description = "Page offset, no maximum. Not with `around`, `before` or `after`."),
+        ("sort" = Option<String>, Query, description = "`date` or `-date`. Default `date`, oldest first."),
+        ("around" = Option<i64>, Query, description = "Message id: the page with this message in the middle. Not with `offset`, `before` or `after`."),
+        ("before" = Option<i64>, Query, description = "Message id: the page just before this message in the page's order, without it. Not with `offset`, `around` or `after`."),
+        ("after" = Option<i64>, Query, description = "Message id: the page just after this message in the page's order, without it. Not with `offset`, `around` or `before`.")
     ),
     responses(
         (status = 200, body = crate::paging::Page<message_crate_api_types::Message>),
@@ -161,20 +205,21 @@ pub(crate) async fn list_conversation_messages(
     AxumPath(conversation_id): AxumPath<i64>,
     Query(query): Query<ListConversationMessagesQuery>,
 ) -> Result<Json<Page<Message>>, ApiError> {
-    let mut conn = state.db.acquire().await?;
     let page = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
     let order = parse_sort(
         query.sort.as_deref(),
         &MESSAGE_SORT_KEYS,
         &DEFAULT_MESSAGE_SORT,
     )?;
+    let window = query.window()?;
+    let mut conn = state.db.acquire().await?;
     let result = get_conversation_messages(
         &mut conn,
         auth.account_id,
         conversation_id,
         &order,
         page.limit,
-        page.offset,
+        window,
     )
     .await?;
     result
@@ -274,8 +319,14 @@ pub(crate) async fn delete_conversation(
         .await?
     };
     match outcome {
-        DeleteOutcome::Deleted(orphaned) => {
-            remove_orphaned_files(Arc::clone(&state.cfg), auth.account_id, orphaned).await?;
+        DeleteOutcome::Deleted(unreferenced) => {
+            crate::asset_store::remove_unreferenced(
+                &state.db,
+                Arc::clone(&state.cfg),
+                auth.account_id,
+                unreferenced,
+            )
+            .await;
             Ok(StatusCode::NO_CONTENT)
         }
         DeleteOutcome::NotOwned => Err(ApiError::NotFound("conversation not found".into())),

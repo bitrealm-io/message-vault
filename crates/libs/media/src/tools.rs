@@ -87,9 +87,9 @@ pub(crate) fn require_ffmpeg() -> Result<()> {
         Ok(())
     } else {
         bail!(
-            "ffmpeg and ffprobe are required for --media-mode convert/compress. \
-             Keep the release-bundled tools in lib/ next to this program (or ../lib/ from cli/), \
-             install ffmpeg on PATH, or set MESSAGE_CRATE_BIN to a directory that contains both."
+            "ffmpeg and ffprobe are required to convert or compress attachments. \
+             Keep the bundled tools in lib/ next to this program, install ffmpeg on PATH, \
+             or set MESSAGE_CRATE_BIN to a folder that contains both."
         )
     }
 }

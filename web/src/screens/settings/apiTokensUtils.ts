@@ -23,8 +23,8 @@ export type ApiTokenItem = {
   label: string;
   can_import: boolean;
   can_export: boolean;
-  /** Masked secret, e.g. `mc-api-Sd..mE`. */
-  token_hint: string;
+  /** Masked secret, e.g. `mc-api-Sd..mE`. Absent in the owner's list of another account's tokens. */
+  token_hint?: string | null;
   created_at: string;
   /** Unix seconds string, or null/absent if never used. */
   last_accessed_at?: string | null;

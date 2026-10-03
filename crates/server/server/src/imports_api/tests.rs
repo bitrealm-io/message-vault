@@ -1,8 +1,8 @@
 use super::*;
 use crate::assets_api;
 use crate::test_support::{
-    RegisteredAccount, TestFixture, fixture_with_account, get_json, patch_json, post_created_json,
-    post_json, test_fixture,
+    RegisteredAccount, TestFixture, assert_every_person_is_on_a_contact, fixture_with_account,
+    get_json, import_jsonl_text, patch_json, post_created_json, post_json, test_fixture,
 };
 use tempfile::TempDir;
 
@@ -167,10 +167,9 @@ async fn append_skips_existing_guids_and_keeps_id_map() {
     let second = write_jsonl(
         tmp.path(),
         "b.jsonl",
-        r#"{"schema_version":4,"export":{"source":"sms-backup-restore","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+14075551234","conversation_type":"individual","group_title":null,"participants":[{"handle":"+14075551234","display_name":null}],"stats":{"message_count":3,"attachment_count":0,"first_timestamp_unix_ms":1426183522000,"last_timestamp_unix_ms":1426183642000}}}
+        r#"{"schema_version":4,"export":{"source":"sms-backup-restore","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+14075551234","conversation_type":"individual","group_title":null,"participants":[{"handle":"+14075551234","display_name":null}],"stats":{"message_count":2,"attachment_count":0,"first_timestamp_unix_ms":1426183522000,"last_timestamp_unix_ms":1426183582000}}}
 {"guid":"g-dup","timestamp_unix_ms":1426183522000,"direction":"outgoing","service":"sms","message_kind":"sms","sender_handle":null,"sender_display_name":null,"subject":null,"text":"two again","attachments":[],"imessage":null,"source":null}
 {"guid":"g-new","timestamp_unix_ms":1426183582000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+14075551234","sender_display_name":null,"subject":null,"text":"three","attachments":[],"imessage":null,"source":null}
-{"guid":"","timestamp_unix_ms":1426183642000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+14075551234","sender_display_name":null,"subject":null,"text":"empty guid always inserts","attachments":[],"imessage":null,"source":null}
 "#,
     );
     let second_stats = import_jsonl_files(
@@ -188,11 +187,11 @@ async fn append_skips_existing_guids_and_keeps_id_map() {
     )
     .await
     .unwrap();
-    assert_eq!(second_stats.messages_appended, 2);
+    assert_eq!(second_stats.messages_appended, 1);
     assert_eq!(second_stats.messages_deduped, 1);
     assert_eq!(
-        second_stats.messages, 2,
-        "an append reports the messages it added, not the three it read"
+        second_stats.messages, 1,
+        "an append reports the messages it added, not the two it read"
     );
 
     let (_pool, mut conn) = open_verify(&db).await;
@@ -200,7 +199,7 @@ async fn append_skips_existing_guids_and_keeps_id_map() {
         .fetch_one(&mut *conn)
         .await
         .unwrap();
-    assert_eq!(n, 4);
+    assert_eq!(n, 3);
     let dup_body: String = sqlx::query_scalar("SELECT body FROM messages WHERE guid = 'g-dup'")
         .fetch_one(&mut *conn)
         .await
@@ -1122,7 +1121,7 @@ fn media_convert_stores_the_converted_file_not_the_original() {
 }
 
 #[tokio::test]
-async fn name_only_participant_becomes_a_contact_with_no_identity() {
+async fn name_only_participant_becomes_an_other_identity_on_a_contact() {
     let tmp = TempDir::new().unwrap();
     let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
@@ -1148,8 +1147,7 @@ async fn name_only_participant_becomes_a_contact_with_no_identity() {
 
     let (_pool, mut conn) = open_verify(&db).await;
 
-    // The name is carried by a contact, because nothing else can hold a
-    // name with no address.
+    // The name is the contact's.
     let name: String = sqlx::query_scalar(
         "SELECT preferred_name FROM contacts WHERE account_id = $1 AND preferred_name = 'Sarah Vale'",
     )
@@ -1159,31 +1157,34 @@ async fn name_only_participant_becomes_a_contact_with_no_identity() {
     .unwrap();
     assert_eq!(name, "Sarah Vale");
 
-    // No address was invented for her.
-    let identity_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM handles h
+    // Her identity is of type `other` and holds the name, not an address
+    // invented for her, and it is on that contact.
+    let identities: Vec<(String, String)> = sqlx::query_as(
+        "SELECT h.handle_type, ct.preferred_name FROM handles h
+         JOIN contact_handles ch ON ch.handle_id = h.id
+         JOIN contacts ct ON ct.id = ch.contact_id
          WHERE h.account_id = $1 AND h.raw = 'Sarah Vale'",
-    )
-    .bind(TEST_ACCOUNT)
-    .fetch_one(&mut *conn)
-    .await
-    .unwrap();
-    assert_eq!(identity_count, 0, "the source recorded no address for her");
-
-    // The promoted participant points at the contact and carries no identity.
-    let rows: Vec<(Option<i64>, Option<i64>)> = sqlx::query_as(
-        "SELECT p.handle_id, p.contact_id FROM participants p
-         JOIN conversations c ON c.id = p.conversation_id
-         WHERE c.account_id = $1",
     )
     .bind(TEST_ACCOUNT)
     .fetch_all(&mut *conn)
     .await
     .unwrap();
-    assert!(
-        rows.iter().any(|(h, c)| h.is_none() && c.is_some()),
-        "expected a participant with a contact and no identity, got {rows:?}"
+    assert_eq!(
+        identities,
+        [("other".to_string(), "Sarah Vale".to_string())]
     );
+
+    // The promoted participant and the message's sender are that identity.
+    let participant_is_her: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM participants p JOIN handles h ON h.id = p.handle_id
+                        WHERE h.raw = 'Sarah Vale')
+            AND EXISTS (SELECT 1 FROM messages m JOIN handles h ON h.id = m.sender_handle_id
+                        WHERE h.raw = 'Sarah Vale')",
+    )
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    assert!(participant_is_her);
 }
 
 /// A group chat's identifier names the conversation, not a person, so only
@@ -1237,13 +1238,8 @@ async fn a_group_chat_identifier_never_becomes_a_contact() {
     assert_eq!(chat, "chat1000000005");
 }
 
-/// `resolve_name_only_participant` returns `(None, None)` when the source
-/// recorded neither an address nor a name for a participant, and
-/// `staging.rs` returns before the insert that follows it. This pins that a
-/// participant record carrying neither cannot reach the
-/// `participants` table with `handle_id` and `name_alias` both NULL, the
-/// shape `participant_names::load_for_conversations`'s COALESCE-to-`''`
-/// fallback assumes never exists.
+/// A participant the source gave neither an address nor a name says nothing,
+/// so the import leaves it out rather than make an identity of nothing.
 #[tokio::test]
 async fn a_participant_with_no_address_and_no_name_is_never_created() {
     let tmp = TempDir::new().unwrap();
@@ -1270,8 +1266,9 @@ async fn a_participant_with_no_address_and_no_name_is_never_created() {
     import_jsonl_files(&db, &[path], &opts).await.unwrap();
 
     let (_pool, mut conn) = open_verify(&db).await;
-    let rows: Vec<(Option<i64>, Option<String>)> = sqlx::query_as(
-        "SELECT p.handle_id, p.name_alias FROM participants p
+    let rows: Vec<String> = sqlx::query_scalar(
+        "SELECT h.raw FROM participants p
+         JOIN handles h ON h.id = p.handle_id
          JOIN conversations c ON c.id = p.conversation_id
          WHERE c.account_id = $1",
     )
@@ -1279,10 +1276,7 @@ async fn a_participant_with_no_address_and_no_name_is_never_created() {
     .fetch_all(&mut *conn)
     .await
     .unwrap();
-    assert!(
-        rows.iter().all(|(h, n)| h.is_some() || n.is_some()),
-        "expected no participant with both handle_id and name_alias NULL, got {rows:?}"
-    );
+    assert!(rows.is_empty(), "expected no participant, got {rows:?}");
 }
 
 #[tokio::test]
@@ -1421,7 +1415,7 @@ async fn claimed_import_rejects_corrupt_existing_asset() {
     let tmp = TempDir::new().unwrap();
     let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
-    let sha = assets_api::sha256_hex(b"expected-asset");
+    let sha = assets_api::Sha256::of_bytes(b"expected-asset");
     let corrupt = assets.join(assets_api::shard_rel_path(&sha, ""));
     fs::create_dir_all(corrupt.parent().unwrap()).unwrap();
     fs::write(&corrupt, b"corrupt-asset").unwrap();
@@ -1740,8 +1734,9 @@ async fn batches_path(state: &crate::server::AppState, token: &str, source: &str
     format!("/v1/imports/{}/batches", created["id"].as_i64().unwrap())
 }
 
+/// A schema-3 header was read; its version breaks a rule, so it is 422.
 #[tokio::test]
-async fn http_import_of_a_schema_3_file_is_a_400_naming_both_versions() {
+async fn http_import_of_a_schema_3_file_is_a_422_naming_both_versions() {
     let (state, _fixture, token) = importer().await;
     let path = batches_path(&state, &token, "whatsapp").await;
     let body = concat!(
@@ -1751,19 +1746,26 @@ async fn http_import_of_a_schema_3_file_is_a_400_naming_both_versions() {
     );
     let (status, text) =
         crate::test_support::post_raw(&state, &path, &token, "application/jsonl", body).await;
-    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST, "{text}");
-    let err: serde_json::Value = serde_json::from_str(&text).unwrap();
-    assert_eq!(
-        err["detail"],
-        "This file is schema version 3; Message Crate reads version 4 (line 1 of the batch)."
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
     );
-    assert_eq!(err["line"], 1, "{text}");
+    assert_eq!(
+        problem.errors.unwrap(),
+        vec![
+            "This file is schema version 3; Message Crate reads version 4 (line 1 of the batch)."
+                .to_string()
+        ]
+    );
+    assert_eq!(problem.line, Some(1), "{text}");
 }
 
 /// A batch is a request body, not a file the sender has: Upload packs it
 /// from parts of one or more staged files. The failure names the line of the
 /// batch, in the sentence and as `line`, so the client can turn it into the
-/// line of the file it came from.
+/// line of the file it came from. Only a line that is not JSON at all cannot
+/// be read, so only it is 400.
 #[tokio::test]
 async fn http_import_of_a_line_that_is_not_json_is_a_400_naming_the_line_of_the_batch() {
     let (state, _fixture, token) = importer().await;
@@ -1788,6 +1790,185 @@ async fn http_import_of_a_line_that_is_not_json_is_a_400_naming_the_line_of_the_
         message.starts_with("Could not read line 3 of the batch:"),
         "{message}"
     );
+}
+
+/// A line that is not UTF-8 cannot be read as text, let alone as JSON, so
+/// it is 400 naming the line, not a 500.
+#[tokio::test]
+async fn http_import_of_a_line_that_is_not_utf8_is_a_400_naming_the_line() {
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+    let mut body = replace_run_batch("+15550100002", &["g-1"]).into_bytes();
+    body.extend_from_slice(b"{\"guid\":\"\xff\xfe\"}\n");
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &token, "application/jsonl", body).await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::MalformedBody,
+    );
+    let message = problem.detail.unwrap();
+    assert!(
+        message.starts_with("Could not read line 3 of the batch:"),
+        "{message}"
+    );
+}
+
+/// A line that breaks a rule is named by its line in the batch, blank lines
+/// counted, in the sentence and as `line`, as a line that is not JSON is: the
+/// client maps `line` back to the staged file and line it packed it from.
+#[tokio::test]
+async fn a_refusal_after_a_blank_line_names_the_line_of_the_batch() {
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+    let header = replace_run_batch("+15550100002", &[]);
+    let body = format!("{header}\n{{\"guid\":7}}\n");
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &token, "application/jsonl", body).await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    assert_eq!(problem.line, Some(3), "{text}");
+    assert!(
+        problem.errors.unwrap()[0].starts_with("Line 3 of the batch:"),
+        "{text}"
+    );
+}
+
+/// C1-7: a header that is JSON with the wrong fields was read and broke a
+/// rule, as the same mistake in a JSON body does, so it answers 422.
+#[tokio::test]
+async fn a_batch_whose_header_has_the_wrong_fields_is_a_422_naming_the_line() {
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+    let body = concat!(
+        r#"{"schema_version":4,"export":{"source":"whatsapp"},"conversation":{"chat_identifier":7}}"#,
+        "\n",
+    );
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &token, "application/jsonl", body).await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    assert!(
+        problem.errors.unwrap()[0]
+            .starts_with("Line 1 of the batch: the conversation header is not valid"),
+        "{text}"
+    );
+}
+
+/// C1-7: an empty batch was read; it holds no conversation, which breaks a
+/// rule, so it answers 422.
+#[tokio::test]
+async fn an_empty_batch_is_a_422() {
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &token, "application/jsonl", "").await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+}
+
+/// One conversation whose single message has one attachment at `path`,
+/// stating `sha` when there is one.
+fn one_attachment_batch(path: &str, sha: Option<&str>) -> String {
+    let digest = sha.map_or("null".to_string(), |s| format!(r#""{s}""#));
+    format!(
+        concat!(
+            r#"{{"schema_version":4,"export":{{"source":"whatsapp","tool":"t","tool_version":"0","owner_handle":"+15550100001","owner_display_name":"Me"}},"#,
+            r#""conversation":{{"chat_identifier":"+15550100002","conversation_type":"individual","group_title":null,"#,
+            r#""participants":[{{"handle":"+15550100002","display_name":null}}],"#,
+            r#""stats":{{"message_count":1,"attachment_count":1,"first_timestamp_unix_ms":1700000000000,"last_timestamp_unix_ms":1700000000000}}}}}}"#,
+            "\n",
+            r#"{{"guid":"g-att","timestamp_unix_ms":1700000000000,"direction":"incoming","service":"whatsapp","message_kind":"sms","sender_handle":"+15550100002","sender_display_name":null,"subject":null,"text":"x","#,
+            r#""attachments":[{{"path":"{path}","original_name":"a.bin","mime_type":"application/octet-stream","digest_sha256":{digest},"is_sticker":false,"transcription":null,"sticker_effect":null}}],"imessage":null,"source":null}}"#,
+            "\n",
+        ),
+        path = path,
+        digest = digest,
+    )
+}
+
+/// S1-11: an attachment path that leaves the folder is the sender's to fix,
+/// so it answers 422 naming the path, not 500.
+#[tokio::test]
+async fn a_batch_with_an_unsafe_attachment_path_is_a_422_naming_the_path() {
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+    let body = one_attachment_batch("../secret.txt", None);
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &token, "application/jsonl", body).await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    // Line 1 is the header; the message with the attachment is line 2.
+    assert_eq!(problem.line, Some(2), "{text}");
+    assert!(
+        problem.errors.unwrap()[0].contains("../secret.txt"),
+        "{text}"
+    );
+}
+
+/// S1-11: a file whose bytes do not hash to the SHA-256 the batch states is
+/// the sender's to fix, so it answers 422 naming the file, not 500.
+#[tokio::test]
+async fn a_batch_whose_file_does_not_match_its_sha256_is_a_422_naming_the_file() {
+    let (fixture, account) = fixture_with_account().await;
+    let state = fixture.state.clone();
+    let path = batches_path(&state, &account.token, "whatsapp").await;
+    let assets_dir = state
+        .cfg
+        .paths
+        .assets_dir_for_account(account.account_id, "whatsapp");
+    fs::create_dir_all(&assets_dir).unwrap();
+    fs::write(assets_dir.join("photo.bin"), b"the bytes on disk").unwrap();
+    let stated = assets_api::sha256_hex(b"the bytes the export saw");
+    let body = one_attachment_batch("photo.bin", Some(&stated));
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &account.token, "application/jsonl", body)
+            .await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    assert_eq!(problem.line, Some(2), "{text}");
+    assert!(problem.errors.unwrap()[0].contains("photo.bin"), "{text}");
+}
+
+/// A stated SHA-256 that is not 64 hex digits, on a file that is there, is
+/// the sender's to fix too: 422 naming the line and the file.
+#[tokio::test]
+async fn a_batch_whose_stated_sha256_is_not_one_is_a_422_naming_the_file() {
+    let (fixture, account) = fixture_with_account().await;
+    let state = fixture.state.clone();
+    let path = batches_path(&state, &account.token, "whatsapp").await;
+    let assets_dir = state
+        .cfg
+        .paths
+        .assets_dir_for_account(account.account_id, "whatsapp");
+    fs::create_dir_all(&assets_dir).unwrap();
+    fs::write(assets_dir.join("photo.bin"), b"the bytes on disk").unwrap();
+    let body = one_attachment_batch("photo.bin", Some("not-a-fingerprint"));
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &account.token, "application/jsonl", body)
+            .await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    assert_eq!(problem.line, Some(2), "{text}");
+    assert!(problem.errors.unwrap()[0].contains("photo.bin"), "{text}");
 }
 
 /// A batch is refused before its body is read when the run is over: the
@@ -1822,6 +2003,57 @@ async fn a_batch_into_a_run_that_is_not_running_is_a_state_conflict() {
     );
 }
 
+/// A run discarded while a batch uploads: the batch passed the check before
+/// its body, and its messages were then stored under a cancelled run. The
+/// run is checked again inside the import's write transaction, and the batch
+/// is refused the same way.
+#[tokio::test]
+async fn a_batch_into_a_run_discarded_while_it_uploads_is_a_state_conflict() {
+    let (state, fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+    let id: i64 = path
+        .trim_start_matches("/v1/imports/")
+        .trim_end_matches("/batches")
+        .parse()
+        .unwrap();
+
+    let mut other_conn = fixture.conn().await;
+    let mut other = crate::db::begin_write(&mut other_conn).await.unwrap();
+    sqlx::query("UPDATE imports SET status = 'cancelled', stage = NULL WHERE id = $1")
+        .bind(id)
+        .execute(&mut *other)
+        .await
+        .unwrap();
+    let (status, text) = crate::db::write_tx::commit_during(
+        other,
+        crate::test_support::post_raw(
+            &state,
+            &path,
+            &token,
+            "application/jsonl",
+            replace_run_batch("+15550000002", &["g1"]),
+        ),
+    )
+    .await;
+
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::StateConflict,
+    );
+    assert_eq!(
+        problem.detail.as_deref(),
+        Some(format!("import {id} is not running (status=cancelled)").as_str())
+    );
+    let mut conn = fixture.conn().await;
+    let stored: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE import_id = $1")
+        .bind(id)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(stored, 0);
+}
+
 /// One conversation with `chat`, holding one message per guid, as a
 /// replace run's batch.
 fn replace_run_batch(chat: &str, guids: &[&str]) -> String {
@@ -1849,9 +2081,8 @@ fn replace_run_batch(chat: &str, guids: &[&str]) -> String {
 /// nothing. This guards both against a change to how a batch picks wipe
 /// or append (today: whether the run has stamped a message yet).
 ///
-/// Every message carries a guid, as every exporter writes one. A message
-/// with an empty guid would be inserted again by the retry, in a replace
-/// run or an append run alike, because append skips by guid only.
+/// The retry adds nothing because append skips a guid the source already
+/// holds, and the import refuses a message without one.
 #[tokio::test]
 async fn a_retried_batch_in_a_replace_run_keeps_every_message_once() {
     let (state, _fixture, token) = importer().await;
@@ -1880,6 +2111,106 @@ async fn a_retried_batch_in_a_replace_run_keeps_every_message_once() {
             .await
             .unwrap();
     assert_eq!(guids, ["g-1a", "g-1b", "g-2a", "g-2b"]);
+}
+
+/// A message without a guid is outside the guid index, so a retried batch
+/// would store it a second time (#1162). The batch is refused with `422`,
+/// naming the line, and nothing in it is stored.
+#[tokio::test]
+async fn a_batch_with_a_message_without_a_guid_is_refused_and_stores_nothing() {
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+    let body = replace_run_batch("+15550000002", &["g-1", "", "g-2"]);
+
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &token, "application/jsonl", body).await;
+
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    assert_eq!(
+        problem.errors.as_deref(),
+        Some(
+            &[
+                "The message on line 3 of the batch has no guid; every message needs one."
+                    .to_string()
+            ][..]
+        )
+    );
+    assert_eq!(
+        problem.line,
+        Some(3),
+        "Upload maps the line back to its file"
+    );
+    let mut conn = state.db.acquire().await.unwrap();
+    let stored: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(stored, 0);
+}
+
+/// The steps in #1162: a proxy in front of the server times out while the
+/// server commits a batch, answers `504 Gateway Timeout`, and Upload posts
+/// the batch again. The second post finds every message already stored by
+/// its guid, so each message is stored once.
+#[tokio::test]
+async fn a_batch_posted_again_after_a_gateway_timeout_stores_each_message_once() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+
+    // Stands in for the proxy: the first batch reaches the server and is
+    // committed, and the client is told 504 instead of the server's answer.
+    let timed_out = Arc::new(AtomicBool::new(false));
+    let app = crate::server::http_app(state.clone()).layer(axum::middleware::from_fn(
+        move |request: axum::extract::Request, next: axum::middleware::Next| {
+            let timed_out = Arc::clone(&timed_out);
+            async move {
+                let is_batch = request.uri().path().ends_with("/batches");
+                let response = next.run(request).await;
+                if is_batch
+                    && response.status().is_success()
+                    && !timed_out.swap(true, Ordering::SeqCst)
+                {
+                    return axum::response::IntoResponse::into_response(
+                        axum::http::StatusCode::GATEWAY_TIMEOUT,
+                    );
+                }
+                response
+            }
+        },
+    ));
+    let server = crate::test_support::serve_router(app).await;
+    let body = replace_run_batch("+15550000002", &["g-a", "g-b", "g-c"]);
+    let post = || {
+        reqwest::Client::new()
+            .post(format!("{}{path}", server.base()))
+            .bearer_auth(&token)
+            .header(reqwest::header::CONTENT_TYPE, "application/jsonl")
+            .body(body.clone())
+            .send()
+    };
+
+    let first = post().await.unwrap();
+    assert_eq!(first.status(), reqwest::StatusCode::GATEWAY_TIMEOUT);
+    let second = post().await.unwrap();
+    assert_eq!(second.status(), reqwest::StatusCode::OK);
+    let answer: serde_json::Value = second.json().await.unwrap();
+    assert_eq!(answer["messages_appended"], 0, "{answer}");
+    assert_eq!(answer["messages_deduped"], 3, "{answer}");
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let guids: Vec<String> =
+        sqlx::query_scalar("SELECT guid FROM messages WHERE source = 'whatsapp' ORDER BY guid")
+            .fetch_all(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(guids, ["g-a", "g-b", "g-c"]);
 }
 
 /// One `source` conversation with `+15550000002`, one message per guid. The
@@ -2118,6 +2449,108 @@ async fn a_batch_into_another_accounts_run_is_not_found() {
     )
     .await;
     assert_ne!(status, axum::http::StatusCode::NOT_FOUND);
+}
+
+/// What a request can change on an Import Run: status, stage, approved plan
+/// and finish time.
+async fn run_state(
+    state: &crate::server::AppState,
+    import_id: i64,
+) -> (String, Option<String>, Option<String>, Option<String>) {
+    let mut conn = state.db.acquire().await.unwrap();
+    sqlx::query_as("SELECT status, stage, summary_json, finished_at FROM imports WHERE id = $1")
+        .bind(import_id)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap()
+}
+
+/// The desktop app sends every call of an Import Run with the session logged
+/// in at the time, so a run whose account logged out while it ran reaches
+/// the server with the next account's session (#1085). Every route on a
+/// run refuses another account's session as if the run did not exist, and
+/// leaves the run as it was.
+#[tokio::test]
+async fn every_route_on_another_accounts_run_is_not_found_and_changes_nothing() {
+    let (fixture, alice) = crate::test_support::fixture_with_account().await;
+    let bob = crate::test_support::register_via_api(&fixture.state, "bob", "hunter2hunter2").await;
+    let (_, created): (String, serde_json::Value) = post_created_json(
+        &fixture.state,
+        "/v1/imports",
+        &bob.token,
+        serde_json::json!({ "source": "imessage" }),
+    )
+    .await;
+    let bobs_run = created["id"].as_i64().unwrap();
+    let run = format!("/v1/imports/{bobs_run}");
+    let before = run_state(&fixture.state, bobs_run).await;
+
+    let state = &fixture.state;
+    let token = alice.token.as_str();
+    let refusals = [
+        (
+            "PATCH stage",
+            crate::test_support::patch_raw(
+                state,
+                &run,
+                token,
+                serde_json::json!({ "stage": "pushing", "summary": { "approved": true } }),
+            )
+            .await,
+        ),
+        (
+            "POST complete",
+            crate::test_support::post_raw(
+                state,
+                &format!("{run}/complete"),
+                token,
+                "application/json",
+                r#"{"status":"completed"}"#,
+            )
+            .await,
+        ),
+        (
+            "POST discard",
+            crate::test_support::post_raw(
+                state,
+                &format!("{run}/discard"),
+                token,
+                "application/json",
+                "{}",
+            )
+            .await,
+        ),
+        (
+            "POST batches",
+            crate::test_support::post_raw(
+                state,
+                &format!("{run}/batches"),
+                token,
+                "application/jsonl",
+                "{}\n",
+            )
+            .await,
+        ),
+        (
+            "GET run",
+            crate::test_support::get_raw(state, &run, token).await,
+        ),
+        (
+            "GET contacts",
+            crate::test_support::get_raw(state, &format!("{run}/contacts"), token).await,
+        ),
+    ];
+    for (route, (status, text)) in refusals {
+        assert_eq!(
+            status,
+            axum::http::StatusCode::NOT_FOUND,
+            "{route} on another account's run: {text}"
+        );
+        crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
+    }
+
+    assert_eq!(run_state(&fixture.state, bobs_run).await, before);
+    assert_eq!(before.0, "running");
 }
 
 /// The account that owns Import Run `import_id`.
@@ -2579,9 +3012,9 @@ async fn reimporting_a_file_with_a_name_only_participant_adds_no_participant() {
 }
 
 /// ADR-0013: an import that meets a trashed contact's handle discards the
-/// contact and makes a fresh one. The discard clears `participants.contact_id`
-/// on the existing row, so the re-import must not add a second row for the
-/// same handle beside it; the conversation lists the person once.
+/// contact and makes a fresh one. The re-import must not add a second row
+/// for the same handle beside the existing one; the conversation lists the
+/// person once.
 #[tokio::test]
 async fn reimporting_after_trashing_a_contact_lists_the_person_once() {
     let fixture = test_fixture().await;
@@ -2922,13 +3355,13 @@ async fn a_name_only_participant_matching_a_trashed_contact_does_not_fail_the_im
     assert_eq!(status, axum::http::StatusCode::OK, "{text}");
 }
 
-/// A live and a trashed contact share a name. The trashed one is invisible to
-/// the import, so the name is not ambiguous: a participant named with no
-/// address is bound to the live contact, and no third contact is made.
+/// A live and a trashed contact share a name. A participant named with no
+/// address is the identity of type `other` holding the name, never a lookup
+/// by name, so it is on a live contact and the trashed one stays as it was.
 #[tokio::test]
-async fn a_name_only_participant_binds_to_the_live_contact_when_a_trashed_one_shares_the_name() {
+async fn a_name_only_participant_is_never_bound_to_a_trashed_contact_that_shares_the_name() {
     let (state, _fixture, token) = importer().await;
-    let live = {
+    let trashed = {
         let mut conn = state.db.acquire().await.unwrap();
         let account_id: i64 =
             sqlx::query_scalar("SELECT id FROM accounts WHERE username = 'importer'")
@@ -2948,7 +3381,7 @@ async fn a_name_only_participant_binds_to_the_live_contact_when_a_trashed_one_sh
                 .unwrap(),
             );
         }
-        let (live, trashed) = (ids[0], ids[1]);
+        let trashed = ids[1];
         crate::db::trash::move_to_trash(
             &mut conn,
             account_id,
@@ -2956,7 +3389,7 @@ async fn a_name_only_participant_binds_to_the_live_contact_when_a_trashed_one_sh
         )
         .await
         .unwrap();
-        live
+        trashed
     };
     import_one_batch(
         &state,
@@ -2967,18 +3400,27 @@ async fn a_name_only_participant_binds_to_the_live_contact_when_a_trashed_one_sh
     )
     .await;
     let mut conn = state.db.acquire().await.unwrap();
-    let bound: Vec<i64> =
-        sqlx::query_scalar("SELECT contact_id FROM participants WHERE handle_id IS NULL")
-            .fetch_all(&mut *conn)
-            .await
-            .unwrap();
-    assert_eq!(bound, vec![live]);
-    let sarahs: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM contacts WHERE preferred_name = 'Sarah Vale'")
+    let bound: Vec<(i64, bool)> = sqlx::query_as(
+        "SELECT ch.contact_id,
+                EXISTS (SELECT 1 FROM trashed_contacts t WHERE t.contact_id = ch.contact_id)
+         FROM participants p
+         JOIN handles h ON h.id = p.handle_id
+         JOIN contact_handles ch ON ch.handle_id = h.id
+         WHERE h.handle_type = 'other' AND h.raw = 'Sarah Vale'",
+    )
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(bound.len(), 1, "{bound:?}");
+    assert_ne!(bound[0].0, trashed, "{bound:?}");
+    assert!(!bound[0].1, "the participant's contact is live: {bound:?}");
+    let still_trashed: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM trashed_contacts WHERE contact_id = $1)")
+            .bind(trashed)
             .fetch_one(&mut *conn)
             .await
             .unwrap();
-    assert_eq!(sarahs, 2, "no third Sarah Vale is made");
+    assert!(still_trashed, "the trashed contact stays in the Trash");
 }
 
 /// One incoming message of the one-to-one chat with +15551234567, whose text
@@ -3179,4 +3621,357 @@ async fn a_participant_listed_twice_under_one_identity_is_listed_once() {
         ["+15551234567"],
         "the one number is listed once"
     );
+}
+
+// --- #1105: an identity is always on a contact, and every participant is a
+// contact through an identity ---
+
+/// A text-message group "Trip": Ada at a number, and Sarah Vale, whom the
+/// source names with no address.
+const TRIP_WITH_A_NAME_ONLY_MEMBER: &str = r#"{"schema_version":4,"export":{"source":"openextract","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"chat2000000001","conversation_type":"group","group_title":"Trip","participants":[{"handle":"+15555550123","display_name":"Ada"},{"display_name":"Sarah Vale"}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}
+{"guid":"g-trip-1105","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+15555550123","sender_display_name":null,"subject":null,"text":"hi","attachments":[],"imessage":null,"source":null}
+"#;
+
+/// A WhatsApp group that names Sarah Vale with no address too.
+const WHATSAPP_GROUP_WITH_A_NAME_ONLY_MEMBER: &str = r#"{"schema_version":4,"export":{"source":"whatsapp","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"120363000000001105@g.us","conversation_type":"group","group_title":"Hikes","participants":[{"handle":"+15555550124","display_name":"Bo"},{"display_name":"Sarah Vale"}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}
+{"guid":"g-hikes-1105","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"whatsapp","message_kind":"unknown","sender_handle":null,"sender_display_name":"Sarah Vale","subject":null,"text":"hi","attachments":[],"imessage":null,"source":null}
+"#;
+
+async fn contact_named(conn: &mut SqliteConnection, name: &str) -> i64 {
+    sqlx::query_scalar("SELECT id FROM contacts WHERE account_id = $1 AND preferred_name = $2")
+        .bind(TEST_ACCOUNT)
+        .bind(name)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap_or_else(|e| panic!("no contact named {name:?}: {e}"))
+}
+
+/// C2-2: a person has one seat in a conversation. Renaming the contact a
+/// name-only participant sits on must not give the next import of the same
+/// backup a second seat and a second contact.
+#[tokio::test]
+async fn c2_2_renaming_a_name_only_contact_then_reimporting_adds_no_seat() {
+    let fixture = test_fixture().await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
+    import_jsonl_text(
+        &mut conn,
+        TEST_ACCOUNT,
+        "openextract",
+        TRIP_WITH_A_NAME_ONLY_MEMBER,
+    )
+    .await;
+    let (first_rows, first_contacts) = participant_and_contact_counts(&mut conn).await;
+    // The person renames Sarah Vale's contact.
+    sqlx::query(
+        "UPDATE contacts SET preferred_name = 'Sarah V.' WHERE account_id = $1 AND preferred_name = 'Sarah Vale'",
+    )
+    .bind(TEST_ACCOUNT)
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+    import_jsonl_text(
+        &mut conn,
+        TEST_ACCOUNT,
+        "openextract",
+        TRIP_WITH_A_NAME_ONLY_MEMBER,
+    )
+    .await;
+    let (second_rows, second_contacts) = participant_and_contact_counts(&mut conn).await;
+    assert_eq!(
+        (second_rows.clone(), second_contacts),
+        (first_rows.clone(), first_contacts),
+        "seats before {first_rows:?} after {second_rows:?}; contacts {first_contacts} -> {second_contacts}"
+    );
+    assert_every_person_is_on_a_contact(&mut conn, "a re-import after a rename").await;
+}
+
+/// C2-4: a contact the source knows only by name sits in its group, and its
+/// totals count that group the way a contact with a number does.
+#[tokio::test]
+async fn c2_4_a_name_only_contact_counts_its_group() {
+    let fixture = test_fixture().await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
+    import_jsonl_text(
+        &mut conn,
+        TEST_ACCOUNT,
+        "openextract",
+        TRIP_WITH_A_NAME_ONLY_MEMBER,
+    )
+    .await;
+    let sarah = contact_named(&mut conn, "Sarah Vale").await;
+    let ada = contact_named(&mut conn, "Ada").await;
+    let ada_totals = crate::db::contacts::read::contact_totals(&mut conn, TEST_ACCOUNT, ada)
+        .await
+        .unwrap();
+    let totals = crate::db::contacts::read::contact_totals(&mut conn, TEST_ACCOUNT, sarah)
+        .await
+        .unwrap();
+    assert_eq!(
+        totals.groups, 1,
+        "Sarah Vale sits in the Trip group but counts {} groups (Ada counts {})",
+        totals.groups, ada_totals.groups
+    );
+}
+
+/// S6-1: search reaches a conversation through the contact its participant's
+/// identity is on now, not through the contact the import first gave it.
+#[tokio::test]
+async fn s6_1_with_follows_an_identity_an_address_book_moved() {
+    let fixture = test_fixture().await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
+    import_jsonl_text(
+        &mut conn,
+        TEST_ACCOUNT,
+        "imessage",
+        r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550123","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550123","display_name":"Ada"}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}
+{"guid":"g-s6-1","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550123","sender_display_name":null,"subject":null,"text":"hi","attachments":[],"imessage":null,"source":null}
+"#,
+    )
+    .await;
+    let a = contact_named(&mut conn, "Ada").await;
+    let conversation: i64 = sqlx::query_scalar("SELECT id FROM conversations")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    // The address book keeps Ada and moves her number to a new contact, Bea.
+    crate::db::address_book::load(
+        &mut conn,
+        TEST_ACCOUNT,
+        &format!(
+            "contact_id,display_name,groups,service,handle_type,identity\n\
+             {a},Ada,,,,\n\
+             ,Bea,,phone,phone,+15555550123\n"
+        ),
+        crate::db::address_book::LoadMode::Append,
+    )
+    .await
+    .unwrap();
+    let b = contact_named(&mut conn, "Bea").await;
+
+    use crate::search::ListKind;
+    use crate::search::tests::run;
+    assert_eq!(
+        run(&mut conn, ListKind::Conversations, &format!("with:#{a}")).await,
+        Vec::<i64>::new(),
+        "Ada no longer holds the number"
+    );
+    assert_eq!(
+        run(&mut conn, ListKind::Conversations, &format!("with:#{b}")).await,
+        vec![conversation],
+        "Bea holds the number now"
+    );
+    assert_every_person_is_on_a_contact(&mut conn, "an address book move").await;
+}
+
+/// A person the source names with no address is an identity of type `other`
+/// holding the name, one on each service. One name on two services is one
+/// person, and the run says how many such identities it met.
+#[tokio::test]
+async fn a_name_with_no_address_is_an_other_identity_on_each_service_and_one_contact() {
+    let fixture = test_fixture().await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
+    let texts = import_jsonl_text(
+        &mut conn,
+        TEST_ACCOUNT,
+        "openextract",
+        TRIP_WITH_A_NAME_ONLY_MEMBER,
+    )
+    .await;
+    let whatsapp = import_jsonl_text(
+        &mut conn,
+        TEST_ACCOUNT,
+        "whatsapp",
+        WHATSAPP_GROUP_WITH_A_NAME_ONLY_MEMBER,
+    )
+    .await;
+    assert_eq!(texts.other_identities, 1, "{texts:?}");
+    assert_eq!(whatsapp.other_identities, 1, "{whatsapp:?}");
+
+    let identities: Vec<(String, String, i64)> = sqlx::query_as(
+        "SELECT h.service, h.raw, ch.contact_id FROM handles h
+         JOIN contact_handles ch ON ch.handle_id = h.id
+         WHERE h.account_id = $1 AND h.handle_type = 'other' AND h.raw = 'Sarah Vale'
+         ORDER BY h.service",
+    )
+    .bind(TEST_ACCOUNT)
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap();
+    let sarah = contact_named(&mut conn, "Sarah Vale").await;
+    assert_eq!(
+        identities,
+        [
+            ("phone".to_string(), "Sarah Vale".to_string(), sarah),
+            ("whatsapp".to_string(), "Sarah Vale".to_string(), sarah),
+        ]
+    );
+    let totals = crate::db::contacts::read::contact_totals(&mut conn, TEST_ACCOUNT, sarah)
+        .await
+        .unwrap();
+    assert_eq!(totals.groups, 2, "Trip and Hikes");
+    assert_every_person_is_on_a_contact(&mut conn, "two imports naming one person").await;
+}
+
+/// A contact whose only identities are of type `other` is a name the import
+/// could not tie to an address, so it is Unknown however it is named.
+#[tokio::test]
+async fn a_contact_with_only_other_identities_is_unknown() {
+    let fixture = test_fixture().await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
+    import_jsonl_text(
+        &mut conn,
+        TEST_ACCOUNT,
+        "openextract",
+        TRIP_WITH_A_NAME_ONLY_MEMBER,
+    )
+    .await;
+    let unknown: Vec<String> = sqlx::query_scalar(&format!(
+        "SELECT ct.preferred_name FROM contacts ct
+         WHERE ct.account_id = $1 AND {}
+         ORDER BY ct.preferred_name",
+        crate::db::contacts::UNKNOWN_CONTACT_SQL
+    ))
+    .bind(TEST_ACCOUNT)
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(unknown, ["Sarah Vale"]);
+}
+
+/// ADR-0013 with the rule: when an import discards a trashed contact, the
+/// fresh contact takes the identity the import met, and every other
+/// identity the trashed contact had that is in a conversation goes to a new
+/// contact with no name.
+#[tokio::test]
+async fn discarding_a_trashed_contact_leaves_none_of_its_identities_on_no_contact() {
+    let fixture = test_fixture().await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
+    let ada_texts = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550123","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550123","display_name":"Ada"}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}
+{"guid":"g-discard-1","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550123","sender_display_name":null,"subject":null,"text":"hi","attachments":[],"imessage":null,"source":null}
+"#;
+    let ada_mail = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"ada@example.com","conversation_type":"individual","group_title":null,"participants":[{"handle":"ada@example.com","display_name":"Ada"}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}
+{"guid":"g-discard-2","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"ada@example.com","sender_display_name":null,"subject":null,"text":"hi","attachments":[],"imessage":null,"source":null}
+"#;
+    import_jsonl_text(&mut conn, TEST_ACCOUNT, "imessage", ada_texts).await;
+    import_jsonl_text(&mut conn, TEST_ACCOUNT, "imessage", ada_mail).await;
+    // Both of Ada's addresses are on one contact, which the person trashes.
+    let ada: i64 = sqlx::query_scalar(
+        "SELECT ch.contact_id FROM contact_handles ch JOIN handles h ON h.id = ch.handle_id
+         WHERE h.raw = '+15555550123'",
+    )
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE contact_handles SET contact_id = $1
+         WHERE account_id = $2 AND handle_id IN (SELECT id FROM handles WHERE raw = 'ada@example.com')",
+    )
+    .bind(ada)
+    .bind(TEST_ACCOUNT)
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+    sqlx::query("DELETE FROM contacts WHERE account_id = $1 AND id <> $2")
+        .bind(TEST_ACCOUNT)
+        .bind(ada)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO trashed_contacts (account_id, contact_id) VALUES ($1, $2)")
+        .bind(TEST_ACCOUNT)
+        .bind(ada)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+
+    // The next backup holds only her number.
+    let ada_texts_again = ada_texts.replace("g-discard-1", "g-discard-3");
+    import_jsonl_text(&mut conn, TEST_ACCOUNT, "imessage", &ada_texts_again).await;
+
+    assert_every_person_is_on_a_contact(&mut conn, "an import discarded a trashed contact").await;
+    let holders: Vec<(String, String)> = sqlx::query_as(
+        "SELECT h.raw, ct.preferred_name FROM handles h
+         JOIN contact_handles ch ON ch.handle_id = h.id
+         JOIN contacts ct ON ct.id = ch.contact_id
+         WHERE h.account_id = $1
+         ORDER BY h.raw",
+    )
+    .bind(TEST_ACCOUNT)
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(
+        holders,
+        [
+            ("+15555550123".to_string(), "Ada".to_string()),
+            ("ada@example.com".to_string(), String::new()),
+        ],
+        "the number is on the fresh contact; the address is Unknown again"
+    );
+}
+
+/// A name-only participant whose contact an import discards keeps its
+/// identity, and the identity goes to the fresh contact.
+#[tokio::test]
+async fn a_name_only_participant_keeps_its_identity_when_its_contact_is_discarded() {
+    let fixture = test_fixture().await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
+    import_jsonl_text(
+        &mut conn,
+        TEST_ACCOUNT,
+        "openextract",
+        TRIP_WITH_A_NAME_ONLY_MEMBER,
+    )
+    .await;
+    let sarah = contact_named(&mut conn, "Sarah Vale").await;
+    sqlx::query("INSERT INTO trashed_contacts (account_id, contact_id) VALUES ($1, $2)")
+        .bind(TEST_ACCOUNT)
+        .bind(sarah)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    let (first_rows, _) = participant_and_contact_counts(&mut conn).await;
+    import_jsonl_text(
+        &mut conn,
+        TEST_ACCOUNT,
+        "openextract",
+        TRIP_WITH_A_NAME_ONLY_MEMBER,
+    )
+    .await;
+    let (second_rows, _) = participant_and_contact_counts(&mut conn).await;
+    assert_eq!(second_rows, first_rows, "Sarah Vale keeps one seat");
+    assert_every_person_is_on_a_contact(&mut conn, "an import discarded a name-only contact").await;
+    let fresh = contact_named(&mut conn, "Sarah Vale").await;
+    assert_ne!(fresh, sarah, "the trashed contact was replaced");
+}
+
+/// #1163: the batch answer counts the contacts the batch made. Staging makes
+/// one for a person the account has no contact for, and that count reaches
+/// the answer beside the participant row promote added.
+#[tokio::test]
+async fn the_batch_answer_counts_the_contacts_it_created() {
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "imessage").await;
+    let (status, text) = crate::test_support::post_raw(
+        &state,
+        &path,
+        &token,
+        "application/jsonl",
+        format!(
+            "{S1_HEADER_1}\n{}\n",
+            s1_message("g1", "+15551234567", 1426183462000, "hi")
+        ),
+    )
+    .await;
+    assert_eq!(status, axum::http::StatusCode::OK, "{text}");
+    let mut conn = state.db.acquire().await.unwrap();
+    let bobs: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM contacts WHERE preferred_name = 'Bob'")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(bobs, 1, "the batch made Bob's contact");
+    let answer: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(answer["contacts_created"], 1, "{text}");
+    assert_eq!(answer["participants"], 1, "{text}");
 }

@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use message_crate_core::ExportReport;
 use message_ir::{
     ConversationDocument, IrAttachment, IrConversationType, IrDirection, IrMessage, IrMessageKind,
-    nonempty,
+    IrService, nonempty,
 };
 use message_ir_format::{MergedArchive, load_attachment_bytes};
 use sbr::{
@@ -24,10 +24,43 @@ const MMS_ADDR_TO: &str = "151";
 /// line feed and carriage return).
 pub(crate) const CHARACTERS_LEFT_OUT: &str = "control_characters_left_out";
 
+/// The export report counter for messages left out of `smses.xml` because
+/// their service is neither SMS nor MMS. SMS Backup & Restore can describe
+/// only those two, and an iMessage or a WhatsApp message written as `<sms>`
+/// would come back from a re-import as an SMS under a new id (ADR 0021).
+pub(crate) const NOT_SMS_OR_MMS_LEFT_OUT: &str = "messages_not_sms_or_mms_left_out";
+
+/// Whether `smses.xml` can hold `msg`: an SMS or MMS from any source,
+/// iMessage's SMS fallback included. An MMS carries the `Sms` service with
+/// the `Mms` kind. A message whose service is unknown (a Mac `chat.db` row
+/// with no service, or one pulled back from the server as `unknown`) is
+/// held when its kind says SMS or MMS, as every other layer reads it. RCS
+/// and every other service are left out.
+pub fn is_sms_or_mms(msg: &IrMessage) -> bool {
+    match msg.service {
+        IrService::Sms => true,
+        IrService::Unknown => matches!(msg.message_kind, IrMessageKind::Sms | IrMessageKind::Mms),
+        _ => false,
+    }
+}
+
+/// The run's log line for [`NOT_SMS_OR_MMS_LEFT_OUT`]: how many messages
+/// were left out and why. `None` when the run left none out.
+pub fn not_sms_or_mms_line(report: &ExportReport) -> Option<String> {
+    let left_out = report.extra(NOT_SMS_OR_MMS_LEFT_OUT);
+    (left_out > 0).then(|| {
+        format!(
+            "Left out {left_out} message(s) that are not SMS or MMS, because SMS Backup & \
+             Restore holds only SMS and MMS"
+        )
+    })
+}
+
 /// Session that appends conversations into a single `{output}/smses.xml`.
 pub(crate) struct SbrBackupSession {
     writer: SbrBackupWriter,
     output_dir: PathBuf,
+    not_sms_or_mms: u64,
 }
 
 impl SbrBackupSession {
@@ -43,15 +76,24 @@ impl SbrBackupSession {
         Ok(Self {
             writer: SbrBackupWriter::create(&path)?,
             output_dir: output_dir.to_path_buf(),
+            not_sms_or_mms: 0,
         })
     }
 
-    /// Write every message of one conversation as SBR `<sms>` or `<mms>` elements.
+    /// Write the SMS and MMS of one conversation as SBR `<sms>` or `<mms>`
+    /// elements, and count every other message as left out. A conversation
+    /// with no SMS or MMS writes nothing.
     pub fn append_document(&mut self, doc: &ConversationDocument) -> Result<()> {
+        self.not_sms_or_mms += doc.messages.iter().filter(|m| !is_sms_or_mms(m)).count() as u64;
         for msg in document_to_sbr_messages(doc, &self.output_dir)? {
             self.writer.write_message(&msg)?;
         }
         Ok(())
+    }
+
+    /// Messages left out so far because their service is neither SMS nor MMS.
+    pub fn not_sms_or_mms_left_out(&self) -> u64 {
+        self.not_sms_or_mms
     }
 
     /// Characters left out so far because XML 1.0 cannot carry them.
@@ -65,7 +107,8 @@ impl SbrBackupSession {
     }
 }
 
-/// Map one conversation's messages into SBR XML elements (lossy for iMessage).
+/// Map one conversation's SMS and MMS into SBR XML elements. A message on
+/// any other service is left out, because the format cannot describe it.
 pub(crate) fn document_to_sbr_messages(
     doc: &ConversationDocument,
     output_dir: &Path,
@@ -77,7 +120,7 @@ pub(crate) fn document_to_sbr_messages(
         .and_then(nonempty)
         .unwrap_or_default();
     let mut out = Vec::with_capacity(doc.messages.len());
-    for msg in &doc.messages {
+    for msg in doc.messages.iter().filter(|m| is_sms_or_mms(m)) {
         out.push(ir_message_to_sbr(doc, msg, &owner, output_dir)?);
     }
     Ok(out)
@@ -408,8 +451,11 @@ fn contact_name_alias(doc: &ConversationDocument, msg: &IrMessage) -> Option<Str
 /// staged files are content-addressed by that same digest, so a digest lookup
 /// is exact. Positional pairing drifts whenever the part list and attachment
 /// list diverge: parts with empty or undecodable base64 never produced an
-/// attachment, and identical payloads dedupe into a single attachment that
-/// several parts share. Parts whose digest matches no attachment (e.g. media
+/// attachment. A `text/plain` part and the SMIL carry their own text; any
+/// other part, a contact card (`text/x-vcard`) included, is an attachment, as
+/// [`mms_parts::body_of`] reads it. Two parts with one payload are two
+/// attachments with one digest, and each part takes the first of them not
+/// already taken. Parts whose digest matches no attachment (e.g. media
 /// transforms rewrote the bytes and rehashed the digest) fall back to the next
 /// unconsumed attachment in list order.
 fn inject_attachment_data(
@@ -420,18 +466,18 @@ fn inject_attachment_data(
     // Digest → attachment index for exact matching. An attachment is keyed by
     // the digest that named its staged file; transforms clear it and rehash,
     // which is exactly when the fallback below takes over.
-    let mut by_digest: HashMap<&str, usize> = HashMap::new();
+    let mut by_digest: HashMap<&str, Vec<usize>> = HashMap::new();
     let mut consumed = vec![false; attachments.len()];
     for (index, att) in attachments.iter().enumerate() {
         if let Some(digest) = att.digest_sha256.as_deref().filter(|d| !d.is_empty()) {
-            by_digest.entry(digest).or_insert(index);
+            by_digest.entry(digest).or_default().push(index);
         }
     }
     // First unconsumed attachment for the positional fallback.
     let mut next_unconsumed = 0usize;
     for part in parts.iter_mut() {
         let ct = part.get("ct").map_or("", String::as_str);
-        let is_text = ct.starts_with("text/") || ct.eq_ignore_ascii_case("application/smil");
+        let is_text = mms_parts::is_text(ct) || mms_parts::is_smil(ct);
         let decode_error = part.get("data_decode_error").is_some_and(|v| v == "true");
         let digest = part.get("data_sha256").cloned();
         // Drop CSV-only digest placeholders.
@@ -444,7 +490,16 @@ fn inject_attachment_data(
             // of consuming another part's attachment.
             continue;
         }
-        let index = if let Some(index) = by_digest.get(digest.as_deref().unwrap_or("")).copied() {
+        let exact = by_digest
+            .get(digest.as_deref().unwrap_or(""))
+            .and_then(|indexes| {
+                indexes
+                    .iter()
+                    .find(|&&i| !consumed[i])
+                    .or(indexes.first())
+                    .copied()
+            });
+        let index = if let Some(index) = exact {
             Some(index)
         } else {
             // No exact digest match (attachment rewritten by a media
@@ -490,7 +545,15 @@ impl MergedArchive for SbrArchive {
         if left_out > 0 {
             report.bump(CHARACTERS_LEFT_OUT, left_out);
         }
+        let not_sms_or_mms = session.not_sms_or_mms_left_out();
+        if not_sms_or_mms > 0 {
+            report.bump(NOT_SMS_OR_MMS_LEFT_OUT, not_sms_or_mms);
+        }
         session.finish()
+    }
+
+    fn file_names(&self) -> Vec<String> {
+        sbr::backup_file_names()
     }
 }
 

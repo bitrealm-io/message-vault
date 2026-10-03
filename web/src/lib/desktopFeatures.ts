@@ -37,10 +37,12 @@ export function importExportBlock(
   if (feature === "export") {
     return profile.can_export ? null : "not-allowed";
   }
-  if (profile.can_import) {
-    return null;
+  // The server refuses every import into the Demo Account by its id, whatever
+  // its permission row says (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`).
+  if (profile.is_demo) {
+    return "demo";
   }
-  return profile.is_demo ? "demo" : "not-allowed";
+  return profile.can_import ? null : "not-allowed";
 }
 
 /**

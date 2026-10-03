@@ -168,6 +168,10 @@ pub async fn connecting_app_for_account(
 
 /// Create or replace the account's session token hash; returns plaintext once.
 ///
+/// One upsert, never a lookup and then an insert: two logins at once both
+/// find no row, and the second insert would break the `account_id` primary
+/// key. The later login's token replaces the earlier one's.
+///
 /// # Errors
 ///
 /// Returns an error when a token cannot be generated or the write fails.
@@ -237,26 +241,6 @@ pub async fn insert_account_session_token_with_ttl(
     .await
     .with_context(|| format!("insert session token for {account_id}"))?;
     Ok(token)
-}
-
-/// Session token for GUI: if a row exists, rotate it; otherwise insert.
-///
-/// # Errors
-///
-/// Returns an error when the lookup or token write fails.
-pub async fn get_or_create_session_token(
-    conn: &mut SqliteConnection,
-    account_id: i64,
-) -> Result<String> {
-    let existing: Option<String> =
-        sqlx::query_scalar("SELECT token_hash FROM account_session_tokens WHERE account_id = $1")
-            .bind(account_id)
-            .fetch_optional(&mut *conn)
-            .await?;
-    match existing {
-        Some(_) => rotate_account_session_token(conn, account_id).await,
-        None => insert_account_session_token(conn, account_id).await,
-    }
 }
 
 /// Revoke the presented session token (logout). Returns whether a row was deleted.

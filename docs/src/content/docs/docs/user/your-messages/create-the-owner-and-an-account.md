@@ -59,7 +59,8 @@ The first login opens **Profile Setup**:
 ![Profile Setup, shown on an account's first login](../../../../../assets/user-guide/profile-setup.png)
 
 Each row under **Your Accounts** has a type, **Text message**, **Email**, or **WhatsApp**, and a value.
-**Continue to Message Crate** opens the conversation list, which is empty.
+**Continue to Message Crate** stays greyed out until **Display Name** and at least one row under **Your Accounts** are filled in, because Import has nothing to match sent messages against without an address.
+Selecting it then opens the conversation list, which is empty.
 
 ## Check that it worked
 

@@ -19,6 +19,7 @@ sms-backup-restore-exporter = { path = "../../exporters/sms-backup-restore-expor
 [dev-dependencies]
 media = { path = "../media", features = ["testutil"] }
 message-ir = { path = "../ir", features = ["testutil"] }
+sms-backup-restore-exporter = { path = "../../exporters/sms-backup-restore-exporter", features = ["testutil"] }
 tempfile = { workspace = true }
 
 [lints]

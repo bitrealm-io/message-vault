@@ -9,9 +9,11 @@ import {
   useRef,
   useState,
 } from "react";
+import ConfirmDialog from "../components/ConfirmDialog";
 import { ApiError, getToken, setAccountId, setBaseUrl, setToken } from "./api";
 import { parsePersistedAuth } from "./authGuards";
 import { createQueryClient } from "./routeQuery";
+import { isUploadRunning, pauseRunningUpload } from "./runningUpload";
 import { getSession, logout as serverLogout } from "./serverApi";
 import { readPref, removePref, writePref } from "./storage";
 import { isTauri } from "./tauri-check";
@@ -28,8 +30,15 @@ interface AuthContextValue extends AuthState {
   login: (serverUrl: string, token: string, accountId: number) => Promise<void>;
   /** Save a new session token after the user changes their password. */
   updateToken: (token: string) => void;
-  /** Revoke the server session (best-effort) and clear the saved login. */
-  logout: () => Promise<void>;
+  /**
+   * Revoke the server session (best-effort) and clear the saved login.
+   *
+   * An Upload that is running is paused first, and the session is revoked
+   * only once the pause is recorded: the push sends this session's token.
+   * Unless `ask` is false, logout first asks whether to pause it, and does
+   * nothing when the person goes back.
+   */
+  logout: (options?: { ask?: boolean }) => Promise<void>;
   setServer: (url: string) => void;
   /**
    * Check the saved login again, after a startup check the server never
@@ -43,6 +52,9 @@ interface AuthContextValue extends AuthState {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 const STORAGE_KEY = "message-crate-auth";
+
+const UPLOAD_RUNNING_PROMPT =
+  "An Upload is running. Logging out pauses it; you can resume it after you log in.";
 
 /** Max time to wait for the server logout request before clearing local state. */
 const LOGOUT_TIMEOUT_MS = 2000;
@@ -284,7 +296,8 @@ function SessionProvider({
     }));
   }, [resetRouteCache]);
 
-  const logout = useCallback(async () => {
+  /** Tell the server to end the session, then forget it here. */
+  const revokeSession = useCallback(async () => {
     authEpoch.current++;
     // Tell the server to end the session while the token is still set on the API client.
     // Await so close-to-quit can finish (or time out) before the WebView dies.
@@ -298,12 +311,41 @@ function SessionProvider({
     clearSession();
   }, [clearSession]);
 
+  // The question logout asks while an Upload runs: open, and then pausing
+  // once the person chose to log out. `answer` settles the logout waiting on it.
+  const [uploadPrompt, setUploadPrompt] = useState<"asking" | "pausing" | null>(null);
+  const answer = useRef<(logOut: boolean) => void>(() => {});
+
+  const logout = useCallback(
+    async ({ ask = true }: { ask?: boolean } = {}) => {
+      if (ask && isUploadRunning()) {
+        const logOut = await new Promise<boolean>((resolve) => {
+          answer.current = resolve;
+          setUploadPrompt("asking");
+        });
+        if (!logOut) return;
+      }
+      try {
+        await pauseRunningUpload();
+        await revokeSession();
+      } finally {
+        setUploadPrompt(null);
+      }
+    },
+    [revokeSession],
+  );
+
   // The server has refused the token, so the session is already over there
   // and there is nothing to tell it. With no token set, the 401 came from a
   // request made before login, and there is no session here to end either.
+  // An Upload that is running is paused all the same: its push sends the
+  // same token, so it would only record every remaining conversation as
+  // failed, and the run stays resumable.
   useEffect(() => {
     sessionEnded.current = () => {
-      if (getToken()) clearSession();
+      if (!getToken()) return;
+      void pauseRunningUpload();
+      clearSession();
     };
   }, [sessionEnded, clearSession]);
 
@@ -323,7 +365,9 @@ function SessionProvider({
           if (closingRef.current) return;
           closingRef.current = true;
           try {
-            await logout();
+            // No pause: closing the window ends the push with the app, and
+            // the run resumes from what the push journal recorded as sent.
+            await revokeSession();
             await win.destroy();
           } catch {
             // Destroy failed or window already gone — allow another close attempt.
@@ -343,13 +387,30 @@ function SessionProvider({
       cancelled = true;
       unlisten?.();
     };
-  }, [logout]);
+  }, [revokeSession]);
 
   return (
     <AuthContext.Provider
       value={{ ...state, login, logout, updateToken, setServer, retrySavedLogin }}
     >
       {children}
+      <ConfirmDialog
+        open={uploadPrompt !== null}
+        title="Log out"
+        body={UPLOAD_RUNNING_PROMPT}
+        confirmLabel="Log out"
+        cancelLabel="Go back"
+        busy={uploadPrompt === "pausing"}
+        busyLabel="Pausing…"
+        onConfirm={() => {
+          setUploadPrompt("pausing");
+          answer.current(true);
+        }}
+        onClose={() => {
+          setUploadPrompt(null);
+          answer.current(false);
+        }}
+      />
     </AuthContext.Provider>
   );
 }

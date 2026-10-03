@@ -249,24 +249,20 @@ pub async fn run_reset_demo(size: DemoSize, cfg: &Config) -> Result<ResetDemoSta
 }
 
 /// Whether the database `cfg` names does not exist yet: a file that is not
-/// there, or a database with no `accounts` table. `serve` seeds such a
-/// database and no other, so one that was ever started, or made empty with
-/// `create-database`, is left as it is.
+/// there, or an empty one ([`schema::DatabaseKind::Empty`]). `serve` seeds
+/// such a database and no other, so one that was ever started, or made
+/// empty with `create-database`, is left as it is. Another program's file is
+/// not new either: seeding would move the new database over it, so `serve`
+/// goes on to refuse it by name.
 ///
 /// # Errors
 ///
-/// Returns an error when the database cannot be opened or read.
+/// Returns an error when the file cannot be read as SQLite.
 pub async fn database_is_new(cfg: &Config) -> Result<bool> {
-    let path = cfg.paths.db.as_path();
-    if !path.exists() {
-        return Ok(true);
-    }
-    let pool = engine::open_pool_for_path(path).await?;
-    let mut conn = pool.acquire().await?;
-    let has_accounts = schema::table_exists(&mut conn, "accounts").await?;
-    conn.close().await?;
-    pool.close().await;
-    Ok(!has_accounts)
+    Ok(matches!(
+        crate::open_db::inspect(&cfg.paths.db).await?,
+        None | Some(schema::DatabaseKind::Empty)
+    ))
 }
 
 /// Add the Demo Account, with the medium data set, to a database that does
@@ -351,14 +347,14 @@ where
     let mut seeding_cfg = cfg.clone();
     seeding_cfg.paths.db = seeding.clone();
     let seeded = async {
-        let opened = OpenDb::open(seeding_cfg.clone()).await?;
+        let opened = OpenDb::create_or_open(seeding_cfg.clone()).await?;
         let built = build(&seeding_cfg, &opened.db).await;
         // Closed before the file is checkpointed and renamed.
         opened.close().await;
         let messages = built?;
         checkpoint_and_clean_sidecars(&seeding, "before moving the new database into place")
             .await?;
-        // A configured file can be there only with no `accounts` table
+        // A configured file can be there only when it is empty
         // ([`database_is_new`]); its sidecars must not attach to the new one.
         remove_sidecars(&cfg.paths.db)?;
         fs::rename(&seeding, &cfg.paths.db).with_context(|| {
@@ -553,6 +549,11 @@ async fn reset_prepared_bundle_with(
     after_rebuild: impl AsyncFnOnce(&SqlitePool) -> Result<()>,
 ) -> Result<ResetPreparedStats> {
     let prepared = validate_prepared_bundle(bundle)?;
+    // Refused here, by its own name, before the lock file, the snapshot or
+    // the swap touch anything beside it.
+    if crate::open_db::inspect(&cfg.paths.db).await? == Some(schema::DatabaseKind::Foreign) {
+        return Err(schema::not_a_message_crate_database(&cfg.paths.db));
+    }
     let _operation_lock = crate::operation_lock::acquire_for_reset(&cfg.paths.db)?;
     let mut ready = crate::operation_lock::ReadyWhileRebuilding::clear(&cfg.paths.db)?;
     let db_parent = parent_dir_or_cwd(&cfg.paths.db);
@@ -573,7 +574,7 @@ async fn reset_prepared_bundle_with(
     let mut temporary_cfg = cfg.clone();
     temporary_cfg.paths.db = prepared_db.clone();
     temporary_cfg.paths.data_dir = data_work.path().to_path_buf();
-    let opened = OpenDb::open(temporary_cfg.clone()).await?;
+    let opened = OpenDb::create_or_open(temporary_cfg.clone()).await?;
     let stats = match rebuild_demo_account(&temporary_cfg, &opened.db, &prepared, account_id).await
     {
         Ok(stats) => after_rebuild(&opened.db).await.map(|()| stats),
@@ -755,7 +756,7 @@ async fn import_demo_sources_with(
             } else {
                 ImportMode::Append
             };
-            let imported = imports_api::import_jsonl_files_on_conn(
+            let imported = imports_api::import_on_conn(
                 &mut conn,
                 batch,
                 &ImportOptions::fixed(FixedImportArgs {
@@ -1476,9 +1477,10 @@ async fn seed_demo_account_on_conn(
     }
 
     // The Demo Account has no password, so anyone at the login card can enter
-    // it. It may export, and trash and restore; it may not import, so a
-    // person's own messages never land in Demo Data, and it may not delete
-    // for good, so one visitor cannot empty it for the next
+    // it. The server takes its grant from its id (`DEMO_ACCOUNT_PERMISSIONS`)
+    // and does not read these flags for it. The row still says the same
+    // grant, export and neither import nor delete, so the database matches
+    // what the server applies
     // (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`).
     sqlx::query(
         r"
@@ -1559,16 +1561,12 @@ async fn wipe_demo_account(cfg: &Config, db: &SqlitePool, account_id: i64) -> Re
     println!("  sql:      demo account rows removed (accounts matched={deleted})");
     drop(conn);
 
-    let account_root = cfg.paths.data_dir.join(account_id.to_string());
-    remove_tree_if_exists(&account_root)?;
-    Ok(())
-}
-/// Remove a folder tree; a missing folder is not an error.
-fn remove_tree_if_exists(path: &Path) -> Result<()> {
-    if path.exists() {
-        fs::remove_dir_all(path).with_context(|| format!("remove {}", path.display()))?;
-    }
-    Ok(())
+    crate::asset_store::remove_account_dir(&cfg.paths, account_id).with_context(|| {
+        format!(
+            "remove {}",
+            crate::asset_store::account_dir(&cfg.paths, account_id).display()
+        )
+    })
 }
 
 #[cfg(test)]

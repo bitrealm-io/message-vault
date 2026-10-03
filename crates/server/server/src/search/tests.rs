@@ -138,35 +138,39 @@ pub(crate) async fn conversation(
     .await
     .unwrap();
     for h in participants {
-        let contact_id: Option<i64> = sqlx::query_scalar(
-            "SELECT contact_id FROM contact_handles WHERE account_id = $1 AND handle_id = $2",
-        )
-        .bind(account)
-        .bind(h)
-        .fetch_optional(&mut *conn)
-        .await
-        .unwrap();
-        sqlx::query(
-            "INSERT INTO participants (conversation_id, handle_id, contact_id) VALUES ($1, $2, $3)",
-        )
-        .bind(id)
-        .bind(h)
-        .bind(contact_id)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
+        sqlx::query("INSERT INTO participants (conversation_id, handle_id) VALUES ($1, $2)")
+            .bind(id)
+            .bind(h)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
     }
     id
 }
 
-/// A participant the source named but gave no address for: `handle_id` is
-/// NULL and `name_alias` carries who they are.
+/// A participant the source named but gave no address for: their identity
+/// is of type `other` and holds the name, and `name_alias` carries the name
+/// too.
 pub(crate) async fn named_participant(conn: &mut SqliteConnection, conversation: i64, alias: &str) {
+    let account: i64 = sqlx::query_scalar("SELECT account_id FROM conversations WHERE id = $1")
+        .bind(conversation)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    let (handle_id, _) = crate::db::handles::upsert_handle_row(
+        conn,
+        account,
+        alias,
+        message_ir::HandleType::Other,
+        Some("phone"),
+    )
+    .await
+    .unwrap();
     sqlx::query(
-        "INSERT INTO participants (conversation_id, handle_id, contact_id, name_alias)
-         VALUES ($1, NULL, NULL, $2)",
+        "INSERT INTO participants (conversation_id, handle_id, name_alias) VALUES ($1, $2, $3)",
     )
     .bind(conversation)
+    .bind(handle_id)
     .bind(alias)
     .execute(&mut *conn)
     .await
@@ -1073,17 +1077,17 @@ mod text_words {
             sorted(vec![f.ana, f.bo, f.cy, f.jane, f.sam])
         );
         assert_eq!(
-            run(&mut conn, ListKind::Contacts, "handle:gmail").await,
+            run(&mut conn, ListKind::Contacts, "identity:gmail").await,
             vec![f.jane]
         );
         assert_eq!(
-            run(&mut conn, ListKind::Contacts, "handle:+1555*")
+            run(&mut conn, ListKind::Contacts, "identity:+1555*")
                 .await
                 .len(),
             4
         );
         assert_eq!(
-            run(&mut conn, ListKind::Contacts, "handle:none").await,
+            run(&mut conn, ListKind::Contacts, "identity:none").await,
             Vec::<i64>::new()
         );
     }
@@ -1097,7 +1101,7 @@ mod text_words {
             sorted(vec![f.jane_direct, f.big_group])
         );
         assert_eq!(
-            run(&mut conn, ListKind::Conversations, "handle:icloud").await,
+            run(&mut conn, ListKind::Conversations, "identity:icloud").await,
             sorted(vec![f.sam_direct, f.archive_group, f.big_group])
         );
         assert_eq!(
@@ -1217,8 +1221,8 @@ mod unicode_case {
             "name:ÉLODIE",
             "name:\"élodie ünal\"",
             "name:élod*",
-            "handle:élodie.ünal",
-            "handle:ÉLODIE*",
+            "identity:élodie.ünal",
+            "identity:ÉLODIE*",
             "élodie",
             "ÜNAL",
             "élod*",
@@ -1299,7 +1303,7 @@ mod unicode_case {
             "title:ålesund",
             "title:ÅLESUND",
             "name:øystein",
-            "handle:ØYSTEIN",
+            "identity:ØYSTEIN",
             "with:øystein",
             "ålesund",
             "øystein",
@@ -2307,15 +2311,12 @@ mod trash_across_lists {
         let a = ACCOUNT;
         let binned_h = handle(&mut conn, a, "+15550201", "sms").await;
         let binned = contact(&mut conn, a, "Binned", &[binned_h]).await;
-        sqlx::query(
-            "INSERT INTO participants (conversation_id, handle_id, contact_id) VALUES ($1, $2, $3)",
-        )
-        .bind(f.trashed_conv)
-        .bind(binned_h)
-        .bind(binned)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
+        sqlx::query("INSERT INTO participants (conversation_id, handle_id) VALUES ($1, $2)")
+            .bind(f.trashed_conv)
+            .bind(binned_h)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
         message(
             &mut conn,
             a,
@@ -2618,7 +2619,7 @@ mod measure_words {
             run(
                 &mut conn,
                 ListKind::Contacts,
-                "first-message:<2020 last-message:>=2024-01-01 handle:@gmail.com"
+                "first-message:<2020 last-message:>=2024-01-01 identity:@gmail.com"
             )
             .await,
             vec![f.jane]
@@ -3548,6 +3549,23 @@ mod refusals {
                 assert_eq!(e.kind, QueryErrorKind::EmptyValue, "{list:?} {query}");
                 assert_eq!(e.span, span, "{list:?} {query}");
                 assert_eq!(e.field, None, "{list:?} {query}");
+            }
+        }
+    }
+
+    /// Issue #1109: the word for a phone number, email, or username is
+    /// `identity:`, the name a person reads. `handle:`, the code's name for
+    /// the same thing, is refused on every list like any unknown word.
+    #[test]
+    fn handle_is_not_a_search_word() {
+        for list in [
+            ListKind::Contacts,
+            ListKind::Conversations,
+            ListKind::Messages,
+        ] {
+            for query in ["handle:gmail", "handle:none"] {
+                let e = err(list, query);
+                assert_eq!(e.kind, QueryErrorKind::UnknownWord, "{list:?} {query}");
             }
         }
     }

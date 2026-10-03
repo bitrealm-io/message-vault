@@ -76,12 +76,12 @@ pub(crate) static FIELDS: &[FieldSpec] = &[
         example: "title:\"book club\"",
     },
     FieldSpec {
-        word: "handle",
+        word: "identity",
         value_type: ValueType::Text,
         lists: &[C, V, M],
         values: NONE_ANY,
         help: "a phone number, email, or username",
-        example: "handle:@gmail.com",
+        example: "identity:@gmail.com",
     },
     FieldSpec {
         word: "with",

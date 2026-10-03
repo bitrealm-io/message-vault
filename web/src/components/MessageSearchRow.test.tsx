@@ -75,6 +75,13 @@ describe("MessageSearchRow", () => {
     expect(screen.getByTitle("2 attachments")).toHaveTextContent("📎 2");
   });
 
+  it("shows no sender for a received message that names none", () => {
+    renderRow(message({ sender: null }));
+    const row = screen.getByRole("button");
+    expect(row).not.toHaveTextContent("Unknown");
+    expect(row).not.toHaveTextContent(":");
+  });
+
   it("shows the attachments' names for a message with no text, with a matching name in bold", () => {
     renderRow(message({ text: null, attachments: [{ original_name: "photo 1.jpg" }] }));
     const row = screen.getByRole("button");

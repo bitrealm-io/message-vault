@@ -44,6 +44,7 @@ export default function MessageSearchRow({
   const zone = useTimeZone();
   const cut = snippet(messageRowText(message), terms);
   const attachmentCount = message.attachments.length;
+  const sender = messageSenderName(message);
 
   return (
     <button
@@ -64,7 +65,11 @@ export default function MessageSearchRow({
       </span>
       <span className="flex min-w-0 items-start justify-between gap-2 text-[0.813rem] leading-[1.35]">
         <span className="line-clamp-2 min-w-0 flex-1 break-words text-muted">
-          <span className="font-medium text-text">{messageSenderName(message)}:</span>{" "}
+          {sender ? (
+            <>
+              <span className="font-medium text-text">{sender}:</span>{" "}
+            </>
+          ) : null}
           {boldRanges(cut.text, cut.ranges)}
         </span>
         {attachmentCount > 0 ? (

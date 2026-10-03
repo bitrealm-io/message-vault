@@ -50,6 +50,10 @@ describe("messageConversationName", () => {
     expect(
       messageConversationName(conversation({ conversation_type: "group", participants: people })),
     ).toBe("Alice, Bob");
+    // The server reads the type ignoring case, and so does the row.
+    expect(
+      messageConversationName(conversation({ conversation_type: "Group", participants: people })),
+    ).toBe("Alice, Bob");
   });
 });
 
@@ -61,6 +65,10 @@ describe("messageSenderName", () => {
   it("is the participant's name for their identity, else the identity", () => {
     expect(messageSenderName(message())).toBe("Alice");
     expect(messageSenderName(message({ sender: "+15555550999" }))).toBe("+15555550999");
+  });
+
+  it("is null for a received message that names no sender", () => {
+    expect(messageSenderName(message({ sender: null }))).toBeNull();
   });
 });
 

@@ -1,26 +1,28 @@
+import { conversationName, isGroupType } from "./conversationName";
 import type { Message, MessageConversation } from "./types";
 
 /**
- * A conversation's name as the conversation list shows it: its title, else
- * the one other person in a one-to-one conversation, else every participant.
+ * A conversation's name as the conversation list shows it ([`conversationName`]).
  */
 export function messageConversationName(conversation: MessageConversation): string {
-  const title = conversation.group_title?.trim();
-  if (title) return title;
-  const names = conversation.participants.map((p) => p.name);
-  if (conversation.conversation_type !== "group") return names[0] ?? "(unknown)";
-  return names.length > 0 ? names.join(", ") : "(unknown)";
+  return conversationName({
+    title: conversation.group_title,
+    isGroup: isGroupType(conversation.conversation_type),
+    participants: conversation.participants,
+  });
 }
 
 /**
  * Who sent a message: "You" for one the account sent, else the participant
  * whose identity sent it, by the name the conversation gives them, else the
- * identity itself.
+ * identity itself. Null when a received message names no sender: the row
+ * then shows no sender rather than a word, since "Unknown" is a Contact
+ * Group's name.
  */
-export function messageSenderName(message: Message): string {
+export function messageSenderName(message: Message): string | null {
   if (message.is_from_me) return "You";
   const sender = message.sender;
-  if (!sender) return "Unknown";
+  if (!sender) return null;
   const participant = message.conversation.participants.find((p) => p.handle === sender);
   return participant?.name ?? sender;
 }

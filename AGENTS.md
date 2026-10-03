@@ -143,28 +143,35 @@ only the user resolves it.
    commit and it has check runs, then watch, stopping at the first failure.
    Watch only the head you mean to queue: a new push to the pull request
    cancels the run on the head before it (`ci.yml`'s concurrency group), so
-   push a fix as soon as a check fails rather than waiting for the rest.
-   A run that failed for a reason outside the pull request is left to
-   finish, because GitHub reruns the failed jobs of a finished run only;
-   then rerun just those. Green counts only while the pull request's head
-   is still the commit you pushed: a push from another session moves it,
-   and its commits have not been reviewed.
+   push a fix as soon as a check fails because of the pull request, rather
+   than waiting for the rest. When the first failure is outside the pull
+   request, let the run finish, because GitHub reruns the failed jobs of a
+   finished run only. Then sort every failed job: any that failed because of
+   the pull request is fixed and pushed, which replaces the rerun; only when
+   every failure is outside does the run get its rerun. Green counts only
+   while the pull request's head is still the commit you pushed: a push from
+   another session moves it, and its commits have not been reviewed.
 
    ```bash
+   before=$(gh pr view <N> --json headRefOid -q .headRefOid)   # just before the push
    sha=$(git rev-parse HEAD)
-   until [ "$(gh pr view <N> --json headRefOid -q .headRefOid)" = "$sha" ] &&
-         [ "$(gh api repos/messagecrate/message-crate/commits/$sha/check-runs -q .total_count)" -gt 0 ]
+   until h=$(gh pr view <N> --json headRefOid -q .headRefOid) && [ "$h" != "$before" ]; do sleep 10; done
+   [ "$h" = "$sha" ] || echo moved   # another session pushed on top
+   until [ "$(gh api repos/messagecrate/message-crate/commits/$sha/check-runs -q .total_count)" -gt 0 ]
    do sleep 30; done
    gh pr checks <N> --watch --required --fail-fast
-   gh run watch <run-id>          # an outside failure: wait for the run to finish
-   gh run rerun <run-id> --failed
+   run=$(gh run list --commit "$sha" --workflow ci.yml --json databaseId -q '.[0].databaseId')
+   gh run watch "$run"               # an outside failure: wait for the run to finish
+   gh run view "$run" --json jobs -q '.jobs[] | select(.conclusion == "failure") | .name'
+   gh run rerun "$run" --failed
    [ "$(gh pr view <N> --json headRefOid -q .headRefOid)" = "$sha" ] || echo moved
    ```
 
 #### Merging
 
-`main` requires the merge queue. `gh pr merge <N>` adds a green pull request
-to the queue, or turns on auto-merge when its checks are still running. It
+`main` requires the merge queue. `gh pr merge <N> --match-head-commit <sha>`
+adds a green pull request to the queue only while its head is still `<sha>`,
+the commit that was reviewed and checked, or turns on auto-merge when its checks are still running. It
 takes no `--squash`, because the queue's merge method is fixed. The queue
 runs `ci.yml` again on the pull request merged onto the latest `main`, and
 lands it only when that run is green. Never pass `--admin`: it merges past the

@@ -37,11 +37,19 @@ queue (AGENTS.md step 6).
 **Before every push**, run the local checks (AGENTS.md step 3).
 
 **After every push**, wait until GitHub reports the PR head as the commit you
-pushed (the wait in AGENTS.md step 6) before you read the diff or post a
-review pinned to it. A finding's line is a line of the file at the commit the
-review is pinned to: re-read the file there and move each line that later
-commits shifted. A finding whose line can't be found there goes in the
-top-level comment.
+pushed (the wait in AGENTS.md step 6) before you read the diff, post a review
+pinned to it, or watch its checks. A finding's line is a line of the file at
+the commit the review is pinned to: re-read the file there and move each line
+that later commits shifted. A finding whose line can't be found there, or is
+outside the PR diff at that commit, goes in a marked top-level comment
+(AGENTS.md step 2).
+
+**Another session's commits.** The PR is queued only while every commit on it
+was reviewed by this run. When another session pushes to the branch, whether
+your push is rejected or the PR head moves past your push, keep its commits:
+merge them in (AGENTS.md step 5), never force over them. Then finish closing
+the findings, and stop before queueing: report the PR and those commits to
+the user.
 
 **Merge review.** Every merge commit you make that resolves a conflict, in
 any step, is reviewed before it is pushed. Resolve each conflict so both
@@ -67,8 +75,8 @@ PR already up to date is not pushed.
 
 Then gather, once (AGENTS.md step 1):
 
-- The diff, and the head SHA you review: the **reviewed head**, which is
-  `git rev-parse HEAD` in the worktree once GitHub reports it as the PR head.
+- The diff, and the head SHA you review: the **reviewed head**, which is the
+  merge you pushed, or the PR head when there was nothing to push.
 - **The spec**: the issues the PR closes, plus any `#123` in its body or
   commits. With none, the Spec review is skipped and the summary says so.
 - **The standards**: always `CLAUDE.md`, `AGENTS.md`,
@@ -159,11 +167,10 @@ A check that fails for a reason outside the PR (a red `main`, a runner fault,
 a network fetch) gets one rerun of its failed jobs. If it fails again, stop
 and report it without changing the code for it.
 
-If the PR head is no longer the commit you pushed, another session pushed
-commits nobody reviewed: stop and report it.
+A failed check is sorted, and the run rerun, as AGENTS.md step 6 says.
 
 Done when every required check on the commit you pushed is green, and it is
-still the PR head.
+still the PR head (_Another session's commits_).
 
 ### 7. Summarise and queue
 
@@ -179,8 +186,7 @@ Post one top-level comment, starting with the marker:
   whose conflicts it resolved.
 - Any Spec skip, and any user thread still open.
 
-Confirm the PR head is still the commit you pushed, then queue the PR when
-"Merging" says it is ready. Otherwise, say in the summary and to the user
+Queue the PR on the commit you pushed when "Merging" says it is ready. Otherwise, say in the summary and to the user
 what it waits on, such as an open user thread.
 
 Remove the worktree. Report to the user: the PR, the counts, and whether it is

@@ -1,4 +1,5 @@
 import { type ReactNode, useId, useState } from "react";
+import PlainButton from "../../components/PlainButton";
 
 /**
  * The rows a stage of an Import Run shows under its label: named groups of
@@ -87,11 +88,10 @@ export function ExpandableFactRow({
   const panelId = useId();
   return (
     <div>
-      <button
-        type="button"
+      <PlainButton
         aria-expanded={open}
         aria-controls={panelId}
-        onClick={() => setOpen((was) => !was)}
+        onPress={() => setOpen((was) => !was)}
         className="flex w-full items-baseline justify-between gap-4 rounded border-0 bg-transparent py-0.5 pl-4 pr-0 text-left text-[0.813rem] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
         <span className="min-w-0 text-accent [overflow-wrap:anywhere]">
@@ -105,7 +105,7 @@ export function ExpandableFactRow({
           {caption ? <span className="ml-1.5 text-muted">{caption}</span> : null}
         </span>
         {value != null ? <span className="tabular-nums text-text">{value}</span> : null}
-      </button>
+      </PlainButton>
       {open ? (
         <div id={panelId} className="pb-1 pl-8">
           {children}
@@ -153,13 +153,12 @@ export function FactList<T>({
         ))}
       </ul>
       {!all && items.length > LIST_PREVIEW ? (
-        <button
-          type="button"
-          onClick={() => setAll(true)}
+        <PlainButton
+          onPress={() => setAll(true)}
           className="mt-1 border-0 bg-transparent p-0 text-[0.813rem] text-accent underline-offset-2 hover:underline"
         >
           Show all {items.length.toLocaleString()}
-        </button>
+        </PlainButton>
       ) : null}
     </>
   );

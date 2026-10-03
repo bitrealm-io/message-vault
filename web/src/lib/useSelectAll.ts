@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { apiErrorMessage } from "./apiErrorMessage";
+import { useResetOnChange } from "./useResetOnChange";
 
 /**
  * Select all on a paged list: load every page the list has not read yet,
@@ -21,16 +22,12 @@ export function useSelectAll<T>(
   currentScope.current = scopeKey;
   const run = useRef(0);
   const [selectingFor, setSelectingFor] = useState<string | null>(null);
-  const [failure, setFailure] = useState<{ scope: string; message: string } | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
 
   const selecting = selectingFor === scopeKey;
   // A failure is for the list as it was: leaving it clears the message, so
   // coming back to the same search does not show it again.
-  const [failureScope, setFailureScope] = useState(scopeKey);
-  if (failureScope !== scopeKey) {
-    setFailureScope(scopeKey);
-    if (failure) setFailure(null);
-  }
+  useResetOnChange(scope, () => setFailure(null));
 
   const selectAll = async () => {
     if (selecting) return;
@@ -44,10 +41,9 @@ export function useSelectAll<T>(
       if (stillWanted()) onRows(rows);
     } catch (error) {
       if (stillWanted()) {
-        setFailure({
-          scope: forScope,
-          message: `Select all could not read every row: ${apiErrorMessage(error, "the list did not load")}`,
-        });
+        setFailure(
+          `Select all could not read every row: ${apiErrorMessage(error, "the list did not load")}`,
+        );
       }
     } finally {
       if (thisRun === run.current) setSelectingFor(null);
@@ -67,6 +63,6 @@ export function useSelectAll<T>(
     /** Pages are loading for Select all; the box waits. */
     selecting,
     /** Why the last Select all ticked nothing, for this scope. */
-    error: failure?.scope === scopeKey ? failure.message : null,
+    error: failure,
   };
 }

@@ -36,6 +36,7 @@ import type { components } from "../lib/serverApi.types";
 import { useTimeZone } from "../lib/timeZone";
 import { UNKNOWN_GROUP } from "../lib/unknownGroup";
 import { useContactGroups } from "../lib/useContactGroups";
+import { useResetOnChange } from "../lib/useResetOnChange";
 import { useSelectAll } from "../lib/useSelectAll";
 
 const FILTER_DEBOUNCE_MS = 300;
@@ -133,13 +134,10 @@ export default function ContactList({
   const [groupsMenuOpen, setGroupsMenuOpen] = useState(false);
   /** Last contacts the Groups menu assigned to, so a list filter change does not disable an open menu. */
   const assignTargetsRef = useRef<Contact[]>([]);
-  /** Ignores the row click that follows a checkbox press (nested control). */
-  const skipRowSelectRef = useRef(false);
   /** The last row checked or unchecked by hand: where a Shift + click range starts. */
-  const rangeAnchorRef = useRef<string | null>(null);
-  const catalogCompleteRef = useRef(false);
-  /** Unfiltered contact list, so group clicks can filter in the browser. */
-  const fullCatalogRef = useRef<Contact[] | null>(null);
+  const [rangeAnchor, setRangeAnchor] = useState<string | null>(null);
+  /** The whole unfiltered list has been in memory once, so a filter can run in the browser. */
+  const [haveFullCatalog, setHaveFullCatalog] = useState(false);
   const { groups: allGroups } = useContactGroups();
   const groupActions = useContactGroupActions();
   const setGroupMembers = useSetContactGroupMembers();
@@ -191,29 +189,24 @@ export default function ContactList({
 
   const catalogComplete =
     !loading && !refreshing && contacts.length >= total && (total > 0 || contacts.length === 0);
-  catalogCompleteRef.current = catalogComplete && !serverQ.trim();
-  if (catalogCompleteRef.current) {
-    fullCatalogRef.current = contacts;
-  }
+  if (catalogComplete && !serverQ.trim() && !haveFullCatalog) setHaveFullCatalog(true);
 
   const groupActive = Boolean(groupFilter);
   const advancedActive = hasFieldToken(filter);
 
-  useEffect(() => {
-    void filter;
-    void groupFilter;
-    rangeAnchorRef.current = null;
+  // A new filter or group unticks every row, so a tick never applies to a row the list no longer shows.
+  useResetOnChange([filter, groupFilter], () => {
+    setRangeAnchor(null);
     setCheckedIds(new Set());
-  }, [filter, groupFilter]);
+  });
 
   useEffect(() => {
     if (clearCheckedRev === 0) return;
-    rangeAnchorRef.current = null;
+    setRangeAnchor(null);
     setCheckedIds(new Set());
   }, [clearCheckedRev]);
 
   useEffect(() => {
-    void catalogComplete;
     const combined = groupListQuery(groupFilter, filter);
     // Empty filter: load the full catalog.
     if (!combined.trim()) {
@@ -221,7 +214,7 @@ export default function ContactList({
       return;
     }
     // The full catalog is already in memory, so filter it in the browser.
-    if (fullCatalogRef.current && !advancedActive) {
+    if (haveFullCatalog && !advancedActive) {
       setServerQ("");
       return;
     }
@@ -230,11 +223,9 @@ export default function ContactList({
       setServerQ(combined);
       return;
     }
-    if (catalogCompleteRef.current && !advancedActive) return;
-
     const t = window.setTimeout(() => setServerQ(combined), FILTER_DEBOUNCE_MS);
     return () => window.clearTimeout(t);
-  }, [filter, catalogComplete, advancedActive, groupFilter, groupActive]);
+  }, [filter, haveFullCatalog, advancedActive, groupFilter, groupActive]);
 
   const filterActive = filter.trim().length > 0;
   const needles = filterNeedles(filter);
@@ -313,7 +304,7 @@ export default function ContactList({
   }, [onCheckedChange]);
 
   const toggleChecked = (id: string) => {
-    rangeAnchorRef.current = id;
+    setRangeAnchor(id);
     setCheckedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -323,13 +314,12 @@ export default function ContactList({
   };
   /** Shift + click: every row from the last clicked one to this one takes this box's new state. */
   const setRangeChecked = (id: string, on: boolean) => {
-    const anchor = rangeAnchorRef.current;
-    rangeAnchorRef.current = id;
+    setRangeAnchor(id);
     setCheckedIds((prev) =>
       applyCheckedRange(
         displayContacts.map((c) => c.id),
         prev,
-        anchor,
+        rangeAnchor,
         id,
         on,
       ),
@@ -425,10 +415,7 @@ export default function ContactList({
     ? (c: Contact) => contactSortLetter(contactLabelText(c.name, c.addresses), nameSort)
     : undefined;
 
-  const localSlice =
-    !advancedActive &&
-    (catalogCompleteRef.current || !serverQ.trim()) &&
-    (filterActive || groupActive);
+  const localSlice = !advancedActive && !serverQ.trim() && (filterActive || groupActive);
   const rangeTotal = localSlice ? displayContacts.length : total;
 
   return (
@@ -446,10 +433,6 @@ export default function ContactList({
       dynamicSize={filterActive}
       selectedId={selectedId}
       onSelect={(c) => {
-        if (skipRowSelectRef.current) {
-          skipRowSelectRef.current = false;
-          return;
-        }
         if (checkedIds.size > 0) {
           toggleChecked(c.id);
           return;
@@ -461,7 +444,7 @@ export default function ContactList({
         checked: selectAllChecked,
         indeterminate: selectAllIndeterminate,
         onChange: (on) => {
-          rangeAnchorRef.current = null;
+          setRangeAnchor(null);
           if (on) {
             void selectAll();
             return;
@@ -504,32 +487,31 @@ export default function ContactList({
       }
       renderRowLead={(c) => {
         const checked = checkedIds.has(c.id);
-        // The whole avatar square toggles the box, so the label points at it by id.
-        const checkId = `contact-check-${c.id}`;
+        // The whole avatar square is the checkbox's label, so a press anywhere on it toggles the box.
         return (
-          <label
-            htmlFor={checkId}
-            className="group/avatar relative flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center self-center"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              skipRowSelectRef.current = true;
-              queueMicrotask(() => {
-                skipRowSelectRef.current = false;
-              });
+          <Checkbox
+            checked={checked}
+            aria-label={`Select ${contactLabelText(c.name, c.addresses)}`}
+            onChange={(on, { shiftKey }) => {
+              if (shiftKey) setRangeChecked(c.id, on);
+              else toggleChecked(c.id);
             }}
-            onKeyDown={(e) => e.stopPropagation()}
+            labelClassName="group/avatar relative h-7 w-7 shrink-0 items-center justify-center self-center"
+            className={`absolute ${
+              checked
+                ? ""
+                : "opacity-0 group-hover/avatar:opacity-100 group-data-focus-visible/avatar:opacity-100"
+            }`}
           >
             {/*
              * The initials hide behind the checkbox on hover, on keyboard focus,
-             * and once checked. `opacity-0` rather than `invisible` so the input
-             * stays in the tab order when it is not yet visible.
+             * and once checked.
              */}
             <span
               className={
                 checked
                   ? "invisible"
-                  : "group-hover/avatar:invisible group-focus-within/avatar:invisible"
+                  : "group-hover/avatar:invisible group-data-focus-visible/avatar:invisible"
               }
             >
               <ContactInitialCircle
@@ -537,20 +519,7 @@ export default function ContactList({
                 preferredHandle={c.addresses?.[0] ?? null}
               />
             </span>
-            <Checkbox
-              id={checkId}
-              checked={checked}
-              aria-label={`Select ${contactLabelText(c.name, c.addresses)}`}
-              onChange={(on, e) => {
-                // A checkbox change is a click underneath, so the Shift key is on it.
-                if ((e.nativeEvent as MouseEvent).shiftKey) setRangeChecked(c.id, on);
-                else toggleChecked(c.id);
-              }}
-              className={`absolute ${
-                checked ? "" : "opacity-0 group-hover/avatar:opacity-100 focus-visible:opacity-100"
-              }`}
-            />
-          </label>
+          </Checkbox>
         );
       }}
       renderRow={(c) => {

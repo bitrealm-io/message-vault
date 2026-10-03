@@ -46,7 +46,6 @@ afterEach(() => {
 });
 
 /** Renders the current path so a test can read where `navigate` landed. */
-// biome-ignore lint/style/useComponentExportOnlyModules: local test harness only
 function LocationDisplay() {
   const location = useLocation();
   return <div data-testid="location">{location.pathname}</div>;

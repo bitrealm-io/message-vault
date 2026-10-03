@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Dialog, type DialogProps, Modal, ModalOverlay } from "react-aria-components";
 import { Z_DRAWER, Z_DRAWER_SCRIM, Z_MODAL } from "../lib/zLayers";
+import PlainButton from "./PlainButton";
 
 /**
  * Button row along the bottom of a dialog. Its own component so the spacing is
@@ -62,15 +63,14 @@ export default function ModalShell({
 } & Omit<DialogProps, "children" | "className">) {
   const closeButton = (className: string) =>
     onClose != null ? (
-      <button
-        type="button"
+      <PlainButton
         aria-label="Close"
-        disabled={closeDisabled}
-        onClick={onClose}
+        isDisabled={closeDisabled}
+        onPress={onClose}
         className={className}
       >
         ×
-      </button>
+      </PlainButton>
     ) : null;
 
   if (variant === "drawer") {

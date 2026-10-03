@@ -16,6 +16,7 @@ import { isTauri } from "../lib/tauri-check";
 import { listRowDividersThin, resizeHandleGutter } from "../lib/tw";
 import ListRangeHeader, { type SelectAllBox } from "./ListRangeHeader";
 import ListRangePill, { RANGE_PILL_OVERLAY_INSET, RANGE_PILL_SCROLL_PAD } from "./ListRangePill";
+import PlainButton from "./PlainButton";
 import VirtualList, { type VisibleRange } from "./VirtualList";
 
 const NEAR_END_THRESHOLD = 10;
@@ -110,17 +111,17 @@ function Row({
 }) {
   if (!lead) {
     return (
-      <button type="button" onClick={onSelect} className={className} style={style} {...rest}>
+      <PlainButton onPress={onSelect} className={className} style={style} {...rest}>
         {children}
-      </button>
+      </PlainButton>
     );
   }
   return (
     <div className={`relative ${className} ${ROW_BODY_FOCUS_RING}`} style={style} {...rest}>
       <div className={ROW_LEAD}>{lead}</div>
-      <button type="button" onClick={onSelect} className={ROW_BODY}>
+      <PlainButton onPress={onSelect} className={ROW_BODY}>
         {children}
-      </button>
+      </PlainButton>
     </div>
   );
 }

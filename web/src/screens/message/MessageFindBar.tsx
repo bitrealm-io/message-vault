@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import PlainButton from "../../components/PlainButton";
 
 const STEP_CLASS =
   "cursor-pointer rounded border border-border bg-panel px-1.5 py-0.5 text-[0.75rem] text-text hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40";
@@ -66,35 +67,32 @@ export default function MessageFindBar({
               : "No matches"}
         </span>
       ) : null}
-      <button
-        type="button"
+      <PlainButton
         aria-label="Older match"
         title="Older match"
-        disabled={matchCount === 0}
-        onClick={onPrevMatch}
+        isDisabled={matchCount === 0}
+        onPress={onPrevMatch}
         className={STEP_CLASS}
       >
         ▲
-      </button>
-      <button
-        type="button"
+      </PlainButton>
+      <PlainButton
         aria-label="Newer match"
         title="Newer match"
-        disabled={matchCount === 0}
-        onClick={onNextMatch}
+        isDisabled={matchCount === 0}
+        onPress={onNextMatch}
         className={STEP_CLASS}
       >
         ▼
-      </button>
-      <button
-        type="button"
+      </PlainButton>
+      <PlainButton
         aria-label="Close Find"
         title="Close Find"
-        onClick={onClose}
+        onPress={onClose}
         className={STEP_CLASS}
       >
         ✕
-      </button>
+      </PlainButton>
     </div>
   );
 }

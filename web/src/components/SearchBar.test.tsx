@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ComponentProps, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -74,7 +74,8 @@ describe("SearchBar", () => {
     await user.keyboard("{ArrowDown}");
     const [first] = screen.getAllByRole("option");
     expect(input.getAttribute("aria-activedescendant")).toBe(first.id);
-    expect(first.getAttribute("aria-selected")).toBe("true");
+    // The row is active, not selected: every row is an action, and none is the box's value.
+    expect(first).toHaveAttribute("data-focused", "true");
 
     await user.keyboard("{ArrowDown}");
     const second = screen.getAllByRole("option")[1];
@@ -141,6 +142,21 @@ describe("SearchBar", () => {
     expect(await screen.findByTestId("advanced-form")).toBeTruthy();
   });
 
+  it("keeps the advanced panel open, with no popdown over it, when the box is focused again", async () => {
+    const user = userEvent.setup();
+    const { input } = renderSearch();
+
+    await user.click(input);
+    await user.keyboard("{ArrowUp}{Enter}");
+    expect(await screen.findByTestId("advanced-form")).toBeTruthy();
+
+    act(() => input.blur());
+    await user.click(input);
+
+    expect(screen.getByTestId("advanced-form")).toBeTruthy();
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
+  });
+
   it("wraps from the last row back to the first", async () => {
     const user = userEvent.setup();
     const { input } = renderSearch();
@@ -151,6 +167,20 @@ describe("SearchBar", () => {
     // Three rows: two recents plus advanced. A fourth press wraps.
     await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}");
     expect(input.getAttribute("aria-activedescendant")).toBe(optionIds()[0]);
+  });
+
+  it("opens on the last row with the up arrow", async () => {
+    const user = userEvent.setup();
+    const { input } = renderSearch();
+
+    await user.click(input);
+    await user.keyboard("{Escape}");
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
+
+    await user.keyboard("{ArrowUp}");
+    const options = screen.getAllByRole("option");
+    expect(input.getAttribute("aria-activedescendant")).toBe(options[options.length - 1]?.id);
+    expect(options[options.length - 1]).toHaveTextContent("Advanced search");
   });
 
   it("closes the popdown on Escape", async () => {

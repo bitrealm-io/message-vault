@@ -415,6 +415,16 @@ impl ContentKeyInputs {
             JOIN handles h ON h.id = p.handle_id
             WHERE c.account_id = $1
               AND h.normalized IS NOT NULL AND h.normalized != ''
+              -- The holder is never a participant: a group imported before
+              -- one of these identities was linked still lists it, and one
+              -- imported after does not, so it is left out of the key on
+              -- both (#1093).
+              AND NOT EXISTS (
+                SELECT 1 FROM account_handles ah
+                JOIN handles ih ON ih.id = ah.handle_id
+                WHERE ah.account_id = c.account_id
+                  AND ih.normalized = h.normalized AND ih.handle_type = h.handle_type
+              )
             ORDER BY p.conversation_id, h.normalized
             ",
         )

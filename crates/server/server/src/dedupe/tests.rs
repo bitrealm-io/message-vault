@@ -1131,6 +1131,56 @@ async fn a_participant_added_after_the_first_dedupe_changes_the_group_content_ke
     assert_eq!(duplicate_of(&mut conn, first).await, None);
 }
 
+/// A group imported before the holder linked one of its addresses still
+/// lists the holder, and the same group imported after does not (#1093).
+/// The holder is never a participant, so the key leaves the holder's
+/// addresses out and the two still pair.
+#[tokio::test]
+async fn the_holders_own_address_does_not_change_a_groups_content_key() {
+    let (pool, _dir) = engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    setup_account(&mut conn).await;
+    let x = conversation(&mut conn, "chat-x", "group").await;
+    let y = conversation(&mut conn, "chat-y", "group").await;
+    for member in ["+15555550128", "+15555550129", "+15555550199"] {
+        add_participant(&mut conn, x, member).await;
+    }
+    for member in ["+15555550128", "+15555550129"] {
+        add_participant(&mut conn, y, member).await;
+    }
+    let holder = handle(&mut conn, "+15555550199").await;
+    sqlx::query("INSERT INTO account_handles (account_id, handle_id) VALUES ($1, $2)")
+        .bind(TEST_ACCOUNT_ID)
+        .bind(holder)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    let mut ids = Vec::new();
+    for (conversation_id, source, guid) in [(x, "imessage", "a-1"), (y, "sms-backup-plus", "b-1")] {
+        ids.push(
+            message(
+                &mut conn,
+                Msg {
+                    conversation_id,
+                    source,
+                    guid,
+                    timestamp: "2015-03-12T18:04:22Z",
+                    from_me: true,
+                    sender: None,
+                    body: "dinner at 7?",
+                },
+            )
+            .await,
+        );
+    }
+
+    dedupe_cross_source(&mut conn, TEST_ACCOUNT_ID, None, 2)
+        .await
+        .unwrap();
+
+    assert_eq!(duplicate_of(&mut conn, ids[1]).await, Some(ids[0]));
+}
+
 /// A dedupe that fails part way leaves the duplicates it found last time
 /// hidden.
 ///

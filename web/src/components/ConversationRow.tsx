@@ -1,4 +1,4 @@
-import { type ReactNode, useId } from "react";
+import type { ReactNode } from "react";
 import { formatDateSpan } from "../lib/formatDate";
 import { useTimeZone } from "../lib/timeZone";
 import { listRowDivider } from "../lib/tw";
@@ -119,7 +119,6 @@ export default function ConversationRow({
   checked?: boolean;
   onCheckChange?: (id: number) => void;
 }) {
-  const checkboxId = useId();
   const columnResizing = useColumnResizing();
   const isGroup = conversation.is_group;
   const wraps = isGroup && !conversation.label && !columnResizing;
@@ -173,18 +172,12 @@ export default function ConversationRow({
         padding puts it back so the box itself does not move. Anywhere left of
         the title toggles the row.
       */}
-      <label
-        htmlFor={checkboxId}
-        className="-my-[0.7rem] -mr-2 -ml-[0.85rem] flex shrink-0 cursor-pointer items-center self-stretch pr-2 pl-[0.85rem]"
-      >
-        <Checkbox
-          id={checkboxId}
-          checked={checked || false}
-          aria-label={`Select ${conversationTitleText(conversation)}`}
-          onChange={() => onCheckChange(conversation.id)}
-          className="shrink-0"
-        />
-      </label>
+      <Checkbox
+        checked={checked || false}
+        aria-label={`Select ${conversationTitleText(conversation)}`}
+        onChange={() => onCheckChange(conversation.id)}
+        labelClassName="-my-[0.7rem] -mr-2 -ml-[0.85rem] shrink-0 items-center self-stretch pr-2 pl-[0.85rem]"
+      />
       <button
         type="button"
         onClick={onClick}

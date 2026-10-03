@@ -12,6 +12,7 @@
  */
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import RightPane from "../components/RightPane";
 import { RightToolbarProvider } from "../components/RightToolbarContext";
@@ -20,6 +21,9 @@ import { mockedAuth, Providers } from "../test/providers";
 import ContactList from "./ContactList";
 
 vi.mock("../lib/auth", () => ({ useAuth: () => mockedAuth }));
+
+const tauriMock = vi.hoisted(() => ({ current: false }));
+vi.mock("../lib/tauri-check", () => ({ isTauri: () => tauriMock.current }));
 
 vi.mock("../lib/serverApi", () => ({
   listContacts: vi.fn(),
@@ -244,5 +248,36 @@ describe("ContactList", () => {
 
     rerender(page("none"));
     await waitFor(() => expect(listed()).toEqual(["Alice"]));
+  });
+
+  it("checks a contact from its avatar in the desktop list without opening it", async () => {
+    tauriMock.current = true;
+    // jsdom lays out nothing; give React Aria's Virtualizer a viewport to fill.
+    const heights = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(400);
+    const widths = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(300);
+    try {
+      const onSelect = vi.fn();
+      render(
+        <Providers>
+          <RightToolbarProvider>
+            <RightPane>
+              <ContactList onSelect={onSelect} />
+            </RightPane>
+          </RightToolbarProvider>
+        </Providers>,
+      );
+      const box = await screen.findByRole("checkbox", { name: "Select Alice" });
+      const avatar = box.closest("label");
+      expect(avatar).not.toBeNull();
+
+      await userEvent.click(avatar as HTMLElement);
+
+      await waitFor(() => expect(box).toBeChecked());
+      expect(onSelect).not.toHaveBeenCalled();
+    } finally {
+      heights.mockRestore();
+      widths.mockRestore();
+      tauriMock.current = false;
+    }
   });
 });

@@ -132,8 +132,6 @@ export default function ContactList({
   const [groupsMenuOpen, setGroupsMenuOpen] = useState(false);
   /** Last contacts the Groups menu assigned to, so a list filter change does not disable an open menu. */
   const assignTargetsRef = useRef<Contact[]>([]);
-  /** Ignores the row click that follows a checkbox press (nested control). */
-  const skipRowSelectRef = useRef(false);
   /** The last row checked or unchecked by hand: where a Shift + click range starts. */
   const [rangeAnchor, setRangeAnchor] = useState<string | null>(null);
   /** The whole unfiltered list has been in memory once, so a filter can run in the browser. */
@@ -422,10 +420,6 @@ export default function ContactList({
       dynamicSize={filterActive}
       selectedId={selectedId}
       onSelect={(c) => {
-        if (skipRowSelectRef.current) {
-          skipRowSelectRef.current = false;
-          return;
-        }
         if (checkedIds.size > 0) {
           toggleChecked(c.id);
           return;
@@ -473,32 +467,31 @@ export default function ContactList({
       }
       renderRowLead={(c) => {
         const checked = checkedIds.has(c.id);
-        // The whole avatar square toggles the box, so the label points at it by id.
-        const checkId = `contact-check-${c.id}`;
+        // The whole avatar square is the checkbox's label, so a press anywhere on it toggles the box.
         return (
-          <label
-            htmlFor={checkId}
-            className="group/avatar relative flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center self-center"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              skipRowSelectRef.current = true;
-              queueMicrotask(() => {
-                skipRowSelectRef.current = false;
-              });
+          <Checkbox
+            checked={checked}
+            aria-label={`Select ${contactLabelText(c.name, c.addresses)}`}
+            onChange={(on, { shiftKey }) => {
+              if (shiftKey) setRangeChecked(c.id, on);
+              else toggleChecked(c.id);
             }}
-            onKeyDown={(e) => e.stopPropagation()}
+            labelClassName="group/avatar relative h-7 w-7 shrink-0 items-center justify-center self-center"
+            className={`absolute ${
+              checked
+                ? ""
+                : "opacity-0 group-hover/avatar:opacity-100 group-data-focus-visible/avatar:opacity-100"
+            }`}
           >
             {/*
              * The initials hide behind the checkbox on hover, on keyboard focus,
-             * and once checked. `opacity-0` rather than `invisible` so the input
-             * stays in the tab order when it is not yet visible.
+             * and once checked.
              */}
             <span
               className={
                 checked
                   ? "invisible"
-                  : "group-hover/avatar:invisible group-focus-within/avatar:invisible"
+                  : "group-hover/avatar:invisible group-data-focus-visible/avatar:invisible"
               }
             >
               <ContactInitialCircle
@@ -506,20 +499,7 @@ export default function ContactList({
                 preferredHandle={c.addresses?.[0] ?? null}
               />
             </span>
-            <Checkbox
-              id={checkId}
-              checked={checked}
-              aria-label={`Select ${contactLabelText(c.name, c.addresses)}`}
-              onChange={(on, e) => {
-                // A checkbox change is a click underneath, so the Shift key is on it.
-                if ((e.nativeEvent as MouseEvent).shiftKey) setRangeChecked(c.id, on);
-                else toggleChecked(c.id);
-              }}
-              className={`absolute ${
-                checked ? "" : "opacity-0 group-hover/avatar:opacity-100 focus-visible:opacity-100"
-              }`}
-            />
-          </label>
+          </Checkbox>
         );
       }}
       renderRow={(c) => {

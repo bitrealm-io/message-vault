@@ -741,6 +741,56 @@ async fn relevance_ranks_by_the_positive_words_only() {
     assert_eq!(texts(&page)[0], "the dentist moved it", "{page}");
 }
 
+/// Relevance has one direction, best match first: `-relevance` would list the
+/// unranked messages first and then the worst match, which nobody asks for.
+#[tokio::test]
+async fn descending_relevance_is_validation_failed() {
+    let (fixture, alice) = seeded_for_relevance().await;
+    for sort in ["-relevance", "-relevance,date", "-date,-relevance"] {
+        let (status, text) = get_raw(
+            &fixture.state,
+            &format!("/v1/messages?q=dentist&sort={sort}"),
+            &alice.token,
+        )
+        .await;
+        expect_problem(status, &text, ProblemType::ValidationFailed);
+        assert!(text.contains("-relevance"), "{sort}: {text}");
+    }
+}
+
+/// The relevance join asks the full-text index once for the whole search,
+/// never once per candidate message (#413). SQLite flattens a plain joined
+/// subquery into a per-row `rowid = m.id AND MATCH` lookup, which took 22 s
+/// for `the` on the medium Demo Account, so the plan must materialize it.
+#[tokio::test]
+async fn the_relevance_join_reads_the_index_once() {
+    let (fixture, _alice) = fixture_with_account().await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
+    let sql = format!(
+        "EXPLAIN QUERY PLAN SELECT m.id FROM messages m {}
+         WHERE m.id IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?)
+         ORDER BY r.rank",
+        crate::db::conversation_messages::RANK_JOIN_SQL
+    );
+    let rows: Vec<(i64, i64, i64, String)> = sqlx::query_as(&sql)
+        .bind("\"the\"")
+        .bind("\"the\"")
+        .fetch_all(&mut *conn)
+        .await
+        .unwrap();
+    let plan: Vec<&str> = rows.iter().map(|r| r.3.as_str()).collect();
+    assert!(
+        !plan
+            .iter()
+            .any(|d| d.contains("messages_fts") && d.contains("LEFT-JOIN")),
+        "per-row full-text lookup: {plan:?}"
+    );
+    assert!(
+        plan.iter().any(|d| d.starts_with("MATERIALIZE")),
+        "{plan:?}"
+    );
+}
+
 /// The Messages list names both its keys when a sort is refused.
 #[tokio::test]
 async fn an_unknown_sort_names_date_and_relevance() {

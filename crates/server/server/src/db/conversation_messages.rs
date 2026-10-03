@@ -162,10 +162,25 @@ pub const DEFAULT_SEARCH_SORT: [SortKey<SearchSort>; 1] = [SortKey {
     direction: Direction::Asc,
 }];
 
+/// The join a relevance order ranks by: every message the rank query
+/// matches, with its `bm25()`, keyed by message id. Its one `?` is the rank
+/// query.
+///
+/// `MATERIALIZED` is load-bearing. Without it SQLite (3.53) flattens the
+/// subquery into the outer query and asks the full-text index once per
+/// candidate message, `rowid = m.id AND MATCH ?`, the per-row cost #413
+/// removed from the filter: 22 s instead of 0.1 s for `the` on the medium
+/// Demo Account. Materialized, the index is asked once for the whole search.
+pub(crate) const RANK_JOIN_SQL: &str = "
+     LEFT JOIN (WITH ranked AS MATERIALIZED (
+                  SELECT rowid AS rank_id, bm25(messages_fts) AS rank
+                  FROM messages_fts WHERE messages_fts MATCH ?)
+                SELECT rank_id, rank FROM ranked) r ON r.rank_id = m.id";
+
 /// One page of the messages a search matches, in `order`.
 ///
 /// A `relevance` key ranks by `bm25()` over `filter`'s rank query, read once
-/// for the whole search as a joined subquery rather than per row (#413). A
+/// for the whole search through [`RANK_JOIN_SQL`] rather than per row (#413). A
 /// message the filter matches without the index, by an attachment's file
 /// name, has no rank and comes after every ranked one. Ties, and every
 /// message under a date-only order, fall back to the date, newest first
@@ -174,7 +189,8 @@ pub const DEFAULT_SEARCH_SORT: [SortKey<SearchSort>; 1] = [SortKey {
 /// # Errors
 ///
 /// `validation-failed` when `order` names `relevance` and the filter has no
-/// free-text word to rank by; otherwise an error when a statement fails.
+/// free-text word to rank by, or names `-relevance`, which has no meaning;
+/// otherwise an error when a statement fails.
 pub async fn load_search_page(
     conn: &mut SqliteConnection,
     filter: &crate::search::Filter,
@@ -182,6 +198,15 @@ pub async fn load_search_page(
     limit: usize,
     offset: usize,
 ) -> Result<Vec<Message>, ApiError> {
+    if order
+        .iter()
+        .any(|k| k.key == SearchSort::Relevance && k.direction == Direction::Desc)
+    {
+        return Err(ApiError::validation(
+            "sort: relevance has one direction, best match first; write `relevance`, not `-relevance`",
+        ));
+    }
+
     let ranked = order.iter().any(|k| k.key == SearchSort::Relevance);
     let mut from_sql = messages_from_sql();
     let mut params = Vec::new();
@@ -191,10 +216,7 @@ pub async fn load_search_page(
                 "sort: relevance needs a free-text word in q to rank by; sort by date instead",
             ));
         };
-        from_sql.push_str(
-            "\n LEFT JOIN (SELECT rowid AS rank_id, bm25(messages_fts) AS rank
-                FROM messages_fts WHERE messages_fts MATCH ?) r ON r.rank_id = m.id",
-        );
+        from_sql.push_str(RANK_JOIN_SQL);
         params.push(SqlParam::Text(rank_query.to_string()));
     }
     params.extend_from_slice(filter.params());
@@ -203,11 +225,9 @@ pub async fn load_search_page(
     let mut date_direction = None;
     for key in order {
         match key.key {
-            // `bm25()` is lower for a better match, so best first is ascending.
-            SearchSort::Relevance => terms.push(format!(
-                "r.rank IS NULL {d}, r.rank {d}",
-                d = key.direction.sql()
-            )),
+            // `bm25()` is lower for a better match, so best first is
+            // ascending, and an unranked message (NULL) comes last.
+            SearchSort::Relevance => terms.push("r.rank IS NULL ASC, r.rank ASC".to_string()),
             SearchSort::Date => {
                 let d = key.direction.sql();
                 terms.push(format!("m.timestamp {d}, m.sort_order {d}"));

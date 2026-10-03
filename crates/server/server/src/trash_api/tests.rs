@@ -204,6 +204,12 @@ fn batch_naming(sha: &str) -> String {
 /// S5-2: an Upload told by `HEAD` that the server holds a file skips the
 /// upload. Emptying the Trash before the batch that names the file arrives
 /// must not leave the imported attachment without its file.
+///
+/// Issue #1069's version of this test empties the Trash before any Import
+/// Run exists, and fails even with the fix, because with no run nothing
+/// keeps the file. This one starts the run before `HEAD`, the order
+/// `message-crate-push` uses (`crates/libs/push/src/run.rs` starts the run
+/// before any asset request), which is the order an Upload sends.
 #[tokio::test]
 async fn a_file_head_reported_present_survives_an_empty_trash_before_the_batch() {
     let (fixture, alice) = fixture_with_account().await;

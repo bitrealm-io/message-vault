@@ -770,28 +770,32 @@ pub async fn load(
 }
 
 /// The address book `csv_text` rewritten so that each new contact it lists
-/// carries the id of the Unknown that holds one of its identities, as a
-/// person who exported the address book after an import and typed the names
-/// onto the Unknowns' rows would write it. Only the text is rewritten; the
-/// account is read and nothing is written. Loaded back, the file names those
-/// Unknowns in place, where a new contact would take their identities and
-/// leave them to be deleted.
+/// carries the id of the nameless contact that holds one of its identities,
+/// as a person who exported the address book after an import and typed the
+/// names onto the rows of its Unknowns would write it. Only the text is
+/// rewritten; the account is read and nothing is written. Loaded back, the
+/// file names those nameless contacts in place, where a new contact would
+/// take their identities and leave them to be deleted.
+///
+/// The test is the name alone, not the address too as the Unknown group's
+/// is: a contact with a name is already named, and a nameless one is what
+/// the file's name is for.
 ///
 /// The file is read as [`load`] reads it, so the identities are matched by
-/// the key the load would give them. A new contact stays new when no Unknown
-/// holds its identities; when the Unknown also holds an identity the
-/// contact's rows do not list (an Append load would then leave the named
-/// contact holding it); when the file already speaks for that Unknown, by its
-/// id or through an earlier contact; or when a row would read as another
-/// identity under the Unknown's id than as a new contact's. A file the load
-/// would refuse comes back as it was, so the load reports the refusal. Rows
-/// keep their numbers, so a note or a refusal from the load names the row of
-/// `csv_text`.
+/// the key the load would give them. A new contact stays new when no
+/// nameless contact holds its identities; when the nameless contact also
+/// holds an identity the contact's rows do not list (an Append load would
+/// then leave the named contact holding it); when the file already speaks
+/// for that nameless contact, by its id or through an earlier contact; or
+/// when a row would read as another identity under the nameless contact's
+/// id than as a new contact's. A file the load would refuse comes back as
+/// it was, so the load reports the refusal. Rows keep their numbers, so a
+/// note or a refusal from the load names the row of `csv_text`.
 ///
 /// # Errors
 ///
 /// Returns an error when reading the account fails.
-pub(crate) async fn rewrite_ids_to_unknowns(
+pub(crate) async fn rewrite_ids_to_nameless(
     conn: &mut SqliteConnection,
     account_id: i64,
     csv_text: &str,
@@ -810,7 +814,7 @@ pub(crate) async fn rewrite_ids_to_unknowns(
             held.entry(holder).or_default().insert(key);
         }
     }
-    let is_unknown = |id: i64| snapshot.contacts.get(&id).is_some_and(String::is_empty);
+    let is_nameless = |id: i64| snapshot.contacts.get(&id).is_some_and(String::is_empty);
     let rows_of = |contact: &FileContact| -> Vec<&FileRow> {
         rows.iter()
             .filter(|row| {
@@ -823,8 +827,8 @@ pub(crate) async fn rewrite_ids_to_unknowns(
             .collect()
     };
 
-    // The Unknown each new contact takes: by its `contact_id` text, or by its
-    // only row when that text is blank. An Unknown the file names by its id
+    // The nameless contact each new contact takes: by its `contact_id` text, or by its
+    // only row when that text is blank. A nameless contact the file names by its id
     // is spoken for already.
     let mut by_text: HashMap<&str, i64> = HashMap::new();
     let mut by_row: HashMap<usize, i64> = HashMap::new();
@@ -838,7 +842,7 @@ pub(crate) async fn rewrite_ids_to_unknowns(
     for contact in file.iter().filter(|c| c.target == Target::New) {
         let listed: HashSet<&IdentityKey> = contact.identities.iter().map(|i| &i.key).collect();
         let contact_rows = rows_of(contact);
-        // Under the Unknown's id, a phone written without `+` can read as
+        // Under the nameless contact's id, a phone written without `+` can read as
         // another key (see [`row_identity`]); the rows must read the same.
         let reads_the_same = |unknown: i64| {
             let mut keys = HashSet::new();
@@ -860,7 +864,7 @@ pub(crate) async fn rewrite_ids_to_unknowns(
             let holds_only_listed = held
                 .get(&holder)
                 .is_some_and(|keys| keys.iter().all(|key| listed.contains(key)));
-            (is_unknown(holder)
+            (is_nameless(holder)
                 && !taken.contains(&holder)
                 && holds_only_listed
                 && reads_the_same(holder))

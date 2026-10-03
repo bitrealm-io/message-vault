@@ -81,12 +81,7 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
 
         message_crate_core::check_cancel(config.cancel.as_ref())?;
         let bin = resolve_wtsexporter()?;
-        // Scratch dir for wtsexporter cwd (iOS/Android extract) + result.json.
-        // Kept until after convert so media copy can read extracted files.
-        let work = tempfile::Builder::new()
-            .prefix("wtsexporter-")
-            .tempdir_in(&config.output)
-            .context("create temp dir for wtsexporter")?;
+        let work = scratch_dir_in_output(config)?;
         let json_out = work.path().join("result.json");
 
         // Cooperative only: cancel is checked before and after the external process.
@@ -178,6 +173,31 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
     Ok(result)
 }
 
+/// The scratch folder wtsexporter runs in (its working folder, the extract,
+/// and `result.json`), created inside the output folder. It is kept until
+/// after convert so media copy can read the extracted files.
+///
+/// The output is cleaned first. The writer cleans the output again when it
+/// opens, and a folder with no sentinel must then be empty, so a new folder
+/// that already held this scratch folder and `wtsexporter_result.json` would
+/// be refused. Cleaning here marks a new or empty folder before anything is
+/// written into it. A resumed run keeps its earlier output, so it is not
+/// cleaned.
+///
+/// # Errors
+///
+/// Returns an error when the output cannot be cleaned or marked, or the
+/// scratch folder cannot be created.
+fn scratch_dir_in_output(config: &ExporterConfig) -> Result<tempfile::TempDir> {
+    if !config.resume {
+        message_ir_format::clean_previous_ir_output(&config.output)?;
+    }
+    tempfile::Builder::new()
+        .prefix("wtsexporter-")
+        .tempdir_in(&config.output)
+        .context("create temp dir for wtsexporter")
+}
+
 #[cfg(test)]
 mod tests {
     use message_crate_core::testutil::jsonl_run_config;
@@ -235,5 +255,26 @@ mod tests {
                 output.display()
             );
         }
+    }
+
+    /// wtsexporter writes into the output folder before the writer opens it,
+    /// and the writer's clean refuses a folder with no sentinel that is not
+    /// empty. The scratch folder is made only after the output is marked.
+    #[test]
+    fn the_writer_accepts_an_output_that_holds_the_wtsexporter_scratch_folder() {
+        let tmp = tempfile::tempdir().unwrap();
+        let output = tmp.path().join("out");
+        fs::create_dir_all(&output).unwrap();
+        let config = jsonl_run_config(
+            &[],
+            &output,
+            SourceConfig::Whatsapp(WhatsappConfig::default()),
+        );
+
+        let work = super::scratch_dir_in_output(&config).unwrap();
+        fs::write(output.join("wtsexporter_result.json"), "{}").unwrap();
+
+        message_ir_format::clean_previous_ir_output(&output).unwrap();
+        assert!(work.path().is_dir(), "the scratch folder is kept");
     }
 }

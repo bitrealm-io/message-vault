@@ -54,7 +54,7 @@ describe("phonesMatch", () => {
   });
 
   it("does not treat a short code as a suffix of a longer number", () => {
-    expect(phonesMatch("60605", "+19415550100")).toBe(false);
+    expect(phonesMatch("50100", "+19415550100")).toBe(false);
   });
 });
 

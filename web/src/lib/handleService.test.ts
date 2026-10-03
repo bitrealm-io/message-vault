@@ -16,19 +16,19 @@ describe("handleService", () => {
   });
 
   it("infers email and phone from handle when service empty", () => {
-    expect(inferService("a@b.com", null)).toBe("email");
+    expect(inferService("a@example.com", null)).toBe("email");
     expect(inferService("+1 (555) 555-0119", "")).toBe("phone");
     expect(inferService("alice", null)).toBe("unknown");
   });
 
   it("prefers an explicit service over inference", () => {
-    expect(inferService("a@b.com", "WhatsApp")).toBe("whatsapp");
+    expect(inferService("a@example.com", "WhatsApp")).toBe("whatsapp");
   });
 
   it("formats user-facing labels for the handles table", () => {
     expect(formatHandleServiceLabel("x", "imessage")).toBe("Text Message");
     expect(formatHandleServiceLabel("x", "whatsapp")).toBe("WhatsApp");
-    expect(formatHandleServiceLabel("a@b.com", null)).toBe("Email");
+    expect(formatHandleServiceLabel("a@example.com", null)).toBe("Email");
     expect(formatHandleServiceLabel("x", null)).toBe("—");
   });
 });

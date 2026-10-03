@@ -7,6 +7,9 @@ export const HANDLE_SERVICES = [
   "whatsapp",
 ] as const satisfies readonly HandleService[];
 
+/** The example phone number shown in empty fields and in the validation message. */
+export const EXAMPLE_PHONE = "+1 555-555-0119";
+
 /**
  * The services an identity can be on, offered wherever one is added: setup,
  * the account profile, and the contact drawer. Each carries the example shown
@@ -14,9 +17,9 @@ export const HANDLE_SERVICES = [
  * adding its example on the same line — there is no second place to forget.
  */
 export const HANDLE_SERVICE_OPTIONS = [
-  { value: "phone", label: "Text Message", placeholder: "+1 555-555-0119" },
+  { value: "phone", label: "Text Message", placeholder: EXAMPLE_PHONE },
   { value: "email", label: "Email", placeholder: "you@example.com" },
-  { value: "whatsapp", label: "WhatsApp", placeholder: "+1 555-555-0119" },
+  { value: "whatsapp", label: "WhatsApp", placeholder: EXAMPLE_PHONE },
 ] as const satisfies ReadonlyArray<{
   value: HandleService;
   label: string;
@@ -51,7 +54,7 @@ export function handleValidationError(service: HandleService, value: string): st
   const digits = trimmed.replace(/\D/g, "");
   const onlyNumberCharacters = /^\+?[\d\s().-]+$/.test(trimmed);
   if (!onlyNumberCharacters || digits.length < 7 || digits.length > 15) {
-    return "Enter a phone number like +1 555-555-0119.";
+    return `Enter a phone number like ${EXAMPLE_PHONE}.`;
   }
   return null;
 }

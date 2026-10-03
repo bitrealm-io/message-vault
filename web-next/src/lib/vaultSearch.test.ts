@@ -267,13 +267,13 @@ describe("vault search + FTS", () => {
       assert.ok(
         byFirst.hits.every(
           (hit) =>
-            hit.title.includes("Recent") || hit.chatIdentifier.includes("51003"),
+            hit.title.includes("Recent") || hit.chatIdentifier.includes("50171"),
         ),
       );
       const byPhone = searchVault("phone:+15555550172");
       assert.ok(byPhone.totalConversations >= 1);
       assert.ok(
-        byPhone.hits.some((hit) => hit.chatIdentifier.includes("51004")),
+        byPhone.hits.some((hit) => hit.chatIdentifier.includes("50172")),
       );
     });
   });

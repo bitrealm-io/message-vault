@@ -588,6 +588,8 @@ mod tests {
     /// same fake data, which is what makes it shareable and comparable — so
     /// the mapping is a contract, not an implementation detail. Regenerate
     /// deliberately if it ever has to change, and say why in the commit.
+    /// The fake numbers on the right are the key's output, not chosen
+    /// numbers, so they can fall outside the reserved test ranges (#1521).
     #[test]
     fn known_answers_for_a_fixed_key() {
         const KEY: u8 = 7;
@@ -973,9 +975,9 @@ mod tests {
     #[test]
     fn text_keeps_valid_email_url_phone() {
         let mut a = Obfuscator::new(key(6));
-        let src = "Email alice@secret.com or https://secret.example/path?x=1 call +1 (555) 555-0119 thanks";
+        let src = "Email alice@example.com or https://secret.example/path?x=1 call +1 (555) 555-0119 thanks";
         let fake = a.obfuscate_text(src);
-        assert!(!fake.contains("alice@secret.com"));
+        assert!(!fake.contains("alice@example.com"));
         assert!(!fake.contains("secret.example"));
         assert!(!fake.contains("555) 555-0119"));
         assert!(fake.contains("@example.invalid"));

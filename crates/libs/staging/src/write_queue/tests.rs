@@ -31,6 +31,12 @@ fn doc_with(who: &str, count: usize) -> ConversationDocument {
     doc
 }
 
+/// The reserved test number `+1 555-555-01nn` for unit `n`, so a generator
+/// and a test that picks out one of its units name the same number.
+fn peer(n: u32) -> String {
+    format!("+155555501{n:02}")
+}
+
 fn unit_from(doc: ConversationDocument, sources: Vec<AttachmentSource>) -> ConversationUnit {
     let mut it = sources.into_iter();
     ConversationUnit::from_doc(doc, |_, _att| {
@@ -337,7 +343,7 @@ fn parallel_drain_writes_every_unit() {
     let units: Vec<_> = (0..12)
         .map(|i| {
             unit_from(
-                doc_with(&format!("+155555501{i:02}"), 1),
+                doc_with(&peer(i), 1),
                 vec![AttachmentSource::Bytes(format!("payload-{i}").into_bytes())],
             )
         })
@@ -365,13 +371,13 @@ fn parallel_drain_stops_on_the_first_error() {
     // A directory sitting where a conversation file must go: the write
     // fails for that unit, and the drain reports it rather than
     // finishing quietly.
-    let blocked = doc_with("+15555550108", 0).filename_stem();
+    let blocked = doc_with(&peer(3), 0).filename_stem();
     fs::create_dir_all(out.join(format!("{blocked}.jsonl"))).unwrap();
 
     let units: Vec<_> = (1..=4)
         .map(|i| {
             unit_from(
-                doc_with(&format!("+155555501{:02}", i + 5), 1),
+                doc_with(&peer(i), 1),
                 vec![AttachmentSource::Bytes(b"x".to_vec())],
             )
         })
@@ -393,7 +399,7 @@ fn last_attachment_bytes(writer_count: usize) -> (u64, u64) {
     // Each source claims 100 bytes for a 5-byte file.
     let units: Vec<_> = (1..=3)
         .map(|i| {
-            ConversationUnit::from_doc(doc_with(&format!("+155555501{:02}", i + 5), 1), |_, _| {
+            ConversationUnit::from_doc(doc_with(&peer(i), 1), |_, _| {
                 (AttachmentSource::Bytes(b"xxxxx".to_vec()), Some(100))
             })
         })
@@ -451,7 +457,7 @@ fn typed_progress_covers_prepare_and_attachments_across_units() {
     let units: Vec<_> = (1..=4)
         .map(|i| {
             unit_from(
-                doc_with(&format!("+155555501{:02}", i + 5), 1),
+                doc_with(&peer(i), 1),
                 vec![AttachmentSource::Bytes(b"x".to_vec())],
             )
         })

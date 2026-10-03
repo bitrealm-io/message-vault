@@ -1212,9 +1212,9 @@ mod unicode_case {
         let (pool, _dir, _f) = seeded().await;
         let mut conn = pool.acquire().await.unwrap();
         let a = ACCOUNT;
-        let address = handle(&mut conn, a, "Élodie.Ünal@example.fr", "imessage").await;
+        let address = handle(&mut conn, a, "Élodie.Ünal@example.net", "imessage").await;
         let elodie = contact(&mut conn, a, "Élodie Ünal", &[address]).await;
-        let plain = handle(&mut conn, a, "elodie.unal@example.fr", "imessage").await;
+        let plain = handle(&mut conn, a, "elodie.unal@example.net", "imessage").await;
         contact(&mut conn, a, "Elodie Unal", &[plain]).await;
         for q in [
             "name:élodie",
@@ -1265,7 +1265,7 @@ mod unicode_case {
         let (pool, _dir, f) = seeded().await;
         let mut conn = pool.acquire().await.unwrap();
         let a = ACCOUNT;
-        let oystein = handle(&mut conn, a, "Øystein@example.no", "imessage").await;
+        let oystein = handle(&mut conn, a, "Øystein@example.net", "imessage").await;
         contact(&mut conn, a, "Øystein Ås", &[oystein]).await;
         let trip = conversation(
             &mut conn,
@@ -1276,7 +1276,7 @@ mod unicode_case {
             &[oystein, f.bo_handle],
         )
         .await;
-        let plain = handle(&mut conn, a, "oystein@example.no", "imessage").await;
+        let plain = handle(&mut conn, a, "oystein@example.net", "imessage").await;
         contact(&mut conn, a, "Oystein As", &[plain]).await;
         conversation(
             &mut conn,

@@ -291,7 +291,7 @@ Bob Sample,2020-01-01 12:00:00,,,,,SMS,Incoming,+15555550100,Bob,Read,,,Hi,,imag
     )
     .unwrap();
     fs::write(
-        chat.join("2020-01-01 12 00 00 - Bob McRoy - image000000.jpg"),
+        chat.join("2020-01-01 12 00 00 - Bob Sample - image000000.jpg"),
         b"fake-jpeg-bytes",
     )
     .unwrap();

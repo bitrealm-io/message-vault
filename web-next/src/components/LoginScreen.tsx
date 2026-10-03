@@ -301,7 +301,7 @@ export function LoginScreen({
                       type="tel"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
-                      placeholder="(555) 789-1234"
+                      placeholder="(555) 555-0100"
                       aria-label="Phone number"
                       className="w-full rounded-md border border-border bg-bg px-3 py-2 text-[14px] text-text outline-none placeholder:text-muted focus:border-accent"
                     />
@@ -353,7 +353,7 @@ export function LoginScreen({
                       type="tel"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
-                      placeholder="(555) 789-1234"
+                      placeholder="(555) 555-0100"
                       aria-label="Phone number"
                       className="w-full rounded-md border border-border bg-bg px-3 py-2 text-[14px] text-text outline-none placeholder:text-muted focus:border-accent"
                     />

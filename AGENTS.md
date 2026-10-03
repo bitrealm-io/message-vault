@@ -89,10 +89,9 @@ only the user resolves it.
 
    If the push is rejected because the branch moved, rebase the fix commits
    onto it (`git fetch origin <headRefName> && git rebase origin/<headRefName>`),
-   rerun the checks, and push again. This holds only while HEAD has no merge
-   commit from step 5. A rebase drops a merge commit and replays the base's
-   commits one by one, which brings the conflict back, so after step 5 merge
-   the moved branch in instead (`git merge origin/<headRefName>`).
+   rerun the checks, and push again. The rebase applies only while HEAD has
+   no merge commit from step 5. Step 5 says how to handle a rejected push
+   after that.
 4. **Answer every thread**, with the commit that fixes it or the reason it
    stays as it is. Then resolve it if it is an agent thread:
 
@@ -123,8 +122,11 @@ only the user resolves it.
    ```
 
    If this push is rejected because the branch moved, fetch it and merge
-   `origin/<headRefName>` in too, then check and push again. A rebase here
-   would drop the merge commit, as step 3 says.
+   `origin/<headRefName>` in (`git merge origin/<headRefName>`). A rebase
+   would drop the merge commit and replay the base's commits one by one,
+   which brings the conflict back. If that merge conflicts too, resolve it,
+   commit, run `./scripts/check-pr.sh`, and review its remerge diff like the
+   first one. Then push again.
 
 6. **Wait for the required checks.** GitHub moves the pull request's head to
    a pushed commit a few seconds after the push, and starts its checks after

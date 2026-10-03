@@ -12038,6 +12038,13 @@
             "format": "int64",
             "description": "Replies in this thread."
           },
+          "owner": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The account holder's own address on this message: the one it was\nsent from, or the one it was received at. `None` when the backup\nnamed no owner."
+          },
           "sender": {
             "type": [
               "string",
@@ -13304,6 +13311,13 @@
                   "type": "integer",
                   "format": "int64",
                   "description": "Replies in this thread."
+                },
+                "owner": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "The account holder's own address on this message: the one it was\nsent from, or the one it was received at. `None` when the backup\nnamed no owner."
                 },
                 "sender": {
                   "type": [

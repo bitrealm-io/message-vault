@@ -71,7 +71,7 @@ Convert reads every file before it writes, so a refused file stops the whole run
 | **CSV (.csv)** | One `.csv` per conversation | `attachments/` folder. Columns: [CSV columns](/docs/developer/reference/csv-columns/) |
 | **EML (one file per message)** | One folder per conversation, one `.eml` per message | Embedded |
 | **MBOX (.mbox)** | One `.mbox` per conversation | Embedded |
-| **Android XML (smses.xml)** | One `smses.xml` | Embedded. Apple-only fields are dropped |
+| **Android XML (smses.xml)** | One `smses.xml` holding only SMS and MMS | Embedded |
 
 The folder layout is described in [Export structure](/docs/developer/reference/export-structure/).
 
@@ -100,4 +100,4 @@ It leaves a hidden file named `.message-crate-export` behind, which marks the fo
 ## Limits
 
 - Attachments reach the output only when they are present in the input folder, because Convert copies them from its `attachments` folder and never fetches them from the server.
-- Android XML has no place for Apple-only fields such as message effects and Tapbacks, so JSON or JSON Lines is the format to choose when that detail matters.
+- Android XML holds only SMS and MMS, because SMS Backup & Restore cannot describe an iMessage, a WhatsApp message or any other kind. Convert leaves every other message out and its log says how many: `Left out 3 message(s) that are not SMS or MMS, because SMS Backup & Restore holds only SMS and MMS`. JSON or JSON Lines is the format to choose when those messages matter.

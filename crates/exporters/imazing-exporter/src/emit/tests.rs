@@ -39,17 +39,14 @@ fn message_guid_prefers_digest_over_rel_path() {
     // Same digest, different relative paths → same GUID material.
     let a = pending_att("attachments/old_name.jpg", Some("abc123"));
     let b = pending_att("attachments/new_name.jpg", Some("abc123"));
-    assert_eq!(
-        attachment_guid_materials(&[a]),
-        attachment_guid_materials(&[b])
-    );
+    assert_eq!(attachment_digests(&[a]), attachment_digests(&[b]));
 
     // Digest present wins over path; path alone differs from digest.
     let with_digest = pending_att("attachments/x.jpg", Some("deadbeef"));
     let path_only = pending_att("attachments/x.jpg", None);
     assert_ne!(
-        attachment_guid_materials(&[with_digest]),
-        attachment_guid_materials(&[path_only])
+        attachment_digests(&[with_digest]),
+        attachment_digests(&[path_only])
     );
 
     // Order of attachments must not change the sorted material list.
@@ -58,7 +55,7 @@ fn message_guid_prefers_digest_over_rel_path() {
         pending_att("b.jpg", Some("aa")),
     ];
     assert_eq!(
-        attachment_guid_materials(&mixed),
+        attachment_digests(&mixed),
         vec!["aa".to_string(), "bb".to_string()]
     );
 }
@@ -211,9 +208,7 @@ fn rejects_unknown_timezone() {
 /// The Unix seconds `parse_message_date` gives `raw` in the zone named `tz`.
 fn secs_in(raw: &str, tz: &str) -> i64 {
     let zone = Zone::parse(Some(tz)).unwrap();
-    let (secs, date_ms) = parse_message_date(raw, zone).expect("date parses");
-    assert_eq!(date_ms, (secs * 1000).to_string());
-    secs
+    parse_message_date(raw, zone).expect("date parses")
 }
 
 #[test]

@@ -16,7 +16,7 @@ use message_ir::{
 };
 use message_staging::{AttachmentSource, AttachmentSpool, ExportWriter};
 use phone::{Handle, OwnerHandleSet};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -72,12 +72,6 @@ fn add_xml_messages(
     for msg in msgs {
         let chat_id = msg.other.key();
         let convo = ensure_conversation(conversations, chat_id, false, None, Vec::new());
-        let dedupe_key = format!(
-            "{}|{}|{}|",
-            msg.timestamp_secs as i64,
-            if msg.is_from_me { "1" } else { "0" },
-            msg.text
-        );
         convo.messages.push(PendingMessage {
             sort_key: msg.timestamp_secs as i64,
             is_from_me: msg.is_from_me,
@@ -91,7 +85,6 @@ fn add_xml_messages(
             attachments: Vec::new(),
             extra: {
                 let mut e = BTreeMap::new();
-                e.insert("dedupe_key".into(), dedupe_key);
                 e.insert("source_kind".into(), "xml".to_string());
                 e.insert("android_type".into(), msg.android_type);
                 e.insert("date_ms".into(), msg.date_ms);
@@ -230,25 +223,13 @@ fn pdu_target(
     }
 }
 
-/// The pending message for a PDU. Its `extra` map carries the dedupe key
-/// (time, direction, body, attachment digests) and the PDU diagnostics the
-/// projection reads back into the IR source fields.
+/// The pending message for a PDU. Its `extra` map carries the PDU
+/// diagnostics the projection reads back into the IR source fields.
 fn pdu_pending_message(
     parsed: ParsedPdu,
     sender: Option<Handle>,
     attachments: Vec<PendingAttachment>,
 ) -> PendingMessage {
-    let att_names: Vec<String> = attachments
-        .iter()
-        .map(|a| a.digest_sha256.clone().unwrap_or_default())
-        .collect();
-    let dedupe_key = format!(
-        "{}|{}|{}|{}",
-        parsed.timestamp,
-        if parsed.is_sent { "1" } else { "0" },
-        parsed.body,
-        att_names.join(",")
-    );
     // The projection names the owner as the sender of every outgoing message
     // itself, so only a received PDU carries its sender here.
     let sender_handle = match sender {
@@ -256,10 +237,9 @@ fn pdu_pending_message(
         _ => String::new(),
     };
     let mut extra = BTreeMap::new();
-    extra.insert("dedupe_key".into(), dedupe_key);
     extra.insert("source_kind".into(), "pdu".to_string());
     extra.insert("android_type".into(), String::new());
-    extra.insert("date_ms".into(), String::new());
+    // No `date_ms`: a PDU file records whole seconds only.
     extra.insert("contact_name".into(), String::new());
     extra.insert("pdu_filename".into(), pdu_basename(&parsed));
     if !parsed.fields.is_empty() {
@@ -277,52 +257,6 @@ fn pdu_pending_message(
         attachments,
         extra,
     }
-}
-
-/// Key prefix shared by XML and PDU rows: `secs|direction|text` up to the
-/// trailing attachment section. The XML key (`…|text|`) is a strict prefix of
-/// the PDU key (`…|body|att_names`) for the same message, so exact-key dedupe
-/// alone would let both rows through and export the MMS twice.
-fn dedupe_base_key(key: &str) -> &str {
-    key.rsplit_once('|').map_or(key, |(base, _)| base)
-}
-
-/// Drop duplicate pending messages, keeping the row with more attachments.
-fn dedupe_messages(messages: &mut Vec<PendingMessage>) {
-    messages.sort_by(|a, b| {
-        a.sort_key
-            .partial_cmp(&b.sort_key)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    let mut seen_base: HashMap<String, usize> = HashMap::new();
-    let mut out: Vec<PendingMessage> = Vec::with_capacity(messages.len());
-    for m in messages.drain(..) {
-        let base = dedupe_base_key(m.extra_str("dedupe_key")).to_string();
-        match seen_base.get(&base).copied() {
-            None => {
-                seen_base.insert(base, out.len());
-                out.push(m);
-            }
-            Some(idx) => {
-                let existing = &out[idx];
-                if existing.attachments.is_empty() && !m.attachments.is_empty() {
-                    // Same message in the XML backup (no attachments) and its
-                    // PDU file (with media): keep the row that carries them.
-                    out[idx] = m;
-                } else if existing.attachments.is_empty() || m.attachments.is_empty() {
-                    // Exact duplicate or an attachment-less row shadowed by a
-                    // richer one already kept: drop it.
-                } else {
-                    // Two attachment-bearing rows with the same prefix are
-                    // distinct MMS (same second, direction, and caption but
-                    // different media): keep both.
-                    seen_base.insert(base, out.len());
-                    out.push(m);
-                }
-            }
-        }
-    }
-    *messages = out;
 }
 
 /// True when the path has a `.xml` extension (any case).
@@ -495,7 +429,6 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
     };
     let mut documents = Vec::new();
     for (chat_id, mut convo) in conversations {
-        dedupe_messages(&mut convo.messages);
         if let Some(doc) = project_conversation(&chat_id, &mut convo, &hooks, &mut report) {
             documents.push(doc);
         }
@@ -841,90 +774,87 @@ mod tests {
         );
     }
 
-    fn test_msg(key: &str, attachments: usize) -> PendingMessage {
+    /// The messages of one conversation as the shared projection writes them.
+    fn project(messages: Vec<PendingMessage>) -> (Vec<message_ir::IrMessage>, ExportReport) {
+        let hooks = GoSmsProjection {
+            export: message_crate_core::export_meta(
+                EXPORT_SOURCE,
+                EXPORT_TOOL,
+                EXPORT_TOOL_VERSION,
+                Some("+15555550100".into()),
+                None,
+            ),
+        };
+        let mut convo = PendingConversation::new("+15555550122", false, None, Vec::new());
+        convo.messages = messages;
+        let mut report = ExportReport::default();
+        let doc = project_conversation("+15555550122", &mut convo, &hooks, &mut report).unwrap();
+        (doc.messages, report)
+    }
+
+    /// An XML row (milliseconds, no attachments) or a PDU row (whole
+    /// seconds) with `digests` as its attachments.
+    fn test_msg(source_kind: &str, text: &str, digests: &[&str]) -> PendingMessage {
+        let mut extra = BTreeMap::new();
+        extra.insert("source_kind".into(), source_kind.to_string());
+        if source_kind == "xml" {
+            extra.insert("date_ms".into(), "1609459200250".to_string());
+        }
         PendingMessage {
-            sort_key: 1609459200,
-            is_from_me: false,
+            sort_key: 1_609_459_200,
+            is_from_me: true,
             sender_handle: String::new(),
             sender_display_name: None,
-            text: String::new(),
-            attachments: (0..attachments)
-                .map(|i| PendingAttachment {
-                    rel_path: format!("attachments/a{i}.jpg"),
-                    content_type: String::new(),
-                    digest_sha256: None,
+            text: text.into(),
+            attachments: digests
+                .iter()
+                .map(|d| PendingAttachment {
+                    rel_path: String::new(),
+                    content_type: "image/jpeg".into(),
+                    digest_sha256: Some(d.to_string()),
                     name_hint: None,
                 })
                 .collect(),
-            extra: {
-                let mut e = BTreeMap::new();
-                e.insert("dedupe_key".into(), key.to_string());
-                e.insert("source_kind".into(), "xml".to_string());
-                e
-            },
+            extra,
         }
     }
 
     #[test]
-    fn dedupe_base_key_prefix() {
-        assert_eq!(dedupe_base_key("1609459200|1|hello|"), "1609459200|1|hello");
-        assert_eq!(
-            dedupe_base_key("1609459200|1|hello|attachments/a1.jpg"),
-            "1609459200|1|hello"
-        );
-        // Pipes inside the text must not split the base key.
-        assert_eq!(
-            dedupe_base_key("1609459200|1|he|llo|attachments/a1.jpg"),
-            "1609459200|1|he|llo"
-        );
-    }
-
-    #[test]
-    fn xml_and_pdu_mms_rows_collapse_keeping_attachments() {
+    fn xml_and_pdu_mms_rows_collapse_keeping_attachments_and_milliseconds() {
         // The same MMS appears in the XML backup (no attachments) and as a PDU
-        // row with media. Exact-key dedupe would export it twice.
-        let mut pdu_row = test_msg("1609459200|1|hello|attachments/a1.jpg", 1);
-        pdu_row.extra.insert("source_kind".into(), "pdu".into());
-        let mut msgs = vec![test_msg("1609459200|1|hello|", 0), pdu_row];
-        dedupe_messages(&mut msgs);
-        assert_eq!(msgs.len(), 1);
-        assert_eq!(msgs[0].attachments.len(), 1);
-        assert_eq!(msgs[0].extra_str("source_kind"), "pdu");
+        // file with media, in either order.
+        let xml = || test_msg("xml", "hello", &[]);
+        let pdu = || test_msg("pdu", "hello", &["a1"]);
+        for rows in [vec![xml(), pdu()], vec![pdu(), xml()]] {
+            let (msgs, report) = project(rows);
+            assert_eq!(msgs.len(), 1);
+            assert_eq!(report.duplicates_dropped, 1);
+            assert_eq!(msgs[0].attachments.len(), 1);
+            assert_eq!(
+                msgs[0].source.as_ref().unwrap().fields["source_kind"],
+                "pdu"
+            );
+            assert_eq!(msgs[0].timestamp_unix_ms, 1_609_459_200_250);
+        }
     }
 
     #[test]
-    fn distinct_mms_with_same_prefix_both_kept() {
+    fn distinct_mms_with_one_caption_in_one_second_are_both_kept() {
         // Two MMS sharing second, direction, and caption but with different
         // media are distinct messages: both rows survive.
-        let mut msgs = vec![
-            test_msg("1609459200|1|photo|attachments/a1.jpg", 1),
-            test_msg("1609459200|1|photo|attachments/a2.jpg", 1),
-        ];
-        dedupe_messages(&mut msgs);
+        let (msgs, _) = project(vec![
+            test_msg("pdu", "photo", &["a1"]),
+            test_msg("pdu", "photo", &["a2"]),
+        ]);
         assert_eq!(msgs.len(), 2);
+        assert_ne!(msgs[0].guid, msgs[1].guid);
     }
 
     #[test]
     fn plain_sms_duplicates_dropped() {
-        let mut msgs = vec![
-            test_msg("1609459200|1|hi|", 0),
-            test_msg("1609459200|1|hi|", 0),
-        ];
-        dedupe_messages(&mut msgs);
+        let (msgs, report) = project(vec![test_msg("xml", "hi", &[]), test_msg("xml", "hi", &[])]);
         assert_eq!(msgs.len(), 1);
-    }
-
-    #[test]
-    fn pdu_row_shadowed_by_xml_row_keeps_attachments() {
-        // Defensive: XML pass runs first, but if a PDU row with media ever
-        // precedes its XML twin, the attachment row still wins.
-        let mut pdu_row = test_msg("1609459200|1|hello|attachments/a1.jpg", 1);
-        pdu_row.extra.insert("source_kind".into(), "pdu".into());
-        let mut msgs = vec![pdu_row, test_msg("1609459200|1|hello|", 0)];
-        dedupe_messages(&mut msgs);
-        assert_eq!(msgs.len(), 1);
-        assert_eq!(msgs[0].attachments.len(), 1);
-        assert_eq!(msgs[0].extra_str("source_kind"), "pdu");
+        assert_eq!(report.duplicates_dropped, 1);
     }
 
     #[test]
@@ -944,12 +874,12 @@ mod tests {
             let addresses = PduAddresses::of(&parsed);
             pdu_pending_message(parsed, addresses.sender, Vec::new())
         };
-        let mut msgs = vec![pending("15555550122"), pending("15555550133")];
-        dedupe_messages(&mut msgs);
+        let (msgs, _) = project(vec![pending("15555550122"), pending("15555550133")]);
         assert_eq!(
             msgs.len(),
             2,
             "Lee's message was dropped as a duplicate of Ana's"
         );
+        assert_ne!(msgs[0].guid, msgs[1].guid);
     }
 }

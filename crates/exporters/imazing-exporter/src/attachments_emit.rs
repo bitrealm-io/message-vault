@@ -2,9 +2,10 @@
 
 use message_ir::{IrAttachment, PendingAttachment, PendingMessage};
 
-/// Materials for [`stable_guid`]: prefer content digests so a later run that
-/// finds and copies a previously missing file does not change the message id.
-pub(super) fn attachment_guid_materials(attachments: &[PendingAttachment]) -> Vec<String> {
+/// What tells a message's attachments apart, for its id and for the dedupe
+/// step: the content digest, so a later run that finds and copies a
+/// previously missing file does not change the message id, else the path.
+pub(super) fn attachment_digests(attachments: &[PendingAttachment]) -> Vec<String> {
     let mut digests: Vec<String> = attachments
         .iter()
         .map(|a| {

@@ -27,7 +27,7 @@ Discovery walks the selected path recursively without following directory symbol
   `read_date`, `edited_date`, `deleted_date`, `sent_date`, plus `group_title` when the session
   string is a display title.
 - `participants_json` is always written (unified header).
-- Deduplication key includes attachment identity so same-time/text with different media are kept.
+- The shared dedupe step (`message_ir::one_copy_per_message`) compares attachments by content digest, or by path when the file was not found, so rows with one time and text and different media are kept.
 - When the Import form's **Attachments** choice copies media (and always for mail / Xml), attachments are resolved by basename or
   suffix-match against files beside the source CSV and copied under `output/attachments/`.
 - When media is copied, the files beside a CSV that no row names are sorted after every CSV is read.

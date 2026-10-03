@@ -146,6 +146,13 @@ impl Obfuscator {
         out
     }
 
+    /// A keyed stand-in for an id, as 64 lowercase hex digits: the same id
+    /// gives the same stand-in under one key, two ids give two, and nobody
+    /// without the key can tell which id it stands for.
+    pub fn obfuscate_id(&self, raw: &str) -> String {
+        hex::encode(self.digest("id", raw))
+    }
+
     /// Human display name from the name word lists (keyed by normalized original).
     pub fn obfuscate_display_name(&mut self, raw: &str) -> String {
         let key = normalize_name_key(raw);
@@ -552,6 +559,19 @@ mod tests {
 
     fn key(n: u8) -> [u8; 32] {
         [n; 32]
+    }
+
+    /// An obfuscated export's message ids are made from these stand-ins, so
+    /// two ids must stay two and one key must always give the same one.
+    #[test]
+    fn an_id_stand_in_is_stable_under_one_key_and_tells_ids_apart() {
+        let anon = Obfuscator::new(key(1));
+        let a = anon.obfuscate_id("guid-a");
+        assert_eq!(a, anon.obfuscate_id("guid-a"));
+        assert_ne!(a, anon.obfuscate_id("guid-b"));
+        assert_ne!(a, Obfuscator::new(key(2)).obfuscate_id("guid-a"));
+        assert_eq!(a.len(), 64);
+        assert!(!a.contains("guid-a"));
     }
 
     /// Known-answer vectors for a fixed key.

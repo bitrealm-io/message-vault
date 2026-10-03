@@ -2,16 +2,17 @@
 //!
 //! Every exporter used to carry its own copy of this loop. The skeleton —
 //! participants with the single-peer fallback, owner sender handling,
-//! sent/received tallying, timestamp formatting, GUID derivation, and
-//! document assembly — lives here once; the genuine per-exporter deltas
-//! (vendor `source` fields, service selection, GUID materials, attachment
-//! mapping) are supplied through [`ProjectionHooks`].
+//! sent/received tallying, the dedupe step, GUID derivation, and document
+//! assembly — lives here once; the genuine per-exporter deltas (vendor
+//! `source` fields, service selection, attachment digests and vendor keys,
+//! attachment mapping) are supplied through [`ProjectionHooks`].
 
 use crate::{
     ConversationDocument, ConversationMeta, ConversationStats, ExportMeta, HandleType,
     IrAttachment, IrConversationType, IrDirection, IrMessage, IrMessageKind, IrParticipant,
-    IrService, IrSource, PendingAttachment, PendingConversation, PendingMessage, SCHEMA_VERSION,
-    format_local_ts, owner_sender, stable_guid,
+    IrService, IrSource, MessageCopy, MessageGuid, MessageIdentity, PendingAttachment,
+    PendingConversation, PendingMessage, SCHEMA_VERSION, TimePrecision, format_local_ts,
+    one_copy_per_message, owner_sender,
 };
 use std::collections::{BTreeMap, HashMap};
 
@@ -61,6 +62,8 @@ pub struct ProjectionTally {
     pub received: u64,
     /// Messages with [`ProjectedRole::Notification`].
     pub notifications: u64,
+    /// Copies dropped because they repeat a message kept (see [`one_copy_per_message`]).
+    pub duplicates: u64,
 }
 
 /// Per-exporter deltas of the shared [`pending_to_document`] projection.
@@ -85,14 +88,21 @@ pub trait ProjectionHooks {
         raw.to_string()
     }
 
-    /// Materials fed into [`stable_guid`] alongside chat, timestamp,
-    /// direction, and text. The default uses each attachment's digest
-    /// (empty string when unknown), in order.
-    fn guid_materials(&self, msg: &PendingMessage) -> Vec<String> {
+    /// What tells the message's attachments apart, for its [`MessageGuid`]
+    /// and for the dedupe step ([`one_copy_per_message`]). The default uses
+    /// each attachment's digest; an unknown digest counts as none.
+    fn attachment_digests(&self, msg: &PendingMessage) -> Vec<String> {
         msg.attachments
             .iter()
-            .map(|a| a.digest_sha256.clone().unwrap_or_default())
+            .filter_map(|a| a.digest_sha256.clone())
             .collect()
+    }
+
+    /// The source's own id for the message, where it has one. It goes into
+    /// the [`MessageGuid`], and two copies with different ones are two
+    /// messages. The default has none.
+    fn vendor_key(&self, _msg: &PendingMessage) -> Option<String> {
+        None
     }
 
     /// Map one queued attachment onto the shared [`IrAttachment`] shape.
@@ -168,12 +178,38 @@ pub trait ProjectionHooks {
     }
 }
 
+/// The UTC instant of one pending message in milliseconds, and how finely
+/// the source recorded it.
+///
+/// A sort key in milliseconds is the time. Otherwise a `date_ms` extra that
+/// holds a number is the time to the millisecond, and without one the time
+/// is the sort key's whole second.
+pub fn message_time(msg: &PendingMessage, unit: SortKeyUnit) -> (i64, TimePrecision) {
+    match unit {
+        SortKeyUnit::Milliseconds => (msg.sort_key, TimePrecision::Milliseconds),
+        SortKeyUnit::Seconds => match msg.extra_str("date_ms").trim().parse::<i64>() {
+            Ok(ms) => (ms, TimePrecision::Milliseconds),
+            Err(_) => (msg.sort_key.saturating_mul(1000), TimePrecision::Seconds),
+        },
+    }
+}
+
+/// What the projection reads from one pending message before it decides
+/// which copies to keep.
+struct Prepared {
+    sender: Option<String>,
+    timestamp_unix_ms: i64,
+    precision: TimePrecision,
+    attachment_digests: Vec<String>,
+    vendor_key: Option<String>,
+}
+
 /// Build a [`ConversationDocument`] from one pending conversation.
 ///
 /// The skeleton shared by every exporter: participants (with the single-peer
-/// chat-id fallback), the owner sender for outgoing rows, `format_local_ts` +
-/// [`stable_guid`] per message, the `date_ms`-extra-with-fallback timestamp,
-/// and document assembly. Timestamps must already be representable — run
+/// chat-id fallback), the owner sender for outgoing rows, one copy kept per
+/// message ([`one_copy_per_message`]), a [`MessageGuid`] per message, and
+/// document assembly. Timestamps must already be representable — run
 /// [`prepare_conversation`] (or an equivalent prune) first.
 ///
 /// Returns the document and a [`ProjectionTally`] for the caller to fold into
@@ -185,10 +221,46 @@ pub fn pending_to_document<H: ProjectionHooks + ?Sized>(
 ) -> (ConversationDocument, ProjectionTally) {
     let export = hooks.export();
     let (owner_sender_handle, owner_sender_display) = owner_sender(&export);
+    let unit = hooks.sort_key_unit();
+
+    let prepared: Vec<Prepared> = convo
+        .messages
+        .iter()
+        .map(|msg| {
+            let (timestamp_unix_ms, precision) = message_time(msg, unit);
+            Prepared {
+                sender: (!msg.sender_handle.is_empty())
+                    .then(|| hooks.normalize_handle(&msg.sender_handle)),
+                timestamp_unix_ms,
+                precision,
+                attachment_digests: hooks.attachment_digests(msg),
+                vendor_key: hooks.vendor_key(msg),
+            }
+        })
+        .collect();
+    let copies: Vec<MessageCopy<'_>> = convo
+        .messages
+        .iter()
+        .zip(&prepared)
+        .map(|(msg, p)| MessageCopy {
+            is_from_me: msg.is_from_me,
+            sender: p.sender.as_deref(),
+            timestamp_unix_ms: p.timestamp_unix_ms,
+            precision: p.precision,
+            text: &msg.text,
+            attachment_digests: &p.attachment_digests,
+            vendor_key: p.vendor_key.as_deref(),
+        })
+        .collect();
+    let kept = one_copy_per_message(&copies);
 
     let mut tally = ProjectionTally::default();
     let mut messages = Vec::with_capacity(convo.messages.len());
-    for msg in &convo.messages {
+    for ((msg, p), kept) in convo.messages.iter().zip(&prepared).zip(kept) {
+        let Some(timestamp_unix_ms) = kept else {
+            tally.duplicates += 1;
+            continue;
+        };
         let role = hooks.role(msg);
         tally.messages += 1;
         match role {
@@ -197,31 +269,22 @@ pub fn pending_to_document<H: ProjectionHooks + ?Sized>(
             ProjectedRole::Notification => tally.notifications += 1,
         }
 
-        let (secs, fallback_ms) = match hooks.sort_key_unit() {
-            SortKeyUnit::Seconds => (msg.sort_key, msg.sort_key.saturating_mul(1000)),
-            SortKeyUnit::Milliseconds => (msg.sort_key / 1000, msg.sort_key),
-        };
-        let (ts_local, _, _) = format_local_ts(secs).expect("timestamp validated above");
-        let guid = stable_guid(
-            chat_id,
-            &ts_local,
-            msg.is_from_me,
-            &msg.text,
-            &hooks.guid_materials(msg),
-        );
-        let timestamp_unix_ms = msg
-            .extra_str("date_ms")
-            .parse::<i64>()
-            .unwrap_or(fallback_ms);
+        let guid = MessageGuid::new(&MessageIdentity {
+            chat: chat_id,
+            is_from_me: msg.is_from_me,
+            sender: p.sender.as_deref(),
+            timestamp_unix_ms,
+            text: &msg.text,
+            attachment_digests: &p.attachment_digests,
+            vendor_key: p.vendor_key.as_deref(),
+        })
+        .into_string();
 
         let outgoing = role == ProjectedRole::Outgoing;
         let (sender_handle, sender_display_name) = if outgoing {
             (owner_sender_handle.clone(), owner_sender_display.clone())
         } else {
-            (
-                (!msg.sender_handle.is_empty()).then(|| hooks.normalize_handle(&msg.sender_handle)),
-                msg.sender_display_name.clone(),
-            )
+            (p.sender.clone(), msg.sender_display_name.clone())
         };
         let attachments: Vec<IrAttachment> = msg
             .attachments
@@ -577,12 +640,43 @@ mod tests {
 
         let (doc, _) = pending_to_document("+15555550122", &convo, &MillisecondHooks);
         assert_eq!(doc.messages[0].timestamp_unix_ms, 1_609_459_200_123);
-        // The GUID is built from the message's second, not its millisecond.
-        let (ts_local, _, _) = format_local_ts(1_609_459_200).unwrap();
-        assert_eq!(
-            doc.messages[0].guid,
-            stable_guid("+15555550122", &ts_local, false, "hi", &[])
-        );
+        // The GUID is built from the message's millisecond.
+        let guid = MessageGuid::new(&MessageIdentity {
+            chat: "+15555550122",
+            is_from_me: false,
+            sender: Some("+15555550122"),
+            timestamp_unix_ms: 1_609_459_200_123,
+            text: "hi",
+            attachment_digests: &[],
+            vendor_key: None,
+        });
+        assert_eq!(doc.messages[0].guid, guid.as_str());
+    }
+
+    /// GO SMS Pro writes an MMS once to its XML backup, with milliseconds and
+    /// no attachments, and once as a PDU file, with whole seconds and the
+    /// attachments. One message comes out, with both.
+    #[test]
+    fn an_xml_row_and_its_pdu_file_are_one_message_with_the_attachments_and_the_milliseconds() {
+        let mut xml = msg(1_609_459_200, false, "look");
+        xml.extra.insert("date_ms".into(), "1609459200250".into());
+        let mut pdu = msg(1_609_459_200, false, "look");
+        pdu.attachments = vec![PendingAttachment {
+            rel_path: String::new(),
+            content_type: "image/jpeg".into(),
+            digest_sha256: Some("a".repeat(64)),
+            name_hint: None,
+        }];
+        for order in [vec![xml.clone(), pdu.clone()], vec![pdu, xml]] {
+            let mut convo = PendingConversation::new("+15555550122", false, None, Vec::new());
+            convo.messages = order;
+            let (doc, tally) = pending_to_document("+15555550122", &convo, &TestHooks);
+            assert_eq!(doc.messages.len(), 1);
+            assert_eq!(tally.duplicates, 1);
+            assert_eq!(tally.messages, 1);
+            assert_eq!(doc.messages[0].attachments.len(), 1);
+            assert_eq!(doc.messages[0].timestamp_unix_ms, 1_609_459_200_250);
+        }
     }
 
     #[test]

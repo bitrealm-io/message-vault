@@ -1,12 +1,7 @@
-//! Build fingerprint strings so duplicate EML messages collapse to one row.
+//! The chat a parsed EML message belongs to, and its time in milliseconds.
 //!
-//! Convert dedupe uses [`cover_identity`]: chat + whole-second time + direction +
-//! collapsed text. It ignores `X-smssync-id`, because the same message exported
-//! twice can carry the id in one copy and not the other, and it floors the time
-//! to the whole second so two exports that disagree below a second still meet.
-//!
-//! Collapsing whitespace in the text avoids two identities for tiny export
-//! differences.
+//! Which copies of a message are one message is decided by the shared
+//! projection (`message_ir::one_copy_per_message`), not here.
 
 use crate::types::ParsedMessage;
 
@@ -47,67 +42,9 @@ pub(crate) fn name_only_key(msg: &ParsedMessage) -> Option<String> {
     Some(name.to_string())
 }
 
-/// Message time as milliseconds since 1970 (for identity strings).
+/// Message time as milliseconds since 1970.
 pub(crate) fn timestamp_ms(timestamp_secs: f64) -> i64 {
     (timestamp_secs * 1000.0).round() as i64
-}
-
-/// Clean the body text before fingerprinting.
-///
-/// Turns newlines into spaces and squeezes repeated spaces so
-/// `"Hello  \n\t from Alice\n"` matches `"Hello from Alice"`.
-pub(crate) fn normalized_text(text: &str) -> String {
-    let unified = text.replace("\r\n", "\n").replace('\r', "\n");
-    unified.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-/// Floor millisecond timestamp to the start of its whole second.
-pub(crate) fn floor_ms_to_sec(ms: i64) -> i64 {
-    ms.div_euclid(1000) * 1000
-}
-
-/// Convert dedupe key: chat + whole-second time + direction + text.
-///
-/// When the message has attachment digests, those digests are appended so two
-/// same-second empty-caption MMS with different media stay distinct. Text-only
-/// messages keep the plain key, so two exports of the same SMS still collapse.
-/// Sub-second time and `X-smssync-id` stay ignored.
-pub(crate) fn cover_identity(msg: &ParsedMessage) -> String {
-    let mut key = cover_identity_from_parts(
-        &chat_id_for(msg),
-        timestamp_ms(msg.timestamp_secs),
-        msg.is_from_me,
-        &normalized_text(&msg.text),
-    );
-    let mut digests: Vec<&str> = msg
-        .attachments
-        .iter()
-        .map(|a| a.digest_hex.as_str())
-        .filter(|d| !d.is_empty())
-        .collect();
-    if !digests.is_empty() {
-        digests.sort_unstable();
-        digests.dedup();
-        key.push('|');
-        key.push_str(&digests.join(","));
-    }
-    key
-}
-
-/// The dedupe identity: chat, second-floored time, direction, and text.
-pub(crate) fn cover_identity_from_parts(
-    chat_id: &str,
-    timestamp_ms: i64,
-    is_from_me: bool,
-    text: &str,
-) -> String {
-    format!(
-        "{}|{}|{}|{}",
-        chat_id,
-        floor_ms_to_sec(timestamp_ms),
-        if is_from_me { "1" } else { "0" },
-        text,
-    )
 }
 
 #[cfg(test)]
@@ -125,6 +62,7 @@ mod tests {
             group_title: None,
             participants: peer.iter().cloned().collect(),
             timestamp_secs: ts,
+            has_milliseconds: true,
             is_from_me,
             sender: peer.filter(|_| !is_from_me),
             text: text.into(),
@@ -134,68 +72,6 @@ mod tests {
             android_type: String::new(),
             eml_path: String::new(),
         }
-    }
-
-    #[test]
-    fn cover_identity_floors_to_second() {
-        let whole = sample_msg("4075551234", 1609459200.0, false, "Hello");
-        let subsec = sample_msg("4075551234", 1609459200.488, false, "Hello");
-        assert_eq!(cover_identity(&whole), cover_identity(&subsec));
-        assert_eq!(cover_identity(&whole), "+14075551234|1609459200000|0|Hello");
-    }
-
-    #[test]
-    fn cover_identity_ignores_smssync_id() {
-        let mut a = sample_msg("4075551234", 1609459200.1, false, "Hello");
-        a.smssync_id = Some("1".into());
-        let mut b = sample_msg("4075551234", 1609459200.9, false, "Hello");
-        b.smssync_id = Some("2".into());
-        assert_eq!(cover_identity(&a), cover_identity(&b));
-    }
-
-    #[test]
-    fn cover_identity_distinct_chats() {
-        let a = sample_msg("5555550122", 1609459300.0, false, "Hello from Sam");
-        let b = sample_msg("5555550111", 1609459200.313, true, "Hello from Alex");
-        assert_ne!(cover_identity(&a), cover_identity(&b));
-    }
-
-    #[test]
-    fn cover_identity_separates_same_second_mms_by_digest() {
-        use crate::types::AttachmentBlob;
-        let mut a = sample_msg("4075551234", 1609459200.1, false, "");
-        a.attachments.push(AttachmentBlob {
-            filename: "a.jpg".into(),
-            digest_hex: "aaa".into(),
-            ..Default::default()
-        });
-        let mut b = sample_msg("4075551234", 1609459200.9, false, "");
-        b.attachments.push(AttachmentBlob {
-            filename: "b.jpg".into(),
-            digest_hex: "bbb".into(),
-            ..Default::default()
-        });
-        assert_ne!(cover_identity(&a), cover_identity(&b));
-        let mut a2 = sample_msg("4075551234", 1609459200.2, false, "");
-        a2.attachments.push(AttachmentBlob {
-            filename: "a-copy.jpg".into(),
-            digest_hex: "aaa".into(),
-            ..Default::default()
-        });
-        assert_eq!(cover_identity(&a), cover_identity(&a2));
-    }
-
-    #[test]
-    fn cover_identity_collapses_whitespace() {
-        let mut spaced = sample_msg("4075551234", 1609459200.5, false, "Hello");
-        spaced.text = "Hello  \n\t from\r\nAlice\n".into();
-        let compact = sample_msg("4075551234", 1609459200.5, false, "Hello from Alice");
-        assert_eq!(cover_identity(&spaced), cover_identity(&compact));
-    }
-
-    #[test]
-    fn normalized_text_collapses_runs() {
-        assert_eq!(normalized_text("  a \n\n b\t "), "a b");
     }
 
     #[test]
@@ -228,21 +104,5 @@ mod tests {
         let mut msg = sample_msg("", 1.0, false, "hi");
         msg.name_alias = Some("  José Ramírez \t".into());
         assert_eq!(chat_id_for(&msg), "José Ramírez");
-    }
-
-    #[test]
-    fn verify_e3_1_two_group_senders_in_one_second_have_two_identities() {
-        let mut alice = sample_msg(
-            "15555550111_15555550122",
-            1_600_000_000.1,
-            false,
-            "Happy birthday!",
-        );
-        alice.conversation_type = "group".into();
-        alice.sender = phone::Handle::parse("15555550111");
-        let mut bob = alice.clone();
-        bob.timestamp_secs = 1_600_000_000.6;
-        bob.sender = phone::Handle::parse("15555550122");
-        assert_ne!(cover_identity(&alice), cover_identity(&bob));
     }
 }

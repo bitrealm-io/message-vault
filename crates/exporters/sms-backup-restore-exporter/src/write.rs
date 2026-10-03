@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use message_crate_core::ExportReport;
 use message_ir::{
     ConversationDocument, IrAttachment, IrConversationType, IrDirection, IrMessage, IrMessageKind,
-    nonempty,
+    IrService, nonempty,
 };
 use message_ir_format::{MergedArchive, load_attachment_bytes};
 use sbr::{
@@ -24,10 +24,29 @@ const MMS_ADDR_TO: &str = "151";
 /// line feed and carriage return).
 pub(crate) const CHARACTERS_LEFT_OUT: &str = "control_characters_left_out";
 
+/// The export report counter for messages left out of `smses.xml` because
+/// their service is neither SMS nor MMS. SMS Backup & Restore can describe
+/// only those two, and an iMessage or a WhatsApp message written as `<sms>`
+/// would come back from a re-import as an SMS under a new id (ADR 0021).
+pub const NOT_SMS_OR_MMS_LEFT_OUT: &str = "messages_not_sms_or_mms_left_out";
+
+/// The run's log line for [`NOT_SMS_OR_MMS_LEFT_OUT`]: how many messages
+/// were left out and why. `None` when the run left none out.
+pub fn not_sms_or_mms_line(report: &ExportReport) -> Option<String> {
+    let left_out = report.extra(NOT_SMS_OR_MMS_LEFT_OUT);
+    (left_out > 0).then(|| {
+        format!(
+            "Left out {left_out} message(s) that are not SMS or MMS, because SMS Backup & \
+             Restore holds only SMS and MMS"
+        )
+    })
+}
+
 /// Session that appends conversations into a single `{output}/smses.xml`.
 pub(crate) struct SbrBackupSession {
     writer: SbrBackupWriter,
     output_dir: PathBuf,
+    not_sms_or_mms: u64,
 }
 
 impl SbrBackupSession {
@@ -43,15 +62,25 @@ impl SbrBackupSession {
         Ok(Self {
             writer: SbrBackupWriter::create(&path)?,
             output_dir: output_dir.to_path_buf(),
+            not_sms_or_mms: 0,
         })
     }
 
-    /// Write every message of one conversation as SBR `<sms>` or `<mms>` elements.
+    /// Write the SMS and MMS of one conversation as SBR `<sms>` or `<mms>`
+    /// elements, and count every other message as left out. A conversation
+    /// with no SMS or MMS writes nothing.
     pub fn append_document(&mut self, doc: &ConversationDocument) -> Result<()> {
-        for msg in document_to_sbr_messages(doc, &self.output_dir)? {
+        let written = document_to_sbr_messages(doc, &self.output_dir)?;
+        self.not_sms_or_mms += (doc.messages.len() - written.len()) as u64;
+        for msg in written {
             self.writer.write_message(&msg)?;
         }
         Ok(())
+    }
+
+    /// Messages left out so far because their service is neither SMS nor MMS.
+    pub fn not_sms_or_mms_left_out(&self) -> u64 {
+        self.not_sms_or_mms
     }
 
     /// Characters left out so far because XML 1.0 cannot carry them.
@@ -65,7 +94,8 @@ impl SbrBackupSession {
     }
 }
 
-/// Map one conversation's messages into SBR XML elements (lossy for iMessage).
+/// Map one conversation's SMS and MMS into SBR XML elements. A message on
+/// any other service is left out, because the format cannot describe it.
 pub(crate) fn document_to_sbr_messages(
     doc: &ConversationDocument,
     output_dir: &Path,
@@ -77,7 +107,9 @@ pub(crate) fn document_to_sbr_messages(
         .and_then(nonempty)
         .unwrap_or_default();
     let mut out = Vec::with_capacity(doc.messages.len());
-    for msg in &doc.messages {
+    // An MMS carries the `Sms` service with the `Mms` kind, so the service
+    // alone decides. iMessage's SMS fallback carries it too.
+    for msg in doc.messages.iter().filter(|m| m.service == IrService::Sms) {
         out.push(ir_message_to_sbr(doc, msg, &owner, output_dir)?);
     }
     Ok(out)
@@ -489,6 +521,10 @@ impl MergedArchive for SbrArchive {
         let left_out = session.characters_left_out();
         if left_out > 0 {
             report.bump(CHARACTERS_LEFT_OUT, left_out);
+        }
+        let not_sms_or_mms = session.not_sms_or_mms_left_out();
+        if not_sms_or_mms > 0 {
+            report.bump(NOT_SMS_OR_MMS_LEFT_OUT, not_sms_or_mms);
         }
         session.finish()
     }

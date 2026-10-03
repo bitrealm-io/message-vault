@@ -14,7 +14,7 @@ use message_ir_format::{
     read_conversation_mbox,
 };
 use message_staging::AttachmentSpool;
-use sms_backup_restore_exporter::{ReadOptions, SbrArchive, read_backup};
+use sms_backup_restore_exporter::{ReadOptions, SbrArchive, not_sms_or_mms_line, read_backup};
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
@@ -62,6 +62,7 @@ impl ReexportReport {
             ));
         }
         lines.extend(self.report.media_lines());
+        lines.extend(not_sms_or_mms_line(&self.report));
         lines
     }
 }

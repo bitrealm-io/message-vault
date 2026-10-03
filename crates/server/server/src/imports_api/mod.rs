@@ -263,8 +263,9 @@ pub enum ImportSchemaMode {
 
 /// Test helper: open a configured database and run one import.
 ///
-/// Production paths use [`import_jsonl_files_on_conn`] on their own
-/// connection (HTTP serve, CLI import, the Demo Account build).
+/// Production paths run on their own connection: HTTP serve through
+/// [`import_jsonl_files_on_conn`], and the `import` command and the Demo
+/// Account build through [`import_on_conn`].
 #[cfg(test)]
 pub(crate) async fn import_jsonl_files(
     db_path: &Path,

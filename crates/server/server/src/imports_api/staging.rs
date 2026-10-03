@@ -84,11 +84,6 @@ fn try_store_converted(
     )
 }
 
-/// An attachment's path as the export sent it, for a refusal to name.
-fn path_as_sent(att: &AttachmentRecord) -> String {
-    att.path.clone().unwrap_or_default()
-}
-
 /// Store an attachment by the sha256 the export claims (reusing an existing blob) or by
 /// hashing its file, counting the ones whose file is missing.
 fn store_claimed_or_path(
@@ -129,7 +124,7 @@ fn store_claimed_or_path(
                 // naming the line and the path as sent.
                 Err(_) => {
                     return Err(ImportFailure::AttachmentSha256Invalid {
-                        path: path_as_sent(att),
+                        path: att.path.clone().unwrap_or_default(),
                         stated: sha.to_string(),
                         line,
                     }
@@ -160,7 +155,7 @@ fn store_claimed_or_path(
                 // the sender's to fix, naming the line and the path as sent.
                 Err(AssetError::Mismatch { claimed, actual }) => {
                     Err(ImportFailure::AttachmentMismatch {
-                        path: path_as_sent(att),
+                        path: att.path.clone().unwrap_or_default(),
                         stated: claimed,
                         actual,
                         line,

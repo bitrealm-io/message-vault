@@ -71,8 +71,10 @@ pub struct ConversationSummary {
     pub participants: Vec<Participant>,
     /// Messages in the conversation (excluding hidden duplicates).
     pub message_count: u64,
-    /// Timestamp of the last message.
-    pub last_message_at: String,
+    /// Timestamp of the last message; `null` when every message in the
+    /// conversation is a duplicate, so none is left to date it.
+    #[schema(required = true)]
+    pub last_message_at: Option<String>,
     /// Timestamp of the conversation's first message.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub date_range_start: Option<String>,
@@ -247,10 +249,6 @@ async fn load_conversation_rows(
 
     let mut out = Vec::with_capacity(rows.len());
     for row in rows {
-        let last = row
-            .last_message_at
-            .clone()
-            .unwrap_or_else(|| "1970-01-01T00:00:00Z".into());
         let is_group = row.conversation_type.eq_ignore_ascii_case("group");
         let service = display_service_label(
             source_sets
@@ -263,7 +261,7 @@ async fn load_conversation_rows(
             id: row.id,
             participants: parts,
             message_count: row.message_count.max(0) as u64,
-            last_message_at: last,
+            last_message_at: row.last_message_at,
             date_range_start: row.date_range_start,
             date_range_end: row.date_range_end,
             service,

@@ -307,17 +307,10 @@ fn persist_clone(
     let name = attachment_dest_name(secs, &digest_hex, &ext);
     let dest = attachments_dir.join(&name);
     let tmp = attachments_dir.join(next_clone_temp_name(&name));
-    let written = fs::write(&tmp, bytes)
-        .map_err(|e| format!("write {}: {e}", tmp.display()))
-        .and_then(|()| {
-            fs::rename(&tmp, &dest).map_err(|e| format!("rename {}: {e}", dest.display()))
-        });
-    if let Err(err) = written {
-        // A write that stopped part way, or a rename that never happened,
-        // leaves the temp file behind, and nothing points at it.
-        let _ = fs::remove_file(&tmp);
-        return Err(err);
-    }
+    // Synced before the conversation file that names it is written, so that
+    // file never vouches for an attachment a power loss left empty.
+    message_ir::write_atomic_via(&tmp, &dest, |out| Ok(out.write_all(bytes)?))
+        .map_err(|e| format!("{e:#}"))?;
     job.attachment.path = Some(format!("attachments/{name}"));
     job.attachment.digest_sha256 = Some(digest_hex);
     job.attachment.size_bytes = Some(bytes.len() as u64);

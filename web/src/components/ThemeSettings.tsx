@@ -189,7 +189,7 @@ export default function ThemeSettings() {
               if (!ok) setShareDraft(shareString);
             }}
             aria-invalid={shareError}
-            className={`min-w-0 flex-1 rounded-md border bg-bg px-2.5 py-1.5 font-mono text-[0.75rem] text-text outline-none ${
+            className={`min-w-0 flex-1 rounded-md border bg-bg px-2.5 py-1.5 font-mono text-[0.75rem] text-text outline-none focus:border-accent ${
               shareError ? "border-danger" : "border-border"
             }`}
           />

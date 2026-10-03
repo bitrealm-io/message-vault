@@ -4,7 +4,7 @@ import { IMESSAGE_SOURCE_ID } from "./imessageImport";
 import { WHATSAPP_SOURCE_ID } from "./whatsappImport";
 
 describe("EXPORT_SOURCES", () => {
-  it("lists one iMessage row instead of separate iOS and macOS sources", () => {
+  it("lists one Apple Messages row instead of separate iOS and macOS sources", () => {
     const ids = EXPORT_SOURCES.map((s) => s.id);
     expect(ids).toContain(IMESSAGE_SOURCE_ID);
     expect(ids).not.toContain("imessage-ios");
@@ -14,7 +14,7 @@ describe("EXPORT_SOURCES", () => {
     expect(ids).not.toContain("whatsapp-ios");
     expect(EXPORT_SOURCES.find((s) => s.id === WHATSAPP_SOURCE_ID)?.label).toBe("WhatsApp");
     expect(ids).toContain("sms-backup-restore");
-    expect(EXPORT_SOURCES.find((s) => s.id === IMESSAGE_SOURCE_ID)?.label).toBe("iMessage");
+    expect(EXPORT_SOURCES.find((s) => s.id === IMESSAGE_SOURCE_ID)?.label).toBe("Apple Messages");
     expect(new Set(ids).size).toBe(ids.length);
   });
 });

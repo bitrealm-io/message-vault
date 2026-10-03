@@ -40,13 +40,13 @@ pub struct CreateSessionResponse {
 }
 
 impl CreateSessionResponse {
-    /// Issue (or reuse) the session token for an existing account. Uses the
-    /// account id when the row has no username.
+    /// Issue the session token for an existing account, replacing the one it
+    /// held. Uses the account id when the row has no username.
     async fn for_existing_account(
         conn: &mut SqliteConnection,
         account_id: i64,
     ) -> anyhow::Result<CreateSessionResponse> {
-        let token = session_tokens::get_or_create_session_token(conn, account_id).await?;
+        let token = session_tokens::rotate_account_session_token(conn, account_id).await?;
         account_profile::record_login(conn, account_id).await?;
         let username = account_profile::username_for_account(conn, account_id)
             .await?

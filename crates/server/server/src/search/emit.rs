@@ -205,12 +205,8 @@ const PARTICIPANT_NAME: &str =
 ///
 /// The route is `participants → contact_handles → contacts`, the same one
 /// `db::participant_names` takes, because ADR-0006 says a handle counts as a
-/// Contact's the moment it is on the Contact.
-/// `participants.contact_id` is written once at import and never updated,
-/// while the link in `contact_handles` changes whenever a handle is linked,
-/// two contacts are merged, or an address book adopts someone. Joining on
-/// `participants.contact_id` therefore showed one name in the conversation
-/// list and found a different one with `name:`.
+/// Contact's the moment it is on the Contact. Every participant has a handle,
+/// so this one route reaches every participant's Contact.
 ///
 /// A contact in the trash is not joined unless the query carries `trashed:`
 /// (#724): `pct` is then NULL for its participant, and the name read is the
@@ -292,7 +288,7 @@ fn emit_field(ctx: &ListCtx, out: &mut Sql, term: &FieldTerm) -> Result<(), Quer
 /// One value of one word, written against the innermost alias it needs.
 fn emit_one(ctx: &ListCtx, out: &mut Sql, term: &FieldTerm, v: &Value) -> Result<(), QueryError> {
     match term.spec.word {
-        "body" | "subject" | "name" | "title" | "handle" | "filename" => {
+        "body" | "subject" | "name" | "title" | "identity" | "filename" => {
             emit_text_word(ctx, out, term, v)
         }
         "with" | "from" | "to" | "in" | "group" | "tag" | "import" => {
@@ -354,7 +350,7 @@ fn text_match(out: &mut Sql, column: &str, term: &FieldTerm, v: &Value) -> Resul
     }
 }
 
-/// The six text words. On Contacts, `name:` and `handle:` look at the
+/// The six text words. On Contacts, `name:` and `identity:` look at the
 /// contact itself; everywhere else they look at the conversation's
 /// participants. `body:`, `subject:`, and `filename:` always look at
 /// messages (and their attachments); `title:` always looks at the
@@ -387,12 +383,15 @@ fn emit_text_word(
             result = text_match(o, PARTICIPANT_NAME, term, v);
             o.push(")");
         }),
-        ("handle", ListKind::Contacts) => match v {
+        // `none` and `any` ask about addresses. An identity of type `other`
+        // holds a name the backup gave with no address, so it is not one,
+        // the way it does not keep a contact out of Unknown.
+        ("identity", ListKind::Contacts) => match v {
             Value::Keyword("none") => out.push(
-                "NOT EXISTS (SELECT 1 FROM contact_handles ch WHERE ch.account_id = ct.account_id AND ch.contact_id = ct.id)",
+                "NOT EXISTS (SELECT 1 FROM contact_handles ch JOIN handles h ON h.id = ch.handle_id WHERE ch.account_id = ct.account_id AND ch.contact_id = ct.id AND h.handle_type <> 'other')",
             ),
             Value::Keyword("any") => out.push(
-                "EXISTS (SELECT 1 FROM contact_handles ch WHERE ch.account_id = ct.account_id AND ch.contact_id = ct.id)",
+                "EXISTS (SELECT 1 FROM contact_handles ch JOIN handles h ON h.id = ch.handle_id WHERE ch.account_id = ct.account_id AND ch.contact_id = ct.id AND h.handle_type <> 'other')",
             ),
             Value::Text(_) | Value::Prefix(_) => {
                 out.push(
@@ -409,16 +408,17 @@ fn emit_text_word(
                 result = Err(bad_value(term, "needs text, a prefix, or none/any."));
             }
         },
-        ("handle", _) => ctx.conversation(out, |o| match v {
+        ("identity", _) => ctx.conversation(out, |o| match v {
             Value::Keyword("none") => o.push(
-                "NOT EXISTS (SELECT 1 FROM participants p WHERE p.conversation_id = c.id AND p.handle_id IS NOT NULL)",
+                "NOT EXISTS (SELECT 1 FROM participants p JOIN handles h ON h.id = p.handle_id WHERE p.conversation_id = c.id AND h.handle_type <> 'other')",
             ),
-            // The true complement of `none`: some participant does have a
-            // handle. Never `1=1` — a conversation can be all name-only
-            // participants (see `named_participant` in the fixture), and
-            // `any` must not match those.
+            // The true complement of `none`: some participant has an
+            // address. Never `1=1` — a conversation can hold only people the
+            // source named with no address (see `named_participant` in the
+            // fixture), whose identities are of type `other`, and `any` must
+            // not match those.
             Value::Keyword("any") => o.push(
-                "EXISTS (SELECT 1 FROM participants p WHERE p.conversation_id = c.id AND p.handle_id IS NOT NULL)",
+                "EXISTS (SELECT 1 FROM participants p JOIN handles h ON h.id = p.handle_id WHERE p.conversation_id = c.id AND h.handle_type <> 'other')",
             ),
             Value::Text(_) | Value::Prefix(_) => {
                 o.push(
@@ -489,32 +489,19 @@ fn person_matches(
             out.push("))");
             Ok(())
         }
-        _ => Err(bad_value(term, "needs a name, a handle, or #id.")),
+        _ => Err(bad_value(term, "needs a name, an identity, or #id.")),
     }
 }
 
 /// The participant row `p` (with `pct` the Contact its handle is on, when
-/// any, in scope via [`participants_with_contact`]) is itself the person `v`:
-/// by contact id, or by a contains-or-prefix match on their display name.
-/// This is how `with:` reaches a participant the source only named —
-/// `handle_id` NULL, so `person_matches` on it never sees them, and neither
-/// does the `contact_handles` join, which leaves `pct` NULL and the name
-/// coming from `p.name_alias`.
-fn participant_matches(
-    ctx: &ListCtx,
-    out: &mut Sql,
-    term: &FieldTerm,
-    v: &Value,
-) -> Result<(), QueryError> {
+/// any, in scope via [`participants_with_contact`]) goes by a display name
+/// that matches `v`: the Contact's name, else what the backup called them in
+/// this conversation. A contact id matches nothing here, because a participant
+/// reaches its contact only through its handle, which `person_matches` reads.
+fn participant_matches(out: &mut Sql, term: &FieldTerm, v: &Value) -> Result<(), QueryError> {
     match v {
-        Value::Id(id) => {
-            out.push("(p.contact_id = ");
-            out.bind_int(*id);
-            if ctx.trash == TrashScope::LeftOut {
-                out.push(" AND ");
-                out.push(&not_trashed_contact_id("c.account_id", "p.contact_id"));
-            }
-            out.push(")");
+        Value::Id(_) => {
+            out.push("0");
             Ok(())
         }
         Value::Text(t) | Value::Prefix(t) => {
@@ -522,12 +509,12 @@ fn participant_matches(
             like_contains(out, PARTICIPANT_NAME, t, prefix);
             Ok(())
         }
-        _ => Err(bad_value(term, "needs a name, a handle, or #id.")),
+        _ => Err(bad_value(term, "needs a name, an identity, or #id.")),
     }
 }
 
 /// Some party to conversation `c` is `v`: its chat handle, a participant's
-/// handle, or a participant the source only named (see `participant_matches`).
+/// handle, or a participant's display name (see `participant_matches`).
 fn with_person(
     ctx: &ListCtx,
     out: &mut Sql,
@@ -547,7 +534,7 @@ fn with_person(
         }
         o.push(" OR ");
         if result.is_ok() {
-            result = participant_matches(ctx, o, term, v);
+            result = participant_matches(o, term, v);
         }
         o.push(")))");
     });

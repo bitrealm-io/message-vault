@@ -6,14 +6,15 @@
 //! `HEAD` / `GET` / `PUT /v1/assets/{sha256}`, `GET /v1/assets/{sha256}/preview`
 //! and the multipart upload routes also live here; multipart staging itself is in `asset_uploads`.
 
+use std::fmt;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+use serde::{Deserialize, Deserializer, Serialize};
+use sha2::{Digest, Sha256 as Sha256Hasher};
 
 use crate::extract::{Json, Path as AxumPath, Query};
 use axum::extract::{Request, State};
@@ -53,6 +54,62 @@ pub struct StoredAsset {
     pub mime_type: Option<String>,
 }
 
+/// A SHA-256 fingerprint that has been checked: exactly 64 hex digits, held
+/// lower-cased.
+///
+/// Every path in the asset store is built from one of these, never from a
+/// string a request or an export sent. A fingerprint names a file, so a value
+/// that is not 64 hex digits could name a folder outside the store. Holding
+/// the checked value in its own type means no function can build a path from
+/// an unchecked one. Surrounding whitespace is refused rather than trimmed,
+/// so the value used for the path is the value the caller sent.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Sha256(String);
+
+impl Sha256 {
+    /// Check `value` and lower-case it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when `value` is not exactly 64 hex digits.
+    pub fn parse(value: &str) -> Result<Self> {
+        if value.len() != 64 || !value.bytes().all(|b| b.is_ascii_hexdigit()) {
+            bail!("invalid sha256 (expected 64 hex digits)");
+        }
+        Ok(Self(value.to_ascii_lowercase()))
+    }
+
+    /// The fingerprint of `data`.
+    pub fn of_bytes(data: &[u8]) -> Self {
+        Self(sha256_hex(data))
+    }
+
+    /// The fingerprint as 64 lower-case hex digits.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// The first two hex digits: the folder the file is stored in.
+    fn shard(&self) -> &str {
+        &self.0[..2]
+    }
+}
+
+impl fmt::Display for Sha256 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+/// A path segment or field that is not a fingerprint is refused while the
+/// request is read, before a handler can use it.
+impl<'de> Deserialize<'de> for Sha256 {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = String::deserialize(deserializer)?;
+        Self::parse(&value).map_err(serde::de::Error::custom)
+    }
+}
+
 /// Encode bytes as lowercase hex.
 pub fn hex_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -62,14 +119,14 @@ pub fn hex_encode(bytes: &[u8]) -> String {
 ///
 /// SHA-256 is a short fingerprint of the file contents.
 pub fn sha256_hex(data: &[u8]) -> String {
-    hex_encode(&Sha256::digest(data))
+    hex_encode(&Sha256Hasher::digest(data))
 }
 
 /// Relative path under the assets root: first two hex digits as a folder, then
 /// the full fingerprint, then `ext`. `.jpeg` is stored as `.jpg`.
-pub fn shard_rel_path(sha256: &str, ext: &str) -> String {
+pub fn shard_rel_path(sha256: &Sha256, ext: &str) -> String {
     let ext = if ext == ".jpeg" { ".jpg" } else { ext };
-    format!("{}/{}{}", &sha256[..2], sha256, ext)
+    format!("{}/{}{}", sha256.shard(), sha256, ext)
 }
 
 /// Find a stored attachment by SHA-256 (a short fingerprint of the file
@@ -78,7 +135,7 @@ pub fn shard_rel_path(sha256: &str, ext: &str) -> String {
 /// Upload and import paths that skip sending bytes because "the file is already
 /// here" must use this function. A truncated or replaced file is then never
 /// treated as the real content.
-pub fn lookup_by_sha256(assets_root: &Path, sha256: &str) -> Option<StoredAsset> {
+pub fn lookup_by_sha256(assets_root: &Path, sha256: &Sha256) -> Option<StoredAsset> {
     let stored = lookup_by_sha256_unverified(assets_root, sha256)?;
     let path = assets_root.join(&stored.assets_path);
     if hash_file(&path).ok()? != stored.sha256 {
@@ -93,15 +150,14 @@ pub fn lookup_by_sha256(assets_root: &Path, sha256: &str) -> Option<StoredAsset>
 /// Used only when streaming an authenticated download. The response body is the
 /// file itself, the URL is the fingerprint, and the client can check what it
 /// received. Hashing the whole file first would read every download twice.
-pub fn lookup_by_sha256_unverified(assets_root: &Path, sha256: &str) -> Option<StoredAsset> {
-    let sha = normalize_sha256(sha256)?;
-    let assets_path = shard_rel_path(&sha, "");
+pub fn lookup_by_sha256_unverified(assets_root: &Path, sha256: &Sha256) -> Option<StoredAsset> {
+    let assets_path = shard_rel_path(sha256, "");
     if !is_regular_file(&assets_root.join(&assets_path)) {
         return None;
     }
-    let mime_type = read_mime_metadata(assets_root, &sha);
+    let mime_type = read_mime_metadata(assets_root, sha256);
     Some(StoredAsset {
-        sha256: sha,
+        sha256: sha256.to_string(),
         assets_path,
         mime_type,
     })
@@ -121,12 +177,11 @@ pub fn lookup_by_sha256_unverified(assets_root: &Path, sha256: &str) -> Option<S
 ///
 /// # Errors
 ///
-/// Returns an error when the claimed fingerprint is invalid, the source is not
-/// a regular file, the bytes do not match the claim, or the file cannot be
-/// written under `assets_root`.
+/// Returns an error when the source is not a regular file, the bytes do not
+/// match the claim, or the file cannot be written under `assets_root`.
 pub fn store_verified(
     source: &Path,
-    claimed_sha256: &str,
+    claimed_sha256: &Sha256,
     assets_root: &Path,
     export_mime: Option<&str>,
     consume_source: bool,
@@ -146,14 +201,13 @@ pub fn store_verified(
 /// Same as [`store_verified`], with hooks so tests can observe copy vs reuse.
 fn store_verified_inner(
     source: &Path,
-    claimed_sha256: &str,
+    claimed: &Sha256,
     assets_root: &Path,
     export_mime: Option<&str>,
     consume_source: bool,
     copy_ready: impl FnOnce(),
     selection_ready: impl FnOnce(),
 ) -> Result<(StoredAsset, bool)> {
-    let claimed = require_sha256(claimed_sha256)?;
     ensure_regular_file(source)?;
     // The export's claim, else a guess from the source file's name. The stored
     // file has no extension, so it can say nothing about its own type.
@@ -161,18 +215,18 @@ fn store_verified_inner(
     let already = install_blob(
         source,
         assets_root,
-        &claimed,
+        claimed,
         consume_source,
         copy_ready,
         selection_ready,
     )?;
     if let Some(mime) = mime_type.as_deref() {
-        store_mime_metadata(assets_root, &claimed, mime)?;
+        store_mime_metadata(assets_root, claimed, mime)?;
     }
     Ok((
         StoredAsset {
-            assets_path: shard_rel_path(&claimed, ""),
-            sha256: claimed,
+            assets_path: shard_rel_path(claimed, ""),
+            sha256: claimed.to_string(),
             mime_type,
         },
         already,
@@ -195,12 +249,12 @@ fn store_verified_inner(
 fn install_blob(
     source: &Path,
     assets_root: &Path,
-    claimed_sha256: &str,
+    claimed_sha256: &Sha256,
     consume_source: bool,
     copy_ready: impl FnOnce(),
     selection_ready: impl FnOnce(),
 ) -> Result<bool> {
-    let shard = assets_root.join(&claimed_sha256[..2]);
+    let shard = assets_root.join(claimed_sha256.shard());
     fs::create_dir_all(&shard).with_context(|| format!("failed to create {}", shard.display()))?;
 
     // The one path a fingerprint can live at: no extension, named only from
@@ -218,7 +272,7 @@ fn install_blob(
                 dest.display()
             );
         }
-        if hash_file(&dest).is_ok_and(|actual| actual == claimed_sha256) {
+        if hash_file(&dest).is_ok_and(|actual| actual == claimed_sha256.as_str()) {
             verify_source_digest(source, claimed_sha256)?;
             if consume_source {
                 let _ = fs::remove_file(source);
@@ -239,7 +293,7 @@ fn install_blob(
             Err(err) if err.error.kind() == std::io::ErrorKind::AlreadyExists => {
                 // The copy above already checked that the source bytes match
                 // the claimed fingerprint.
-                if hash_file(&dest).is_ok_and(|actual| actual == claimed_sha256) {
+                if hash_file(&dest).is_ok_and(|actual| actual == claimed_sha256.as_str()) {
                     if consume_source {
                         let _ = fs::remove_file(source);
                     }
@@ -265,9 +319,9 @@ fn install_blob(
 ///
 /// Used when skipping the copy because a matching file is already stored. Without
 /// this check, a wrong claim would be accepted just because that file exists.
-fn verify_source_digest(source: &Path, claimed_sha256: &str) -> Result<()> {
+fn verify_source_digest(source: &Path, claimed_sha256: &Sha256) -> Result<()> {
     let actual = hash_file(source).with_context(|| format!("read source {}", source.display()))?;
-    if actual != claimed_sha256 {
+    if actual != claimed_sha256.as_str() {
         bail!("sha256 mismatch: claimed {claimed_sha256}, got {actual}");
     }
     Ok(())
@@ -281,13 +335,13 @@ fn verify_source_digest(source: &Path, claimed_sha256: &str) -> Result<()> {
 fn copy_to_verified_temp(
     source: &Path,
     shard: &Path,
-    claimed_sha256: &str,
+    claimed_sha256: &Sha256,
 ) -> Result<tempfile::NamedTempFile> {
     let mut temporary = tempfile::NamedTempFile::new_in(shard)
         .with_context(|| format!("create temporary asset in {}", shard.display()))?;
     let mut src =
         open_nofollow_read(source).with_context(|| format!("open source {}", source.display()))?;
-    let mut hasher = Sha256::new();
+    let mut hasher = Sha256Hasher::new();
     let mut buf = vec![0u8; COPY_BUFFER_BYTES];
     loop {
         let n = src
@@ -304,7 +358,7 @@ fn copy_to_verified_temp(
     temporary.flush()?;
     temporary.as_file().sync_all()?;
     let actual = hex_encode(&hasher.finalize());
-    if actual != claimed_sha256 {
+    if actual != claimed_sha256.as_str() {
         bail!("sha256 mismatch: claimed {claimed_sha256}, got {actual}");
     }
     Ok(temporary)
@@ -328,6 +382,7 @@ pub fn hash_and_store(
     }
 
     let sha = hash_file(source).with_context(|| format!("failed to hash {}", source.display()))?;
+    let sha = Sha256::parse(&sha)?;
     let (stored, already) = store_verified(source, &sha, assets_root, export_mime, false, false)?;
     if already {
         stats.deduped += 1;
@@ -335,30 +390,6 @@ pub fn hash_and_store(
         stats.copied += 1;
     }
     Ok(Some(stored))
-}
-
-/// Accept a 64-character hex SHA-256 fingerprint in either case and return it
-/// lowercased, or return `None`.
-pub(crate) fn normalize_sha256(sha: &str) -> Option<String> {
-    let s = sha.trim().to_ascii_lowercase();
-    if s.len() != 64 || !s.chars().all(|c| c.is_ascii_hexdigit()) {
-        return None;
-    }
-    Some(s)
-}
-
-/// Same as [`normalize_sha256`], but as an error when the value is invalid.
-///
-/// # Errors
-///
-/// Returns an error when `sha` is not 64 hex digits.
-pub(crate) fn require_sha256(sha: &str) -> Result<String> {
-    match normalize_sha256(sha) {
-        Some(normalized) => Ok(normalized),
-        None => Err(anyhow::anyhow!(
-            "invalid sha256 (expected 64 lowercase hex digits)"
-        )),
-    }
 }
 
 /// SHA-256 fingerprint of the file at `path`, as 64 lowercase hex digits.
@@ -369,7 +400,7 @@ pub(crate) fn require_sha256(sha: &str) -> Result<String> {
 pub(crate) fn hash_file(path: &Path) -> Result<String> {
     let file = open_nofollow_read(path)?;
     let mut reader = BufReader::new(file);
-    let mut hasher = Sha256::new();
+    let mut hasher = Sha256Hasher::new();
     let mut buf = [0u8; COPY_BUFFER_BYTES];
     loop {
         let n = reader.read(&mut buf)?;
@@ -382,12 +413,12 @@ pub(crate) fn hash_file(path: &Path) -> Result<String> {
 }
 
 /// Path of the hidden `.<sha>.mime` sidecar that records a blob's MIME type, since the blob's name carries none.
-fn mime_metadata_path(assets_root: &Path, sha: &str) -> Option<PathBuf> {
-    crate::asset_store::sidecar_path(assets_root, sha)
+fn mime_metadata_path(assets_root: &Path, sha: &Sha256) -> Option<PathBuf> {
+    crate::asset_store::sidecar_path(assets_root, sha.as_str())
 }
 
 /// Read the MIME sidecar for `sha`, if present and non-empty.
-fn read_mime_metadata(assets_root: &Path, sha: &str) -> Option<String> {
+fn read_mime_metadata(assets_root: &Path, sha: &Sha256) -> Option<String> {
     let file = open_nofollow_read(&mime_metadata_path(assets_root, sha)?).ok()?;
     let mut mime = String::new();
     file.take(1024).read_to_string(&mut mime).ok()?;
@@ -400,7 +431,7 @@ fn read_mime_metadata(assets_root: &Path, sha: &str) -> Option<String> {
 }
 
 /// Write the MIME sidecar for `sha` unless one already exists. Empty types are not recorded.
-fn store_mime_metadata(assets_root: &Path, sha: &str, mime: &str) -> Result<()> {
+fn store_mime_metadata(assets_root: &Path, sha: &Sha256, mime: &str) -> Result<()> {
     let mime = mime.trim();
     if mime.is_empty() {
         return Ok(());
@@ -524,7 +555,7 @@ enum AssetAccess {
 async fn resolve_asset_lookup(
     state: &AppState,
     auth: &AuthIdentity,
-    sha256: &str,
+    sha256: &Sha256,
     query: &AssetQuery,
     access: AssetAccess,
 ) -> Result<(i64, String, Option<StoredAsset>), ApiError> {
@@ -546,7 +577,7 @@ async fn resolve_asset_lookup(
     let source_id = query.source.clone();
 
     let cfg = Arc::clone(&state.cfg);
-    let sha_lookup = sha256.to_string();
+    let sha_lookup = sha256.clone();
     let source_lookup = source_id.clone();
     let existing = tokio::task::spawn_blocking(move || {
         let assets_dir = cfg.paths.assets_dir_for_account(account, &source_lookup);
@@ -580,7 +611,7 @@ async fn resolve_asset_lookup(
 pub(crate) async fn head_asset(
     State(state): State<AppState>,
     ImportOrExportAccess(auth): ImportOrExportAccess,
-    AxumPath(sha256): AxumPath<String>,
+    AxumPath(sha256): AxumPath<Sha256>,
     Query(query): Query<AssetQuery>,
 ) -> Result<Json<Asset>, ApiError> {
     let (_account, _source_id, existing) =
@@ -610,7 +641,7 @@ pub(crate) async fn head_asset(
 pub(crate) async fn get_asset(
     State(state): State<AppState>,
     AssetReadAccess(auth): AssetReadAccess,
-    AxumPath(sha256): AxumPath<String>,
+    AxumPath(sha256): AxumPath<Sha256>,
     Query(query): Query<AssetQuery>,
 ) -> Result<Response, ApiError> {
     let (account, source_id, existing) =
@@ -645,7 +676,7 @@ pub(crate) async fn get_asset(
 pub(crate) async fn get_asset_preview(
     State(state): State<AppState>,
     AssetReadAccess(auth): AssetReadAccess,
-    AxumPath(sha256): AxumPath<String>,
+    AxumPath(sha256): AxumPath<Sha256>,
     Query(query): Query<AssetQuery>,
 ) -> Result<Response, ApiError> {
     // The same lookup as the original: the caller's own store, so another
@@ -761,7 +792,7 @@ pub(crate) async fn replace_asset(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
     headers: HeaderMap,
-    AxumPath(sha256): AxumPath<String>,
+    AxumPath(sha256): AxumPath<Sha256>,
     Query(query): Query<AssetQuery>,
     request: Request,
 ) -> Result<Response, ApiError> {
@@ -786,6 +817,8 @@ pub(crate) async fn replace_asset(
         .map_err(|e| {
             ApiError::Internal(anyhow::anyhow!("mkdir {}: {e}", incoming_dir.display()))
         })?;
+    // Named from the checked fingerprint, so the file is always inside
+    // `incoming_dir`.
     let tmp_path = incoming_dir.join(format!(
         "{sha256}-{}.part",
         std::time::SystemTime::now()
@@ -802,7 +835,7 @@ pub(crate) async fn replace_asset(
     let sha = sha256.clone();
     let tmp_for_store = tmp_path.clone();
     let assets_dir_store = assets_dir.clone();
-    let (stored, already_present) = tokio::task::spawn_blocking(move || {
+    let stored = tokio::task::spawn_blocking(move || {
         std::fs::create_dir_all(&assets_dir_store)?;
         store_verified(
             &tmp_for_store,
@@ -813,13 +846,14 @@ pub(crate) async fn replace_asset(
             false,
         )
     })
-    .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("asset upload task: {e}")))?
-    .map_err(|e| ApiError::AssetUploadInvalid(e.to_string()))?;
-
-    // Storing consumes the upload file; remove leftovers after errors /
-    // already_present races.
+    .await;
+    // Storing consumes the upload file on success. Every other outcome, a
+    // body that does not match the fingerprint included, leaves it, and it
+    // is removed here before the answer, so a refused upload keeps nothing.
     let _ = tokio::fs::remove_file(&tmp_path).await;
+    let (stored, already_present) = stored
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("asset upload task: {e}")))?
+        .map_err(|e| ApiError::AssetUploadInvalid(e.to_string()))?;
     // A racing upload of the same bytes may have stored them first; then
     // this request made nothing.
     if already_present {
@@ -892,7 +926,7 @@ pub(crate) struct ReplaceAssetUploadPartResponse {
 pub(crate) async fn create_asset_upload(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
-    AxumPath(sha256): AxumPath<String>,
+    AxumPath(sha256): AxumPath<Sha256>,
     Query(query): Query<AssetQuery>,
     Json(body): Json<CreateAssetUploadRequest>,
 ) -> Result<Response, ApiError> {
@@ -960,7 +994,7 @@ pub(crate) async fn replace_asset_upload_part(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
     headers: HeaderMap,
-    AxumPath((sha256, upload_id, part)): AxumPath<(String, String, u32)>,
+    AxumPath((sha256, upload_id, part)): AxumPath<(Sha256, String, u32)>,
     Query(query): Query<AssetQuery>,
     request: Request,
 ) -> Result<Json<ReplaceAssetUploadPartResponse>, ApiError> {
@@ -1034,7 +1068,7 @@ pub(crate) async fn replace_asset_upload_part(
 pub(crate) async fn complete_asset_upload(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
-    AxumPath((sha256, upload_id)): AxumPath<(String, String)>,
+    AxumPath((sha256, upload_id)): AxumPath<(Sha256, String)>,
     Query(query): Query<AssetQuery>,
 ) -> Result<Response, ApiError> {
     let (account, source_id, existing) =
@@ -1107,7 +1141,7 @@ pub(crate) async fn complete_asset_upload(
 pub(crate) async fn delete_asset_upload(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
-    AxumPath((sha256, upload_id)): AxumPath<(String, String)>,
+    AxumPath((sha256, upload_id)): AxumPath<(Sha256, String)>,
     Query(query): Query<AssetQuery>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     let (account, source_id, _existing) =

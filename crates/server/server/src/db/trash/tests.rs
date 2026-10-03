@@ -457,6 +457,71 @@ async fn delete_conversation_not_in_the_trash_is_refused_and_changes_nothing() {
     );
 }
 
+/// A trashed conversation open in two tabs: Delete for good in one, Restore
+/// in the other, and the restore commits after the delete has read the
+/// marker. The restored conversation must stay, with its messages.
+#[tokio::test]
+async fn a_restore_that_commits_while_delete_for_good_reads_keeps_the_conversation() {
+    let fixture = crate::test_support::test_fixture().await;
+    fixture.account_with_id(ACCOUNT_A, "a").await;
+    let mut conn = fixture.conn().await;
+    let id = insert_conversation_on(&mut conn, ACCOUNT_A, "+15550001").await;
+    insert_message(&mut conn, ACCOUNT_A, id, 0).await;
+    move_to_trash(&mut conn, ACCOUNT_A, Trashable::Conversation(id))
+        .await
+        .unwrap();
+
+    let mut other_conn = fixture.conn().await;
+    let mut other = crate::db::begin_write(&mut other_conn).await.unwrap();
+    restore(&mut other, ACCOUNT_A, Trashable::Conversation(id))
+        .await
+        .unwrap();
+    let outcome = crate::db::write_tx::commit_during(
+        other,
+        delete_trashed(&mut conn, ACCOUNT_A, Trashable::Conversation(id)),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(outcome, DeleteOutcome::NotTrashed);
+    assert_eq!(
+        count(
+            &mut conn,
+            "SELECT COUNT(*) FROM messages WHERE conversation_id = $1",
+            id
+        )
+        .await,
+        1
+    );
+}
+
+/// The `DELETE` itself checks the Trash marker, so a conversation that is not
+/// in the Trash survives a delete that was handed its id.
+#[tokio::test]
+async fn deleting_conversations_skips_one_that_is_not_in_the_trash() {
+    let fixture = crate::test_support::test_fixture().await;
+    fixture.account_with_id(ACCOUNT_A, "a").await;
+    let mut conn = fixture.conn().await;
+    let id = insert_conversation_on(&mut conn, ACCOUNT_A, "+15550001").await;
+    insert_message(&mut conn, ACCOUNT_A, id, 0).await;
+
+    let mut tx = crate::db::begin_write(&mut conn).await.unwrap();
+    delete_conversations(&mut tx, ACCOUNT_A, &[id])
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+
+    assert_eq!(
+        count(
+            &mut conn,
+            "SELECT COUNT(*) FROM messages WHERE conversation_id = $1",
+            id
+        )
+        .await,
+        1
+    );
+}
+
 #[tokio::test]
 async fn delete_refuses_another_accounts_conversation_even_when_trashed() {
     let fixture = crate::test_support::test_fixture().await;
@@ -525,8 +590,8 @@ async fn delete_reports_only_the_files_no_remaining_message_uses() {
     .unwrap();
     let staging_message: i64 = sqlx::query_scalar(
         "INSERT INTO staging_messages (
-            conversation_id, account_id, source, timestamp, is_from_me, sort_order
-         ) VALUES ($1, $2, 'imessage', '2020-01-01T00:00:00Z', 1, 0) RETURNING id",
+            conversation_id, account_id, source, guid, timestamp, is_from_me, sort_order
+         ) VALUES ($1, $2, 'imessage', 'g-staged', '2020-01-01T00:00:00Z', 1, 0) RETURNING id",
     )
     .bind(staging_conversation)
     .bind(ACCOUNT_A)

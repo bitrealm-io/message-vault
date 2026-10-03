@@ -362,14 +362,19 @@ async fn same_source_guid_allowed_across_accounts() {
 async fn old_database_rebuilds_empty_at_current_version() {
     let (pool, _dir) = test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    // A pre-versioning database from the pre-groups era: contact_labels
-    // tables, no user_version stamp.
+    // A Message Crate database from the pre-groups era: contact_labels
+    // tables, no user_version stamp, and the mark every Message Crate
+    // database carries.
     execute_batch(
         &mut conn,
         include_str!("../../../../../../tests/fixtures/schema/v0-schema.sql"),
     )
     .await
     .unwrap();
+    sqlx::query(&format!("PRAGMA application_id = {APPLICATION_ID}"))
+        .execute(&mut *conn)
+        .await
+        .unwrap();
     sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'alice')")
         .bind(A1)
         .execute(&mut *conn)
@@ -726,4 +731,58 @@ fn split_ddl_skips_comments_and_blanks() {
         out,
         vec!["CREATE TABLE a (x INTEGER);", "CREATE TABLE b (y INTEGER);"]
     );
+}
+
+/// S7-3: a SQLite file that was never a Message Crate database (another
+/// program's, such as Apple's `chat.db`) must not be wiped on open.
+#[tokio::test]
+async fn a_foreign_sqlite_file_keeps_its_tables() {
+    let (pool, _dir) = test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    sqlx::query("CREATE TABLE message (ROWID INTEGER PRIMARY KEY, text TEXT)")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO message (text) VALUES ('hello from another program')")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    let _ = ensure_schema(&mut conn).await;
+    assert!(
+        table_exists(&mut conn, "message").await.unwrap(),
+        "another program's table was dropped"
+    );
+}
+
+/// A fresh database carries the mark, so the next open knows it for a
+/// Message Crate database; an empty file is one a database may be built in.
+#[tokio::test]
+async fn a_built_database_carries_the_message_crate_mark() {
+    let (pool, _dir) = test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    assert_eq!(database_kind(&mut conn).await.unwrap(), DatabaseKind::Empty);
+    ensure_schema(&mut conn).await.unwrap();
+    assert_eq!(
+        database_kind(&mut conn).await.unwrap(),
+        DatabaseKind::MessageCrate
+    );
+}
+
+/// Another program's file that marks itself with its own `application_id`
+/// is foreign even with no tables yet.
+#[tokio::test]
+async fn a_file_with_another_programs_mark_is_foreign() {
+    let (pool, _dir) = test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    // GeoPackage's mark, "GPKG".
+    sqlx::query("PRAGMA application_id = 1196444487")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(
+        database_kind(&mut conn).await.unwrap(),
+        DatabaseKind::Foreign
+    );
+    assert!(ensure_schema(&mut conn).await.is_err());
+    assert!(!table_exists(&mut conn, "accounts").await.unwrap());
 }

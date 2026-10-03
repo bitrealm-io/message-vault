@@ -92,7 +92,7 @@ export interface paths {
         };
         /**
          * List the account's named API tokens with their permissions and masked secrets.
-         * @description Each token's permissions are capped by the account's as they are now.
+         * @description Each token's permissions are capped by the account's as they are now. The owner lists any account's tokens, without their masked secrets.
          */
         get: operations["list_api_tokens"];
         put?: never;
@@ -119,7 +119,7 @@ export interface paths {
         post?: never;
         /**
          * Delete one named API token.
-         * @description Requests using it start failing on the next call.
+         * @description Requests using it start failing on the next call. The owner revokes any account's token, so a leaked one can be ended without the account's help.
          */
         delete: operations["delete_api_token"];
         options?: never;
@@ -140,7 +140,7 @@ export interface paths {
         };
         /**
          * An account's Export Runs as a page, newest first unless `sort` says otherwise.
-         * @description The owner reads any account's; an account reads its own.
+         * @description The owner reads any account's, each an `OwnerExportRun`; an account reads its own in full.
          */
         get: operations["list_account_exports"];
         put?: never;
@@ -180,7 +180,7 @@ export interface paths {
         };
         /**
          * An account's Import Runs as a page, newest first unless `sort` says otherwise.
-         * @description The owner reads any account's; an account reads its own.
+         * @description The owner reads any account's, each an `OwnerImportRun`; an account reads its own in full.
          */
         get: operations["list_account_imports"];
         put?: never;
@@ -199,7 +199,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * One of an account's Import Runs: status, timings, counts and issues.
+         * One of an account's Import Runs: status, timings and counts, and for the account itself its summary and issues.
          * @description A run that is another account's is a 404.
          */
         get: operations["get_account_import"];
@@ -685,7 +685,15 @@ export interface paths {
         };
         /**
          * A conversation's messages, ascending by timestamp then `sort_order`.
-         * @description The read path a screen uses to open a conversation: no search query to compose, just the conversation id. `offset` has no cap: the conversation page reads a thread by stepping it forward, and every message must be reachable.
+         * @description The read path a screen uses to open a conversation: no search query to compose, just the conversation id.
+         *
+         *     The page starts at `offset`, or beside one message: `around` puts the
+         *     message in the middle of the page, and `before` and `after` answer the
+         *     messages just before or just after it in the page's order, without it.
+         *     The answer's `offset` says where the page sits either way, so a screen
+         *     that jumps to a message (a search result, a Find match, the first message
+         *     of a year) can keep reading in both directions from there. `offset` has
+         *     no cap: every message of a long conversation must be reachable.
          */
         get: operations["list_conversation_messages"];
         put?: never;
@@ -904,7 +912,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Import one message-ir JSONL body. */
+        /**
+         * Import one message-ir JSONL body.
+         * @description Every message needs a non-empty `guid`. A batch with a message without
+         *     one is refused with `422`, naming its lines, and nothing in it is stored.
+         *     A message whose `guid` the source already holds is skipped, so a batch
+         *     sent again after its answer was lost stores nothing twice.
+         */
         post: operations["create_import_batch"];
         delete?: never;
         options?: never;
@@ -1387,6 +1401,11 @@ export interface components {
             /** @description Login username. */
             username: string;
         };
+        /**
+         * @description An account's Export Runs as its reader may see them: in full for the
+         *     account itself, each an `OwnerExportRun` for the owner.
+         */
+        AccountExportRuns: components["schemas"]["Page_ExportRun"] | components["schemas"]["Page_OwnerExportRun"];
         /** @description One identity to link or unlink, with its platform service. */
         AccountIdentityRequest: {
             /** @description The address as typed, e.g. `+15555550100` or `alex@example.com`. */
@@ -1394,6 +1413,13 @@ export interface components {
             /** @description Platform the address belongs to: `phone`, `email`, or `whatsapp`. */
             service: string;
         };
+        /** @description One of an account's Import Runs as its reader may see it. */
+        AccountImportRun: components["schemas"]["ImportRun"] | components["schemas"]["OwnerImportRun"];
+        /**
+         * @description An account's Import Runs as its reader may see them: in full for the
+         *     account itself, each an `OwnerImportRun` for the owner.
+         */
+        AccountImportRuns: components["schemas"]["Page_ImportSummary"] | components["schemas"]["Page_OwnerImportRun"];
         /** @description One account's share of the messages held: an id, a username and numbers. */
         AccountMessages: {
             /** Format: int64 */
@@ -1469,8 +1495,11 @@ export interface components {
             label: string;
             /** @description Unix-seconds string of last use; absent when never used. */
             last_accessed_at?: string | null;
-            /** @description Masked secret for Settings (e.g. `mc-api-Sd..mE`). */
-            token_hint: string;
+            /**
+             * @description Masked secret for Settings (e.g. `mc-api-Sd..mE`). Absent when the
+             *     owner lists another account's tokens: the hint is part of the secret.
+             */
+            token_hint?: string | null;
         };
         /**
          * @description Which app a session's requests come from. The server records it beside the
@@ -1720,8 +1749,11 @@ export interface components {
             is_group: boolean;
             /** @description Group label from the export, when present. */
             label?: string | null;
-            /** @description Timestamp of the last message. */
-            last_message_at: string;
+            /**
+             * @description Timestamp of the last message; `null` when every message in the
+             *     conversation is a duplicate, so none is left to date it.
+             */
+            last_message_at: string | null;
             /**
              * Format: int64
              * @description Messages in the conversation (excluding hidden duplicates).
@@ -2050,6 +2082,12 @@ export interface components {
             message_ids?: number[];
         };
         /**
+         * @description Which of the three forms an Export Run's scope took, without what it
+         *     asked for.
+         * @enum {string}
+         */
+        ExportScopeKind: "everything" | "query" | "selection";
+        /**
          * @description How an Export Run stands: the values `exports.status` holds, the values
          *     `GET /v1/exports?status=` accepts, and the word every Export Run carries.
          * @enum {string}
@@ -2242,6 +2280,14 @@ export interface components {
             mode: components["schemas"]["ImportMode"];
             /**
              * Format: int64
+             * @description Identities of type `other` this import met for people: a name the
+             *     backup gave with no address, or a sender such as `AMAZON`. Each one is
+             *     a person the exporter could not tie to an address, so a count above
+             *     zero says the import is incomplete.
+             */
+            other_identities: number;
+            /**
+             * Format: int64
              * @description Participant rows imported.
              */
             participants: number;
@@ -2407,6 +2453,12 @@ export interface components {
              * @description Replies in this thread.
              */
             num_replies: number;
+            /**
+             * @description The account holder's own address on this message: the one it was
+             *     sent from, or the one it was received at. `None` when the backup
+             *     named no owner.
+             */
+            owner?: string | null;
             /** @description Sender handle for incoming messages. */
             sender?: string | null;
             /**
@@ -2467,6 +2519,147 @@ export interface components {
         /** @description A name to create, or the new name for an existing set. */
         NamedSetRequest: {
             name: string;
+        };
+        /**
+         * @description An Export Run as the owner reads it under another account: the form of
+         *     its scope, its tool, times, outcome and counts
+         *     (`docs/adr/0008-the-owner-holds-no-messages.md`, "What the owner may
+         *     see"). A query's text is a search over the account's messages, and a
+         *     selection names its conversations, so neither is here, and a field
+         *     reaches the owner only by being added here.
+         */
+        OwnerExportRun: {
+            /**
+             * Format: int64
+             * @description Distinct attachment fingerprints among the matching messages.
+             */
+            attachment_count: number;
+            /**
+             * Format: int64
+             * @description Distinct conversations with at least one matching message.
+             */
+            conversation_count: number;
+            /** @description UTC time the run finished, when it has. */
+            finished_at?: string | null;
+            /**
+             * Format: int64
+             * @description Export Run id.
+             */
+            id: number;
+            /**
+             * Format: int64
+             * @description Messages the scope matched when the run was created.
+             */
+            message_count: number;
+            /**
+             * Format: int64
+             * @description How far the run's messages have been read, in places.
+             */
+            messages_delivered: number;
+            /** @description The form of the scope the run asked for. */
+            scope_kind: components["schemas"]["ExportScopeKind"];
+            /** @description UTC time the run started. */
+            started_at: string;
+            /** @description Lifecycle status. */
+            status: components["schemas"]["ExportStatus"];
+            /** @description Exporting tool, e.g. `message-crate-pull`, when the client named one. */
+            tool?: string | null;
+            /**
+             * Format: int64
+             * @description Sum of the known sizes of those distinct attachments, in bytes.
+             */
+            total_bytes: number;
+        };
+        /**
+         * @description An Import Run as the owner reads it under another account: its source,
+         *     mode, times, outcome and counts, and nothing of what the backup held
+         *     (`docs/adr/0008-the-owner-holds-no-messages.md`, "What the owner may
+         *     see"). The run's summary, its issues and its form say whom the account
+         *     talks to, so they stay out, and a field reaches the owner only by being
+         *     added here.
+         */
+        OwnerImportRun: {
+            /**
+             * Format: int64
+             * @description Attachments counted for the run.
+             */
+            attachment_count: number;
+            /**
+             * Format: int64
+             * @description Time spent on attachments, when finished.
+             */
+            attachments_ms?: number | null;
+            /**
+             * Format: int64
+             * @description Bytes uploaded so far.
+             */
+            bytes_uploaded: number;
+            /**
+             * Format: int64
+             * @description Contacts it only changed.
+             */
+            contacts_changed: number;
+            /**
+             * Format: int64
+             * @description Contacts this run created.
+             */
+            contacts_new: number;
+            /**
+             * @description The whole numbers the run's summary reported, by name. The summary's
+             *     other values, among them the addresses a staging summary lists, are
+             *     the account's own.
+             */
+            counts: {
+                [key: string]: number;
+            };
+            /**
+             * Format: int64
+             * @description Total wall-clock duration, when finished.
+             */
+            duration_ms?: number | null;
+            /** @description UTC time the run finished, when it has. */
+            finished_at?: string | null;
+            /**
+             * Format: int64
+             * @description Import Run id.
+             */
+            id: number;
+            /**
+             * Format: int64
+             * @description Issues the run recorded. Each names the conversation it was about, so
+             *     the owner reads how many and not which.
+             */
+            issue_count: number;
+            /**
+             * Format: int64
+             * @description Messages counted for the run.
+             */
+            message_count: number;
+            /** @description Import mode (`replace` or `append`). */
+            mode: string;
+            /**
+             * Format: int64
+             * @description Time spent parsing, when finished.
+             */
+            parse_ms?: number | null;
+            /**
+             * Format: int64
+             * @description Time spent preparing conversation files, when finished.
+             */
+            prepare_ms?: number | null;
+            /** @description Source id the run imports. */
+            source: string;
+            /** @description UTC time the run started. */
+            started_at: string;
+            /** @description Lifecycle status. */
+            status: components["schemas"]["ImportStatus"];
+            /** @description Importing tool, e.g. `message-crate-push`. */
+            tool?: string | null;
+            /**
+             * Format: int64
+             * @description Time spent uploading, when finished.
+             */
+            upload_ms?: number | null;
         };
         /** @description One page of a list. */
         Page_Account: {
@@ -2570,8 +2763,11 @@ export interface components {
                 label: string;
                 /** @description Unix-seconds string of last use; absent when never used. */
                 last_accessed_at?: string | null;
-                /** @description Masked secret for Settings (e.g. `mc-api-Sd..mE`). */
-                token_hint: string;
+                /**
+                 * @description Masked secret for Settings (e.g. `mc-api-Sd..mE`). Absent when the
+                 *     owner lists another account's tokens: the hint is part of the secret.
+                 */
+                token_hint?: string | null;
             }[];
             /** @description Page size used. */
             limit: number;
@@ -2728,8 +2924,11 @@ export interface components {
                 is_group: boolean;
                 /** @description Group label from the export, when present. */
                 label?: string | null;
-                /** @description Timestamp of the last message. */
-                last_message_at: string;
+                /**
+                 * @description Timestamp of the last message; `null` when every message in the
+                 *     conversation is a duplicate, so none is left to date it.
+                 */
+                last_message_at: string | null;
                 /**
                  * Format: int64
                  * @description Messages in the conversation (excluding hidden duplicates).
@@ -3011,6 +3210,12 @@ export interface components {
                  * @description Replies in this thread.
                  */
                 num_replies: number;
+                /**
+                 * @description The account holder's own address on this message: the one it was
+                 *     sent from, or the one it was received at. `None` when the backup
+                 *     named no owner.
+                 */
+                owner?: string | null;
                 /** @description Sender handle for incoming messages. */
                 sender?: string | null;
                 /**
@@ -3063,6 +3268,157 @@ export interface components {
                 /** Format: int64 */
                 id: number;
                 name: string;
+            }[];
+            /** @description Page size used. */
+            limit: number;
+            /** @description Page offset used. */
+            offset: number;
+            /**
+             * Format: int64
+             * @description Rows matching the query across every page.
+             */
+            total: number;
+        };
+        /** @description One page of a list. */
+        Page_OwnerExportRun: {
+            /** @description The rows on this page. */
+            items: {
+                /**
+                 * Format: int64
+                 * @description Distinct attachment fingerprints among the matching messages.
+                 */
+                attachment_count: number;
+                /**
+                 * Format: int64
+                 * @description Distinct conversations with at least one matching message.
+                 */
+                conversation_count: number;
+                /** @description UTC time the run finished, when it has. */
+                finished_at?: string | null;
+                /**
+                 * Format: int64
+                 * @description Export Run id.
+                 */
+                id: number;
+                /**
+                 * Format: int64
+                 * @description Messages the scope matched when the run was created.
+                 */
+                message_count: number;
+                /**
+                 * Format: int64
+                 * @description How far the run's messages have been read, in places.
+                 */
+                messages_delivered: number;
+                /** @description The form of the scope the run asked for. */
+                scope_kind: components["schemas"]["ExportScopeKind"];
+                /** @description UTC time the run started. */
+                started_at: string;
+                /** @description Lifecycle status. */
+                status: components["schemas"]["ExportStatus"];
+                /** @description Exporting tool, e.g. `message-crate-pull`, when the client named one. */
+                tool?: string | null;
+                /**
+                 * Format: int64
+                 * @description Sum of the known sizes of those distinct attachments, in bytes.
+                 */
+                total_bytes: number;
+            }[];
+            /** @description Page size used. */
+            limit: number;
+            /** @description Page offset used. */
+            offset: number;
+            /**
+             * Format: int64
+             * @description Rows matching the query across every page.
+             */
+            total: number;
+        };
+        /** @description One page of a list. */
+        Page_OwnerImportRun: {
+            /** @description The rows on this page. */
+            items: {
+                /**
+                 * Format: int64
+                 * @description Attachments counted for the run.
+                 */
+                attachment_count: number;
+                /**
+                 * Format: int64
+                 * @description Time spent on attachments, when finished.
+                 */
+                attachments_ms?: number | null;
+                /**
+                 * Format: int64
+                 * @description Bytes uploaded so far.
+                 */
+                bytes_uploaded: number;
+                /**
+                 * Format: int64
+                 * @description Contacts it only changed.
+                 */
+                contacts_changed: number;
+                /**
+                 * Format: int64
+                 * @description Contacts this run created.
+                 */
+                contacts_new: number;
+                /**
+                 * @description The whole numbers the run's summary reported, by name. The summary's
+                 *     other values, among them the addresses a staging summary lists, are
+                 *     the account's own.
+                 */
+                counts: {
+                    [key: string]: number;
+                };
+                /**
+                 * Format: int64
+                 * @description Total wall-clock duration, when finished.
+                 */
+                duration_ms?: number | null;
+                /** @description UTC time the run finished, when it has. */
+                finished_at?: string | null;
+                /**
+                 * Format: int64
+                 * @description Import Run id.
+                 */
+                id: number;
+                /**
+                 * Format: int64
+                 * @description Issues the run recorded. Each names the conversation it was about, so
+                 *     the owner reads how many and not which.
+                 */
+                issue_count: number;
+                /**
+                 * Format: int64
+                 * @description Messages counted for the run.
+                 */
+                message_count: number;
+                /** @description Import mode (`replace` or `append`). */
+                mode: string;
+                /**
+                 * Format: int64
+                 * @description Time spent parsing, when finished.
+                 */
+                parse_ms?: number | null;
+                /**
+                 * Format: int64
+                 * @description Time spent preparing conversation files, when finished.
+                 */
+                prepare_ms?: number | null;
+                /** @description Source id the run imports. */
+                source: string;
+                /** @description UTC time the run started. */
+                started_at: string;
+                /** @description Lifecycle status. */
+                status: components["schemas"]["ImportStatus"];
+                /** @description Importing tool, e.g. `message-crate-push`. */
+                tool?: string | null;
+                /**
+                 * Format: int64
+                 * @description Time spent uploading, when finished.
+                 */
+                upload_ms?: number | null;
             }[];
             /** @description Page size used. */
             limit: number;
@@ -3194,9 +3550,11 @@ export interface components {
             /**
              * Format: int64
              * @description `malformed-body` from an import batch: the line of the request body
-             *     the server could not read, counted from 1 with blank lines included.
-             *     The body is a batch the client packed, so only the client can say
-             *     which file and line of its own that line came from.
+             *     the server could not read; `validation-failed` from an import batch:
+             *     the first line that broke a rule, such as a message without a guid.
+             *     Counted from 1 with blank lines included. The body is a batch the
+             *     client packed, so only the client can say which file and line of its
+             *     own that line came from.
              */
             line?: number | null;
             /** @description The `x-request-id` of the response this came in. */
@@ -4039,7 +4397,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                /** @description Account id; must be the caller's own */
+                /** @description Account id; the caller's own, or any for the owner */
                 id: number;
             };
             cookie?: never;
@@ -4065,7 +4423,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -4198,7 +4558,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Account id; must be the caller's own */
+                /** @description Account id; the caller's own, or any for the owner */
                 id: number;
                 /** @description API token id */
                 token_id: number;
@@ -4224,7 +4584,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -4379,7 +4741,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Page_ExportRun"];
+                    "application/json": components["schemas"]["AccountExportRuns"];
                 };
             };
             /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
@@ -4523,7 +4885,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Page_ImportSummary"];
+                    "application/json": components["schemas"]["AccountImportRuns"];
                 };
             };
             /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
@@ -4590,7 +4952,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImportRun"];
+                    "application/json": components["schemas"]["AccountImportRun"];
                 };
             };
             /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
@@ -7017,10 +7379,16 @@ export interface operations {
             query?: {
                 /** @description Page size, default 40, max 500 */
                 limit?: number;
-                /** @description Page offset, no maximum */
+                /** @description Page offset, no maximum. Not with `around`, `before` or `after`. */
                 offset?: number;
                 /** @description `date` or `-date`. Default `date`, oldest first. */
                 sort?: string;
+                /** @description Message id: the page with this message in the middle. Not with `offset`, `before` or `after`. */
+                around?: number;
+                /** @description Message id: the page just before this message in the page's order, without it. Not with `offset`, `around` or `after`. */
+                before?: number;
+                /** @description Message id: the page just after this message in the page's order, without it. Not with `offset`, `around` or `before`. */
+                after?: number;
             };
             header?: never;
             path: {

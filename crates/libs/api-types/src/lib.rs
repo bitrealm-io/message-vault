@@ -372,6 +372,10 @@ api_shape! {
         pub is_from_me: bool,
         /// Sender handle for incoming messages.
         pub sender: Option<String>,
+        /// The account holder's own address on this message: the one it was
+        /// sent from, or the one it was received at. `None` when the backup
+        /// named no owner.
+        pub owner: Option<String>,
         /// Subject line, when set.
         pub subject: Option<String>,
         /// Body text, when present.
@@ -495,6 +499,7 @@ mod tests {
             sort_order: 0,
             is_from_me: false,
             sender: None,
+            owner: None,
             subject: None,
             text: None,
             is_announcement: false,
@@ -634,9 +639,11 @@ pub struct Problem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retry_after: Option<u64>,
     /// `malformed-body` from an import batch: the line of the request body
-    /// the server could not read, counted from 1 with blank lines included.
-    /// The body is a batch the client packed, so only the client can say
-    /// which file and line of its own that line came from.
+    /// the server could not read; `validation-failed` from an import batch:
+    /// the first line that broke a rule, such as a message without a guid.
+    /// Counted from 1 with blank lines included. The body is a batch the
+    /// client packed, so only the client can say which file and line of its
+    /// own that line came from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub line: Option<u64>,
 }

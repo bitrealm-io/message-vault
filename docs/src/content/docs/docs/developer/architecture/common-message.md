@@ -89,7 +89,7 @@ Pipeline: `backup → common message → FormatSink → user-picked format`.
 - Incoming rows use the peer identity.
 - `owner_handle` on a message is the owner's own address on it: the one it was sent from, or the one it was received at. Only sources that record the owner per message write it (iMessage, from `destination_caller_id`); everywhere else it is omitted and `export.owner_handle` stands for every message. An iMessage outgoing row keeps the address it was sent from, and takes `export.owner_handle` only when the database recorded none.
 - Display names are not duplicated under `source`.
-- `guid` is Apple's own id for Apple Messages. Every other source's `guid` is a `MessageGuid`: SHA-256 of the chat id, the direction, the sender of an incoming message, the UTC instant in milliseconds, the text with whitespace collapsed, the sorted attachment digests, and the source's own key where it has one (WhatsApp's `key_id`). It reads no time zone and no display format, so one backup gives the same ids on any computer.
+- `guid` is Apple's own id for Apple Messages. Every other source's `guid` is a `MessageGuid`: SHA-256 of the chat id, the direction, the sender of an incoming message, the UTC instant in milliseconds, the text with whitespace collapsed, the sorted attachment digests, and the source's own key where it has one (WhatsApp's `key_id`). It reads no time zone and no display format, so one backup gives the same ids on any computer. The server refuses a message whose `guid` is empty.
 - Two records a backup cannot tell apart are one message, and the exporter keeps one (`message_ir::one_copy_per_message`). The server's content key, which matches one message across sources, is the same identity at whole seconds.
 
 ### Attachments

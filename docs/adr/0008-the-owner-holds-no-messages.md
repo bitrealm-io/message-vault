@@ -123,7 +123,12 @@ largest attachments by name and size. The owner reads them at
 on that screen say who the account talks to, and the owner gets neither: an
 import's detail gives the owner how many contacts it created and changed and
 not who they are, and a large attachment comes to the owner as a name, a type
-and a size, without the conversation it is in. The installation-wide totals are
+and a size, without the conversation it is in. A run in the history comes to
+the owner as a type of its own, `OwnerImportRun` or `OwnerExportRun`, holding
+the source, mode, tool, times, outcome and counts: an import's summary lists
+the addresses in the backup, its issues name conversations, and an export's
+query is a search over the account's messages, so none of them reach the
+owner. The installation-wide totals are
 `GET /v1/server/storage`, the owner's alone, and Owner Home's Dashboard shows
 them. The per-account and installation-wide numbers come from the same queries
 (`crates/server/server/src/db/storage.rs`), with and without an account
@@ -229,8 +234,13 @@ product needs.)
   connects with.
   Storage shows the owner what it shows the holder: how much the account
   stores, its import and export history, and its largest attachments' names
-  and sizes. The owner sees no API tokens, which are the
-  holder's credentials, and no address book, which is content. The tabs that belong to a device rather than an
+  and sizes. The owner sees the account's API tokens on its Account tab,
+  each with its label, permissions and use, and revokes one, so a leaked
+  token can be ended; it never sees any part of a token's secret, and makes
+  and renames none, because a token is the holder's credential. A token's
+  label and permissions are not message content. (Until 2026-10-02 the
+  owner saw no API tokens at all.) The owner sees no address book, which is
+  content. The tabs that belong to a device rather than an
   account (System, Convert, Appearance) are not shown for a managed account.
 - The owner's own Settings are Account, Profile and Appearance. Storage,
   System and Convert work on messages, and Profile has no handles and no

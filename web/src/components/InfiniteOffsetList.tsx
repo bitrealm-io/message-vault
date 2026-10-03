@@ -69,7 +69,7 @@ function rowClass(selected: boolean, hovered = false): string {
     : hovered
       ? "bg-hover"
       : "bg-transparent hover:bg-hover";
-  return `box-border flex w-full cursor-pointer items-center gap-2.5 border-none p-2 px-3 text-left text-text outline-none ${listRowDividersThin} ${fill}`;
+  return `box-border flex w-full cursor-pointer items-center gap-2.5 border-none p-2 px-3 text-left text-text outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent ${listRowDividersThin} ${fill}`;
 }
 
 /**
@@ -82,6 +82,14 @@ function rowClass(selected: boolean, hovered = false): string {
  */
 const ROW_BODY =
   "flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 border-none bg-transparent p-0 text-left text-text outline-none after:absolute after:inset-0 after:content-['']";
+
+/**
+ * The focus ring of a row whose select button sits beside a lead cell. The
+ * button is only as tall as the name inside it, so the row draws the ring while
+ * the button has keyboard focus.
+ */
+const ROW_BODY_FOCUS_RING =
+  "has-[>button:focus-visible]:ring-2 has-[>button:focus-visible]:ring-inset has-[>button:focus-visible]:ring-accent";
 
 /** Lifts the lead cell above the select button's stretched target, so it still takes its own clicks. */
 const ROW_LEAD = "relative z-[1] flex shrink-0 self-center";
@@ -110,7 +118,7 @@ function Row({
     );
   }
   return (
-    <div className={`relative ${className}`} style={style} {...rest}>
+    <div className={`relative ${className} ${ROW_BODY_FOCUS_RING}`} style={style} {...rest}>
       <div className={ROW_LEAD}>{lead}</div>
       <button type="button" onClick={onSelect} className={ROW_BODY}>
         {children}

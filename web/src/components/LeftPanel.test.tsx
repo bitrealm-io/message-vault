@@ -34,7 +34,7 @@ vi.mock("../lib/tauri-check", () => ({
 }));
 
 const importAttentionState = vi.hoisted(() => ({
-  attention: null as "waiting" | "failed" | null,
+  attention: null as "waiting" | "paused" | "failed" | null,
 }));
 
 vi.mock("../screens/import/useImportAttention", () => ({
@@ -234,6 +234,13 @@ describe("LeftPanel", () => {
       importAttentionState.attention = "failed";
       renderPanel();
       expect(screen.getByRole("button", { name: /Import/ })).toHaveTextContent("Failed");
+    });
+
+    it("marks Import when a run is paused at its Upload", () => {
+      importAttentionState.attention = "paused";
+      renderPanel();
+      expect(screen.getByRole("button", { name: /Import/ })).toHaveTextContent("Paused");
+      expect(screen.getByTitle("An import is paused and can be resumed")).toBeTruthy();
     });
 
     it("carries no badge while nothing needs the person", () => {

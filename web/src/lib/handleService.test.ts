@@ -26,7 +26,7 @@ describe("handleService", () => {
   });
 
   it("formats user-facing labels for the handles table", () => {
-    expect(formatHandleServiceLabel("x", "imessage")).toBe("Text message");
+    expect(formatHandleServiceLabel("x", "imessage")).toBe("Text Message");
     expect(formatHandleServiceLabel("x", "whatsapp")).toBe("WhatsApp");
     expect(formatHandleServiceLabel("a@b.com", null)).toBe("Email");
     expect(formatHandleServiceLabel("x", null)).toBe("—");
@@ -47,7 +47,7 @@ describe("handlePlaceholder", () => {
   });
 
   it("calls a phone number what the contact drawer calls it", () => {
-    expect(HANDLE_SERVICE_OPTIONS.find((o) => o.value === "phone")?.label).toBe("Text message");
+    expect(HANDLE_SERVICE_OPTIONS.find((o) => o.value === "phone")?.label).toBe("Text Message");
   });
 });
 

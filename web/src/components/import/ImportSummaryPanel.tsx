@@ -10,9 +10,9 @@ export type ImportIssue = {
 
 export type ImportSummaryView = {
   /**
-   * `paused` is an Upload stopped by Pause: the run stays open at its
-   * Upload and resumes later. The server never records it, so only the run
-   * on screen has it.
+   * `paused` is an Upload that did not send every conversation, stopped by
+   * Pause or by a failure: the run stays open at its Upload and resumes
+   * later. The server never records it, so only the run on screen has it.
    */
   status: "completed" | "completed_with_issues" | "failed" | "cancelled" | "paused" | "running";
   filesTotal?: number;

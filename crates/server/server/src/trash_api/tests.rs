@@ -208,7 +208,7 @@ fn batch_naming(sha: &str) -> String {
 async fn a_file_head_reported_present_survives_an_empty_trash_before_the_batch() {
     let (fixture, alice) = fixture_with_account().await;
     let bytes = b"shared photo bytes";
-    let sha = crate::assets_api::sha256_hex(bytes);
+    let sha = crate::assets_api::Sha256::of_bytes(bytes);
     let blob = fixture
         .state
         .cfg
@@ -225,7 +225,7 @@ async fn a_file_head_reported_present_survives_an_empty_trash_before_the_batch()
              SELECT id, $2, $3 FROM messages WHERE conversation_id = $1",
         )
         .bind(old)
-        .bind(&sha)
+        .bind(sha.as_str())
         .bind(crate::assets_api::shard_rel_path(&sha, ""))
         .execute(&mut *conn)
         .await
@@ -253,7 +253,7 @@ async fn a_file_head_reported_present_survives_an_empty_trash_before_the_batch()
         &format!("/v1/imports/{run}/batches"),
         &alice.token,
         "application/jsonl",
-        batch_naming(&sha),
+        batch_naming(sha.as_str()),
     )
     .await;
     assert!(status.is_success(), "{status} {text}");

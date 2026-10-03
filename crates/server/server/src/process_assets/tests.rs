@@ -44,8 +44,14 @@ fn pass<'a>(
 
 #[test]
 fn derived_rel_path_layout() {
-    assert_eq!(derived_rel_path(SHA, ".jpg"), format!("ab/{SHA}.jpg"));
-    assert_eq!(derived_rel_path(SHA, ".jpeg"), format!("ab/{SHA}.jpg"));
+    assert_eq!(
+        derived_rel_path(&crate::assets_api::Sha256::parse(SHA).unwrap(), ".jpg"),
+        format!("ab/{SHA}.jpg")
+    );
+    assert_eq!(
+        derived_rel_path(&crate::assets_api::Sha256::parse(SHA).unwrap(), ".jpeg"),
+        format!("ab/{SHA}.jpg")
+    );
 }
 
 #[test]
@@ -357,7 +363,7 @@ fn a_work_file_is_stored_content_addressed_and_then_removed() {
 
     let expected = DerivedBlob {
         sha256: crate::assets_api::sha256_hex(b"jpeg-bytes"),
-        assets_path: derived_rel_path(&crate::assets_api::sha256_hex(b"jpeg-bytes"), ".jpg"),
+        assets_path: derived_rel_path(&crate::assets_api::Sha256::of_bytes(b"jpeg-bytes"), ".jpg"),
         mime_type: "image/jpeg".to_string(),
     };
     assert_eq!(stored, Derived::Stored(expected.clone()));
@@ -636,7 +642,10 @@ fn a_run_writes_a_jpeg_preview_under_the_converted_folder_and_records_it() {
         let bytes = fs::read(&preview).expect("the preview is under assets_converted/");
         assert_eq!(&bytes[..2], [0xff, 0xd8], "a JPEG starts with SOI");
         assert_eq!(sha, crate::assets_api::sha256_hex(&bytes));
-        assert_eq!(rel, derived_rel_path(&sha, ".jpg"));
+        assert_eq!(
+            rel,
+            derived_rel_path(&crate::assets_api::Sha256::parse(&sha).unwrap(), ".jpg")
+        );
         assert_eq!(mime, "image/jpeg");
 
         // A second run leaves the preview alone; `force` makes it again.
@@ -920,7 +929,7 @@ async fn opening_a_source_makes_its_converted_folder_and_cleans_its_incoming_tem
 fn a_truncated_derived_file_is_rewritten() {
     let dir = tempfile::tempdir().unwrap();
     let buf = vec![7u8; 4096];
-    let rel = derived_rel_path(&crate::assets_api::sha256_hex(&buf), ".jpg");
+    let rel = derived_rel_path(&crate::assets_api::Sha256::of_bytes(&buf), ".jpg");
     let dest = dir.path().join(&rel);
     std::fs::create_dir_all(dest.parent().unwrap()).unwrap();
     std::fs::write(&dest, &buf[..100]).unwrap();

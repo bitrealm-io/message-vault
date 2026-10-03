@@ -12,16 +12,6 @@ const REMEMBER_IMPORTER_PATHS_KEY = "mc-remember-importer-paths";
 const IMPORTER_PATHS_KEY = "mc-importer-paths";
 const IMPORTER_EXTRA_PATHS_KEY = "mc-importer-extra-paths";
 
-/**
- * Strip trailing `/` or `\\` without turning a Unix root into an empty string.
- */
-export function stripTrailingPathSeparators(path: string): string {
-  const trimmed = path.trim();
-  const stripped = trimmed.replace(/[/\\]+$/, "");
-  if (!stripped && /^[/\\]+$/.test(trimmed)) return "/";
-  return stripped;
-}
-
 /** True when Import should reuse the last backup folder for each source. */
 export function getRememberImporterPaths(): boolean {
   return readPref(REMEMBER_IMPORTER_PATHS_KEY) === "1";

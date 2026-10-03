@@ -58,7 +58,7 @@ mod tests {
                 .as_ref()
                 .map(|p| p.key().to_string())
                 .unwrap_or_default(),
-            conversation_type: "individual".into(),
+            conversation_type: message_ir::IrConversationType::Individual,
             group_title: None,
             participants: peer.iter().cloned().collect(),
             timestamp_secs: ts,
@@ -71,6 +71,7 @@ mod tests {
             smssync_id: None,
             android_type: String::new(),
             eml_path: String::new(),
+            owner_not_named: false,
         }
     }
 

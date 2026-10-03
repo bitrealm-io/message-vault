@@ -3,6 +3,7 @@
 use crate::assets::extract_attachments;
 use crate::types::ParsedMessage;
 use mailparse::{MailHeaderMap, ParsedMail};
+use message_ir::IrConversationType;
 use phone::{Handle, OwnerHandleSet};
 use regex::Regex;
 use sha2::{Digest, Sha256};
@@ -92,6 +93,11 @@ const UNKNOWN_EMAIL_DOMAIN: &str = "unknown.email";
 /// Two or more other participants make a group conversation.
 const GROUP_MIN_PARTICIPANTS: usize = 2;
 
+/// The fewest addresses in `To` that can name a group. A sent MMS names only
+/// the recipients there, and a received one the owner too, but never its
+/// sender, so either way two addresses is the least a group gives.
+const GROUP_MIN_TO_ADDRESSES: usize = 2;
+
 /// The person whose phone the archive came from: their numbers, and the
 /// email addresses SMS Backup+ writes for them in `From` and `To`.
 pub(crate) struct Owner {
@@ -112,9 +118,14 @@ impl Owner {
         Self { handles, emails }
     }
 
-    /// The owner's numbers.
-    pub(crate) fn handles(&self) -> &OwnerHandleSet {
-        &self.handles
+    /// The owner's first number, as a handle key.
+    pub(crate) fn primary_handle(&self) -> Option<String> {
+        self.handles.primary_owner_handle()
+    }
+
+    /// True when `handle` is one of the owner's numbers.
+    fn is_owner_handle(&self, handle: &Handle) -> bool {
+        self.handles.is_owner(handle)
     }
 
     /// How many email addresses the owner has.
@@ -176,9 +187,20 @@ fn to_addresses(to: &str) -> Vec<String> {
         .collect()
 }
 
-/// The other participants an MMS names in `From` and `To`, once each by key,
-/// leaving out the owner's numbers and email addresses. `None` when `To`
-/// names fewer than two addresses, which is not a group.
+/// What the `From` and `To` of a mail say about a group.
+enum MailParticipants {
+    /// Not a group: fewer than two other participants.
+    NotAGroup,
+    /// A group of these other participants, once each by key.
+    Group(Vec<Handle>),
+    /// A received mail whose `To` names two or more addresses, none of them
+    /// a number or email address the owner gave. One of them is the owner
+    /// under an address the run does not know, so the set cannot be trusted.
+    OwnerNotNamed,
+}
+
+/// The other participants an MMS names in `From` and `To`, leaving out the
+/// owner's numbers and email addresses.
 ///
 /// SMS Backup+ writes only the first address of an MMS in
 /// `X-smssync-address`. A sent MMS names every recipient in `To`; a received
@@ -187,26 +209,36 @@ fn to_addresses(to: &str) -> Vec<String> {
 /// `MmsSupport.getDetails` in jberkel/sms-backup-plus at `fd33c32`). So a
 /// one-to-one MMS names one address in `To` either way: the recipient, or
 /// the owner.
-fn mail_participants(headers: &MailHeaders, sent: bool, owner: &Owner) -> Option<Vec<Handle>> {
+fn mail_participants(headers: &MailHeaders, sent: bool, owner: &Owner) -> MailParticipants {
     let to = to_addresses(&headers.to);
-    if to.len() < GROUP_MIN_PARTICIPANTS {
-        return None;
+    if to.len() < GROUP_MIN_TO_ADDRESSES {
+        return MailParticipants::NotAGroup;
     }
     let sender = (!sent).then(|| addr_spec(&headers.from).to_string());
     let mut participants = Vec::new();
     let mut seen = HashSet::new();
+    let mut owner_named = false;
     for address in sender.into_iter().chain(to) {
         if owner.is_owner_email(&address) {
+            owner_named = true;
             continue;
         }
         let Some(handle) = mail_address_handle(&address) else {
             continue;
         };
-        if !owner.handles.is_owner(&handle) && seen.insert(handle.key().to_string()) {
+        if owner.is_owner_handle(&handle) {
+            owner_named = true;
+        } else if seen.insert(handle.key().to_string()) {
             participants.push(handle);
         }
     }
-    Some(participants)
+    if !sent && !owner_named {
+        MailParticipants::OwnerNotNamed
+    } else if participants.len() < GROUP_MIN_PARTICIPANTS {
+        MailParticipants::NotAGroup
+    } else {
+        MailParticipants::Group(participants)
+    }
 }
 
 /// The contact name from an `SMS with <name>` subject, unless it is a number.
@@ -309,6 +341,7 @@ pub(crate) fn parse_flat_eml_mail(
     let sent = is_sent(headers, owner);
     let addresses = FlatAddresses::from_headers(headers, owner, sent);
     let conversation = addresses.conversation(headers, sent, name_alias.as_deref())?;
+    let owner_not_named = addresses.owner_not_named;
 
     let file_key = hex::encode(Sha256::digest(path.to_string_lossy().as_bytes()));
     let attachments = extract_attachments(
@@ -318,7 +351,7 @@ pub(crate) fn parse_flat_eml_mail(
     );
     Some(ParsedMessage {
         chat_key: conversation.chat_key,
-        conversation_type: conversation.conversation_type.into(),
+        conversation_type: conversation.conversation_type,
         group_title: conversation.group_title,
         participants: conversation.participants,
         timestamp_secs,
@@ -331,6 +364,7 @@ pub(crate) fn parse_flat_eml_mail(
         smssync_id: (!headers.smssync_id.is_empty()).then(|| headers.smssync_id.clone()),
         android_type: headers.smssync_type.clone(),
         eml_path: String::new(),
+        owner_not_named,
     })
 }
 
@@ -341,12 +375,15 @@ struct FlatAddresses {
     /// The first address in the header.
     first: Option<Handle>,
     non_owner: Vec<Handle>,
+    /// A received mail whose `To` names a group without naming the owner by
+    /// any number or email address they gave (`MailParticipants::OwnerNotNamed`).
+    owner_not_named: bool,
 }
 
 /// Where a flat EML lands and who sent it.
 struct FlatConversation {
     chat_key: String,
-    conversation_type: &'static str,
+    conversation_type: IrConversationType,
     group_title: Option<String>,
     participants: Vec<Handle>,
     sender: Option<Handle>,
@@ -354,27 +391,36 @@ struct FlatConversation {
 
 impl FlatAddresses {
     /// An MMS that names two or more other participants in `From` and `To`
-    /// is a group of them. Otherwise the addresses come from
+    /// is a group of them. A received one whose `To` does not name the owner
+    /// is not trusted, since the owner would count as a participant.
+    /// Otherwise the addresses come from
     /// `X-smssync-address`: `To` decides nothing for one participant, because
     /// it may give that person's email address where `X-smssync-address`
     /// gives the number, and the number is what keys the one-to-one
     /// conversation.
     fn from_headers(headers: &MailHeaders, owner: &Owner, sent: bool) -> Self {
-        if let Some(participants) = mail_participants(headers, sent, owner)
-            && participants.len() >= GROUP_MIN_PARTICIPANTS
-        {
-            return Self {
-                first: participants.first().cloned(),
-                non_owner: participants,
-            };
-        }
+        let owner_not_named = match mail_participants(headers, sent, owner) {
+            MailParticipants::Group(participants) => {
+                return Self {
+                    first: participants.first().cloned(),
+                    non_owner: participants,
+                    owner_not_named: false,
+                };
+            }
+            MailParticipants::OwnerNotNamed => true,
+            MailParticipants::NotAGroup => false,
+        };
         let addresses = smssync_addresses(&headers.smssync_address);
         let first = addresses.first().cloned();
         let non_owner = addresses
             .into_iter()
-            .filter(|a| !owner.handles.is_owner(a))
+            .filter(|a| !owner.is_owner_handle(a))
             .collect();
-        Self { first, non_owner }
+        Self {
+            first,
+            non_owner,
+            owner_not_named,
+        }
     }
 
     /// A group when two or more other participants are named, else the one-to-one chat
@@ -391,7 +437,7 @@ impl FlatAddresses {
             let (chat_key, title) = phone::group_chat_id("group-", &keys);
             return Some(FlatConversation {
                 chat_key,
-                conversation_type: crate::types::GROUP,
+                conversation_type: IrConversationType::Group,
                 group_title: Some(title),
                 participants: self.non_owner.clone(),
                 sender: if sent {
@@ -413,7 +459,7 @@ impl FlatAddresses {
                 .as_ref()
                 .map(|p| p.key().to_string())
                 .unwrap_or_default(),
-            conversation_type: "individual",
+            conversation_type: IrConversationType::Individual,
             group_title: None,
             participants: peer.iter().cloned().collect(),
             sender: peer.filter(|_| !sent),
@@ -637,7 +683,7 @@ old message\r\n"
             &["+447700900123"],
         )
         .unwrap();
-        assert_eq!(msg.conversation_type, "individual");
+        assert_eq!(msg.conversation_type, IrConversationType::Individual);
     }
 
     fn received_from(address: &str) -> ParsedMessage {
@@ -686,7 +732,7 @@ old message\r\n"
             &["5555550100"],
         )
         .unwrap();
-        assert_eq!(msg.conversation_type, "group");
+        assert_eq!(msg.conversation_type, IrConversationType::Group);
         assert_eq!(msg.sender.unwrap().key(), "+14075555678");
     }
 
@@ -703,7 +749,7 @@ old message\r\n"
                 &["5555550100"],
             )
             .unwrap();
-            assert_eq!(msg.conversation_type, "group", "{from}");
+            assert_eq!(msg.conversation_type, IrConversationType::Group, "{from}");
             assert!(msg.sender.is_none(), "{from}: {:?}", msg.sender);
         }
     }
@@ -718,7 +764,7 @@ old message\r\n"
         )
         .unwrap();
         assert!(msg.is_from_me);
-        assert_eq!(msg.conversation_type, "group");
+        assert_eq!(msg.conversation_type, IrConversationType::Group);
         let mut keys: Vec<&str> = msg.participants.iter().map(Handle::key).collect();
         keys.sort_unstable();
         assert_eq!(keys, ["+14075551111", "+14075552222", "carol@example.org"]);
@@ -741,9 +787,25 @@ old message\r\n"
             &["5555550100"],
         )
         .unwrap();
-        assert_eq!(received.conversation_type, "group");
+        assert_eq!(received.conversation_type, IrConversationType::Group);
         assert_eq!(received.chat_key, sent.chat_key);
         assert_eq!(received.sender.unwrap().key(), "carol@example.org");
+    }
+
+    /// A received group MMS names the owner in `To` under the address on
+    /// their own contact card. When that is no number or email address the
+    /// owner gave, the owner would count as a participant, so the message is
+    /// keyed by `X-smssync-address` and marked.
+    #[test]
+    fn a_received_group_mms_that_does_not_name_the_owner_is_not_trusted() {
+        let msg = parse(
+            "From: \"Carol\" <carol@example.org>\nTo: <me@icloud.example>, \"Alice\" <+14075551111@unknown.email>\nSubject: SMS with Carol\nX-smssync-type: 132\nX-smssync-address: 4075551111\nX-smssync-date: 1609459260000\nContent-Type: text/plain; charset=utf-8\n\nhello\n",
+            &["5555550100"],
+        )
+        .unwrap();
+        assert_eq!(msg.conversation_type, IrConversationType::Individual);
+        assert_eq!(msg.chat_key, "+14075551111");
+        assert!(msg.owner_not_named);
     }
 
     /// A received MMS from one person names only the owner in `To`, so it
@@ -755,7 +817,7 @@ old message\r\n"
             &["5555550100"],
         )
         .unwrap();
-        assert_eq!(msg.conversation_type, "individual");
+        assert_eq!(msg.conversation_type, IrConversationType::Individual);
         assert_eq!(msg.chat_key, "+14075551111");
     }
 
@@ -769,7 +831,7 @@ old message\r\n"
             &["5555550100"],
         )
         .unwrap();
-        assert_eq!(msg.conversation_type, "individual");
+        assert_eq!(msg.conversation_type, IrConversationType::Individual);
         assert_eq!(msg.chat_key, "+14075551111");
     }
 }

@@ -29,6 +29,10 @@ const EXPORT_TOOL_VERSION: &str = "1.5.11";
 /// group, kept with no sender. Counted before copies are reduced to one.
 const GROUP_MESSAGES_WITHOUT_SENDER: &str = "group_messages_without_sender";
 
+/// Report counter: received MMS whose `To` names a group but none of the
+/// owner's numbers or email addresses, keyed by `X-smssync-address` instead.
+const GROUP_MESSAGES_OWNER_NOT_NAMED: &str = "group_messages_owner_not_named";
+
 /// The EML's path relative to the input root it was found under, for the vendor `source` bag.
 ///
 /// An EML given as an input itself is recorded under its file name: its path
@@ -321,8 +325,7 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
     };
     let owner = Owner::new(OwnerHandleSet::from_phones(owner_phones)?, owner_emails);
     let owner_handle = owner
-        .handles()
-        .primary_owner_handle()
+        .primary_handle()
         .expect("from_phones guarantees a phone owner handle");
     verbose.line(format!("owner phones: {}", owner_phones.len()));
     verbose.line(format!("owner emails: {}", owner.email_count()));
@@ -509,6 +512,9 @@ impl<'a> EmlIngest<'a> {
         if msg.is_group() && !msg.is_from_me && msg.sender.is_none() {
             self.report.bump(GROUP_MESSAGES_WITHOUT_SENDER, 1);
         }
+        if msg.owner_not_named {
+            self.report.bump(GROUP_MESSAGES_OWNER_NOT_NAMED, 1);
+        }
         let atts = queue_attachments(&msg.attachments, self.spool)?;
         add_message(&mut self.conversations, msg, atts, &mut self.report);
         Ok(())
@@ -517,11 +523,12 @@ impl<'a> EmlIngest<'a> {
     /// One line of parse counters for the verbose log.
     fn parse_summary(&self) -> String {
         format!(
-            "parsed: flat_eml={} messages={} unknown_chat={} group_without_sender={} skipped_call_log={} skipped_not_sms_backup_plus={} skipped_parse_error={}",
+            "parsed: flat_eml={} messages={} unknown_chat={} group_without_sender={} group_owner_not_named={} skipped_call_log={} skipped_not_sms_backup_plus={} skipped_parse_error={}",
             self.report.extra("flat_eml"),
             self.report.extra("messages_before_dedupe"),
             self.report.extra("unknown_chat_messages"),
             self.report.extra(GROUP_MESSAGES_WITHOUT_SENDER),
+            self.report.extra(GROUP_MESSAGES_OWNER_NOT_NAMED),
             self.report.extra("skipped_call_log"),
             self.report.extra("skipped_not_sms_backup_plus"),
             self.report.extra("skipped_parse_error"),
@@ -684,7 +691,7 @@ mod tests {
     fn parsed(timestamp_secs: f64, has_milliseconds: bool, eml_path: &str) -> ParsedMessage {
         ParsedMessage {
             chat_key: "+15555550101".into(),
-            conversation_type: "individual".into(),
+            conversation_type: IrConversationType::Individual,
             group_title: None,
             participants: Handle::parse("+15555550101").into_iter().collect(),
             timestamp_secs,
@@ -697,6 +704,7 @@ mod tests {
             smssync_id: None,
             android_type: "1".into(),
             eml_path: eml_path.into(),
+            owner_not_named: false,
         }
     }
 
@@ -704,7 +712,7 @@ mod tests {
     fn verify_e3_1_two_group_senders_in_one_second_are_two_messages() {
         let group = |sender: &str, timestamp_secs: f64| ParsedMessage {
             chat_key: "+15555550111_+15555550122".into(),
-            conversation_type: "group".into(),
+            conversation_type: IrConversationType::Group,
             sender: Handle::parse(sender),
             text: "Happy birthday!".into(),
             ..parsed(timestamp_secs, true, "")

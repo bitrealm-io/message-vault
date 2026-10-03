@@ -209,11 +209,11 @@ released versions carry their date on the heading.
 #### Importing
 
 - 2026-10-03 **Group texts from an SMS Backup+ archive are group
-  conversations.** Every group picture message used to be filed as a
-  conversation with one of its members alone. A group message the owner sent
-  and the replies to it now land together in one group conversation, each
-  reply credited to the person who sent it. A group message whose sender
-  matches nobody in the group shows no sender instead of the first member.
+  conversations.** Every group text used to be filed as a conversation with
+  one of its members alone. A group text you sent and the replies to it now
+  land together in one group conversation, each reply credited to the person
+  who sent it. A group text whose sender matches nobody in the group shows
+  no sender instead of the first member.
 - 2026-09-23 **A group text from an SMS Backup & Restore backup is no longer
   credited to the wrong person when the backup names no sender.** A group
   MMS without a sender address was shown as sent by whichever member the

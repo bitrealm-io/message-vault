@@ -267,34 +267,46 @@ export function listAccountIdentities(
 /** Which page of an account's run history to read. Absent values are left off the URL. */
 export type AccountRunListParams = { limit?: number; offset?: number };
 
-/** An account's Import Runs, newest first: the logged-in one, or as the owner the one named. */
+/**
+ * An account's Import Runs, newest first: the logged-in one in full, or as the
+ * owner the one named, each without what the run held.
+ */
 export function listAccountImports(
   params: AccountRunListParams,
   opts?: RequestOptions,
   accountId?: number,
-): Promise<Schema["Page_ImportSummary"]> {
-  return apiClient.get<Schema["Page_ImportSummary"]>(
+): Promise<Schema["AccountImportRuns"]> {
+  return apiClient.get<Schema["AccountImportRuns"]>(
     withQuery(`${accountBase(accountId)}/imports`, query(params)),
     opts,
   );
 }
 
-/** One of an account's Import Runs, with its counts, timings and issues. */
+/**
+ * One of an account's Import Runs, with its counts and timings, and for the
+ * logged-in account its summary and issues.
+ */
 export function getAccountImport(
   importId: number,
   opts?: RequestOptions,
   accountId?: number,
-): Promise<Schema["ImportRun"]> {
-  return apiClient.get<Schema["ImportRun"]>(`${accountBase(accountId)}/imports/${importId}`, opts);
+): Promise<Schema["AccountImportRun"]> {
+  return apiClient.get<Schema["AccountImportRun"]>(
+    `${accountBase(accountId)}/imports/${importId}`,
+    opts,
+  );
 }
 
-/** An account's Export Runs, newest first: the logged-in one, or as the owner the one named. */
+/**
+ * An account's Export Runs, newest first: the logged-in one in full, or as
+ * the owner the one named, each without what the run asked for.
+ */
 export function listAccountExports(
   params: AccountRunListParams,
   opts?: RequestOptions,
   accountId?: number,
-): Promise<Schema["Page_ExportRun"]> {
-  return apiClient.get<Schema["Page_ExportRun"]>(
+): Promise<Schema["AccountExportRuns"]> {
+  return apiClient.get<Schema["AccountExportRuns"]>(
     withQuery(`${accountBase(accountId)}/exports`, query(params)),
     opts,
   );
@@ -399,11 +411,23 @@ export function getConversation(
   return apiClient.get<Schema["ConversationSummary"]>(`/v1/conversations/${conversationId}`, opts);
 }
 
-/** Paging for `GET /v1/conversations/{id}/messages`. Opening a conversation
- * takes no filter: a year inside one is the search `in:#id date:YYYY`. */
+/**
+ * Paging for `GET /v1/conversations/{id}/messages`. Opening a conversation
+ * takes no filter: a year inside one is the search `in:#id date:YYYY`.
+ *
+ * The page starts at `offset`, or beside one message: `around` puts it in the
+ * middle, `before` and `after` read the page just before or after it in the
+ * page's order. Send at most one of the four; the answer's `offset` says
+ * where the page sits.
+ */
 export type ConversationMessagesParams = {
   offset?: number;
   limit?: number;
+  /** `date` (oldest first, the default) or `-date`. */
+  sort?: "date" | "-date";
+  around?: number;
+  before?: number;
+  after?: number;
 };
 
 export function listConversationMessages(
@@ -422,6 +446,8 @@ export type MessagesListParams = {
   q?: string;
   offset?: number;
   limit?: number;
+  /** `date` (oldest first, the default) or `-date`. */
+  sort?: "date" | "-date";
 };
 
 /**

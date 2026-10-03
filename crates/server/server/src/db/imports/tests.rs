@@ -323,7 +323,7 @@ async fn running_import(conn: &mut SqliteConnection, account: i64) -> Option<Imp
     let (items, _) = list_imports_page(conn, account, Some("running"), &DEFAULT_IMPORT_SORT, 1, 0)
         .await
         .unwrap();
-    items.into_iter().next()
+    items.into_iter().next().map(Into::into)
 }
 
 #[tokio::test]

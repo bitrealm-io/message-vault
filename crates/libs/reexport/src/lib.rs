@@ -14,7 +14,9 @@ use message_ir_format::{
     read_conversation_mbox,
 };
 use message_staging::AttachmentSpool;
-use sms_backup_restore_exporter::{ReadOptions, SbrArchive, read_backup};
+use sms_backup_restore_exporter::{
+    ReadOptions, SbrArchive, is_sms_or_mms, not_sms_or_mms_line, read_backup,
+};
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
@@ -49,12 +51,13 @@ struct ReexportReport {
 }
 
 impl ReexportReport {
-    /// Lines for the run's log.
+    /// Lines for the run's log. The desktop app shows the last line again as
+    /// the run's summary, so the left-out line comes before `Conversations:`
+    /// and never closes the log.
     fn log_lines(&self) -> Vec<String> {
-        let mut lines = vec![
-            format!("Detected input format: {}", self.detected_format),
-            format!("Conversations: {}", self.report.conversations),
-        ];
+        let mut lines = vec![format!("Detected input format: {}", self.detected_format)];
+        lines.extend(not_sms_or_mms_line(&self.report));
+        lines.push(format!("Conversations: {}", self.report.conversations));
         if self.report.attachments_saved > 0 {
             lines.push(format!(
                 "  saved {} attachments",
@@ -113,10 +116,16 @@ fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportR
         apply_reexport_convert(&mut documents, config, &transforms, &mut report)?;
     }
 
-    report.conversations = documents.len() as u64;
     let mut sink = FormatSink::open(&config.output, config.output_format, transforms)?;
+    report.conversations = documents.len() as u64;
     if config.output_format == OutputFormat::Xml {
         sink = sink.with_archive(Box::new(SbrArchive));
+        // `smses.xml` holds only SMS and MMS, and the archive writes nothing
+        // for a conversation with none, so only the others are counted.
+        report.conversations = documents
+            .iter()
+            .filter(|doc| doc.messages.iter().any(is_sms_or_mms))
+            .count() as u64;
     }
     for document in documents {
         sink.write_document(document)?;

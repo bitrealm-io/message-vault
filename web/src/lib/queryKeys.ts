@@ -60,11 +60,16 @@ export const keys = {
     list: ({ q, sort, order }: ConversationListKey) =>
       ["conversations", "list", q, sort, order] as const,
     detail: (id: number) => ["conversations", "detail", String(id)] as const,
-    messages: (id: number, p: { offset: number; limit: number }) =>
-      ["conversations", "messages", String(id), p.offset, p.limit] as const,
-    /** One conversation narrowed to a year or a find term: `GET /v1/messages?q=in:#id …`. */
-    find: (id: number, q: string, offset: number, limit: number) =>
-      ["conversations", "find", String(id), q, offset, limit] as const,
+    /**
+     * The messages the conversation panel has read outward from where it
+     * opened or last jumped to: `newest`, or `around:{message id}`. One entry
+     * per place, holding the pages read before and after it.
+     */
+    messages: (id: number, start: string) =>
+      ["conversations", "messages", String(id), start] as const,
+    /** A page of one conversation's messages matching a search: `GET /v1/messages?q=in:#id …`. */
+    find: (id: number, q: string, sort: string, offset: number, limit: number) =>
+      ["conversations", "find", String(id), q, sort, offset, limit] as const,
     sources: (id: number | null) => ["conversations", "sources", String(id)] as const,
   },
   contactGroups: { all: ["contact-groups"] as const },

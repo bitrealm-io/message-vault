@@ -234,9 +234,23 @@ that counts something else is a second shape.
 Export Run's messages. `offset` is at most 50 000 on the browse lists. A value
 outside the range is `validation-failed`, never a silent clamp. One
 conversation's messages, `GET /v1/conversations/{id}/messages`, is not a browse
-list and has no `offset` cap. Why: the conversation page reads a thread by
-stepping `offset` forward, and a cap would leave the rest of a long thread out
-of reach.
+list and has no `offset` cap. Why: every message of a long conversation must
+be reachable, and a cap would leave the rest of a long thread out of reach.
+
+One conversation's messages can also be read beside one message, in place of
+`offset`: `around={message_id}` answers the page with that message in the
+middle, and `before={message_id}` and `after={message_id}` the page just
+before or just after it in the page's order, without it. The answer is the
+same page, and its `offset` says where the page sits, so `total` and the
+position stay known. A request sends at most one of `offset`, `around`,
+`before` and `after`, and a message the conversation does not show (another
+conversation's, a duplicate, or none) is `validation-failed`. Why: a jump to a
+message (a search result, a Find match, the first message of a year) does not
+know the message's offset, and a screen that scrolls from there reads the next
+page from the message at its edge rather than from a number that an import
+or a deletion in between would shift. This is not the cursor paging rejected
+below: the page keeps `total` and `offset`, and the parameters name a message,
+not an opaque token.
 
 Sorting is `sort=-field,field`: comma-separated keys, a leading `-` for
 descending. Each list declares the keys it accepts, and an unlisted key is
@@ -400,6 +414,16 @@ What each reaches:
   them. Each pair answers from one function, so the two lists cannot differ.
   Which contacts a run created is content, so `/v1/imports/{id}/contacts` has
   no twin under the account.
+- The account reads its own runs in full. The owner reads each run as an
+  `OwnerImportRun` or `OwnerExportRun`: the source, mode, tool, times,
+  outcome and counts, with the counts an import's summary reported and how
+  many issues it recorded, and for an export only which form its scope took.
+  Why: a staging summary lists the addresses of everyone in the backup, an
+  issue names its conversation's file, and an export's query is a search over
+  the account's messages, all content under
+  `docs/adr/0008-the-owner-holds-no-messages.md`. The owner's view is a type
+  of its own rather than the account's with fields removed, so a field added
+  to a run reaches the owner only when someone adds it to that type.
 - `GET /v1/server` and `POST /v1/server/claim` take no credential.
   `/v1/server/settings` and `GET /v1/server/storage` are the owner's: the
   storage totals sum every account, and no account holds more than its own.

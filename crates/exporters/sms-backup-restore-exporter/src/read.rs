@@ -956,13 +956,13 @@ mod tests {
     #[test]
     fn an_international_number_keeps_its_country() {
         let docs = read_xml(
-            r#"<sms protocol="0" address="+6591234567" date="1400773261000" type="1" body="hi"/><sms protocol="0" address="+447700900123" date="1400773261000" type="1" body="hi"/>"#,
+            r#"<sms protocol="0" address="+6595550100" date="1400773261000" type="1" body="hi"/><sms protocol="0" address="+447700900123" date="1400773261000" type="1" body="hi"/>"#,
         );
         let ids: Vec<_> = docs
             .iter()
             .map(|d| d.conversation.chat_identifier.as_str())
             .collect();
-        assert_eq!(ids, ["+447700900123", "+6591234567"]);
+        assert_eq!(ids, ["+447700900123", "+6595550100"]);
     }
 
     #[test]

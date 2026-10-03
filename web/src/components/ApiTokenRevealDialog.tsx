@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { type ApiTokenReveal, ApiTokenRevealContext } from "./apiTokenRevealState";
 import Button from "./Button";
 import ModalShell from "./ModalShell";
+import PlainButton from "./PlainButton";
 
 function CopyIcon() {
   return (
@@ -70,14 +71,13 @@ export default function ApiTokenRevealDialog({
       dismissable={false}
       keyboardDismissable={false}
     >
-      <button
-        type="button"
+      <PlainButton
         aria-label="Close"
-        onClick={onClose}
+        onPress={onClose}
         className="absolute top-3 right-3 cursor-pointer border-none bg-transparent text-[1.25rem] leading-none text-muted"
       >
         ×
-      </button>
+      </PlainButton>
 
       <h3 className="mb-3 pr-6 text-center text-[1.125rem] font-medium text-text">
         API Token created

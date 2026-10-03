@@ -387,6 +387,12 @@ What each reaches:
   session: the account's own with the `delete` permission, or, for an
   account's messages and for the account itself, the owner's. A token is
   refused whatever its scopes.
+- The Demo Account is refused with `403 Forbidden` and
+  `demo-account-protected` by its id, whatever its permission row says, on
+  every route that needs the `import` scope or the `delete` permission and on
+  `POST /v1/contacts`. Its profile reports `export` and neither `import` nor
+  `delete`, from the same id. Why: it has no password, so its limits must not
+  rest on a row (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`).
 - An account may do everything with its own messages, deleting them and
   itself included, unless the owner limits it. Deleting an account deletes
   every message it owns, so an account whose `delete` permission is off
@@ -415,6 +421,14 @@ What each reaches:
   them. Each pair answers from one function, so the two lists cannot differ.
   Which contacts a run created is content, so `/v1/imports/{id}/contacts` has
   no twin under the account.
+- The Audit Trail is read at `GET /v1/audit-trail`, every account's entries,
+  which is the owner's alone, and at `GET /v1/accounts/{id}/audit-trail`, the
+  entries about one account, which the owner and that account read. Both answer
+  from one function, so the two lists cannot differ. No route writes, changes
+  or deletes an entry: the server writes one as part of the act it records.
+  Why: an account holder reads what the owner did to their account, and a
+  record its subject or the owner could edit would be no check on either
+  (`docs/adr/0020-the-audit-trail-outlives-the-account.md`).
 - The account reads its own runs in full. The owner reads each run as an
   `OwnerImportRun` or `OwnerExportRun`: the source, mode, tool, times,
   outcome and counts, with the counts an import's summary reported and how
@@ -476,7 +490,10 @@ takes a handful of registrations, so a server-wide count never stops a person.
 ## Runs
 
 An Import Run and an Export Run are recorded permanently, whether they
-completed, failed or were cancelled, and the client closes them: a run's
+completed, failed or were cancelled, and outlive the account that ran them, as
+the rest of the Audit Trail does. Each run records what started it: a Session
+with the app it named, or an API token by its label and hint as they were
+then. The client closes a run: a run's
 settings are stated once on creation, never per batch or per page, and
 `complete`, `discard` (imports) and `cancel` (exports) are the only ways out.
 There is no sessionless import and no unrecorded export.
@@ -546,25 +563,29 @@ when the two differ, and CI checks the web app's generated types against it.
 An operation's error responses are built from shared parts, never written out
 by hand. The credential a route accepts brings its `401` and `403`; a request
 body brings `400`, `413`, `415` and `422`; an id in the path brings `404` and
-`422`; and every `/v1` route brings `422` for a query parameter it does not
-declare. The handler adds only what is its own, such as `409` for a run in the
-wrong state, by naming the problem type (`crate::problem::openapi`).
+`422`; every `/v1` route brings `422` for a query parameter it does not
+declare; and every `/v1` route that answers JSON brings `406` for an `Accept`
+that names nothing JSON. `405` is said once, in the document's own
+description, because it answers a method no operation has. The handler adds
+only what is its own, such as `409` for a run in the wrong state, by naming
+the problem type (`crate::problem::openapi`).
 Every error response is declared as `application/problem+json`, names the
 problem types it can carry (in its description and in `x-problem-types`), and
-has a description. The first sentence of a
-handler's doc comment is the operation's summary, and the rest is its
-description.
+has a description. The first sentence of a handler's doc comment is the
+operation's summary, and the rest is its description.
 Why: every mismatch between the reference and the handlers that the September
 2026 review found was in a hand-written list.
 
 A rule that can be checked by walking every operation in the document is
 checked that way, by one test, as `openapi/credential_matrix.rs` checks every
 route's reach: the page shape and paging parameters on every list, a
-`Location` on every `201`, a problem document on every failure, `401` without
-a credential, a refused unknown query parameter, `415` for a body without an
-accepted `Content-Type`, `400` for a JSON body that is not JSON, kebab-case
-paths and the nesting depth. Why: a rule checked one route at a time is
-checked on the routes someone remembered.
+`Location` on every `201` that the credential which made it can `GET`, a
+problem document on every failure, `401` without a credential, a refused
+unknown query parameter, `415` for a body without an accepted `Content-Type`,
+`400` for a JSON body that is not JSON, `406` exactly where the document lists
+it, a successful `GET` in a media type its document declares, no body on a
+`HEAD` answer, kebab-case paths and the nesting depth. Why: a rule checked one
+route at a time is checked on the routes someone remembered.
 
 The shared failures are checked by calling each operation into them, and the
 status and problem type the server answers must be ones the document lists.
@@ -577,12 +598,17 @@ A route group is one module named for the route's first path segment, with
 `_api`: `contacts_api`, `conversations_api`, `imports_api`, `exports_api`,
 `assets_api`, `search_fields_api`, `session_api`, `server_api`, `trash_api`.
 Contact Groups and Message Tags, one shape served twice, share
-`named_set_api`. Why: a route's code is found from its URL without searching.
+`named_set_api`. A collection nested under a member is a submodule of that
+group: `/v1/accounts/{id}/api-tokens` is `accounts_api::api_tokens`.
+Why: a route's code is found from its URL without searching.
 
 A handler is named `verb_noun`, with no `_handler` suffix. The verb is `list`,
 `get`, `create`, `update` (`PATCH`), `replace` (`PUT`) or `delete`, or the
 action's own verb: `list_contacts`, `get_contact`, `update_contact`,
 `claim_server`, `complete_import`.
+A `HEAD` handler takes the method's own verb, `head`: `head_asset`.
+A `POST` that reads is named for what it returns, as its route is:
+`list_contact_summaries`, `get_address_book`.
 
 A type on the wire is named one of two ways, and a reader can tell which from
 the name:

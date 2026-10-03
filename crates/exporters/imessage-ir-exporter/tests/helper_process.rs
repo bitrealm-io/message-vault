@@ -59,7 +59,7 @@ fn exports_a_mac_chat_db_through_the_helper_process() {
         .map(|path| fs::read_to_string(path).unwrap())
         .collect();
     assert!(
-        !all.contains("+15550000002 sam@example.com"),
+        !all.contains("+15555550107 sam@example.com"),
         "one person's two addresses are never joined into one: {all}"
     );
     assert!(all.contains("\"guid-1\""), "{all}");

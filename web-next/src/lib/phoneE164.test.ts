@@ -8,7 +8,7 @@ describe("toPhoneE164 guarded policy", () => {
     assert.equal(toPhoneE164("15555550100"), "+15555550100");
     assert.equal(toPhoneE164("+15555550100"), "+15555550100");
     assert.equal(toPhoneE164("+44 20 7183 8750"), "+442071838750");
-    assert.equal(toPhoneE164("+1-542-341-2398"), "+15423412398");
+    assert.equal(toPhoneE164("+1-542-555-0100"), "+15425550100");
   });
 
   it("returns null for ambiguous values instead of fabricating +0…", () => {
@@ -23,7 +23,7 @@ describe("toPhoneE164 guarded policy", () => {
 
 describe("formatPhoneDisplay", () => {
   it("formats US E.164 with international spacing", () => {
-    assert.equal(formatPhoneDisplay("+19412660605"), "+1 941 266 0605");
+    assert.equal(formatPhoneDisplay("+19415550100"), "+1 941 555 0100");
   });
 
   it("formats UK E.164 with international spacing", () => {

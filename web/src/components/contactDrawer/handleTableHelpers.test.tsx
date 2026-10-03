@@ -19,7 +19,6 @@ afterEach(() => {
   cleanup();
 });
 
-// biome-ignore lint/style/useComponentExportOnlyModules: local test harness only
 function Harness() {
   const [sortDescriptor, setSortDescriptor] = useState<SortDescriptor | null>(null);
   return (

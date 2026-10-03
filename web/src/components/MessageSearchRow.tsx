@@ -6,6 +6,7 @@ import { messageConversationName, messageRowText, messageSenderName } from "../l
 import { useTimeZone } from "../lib/timeZone";
 import { listRowDivider } from "../lib/tw";
 import type { Message } from "../lib/types";
+import PlainButton from "./PlainButton";
 
 /** `text` with each range in bold. */
 function boldRanges(text: string, ranges: readonly MatchRange[]): ReactNode[] {
@@ -47,9 +48,8 @@ export default function MessageSearchRow({
   const sender = messageSenderName(message);
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <PlainButton
+      onPress={onClick}
       aria-current={isSelected ? "true" : undefined}
       className={`box-border flex w-full cursor-pointer flex-col gap-[0.3rem] border-none px-[0.85rem] py-[0.7rem] text-left ${listRowDivider} ${
         isSelected ? "bg-hover" : "bg-transparent"
@@ -81,6 +81,6 @@ export default function MessageSearchRow({
           </span>
         ) : null}
       </span>
-    </button>
+    </PlainButton>
   );
 }

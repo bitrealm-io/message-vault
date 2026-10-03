@@ -1269,7 +1269,7 @@ mod tests {
         // a bare `Me` becomes `You`.
         assert_eq!(
             announcement_text(&session, &added).as_deref(),
-            Some("+15550000001 added Sam Example to the conversation.")
+            Some("+15555550106 added Sam Example to the conversation.")
         );
         added.destination_caller_id = None;
         assert_eq!(
@@ -1374,23 +1374,23 @@ mod tests {
         assert_eq!(
             lines,
             [
-                r#"conversation "+15550000002""#,
-                r#"message "guid-1" in "+15550000002""#,
-                r#"message "guid-2" in "+15550000002""#,
+                r#"conversation "+15555550107""#,
+                r#"message "guid-1" in "+15555550107""#,
+                r#"message "guid-2" in "+15555550107""#,
                 r#"conversation "chat100""#,
                 r#"message "guid-3" in "chat100""#,
                 r#"conversation "friend@example.com""#,
                 r#"message "guid-4" in "friend@example.com""#,
-                r#"message "guid-5" in "+15550000002""#,
-                r#"message "guid-6" in "+15550000002""#,
+                r#"message "guid-5" in "+15555550107""#,
+                r#"message "guid-6" in "+15555550107""#,
                 r#"conversation "sam@example.com""#,
                 r#"message "guid-7" in "sam@example.com""#,
                 r#"conversation "chat200""#,
                 r#"message "guid-8" in "chat200""#,
                 r#"message "guid-9" in "chat100""#,
-                r#"conversation "+15550000001""#,
-                r#"message "guid-10" in "+15550000001""#,
-                r#"message "guid-11" in "+15550000001""#,
+                r#"conversation "+15555550106""#,
+                r#"message "guid-10" in "+15555550106""#,
+                r#"message "guid-11" in "+15555550106""#,
                 r#"conversation "orphaned""#,
                 r#"message "guid-12" in "orphaned""#,
                 "progress",

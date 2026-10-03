@@ -18,7 +18,7 @@ use rusqlite::Connection;
 
 /// The owner's number, as `message.destination_caller_id` carries it.
 /// `chat.account_login` stores it with Apple's `P:` prefix.
-pub const OWNER: &str = "+15550000001";
+pub const OWNER: &str = "+15555550106";
 
 /// The owner's email address, the second identity the owner sends from, as
 /// `message.destination_caller_id` carries it. `chat.account_login` stores
@@ -27,7 +27,7 @@ pub const OWNER_EMAIL: &str = "owner@example.com";
 
 /// The first contact's number: the other side of the direct chat and a member
 /// of the group chat.
-pub const FRIEND_PHONE: &str = "+15550000002";
+pub const FRIEND_PHONE: &str = "+15555550107";
 
 /// The second contact's address: a member of the group chat, and the other
 /// side of the direct chat the owner runs from the email account.
@@ -235,7 +235,7 @@ mod tests {
         assert_eq!(
             count(
                 "SELECT count(*) FROM chat_handle_join JOIN handle ON handle.ROWID = handle_id \
-                 WHERE chat_id = 2 AND handle.id = '+15550000001'"
+                 WHERE chat_id = 2 AND handle.id = '+15555550106'"
             ),
             1,
             "the group lists the owner's own handle among its members"

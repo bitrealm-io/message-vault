@@ -588,6 +588,8 @@ mod tests {
     /// same fake data, which is what makes it shareable and comparable — so
     /// the mapping is a contract, not an implementation detail. Regenerate
     /// deliberately if it ever has to change, and say why in the commit.
+    /// The fake numbers on the right are the key's output, not chosen
+    /// numbers, so they can fall outside the reserved test ranges (#1521).
     #[test]
     fn known_answers_for_a_fixed_key() {
         const KEY: u8 = 7;
@@ -597,7 +599,7 @@ mod tests {
             ("+15555550100", "+10490970433"),
             ("+44 20 7183 8750", "+44 39 2603 3624"),
             ("7535", "7032"),
-            ("(555) 123-4567", "(972) 642-7627"),
+            ("(555) 555-0102", "(075) 458-7648"),
         ] {
             assert_eq!(phones.obfuscate_phone(raw), expected, "phone {raw:?}");
         }
@@ -649,8 +651,8 @@ mod tests {
         // prose around them.
         let mut text = Obfuscator::new(key(KEY));
         assert_eq!(
-            text.obfuscate_text("Call me at +1 555 123 4567 or alice@example.com"),
-            "Vmrq sm hl +1 839 910 9347 pt hugo.white@example.invalid"
+            text.obfuscate_text("Call me at +1 555 555 0119 or alice@example.com"),
+            "Vmrq sm hl +1 060 199 4055 pt hugo.white@example.invalid"
         );
 
         // A handle with no name of its own still gets a stable one, and a real
@@ -675,7 +677,7 @@ mod tests {
     fn overlapping_structured_spans_are_each_rewritten_once() {
         // The address sits inside the URL, and the digits sit inside the
         // address: three regexes, one region of text.
-        let raw = "see https://mail.example.com/u/alice@example.com?id=5551234567 now";
+        let raw = "see https://mail.example.com/u/alice@example.com?id=5555550119 now";
         let spans = find_structured_spans(raw);
 
         let mut sorted: Vec<(usize, usize)> = spans.iter().map(|(s, e, _)| (*s, *e)).collect();
@@ -694,7 +696,7 @@ mod tests {
         let out = anon.obfuscate_text(raw);
         assert!(!out.contains("alice@example.com"), "{out}");
         assert!(!out.contains("mail.example.com"), "{out}");
-        assert!(!out.contains("5551234567"), "{out}");
+        assert!(!out.contains("5555550119"), "{out}");
     }
 
     /// A run of prose longer than the digest is the case that exercises the
@@ -874,7 +876,7 @@ mod tests {
         for (raw, expected) in [
             ("call 1234 now", "shhw 8610 bsg"),
             ("call 12345 now", "fscs 25657 uto"),
-            ("call 5551234567 now", "nbxh 3189880900 uvx"),
+            ("call 5555550119 now", "nbxh 6667863530 uvx"),
         ] {
             let mut anon = Obfuscator::new(key(13));
             assert_eq!(anon.obfuscate_text(raw), expected, "for {raw:?}");
@@ -913,12 +915,12 @@ mod tests {
     #[test]
     fn phone_keeps_country_calling_code() {
         let mut a = Obfuscator::new(key(3));
-        let us = a.obfuscate_phone("+1 (555) 123-4567");
+        let us = a.obfuscate_phone("+1 (555) 555-0119");
         assert!(us.starts_with("+1"));
         let us_digits: String = us.chars().filter(|c| c.is_ascii_digit()).collect();
         assert!(us_digits.starts_with('1'));
         assert_eq!(us_digits.len(), 11);
-        assert_ne!(&us_digits[1..], "5551234567");
+        assert_ne!(&us_digits[1..], "5555550119");
 
         let uk = a.obfuscate_phone("+44 20 7183 8750");
         assert!(uk.starts_with("+44"));
@@ -973,11 +975,11 @@ mod tests {
     #[test]
     fn text_keeps_valid_email_url_phone() {
         let mut a = Obfuscator::new(key(6));
-        let src = "Email alice@secret.com or https://secret.example/path?x=1 call +1 (555) 123-4567 thanks";
+        let src = "Email alice@example.com or https://secret.example/path?x=1 call +1 (555) 555-0119 thanks";
         let fake = a.obfuscate_text(src);
-        assert!(!fake.contains("alice@secret.com"));
+        assert!(!fake.contains("alice@example.com"));
         assert!(!fake.contains("secret.example"));
-        assert!(!fake.contains("555) 123-4567"));
+        assert!(!fake.contains("555) 555-0119"));
         assert!(fake.contains("@example.invalid"));
         assert!(fake.contains("https://") && fake.contains(".example.invalid"));
         assert!(fake.contains('+') && fake.contains('(') && fake.contains('-'));
@@ -993,7 +995,7 @@ mod tests {
     #[test]
     fn phone_preserves_formatting() {
         let mut a = Obfuscator::new(key(7));
-        let src = "+1 (555) 123-4567";
+        let src = "+1 (555) 555-0119";
         let fake = a.obfuscate_phone(src);
         assert_eq!(fake.len(), src.len());
         let shape = |s: &str| {
@@ -1004,7 +1006,7 @@ mod tests {
         assert_eq!(shape(&fake), shape(src));
         let digits: String = fake.chars().filter(|c| c.is_ascii_digit()).collect();
         assert_eq!(digits.len(), 11);
-        assert_ne!(digits, "15551234567");
+        assert_ne!(digits, "15555550119");
     }
 
     #[test]

@@ -6,7 +6,7 @@
 //! `(TempDir, AppState, String, i64)` for handler-level tests that call a
 //! handler function directly. This module drives the whole stack over real
 //! HTTP, for tests in `session_api.rs`, `accounts_api.rs`,
-//! `api_tokens_api.rs`, and any route whose contract is worth checking end
+//! `accounts_api/api_tokens.rs`, and any route whose contract is worth checking end
 //! to end.
 
 use axum::http::StatusCode;
@@ -152,6 +152,28 @@ impl TestFixture {
             .await
             .unwrap();
         id
+    }
+
+    /// Insert the Demo Account at its fixed id, with the schema's default row:
+    /// every permission on, so whatever refuses it does so by its id
+    /// (ADR 0016). Returns its id.
+    pub async fn demo_account(&self) -> i64 {
+        use crate::db::account_profile::{DEMO_ACCOUNT_ID, DEMO_USERNAME};
+        self.account_with_id(DEMO_ACCOUNT_ID, DEMO_USERNAME).await
+    }
+
+    /// The Demo Account at its fixed id, logged in with its empty password,
+    /// with a row that grants every permission. A test uses it to show that
+    /// the server refuses the Demo Account by its id, whatever the row says
+    /// (ADR 0016). Returns its id and session token.
+    pub async fn demo_account_session(&self) -> (i64, String) {
+        let id = self.demo_account().await;
+        let token =
+            log_in(&self.state, crate::db::account_profile::DEMO_USERNAME, "").await["token"]
+                .as_str()
+                .unwrap()
+                .to_string();
+        (id, token)
     }
 
     /// Insert an `accounts` row under the id the database hands out, for a
@@ -394,8 +416,9 @@ pub async fn post_created_json<T: DeserializeOwned>(
     );
     let location =
         location.unwrap_or_else(|| panic!("POST {path} answered 201 without a Location"));
+    let collection = path.split('?').next().unwrap_or(path);
     assert!(
-        location.starts_with(&format!("{path}/")),
+        location.starts_with(&format!("{collection}/")),
         "POST {path} Location must name a member under it, got {location}"
     );
     let parsed = serde_json::from_str(&text)

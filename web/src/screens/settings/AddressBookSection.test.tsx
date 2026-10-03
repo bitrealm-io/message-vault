@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../lib/api";
 import { loadAddressBook } from "../../lib/serverApi";
@@ -48,6 +49,18 @@ describe("AddressBookSection", () => {
     render(<AddressBookSection />);
     expect((screen.getByLabelText(/^Append/) as HTMLInputElement).checked).toBe(true);
     expect((screen.getByLabelText(/^Edit/) as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("is one radio group, named and moved through with the arrow keys", async () => {
+    render(<AddressBookSection />);
+    const group = screen.getByRole("radiogroup", { name: "How to load it" });
+
+    await userEvent.tab();
+    expect(within(group).getByRole("radio", { name: /^Append/ })).toHaveFocus();
+    await userEvent.keyboard("{ArrowDown}");
+
+    expect(within(group).getByRole("radio", { name: /^Edit/ })).toBeChecked();
+    expect(within(group).getByRole("radio", { name: /^Append/ })).not.toBeChecked();
   });
 
   it("sends the file's text as an Append unless Edit is chosen", async () => {
@@ -103,7 +116,7 @@ describe("AddressBookSection", () => {
 
   it("lists each number the load read with its + back or made a new identity", async () => {
     const notes = [
-      'row 2: 6591234567 has no +, so it was read as +6591234567, which "Ada" (contact 4) holds',
+      'row 2: 6595550100 has no +, so it was read as +6595550100, which "Ada" (contact 4) holds',
       "row 5: 447700900123 has no +, so it became the new identity 447700900123",
     ];
     post.mockResolvedValue({ ...NOTHING, notes });

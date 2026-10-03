@@ -1,8 +1,9 @@
 import ImportSummaryPanel, {
   type ImportSummaryView,
 } from "../../../components/import/ImportSummaryPanel";
+import PlainButton from "../../../components/PlainButton";
 import ImportContactsPanel from "./ImportContactsPanel";
-import type { ImportDetailResponse } from "./storageUtils";
+import type { AccountImportRun } from "./storageUtils";
 import {
   formatBytes,
   formatImportDate,
@@ -23,7 +24,7 @@ export default function ImportDetailPanel({
   detailId: string;
   /** False for the owner: who an account's contacts are is the account's own. */
   listContacts: boolean;
-  selectedImport: ImportDetailResponse | null;
+  selectedImport: AccountImportRun | null;
   selectedImportSummary: ImportSummaryView | null;
   selectedImportLoading: boolean;
   selectedImportError: string;
@@ -50,15 +51,14 @@ export default function ImportDetailPanel({
             <p className={sectionHint}>Loading import details…</p>
           )}
         </div>
-        <button
-          type="button"
+        <PlainButton
           aria-label="Close import details"
           title="Close import details"
-          onClick={onClose}
+          onPress={onClose}
           className="flex size-8 items-center justify-center rounded-md text-xl leading-none text-muted hover:bg-hover hover:text-text"
         >
           ×
-        </button>
+        </PlainButton>
       </div>
 
       {selectedImportLoading ? (

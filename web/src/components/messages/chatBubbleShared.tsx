@@ -172,7 +172,7 @@ export function ChatBubbleRow({
       {hasBubble ? (
         <div
           className={`${radius} ${bubbleColorClasses(palette, mine)} max-w-[min(78%,34rem)] whitespace-pre-wrap break-words px-[0.7rem] py-[0.45rem] text-[0.9375rem] leading-[1.35] ${
-            mine ? "" : "shadow-[0_0.5px_0_rgb(0_0_0/0.06)]"
+            mine ? "" : "shadow-bubble"
           }`}
         >
           {children}

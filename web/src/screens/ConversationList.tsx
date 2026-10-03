@@ -4,7 +4,7 @@ import ConversationSortMenu from "../components/ConversationSortMenu";
 import ListRangeHeader from "../components/ListRangeHeader";
 import ListRangePill, {
   RANGE_PILL_OVERLAY_INSET,
-  RANGE_PILL_SCROLL_PAD,
+  RangePillSpacer,
 } from "../components/ListRangePill";
 import TagsMenu from "../components/TagsMenu";
 import { useSetRightToolbar } from "../components/useRightToolbar";
@@ -24,6 +24,8 @@ import { listConversations } from "../lib/serverApi";
 import type { Conversation } from "../lib/types";
 import { useDebouncedQuery } from "../lib/useDebouncedQuery";
 import { useMessageTags } from "../lib/useMessageTags";
+import { useResetOnChange } from "../lib/useResetOnChange";
+import { useSelectAll } from "../lib/useSelectAll";
 
 export default function ConversationList({
   selectedId,
@@ -43,10 +45,8 @@ export default function ConversationList({
   const { tags: allTags } = useMessageTags();
   const setRightToolbar = useSetRightToolbar();
 
-  useEffect(() => {
-    void query;
-    setCheckedIds(new Set());
-  }, [query]);
+  // A new query unticks every row, so a tick never applies to a row the list no longer shows.
+  useResetOnChange([query], () => setCheckedIds(new Set()));
 
   const fetchPage = useCallback<PagedFetchPage<Conversation>>(
     async ({ limit, offset, signal }) => {
@@ -77,9 +77,22 @@ export default function ConversationList({
     error,
     hasMore,
     loadMore,
+    loadAll,
   } = useRoutePagedList(
     keys.conversations.list({ q: debouncedQ, sort: sortState.sort, order: sortState.order }),
     fetchPage,
+  );
+
+  // Select all ticks every conversation the list holds, so it loads the pages
+  // not yet on screen first: an action that follows reaches all of them, not
+  // the page in hand (issue #1145).
+  const {
+    selectAll,
+    cancel: cancelSelectAll,
+    selecting: selectingAll,
+    error: selectAllError,
+  } = useSelectAll(loadAll, [debouncedQ, sortState], (rows: Conversation[]) =>
+    setCheckedIds(new Set(rows.map((c) => c.id))),
   );
 
   const selectedConversation = conversations.find((c) => c.id === selectedId) ?? null;
@@ -158,8 +171,10 @@ export default function ConversationList({
     tagActions.create,
   ]);
 
+  // The box reads as ticked only when every conversation the list holds is
+  // ticked, which needs every page loaded: rows not yet fetched are not ticked.
   const selectAllChecked =
-    conversations.length > 0 && conversations.every((c) => checkedIds.has(c.id));
+    !hasMore && conversations.length > 0 && conversations.every((c) => checkedIds.has(c.id));
   const selectAllIndeterminate =
     !selectAllChecked && conversations.some((c) => checkedIds.has(c.id));
 
@@ -185,13 +200,21 @@ export default function ConversationList({
         rangeLabel={showRangePill ? undefined : rangeLabel}
         refreshing={!showRangePill && refreshing}
         filling={!showRangePill && filling}
-        selectAllChecked={selectAllChecked}
-        selectAllIndeterminate={selectAllIndeterminate}
-        onSelectAllChange={(on) => {
-          setCheckedIds(on ? new Set(conversations.map((c) => c.id)) : new Set());
+        selectAll={{
+          checked: selectAllChecked,
+          indeterminate: selectAllIndeterminate,
+          onChange: (on) => {
+            if (on) {
+              void selectAll();
+              return;
+            }
+            cancelSelectAll();
+            setCheckedIds(new Set());
+          },
+          label: "Select all conversations",
+          disabled: conversations.length === 0 || selectingAll,
+          error: selectAllError,
         }}
-        selectAllLabel="Select all conversations"
-        selectAllDisabled={conversations.length === 0}
         actions={
           <ConversationSortMenu
             sort={sortState.sort}
@@ -199,6 +222,9 @@ export default function ConversationList({
             onChange={(next) => {
               setSortState(next);
               saveConversationSort(next);
+              // The ticks belong to the list they were made on: a new sort reads
+              // its rows again, and an action must not reach only the ones loaded.
+              setCheckedIds(new Set());
             }}
           />
         }
@@ -209,7 +235,7 @@ export default function ConversationList({
         dynamicSize
         onVisibleRangeChange={setVisibleRange}
         visibleBottomInset={RANGE_PILL_OVERLAY_INSET}
-        footer={<div aria-hidden className="shrink-0" style={{ height: RANGE_PILL_SCROLL_PAD }} />}
+        footer={<RangePillSpacer />}
         onNearEnd={() => {
           if (hasMore) loadMore();
         }}

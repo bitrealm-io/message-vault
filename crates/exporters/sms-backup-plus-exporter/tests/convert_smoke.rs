@@ -83,7 +83,7 @@ fn convert_smoke_writes_csv_not_json() {
             ("text", "Hello from Alice"),
             ("direction", "incoming"),
             ("timestamp_unix_ms", "1609459200000"),
-            ("chat_identifier", "+14075551234"),
+            ("chat_identifier", "+14075550107"),
         ],
     );
 
@@ -141,10 +141,10 @@ fn a_whole_second_export_and_a_millisecond_export_of_one_message_collapse() {
             input_dir.join(name),
             format!(
                 "From: me@example.com\r\n\
-To: 4075551234@sms-backup-plus.local\r\n\
+To: 4075550107@sms-backup-plus.local\r\n\
 Subject: SMS with Alice\r\n\
 X-smssync-type: 2\r\n\
-X-smssync-address: 4075551234\r\n\
+X-smssync-address: 4075550107\r\n\
 {date_line}\r\n\
 {id_line}\
 Content-Type: text/plain; charset=utf-8\r\n\
@@ -181,7 +181,7 @@ Will do\r\n"
     assert_eq!(report.messages, 2, "the first two copies are one message");
     assert_eq!(report.duplicates_dropped, 1);
 
-    let csv = fs::read_to_string(out.join("+14075551234.csv")).unwrap();
+    let csv = fs::read_to_string(out.join("+14075550107.csv")).unwrap();
     assert!(csv.contains("Will do"));
     assert!(
         csv.contains("999"),
@@ -200,9 +200,9 @@ fn a_mail_without_a_type_from_the_owners_email_is_outgoing() {
     fs::write(
         input_dir.join("sent.eml"),
         "From: Owner <owner@example.com>\r\n\
-To: 4075551234@sms-backup-plus.local\r\n\
+To: 4075550107@sms-backup-plus.local\r\n\
 Subject: SMS with Alice\r\n\
-X-smssync-address: 4075551234\r\n\
+X-smssync-address: 4075550107\r\n\
 X-smssync-date: 1609459200000\r\n\
 Content-Type: text/plain; charset=utf-8\r\n\
 \r\n\
@@ -215,7 +215,7 @@ On my way\r\n",
 
     assert_eq!(report.messages, 1);
     assert_csv_row(
-        &out.join("+14075551234.csv"),
+        &out.join("+14075550107.csv"),
         &[("text", "On my way"), ("direction", "outgoing")],
     );
 }

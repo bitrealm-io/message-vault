@@ -54,7 +54,7 @@ function renderList(query: string, sortPick: MessageSearchSort | null = null) {
 /** The labels of the sort menu's choices, Sort By then Order, once it is open. */
 async function sortChoices(): Promise<string[]> {
   await userEvent.setup().click(screen.getByRole("button", { name: /^Sort messages by/ }));
-  const menu = screen.getByRole("menu", { name: "Sort messages" });
+  const menu = await screen.findByRole("menu");
   return [...menu.querySelectorAll('[role="menuitemradio"]')].map((item) => item.textContent ?? "");
 }
 

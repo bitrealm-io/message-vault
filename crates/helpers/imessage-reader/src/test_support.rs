@@ -90,7 +90,7 @@ pub(crate) fn mac_source(db_path: &Path) -> Source {
 /// The `ZABCD*` tables a macOS `AddressBook-v22.abcddb` holds, as far as the
 /// reader queries them, naming the fixture's people: "Sam Example" at
 /// [`chat_db_fixture::FRIEND_PHONE`] and `sam@example.com`, "Robin" at
-/// [`chat_db_fixture::FRIEND_EMAIL`], and a nameless row at `+15559990000`.
+/// [`chat_db_fixture::FRIEND_EMAIL`], and a nameless row at `+15555550179`.
 /// Nothing here comes from a real address book.
 pub(crate) fn fill_macos_address_book(conn: &Connection) {
     conn.execute_batch(
@@ -100,8 +100,8 @@ pub(crate) fn fill_macos_address_book(conn: &Connection) {
          INSERT INTO ZABCDRECORD VALUES (1, 'Sam', 'Example');
          INSERT INTO ZABCDRECORD VALUES (2, 'Robin', NULL);
          INSERT INTO ZABCDRECORD VALUES (3, NULL, NULL);
-         INSERT INTO ZABCDPHONENUMBER VALUES (1, 1, '+1 (555) 000-0002');
-         INSERT INTO ZABCDPHONENUMBER VALUES (2, 3, '+1 (555) 999-0000');
+         INSERT INTO ZABCDPHONENUMBER VALUES (1, 1, '+1 (555) 555-0107');
+         INSERT INTO ZABCDPHONENUMBER VALUES (2, 3, '+1 (555) 555-0179');
          INSERT INTO ZABCDEMAILADDRESS VALUES (1, 1, '<Sam@Example.com>');
          INSERT INTO ZABCDEMAILADDRESS VALUES (2, 2, 'friend@example.com');",
     )
@@ -114,9 +114,9 @@ pub(crate) fn fill_macos_address_book(conn: &Connection) {
 pub(crate) fn fill_ios_address_book(conn: &Connection) {
     conn.execute_batch(
         "CREATE TABLE ABPersonFullTextSearch_content (c0First TEXT, c1Last TEXT, c16Phone TEXT, c17Email TEXT);
-         INSERT INTO ABPersonFullTextSearch_content VALUES ('Sam', 'Example', '+15550000002 15550000002 5550000002', 'Sam@Example.com sam@work.example');
+         INSERT INTO ABPersonFullTextSearch_content VALUES ('Sam', 'Example', '+15555550107 15555550107 5555550107', 'Sam@Example.com sam@work.example');
          INSERT INTO ABPersonFullTextSearch_content VALUES ('Robin', NULL, NULL, 'friend@example.com');
-         INSERT INTO ABPersonFullTextSearch_content VALUES (NULL, NULL, '+15559990000', NULL);",
+         INSERT INTO ABPersonFullTextSearch_content VALUES (NULL, NULL, '+15555550179', NULL);",
     )
     .expect("fill the iOS address book");
 }

@@ -1,7 +1,7 @@
 //! Router assembly, shared state, auth resolution, and HTTP plumbing.
 //!
 //! Domain handlers live in their own modules: `session_api` (logging in and
-//! out), `accounts_api` (the accounts collection), `api_tokens_api`,
+//! out), `accounts_api` (the accounts collection and their API tokens),
 //! `contacts_api`, `conversations_api`, `exports_api` (Export Runs),
 //! `imports_api` (JSONL ingest and Import Runs), and `assets_api` (asset bytes and
 //! multipart uploads). This module
@@ -62,6 +62,9 @@ pub struct AuthIdentity {
     pub account_id: i64,
     /// What this credential is allowed to do.
     pub capability: AuthCapability,
+    /// The credential as the Audit Trail records it on a run it starts: a
+    /// Session and its app, or an API token's label and hint.
+    pub credential: crate::db::audit_trail::CredentialUsed,
 }
 
 impl AuthIdentity {
@@ -144,12 +147,40 @@ pub fn require_logged_in(auth: &AuthIdentity) -> Result<(), ApiError> {
     ))
 }
 
-/// Allow a credential that may import.
+/// Refuse an act the Demo Account is never open to, whoever asks.
+///
+/// The Demo Account has no password, so anyone at the login card can enter
+/// it. Its limits are therefore fixed here, by its id, whatever its
+/// permission row says, and are not settings the owner can change
+/// (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`).
 ///
 /// # Errors
 ///
-/// Returns forbidden when import is not permitted.
+/// Returns `demo-account-protected` when `target` is the Demo Account. `what`
+/// finishes the sentence "The Demo Account's ...".
+pub fn refuse_for_demo_account(target: i64, what: &str) -> Result<(), ApiError> {
+    if account_profile::is_demo_account(target) {
+        return Err(ApiError::DemoAccountProtected(format!(
+            "The Demo Account's {what}. The owner can delete the account, and reset-demo restores it."
+        )));
+    }
+    Ok(())
+}
+
+/// Allow a credential that may import. The Demo Account never may, whatever
+/// its permission row says: an import would put real messages into an
+/// account anyone can enter. It is refused every import route, a read of an
+/// Import Run included, because it never has one to read.
+///
+/// # Errors
+///
+/// Returns `demo-account-protected` for the Demo Account, and forbidden when
+/// import is not permitted.
 pub fn require_import_access(auth: &AuthIdentity) -> Result<(), ApiError> {
+    refuse_for_demo_account(
+        auth.account_id,
+        "imports are closed, because its messages come only from its seed",
+    )?;
     if auth.permissions().import {
         return Ok(());
     }
@@ -205,12 +236,16 @@ pub fn require_import_or_export_access(auth: &AuthIdentity) -> Result<(), ApiErr
     ))
 }
 
-/// Allow a credential that may destroy message data.
+/// Allow a credential that may destroy message data. The Demo Account never
+/// may, whatever its permission row says: one visitor would empty it for the
+/// next.
 ///
 /// # Errors
 ///
-/// Returns forbidden when deletion is not permitted.
+/// Returns `demo-account-protected` for the Demo Account, and forbidden when
+/// deletion is not permitted.
 pub fn require_delete_access(auth: &AuthIdentity) -> Result<(), ApiError> {
+    refuse_for_demo_account(auth.account_id, "data cannot be deleted for good")?;
     if auth.permissions().delete {
         return Ok(());
     }
@@ -222,13 +257,15 @@ pub fn require_delete_access(auth: &AuthIdentity) -> Result<(), ApiError> {
 /// Allow a logged-in session that may destroy message data: the guard for
 /// permanent deletion out of the trash. Both halves matter. Trash is a GUI
 /// affair, so an API token is refused the way every trash route refuses it,
-/// and the account's own `can_delete` grant is what keeps the demo account
-/// from deleting anything for good while it still exports and uses the trash.
+/// and the account must hold the `delete` permission. The Demo Account is
+/// refused by its id in [`require_delete_access`], so it uses the trash and
+/// deletes nothing for good.
 ///
 /// # Errors
 ///
-/// Returns forbidden when the credential is an API token or the account may
-/// not delete.
+/// Returns forbidden when the credential is an API token,
+/// `demo-account-protected` for a Demo Account session, and forbidden when
+/// the account may not delete.
 pub fn require_full_delete_access(auth: &AuthIdentity) -> Result<(), ApiError> {
     require_full_access(auth)?;
     require_delete_access(auth)
@@ -729,6 +766,56 @@ impl From<crate::db::imports::StartImportError> for ApiError {
                 Self::StateConflict(err.to_string())
             }
             crate::db::imports::StartImportError::Db(err) => Self::Internal(err),
+        }
+    }
+}
+
+/// The one place an asset store failure gets its status
+/// (`docs/architecture/http-api.md`, "Status codes").
+impl From<crate::assets_api::AssetError> for ApiError {
+    fn from(e: crate::assets_api::AssetError) -> Self {
+        use crate::assets_api::AssetError;
+        match e {
+            err @ (AssetError::Mismatch { .. } | AssetError::Invalid(_)) => {
+                Self::AssetUploadInvalid(err.to_string())
+            }
+            // The upload is busy, not wrong: a resource in the wrong state.
+            err @ AssetError::Locked => Self::StateConflict(err.to_string()),
+            err @ AssetError::UploadNotFound => Self::NotFound(err.to_string()),
+            AssetError::Internal(err) => Self::Internal(err),
+        }
+    }
+}
+
+/// The one place a sender's import failure gets its status: only a line that
+/// is not JSON cannot be read (`400`); everything else was read and broke a
+/// rule (`422`). A failure on one line carries it as `line`, a line of the
+/// batch, so a client can map it back to a file of its own.
+impl From<crate::imports_api::ImportFailure> for ApiError {
+    fn from(e: crate::imports_api::ImportFailure) -> Self {
+        use crate::imports_api::ImportFailure;
+        let detail = e.batch_sentence();
+        match (&e, e.line()) {
+            (ImportFailure::NotJson { .. }, Some(line)) => {
+                Self::MalformedImportLine { detail, line }
+            }
+            (_, Some(line)) => Self::InvalidImportLines {
+                errors: vec![detail],
+                line,
+            },
+            (_, None) => Self::validation(detail),
+        }
+    }
+}
+
+/// An import failure the sender can fix keeps its own status; anything else
+/// is a `500` with its cause in the log.
+impl From<crate::imports_api::ImportError> for ApiError {
+    fn from(e: crate::imports_api::ImportError) -> Self {
+        match e {
+            crate::imports_api::ImportError::Rejected { failure, .. } => failure.into(),
+            crate::imports_api::ImportError::Run(err) => err.into(),
+            crate::imports_api::ImportError::Internal(err) => Self::Internal(err),
         }
     }
 }
@@ -1266,7 +1353,7 @@ const MAX_APP_BUILD_LEN: usize = 64;
 /// The app a request says it comes from. `None` unless both headers are
 /// present and well formed: curl, Swagger UI and a script send neither, and
 /// are served without anything being recorded.
-fn connecting_app(headers: &HeaderMap) -> Option<session_tokens::ConnectingApp> {
+pub(crate) fn connecting_app(headers: &HeaderMap) -> Option<session_tokens::ConnectingApp> {
     let kind = session_tokens::AppKind::parse(headers.get(APP_HEADER)?.to_str().ok()?)?;
     let build = headers.get(APP_VERSION_HEADER)?.to_str().ok()?.trim();
     let well_formed = !build.is_empty()
@@ -1286,6 +1373,8 @@ enum Credential {
     Session,
     ApiToken(Permissions),
 }
+
+use crate::db::audit_trail::CredentialUsed;
 
 /// Resolve a Bearer credential on an existing connection.
 ///
@@ -1317,14 +1406,22 @@ pub async fn resolve_auth_on_conn(
                 );
             }
         }
-        Some((session.account_id, Credential::Session))
+        // The app this request named, or the one the session last recorded.
+        let used = CredentialUsed::Session(app.cloned().or(session.app));
+        Some((session.account_id, Credential::Session, used))
     } else {
         api_tokens::lookup_account_for_api_token(&mut *conn, token)
             .await?
-            .map(|tok| (tok.account_id, Credential::ApiToken(tok.permissions)))
+            .map(|tok| {
+                let used = CredentialUsed::ApiToken {
+                    label: tok.label,
+                    hint: tok.token_hint,
+                };
+                (tok.account_id, Credential::ApiToken(tok.permissions), used)
+            })
     };
 
-    let Some((account_id, credential)) = resolved else {
+    let Some((account_id, credential, used)) = resolved else {
         return Err(ApiError::AuthenticationRequired("invalid API token".into()));
     };
 
@@ -1353,6 +1450,7 @@ pub async fn resolve_auth_on_conn(
     Ok(AuthIdentity {
         account_id,
         capability,
+        credential: used,
     })
 }
 

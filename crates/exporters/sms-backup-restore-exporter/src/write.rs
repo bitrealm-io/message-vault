@@ -1,7 +1,7 @@
 //! Write [`ConversationDocument`] messages as SMS Backup & Restore XML.
 
 use anyhow::{Context, Result};
-use message_crate_core::ExportReport;
+use message_crate_core::{ExportReport, NOT_SMS_OR_MMS_LEFT_OUT};
 use message_ir::{
     ConversationDocument, IrAttachment, IrConversationType, IrDirection, IrMessage, IrMessageKind,
     nonempty,
@@ -28,6 +28,7 @@ pub(crate) const CHARACTERS_LEFT_OUT: &str = "control_characters_left_out";
 pub(crate) struct SbrBackupSession {
     writer: SbrBackupWriter,
     output_dir: PathBuf,
+    not_sms_or_mms: u64,
 }
 
 impl SbrBackupSession {
@@ -43,15 +44,24 @@ impl SbrBackupSession {
         Ok(Self {
             writer: SbrBackupWriter::create(&path)?,
             output_dir: output_dir.to_path_buf(),
+            not_sms_or_mms: 0,
         })
     }
 
-    /// Write every message of one conversation as SBR `<sms>` or `<mms>` elements.
+    /// Write the SMS and MMS of one conversation as SBR `<sms>` or `<mms>`
+    /// elements, and count every other message as left out. A conversation
+    /// with no SMS or MMS writes nothing.
     pub fn append_document(&mut self, doc: &ConversationDocument) -> Result<()> {
+        self.not_sms_or_mms += doc.messages.iter().filter(|m| !m.is_sms_or_mms()).count() as u64;
         for msg in document_to_sbr_messages(doc, &self.output_dir)? {
             self.writer.write_message(&msg)?;
         }
         Ok(())
+    }
+
+    /// Messages left out so far because their service is neither SMS nor MMS.
+    pub fn not_sms_or_mms_left_out(&self) -> u64 {
+        self.not_sms_or_mms
     }
 
     /// Characters left out so far because XML 1.0 cannot carry them.
@@ -65,7 +75,8 @@ impl SbrBackupSession {
     }
 }
 
-/// Map one conversation's messages into SBR XML elements (lossy for iMessage).
+/// Map one conversation's SMS and MMS into SBR XML elements. A message on
+/// any other service is left out, because the format cannot describe it.
 pub(crate) fn document_to_sbr_messages(
     doc: &ConversationDocument,
     output_dir: &Path,
@@ -77,7 +88,7 @@ pub(crate) fn document_to_sbr_messages(
         .and_then(nonempty)
         .unwrap_or_default();
     let mut out = Vec::with_capacity(doc.messages.len());
-    for msg in &doc.messages {
+    for msg in doc.messages.iter().filter(|m| m.is_sms_or_mms()) {
         out.push(ir_message_to_sbr(doc, msg, &owner, output_dir)?);
     }
     Ok(out)
@@ -502,7 +513,19 @@ impl MergedArchive for SbrArchive {
         if left_out > 0 {
             report.bump(CHARACTERS_LEFT_OUT, left_out);
         }
+        let not_sms_or_mms = session.not_sms_or_mms_left_out();
+        if not_sms_or_mms > 0 {
+            report.bump(NOT_SMS_OR_MMS_LEFT_OUT, not_sms_or_mms);
+        }
         session.finish()
+    }
+
+    fn file_names(&self) -> Vec<String> {
+        sbr::backup_file_names()
+    }
+
+    fn format_name(&self) -> &'static str {
+        "SMS Backup & Restore"
     }
 }
 

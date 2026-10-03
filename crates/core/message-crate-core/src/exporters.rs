@@ -637,7 +637,7 @@ fn lines(value: &str) -> Vec<&str> {
 /// Non-empty trimmed values split on newlines, commas or semicolons.
 ///
 /// Spaces do not split: people type phone numbers with them
-/// (`+1 555-123-4567`), so `"+1555 +1666"` is one value.
+/// (`+1 555-555-0119`), so `"+1555 +1666"` is one value.
 fn values(value: &str) -> Vec<&str> {
     value
         .split(['\n', ',', ';'])
@@ -681,13 +681,13 @@ mod tests {
                     "+15555550103",
                 ],
             ),
-            // A space stays inside one value: "+1 555-123-4567" is one
+            // A space stays inside one value: "+1 555-555-0119" is one
             // number, typed the way the Import screen's placeholder shows it.
-            ("+1 555-123-4567", &["+1 555-123-4567"]),
+            ("+1 555-555-0119", &["+1 555-555-0119"]),
             ("+1555 +1666", &["+1555 +1666"]),
             (
-                "+1 555-123-4567, +44 20 7946 0958",
-                &["+1 555-123-4567", "+44 20 7946 0958"],
+                "+1 555-555-0119, +44 20 7946 0958",
+                &["+1 555-555-0119", "+44 20 7946 0958"],
             ),
             (
                 "me@example.com;; you@example.com",

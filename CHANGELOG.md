@@ -21,6 +21,14 @@ released versions carry their date on the heading.
 
 ### Features
 
+- 2026-10-03 **An Audit Trail of what each user did, and when.** Owner Home's
+  Activity panel is now the Audit Trail: every login, session ending and
+  refused login, every import and export, and every change to an account,
+  newest first, with who did it and from which app. The owner reads every
+  account's and can narrow it to one. Each person reads what concerns their
+  own account under Settings, including what the owner changed. Nobody can
+  edit or remove an entry, and an account's entries stay, under its old
+  username, after the account is deleted.
 - 2026-09-22 **One identity table, on the contact drawer and on an account's
   Profile.** An account's identities now show what a contact's do: the
   service, the address, when it was first and last heard from, and how many
@@ -129,6 +137,11 @@ released versions carry their date on the heading.
   for the password before the import starts. The encrypted backup you made
   for your iPhone messages now serves for WhatsApp too; a second,
   unencrypted backup is no longer needed.
+- 2026-10-03 **Export and Convert write SMS Backup+ mail.** Choose **EML
+  (SMS Backup+)** to get your SMS and MMS back as the mail SMS Backup+
+  writes, one folder per conversation, which the SMS Backup+ import reads
+  again and any mail program can keep. Other messages are left out, and the
+  log says how many.
 
 ### Design
 
@@ -216,11 +229,21 @@ released versions carry their date on the heading.
   fiction.** No Demo Data number can be dialled or belong to a real person.
   Demo Data messages also fall in the daytime, between 08:00 and 23:00,
   where most of them used to fall overnight.
+- 2026-10-03 **Convert reads JSON Lines files only when they end in
+  `.jsonl`,** the name Message Crate gives them. A file ending in `.ndjson`
+  is no longer taken for one.
 
 ### Fixes
 
 #### Importing
 
+- 2026-10-03 **Group texts from an SMS Backup+ archive are group
+  conversations.** Every group text used to be filed as a conversation with
+  one of its members alone. A group text you sent and the replies to it now
+  land together in one group conversation, each reply credited to the person
+  who sent it. A group text whose sender matches nobody in the group shows
+  no sender instead of the first member. Each such group text is also listed
+  among the import's issues.
 - 2026-09-23 **A group text from an SMS Backup & Restore backup is no longer
   credited to the wrong person when the backup names no sender.** A group
   MMS without a sender address was shown as sent by whichever member the
@@ -312,7 +335,7 @@ released versions carry their date on the heading.
   the next step ran to the end.
 - 2026-10-02 **Two conversations with one person in one batch become one.**
   Two conversations whose addresses are the same once written the same way,
-  such as `+15551234567` and `5551234567`, or an iMessage and an SMS
+  such as `+15555550119` and `5555550119`, or an iMessage and an SMS
   conversation with one number, failed the whole batch when they arrived
   together. They now merge, as they did when they arrived apart.
 - 2026-10-02 **Messages sent in the same second keep their order.** When an
@@ -354,7 +377,7 @@ released versions carry their date on the heading.
   no longer fails over leftovers from an earlier run in the backup folder.
 - 2026-10-02 **Phone numbers from Android SMS backups keep their country.**
   The SMS Backup & Restore, GO SMS Pro and SMS Backup+ readers read every
-  number by US rules, so `+6591234567` became a US number and a UK number
+  number by US rules, so `+6595550100` became a US number and a UK number
   matched nobody. An email address became a phone number made of its
   digits, and a message from a sender name such as `AMAZON` was dropped. Your
   own number written without its country code is now recognised as yours,
@@ -416,6 +439,10 @@ released versions carry their date on the heading.
 
 #### Exporting and converting
 
+- 2026-10-03 **Android XML holds only SMS and MMS.** Export and Convert
+  wrote every message as a text message, so an iMessage or a WhatsApp
+  message came back from a re-import as an SMS. They now leave every other
+  message out, and the log says how many were left out and why.
 - 2026-10-01 **An export from the Conversations list holds those
   conversations.** Export opened from a filtered Conversations list wrote
   only the matching messages, or refused a search such as `messages:>100`.
@@ -510,7 +537,7 @@ released versions carry their date on the heading.
 #### Contacts and identities
 
 - 2026-09-22 **International phone numbers keep their country.** A number
-  written with a country code, such as `+65 9123 4567` in an address book or
+  written with a country code, such as `+65 9555 0100` in an address book or
   `+44 7700 900123` as your own number, is now matched as that number. Before,
   some were read as a US number with the same digits and named the wrong
   person, and some matched nobody.
@@ -567,6 +594,9 @@ released versions carry their date on the heading.
   Crate doesn't know, such as an iPhone message sent by satellite, was filed
   under a new contact with no name and left out of the named contact's
   counts.
+- 2026-10-03 **The contact drawer opened from a conversation covers the
+  column resize handles.** It sat below the handles, so a handle could show
+  through it.
 
 #### Accounts, Settings and screens
 
@@ -663,6 +693,9 @@ released versions carry their date on the heading.
   one step, waits for a batch in progress, and leaves the attachment files
   on disk while the account has an Import Run going; they are removed by
   the next Delete all messages with no import running, or with the account.
+- 2026-10-03 **The Sources panel dims the screen the way every other dialog
+  does.** The shade behind it now follows the light or the dark theme instead
+  of one fixed grey.
 
 #### The server
 

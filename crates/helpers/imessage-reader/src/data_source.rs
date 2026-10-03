@@ -200,7 +200,7 @@ mod tests {
             ..fixture.export_request()
         });
         let source = DataSource::from(&options).unwrap();
-        assert_eq!(source.contacts_index.lookup("+15550000002"), None);
+        assert_eq!(source.contacts_index.lookup("+15555550107"), None);
         assert!(
             DataSource::get_contacts_index(Some(&fixture.dir.path().join("missing.db"))).is_none()
         );

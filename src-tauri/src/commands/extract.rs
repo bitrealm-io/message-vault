@@ -34,6 +34,7 @@ use super::events;
 use super::events::ExtractProgressEvent;
 use super::jobs::{cancel_running_job, spawn_job, start_job};
 use super::last_log_line_or;
+use crate::staging_folders::StagingFolders;
 use crate::state::AppState;
 
 /// Ask this process to stop the job that is running. Does nothing when no
@@ -74,7 +75,8 @@ pub struct ExtractArgs {
     pub source: String,
     /// Path to the phone backup (a folder, database file, or XML file).
     pub path: String,
-    /// Folder the exporter writes conversation files into.
+    /// Staging folder `create_staging_dir` made, which the exporter writes
+    /// conversation files into.
     pub output_dir: String,
     /// Password for encrypted backups, when the source needs one.
     pub backup_password: Option<String>,
@@ -137,15 +139,20 @@ pub struct ExtractArgs {
 ///
 /// # Errors
 ///
-/// Returns an error if a form field is invalid, the source is unknown,
-/// another job is running, or another thread panicked while holding the shared state lock. Failures
+/// Returns an error if `output_dir` is not a staging folder this app made, a
+/// form field is invalid, the source is unknown, another job is running, or
+/// another thread panicked while holding the shared state lock. Failures
 /// during the export itself are sent as `extract:error`, not returned here.
 #[tauri::command(async)]
 pub fn extract(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    folders: tauri::State<'_, StagingFolders>,
     app: tauri::AppHandle,
     args: ExtractArgs,
 ) -> Result<(), String> {
+    // The exporter cleans the folder it writes into, so it writes only into
+    // one this app made for staging.
+    let output_dir = folders.folder(&args.output_dir)?;
     let options = ExtractOptions {
         backup_password: args.backup_password.unwrap_or_default(),
         attachment_media: parse_attachment_media(args.attachment_media.as_deref())?,
@@ -168,8 +175,12 @@ pub fn extract(
     };
 
     let media_settings = media_settings_for(&options, args.asset_max_bytes)?;
-    let output_dir = args.output_dir;
-    let mut config = build_exporter_config(&args.source, &args.path, &output_dir, &options)?;
+    let mut config = build_exporter_config(
+        &args.source,
+        &args.path,
+        &output_dir.display().to_string(),
+        &options,
+    )?;
     config.resume = args.resume.unwrap_or(false);
 
     let job = start_job(&state, "an extract")?;
@@ -193,7 +204,7 @@ pub fn extract(
     }));
 
     spawn_job(app, job, move || {
-        let run_result = run_staging(&config, Path::new(&output_dir), &media_settings)?;
+        let run_result = run_staging(&config, &output_dir, &media_settings)?;
         let payload = finished_payload(&run_result);
         for line in run_result.messages {
             events::emit(&app_handle, events::LOG, line);

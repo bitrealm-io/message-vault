@@ -16,8 +16,8 @@ vi.mock("../lib/serverApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/serverApi")>()),
   // The sidebar list `MessageRoute` renders alongside the thread.
   listConversations: vi.fn().mockResolvedValue({ items: [], total: 0, limit: 40, offset: 0 }),
-  listContactGroups: vi.fn().mockResolvedValue({ items: [] }),
-  listMessageTags: vi.fn().mockResolvedValue({ items: [] }),
+  listContactGroups: vi.fn().mockResolvedValue([]),
+  listMessageTags: vi.fn().mockResolvedValue([]),
   getConversation: vi.fn(),
   listConversationMessages: vi.fn(),
   trashConversation: vi.fn(),

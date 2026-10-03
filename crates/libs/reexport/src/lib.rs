@@ -4,16 +4,17 @@ use anyhow::{Context, Result, bail};
 use media::{CompressOptions, MediaMode};
 pub use message_crate_core::RunResult;
 use message_crate_core::{
-    ExportReport, ExportTransforms, ExporterConfig, MediaConfig, OutputFormat, document_messages,
-    prepare_outputs, stage_conversation_attachments,
+    ATTACHMENTS_MISSING, ExportReport, ExportTransforms, ExporterConfig, MediaConfig, OutputFormat,
+    SourceConfig, document_messages, prepare_outputs, stage_conversation_attachments,
 };
-use message_ir::ConversationDocument;
+use message_ir::{ConversationDocument, IrMessage};
 use message_ir_format::{
-    CSV_HEADERS, FormatSink, clean_previous_ir_output, read_conversation_csv,
+    CSV_HEADERS, FormatSink, MergedArchive, clean_previous_ir_output, read_conversation_csv,
     read_conversation_eml_dir, read_conversation_json, read_conversation_jsonl,
     read_conversation_mbox,
 };
 use message_staging::AttachmentSpool;
+use sms_backup_plus_exporter::SmsBackupPlusArchive;
 use sms_backup_restore_exporter::{ReadOptions, SbrArchive, read_backup};
 use std::collections::HashSet;
 use std::fs::{self, File};
@@ -43,25 +44,32 @@ struct DetectedExport {
 #[derive(Debug, Default)]
 struct ReexportReport {
     detected_format: String,
+    /// The name of the format written when it holds only SMS and MMS, for
+    /// the line that says how many messages were left out of it.
+    sms_only_format: Option<&'static str>,
     /// Conversations written, attachments a convert or compress pass
     /// staged, the media pass, and obfuscation.
     report: ExportReport,
 }
 
 impl ReexportReport {
-    /// Lines for the run's log.
+    /// Lines for the run's log. The desktop app shows the last line again as
+    /// the run's summary, so the left-out line comes before `Conversations:`
+    /// and never closes the log.
     fn log_lines(&self) -> Vec<String> {
-        let mut lines = vec![
-            format!("Detected input format: {}", self.detected_format),
-            format!("Conversations: {}", self.report.conversations),
-        ];
+        let mut lines = vec![format!("Detected input format: {}", self.detected_format)];
+        lines.extend(
+            self.sms_only_format
+                .and_then(|format| self.report.not_sms_or_mms_line(format)),
+        );
+        lines.push(format!("Conversations: {}", self.report.conversations));
         if self.report.attachments_saved > 0 {
             lines.push(format!(
                 "  saved {} attachments",
                 self.report.attachments_saved
             ));
         }
-        let missing = self.report.extra("attachments_missing");
+        let missing = self.report.extra(ATTACHMENTS_MISSING);
         if missing > 0 {
             lines.push(format!("  {missing} attachments missing"));
         }
@@ -72,6 +80,13 @@ impl ReexportReport {
 
 /// Detect the input format, copy attachments if needed, and write the new export.
 fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportReport> {
+    // SMS Backup+ mail records when its backup was made: the start of the
+    // Export Run this conversion is part of, or of this run when it is one.
+    let started = match &config.source {
+        SourceConfig::Format(format) => format.run_started,
+        _ => None,
+    }
+    .unwrap_or_else(chrono::Utc::now);
     // The output is cleaned below, so one that is or holds the input is
     // refused before anything is written.
     prepare_outputs(&[input_dir.to_path_buf()], &config.output)?;
@@ -113,10 +128,18 @@ fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportR
         apply_reexport_convert(&mut documents, config, &transforms, &mut report)?;
     }
 
-    report.conversations = documents.len() as u64;
     let mut sink = FormatSink::open(&config.output, config.output_format, transforms)?;
-    if config.output_format == OutputFormat::Xml {
-        sink = sink.with_archive(Box::new(SbrArchive));
+    report.conversations = documents.len() as u64;
+    let sms_only = sms_only_archive(config.output_format, started);
+    let sms_only_format = sms_only.as_ref().map(|archive| archive.format_name());
+    if let Some(archive) = sms_only {
+        sink = sink.with_archive(archive);
+        // The archive writes nothing for a conversation with no SMS or MMS,
+        // so only the others are counted.
+        report.conversations = documents
+            .iter()
+            .filter(|doc| doc.messages.iter().any(IrMessage::is_sms_or_mms))
+            .count() as u64;
     }
     for document in documents {
         sink.write_document(document)?;
@@ -125,8 +148,23 @@ fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportR
 
     Ok(ReexportReport {
         detected_format: detected.format.as_str().to_string(),
+        sms_only_format,
         report,
     })
+}
+
+/// The archive that writes `format`, for a format that holds only SMS and
+/// MMS and so leaves every other message out. `None` for every other format,
+/// which the sink writes itself.
+fn sms_only_archive(
+    format: OutputFormat,
+    started: chrono::DateTime<chrono::Utc>,
+) -> Option<Box<dyn MergedArchive>> {
+    match format {
+        OutputFormat::Xml => Some(Box::new(SbrArchive)),
+        OutputFormat::SmsBackupPlus => Some(Box::new(SmsBackupPlusArchive::new(started))),
+        _ => None,
+    }
 }
 
 /// Where one attachment's bytes come from when it is staged again.
@@ -208,7 +246,7 @@ fn apply_reexport_convert(
         }
     }
     if missing > 0 {
-        report.bump("attachments_missing", missing);
+        report.bump(ATTACHMENTS_MISSING, missing);
     }
     Ok(())
 }
@@ -274,6 +312,7 @@ fn read_artifact(path: &Path, format: OutputFormat) -> Result<ConversationDocume
         OutputFormat::Mbox => read_conversation_mbox(path),
         OutputFormat::Eml => read_conversation_eml_dir(path),
         OutputFormat::Xml => unreachable!("XML handled above"),
+        OutputFormat::SmsBackupPlus => unreachable!("never detected as an input"),
     }
 }
 
@@ -303,7 +342,7 @@ fn detect_ir_export(input_dir: &Path) -> Result<DetectedExport> {
                     Some(OutputFormat::Xml)
                 }
                 "json" if looks_like_ir_json(&path)? => Some(OutputFormat::Json),
-                "jsonl" | "ndjson" if looks_like_ir_jsonl(&path)? => Some(OutputFormat::Jsonl),
+                "jsonl" if looks_like_ir_jsonl(&path)? => Some(OutputFormat::Jsonl),
                 "csv" if looks_like_ir_csv(&path)? => Some(OutputFormat::Csv),
                 "mbox" => Some(OutputFormat::Mbox),
                 _ => None,
@@ -331,6 +370,7 @@ fn detect_ir_export(input_dir: &Path) -> Result<DetectedExport> {
         OutputFormat::Csv => 3,
         OutputFormat::Mbox => 4,
         OutputFormat::Eml => 5,
+        OutputFormat::SmsBackupPlus => 6,
     });
 
     match present.as_slice() {
@@ -378,7 +418,7 @@ fn list_artifacts(input_dir: &Path, format: OutputFormat) -> Result<Vec<PathBuf>
                     && path
                         .extension()
                         .and_then(|extension| extension.to_str())
-                        .is_some_and(|extension| extension == "jsonl" || extension == "ndjson")
+                        .is_some_and(|extension| extension == "jsonl")
                     && looks_like_ir_jsonl(&path)?
             }
             OutputFormat::Csv => {
@@ -391,6 +431,8 @@ fn list_artifacts(input_dir: &Path, format: OutputFormat) -> Result<Vec<PathBuf>
                     && path.extension().and_then(|extension| extension.to_str()) == Some("mbox")
             }
             OutputFormat::Eml => path.is_dir() && dir_has_eml(&path)?,
+            // Never detected as an input: its folders are found as `Eml`.
+            OutputFormat::SmsBackupPlus => false,
         };
         if matches {
             paths.push(path);

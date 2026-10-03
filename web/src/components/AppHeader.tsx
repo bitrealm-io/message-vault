@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { SearchScope } from "../lib/recentSearches";
 import type { SearchList } from "../lib/searchFields";
+import { Z_APP_HEADER } from "../lib/zLayers";
 import type { AdvancedSearchMode } from "./AdvancedSearchForm";
 import AppAccountMenu from "./AppAccountMenu";
 import { loadWidth } from "./columnResize";
@@ -96,7 +97,9 @@ export default function AppHeader({
 
   return (
     <>
-      <header className="relative z-20 flex shrink-0 items-center border-b border-border bg-panel">
+      <header
+        className={`relative flex shrink-0 items-center border-b border-border bg-panel ${Z_APP_HEADER}`}
+      >
         <div
           className="box-border flex h-12 shrink-0 items-center px-3"
           style={{ width: `var(${LEFT_PANEL_WIDTH_VAR}, ${brandWidth}px)` }}

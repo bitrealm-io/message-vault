@@ -19,6 +19,16 @@ export const PAGE_SIZE_FILL = 100;
 export const MAX_LIST_OFFSET = 50_000;
 /** Contacts catalog first page — large enough for typical accounts in one request. */
 export const PAGE_SIZE_CONTACTS_FIRST = 500;
+/** The largest page any list route answers (`MAX_LIST_LIMIT` in the server's `paging.rs`). */
+export const PAGE_SIZE_MAX = 500;
+
+/** How close to the end of a list, in pixels, scrolling asks for the next page. */
+const NEAR_END_PX = 48;
+
+/** The scrolled list `el` is near enough its end to ask for the next page. */
+export function isNearEnd(el: HTMLElement): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR_END_PX;
+}
 
 /** Status suffix appended to a visible-range label. */
 export function listActivitySuffix(refreshing: boolean, filling: boolean): string {

@@ -210,16 +210,16 @@ fn an_incoming_sms_keeps_its_sender_and_contact_name() {
     assert_eq!(msg.text, "hello ir");
 }
 
-/// A message from another app has no SBR fields to restore, so the element
-/// is built from the message alone. A photo in a 1:1 chat makes it an
-/// `<mms>`, whatever kind the source app called the message.
+/// An SMS from another app, such as iMessage's SMS fallback, has no SBR
+/// fields to restore, so the element is built from the message alone. A
+/// photo in a 1:1 chat makes it an `<mms>`, whatever kind the source app
+/// called the message.
 #[test]
 fn a_direct_photo_from_another_app_keeps_its_chat_sender_subject_and_bytes() {
     let mut doc = message_ir::testutil::sample_document("look at this");
     let msg = &mut doc.messages[0];
     msg.source = None;
-    msg.service = message_ir::IrService::IMessage;
-    msg.message_kind = IrMessageKind::IMessage;
+    msg.message_kind = IrMessageKind::Sms;
     msg.subject = Some("Holiday".into());
     msg.attachments = vec![IrAttachment {
         mime_type: Some("image/png".into()),
@@ -266,8 +266,7 @@ fn a_text_only_group_message_from_another_app_stays_in_its_group() {
         });
     let incoming = &mut doc.messages[0];
     incoming.source = None;
-    incoming.service = message_ir::IrService::IMessage;
-    incoming.message_kind = IrMessageKind::IMessage;
+    incoming.message_kind = IrMessageKind::Sms;
     incoming.sender_handle = Some("+15555550102".into());
     incoming.sender_display_name = Some("Lee".into());
     let mut outgoing = incoming.clone();
@@ -433,27 +432,51 @@ fn restored_mms_parts_get_back_their_own_attachment_bytes() {
     assert_eq!(part_payloads(&read[0].messages[0]), payloads(None));
 }
 
+/// SMS Backup & Restore can describe only SMS and MMS. An iMessage or a
+/// WhatsApp message written as `<sms>` would come back from a re-import as
+/// an SMS under a new id, so the archive leaves it out and counts it (ADR 0021).
 #[test]
-fn a_session_writes_every_conversation_into_one_smses_backup() {
+fn the_archive_writes_only_sms_and_mms_and_counts_the_rest() {
+    let mut imessage = message_ir::testutil::sample_imessage_document();
+    // iMessage's SMS fallback is an SMS, whatever app it came from.
+    let mut fallback = imessage.messages[0].clone();
+    fallback.guid = "SMS-FALLBACK-0001".into();
+    fallback.service = message_ir::IrService::Sms;
+    fallback.message_kind = IrMessageKind::Sms;
+    fallback.imessage = None;
+    fallback.text = "hello fallback".into();
+    imessage.messages.push(fallback);
+    // A Mac `chat.db` row with no service is read as an SMS by its kind.
+    let mut no_service = imessage.messages[0].clone();
+    no_service.guid = "NO-SERVICE-0001".into();
+    no_service.service = message_ir::IrService::Unknown;
+    no_service.message_kind = IrMessageKind::Sms;
+    no_service.imessage = None;
+    no_service.text = "hello no service".into();
+    imessage.messages.push(no_service);
+    let docs = [
+        message_ir::testutil::sample_document("hello ir"),
+        imessage,
+        message_ir::testutil::sample_whatsapp_document("hello whatsapp"),
+    ];
+
     let tmp = tempfile::tempdir().unwrap();
-    let mut session = SbrBackupSession::create(tmp.path()).unwrap();
-    session
-        .append_document(&message_ir::testutil::sample_document("hello ir"))
-        .unwrap();
-    session
-        .append_document(&message_ir::testutil::sample_imessage_document())
-        .unwrap();
-    let path = session.finish().unwrap();
+    let mut report = message_crate_core::ExportReport::default();
+    let path = SbrArchive.write(tmp.path(), &docs, &mut report).unwrap();
     assert_eq!(path.file_name().unwrap(), "smses.xml");
     let text = fs::read_to_string(&path).unwrap();
-    assert!(text.contains(r#"count="3""#)); // 1 SMS + 2 iMessage rows
+    assert!(text.contains(r#"count="3""#), "{text}");
     assert!(text.contains("hello ir"));
-    assert!(text.contains(r#"type="1""#) || text.contains(r#"msg_box="1""#));
-    assert!(text.contains("hello imessage"));
-    // iMessage bags are not mirrored as Apple attrs.
-    assert!(!text.contains("X-ME-"));
-    assert!(!text.contains("Sent with Balloons"));
-    assert!(!text.contains("tapback_kind"));
+    assert!(text.contains("hello fallback"));
+    assert!(text.contains("hello no service"), "{text}");
+    assert!(!text.contains("hello imessage"), "{text}");
+    assert!(!text.contains("Loved a message"), "{text}");
+    assert!(!text.contains("hello whatsapp"), "{text}");
+    // The WhatsApp conversation had nothing left to write, so no element
+    // names its address.
+    assert!(!text.contains("+15555550102"), "{text}");
+    // Two iMessage rows and one WhatsApp row.
+    assert_eq!(report.extra(NOT_SMS_OR_MMS_LEFT_OUT), 3);
 }
 
 #[test]
@@ -467,7 +490,7 @@ fn the_archive_restores_source_fields_as_attrs() {
         attrs.insert("date".into(), json!("1400773261000"));
         attrs.insert("type".into(), json!("1"));
         attrs.insert("body".into(), json!("hello ir"));
-        attrs.insert("service_center".into(), json!("+15550009999"));
+        attrs.insert("service_center".into(), json!("+15555550114"));
         attrs.insert("contact_name".into(), json!("Sam"));
         source.fields = {
             let mut m = Map::new();
@@ -485,7 +508,7 @@ fn the_archive_restores_source_fields_as_attrs() {
         )
         .unwrap();
     let text = fs::read_to_string(&path).unwrap();
-    assert!(text.contains(r#"service_center="+15550009999""#));
+    assert!(text.contains(r#"service_center="+15555550114""#));
     assert!(text.contains("hello ir"));
 }
 

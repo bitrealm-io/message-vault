@@ -2,7 +2,7 @@ From: alice@unknown.email
 To: me@example.com
 Subject: SMS with Alice
 X-smssync-type: 1
-X-smssync-address: 4075551234
+X-smssync-address: 4075550107
 X-smssync-date: 1609459200000
 Content-Type: text/plain; charset=utf-8
 

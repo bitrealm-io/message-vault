@@ -66,10 +66,10 @@ struct CreateImportResponse {
     id: i64,
 }
 
-/// The answer to `POST /v1/imports/{id}/complete`. Only `id` is read: it
+/// The Import Run `POST /v1/imports/{id}/complete` answers. Only `id` is read: it
 /// names the run the server closed.
 #[derive(Debug, Deserialize)]
-struct CompleteImportResponse {
+struct ImportRun {
     id: i64,
 }
 
@@ -352,7 +352,7 @@ impl Session {
             .send()
             .with_context(|| format!("POST /v1/imports/{import_id}/complete"))?;
         let (status, text) = read_body("import run complete", response)?;
-        let closed: CompleteImportResponse = ok_json("import run complete", status, &text)?;
+        let closed: ImportRun = ok_json("import run complete", status, &text)?;
         if closed.id != import_id {
             return Err(anyhow!(
                 "import run complete: the server closed run {} for run {import_id}",

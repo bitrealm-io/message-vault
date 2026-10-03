@@ -81,7 +81,6 @@ afterEach(() => {
 });
 
 /** Where the router is now, and a Back button. */
-// biome-ignore lint/style/useComponentExportOnlyModules: local test harness only
 function HistoryProbe() {
   const location = useLocation();
   const navigate = useNavigate();

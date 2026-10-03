@@ -154,13 +154,13 @@ export default function OnboardingScreen() {
     if (!listed || identitiesSeeded.current) return;
     identitiesSeeded.current = true;
 
-    const shown = listed.items
+    const shown = listed
       .slice(0, MAX_ACCOUNT_ROWS)
       .map(({ address, service }) =>
         newHandleRow(address, parseSelectKey(service, HANDLE_SERVICES) ?? "phone"),
       );
     if (shown.length === 0) return;
-    setHiddenIdentities(listed.total - shown.length);
+    setHiddenIdentities(listed.length - shown.length);
     setSeededRows(shown);
     setHandles((rows) => (rows.some((row) => row.handle.trim()) ? rows : shown));
   }, [identities.data]);

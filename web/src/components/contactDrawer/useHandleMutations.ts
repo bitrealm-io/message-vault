@@ -1,8 +1,12 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { type ContactHandle, useUpdateContact } from "../../lib/contactDetail";
 import { formatHandleServiceLabel, inferService } from "./contactDrawerTypes";
 import type { RemoveIdentityTarget } from "./handleTableLogic";
 
+/**
+ * The add and remove dialogs of a contact's handle table, and the update they send.
+ * `ContactDrawer` keys the table by contact id, so this state starts fresh for each contact.
+ */
 export function useHandleMutations({ contactId }: { contactId: string }) {
   const [adding, setAdding] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<RemoveIdentityTarget | null>(null);
@@ -10,14 +14,6 @@ export function useHandleMutations({ contactId }: { contactId: string }) {
   const busy = updateContact.isPending;
   // The dialogs stay open on a refusal and show this, so a person can retry.
   const error = updateContact.error ? updateContact.error.message : "";
-  const reset = updateContact.reset;
-
-  useEffect(() => {
-    void contactId;
-    setAdding(false);
-    setRemoveTarget(null);
-    reset();
-  }, [contactId, reset]);
 
   const requestRemoveHandle = (h: ContactHandle) => {
     if (busy) return;

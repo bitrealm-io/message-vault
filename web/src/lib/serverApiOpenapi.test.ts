@@ -33,7 +33,8 @@ import * as serverApi from "./serverApi";
 
 vi.mock("./api", () => ({
   apiClient: {
-    get: vi.fn().mockResolvedValue({}),
+    // An empty page, so a list read whole stops after one request.
+    get: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     post: vi.fn().mockResolvedValue({}),
     postRaw: vi.fn().mockResolvedValue({}),
     postText: vi.fn().mockResolvedValue(""),
@@ -153,6 +154,14 @@ const EXERCISED: Record<string, () => unknown> = {
   getAccountImport: () => serverApi.getAccountImport(2, undefined, 3),
   listAccountExports: () =>
     serverApi.listAccountExports(every<serverApi.AccountRunListParams>({ limit: 50, offset: 50 })),
+  listAuditTrail: () =>
+    serverApi.listAuditTrail(every<serverApi.AuditTrailParams>({ limit: 50, offset: 50 })),
+  listAccountAuditTrail: () =>
+    serverApi.listAccountAuditTrail(
+      every<serverApi.AuditTrailParams>({ limit: 50, offset: 50 }),
+      undefined,
+      3,
+    ),
   deleteAllMessages: () => serverApi.deleteAllMessages({ confirm: true }),
 
   // API tokens

@@ -220,21 +220,26 @@ fn write_message_file(conv_dir: &Path, sequence: u32, msg: &MailMessage) -> Resu
     }
     fs::create_dir_all(conv_dir)
         .with_context(|| format!("create conversation dir {}", conv_dir.display()))?;
-    let secs = msg.message.timestamp_unix_ms.div_euclid(1000);
-    let (date_part, time_part) = local_date_time_parts(secs).with_context(|| {
-        format!(
-            "invalid timestamp_unix_ms {}",
-            msg.message.timestamp_unix_ms
-        )
-    })?;
-    let guid8 = guid_prefix8(&msg.message.guid);
-    let filename = format!("{sequence:06}_{date_part}_{time_part}_{guid8}.eml");
-    let path = conv_dir.join(&filename);
+    let path = conv_dir.join(eml_file_name(sequence, &msg.message)?);
     let bytes = build_eml(msg)?;
     let mut file = File::create(&path).with_context(|| format!("create {}", path.display()))?;
     file.write_all(&bytes)
         .with_context(|| format!("write {}", path.display()))?;
     Ok(path)
+}
+
+/// The file name of the `sequence`th `.eml` in a conversation folder:
+/// `000001_<local date>_<local time>_<first 8 hex of the guid>.eml`.
+///
+/// # Errors
+///
+/// Returns an error when the message's time cannot be represented.
+pub fn eml_file_name(sequence: u32, message: &IrMessage) -> Result<String> {
+    let secs = message.timestamp_unix_ms.div_euclid(1000);
+    let (date_part, time_part) = local_date_time_parts(secs)
+        .with_context(|| format!("invalid timestamp_unix_ms {}", message.timestamp_unix_ms))?;
+    let guid8 = guid_prefix8(&message.guid);
+    Ok(format!("{sequence:06}_{date_part}_{time_part}_{guid8}.eml"))
 }
 
 /// Write one conversation folder of `.eml` files under `output_root`.
@@ -626,7 +631,7 @@ fn build_eml(msg: &MailMessage) -> Result<Vec<u8>> {
 /// the end of a line, rule 5), which encodes nothing: the line ending a
 /// `.eml` file or an mbox record adds after it belongs to that soft break
 /// and is never decoded as text.
-fn text_body_part(text: &str) -> MimePart<'static> {
+pub fn text_body_part(text: &str) -> MimePart<'static> {
     let mut encoded = QuotedPrintableEncoder::new()
         .encode(text.as_bytes())
         .unwrap_or_default();
@@ -647,7 +652,7 @@ fn text_body_part(text: &str) -> MimePart<'static> {
 /// file would lose its CRs and no longer match its `digest_sha256`. Base64
 /// lines carry no bytes of the file in their line ends, so every attachment,
 /// text or not, is encoded here rather than by mail-builder.
-fn attachment_part(mime: &str, filename: String, bytes: &[u8]) -> MimePart<'static> {
+pub fn attachment_part(mime: &str, filename: String, bytes: &[u8]) -> MimePart<'static> {
     let encoded = Base64Encoder::new()
         .wrap_lines()
         .encode(bytes)

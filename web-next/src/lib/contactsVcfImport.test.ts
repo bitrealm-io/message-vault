@@ -30,7 +30,7 @@ describe("contactsVcfImport preview/commit", () => {
     const account = await createAccount({
       username: `vcf_${Date.now()}`,
       preferredName: "Vault Owner",
-      phone: "+15555550000",
+      phone: "+15555550127",
     });
     accountId = account.id;
     saveAccount(accountId, { read_only: false });
@@ -38,13 +38,13 @@ describe("contactsVcfImport preview/commit", () => {
     const other = await createAccount({
       username: `vcf_other_${Date.now()}`,
       preferredName: "Other Owner",
-      phone: "+15555550001",
+      phone: "+15555550128",
     });
     otherAccountId = other.id;
     saveAccount(otherAccountId, { read_only: false });
 
-    seedMessage(accountId, "+15551111111");
-    seedMessage(otherAccountId, "+15552222222");
+    seedMessage(accountId, "+15555550117");
+    seedMessage(otherAccountId, "+15555550120");
   });
 
   after(() => {
@@ -99,14 +99,14 @@ describe("contactsVcfImport preview/commit", () => {
 VERSION:3.0
 FN:Matched Person
 N:Person;Matched;;;
-TEL:+15551111111
+TEL:+15555550117
 CATEGORIES:Family,Friends
 END:VCARD
 BEGIN:VCARD
 VERSION:3.0
 FN:Unmatched Person
 N:Person;Unmatched;;;
-TEL:+15559999999
+TEL:+15555550180
 CATEGORIES:Work
 END:VCARD
 BEGIN:VCARD
@@ -138,7 +138,7 @@ END:VCARD
 VERSION:3.0
 FN:Other Account
 N:Account;Other;;;
-TEL:+15552222222
+TEL:+15555550120
 CATEGORIES:Secret
 END:VCARD
 `;
@@ -179,27 +179,27 @@ END:VCARD
   });
 
   it("merges duplicate-phone VCF cards into one contact", () => {
-    seedMessage(accountId, "+15551234567");
+    seedMessage(accountId, "+15555550119");
     const vcf = `BEGIN:VCARD
 VERSION:3.0
 FN:Ada Augusta Lovelace
 N:Lovelace;Ada;Augusta;;
-TEL:+15551234567
+TEL:+15555550119
 CATEGORIES:Family
 END:VCARD
 BEGIN:VCARD
 VERSION:3.0
 FN:Ada Duplicate
 N:Duplicate;Ada;;;
-TEL:+15551234567
-TEL:+15559876543
+TEL:+15555550119
+TEL:+15555550178
 CATEGORIES:Work
 END:VCARD
 BEGIN:VCARD
 VERSION:3.0
 FN:Mononym
 N:;Mononym;;;
-TEL:+15557654321
+TEL:+15555550176
 CATEGORIES:Friends
 END:VCARD
 `;
@@ -213,12 +213,12 @@ END:VCARD
       assert.equal(summary.updated, 1);
 
       const ada = listContacts("all").find(
-        (contact) => contact.preferredHandle === "+15551234567",
+        (contact) => contact.preferredHandle === "+15555550119",
       );
       assert.ok(ada);
       const detail = getContact(ada.id);
       assert.equal(detail?.preferredName, "Ada Augusta Lovelace");
-      assert.deepEqual(detail?.phones, ["+15551234567", "+15559876543"]);
+      assert.deepEqual(detail?.phones, ["+15555550119", "+15555550178"]);
       assert.deepEqual(detail?.labels, ["Family", "Work"]);
     });
   });

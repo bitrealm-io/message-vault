@@ -163,7 +163,7 @@ async fn require_running_import_rejects_a_completed_import_and_returns_a_running
 }
 
 #[tokio::test]
-async fn get_import_detail_returns_issues() {
+async fn list_import_issues_returns_them_oldest_first() {
     let (pool, _dir) = setup_accounts_only().await;
     let mut conn = pool.acquire().await.unwrap();
     let import_id = start_import(&mut conn, &default_start_args(ACCOUNT_ID))
@@ -203,16 +203,17 @@ async fn get_import_detail_returns_issues() {
     .await
     .unwrap();
 
-    let detail = get_import_detail(&mut conn, ACCOUNT_ID, import_id)
+    let row = get_owned_import(&mut conn, ACCOUNT_ID, import_id)
         .await
         .unwrap();
-    assert_eq!(detail.row.duration_ms, Some(48_000));
-    assert_eq!(detail.row.parse_ms, Some(18_000));
-    assert_eq!(detail.issues.len(), 2);
-    assert_eq!(detail.issues[0].kind, "skip");
-    assert_eq!(detail.issues[0].step, "convert");
-    assert_eq!(detail.issues[1].kind, "error");
-    assert_eq!(detail.issues[1].step, "upload");
+    assert_eq!(row.duration_ms, Some(48_000));
+    assert_eq!(row.parse_ms, Some(18_000));
+    let issues = list_import_issues(&mut conn, import_id).await.unwrap();
+    assert_eq!(issues.len(), 2);
+    assert_eq!(issues[0].kind, "skip");
+    assert_eq!(issues[0].step, "convert");
+    assert_eq!(issues[1].kind, "error");
+    assert_eq!(issues[1].step, "upload");
 }
 
 #[tokio::test]
@@ -319,11 +320,11 @@ async fn the_list_sorted_by_start_ascending_puts_the_oldest_run_first() {
 
 /// The account's running Import Run through the list, as the desktop app
 /// finds it: `status=running`, and at most one.
-async fn running_import(conn: &mut SqliteConnection, account: i64) -> Option<ImportSummary> {
+async fn running_import(conn: &mut SqliteConnection, account: i64) -> Option<ImportRow> {
     let (items, _) = list_imports_page(conn, account, Some("running"), &DEFAULT_IMPORT_SORT, 1, 0)
         .await
         .unwrap();
-    items.into_iter().next().map(Into::into)
+    items.into_iter().next()
 }
 
 #[tokio::test]
@@ -356,7 +357,7 @@ async fn active_session_round_trips_and_blocks_a_second() {
         Some("/home/u/message-crate/staging-iphone-260830")
     );
     assert_eq!(active.device_id.as_deref(), Some("device-a"));
-    assert_eq!(active.form["source"], "imessage-ios");
+    assert_eq!(json_column(active.form_json)["source"], "imessage-ios");
 
     assert!(
         matches!(

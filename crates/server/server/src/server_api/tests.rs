@@ -19,7 +19,7 @@ async fn an_unowned_server_reports_unclaimed() {
     let fixture = test_fixture().await;
     let state = fixture.state.clone();
 
-    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
+    let body: Server = get_json(&state, "/v1/server", "").await;
     assert_eq!(body.state, ServerState::Unclaimed);
 }
 
@@ -30,7 +30,7 @@ async fn public_registration_does_not_make_an_unowned_server_open() {
     let fixture = test_fixture().await;
     let state = fixture.state.clone();
 
-    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
+    let body: Server = get_json(&state, "/v1/server", "").await;
     assert_eq!(
         body.state,
         ServerState::Unclaimed,
@@ -46,18 +46,16 @@ async fn the_server_reports_the_demo_account_while_it_exists() {
     let fixture = test_fixture().await;
     let state = fixture.state.clone();
 
-    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
+    let body: Server = get_json(&state, "/v1/server", "").await;
     assert!(!body.demo_account, "no Demo Account has been seeded");
 
-    let demo = fixture
-        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
-        .await;
-    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
+    let demo = fixture.demo_account().await;
+    let body: Server = get_json(&state, "/v1/server", "").await;
     assert_eq!(body.state, ServerState::Unclaimed);
     assert!(body.demo_account);
 
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
-    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
+    let body: Server = get_json(&state, "/v1/server", "").await;
     assert!(body.demo_account, "claiming changes nothing about it");
 
     assert_eq!(
@@ -65,7 +63,7 @@ async fn the_server_reports_the_demo_account_while_it_exists() {
             .await,
         StatusCode::NO_CONTENT
     );
-    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
+    let body: Server = get_json(&state, "/v1/server", "").await;
     assert!(!body.demo_account);
 }
 
@@ -76,7 +74,7 @@ async fn a_claimed_server_is_closed_until_registration_is_opened() {
     close_registration(&state).await;
     let _owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
 
-    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
+    let body: Server = get_json(&state, "/v1/server", "").await;
     assert_eq!(body.state, ServerState::Closed);
 }
 
@@ -86,7 +84,7 @@ async fn a_claimed_server_with_registration_on_is_open() {
     let state = fixture.state.clone();
     let _owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
 
-    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
+    let body: Server = get_json(&state, "/v1/server", "").await;
     assert_eq!(body.state, ServerState::Open);
 }
 
@@ -112,7 +110,7 @@ async fn the_state_route_carries_the_build_and_the_schema_fingerprint() {
     let fixture = test_fixture().await;
     let state = fixture.state.clone();
 
-    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
+    let body: Server = get_json(&state, "/v1/server", "").await;
 
     assert_eq!(body.version, crate::BUILD);
     assert!(
@@ -161,7 +159,7 @@ async fn claiming_an_unowned_server_creates_the_owner_and_signs_them_in() {
     assert!(auth.is_owner());
     drop(conn);
 
-    let after: ServerInfo = get_json(&state, "/v1/server", "").await;
+    let after: Server = get_json(&state, "/v1/server", "").await;
     assert_eq!(
         after.state,
         ServerState::Open,
@@ -191,6 +189,37 @@ async fn a_server_can_only_be_claimed_once() {
         .await
         .unwrap();
     assert_eq!(taken, 0);
+}
+
+/// A new Message Crate already holds the Demo Account, so a claim under its
+/// username answers `409 Conflict` as `username-taken`, and the reference
+/// lists that type for the claim beside `state-conflict`.
+#[tokio::test]
+async fn a_claim_under_a_taken_username_answers_username_taken_as_the_reference_says() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
+    fixture.account("demo").await;
+
+    let (status, text) = crate::test_support::post_logged_out(
+        &state,
+        "/v1/server/claim",
+        serde_json::json!({ "username": "demo", "password": "hunter2hunter2" }),
+    )
+    .await;
+    crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::UsernameTaken);
+
+    let doc: serde_json::Value =
+        serde_json::from_str(&crate::openapi::dump_openapi_json()).unwrap();
+    let listed = &doc["paths"]["/v1/server/claim"]["post"]["responses"]["409"]
+        [crate::openapi::shared_parts::PROBLEM_TYPES];
+    assert!(
+        listed
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|t| *t == crate::problem::ProblemType::UsernameTaken.url()),
+        "the claim's 409 lists {listed}"
+    );
 }
 
 /// Two claims at once: the second reads the Message Crate unclaimed while the
@@ -250,7 +279,7 @@ async fn claiming_needs_a_password_of_one_character_or_more() {
         StatusCode::UNPROCESSABLE_ENTITY,
         "the owner must have a password"
     );
-    let after: ServerInfo = get_json(&state, "/v1/server", "").await;
+    let after: Server = get_json(&state, "/v1/server", "").await;
     assert_eq!(after.state, ServerState::Unclaimed);
 
     let status = post_status(
@@ -297,7 +326,7 @@ async fn claiming_is_rate_limited_across_the_server() {
         crate::problem::ProblemType::RateLimited,
     );
     assert!(problem.retry_after.is_some(), "{text}");
-    let after: ServerInfo = get_json(&state, "/v1/server", "").await;
+    let after: Server = get_json(&state, "/v1/server", "").await;
     assert_eq!(after.state, ServerState::Unclaimed);
 }
 
@@ -349,7 +378,7 @@ async fn the_owner_can_open_and_close_registration() {
     let joined = register_via_api(&state, "stranger", "hunter2hunter2").await;
     assert_eq!(joined.username, "stranger");
 
-    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
+    let body: Server = get_json(&state, "/v1/server", "").await;
     assert_eq!(body.state, ServerState::Open);
 }
 
@@ -608,7 +637,7 @@ async fn the_owner_reads_the_server_totals_summed_over_every_account() {
 
     for (account_id, handle, bodies) in [
         (alice.account_id, "+15555550100", &["hi", "thérè"][..]),
-        (bob.account_id, "+15555550200", &["yo"][..]),
+        (bob.account_id, "+15555550135", &["yo"][..]),
     ] {
         let messages: Vec<SeedMessage> = bodies
             .iter()
@@ -816,7 +845,7 @@ async fn the_owner_adds_the_demo_account_and_no_other_account_changes() {
 
     let demo = demo_account_after_build(&state, &owner.token).await;
     assert_eq!(demo.status, DemoAccountStatus::Ready, "{:?}", demo.error);
-    let info: ServerInfo = get_json(&state, "/v1/server", "").await;
+    let info: Server = get_json(&state, "/v1/server", "").await;
     assert!(info.demo_account);
     assert_ne!(
         info.state,
@@ -848,9 +877,7 @@ async fn the_demo_username_stays_reserved_after_the_demo_account_is_deleted() {
     let fixture = test_fixture().await;
     let mut state = fixture.state.clone();
     state.demo_bundle_generator = tiny_bundle;
-    let demo = fixture
-        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
-        .await;
+    let demo = fixture.demo_account().await;
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     assert_eq!(
         crate::test_support::delete_status(&state, &format!("/v1/accounts/{demo}"), &owner.token)
@@ -924,7 +951,7 @@ async fn a_failed_demo_build_reports_why_and_leaves_no_account() {
         "{:?}",
         demo.error
     );
-    let info: ServerInfo = get_json(&state, "/v1/server", "").await;
+    let info: Server = get_json(&state, "/v1/server", "").await;
     assert!(!info.demo_account);
 
     state.demo_bundle_generator = tiny_bundle;
@@ -961,9 +988,7 @@ async fn a_demo_build_the_server_stopped_is_removed_and_failed_on_the_next_start
     let fixture = test_fixture().await;
     let mut state = fixture.state.clone();
     state.demo_bundle_generator = tiny_bundle;
-    fixture
-        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
-        .await;
+    fixture.demo_account().await;
     {
         let mut conn = fixture.conn().await;
         crate::db::demo_account_build::begin(&mut conn)
@@ -985,7 +1010,7 @@ async fn a_demo_build_the_server_stopped_is_removed_and_failed_on_the_next_start
         "{:?}",
         demo.error
     );
-    let info: ServerInfo = get_json(&state, "/v1/server", "").await;
+    let info: Server = get_json(&state, "/v1/server", "").await;
     assert!(!info.demo_account);
     assert!(!demo_build_is_unfinished(&fixture).await);
 
@@ -1003,9 +1028,7 @@ async fn stopping_the_server_during_a_demo_build_leaves_no_demo_account() {
     let fixture = test_fixture().await;
     let mut state = fixture.state.clone();
     state.demo_bundle_generator = slow_tiny_bundle;
-    fixture
-        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
-        .await;
+    fixture.demo_account().await;
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
 
     let (status, body) = start_demo_build(&state, &owner.token).await;
@@ -1069,9 +1092,7 @@ async fn the_demo_account_cannot_be_entered_while_it_is_built() {
     let fixture = test_fixture().await;
     let mut state = fixture.state.clone();
     state.demo_bundle_generator = slow_tiny_bundle;
-    fixture
-        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
-        .await;
+    fixture.demo_account().await;
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let visitor = crate::test_support::log_in(&state, "demo", "").await;
     let visitor_token = visitor["token"].as_str().unwrap().to_string();
@@ -1083,7 +1104,7 @@ async fn the_demo_account_cannot_be_entered_while_it_is_built() {
     let (status, body) = start_demo_build(&state, &owner.token).await;
     assert_eq!(status, StatusCode::ACCEPTED, "{body}");
 
-    let info: ServerInfo = get_json(&state, "/v1/server", "").await;
+    let info: Server = get_json(&state, "/v1/server", "").await;
     assert!(!info.demo_account, "the login card offers no Demo Account");
     assert_eq!(
         crate::test_support::login_status(&state, "demo", "").await,
@@ -1098,7 +1119,7 @@ async fn the_demo_account_cannot_be_entered_while_it_is_built() {
 
     let demo = demo_account_after_build(&state, &owner.token).await;
     assert_eq!(demo.status, DemoAccountStatus::Ready, "{:?}", demo.error);
-    let info: ServerInfo = get_json(&state, "/v1/server", "").await;
+    let info: Server = get_json(&state, "/v1/server", "").await;
     assert!(info.demo_account);
     assert_eq!(
         crate::test_support::login_status(&state, "demo", "").await,

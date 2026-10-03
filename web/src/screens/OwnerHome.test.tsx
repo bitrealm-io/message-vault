@@ -30,6 +30,8 @@ const listAccountExports = vi.hoisted(() => vi.fn());
 const getImportContacts = vi.hoisted(() => vi.fn());
 const deleteAccountById = vi.hoisted(() => vi.fn());
 const deleteAccountMessages = vi.hoisted(() => vi.fn());
+const listAuditTrail = vi.hoisted(() => vi.fn());
+const listAccountAuditTrail = vi.hoisted(() => vi.fn());
 const listApiTokens = vi.hoisted(() => vi.fn());
 
 vi.mock("../lib/auth", () => ({
@@ -57,6 +59,8 @@ vi.mock("../lib/serverApi", async (importOriginal) => ({
   getImportContacts: (...a: unknown[]) => getImportContacts(...a),
   deleteAccountById: (...a: unknown[]) => deleteAccountById(...a),
   deleteAccountMessages: (...a: unknown[]) => deleteAccountMessages(...a),
+  listAuditTrail: (...a: unknown[]) => listAuditTrail(...a),
+  listAccountAuditTrail: (...a: unknown[]) => listAccountAuditTrail(...a),
   listApiTokens: (...a: unknown[]) => listApiTokens(...a),
 }));
 
@@ -117,8 +121,10 @@ beforeEach(() => {
   getImportContacts.mockReset();
   deleteAccountById.mockReset();
   deleteAccountMessages.mockReset();
+  listAuditTrail.mockReset();
+  listAccountAuditTrail.mockReset();
   listApiTokens.mockReset();
-  listApiTokens.mockResolvedValue({ items: [], total: 0, limit: 40, offset: 0 });
+  listApiTokens.mockResolvedValue([]);
   getAccountProfile.mockResolvedValue(theOwner);
   getAccount.mockResolvedValue(anAccount);
   getAccountStorage.mockResolvedValue({
@@ -129,27 +135,22 @@ beforeEach(() => {
     top_attachments: [],
   });
   listAccountImports.mockResolvedValue({ items: [anImport], total: 1, limit: 40, offset: 0 });
-  listAccountIdentities.mockResolvedValue({
-    items: [
-      {
-        address: "+15555550100",
-        service: "phone",
-        start_date: "2020-01-01T00:00:00Z",
-        end_date: "2020-02-03T00:00:00Z",
-        conversations: 2,
-        direct_messages: 12,
-        group_messages: 30,
-      },
-    ],
-    total: 1,
-    limit: 40,
-    offset: 0,
-  });
-  getAccountImport.mockResolvedValue(anImportDetail);
+  listAccountIdentities.mockResolvedValue([
+    {
+      address: "+15555550100",
+      service: "phone",
+      start_date: "2020-01-01T00:00:00Z",
+      end_date: "2020-02-03T00:00:00Z",
+      conversations: 2,
+      direct_messages: 12,
+      group_messages: 30,
+    },
+  ]);
+  getAccountImport.mockResolvedValue(anAccountImportRun);
   listAccountExports.mockResolvedValue({ items: [], total: 0, limit: 40, offset: 0 });
   deleteAccountById.mockResolvedValue(undefined);
   deleteAccountMessages.mockResolvedValue(undefined);
-  listAccounts.mockResolvedValue({ items: [theOwner, anAccount] });
+  listAccounts.mockResolvedValue([theOwner, anAccount]);
   getServerSettings.mockResolvedValue({ public_registration: false });
   getDemoAccount.mockResolvedValue({ status: "ready", size: null, error: null });
   getServerStorage.mockResolvedValue({
@@ -243,7 +244,7 @@ const anImport = {
 };
 
 /** The same run in full, which is what opening its row reads. */
-const anImportDetail = {
+const anAccountImportRun = {
   ...anImport,
   tool: "desktop",
   mode: "full",
@@ -260,14 +261,14 @@ const anImportDetail = {
 };
 
 describe("OwnerHome", () => {
-  it("lists Dashboard, Server Settings, User Accounts, Activity and Logs in the side panel", () => {
+  it("lists Dashboard, Server Settings, User Accounts, Audit Trail and Logs in the side panel", () => {
     renderHome();
 
     expect(sectionLinks().map((b) => b.textContent)).toEqual([
       "Dashboard",
       "Server Settings",
       "User Accounts",
-      "Activity",
+      "Audit Trail",
       "Logs",
     ]);
   });
@@ -321,17 +322,79 @@ describe("OwnerHome", () => {
     expect(cells(rows[4])).toEqual(["All accounts", "5,678", "8.0 MB", "400 MB"]);
   });
 
-  it.each([
-    ["activity", "Activity"],
-    ["logs", "Logs"],
-  ])("opens /owner/%s on its name and loads nothing", (id, label) => {
-    renderHome([`/owner/${id}`]);
+  it("opens /owner/logs on its name and loads nothing", () => {
+    renderHome(["/owner/logs"]);
 
-    expect(selectedSection()).toBe(label);
-    expect(screen.getByRole("heading", { name: label })).toBeInTheDocument();
+    expect(selectedSection()).toBe("Logs");
+    expect(screen.getByRole("heading", { name: "Logs" })).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(listAccounts).not.toHaveBeenCalled();
     expect(getServerSettings).not.toHaveBeenCalled();
+  });
+
+  it("lists every account's Audit Trail, a deleted account's under its old username, and narrows it to one account", async () => {
+    listAccounts.mockResolvedValue([theOwner, anAccount]);
+    listAuditTrail.mockResolvedValue({
+      items: [
+        {
+          id: 9,
+          action: "account_deleted",
+          at: "2026-10-02T10:00:00+00:00",
+          actor: "owner",
+          account_id: null,
+          username: "carol",
+        },
+        {
+          id: 4,
+          action: "logged_in",
+          at: "2026-10-01T09:00:00+00:00",
+          actor: "holder",
+          account_id: 101,
+          username: "bob",
+          app: "website",
+          app_version: "0.10.0+aaaa1111",
+        },
+      ],
+      total: 2,
+      limit: 50,
+      offset: 0,
+    });
+    listAccountAuditTrail.mockResolvedValue({
+      items: [
+        {
+          id: 4,
+          action: "logged_in",
+          at: "2026-10-01T09:00:00+00:00",
+          actor: "holder",
+          account_id: 101,
+          username: "bob",
+        },
+      ],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    });
+    renderHome(["/owner/audit-trail"]);
+
+    expect(selectedSection()).toBe("Audit Trail");
+    const table = await screen.findByRole("table");
+    const rows = within(table).getAllByRole("row");
+    expect(rows).toHaveLength(3);
+    expect(within(rows[1]).getByText("carol")).toBeInTheDocument();
+    expect(within(rows[1]).getByText("deleted")).toBeInTheDocument();
+    expect(within(rows[1]).getByText("Account deleted")).toBeInTheDocument();
+    expect(within(rows[1]).getByText("Owner")).toBeInTheDocument();
+    expect(
+      within(rows[2]).getByText("Logged in from the website (0.10.0+aaaa1111)"),
+    ).toBeInTheDocument();
+
+    await userEvent.click(await screen.findByRole("button", { name: /Every account/ }));
+    await userEvent.click(await screen.findByRole("option", { name: "bob" }));
+    await waitFor(() => expect(listAccountAuditTrail).toHaveBeenCalled());
+    expect(listAccountAuditTrail.mock.calls[0][2]).toBe(101);
+    await waitFor(() =>
+      expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(2),
+    );
   });
 
   it("has the header every account sees: the product name, a search bar, the account button", () => {
@@ -355,9 +418,10 @@ describe("OwnerHome", () => {
 
   it("narrows the accounts table to the usernames the search bar matches", async () => {
     const user = userEvent.setup({ delay: null });
-    listAccounts.mockResolvedValue({
-      items: [anAccount, { ...anAccount, account_id: 102, username: "carol" }],
-    });
+    listAccounts.mockResolvedValue([
+      anAccount,
+      { ...anAccount, account_id: 102, username: "carol" },
+    ]);
     renderHome();
 
     await screen.findByText("bob");
@@ -437,6 +501,7 @@ describe("OwnerHome", () => {
       "Account",
       "Profile",
       "Storage",
+      "Audit Trail",
     ]);
     // The owner sees bob's API Tokens, to revoke a leaked one, and makes none.
     expect(await screen.findByRole("heading", { name: "API Tokens" })).toBeInTheDocument();
@@ -467,7 +532,7 @@ describe("OwnerHome", () => {
 
     updateAccount.mockResolvedValue({ ...anAccount, phones: [] });
     getAccount.mockResolvedValue({ ...anAccount, phones: [] });
-    listAccountIdentities.mockResolvedValue({ items: [], total: 0, limit: 40, offset: 0 });
+    listAccountIdentities.mockResolvedValue([]);
     // Remove asks first; the identity goes only once the dialog agrees.
     await user.click(screen.getByRole("button", { name: "Remove +15555550100 (Text Message)" }));
     expect(updateAccount).not.toHaveBeenCalledWith(
@@ -623,17 +688,15 @@ describe("OwnerHome", () => {
   });
 
   it("shows when each account last logged in, or Never", async () => {
-    listAccounts.mockResolvedValue({
-      items: [
-        anAccount,
-        {
-          ...anAccount,
-          account_id: 102,
-          username: "carol",
-          last_login_at: "2026-09-17T14:05:00Z",
-        },
-      ],
-    });
+    listAccounts.mockResolvedValue([
+      anAccount,
+      {
+        ...anAccount,
+        account_id: 102,
+        username: "carol",
+        last_login_at: "2026-09-17T14:05:00Z",
+      },
+    ]);
     renderHome();
 
     expect(await screen.findByText("Never")).toBeInTheDocument();
@@ -914,6 +977,7 @@ describe("OwnerHome", () => {
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
       "Account",
       "Profile",
+      "Audit Trail",
       "Appearance",
     ]);
     // The owner's account reaches every other, so its password change asks for the current one.

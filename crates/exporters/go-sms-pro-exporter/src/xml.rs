@@ -317,14 +317,14 @@ mod tests {
 <GoSms>
   <SMSCount>2</SMSCount>
   <SMS>
-    <address>+14075551234</address>
+    <address>+14075550107</address>
     <contactName>Alice</contactName>
     <date>1400773261000</date>
     <type>1</type>
     <body>hello +g1f602</body>
   </SMS>
   <SMS>
-    <address>+14075551234</address>
+    <address>+14075550107</address>
     <contactName>Alice</contactName>
     <date>1400773321000</date>
     <type>2</type>
@@ -338,7 +338,7 @@ mod tests {
         assert_eq!(msgs.len(), 2);
         assert!(!msgs[0].is_from_me);
         assert_eq!(msgs[0].text, "hello 😂");
-        assert_eq!(msgs[0].other.key(), "+14075551234");
+        assert_eq!(msgs[0].other.key(), "+14075550107");
         assert!(msgs[1].is_from_me);
     }
 
@@ -347,13 +347,13 @@ mod tests {
         let xml = r#"<?xml version="1.0"?>
 <GoSms>
   <SMS>
-    <address>+14075551234</address>
+    <address>+14075550107</address>
     <contactName>Alice</contactName>
     <type>1</type>
     <body>no date here</body>
   </SMS>
   <SMS>
-    <address>+14075551234</address>
+    <address>+14075550107</address>
     <contactName>Alice</contactName>
     <date>1400773261000</date>
     <type>1</type>
@@ -373,7 +373,7 @@ mod tests {
         let xml = r#"<?xml version="1.0"?>
 <GoSms>
   <SMS>
-    <address>+14075551234</address>
+    <address>+14075550107</address>
     <contactName>Alice</contactName>
     <date>1400773261000</date>
     <type>1</type>
@@ -406,8 +406,8 @@ mod tests {
 
     #[test]
     fn a_number_with_its_country_keeps_it() {
-        let (msgs, _) = received_from("+6591234567");
-        assert_eq!(msgs[0].other.key(), "+6591234567");
+        let (msgs, _) = received_from("+6595550100");
+        assert_eq!(msgs[0].other.key(), "+6595550100");
     }
 
     #[test]
@@ -428,7 +428,7 @@ mod tests {
 
     fn sms_with_date(date: &str) -> (Vec<XmlMessage>, XmlParseStats) {
         let xml = format!(
-            "<GoSms><SMS><address>+14075551234</address><date>{date}</date><type>1</type><body>hi</body></SMS></GoSms>"
+            "<GoSms><SMS><address>+14075550107</address><date>{date}</date><type>1</type><body>hi</body></SMS></GoSms>"
         );
         parse_xml_str(&xml).unwrap()
     }

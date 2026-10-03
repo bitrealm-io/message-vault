@@ -10,7 +10,7 @@ describe("serializeContactsCsv", () => {
   it("writes at least five label columns", () => {
     const csv = serializeContactsCsv([
       {
-        phones: ["+15551234567"],
+        phones: ["+15555550119"],
         preferredName: "Ada Lovelace",
         labels: ["Family"],
       },
@@ -24,7 +24,7 @@ describe("serializeContactsCsv", () => {
     const labels = ["A", "B", "C", "D", "E", "F", "G"];
     const csv = serializeContactsCsv([
       {
-        phones: ["+15551234567"],
+        phones: ["+15555550119"],
         preferredName: "Mononym",
         labels,
       },
@@ -33,7 +33,7 @@ describe("serializeContactsCsv", () => {
     const header = parseCsvLine(lines[0]!);
     assert.deepEqual(header, contactsCsvHeader(7));
     const row = parseCsvLine(lines[1]!);
-    assert.equal(row[0], "+15551234567");
+    assert.equal(row[0], "+15555550119");
     assert.equal(row[1], "Mononym");
     assert.equal(row[2], "");
     assert.deepEqual(row.slice(3), labels);

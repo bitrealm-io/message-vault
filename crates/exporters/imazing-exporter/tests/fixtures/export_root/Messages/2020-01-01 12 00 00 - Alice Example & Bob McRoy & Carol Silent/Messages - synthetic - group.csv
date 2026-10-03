@@ -1,4 +1,0 @@
-Chat Session,Message Date,Delivered Date,Read Date,Edited Date,Deleted Date,Service,Type,Sender ID,Sender Name,Status,Replying to,Subject,Text,Reactions,Attachment,Attachment type
-Alice Example & Bob McRoy & Carol Silent,2020-01-01 12:10:00,,,,,iMessage,Incoming,+15555550111,Alice Example,Read,,,Group hello,,,
-Alice Example & Bob McRoy & Carol Silent,2020-01-01 12:11:00,,,,,iMessage,Incoming,+13212462167,Bob McRoy,Read,,,Group reply,,,
-Alice Example & Bob McRoy & Carol Silent,2020-01-01 12:12:00,,,,,iMessage,Notification,,,,Read,,,Carol Silent left the group,,,

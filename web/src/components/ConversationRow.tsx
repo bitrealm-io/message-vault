@@ -1,4 +1,4 @@
-import { type ReactNode, useId } from "react";
+import type { ReactNode } from "react";
 import { conversationName } from "../lib/conversationName";
 import { formatDateSpan } from "../lib/formatDate";
 import { conversationServiceLabel } from "../lib/serviceLabel";
@@ -7,6 +7,7 @@ import { listRowDivider } from "../lib/tw";
 import type { Conversation } from "../lib/types";
 import Checkbox from "./Checkbox";
 import { useColumnResizing } from "./columnResizeState";
+import PlainButton from "./PlainButton";
 
 function GroupIcon() {
   return (
@@ -94,7 +95,6 @@ export default function ConversationRow({
   checked?: boolean;
   onCheckChange?: (id: number) => void;
 }) {
-  const checkboxId = useId();
   const columnResizing = useColumnResizing();
   const isGroup = conversation.is_group;
   const wraps = isGroup && !conversation.label && !columnResizing;
@@ -131,9 +131,9 @@ export default function ConversationRow({
 
   if (!onCheckChange) {
     return (
-      <button type="button" onClick={onClick} className={`cursor-pointer ${rowClass}`}>
+      <PlainButton onPress={onClick} className={`cursor-pointer ${rowClass}`}>
         {body}
-      </button>
+      </PlainButton>
     );
   }
 
@@ -148,25 +148,18 @@ export default function ConversationRow({
         padding puts it back so the box itself does not move. Anywhere left of
         the title toggles the row.
       */}
-      <label
-        htmlFor={checkboxId}
-        className="-my-[0.7rem] -mr-2 -ml-[0.85rem] flex shrink-0 cursor-pointer items-center self-stretch pr-2 pl-[0.85rem]"
-      >
-        <Checkbox
-          id={checkboxId}
-          checked={checked || false}
-          aria-label={`Select ${conversationTitleText(conversation)}`}
-          onChange={() => onCheckChange(conversation.id)}
-          className="shrink-0"
-        />
-      </label>
-      <button
-        type="button"
-        onClick={onClick}
+      <Checkbox
+        checked={checked || false}
+        aria-label={`Select ${conversationTitleText(conversation)}`}
+        onChange={() => onCheckChange(conversation.id)}
+        labelClassName="-my-[0.7rem] -mr-2 -ml-[0.85rem] shrink-0 items-center self-stretch pr-2 pl-[0.85rem]"
+      />
+      <PlainButton
+        onPress={onClick}
         className="flex min-w-0 flex-1 cursor-pointer items-start border-none bg-transparent p-0 text-left"
       >
         {body}
-      </button>
+      </PlainButton>
     </div>
   );
 }

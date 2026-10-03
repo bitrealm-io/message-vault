@@ -13,7 +13,7 @@ async fn an_import_creates_the_contact_with_the_backup_name() {
         .unwrap();
     let handle_id: i64 = sqlx::query_scalar(
         "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
-         VALUES ($1, '+15555550700', '+15555550700', 'phone', 'imessage') RETURNING id",
+         VALUES ($1, '+15555550153', '+15555550153', 'phone', 'imessage') RETURNING id",
     )
     .bind(TEST_ACCOUNT)
     .fetch_one(&mut *conn)
@@ -52,7 +52,7 @@ async fn a_later_backup_names_a_contact_an_earlier_one_left_nameless() {
         .unwrap();
     let handle_id: i64 = sqlx::query_scalar(
         "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
-         VALUES ($1, '+15555550800', '+15555550800', 'phone', 'imessage') RETURNING id",
+         VALUES ($1, '+15555550160', '+15555550160', 'phone', 'imessage') RETURNING id",
     )
     .bind(TEST_ACCOUNT)
     .fetch_one(&mut *conn)
@@ -98,8 +98,8 @@ async fn an_import_replaces_a_trashed_contact_with_a_fresh_one() {
     crate::db::account_profile::ensure_account_row(&mut conn, TEST_ACCOUNT)
         .await
         .unwrap();
-    let met = insert_handle(&mut conn, "+15555550950", "imessage").await;
-    let unmentioned = insert_handle(&mut conn, "+15555550951", "imessage").await;
+    let met = insert_handle(&mut conn, "+15555550163", "imessage").await;
+    let unmentioned = insert_handle(&mut conn, "+15555550164", "imessage").await;
     let mut stats = ImportStats::default();
     let old =
         ensure_contact_for_handle(&mut conn, TEST_ACCOUNT, None, met, Some("Ada"), &mut stats)
@@ -212,8 +212,8 @@ async fn a_fresh_contact_takes_the_number_on_every_service() {
     crate::db::account_profile::ensure_account_row(&mut conn, TEST_ACCOUNT)
         .await
         .unwrap();
-    let on_whatsapp = insert_handle(&mut conn, "+15555550960", "whatsapp").await;
-    let on_phone = insert_handle(&mut conn, "+15555550960", "phone").await;
+    let on_whatsapp = insert_handle(&mut conn, "+15555550165", "whatsapp").await;
+    let on_phone = insert_handle(&mut conn, "+15555550165", "phone").await;
     let mut stats = ImportStats::default();
     let old = ensure_contact_for_handle(
         &mut conn,
@@ -360,7 +360,7 @@ async fn a_sender_no_header_names_still_gets_a_contact() {
         &[
             (
                 "orphaned.jsonl",
-                orphaned(&incoming("g-orphan", "+15555550701")),
+                orphaned(&incoming("g-orphan", "+15555550154")),
             ),
             (
                 "group.jsonl",
@@ -369,7 +369,7 @@ async fn a_sender_no_header_names_still_gets_a_contact() {
                     "group",
                     r#"{"handle":"+15555550123","display_name":null}"#,
                 ) + "\n"
-                    + &incoming("g-group", "+15555550702")
+                    + &incoming("g-group", "+15555550156")
                     + "\n",
             ),
         ],
@@ -389,7 +389,7 @@ async fn the_orphaned_conversation_is_not_a_person() {
         &mut conn,
         &[(
             "orphaned.jsonl",
-            orphaned(&incoming("g-orphan", "+15555550705")),
+            orphaned(&incoming("g-orphan", "+15555550159")),
         )],
     )
     .await;
@@ -403,7 +403,7 @@ async fn the_orphaned_conversation_is_not_a_person() {
     .fetch_all(&mut *conn)
     .await
     .unwrap();
-    assert_eq!(linked, ["+15555550705"], "only the sender is a person");
+    assert_eq!(linked, ["+15555550159"], "only the sender is a person");
 }
 
 /// Report (b): a sender whose number is on a trashed contact under another
@@ -417,7 +417,7 @@ async fn a_sender_is_never_linked_to_a_trashed_contact() {
     crate::db::account_profile::ensure_account_row(&mut conn, TEST_ACCOUNT)
         .await
         .unwrap();
-    let on_whatsapp = insert_handle(&mut conn, "+15555550703", "whatsapp").await;
+    let on_whatsapp = insert_handle(&mut conn, "+15555550157", "whatsapp").await;
     let mut stats = ImportStats::default();
     let trashed = ensure_contact_for_handle(
         &mut conn,
@@ -440,7 +440,7 @@ async fn a_sender_is_never_linked_to_a_trashed_contact() {
         &mut conn,
         &[(
             "orphaned.jsonl",
-            orphaned(&incoming("g-trashed", "+15555550703")),
+            orphaned(&incoming("g-trashed", "+15555550157")),
         )],
     )
     .await;
@@ -478,12 +478,12 @@ async fn a_one_to_one_chat_first_met_as_a_sender_gets_a_contact() {
                     "group",
                     r#"{"handle":"+15555550123","display_name":null}"#,
                 ) + "\n"
-                    + &incoming("g-group", "+15555550704")
+                    + &incoming("g-group", "+15555550158")
                     + "\n",
             ),
             (
                 "direct.jsonl",
-                header("+15555550704", "individual", "") + "\n",
+                header("+15555550158", "individual", "") + "\n",
             ),
         ],
     )
@@ -523,7 +523,7 @@ async fn a_second_spelling_does_not_rename_anyone() {
         .unwrap();
     let handle_id: i64 = sqlx::query_scalar(
         "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
-         VALUES ($1, '+15555550900', '+15555550900', 'phone', 'imessage') RETURNING id",
+         VALUES ($1, '+15555550162', '+15555550162', 'phone', 'imessage') RETURNING id",
     )
     .bind(TEST_ACCOUNT)
     .fetch_one(&mut *conn)
@@ -572,7 +572,7 @@ async fn an_import_does_not_overwrite_a_name_the_person_typed() {
         .unwrap();
     let handle_id: i64 = sqlx::query_scalar(
         "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
-         VALUES ($1, '+15555551000', '+15555551000', 'phone', 'imessage') RETURNING id",
+         VALUES ($1, '+15555550168', '+15555550168', 'phone', 'imessage') RETURNING id",
     )
     .bind(TEST_ACCOUNT)
     .fetch_one(&mut *conn)

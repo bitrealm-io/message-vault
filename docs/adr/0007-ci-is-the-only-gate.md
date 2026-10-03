@@ -262,10 +262,13 @@ A pull request's own run checks it against the `main` it branched from, not
 the `main` it lands on, so two pull requests that are green on their own can
 squash-merge into a `main` that does not compile. The ruleset required the
 merge queue for a time (#1514), which ran `ci.yml` again on each pull request
-merged onto the latest `main`, and no longer does: a pull request merges
-directly once its own checks are green. The queue made every merge wait for a
-second full CI run, and with many agent sessions merging in parallel that
-wait held up more work than an occasional red `main` costs. The run on the
+merged onto the latest `main`, and no longer does (#1548): a pull request
+merges directly once its own checks are green. The queue made every merge
+wait for a second CI run after its own checks were already green: its 11
+successful runs on 2026-10-03 took up to 8 minutes each, 4 at the median. On
+2026-10-02, the day before the queue, 179 pull requests merged to `main`; at
+that rate the wait held up more work than fixing the rare red `main` it
+prevents. The run on the
 push to `main` is where such a break shows, and it is fixed forward: a pull
 request whose review finds `main` red on the same job stops and says so
 (AGENTS.md, "Review on the pull request", step 6). `ci.yml` cancels an

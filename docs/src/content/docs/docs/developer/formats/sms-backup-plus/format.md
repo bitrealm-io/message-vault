@@ -13,11 +13,17 @@ Typical headers:
 |--------|---------|
 | `X-smssync-datatype` | `SMS`, `MMS` or `CALLLOG`; a `CALLLOG` mail is skipped (below) |
 | `X-smssync-type` | Android SMS type; sent ≈ `{2,128,4,135,6,5}`, received ≈ `{1,132,130}` |
-| `X-smssync-address` | Counterparty phone(s); groups use `~` (or `;`, `,`, `\|`) separators |
+| `X-smssync-address` | The other party's number. For an MMS, only the first address the phone stored for it, so a group MMS names one of its participants here. Older exports may list several, separated by `~` (or `;`, `,`, `\|`) |
 | `X-smssync-date` | Unix epoch **milliseconds** (or seconds if small) |
 | `X-smssync-id` | Stable sync id (optional) |
 | `Subject` | `SMS with {contact name}` |
-| `From` / `To` | Often `*@sms-backup-plus.local` or owner Gmail |
+| `From` / `To` | The owner is their Gmail address. Anyone else is their contact's email address when the contact has one, else `<number>@unknown.email`. A sent MMS names every recipient in `To`; a received MMS names its sender in `From` and every other recipient, the owner included, in `To` |
+
+The `X-smssync-address`, `From` and `To` rows come from SMS Backup+ at commit
+`fd33c32`: `messageFromMapMms` in
+`app/src/main/java/sms/backup/plus/mail/MessageGenerator.java` (lines 144–150
+and 182), `getDetails` in `MmsSupport.java` (lines 91–153), and `getAddress`
+and `getUnknownEmail` in `PersonRecord.java` (lines 36–52 and 83–86).
 
 The body is the `text/plain` part. SMS Backup+ writes every message body as
 plain text — zero of 20,000 sampled carry a `text/html` part — so there is

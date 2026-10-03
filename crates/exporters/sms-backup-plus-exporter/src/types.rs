@@ -37,3 +37,13 @@ pub(crate) struct ParsedMessage {
     /// Source `.eml` path (relative when under an input root).
     pub eml_path: String,
 }
+
+impl ParsedMessage {
+    /// True for a message in a group conversation.
+    pub(crate) fn is_group(&self) -> bool {
+        self.conversation_type == GROUP
+    }
+}
+
+/// The `conversation_type` of a group conversation.
+pub(crate) const GROUP: &str = "group";

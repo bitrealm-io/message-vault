@@ -25,14 +25,14 @@ In CSV form: one file per conversation (header + one row per message after dedup
 | Shared field | EML source |
 |---------------|------------|
 | `chat_identifier` | Peer's handle key (a number, an email address or a sender name, classified by `phone::Handle::parse`) or `chat-group-…` |
-| `conversation_type` | `group` when two or more peers are named, else `individual`. The peers come from `X-smssync-address`, or from `To` when a sent message names two or more recipients there: SMS Backup+ names only one recipient of a sent MMS in `X-smssync-address` |
+| `conversation_type` | `group` when two or more other participants are named, else `individual`. A mail whose `To` names two or more addresses (in practice an MMS) takes its participants from `To`, plus `From` when it was received, leaving out the owner; any other mail takes them from `X-smssync-address`. See the `From` / `To` row in [format](/docs/developer/formats/sms-backup-plus/format/) for why |
 | `group_title` | Derived for groups (empty for 1:1) |
 | `participants_json` | Peer handles for the conversation |
 | `guid` | SHA-256 of the message identity (`MessageGuid`): chat id, direction, sender, UTC milliseconds, collapsed text, sorted attachment digests |
 | `timestamp` / `timestamp_utc` / `timestamp_display` / `timestamp_unix_ms` | Flat: `X-smssync-date` / `Date`; archive: body timestamp |
 | `direction` | `incoming` / `outgoing` from `X-smssync-type` or archive sender |
 | `service` | Always `sms` |
-| `sender_handle` / `sender_display_name` | Outgoing uses export owner. Incoming one-to-one: the peer. Incoming group: the address inside `<…>` of `From` (the part before `@unknown.email`, or the whole email address) when it is one of the peers, else no sender, counted as `group_messages_without_sender` in the run summary. The display name may come from Subject |
+| `sender_handle` / `sender_display_name` | Outgoing uses export owner. Incoming one-to-one: the other participant. Incoming group: the address inside `<…>` of `From` (the part before `@unknown.email`, or the whole email address) when it is one of the participants, else no sender, counted as `group_messages_without_sender` in the run summary. The display name may come from Subject |
 | `text` | The first `text/plain` part |
 | `attachments_json` | Non-text MIME parts under `attachments/` |
 | `message_kind` | `sms` or `mms` |

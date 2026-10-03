@@ -2,6 +2,7 @@
 //! then write the chosen output format via [`ExportWriter`].
 
 use crate::attachments_emit::queue_attachments;
+use crate::flat_eml::Owner;
 use crate::identity::{chat_id_for, name_only_key, timestamp_ms};
 use crate::parse_emit::{ParsedEmlKind, collect_eml_paths, parse_one_eml};
 use crate::types::ParsedMessage;
@@ -133,7 +134,7 @@ fn add_message(
     let convo = ensure_convo(
         conversations,
         &chat_id,
-        msg.conversation_type == "group",
+        msg.is_group(),
         msg.group_title.clone(),
         peers,
     );
@@ -318,17 +319,13 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
         enabled: verbose,
         log,
     };
-    let owners = OwnerHandleSet::from_phones(owner_phones)?;
-    let owner_handle = owners
+    let owner = Owner::new(OwnerHandleSet::from_phones(owner_phones)?, owner_emails);
+    let owner_handle = owner
+        .handles()
         .primary_owner_handle()
         .expect("from_phones guarantees a phone owner handle");
-    let owner_emails_lc: Vec<String> = owner_emails
-        .iter()
-        .map(|e| e.trim().to_ascii_lowercase())
-        .filter(|e| !e.is_empty())
-        .collect();
     verbose.line(format!("owner phones: {}", owner_phones.len()));
-    verbose.line(format!("owner emails: {}", owner_emails_lc.len()));
+    verbose.line(format!("owner emails: {}", owner.email_count()));
     verbose.line(format!("output: {}", output_dir.display()));
 
     let input_paths: Vec<PathBuf> = inputs.iter().map(|p| p.as_ref().to_path_buf()).collect();
@@ -345,8 +342,7 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
     let parse = ParseInputs {
         file_inputs: inputs.iter().filter(|p| p.is_file()).cloned().collect(),
         input_roots: inputs,
-        owners,
-        owner_emails_lc,
+        owner,
     };
     let spool = writer.copies_attachments().then(|| writer.spool());
     let mut ingest = EmlIngest::new(spool, eml_paths.len());
@@ -404,8 +400,7 @@ struct ParseInputs {
     input_roots: Vec<PathBuf>,
     /// The subset of `input_roots` that are single files rather than folders.
     file_inputs: HashSet<PathBuf>,
-    owners: OwnerHandleSet,
-    owner_emails_lc: Vec<String>,
+    owner: Owner,
 }
 
 /// How many EMLs one parallel batch parses before its results are folded in.
@@ -454,7 +449,7 @@ fn parse_eml_path(
         return ParsedEmlKind::Cancelled;
     }
     let rel_path = relative_eml_path(eml_path, &inputs.input_roots, &inputs.file_inputs);
-    parse_one_eml(eml_path, rel_path, &inputs.owners, &inputs.owner_emails_lc)
+    parse_one_eml(eml_path, rel_path, &inputs.owner)
 }
 
 /// Everything the scan accumulates: conversations and the counts that end
@@ -511,7 +506,7 @@ impl<'a> EmlIngest<'a> {
         if msg.chat_key.is_empty() {
             self.report.bump("unknown_chat_messages", 1);
         }
-        if msg.conversation_type == "group" && !msg.is_from_me && msg.sender.is_none() {
+        if msg.is_group() && !msg.is_from_me && msg.sender.is_none() {
             self.report.bump(GROUP_MESSAGES_WITHOUT_SENDER, 1);
         }
         let atts = queue_attachments(&msg.attachments, self.spool)?;
@@ -522,10 +517,11 @@ impl<'a> EmlIngest<'a> {
     /// One line of parse counters for the verbose log.
     fn parse_summary(&self) -> String {
         format!(
-            "parsed: flat_eml={} messages={} unknown_chat={} skipped_call_log={} skipped_not_sms_backup_plus={} skipped_parse_error={}",
+            "parsed: flat_eml={} messages={} unknown_chat={} group_without_sender={} skipped_call_log={} skipped_not_sms_backup_plus={} skipped_parse_error={}",
             self.report.extra("flat_eml"),
             self.report.extra("messages_before_dedupe"),
             self.report.extra("unknown_chat_messages"),
+            self.report.extra(GROUP_MESSAGES_WITHOUT_SENDER),
             self.report.extra("skipped_call_log"),
             self.report.extra("skipped_not_sms_backup_plus"),
             self.report.extra("skipped_parse_error"),

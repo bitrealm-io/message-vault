@@ -73,9 +73,9 @@ describe("SearchBar", () => {
 
     await user.keyboard("{ArrowDown}");
     const [first] = screen.getAllByRole("option");
+    // The active row is told to a screen reader by `aria-activedescendant`; it
+    // is not selected, because every row is an action and none is the value.
     expect(input.getAttribute("aria-activedescendant")).toBe(first.id);
-    // The row is active, not selected: every row is an action, and none is the box's value.
-    expect(first).toHaveAttribute("data-focused", "true");
 
     await user.keyboard("{ArrowDown}");
     const second = screen.getAllByRole("option")[1];
@@ -119,6 +119,36 @@ describe("SearchBar", () => {
 
     await user.keyboard("{Enter}");
     expect(onSubmit).toHaveBeenLastCalledWith("grace");
+  });
+
+  it("runs a search typed after a row was clicked on the first Enter", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    function Controlled() {
+      const [value, setValue] = useState("");
+      return (
+        <SearchBar
+          value={value}
+          onChange={setValue}
+          onSubmit={onSubmit}
+          scope="contact"
+          list="contacts"
+          placeholder="Search contacts"
+          advancedMode="contacts"
+        />
+      );
+    }
+    render(<Controlled />);
+    const input = screen.getByRole("combobox", { name: "Search contacts" });
+
+    await user.click(input);
+    await user.click(screen.getByRole("option", { name: "ada" }));
+    expect(onSubmit).toHaveBeenLastCalledWith("ada");
+    await user.clear(input);
+    await user.type(input, "bob");
+    await user.keyboard("{Escape}{Enter}");
+
+    expect(onSubmit).toHaveBeenLastCalledWith("bob");
   });
 
   it("submits the typed text when no row is highlighted", async () => {

@@ -158,7 +158,8 @@ export default function SearchBar({
   const [recents, setRecents] = useState(() => loadRecentSearches(scope));
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  /** Set when Enter ran a row, so the same key press does not also run the typed text. */
+  /** Set when a row ran during the current key press, so Enter does not also
+   * run the typed text. Cleared as each key press starts. */
   const ranRowRef = useRef(false);
 
   const suggestions = useSearchSuggestions(value, list);
@@ -244,7 +245,14 @@ export default function SearchBar({
         }}
       >
         <KeepPopdownClosed when={showAdvanced} />
-        <Group className="flex items-center rounded-xl border border-border bg-bg focus-within:border-accent">
+        <Group
+          // Each key press starts with no row run, so a row a click ran never
+          // swallows the next Enter. React Aria runs the active row after this.
+          onKeyDownCapture={() => {
+            ranRowRef.current = false;
+          }}
+          className="flex items-center rounded-xl border border-border bg-bg focus-within:border-accent"
+        >
           <MagnifyingGlassIcon />
           <Input
             ref={inputRef}
@@ -257,10 +265,7 @@ export default function SearchBar({
               }
               if (e.key !== "Enter") return;
               // React Aria has already run the active row, if there was one.
-              if (ranRowRef.current) {
-                ranRowRef.current = false;
-                return;
-              }
+              if (ranRowRef.current) return;
               applyQuery(value, { save: true });
             }}
             // The bar has a Clear search button of its own, so the one the browser

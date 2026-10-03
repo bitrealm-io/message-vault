@@ -13,7 +13,6 @@ use anyhow::Result;
 use message_crate_api_types::Problem;
 use serde::de::DeserializeOwned;
 
-use crate::SESSION_REFUSED;
 use crate::retry::HttpError;
 use crate::truncate;
 
@@ -95,12 +94,14 @@ pub fn ok_json<T: DeserializeOwned>(
     }
     // A 401 mid-run means the session expired or was ended since login, so
     // the message says to log in again rather than what the server wrote.
-    let message = if status == reqwest::StatusCode::UNAUTHORIZED {
-        format!("{what} failed. {SESSION_REFUSED}")
+    let error = if status == reqwest::StatusCode::UNAUTHORIZED {
+        crate::session_refused(what)
     } else {
-        format!("{what} failed (HTTP {status}): {}", error_sentence(body))
+        HttpError::new(
+            status.as_u16(),
+            format!("{what} failed (HTTP {status}): {}", error_sentence(body)),
+        )
     };
-    let error = HttpError::new(status.as_u16(), message);
     Err(match serde_json::from_str::<Problem>(body) {
         Ok(problem) => error.with_problem(problem),
         Err(_) => error,

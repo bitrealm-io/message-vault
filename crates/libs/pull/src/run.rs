@@ -39,7 +39,8 @@ pub struct PullConfig {
     /// events carry the username the server reports at login, else the
     /// account id.
     pub username: String,
-    /// API token or session token for the server.
+    /// The logged-in Session's token. The desktop app never passes an API
+    /// Token.
     pub token: String,
     /// A query in the server's search language. Blank asks for everything the
     /// account holds; anything else is the run's `query` scope.

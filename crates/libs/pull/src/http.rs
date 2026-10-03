@@ -15,7 +15,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use message_crate_http::{HttpError, SESSION_REFUSED, error_sentence, ok_json, trim_base_url};
+use message_crate_http::{HttpError, error_sentence, ok_json, session_refused, trim_base_url};
 use reqwest::Method;
 use sha2::{Digest, Sha256};
 
@@ -160,9 +160,7 @@ pub fn download_asset(
         return Err(HttpError::new(404, format!("asset not found: {sha256}")).into());
     }
     if status.as_u16() == 401 {
-        return Err(
-            HttpError::new(401, format!("asset download failed. {SESSION_REFUSED}")).into(),
-        );
+        return Err(session_refused("asset download").into());
     }
     if !status.is_success() {
         let body = response.text().unwrap_or_default();

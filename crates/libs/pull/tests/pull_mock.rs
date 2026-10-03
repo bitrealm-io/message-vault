@@ -863,7 +863,7 @@ fn a_scope_the_server_refuses_fails_the_run_with_the_servers_sentence() {
 fn a_blank_token_or_output_folder_is_refused_before_login() {
     let dir = tempdir().unwrap();
     let base_url = "http://127.0.0.1:1".to_string();
-    let blank_key = PullConfig {
+    let blank_token = PullConfig {
         token: "  ".into(),
         ..config(dir.path(), base_url.clone())
     };
@@ -873,7 +873,7 @@ fn a_blank_token_or_output_folder_is_refused_before_login() {
     };
 
     assert_eq!(
-        run(&blank_key, None).unwrap_err().to_string(),
+        run(&blank_token, None).unwrap_err().to_string(),
         "session token is required"
     );
     assert_eq!(

@@ -4,9 +4,18 @@
 //! text is the message the desktop app shows. The push and the pull send a
 //! session token, so no text names an API token.
 
+use crate::retry::HttpError;
+
 /// What the desktop app shows when the server answers 401 to the session
-/// token: at login, or mid-run once the session has expired.
+/// token. That happens at login, or mid-run once the session has expired.
 pub const SESSION_REFUSED: &str = "The server did not accept this session (401 Unauthorized) because it expired or was ended. Log in again.";
+
+/// The error for a 401 answer to `what`, mid-run. The text names the step
+/// that failed, then says to log in again. The status stays 401, so
+/// [`crate::classify_retry`] treats it as permanent.
+pub fn session_refused(what: &str) -> HttpError {
+    HttpError::new(401, format!("{what} failed. {SESSION_REFUSED}"))
+}
 
 /// Failure from `GET /v1/session`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -49,7 +58,7 @@ pub enum AuthError {
     },
     /// The endpoint returned HTML instead of the Message Crate API.
     #[error(
-        "GET /v1/session returned HTML from {url} (HTTP {status}). The server address must point at the Message Crate server: the TLS site or port 8080."
+        "GET /v1/session returned HTML from {url} (HTTP {status}). The server address must point at the Message Crate server. That is the TLS site or port 8080."
     )]
     WrongHostHtml {
         /// The endpoint that returned HTML.
@@ -261,38 +270,38 @@ mod tests {
 
         for (error, kind) in cases {
             assert_eq!(error.kind(), kind);
-            let detail = error.to_string();
-            assert!(!detail.is_empty(), "{kind} detail empty");
+            let message = error.to_string();
+            assert!(!message.is_empty(), "{kind} message empty");
             assert!(
-                !detail.contains("API key"),
-                "{kind} names an API key: {detail}"
+                !message.contains("API key"),
+                "{kind} names an API key: {message}"
             );
             match &error {
-                AuthError::Unauthorized => assert!(detail.contains("Log in again")),
+                AuthError::Unauthorized => assert!(message.contains("Log in again")),
                 AuthError::MissingAccountId => {}
                 AuthError::HttpsRequired { url } => {
-                    assert!(detail.contains(url));
-                    assert!(detail.contains("https://"));
+                    assert!(message.contains(url));
+                    assert!(message.contains("https://"));
                 }
                 AuthError::WrongHostHtml { .. } => {
-                    assert!(detail.contains("HTML") || detail.contains("html"));
+                    assert!(message.contains("HTML") || message.contains("html"));
                 }
                 AuthError::ServerError { status, body, .. }
                 | AuthError::HttpStatus { status, body, .. }
                 | AuthError::Forbidden { status, body, .. }
                 | AuthError::ApiNotFound { status, body, .. }
                 | AuthError::RateLimited { status, body, .. } => {
-                    assert!(detail.contains(&status.to_string()));
-                    assert!(detail.contains(body));
+                    assert!(message.contains(&status.to_string()));
+                    assert!(message.contains(body));
                 }
-                AuthError::BadJson { snippet, .. } => assert!(detail.contains(snippet)),
-                AuthError::Rejected { message } => assert!(detail.contains(message)),
+                AuthError::BadJson { snippet, .. } => assert!(message.contains(snippet)),
+                AuthError::Rejected { message: m } => assert!(message.contains(m)),
                 AuthError::Network { detail: d, .. }
                 | AuthError::Timeout { detail: d, .. }
                 | AuthError::Client { detail: d }
                 | AuthError::ReadResponse { detail: d }
                 | AuthError::InvalidUrl { detail: d, .. } => {
-                    assert!(detail.contains(d));
+                    assert!(message.contains(d));
                 }
             }
         }

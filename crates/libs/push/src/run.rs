@@ -98,7 +98,8 @@ pub struct PushConfig {
     /// events carry the username the server reports at login, else the
     /// account id.
     pub username: String,
-    /// API token or session token for the server.
+    /// The logged-in Session's token. The desktop app never passes an API
+    /// Token.
     pub token: String,
     /// `Append` adds to existing data; `Replace` clears then imports (with force).
     pub mode: ImportMode,

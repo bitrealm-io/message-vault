@@ -20,8 +20,8 @@ pub struct PullArgs {
     pub base_url: String,
     /// Account name.
     pub username: String,
-    /// Bearer token for the server: an API token, or the logged-in Session's
-    /// token. Never a password.
+    /// The logged-in Session's token, sent as the bearer token. Never an API
+    /// Token, and never a password.
     pub token: String,
     /// Folder the pulled conversation files are written into.
     pub out_dir: String,

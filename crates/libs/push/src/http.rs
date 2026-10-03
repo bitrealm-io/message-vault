@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow};
 use message_crate_http::{
-    HttpError, SESSION_REFUSED, error_sentence, looks_like_html, ok_json, read_body, trim_base_url,
+    HttpError, error_sentence, looks_like_html, ok_json, read_body, session_refused, trim_base_url,
 };
 use reqwest::Method;
 use serde::Deserialize;
@@ -134,7 +134,7 @@ impl Session {
     /// # Errors
     ///
     /// Returns an error when the server does not accept the session
-    /// (`401 Unauthorized`: expired or ended), refuses the account
+    /// (`401 Unauthorized`, because it expired or was ended), refuses the account
     /// (`403 Forbidden`: disabled, or neither import nor export), or the
     /// request fails in any other way.
     pub(crate) fn head_asset(&self, sha256: &str) -> Result<bool> {
@@ -149,7 +149,7 @@ impl Session {
         match status.as_u16() {
             404 => return Ok(false),
             401 => {
-                return Err(HttpError::new(401, SESSION_REFUSED).into());
+                return Err(session_refused("asset HEAD").into());
             }
             403 => {
                 return Err(HttpError::new(
@@ -445,6 +445,9 @@ impl<'a> MultipartUpload<'a> {
             )
             .into());
         }
+        if status == reqwest::StatusCode::UNAUTHORIZED {
+            return Err(session_refused(&format!("asset part {part}")).into());
+        }
         if !status.is_success() {
             return Err(HttpError::new(
                 status.as_u16(),
@@ -540,6 +543,33 @@ mod tests {
         assert!(message.contains("401 Unauthorized"), "got {message}");
         assert!(message.contains("Log in again"), "got {message}");
         assert!(!message.contains("API key"), "got {message}");
+    }
+
+    /// A session that expires during a multipart upload answers 401 to a
+    /// part, and the message names the part and says to log in again.
+    #[test]
+    fn send_part_401_names_the_part_and_says_to_log_in_again() {
+        let server = MockServer::start();
+        let _part = server.mock(|when, then| {
+            when.method("PUT")
+                .path(format!("/v1/assets/{DIGEST}/uploads/up-1/parts/2"));
+            then.status(401);
+        });
+        let session = session(server.base_url());
+        let upload = MultipartUpload {
+            session: &session,
+            sha256: DIGEST,
+            upload_id: "up-1".into(),
+            part_size: 4,
+        };
+        let err = upload.send_part(2, vec![0; 4]).unwrap_err();
+        let message = err.to_string();
+        assert!(message.starts_with("asset part 2 failed."), "got {message}");
+        assert!(message.contains("Log in again"), "got {message}");
+        assert_eq!(
+            message_crate_http::classify_retry(&err),
+            message_crate_http::RetryKind::Permanent
+        );
     }
 
     #[test]

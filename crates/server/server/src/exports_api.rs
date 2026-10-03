@@ -11,12 +11,11 @@ use crate::extract::{Json, Path as AxumPath, Query};
 use axum::extract::State;
 use message_crate_api_types::{ExportQueryList, ExportRun, ExportScope, ExportStatus};
 use serde::Deserialize;
-use sqlx::{Connection, SqliteConnection};
+use sqlx::SqliteConnection;
 
 use crate::db::conversation_messages::{
     DEFAULT_MESSAGE_SORT, MESSAGE_SORT_KEYS, Message, selection_where,
 };
-use crate::db::engine::BEGIN_IMMEDIATE_SQL;
 use crate::db::exports::{
     self, DEFAULT_EXPORT_SORT, EXPORT_SORT_KEYS, ExportPageOpts, StartExportArgs, export_messages,
 };
@@ -46,7 +45,7 @@ pub async fn start_export_run(
     tool: Option<&str>,
     clock: (chrono_tz::Tz, chrono::NaiveDate),
 ) -> Result<ExportRun, ApiError> {
-    let mut tx = conn.begin_with(BEGIN_IMMEDIATE_SQL).await?;
+    let mut tx = crate::db::begin_write(conn).await?;
     let filter = scope_filter(&mut tx, account_id, scope, clock).await?;
     crate::db::account_profile::ensure_account_row(&mut tx, account_id).await?;
     let export_id = exports::start_export(
@@ -224,12 +223,16 @@ async fn running_export(
 ) -> Result<ExportRun, ApiError> {
     let run = owned_export(conn, account_id, export_id).await?;
     if run.status != ExportStatus::Running {
-        return Err(ApiError::StateConflict(format!(
-            "export {export_id} is not running (status={})",
-            run.status
-        )));
+        return Err(not_running(export_id, run.status));
     }
     Ok(run)
+}
+
+/// The `state-conflict` for a run that has ended with `status`.
+fn not_running(export_id: i64, status: ExportStatus) -> ApiError {
+    ApiError::StateConflict(format!(
+        "export {export_id} is not running (status={status})"
+    ))
 }
 
 /// Close a running run with `status`, answering it as it now stands.
@@ -240,13 +243,12 @@ async fn close_export(
     status: ExportStatus,
 ) -> Result<Json<ExportRun>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    let run = running_export(&mut conn, account_id, export_id).await?;
+    running_export(&mut conn, account_id, export_id).await?;
     if !exports::finish_export(&mut conn, account_id, export_id, status).await? {
-        // Another closer won between the read above and this write.
-        return Err(ApiError::StateConflict(format!(
-            "export {export_id} is not running (status={})",
-            run.status
-        )));
+        // Another closer won between the read above and this write. The run
+        // is read again, so the answer names how it ended.
+        let run = owned_export(&mut conn, account_id, export_id).await?;
+        return Err(not_running(export_id, run.status));
     }
     Ok(Json(owned_export(&mut conn, account_id, export_id).await?))
 }
@@ -434,11 +436,18 @@ pub(crate) async fn list_export_messages(
         },
     )
     .await?;
-    // A page past the end reached nothing, so it moves nothing.
-    if (page.offset as u64) < total {
-        let reached = (page.offset as u64 + page.limit as u64).min(total);
-        let reached = i64::try_from(reached).unwrap_or(i64::MAX);
-        exports::record_delivered(&mut conn, account, export_id, reached).await?;
+    // A page past the end reached nothing, so it raises nothing, but it is
+    // still checked: the run may have closed while the page was read, and a
+    // closed run hands nothing over.
+    let reached = if (page.offset as u64) < total {
+        (page.offset as u64 + page.limit as u64).min(total)
+    } else {
+        0
+    };
+    let reached = i64::try_from(reached).unwrap_or(i64::MAX);
+    if !exports::record_delivered(&mut conn, account, export_id, reached).await? {
+        let run = owned_export(&mut conn, account, export_id).await?;
+        return Err(not_running(export_id, run.status));
     }
     Ok(Json(body))
 }

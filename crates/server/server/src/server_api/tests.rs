@@ -193,6 +193,46 @@ async fn a_server_can_only_be_claimed_once() {
     assert_eq!(taken, 0);
 }
 
+/// Two claims at once: the second reads the Message Crate unclaimed while the
+/// first is still writing its owner. Its deferred transaction then failed at
+/// its insert and answered `500`; it must find the owner and answer `409`.
+#[tokio::test]
+async fn a_claim_that_loses_a_race_answers_conflict() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
+
+    let mut other_conn = state.db.acquire().await.unwrap();
+    let mut other = crate::db::begin_write(&mut other_conn).await.unwrap();
+    account_profile::insert_account_at(
+        &mut other,
+        account_profile::OWNER_ACCOUNT_ID,
+        "keeper",
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    let status = crate::db::write_tx::commit_during(
+        other,
+        post_status(
+            &state,
+            "/v1/server/claim",
+            "",
+            serde_json::json!({ "username": "usurper", "password": "hunter2hunter2" }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let owner: String = sqlx::query_scalar("SELECT username FROM accounts WHERE id = $1")
+        .bind(account_profile::OWNER_ACCOUNT_ID)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(owner, "keeper");
+}
+
 #[tokio::test]
 async fn claiming_needs_a_password_of_one_character_or_more() {
     let fixture = test_fixture().await;

@@ -9,7 +9,7 @@
 use std::fmt;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
@@ -21,6 +21,7 @@ use axum::extract::{Request, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 
+use crate::asset_store::sidecar_path;
 use crate::asset_uploads;
 use crate::config::validate_source_id;
 use crate::server::{
@@ -412,14 +413,9 @@ pub(crate) fn hash_file(path: &Path) -> Result<String> {
     Ok(hex_encode(&hasher.finalize()))
 }
 
-/// Path of the hidden `.<sha>.mime` sidecar that records a blob's MIME type, since the blob's name carries none.
-fn mime_metadata_path(assets_root: &Path, sha: &Sha256) -> PathBuf {
-    crate::asset_store::sidecar_path(assets_root, sha)
-}
-
 /// Read the MIME sidecar for `sha`, if present and non-empty.
 fn read_mime_metadata(assets_root: &Path, sha: &Sha256) -> Option<String> {
-    let file = open_nofollow_read(&mime_metadata_path(assets_root, sha)).ok()?;
+    let file = open_nofollow_read(&sidecar_path(assets_root, sha)).ok()?;
     let mut mime = String::new();
     file.take(1024).read_to_string(&mut mime).ok()?;
     let mime = mime.trim();
@@ -436,7 +432,7 @@ fn store_mime_metadata(assets_root: &Path, sha: &Sha256, mime: &str) -> Result<(
     if mime.is_empty() {
         return Ok(());
     }
-    let path = mime_metadata_path(assets_root, sha);
+    let path = sidecar_path(assets_root, sha);
     if read_mime_metadata(assets_root, sha).is_some() {
         return Ok(());
     }

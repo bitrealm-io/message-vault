@@ -31,10 +31,12 @@ pub(crate) async fn empty_trash(
     State(state): State<AppState>,
     FullDeleteAccess(auth): FullDeleteAccess,
 ) -> Result<StatusCode, ApiError> {
-    let mut conn = state.db.acquire().await?;
-    let unreferenced = trash::empty_trash(&mut conn, auth.account_id).await?;
+    let unreferenced = {
+        let mut conn = state.db.acquire().await?;
+        trash::empty_trash(&mut conn, auth.account_id).await?
+    };
     asset_store::remove_unreferenced(
-        &mut conn,
+        &state.db,
         Arc::clone(&state.cfg),
         auth.account_id,
         unreferenced,

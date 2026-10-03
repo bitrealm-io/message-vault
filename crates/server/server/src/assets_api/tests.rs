@@ -1,5 +1,6 @@
 use super::*;
 use std::io::Write;
+use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Barrier};
 use std::time::{Duration, Instant};
@@ -1037,7 +1038,7 @@ async fn an_asset_put_keeps_its_media_type_but_not_octet_stream() {
         Some("image/jpeg")
     );
     assert!(
-        !mime_metadata_path(&assets_dir, &blob_sha).exists(),
+        !crate::asset_store::sidecar_path(&assets_dir, &blob_sha).exists(),
         "octet-stream must not be recorded as the asset's type"
     );
 }

@@ -205,11 +205,9 @@ fn batch_naming(sha: &str) -> String {
 /// upload. Emptying the Trash before the batch that names the file arrives
 /// must not leave the imported attachment without its file.
 ///
-/// Issue #1069's version of this test empties the Trash before any Import
-/// Run exists, and fails even with the fix, because with no run nothing
-/// keeps the file. This one starts the run before `HEAD`, the order
-/// `message-crate-push` uses (`crates/libs/push/src/run.rs` starts the run
-/// before any asset request), which is the order an Upload sends.
+/// The run starts before `HEAD`, because that is the order an Upload sends:
+/// `message-crate-push` (`crates/libs/push/src/run.rs`) starts the run
+/// before any asset request.
 #[tokio::test]
 async fn a_file_head_reported_present_survives_an_empty_trash_before_the_batch() {
     let (fixture, alice) = fixture_with_account().await;
@@ -346,9 +344,10 @@ async fn a_run_started_after_the_delete_commits_keeps_its_original() {
         .unwrap();
     assert_eq!(files.len(), 1, "the delete reports the file unnamed");
 
+    drop(conn);
     start_run(&fixture, &alice).await;
     crate::asset_store::remove_unreferenced(
-        &mut conn,
+        &fixture.state.db,
         std::sync::Arc::clone(&fixture.state.cfg),
         alice.account_id,
         files,

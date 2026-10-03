@@ -1081,8 +1081,8 @@ pub(crate) async fn complete_import(
                 Err(other) => ApiError::Internal(other),
             },
         )?;
-
-    crate::asset_store::sweep_after_run(&mut conn, &state.cfg.paths, account).await;
+    drop(conn);
+    crate::asset_store::sweep_after_run(&state.db, &state.cfg.paths, account).await;
 
     Ok(Json(CompleteImportResponse {
         id: row.id,
@@ -1394,7 +1394,8 @@ pub(crate) async fn discard_import(
     let account = resolve_import_account(&auth);
     let mut conn = state.db.acquire().await?;
     crate::db::imports::discard_import(&mut conn, account, import_id).await?;
-    crate::asset_store::sweep_after_run(&mut conn, &state.cfg.paths, account).await;
+    drop(conn);
+    crate::asset_store::sweep_after_run(&state.db, &state.cfg.paths, account).await;
     Ok(Json(DiscardImportResponse {
         id: import_id,
         status: crate::db::imports::ImportStatus::Cancelled,

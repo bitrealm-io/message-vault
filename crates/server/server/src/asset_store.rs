@@ -14,7 +14,7 @@
 //! it. That test alone is not enough while the account has a running Import
 //! Run: `HEAD /v1/assets/{sha256}` may have told the run a file exists, or
 //! the run may have uploaded it, and the batch that names it has not arrived
-//! yet. So an original is removed only while this connection holds the
+//! yet. So an original is removed only while a connection holds the
 //! database write lock and no run is running. Starting a run writes its row,
 //! so no run can start between that check and the last removal. While a run
 //! is running the original stays, and [`sweep_unreferenced`] removes it when
@@ -37,7 +37,7 @@
 //! - [`sweep_incoming`]: abandoned upload temps, by age.
 //!
 //! Upload and `process-assets` still remove their own temporary and
-//! replaced files; those are never an Asset a row names.
+//! replaced files. Those are never an Asset a row names.
 
 use std::collections::HashSet;
 use std::io;
@@ -46,7 +46,7 @@ use std::sync::Arc;
 use std::time::SystemTime;
 
 use anyhow::Context;
-use sqlx::SqliteConnection;
+use sqlx::{SqliteConnection, SqlitePool};
 
 use crate::assets_api::Sha256;
 use crate::config::{Config, PathsConfig};
@@ -119,7 +119,7 @@ fn remove_logged(account_id: i64, path: &Path) -> bool {
                 account_id,
                 path = %path.display(),
                 %error,
-                "an Asset could not be removed"
+                "a file could not be removed"
             );
             false
         }
@@ -132,7 +132,7 @@ fn remove_logged(account_id: i64, path: &Path) -> bool {
 /// Never fails: a file that cannot be removed, or a lock that cannot be
 /// taken, is logged and the originals stay for [`sweep_unreferenced`].
 pub(crate) async fn remove_unreferenced(
-    conn: &mut SqliteConnection,
+    pool: &SqlitePool,
     cfg: Arc<Config>,
     account_id: i64,
     files: Vec<OrphanedFile>,
@@ -141,20 +141,21 @@ pub(crate) async fn remove_unreferenced(
         .into_iter()
         .partition(|file| matches!(file, OrphanedFile::Original { .. }));
     if !previews.is_empty() {
-        let paths: Vec<PathBuf> = previews
-            .iter()
-            .flat_map(|file| paths_of(&cfg.paths, account_id, file))
-            .collect();
+        let paths = paths_of_all(&cfg.paths, account_id, &previews);
         run_blocking_logged(account_id, move || remove_each(account_id, &paths)).await;
     }
-    if originals.is_empty() {
-        return;
+    if !originals.is_empty() {
+        let paths = paths_of_all(&cfg.paths, account_id, &originals);
+        unless_import_running(pool, account_id, move || remove_each(account_id, &paths)).await;
     }
-    let paths: Vec<PathBuf> = originals
+}
+
+/// Every path [`paths_of`] gives for `files`.
+fn paths_of_all(paths: &PathsConfig, account_id: i64, files: &[OrphanedFile]) -> Vec<PathBuf> {
+    files
         .iter()
-        .flat_map(|file| paths_of(&cfg.paths, account_id, file))
-        .collect();
-    unless_import_running(conn, account_id, move || remove_each(account_id, &paths)).await;
+        .flat_map(|file| paths_of(paths, account_id, file))
+        .collect()
 }
 
 /// Remove each of `paths`, logging any that cannot be removed.
@@ -203,11 +204,11 @@ fn paths_of(paths: &PathsConfig, account_id: i64, file: &OrphanedFile) -> Vec<Pa
 /// account has a running Import Run (see the module notes). A folder that
 /// cannot be removed is logged and the others still go.
 pub(crate) async fn remove_all_attachment_files(
-    conn: &mut SqliteConnection,
+    pool: &SqlitePool,
     cfg: Arc<Config>,
     account_id: i64,
 ) {
-    let dirs_of = |kind: String| {
+    let remove_kind_dirs = |kind: String| {
         let cfg = Arc::clone(&cfg);
         move || {
             let paths = &cfg.paths;
@@ -218,44 +219,66 @@ pub(crate) async fn remove_all_attachment_files(
                         account_id,
                         path = %dir.display(),
                         %error,
-                        "a folder of Assets could not be removed"
+                        "a folder could not be removed"
                     );
                 }
             }
         }
     };
-    run_blocking_logged(account_id, dirs_of(cfg.paths.assets_converted_dir.clone())).await;
-    unless_import_running(conn, account_id, dirs_of(cfg.paths.assets_dir.clone())).await;
+    run_blocking_logged(
+        account_id,
+        remove_kind_dirs(cfg.paths.assets_converted_dir.clone()),
+    )
+    .await;
+    unless_import_running(
+        pool,
+        account_id,
+        remove_kind_dirs(cfg.paths.assets_dir.clone()),
+    )
+    .await;
 }
 
-/// Run `remove` on the blocking pool while `conn` holds the database write
-/// lock, unless `account_id` has a running Import Run. Starting a run
-/// writes its row, so no run can start until `remove` has finished. Every
-/// other writer waits for `remove` too, which is the price of that
-/// guarantee. A run that is running, a lock that cannot be taken, or a
-/// stopped task leaves the originals for [`sweep_unreferenced`], and the
-/// last two are logged.
-async fn unless_import_running<F>(conn: &mut SqliteConnection, account_id: i64, remove: F)
+/// Run `remove` on the blocking pool while a connection from `pool` holds
+/// the database write lock, unless `account_id` has a running Import Run.
+/// Starting a run writes its row, so no run can start until `remove` has
+/// finished. Every other writer waits for `remove` too, which is the price
+/// of that guarantee.
+///
+/// The lock, the check and `remove` run in a task of their own that owns
+/// its connection. A request dropped part way, such as a closed tab, then
+/// cannot let go of the lock while files are still being removed. The
+/// caller must hold no connection from `pool` while it waits, or a full
+/// pool would leave the task waiting for one.
+///
+/// A run that is running, a lock that cannot be taken, or a stopped task
+/// leaves the originals for [`sweep_unreferenced`], and the last two are
+/// logged.
+async fn unless_import_running<F>(pool: &SqlitePool, account_id: i64, remove: F)
 where
     F: FnOnce() + Send + 'static,
 {
-    let result: anyhow::Result<()> = async {
-        let mut tx = begin_write(conn).await?;
+    let pool = pool.clone();
+    let task = tokio::spawn(async move {
+        let mut conn = pool.acquire().await?;
+        let mut tx = begin_write(&mut conn).await?;
         if has_running_import(&mut tx, account_id).await? {
             return Ok(());
         }
         tokio::task::spawn_blocking(remove)
             .await
-            .context("removing Assets stopped")?;
+            .context("removing files stopped")?;
         tx.commit().await?;
-        Ok(())
-    }
-    .await;
+        anyhow::Ok(())
+    });
+    let result = task
+        .await
+        .context("removing files stopped")
+        .and_then(|done| done);
     if let Err(error) = result {
         tracing::warn!(
             account_id,
             error = format!("{error:#}"),
-            "Assets were not removed; the sweep at the next Import Run's end will try again"
+            "files were not removed; the sweep at the next Import Run's end will try again"
         );
     }
 }
@@ -266,7 +289,7 @@ where
     F: FnOnce() + Send + 'static,
 {
     if let Err(error) = tokio::task::spawn_blocking(work).await {
-        tracing::warn!(account_id, %error, "removing Assets stopped");
+        tracing::warn!(account_id, %error, "removing files stopped");
     }
 }
 
@@ -313,7 +336,9 @@ fn source_dirs(account_id: i64, account_root: &Path) -> Vec<PathBuf> {
 /// writes nothing, but it holds the database write lock for the whole walk
 /// of the account's store, so every writer on the server waits for the
 /// walk. The walk reads folders and removes files and nothing else, so it
-/// is short next to an import.
+/// is short next to an import. Like [`unless_import_running`], it runs in a
+/// task that owns its connection, and the caller must hold no connection
+/// from `pool` while it waits.
 ///
 /// A Preview written in the last [`PREVIEW_GRACE_SECS`] is left alone:
 /// `process-assets` writes a Preview before the row that names it, and a
@@ -330,8 +355,24 @@ fn source_dirs(account_id: i64, account_root: &Path) -> Vec<PathBuf> {
 /// Returns a database error, or an error when the file walk stops. A file
 /// that cannot be removed is logged and the walk goes on.
 pub(crate) async fn sweep_unreferenced(
-    conn: &mut SqliteConnection,
+    pool: &SqlitePool,
     paths: &PathsConfig,
+    account_id: i64,
+) -> anyhow::Result<u64> {
+    let pool = pool.clone();
+    let paths = paths.clone();
+    tokio::spawn(async move {
+        let mut conn = pool.acquire().await?;
+        sweep_holding_lock(&mut conn, paths, account_id).await
+    })
+    .await
+    .context("sweep of unreferenced files stopped")?
+}
+
+/// The body of [`sweep_unreferenced`], on a connection of its own.
+async fn sweep_holding_lock(
+    conn: &mut SqliteConnection,
+    paths: PathsConfig,
     account_id: i64,
 ) -> anyhow::Result<u64> {
     let mut tx = begin_write(conn).await?;
@@ -339,7 +380,6 @@ pub(crate) async fn sweep_unreferenced(
         return Ok(0);
     }
     let named = named_fingerprints(&mut tx, account_id).await?;
-    let paths = paths.clone();
     let removed = tokio::task::spawn_blocking(move || {
         let mut removed = 0u64;
         for source in source_dirs(account_id, &account_dir(&paths, account_id)) {
@@ -354,7 +394,7 @@ pub(crate) async fn sweep_unreferenced(
         removed
     })
     .await
-    .context("sweep of unreferenced Assets")?;
+    .context("sweep of unreferenced files")?;
     tx.commit().await?;
     Ok(removed)
 }
@@ -362,16 +402,12 @@ pub(crate) async fn sweep_unreferenced(
 /// [`sweep_unreferenced`] once an Import Run of `account_id` has ended, so
 /// the files it was told about or uploaded and never named go. A failure is
 /// logged: the run's end is what the caller answers for.
-pub(crate) async fn sweep_after_run(
-    conn: &mut SqliteConnection,
-    paths: &PathsConfig,
-    account_id: i64,
-) {
-    if let Err(error) = sweep_unreferenced(conn, paths, account_id).await {
+pub(crate) async fn sweep_after_run(pool: &SqlitePool, paths: &PathsConfig, account_id: i64) {
+    if let Err(error) = sweep_unreferenced(pool, paths, account_id).await {
         tracing::warn!(
             account_id,
             error = format!("{error:#}"),
-            "unreferenced Assets could not be swept after an Import Run"
+            "unreferenced files could not be swept after an Import Run"
         );
     }
 }
@@ -547,7 +583,7 @@ pub(crate) fn has_part_extension(path: &Path) -> bool {
 fn remove_stale_parts(parts: &[PathBuf], now: SystemTime, dry_run: bool) -> u64 {
     let mut removed = 0u64;
     for part in parts {
-        match modified_before_limit(part, now) {
+        match modified_at_least(part, now, STALE_UPLOAD_SECS) {
             Ok(true) => {}
             Ok(false) => continue,
             Err(err) => {
@@ -631,15 +667,10 @@ fn remove_stale_sessions(sha_dir: &Path, now: SystemTime, dry_run: bool) -> u64 
 fn upload_session_is_stale(session: &Path, now: SystemTime) -> io::Result<bool> {
     let manifest = session.join("manifest.json");
     if manifest.is_file() {
-        modified_before_limit(&manifest, now)
+        modified_at_least(&manifest, now, STALE_UPLOAD_SECS)
     } else {
-        modified_before_limit(session, now)
+        modified_at_least(session, now, STALE_UPLOAD_SECS)
     }
-}
-
-/// True when `path` was last modified [`STALE_UPLOAD_SECS`] or more before `now`.
-fn modified_before_limit(path: &Path, now: SystemTime) -> io::Result<bool> {
-    modified_at_least(path, now, STALE_UPLOAD_SECS)
 }
 
 /// True when `path` was last modified `secs` or more before `now`.

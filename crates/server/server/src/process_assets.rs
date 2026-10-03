@@ -618,6 +618,15 @@ fn store_derived_bytes(derived_dir: &Path, buf: &[u8], ext: &str) -> Result<Deri
             .persist(&dest)
             .map_err(|err| err.error)
             .with_context(|| format!("install {}", dest.display()))?;
+    } else {
+        // The file is reused, so it gets a fresh modified time: the sweep at
+        // an Import Run's end leaves a young unnamed Preview alone until
+        // `update_derived` names it.
+        fs::File::options()
+            .write(true)
+            .open(&dest)
+            .and_then(|file| file.set_modified(std::time::SystemTime::now()))
+            .with_context(|| format!("touch {}", dest.display()))?;
     }
     Ok(DerivedBlob {
         sha256: sha.to_string(),

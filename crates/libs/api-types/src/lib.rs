@@ -415,7 +415,7 @@ api_shape! {
     pub struct MessageConversation {
         /// Conversation row id.
         pub id: i64,
-        /// Original chat id from the export.
+        /// The conversation's identifier as the export wrote it.
         pub chat_identifier: String,
         /// `individual` or `group`.
         pub conversation_type: String,

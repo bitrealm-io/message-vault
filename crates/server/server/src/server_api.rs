@@ -110,9 +110,9 @@ pub async fn get_server(State(state): State<AppState>) -> Result<Json<Server>, A
 ///
 /// Unauthenticated, because a Message Crate with no owner has no credential
 /// that could authorize this. Whoever reaches an unclaimed one first may
-/// claim it: Message Crate is self-hosted, so its operator installs the
-/// software, claims it, and publishes the port, in that order and at times
-/// of their choosing. An unclaimed one is also empty, so a lost race
+/// claim it: Message Crate is self-hosted, so whoever installs the software
+/// claims it and then publishes the port, in that order and at times of
+/// their choosing. An unclaimed one is also empty, so a lost race
 /// destroys nothing and announces itself at once.
 #[utoipa::path(
     post,

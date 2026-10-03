@@ -1273,9 +1273,9 @@ export interface paths {
          * Claim an unclaimed Message Crate by creating its owner.
          * @description Unauthenticated, because a Message Crate with no owner has no credential
          *     that could authorize this. Whoever reaches an unclaimed one first may
-         *     claim it: Message Crate is self-hosted, so its operator installs the
-         *     software, claims it, and publishes the port, in that order and at times
-         *     of their choosing. An unclaimed one is also empty, so a lost race
+         *     claim it: Message Crate is self-hosted, so whoever installs the software
+         *     claims it and then publishes the port, in that order and at times of
+         *     their choosing. An unclaimed one is also empty, so a lost race
          *     destroys nothing and announces itself at once.
          */
         post: operations["claim_server"];
@@ -1838,7 +1838,8 @@ export interface components {
          */
         ContactReason: "replaced_trashed" | "created" | "named" | "identity_added";
         /**
-         * @description Contact-level first/last seen and message counts for the selection table.
+         * @description Each contact's first and last heard from, and its message counts, for the
+         *     selection table.
          *     Every date and message count is over the messages the contact sent, the
          *     same messages `messages:` counts on Contacts; the conversation counts are
          *     over the conversations the contact takes part in. Trashed conversations
@@ -2724,7 +2725,7 @@ export interface components {
         };
         /** @description The conversation a message belongs to. */
         MessageConversation: {
-            /** @description Original chat id from the export. */
+            /** @description The conversation's identifier as the export wrote it. */
             chat_identifier: string;
             /** @description `individual` or `group`. */
             conversation_type: string;

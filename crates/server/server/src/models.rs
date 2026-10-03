@@ -22,7 +22,7 @@ pub enum ExportRecord {
 /// The conversation header of one JSONL conversation.
 #[derive(Debug, Clone)]
 pub struct ConversationRecord {
-    /// Original chat id from the export.
+    /// The conversation's identifier as the export wrote it.
     pub chat_identifier: String,
     /// Platform service, e.g. `imessage`.
     pub service: Option<String>,

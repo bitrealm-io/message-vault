@@ -10596,7 +10596,7 @@
           "Server"
         ],
         "summary": "Claim an unclaimed Message Crate by creating its owner.",
-        "description": "Unauthenticated, because a Message Crate with no owner has no credential\nthat could authorize this. Whoever reaches an unclaimed one first may\nclaim it: Message Crate is self-hosted, so its operator installs the\nsoftware, claims it, and publishes the port, in that order and at times\nof their choosing. An unclaimed one is also empty, so a lost race\ndestroys nothing and announces itself at once.",
+        "description": "Unauthenticated, because a Message Crate with no owner has no credential\nthat could authorize this. Whoever reaches an unclaimed one first may\nclaim it: Message Crate is self-hosted, so whoever installs the software\nclaims it and then publishes the port, in that order and at times of\ntheir choosing. An unclaimed one is also empty, so a lost race\ndestroys nothing and announces itself at once.",
         "operationId": "claim_server",
         "requestBody": {
           "content": {
@@ -12534,7 +12534,7 @@
       },
       "ContactSelectionSummary": {
         "type": "object",
-        "description": "Contact-level first/last seen and message counts for the selection table.\nEvery date and message count is over the messages the contact sent, the\nsame messages `messages:` counts on Contacts; the conversation counts are\nover the conversations the contact takes part in. Trashed conversations\nare left out of both.",
+        "description": "Each contact's first and last heard from, and its message counts, for the\nselection table.\nEvery date and message count is over the messages the contact sent, the\nsame messages `messages:` counts on Contacts; the conversation counts are\nover the conversations the contact takes part in. Trashed conversations\nare left out of both.",
         "required": [
           "id",
           "name",
@@ -14217,7 +14217,7 @@
         "properties": {
           "chat_identifier": {
             "type": "string",
-            "description": "Original chat id from the export."
+            "description": "The conversation's identifier as the export wrote it."
           },
           "conversation_type": {
             "type": "string",
@@ -15008,7 +15008,7 @@
             "type": "array",
             "items": {
               "type": "object",
-              "description": "Contact-level first/last seen and message counts for the selection table.\nEvery date and message count is over the messages the contact sent, the\nsame messages `messages:` counts on Contacts; the conversation counts are\nover the conversations the contact takes part in. Trashed conversations\nare left out of both.",
+              "description": "Each contact's first and last heard from, and its message counts, for the\nselection table.\nEvery date and message count is over the messages the contact sent, the\nsame messages `messages:` counts on Contacts; the conversation counts are\nover the conversations the contact takes part in. Trashed conversations\nare left out of both.",
               "required": [
                 "id",
                 "name",

@@ -24,7 +24,6 @@ import type {
 } from "../../lib/tauri";
 import type { AttachmentMediaMode, ImportIssueEvent, ImportProgressEvent } from "../../lib/types";
 import { restoreFormFromSnapshot, snapshotSecret } from "./formSnapshot";
-import { issueFromEvent } from "./importProgressState";
 import { importRunStore } from "./importRunStore";
 
 const createImportMock = vi.fn();
@@ -954,7 +953,10 @@ describe("useImportJob wiring", () => {
       { staging_dir: string; record: Record<string, unknown> },
     ];
     expect(staging_dir).toBe("/home/sam/message-crate/staging-iphone");
-    expect(record.issues).toEqual([issueFromEvent(stagingIssue), issueFromEvent(attachmentSkip)]);
+    expect(record.issues).toEqual([
+      { kind: "skip", stage: "staging", item: "IMG_1.HEIC", reason: "missing" },
+      { kind: "skip", stage: "upload", item: "a.jsonl:attachments/big.mov", reason: "too large" },
+    ]);
     expect(record.bytesUploaded).toBe(4_096);
     expect(record.filesSucceeded).toBe(1);
     expect(typeof record.uploadMs).toBe("number");
@@ -975,7 +977,9 @@ describe("useImportJob wiring", () => {
 
     expect(result.current.phase).toBe("staging_review");
     const [{ record }] = saveRunRecordMock.mock.lastCall as [{ record: Record<string, unknown> }];
-    expect(record.issues).toEqual([issueFromEvent(stagingIssue)]);
+    expect(record.issues).toEqual([
+      { kind: "error", stage: "staging", item: "IMG_2.HEIC", reason: "could not be decrypted" },
+    ]);
   });
 
   it("completes a failed Staging as failed and deletes its folder, since nothing complete exists to upload", async () => {

@@ -1,7 +1,8 @@
 //! Typed login failures from `GET /v1/session`.
 //!
-//! Each variant has a stable `kind()` string for tests and a short
-//! `user_message()` for the desktop app banner.
+//! Each variant has a stable `kind()` string for tests, and its `Display`
+//! text is the message the desktop app shows. The push and the pull send a
+//! session token, never an API key, so no text names an API key.
 
 /// Failure from `GET /v1/session`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -54,16 +55,18 @@ pub enum AuthError {
     },
     /// Requested `http://…` but the server redirected to `https://…` (auth header dropped).
     #[error(
-        "server address {url} redirected from http to https; use https:// so the API key is sent (http redirects drop Authorization)"
+        "server address {url} redirected from http to https; use https:// so the session token is sent (http redirects drop Authorization)"
     )]
     HttpsRequired {
         /// The `http://` URL that the server redirected to `https://`.
         url: String,
     },
-    /// The API key was rejected as invalid.
-    #[error("invalid API key")]
-    InvalidKey,
-    /// The API key does not have permission for this Message Crate.
+    /// The server refused the session: it is unknown, or it has expired.
+    #[error(
+        "The server did not accept this session (401 Unauthorized): it is unknown or has expired. Log in again."
+    )]
+    Unauthorized,
+    /// The session does not have permission for this Message Crate.
     #[error("session check failed (HTTP {status}): {body}")]
     Forbidden {
         /// The HTTP status code returned.
@@ -135,7 +138,7 @@ impl AuthError {
             Self::ReadResponse { .. } => "read_response",
             Self::WrongHostHtml { .. } => "wrong_host",
             Self::HttpsRequired { .. } => "https_required",
-            Self::InvalidKey => "invalid_key",
+            Self::Unauthorized => "unauthorized",
             Self::Forbidden { .. } => "forbidden",
             Self::ApiNotFound { .. } => "api_not_found",
             Self::RateLimited { .. } => "rate_limited",
@@ -144,66 +147,6 @@ impl AuthError {
             Self::BadJson { .. } => "bad_json",
             Self::Rejected { .. } => "rejected",
             Self::MissingAccountId => "missing_account",
-        }
-    }
-
-    /// Short message for the GUI error banner (no transport internals).
-    pub fn user_message(&self) -> String {
-        match self {
-            Self::InvalidUrl { .. } => {
-                "This server address is not valid. Enter the full URL, including `https://`.".into()
-            }
-            Self::Timeout { .. } => {
-                "The server did not respond within 15 seconds. Check the URL and try again.".into()
-            }
-            Self::Network { .. } => {
-                "Could not connect to the server. Check the URL, your network connection, and whether the server is running.".into()
-            }
-            Self::Client { .. } => {
-                "Could not start a secure connection to the server. Restart the app and try again."
-                    .into()
-            }
-            Self::ReadResponse { .. } => {
-                "Connected to the server, but could not read its response. Try again.".into()
-            }
-            Self::WrongHostHtml { .. } => {
-                "This URL points to the Message Crate website, not the API. Use the server address (the TLS host or port 8080, not port 3000).".into()
-            }
-            Self::HttpsRequired { .. } => {
-                "This server requires https:// but http:// was specified.".into()
-            }
-            Self::InvalidKey => {
-                "This API key is not valid for this server. Paste a valid key and try again."
-                    .into()
-            }
-            Self::Forbidden { .. } => {
-                "This API key does not have permission to access this server.".into()
-            }
-            Self::ApiNotFound { .. } => {
-                "The API was not found at this URL. Enter the server’s base URL without `/v1/session`.".into()
-            }
-            Self::RateLimited { .. } => {
-                "Too many verification attempts. Wait a moment, then try again.".into()
-            }
-            Self::ServerError { status, .. } => {
-                format!(
-                    "The server could not verify your credentials right now (HTTP {status}). Try again later."
-                )
-            }
-            Self::HttpStatus { status, .. } => {
-                format!(
-                    "The server rejected the verification request (HTTP {status}). Open the Log tab for details."
-                )
-            }
-            Self::BadJson { .. } => {
-                "Connected to the server, but its response was not recognized. Confirm that the server is compatible with this app.".into()
-            }
-            Self::Rejected { .. } => {
-                "The server rejected these credentials. Check the server address and API key.".into()
-            }
-            Self::MissingAccountId => {
-                "The API key was accepted, but the server did not return an account. Contact the owner of this Message Crate.".into()
-            }
         }
     }
 
@@ -218,7 +161,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn kinds_and_user_messages_cover_all_variants() {
+    fn kinds_and_details_cover_all_variants() {
         let cases: Vec<(AuthError, &str)> = vec![
             (
                 AuthError::InvalidUrl {
@@ -266,7 +209,7 @@ mod tests {
                 },
                 "https_required",
             ),
-            (AuthError::InvalidKey, "invalid_key"),
+            (AuthError::Unauthorized, "unauthorized"),
             (
                 AuthError::Forbidden {
                     status: 403,
@@ -321,29 +264,18 @@ mod tests {
 
         for (error, kind) in cases {
             assert_eq!(error.kind(), kind);
-            let user = error.user_message();
-            assert!(!user.is_empty(), "{kind} user message empty");
-            // Banner copy must stay free of transport / body dumps.
-            assert!(
-                !user.contains("dns")
-                    && !user.contains("teapot")
-                    && !user.contains("busy")
-                    && !user.contains("nope")
-                    && !user.contains("missing")
-                    && !user.contains("slow down")
-                    && !user.contains("bad token")
-                    && !user.contains("relative URL")
-                    && !user.contains("GET https"),
-                "{kind} user message leaked detail: {user}"
-            );
             let detail = error.detail();
             assert!(!detail.is_empty(), "{kind} detail empty");
+            assert!(
+                !detail.contains("API key"),
+                "{kind} names an API key: {detail}"
+            );
             match &error {
-                AuthError::InvalidKey | AuthError::MissingAccountId => {}
+                AuthError::Unauthorized => assert!(detail.contains("Log in again")),
+                AuthError::MissingAccountId => {}
                 AuthError::HttpsRequired { url } => {
                     assert!(detail.contains(url));
-                    assert!(detail.contains("https"));
-                    assert!(user.contains("https://"));
+                    assert!(detail.contains("https://"));
                 }
                 AuthError::WrongHostHtml { .. } => {
                     assert!(detail.contains("HTML") || detail.contains("html"));
@@ -367,25 +299,5 @@ mod tests {
                 }
             }
         }
-    }
-
-    #[test]
-    fn status_messages_include_http_code() {
-        assert!(
-            AuthError::ServerError {
-                status: 502,
-                body: "x".into()
-            }
-            .user_message()
-            .contains("HTTP 502")
-        );
-        assert!(
-            AuthError::HttpStatus {
-                status: 418,
-                body: "x".into()
-            }
-            .user_message()
-            .contains("HTTP 418")
-        );
     }
 }

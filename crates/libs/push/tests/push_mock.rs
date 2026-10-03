@@ -1265,9 +1265,9 @@ fn authenticate_maps_http_failures_to_typed_errors() {
         then.status(401).body("unauthorized");
     });
     let err = authenticate(&server.base_url(), "bad").unwrap_err();
-    assert_eq!(err.kind(), "invalid_key");
-    assert!(!err.user_message().contains("unauthorized"));
-    assert!(err.detail().contains("invalid API key"));
+    assert_eq!(err.kind(), "unauthorized");
+    assert!(err.detail().contains("Log in again"), "{}", err.detail());
+    assert!(!err.detail().contains("API key"), "{}", err.detail());
 }
 
 #[test]
@@ -1280,7 +1280,6 @@ fn authenticate_maps_html_and_status_failures() {
     });
     let err = authenticate(&server.base_url(), "mc_test").unwrap_err();
     assert_eq!(err.kind(), "wrong_host");
-    assert!(err.user_message().contains("website"));
     assert!(err.detail().contains("HTML"));
 
     // Fresh server for a non-401 status.
@@ -1291,7 +1290,6 @@ fn authenticate_maps_html_and_status_failures() {
     });
     let err = authenticate(&server.base_url(), "mc_test").unwrap_err();
     assert_eq!(err.kind(), "forbidden");
-    assert!(!err.user_message().contains("username does not match"));
     assert!(err.detail().contains("username does not match API key"));
 }
 

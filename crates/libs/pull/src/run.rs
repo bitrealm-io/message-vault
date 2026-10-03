@@ -168,11 +168,11 @@ fn prepare_out_dir(out_dir: &Path, skip_attachments: bool) -> Result<()> {
 ///
 /// # Errors
 ///
-/// Returns an error when the key or output folder is missing, login fails, a
+/// Returns an error when the session token or output folder is missing, login fails, a
 /// page or download fails, or a conversation file cannot be written.
 pub fn run(cfg: &PullConfig, mut on_progress: Option<&mut ProgressFn<'_>>) -> Result<PullReport> {
     if cfg.key.trim().is_empty() {
-        bail!("API key is required");
+        bail!("session token is required");
     }
     if cfg.out_dir.as_os_str().is_empty() {
         bail!("output directory is required");

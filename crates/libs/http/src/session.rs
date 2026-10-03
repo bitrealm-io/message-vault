@@ -19,7 +19,7 @@ pub struct HttpSession {
     client: Client,
 }
 
-/// `Authorization` header value for an API key.
+/// `Authorization` header value for a session token or an API token.
 pub fn bearer_header(key: &str) -> String {
     format!("Bearer {}", key.trim())
 }
@@ -152,7 +152,7 @@ pub fn looks_like_html(body: &str) -> bool {
     head.starts_with("<!doctype") || head.starts_with("<html")
 }
 
-/// Map HTTP 401. When `http://` was redirected to `https://`, the API key was
+/// Map HTTP 401. When `http://` was redirected to `https://`, the token was
 /// dropped with the Authorization header — tell the user to use https.
 fn classify_unauthorized(
     requested_base: &str,
@@ -164,7 +164,7 @@ fn classify_unauthorized(
             url: requested_base.to_string(),
         }
     } else {
-        AuthError::InvalidKey
+        AuthError::Unauthorized
     }
 }
 
@@ -252,24 +252,23 @@ mod tests {
         let final_url = reqwest::Url::parse("https://my.messagecrate.app/v1/session").unwrap();
         let err = classify_unauthorized("http://my.messagecrate.app", &requested, &final_url);
         assert_eq!(err.kind(), "https_required");
-        assert!(err.user_message().contains("https://"));
         assert!(err.detail().contains("Authorization"));
     }
 
     #[test]
-    fn unauthorized_same_scheme_is_invalid_key() {
+    fn unauthorized_same_scheme_is_unauthorized() {
         let requested = reqwest::Url::parse("https://my.messagecrate.app").unwrap();
         let final_url = reqwest::Url::parse("https://my.messagecrate.app/v1/session").unwrap();
         let err = classify_unauthorized("https://my.messagecrate.app", &requested, &final_url);
-        assert_eq!(err.kind(), "invalid_key");
+        assert_eq!(err.kind(), "unauthorized");
     }
 
     #[test]
-    fn unauthorized_local_http_is_invalid_key() {
+    fn unauthorized_local_http_is_unauthorized() {
         let requested = reqwest::Url::parse("http://127.0.0.1:8080").unwrap();
         let final_url = reqwest::Url::parse("http://127.0.0.1:8080/v1/session").unwrap();
         let err = classify_unauthorized("http://127.0.0.1:8080", &requested, &final_url);
-        assert_eq!(err.kind(), "invalid_key");
+        assert_eq!(err.kind(), "unauthorized");
     }
 
     #[test]

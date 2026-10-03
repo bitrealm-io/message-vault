@@ -874,12 +874,33 @@ fn a_blank_key_or_output_folder_is_refused_before_login() {
 
     assert_eq!(
         run(&blank_key, None).unwrap_err().to_string(),
-        "API key is required"
+        "session token is required"
     );
     assert_eq!(
         run(&blank_out_dir, None).unwrap_err().to_string(),
         "output directory is required"
     );
+}
+
+/// The desktop app sends a session token, so a session the server refuses
+/// (expired, or revoked from another window) says to log in again and names
+/// no API key (#1400).
+#[test]
+fn a_refused_session_says_to_log_in_again() {
+    let server = MockServer::start();
+    let _session = server.mock(|when, then| {
+        when.method(GET).path("/v1/session");
+        then.status(401).body("unauthorized");
+    });
+    let dir = tempdir().unwrap();
+
+    let message = format!(
+        "{:#}",
+        run(&config(dir.path(), server.base_url()), None).unwrap_err()
+    );
+
+    assert!(message.contains("Log in again"), "{message}");
+    assert!(!message.contains("API key"), "{message}");
 }
 
 /// Staging names a file by date and fingerprint, so one menu sent on two days

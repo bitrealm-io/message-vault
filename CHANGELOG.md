@@ -237,6 +237,10 @@ released versions carry their date on the heading.
 
 #### Importing
 
+- 2026-10-03 **An expired login says to log in again.** When your login had
+  expired, or was ended from another window, an Upload or an Export said
+  "invalid API key", though the app sends no API key. It now says the
+  server did not accept the session, and to log in again.
 - 2026-10-03 **A message sent twice a moment apart is shown twice.** When
   one source held a message sent twice a second or two apart, and another
   source held one copy, matching the sources hid all but one of the three.

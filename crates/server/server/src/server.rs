@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
+use axum::extract::DefaultBodyLimit;
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::{Json, Router};
@@ -810,8 +811,7 @@ fn build_cors_layer(origins: &[String]) -> CorsLayer {
 fn limited_auth_router() -> (Router<AppState>, utoipa::openapi::OpenApi) {
     let (router, spec) = crate::openapi::public_openapi().split_for_parts();
     (
-        // Auth JSON is tiny; keep a tight limit so Argon2 abuse cannot ship 512 MiB bodies.
-        router.layer(RequestBodyLimitLayer::new(32 * 1024)),
+        router.layer(RequestBodyLimitLayer::new(MAX_AUTH_BODY_BYTES)),
         spec,
     )
 }
@@ -847,6 +847,18 @@ async fn json_body_limit_response(response: Response) -> Response {
     }
     ApiError::PayloadTooLarge("the request body is too large".to_string()).into_response()
 }
+
+/// The body cap of the routes a stranger may call ([`limited_auth_router`]):
+/// 32 KiB, so password hashing cannot be fed a large body.
+pub(crate) const MAX_AUTH_BODY_BYTES: usize = 32 * 1024;
+
+/// The cap on a JSON body, the one `crate::extract::Json` reads: 32 MiB. It
+/// is sized for the largest body the web app sends, the completion of an
+/// Import Run (`POST /v1/imports/{id}/complete`), which carries every issue
+/// of the run; at a few hundred bytes an issue, that is about a hundred
+/// thousand issues. Without it a JSON body is held to Axum's own 2 MiB
+/// default, a figure nobody chose.
+pub(crate) const MAX_JSON_BODY_BYTES: usize = 32 * 1024 * 1024;
 
 /// The body cap of every route but the attachment uploads: 512 MiB, the
 /// attachment size limit a new Message Crate starts with. It is fixed in the
@@ -1052,6 +1064,9 @@ pub(crate) fn http_app(state: AppState) -> Router {
     }
     api.method_not_allowed_fallback(api_method_not_allowed)
         .fallback_service(ServeDir::new(static_dir))
+        // The cap `extract::Json` reads a body against. The routes that read
+        // a body of their own hold it to their own figure instead.
+        .layer(DefaultBodyLimit::max(MAX_JSON_BODY_BYTES))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             limit_request_body,

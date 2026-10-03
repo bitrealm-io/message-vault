@@ -13,22 +13,12 @@ import { useUpdateSettingsProfile } from "../../lib/useSettingsAccount";
 import { type Identity, removeBody } from "./identities";
 import { sectionTitleClass } from "./profileStyles";
 
-/** Whether `profile` lists `handle` on `service`, however either was typed. */
-function profileIncludes(p: AccountProfile, handle: string, service: string): boolean {
-  const needle = handle.trim().toLowerCase();
-  if (service === "email") {
-    return p.emails.some((e) => e.toLowerCase() === needle);
-  }
-  // Phone and WhatsApp both come back in profile.phones (E.164 when unambiguous).
-  return p.phones.some((phone) => phonesMatch(handle, phone));
-}
-
 /**
  * Whether `rows` hold `address` on `service`, however the address was typed.
  *
- * A removal is judged here rather than by `profile.phones`, because one number
- * can be a Text Message identity and a WhatsApp identity at once, and
- * `profile.phones` lists it for each with no service.
+ * An add and a removal are judged here rather than by `profile.phones`,
+ * because one number can be a Text Message identity and a WhatsApp identity
+ * at once, and `profile.phones` lists it for each with no service.
  */
 function listsIdentity(rows: Identity[], address: string, service: string): boolean {
   const needle = address.trim().toLowerCase();
@@ -100,13 +90,44 @@ export function IdentitiesSection({
     [rows],
   );
 
-  const confirmAdd = async ({ address, service }: { address: string; service: HandleService }) => {
+  /**
+   * Send `body`, then read the identities list again and require that it now
+   * holds `address` on `service` (`listed`) or no longer does. The change is
+   * judged by the list, not by the profile the server answered, because the
+   * profile names no service for a number.
+   *
+   * A list that cannot be read again leaves the change unchecked, so the
+   * error says only that, and the dialog stays open. Sending the change
+   * again is harmless: an identity already linked, or already gone, stays
+   * as it is, and the list is read again.
+   */
+  const changeAndCheck = async (
+    body: Parameters<typeof updateProfile.mutateAsync>[0],
+    { address, service }: { address: string; service: string },
+    { listed, notChanged }: { listed: boolean; notChanged: string },
+  ) => {
+    await updateProfile.mutateAsync(body);
+    let rows: Identity[];
+    try {
+      rows = (await identities.refetch({ throwOnError: true })).data ?? [];
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : String(e);
+      throw new Error(
+        `The server answered, but Identities could not be loaded again to check the change: ${reason}. Try again.`,
+      );
+    }
+    if (listsIdentity(rows, address, service) !== listed) {
+      throw new Error(notChanged);
+    }
+  };
+
+  const confirmAdd = async (identity: { address: string; service: HandleService }) => {
     setAddError("");
     try {
-      const updated = await updateProfile.mutateAsync({ identities: [{ address, service }] });
-      if (!profileIncludes(updated, address, service)) {
-        throw new Error("The server did not add that identity.");
-      }
+      await changeAndCheck({ identities: [identity] }, identity, {
+        listed: true,
+        notChanged: "The server did not add that identity.",
+      });
       setAdding(false);
     } catch (e) {
       setAddError(e instanceof Error ? e.message : String(e));
@@ -118,11 +139,10 @@ export function IdentitiesSection({
     const { address, service } = removeTarget;
     setRemoveError("");
     try {
-      await updateProfile.mutateAsync({ remove_identities: [{ address, service }] });
-      const { data } = await identities.refetch({ throwOnError: true });
-      if (listsIdentity(data ?? [], address, service)) {
-        throw new Error("The server did not remove that identity.");
-      }
+      await changeAndCheck({ remove_identities: [{ address, service }] }, removeTarget, {
+        listed: false,
+        notChanged: "The server did not remove that identity.",
+      });
       setRemoveTarget(null);
     } catch (e) {
       setRemoveError(e instanceof Error ? e.message : String(e));

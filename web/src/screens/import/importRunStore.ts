@@ -63,6 +63,13 @@ export type ImportRunState = {
    */
   computingSummary: boolean;
   sourceIdentities: string[] | null;
+  /**
+   * A staging folder Message Crate could not delete, and why: from a
+   * discarded or cancelled run, or the cleanup after a finished one. Shown
+   * until the person dismisses it or a later delete of the folder succeeds,
+   * so a folder of several gigabytes is never left behind unsaid.
+   */
+  stagingDeleteFailure: { path: string; reason: string } | null;
 };
 
 export function initialImportRunState(steps: ImportStep[]): ImportRunState {
@@ -83,6 +90,7 @@ export function initialImportRunState(steps: ImportStep[]): ImportRunState {
     reviewError: null,
     computingSummary: false,
     sourceIdentities: null,
+    stagingDeleteFailure: null,
   };
 }
 

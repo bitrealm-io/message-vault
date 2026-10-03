@@ -12,9 +12,11 @@
 
 mod commands;
 mod local_server;
+mod staging_folders;
 mod state;
 
 use local_server::LocalServer;
+use staging_folders::StagingFolders;
 use state::AppState;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
@@ -38,6 +40,16 @@ fn main() {
         .manage(app_state)
         // The Message Crate this app starts for itself, when asked to.
         .manage(LocalServer::default())
+        // The Staging Directory and the staging folders made under it, kept
+        // in the app's data folder.
+        .setup(|app| {
+            let record = app
+                .path()
+                .app_data_dir()?
+                .join(staging_folders::RECORD_FILE);
+            app.manage(Mutex::new(StagingFolders::load(record, dirs::home_dir())));
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::extract::extract,
             commands::extract::cancel,
@@ -56,6 +68,9 @@ fn main() {
             commands::local_server::open_data_folder,
             commands::push::push,
             commands::pull::pull,
+            commands::staging::staging_root,
+            commands::staging::set_staging_root,
+            commands::staging::create_staging_dir,
             commands::staging::summarize_staging,
             commands::staging::transcode_staging,
             commands::staging::delete_staging,

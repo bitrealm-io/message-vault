@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const invoke = vi.fn();
 const isTauri = vi.fn();
-const resolveStagingParent = vi.fn();
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invoke(...args),
@@ -12,26 +11,21 @@ vi.mock("./tauri-check", () => ({
   isTauri: () => isTauri(),
 }));
 
-vi.mock("./system-settings", () => ({
-  resolveStagingParent: (...args: unknown[]) => resolveStagingParent(...args),
-}));
-
 describe("openPathInExplorer", () => {
   beforeEach(() => {
     invoke.mockReset();
     isTauri.mockReset();
-    resolveStagingParent.mockReset();
     isTauri.mockReturnValue(true);
     invoke.mockResolvedValue(undefined);
-    resolveStagingParent.mockResolvedValue("/home/sam/message-crate");
   });
 
-  it("invokes open_path with the staging parent in the desktop app", async () => {
+  it("invokes open_path with the path alone in the desktop app", async () => {
+    // The desktop process checks the path against the staging folders it
+    // made; a root from the window would be the setting as it is now.
     const { openPathInExplorer } = await import("./openPath");
     await openPathInExplorer("/home/sam/message-crate/staging");
     expect(invoke).toHaveBeenCalledWith("open_path", {
       path: "/home/sam/message-crate/staging",
-      stagingRoot: "/home/sam/message-crate",
     });
   });
 
@@ -39,7 +33,6 @@ describe("openPathInExplorer", () => {
     const { openPathInExplorer } = await import("./openPath");
     await openPathInExplorer("   ");
     expect(invoke).not.toHaveBeenCalled();
-    expect(resolveStagingParent).not.toHaveBeenCalled();
   });
 
   it("rejects when not running in Tauri", async () => {
@@ -47,14 +40,6 @@ describe("openPathInExplorer", () => {
     const { openPathInExplorer } = await import("./openPath");
     await expect(openPathInExplorer("/home/sam/message-crate/staging")).rejects.toThrow(
       "desktop app",
-    );
-  });
-
-  it("rejects when the staging parent cannot be resolved", async () => {
-    resolveStagingParent.mockResolvedValue("");
-    const { openPathInExplorer } = await import("./openPath");
-    await expect(openPathInExplorer("/home/sam/message-crate/staging")).rejects.toThrow(
-      /staging directory/i,
     );
   });
 });

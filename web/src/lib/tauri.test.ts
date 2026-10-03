@@ -3,6 +3,7 @@ import { currentDesktopJob } from "./desktopJob";
 import type { PushFinishedReport } from "./tauri";
 import {
   awaitTauriJob,
+  invokeCreateStagingDir,
   invokeDeleteStaging,
   invokeReadImportRunRecord,
   invokeSaveImportRunRecord,
@@ -12,7 +13,6 @@ import {
 } from "./tauri";
 
 const invoke = vi.fn();
-const resolveStagingParent = vi.fn();
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invoke(...args),
@@ -25,10 +25,6 @@ vi.mock("@tauri-apps/api/event", () => ({
     listeners.set(name, handler);
     return () => listeners.delete(name);
   },
-}));
-
-vi.mock("./system-settings", () => ({
-  resolveStagingParent: (...args: unknown[]) => resolveStagingParent(...args),
 }));
 
 function reportJson(overrides: Partial<PushFinishedReport> = {}): string {
@@ -167,80 +163,40 @@ describe("parseTauriJobResult", () => {
   });
 });
 
-describe("staging command wrappers resolve their own staging root", () => {
-  beforeEach(async () => {
+describe("staging command wrappers name only the folder", () => {
+  const run = "/home/sam/message-crate/staging-run";
+
+  beforeEach(() => {
     invoke.mockReset();
-    resolveStagingParent.mockReset();
     invoke.mockResolvedValue(undefined);
-    resolveStagingParent.mockResolvedValue("/home/sam/message-crate");
   });
 
-  it("invokeSummarizeStaging resolves the root itself rather than taking one from the caller", async () => {
-    await invokeSummarizeStaging({ staging_dir: "/home/sam/message-crate/staging-run" });
+  // The desktop process keeps the Staging Directory and knows which folders
+  // it made. A root sent from the window would be checked against the
+  // setting as it is now, and a run started under an earlier setting would
+  // be refused (#1154).
+  it("sends no staging root with any staging command", async () => {
+    await invokeSummarizeStaging({ staging_dir: run });
+    await invokeTranscodeStaging({ staging_dir: run });
+    await invokeDeleteStaging({ staging_dir: run });
+    await invokeReadImportRunRecord({ staging_dir: run });
+    await invokeSaveImportRunRecord({ staging_dir: run, record: { issues: [] } });
 
-    expect(resolveStagingParent).toHaveBeenCalledTimes(1);
-    // Only the folder: the command reads the run's media settings from it.
-    expect(invoke).toHaveBeenCalledWith("summarize_staging", {
-      args: {
-        stagingDir: "/home/sam/message-crate/staging-run",
-        stagingRoot: "/home/sam/message-crate",
-      },
-    });
+    expect(invoke.mock.calls).toEqual([
+      ["summarize_staging", { args: { stagingDir: run } }],
+      ["transcode_staging", { args: { stagingDir: run } }],
+      ["delete_staging", { args: { stagingDir: run } }],
+      ["read_import_run_record", { args: { stagingDir: run } }],
+      ["save_import_run_record", { args: { stagingDir: run, record: { issues: [] } } }],
+    ]);
   });
 
-  it("invokeTranscodeStaging resolves the root itself rather than taking one from the caller", async () => {
-    await invokeTranscodeStaging({ staging_dir: "/home/sam/message-crate/staging-run" });
+  it("asks the desktop process to make a run's folder", async () => {
+    invoke.mockResolvedValue(run);
 
-    expect(resolveStagingParent).toHaveBeenCalledTimes(1);
-    expect(invoke).toHaveBeenCalledWith("transcode_staging", {
-      args: {
-        stagingDir: "/home/sam/message-crate/staging-run",
-        stagingRoot: "/home/sam/message-crate",
-      },
-    });
-  });
+    await expect(invokeCreateStagingDir("imessage-ios")).resolves.toBe(run);
 
-  it("invokeDeleteStaging resolves the root itself rather than taking one from the caller", async () => {
-    await invokeDeleteStaging({ staging_dir: "/home/sam/message-crate/staging-run" });
-
-    expect(resolveStagingParent).toHaveBeenCalledTimes(1);
-    expect(invoke).toHaveBeenCalledWith("delete_staging", {
-      args: {
-        stagingDir: "/home/sam/message-crate/staging-run",
-        stagingRoot: "/home/sam/message-crate",
-      },
-    });
-  });
-
-  it("reads and saves the Import Run record under the root it resolves itself", async () => {
-    await invokeReadImportRunRecord({ staging_dir: "/home/sam/message-crate/staging-run" });
-    await invokeSaveImportRunRecord({
-      staging_dir: "/home/sam/message-crate/staging-run",
-      record: { issues: [] },
-    });
-
-    expect(invoke).toHaveBeenCalledWith("read_import_run_record", {
-      args: {
-        stagingDir: "/home/sam/message-crate/staging-run",
-        stagingRoot: "/home/sam/message-crate",
-      },
-    });
-    expect(invoke).toHaveBeenCalledWith("save_import_run_record", {
-      args: {
-        stagingDir: "/home/sam/message-crate/staging-run",
-        stagingRoot: "/home/sam/message-crate",
-        record: { issues: [] },
-      },
-    });
-  });
-
-  it("rejects rather than calling through when the staging root cannot be resolved", async () => {
-    resolveStagingParent.mockResolvedValue("");
-
-    await expect(
-      invokeSummarizeStaging({ staging_dir: "/home/sam/message-crate/staging-run" }),
-    ).rejects.toThrow(/staging directory/i);
-    expect(invoke).not.toHaveBeenCalled();
+    expect(invoke).toHaveBeenCalledWith("create_staging_dir", { label: "imessage-ios" });
   });
 });
 

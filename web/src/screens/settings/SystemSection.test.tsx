@@ -6,14 +6,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setBaseUrl } from "../../lib/api";
 import { APP_BUILD } from "../../lib/build";
 import { getOpenToNetwork } from "../../lib/localServer";
-import { getStagingDir } from "../../lib/system-settings";
 import { readerLicenseUrl, readerSourceUrl } from "../../lib/thirdPartySoftware";
 import { SystemSection } from "./SystemSection";
 
 const tauriState = vi.hoisted(() => ({ isTauri: true }));
 const probeFfmpegTools = vi.hoisted(() => vi.fn());
 const setFfmpegToolsDir = vi.hoisted(() => vi.fn());
-const getHomeDir = vi.hoisted(() => vi.fn());
+/** The Staging Directory as the desktop process keeps it. */
+const desktopStaging = vi.hoisted(() => ({ root: "", defaultRoot: "/home/demo/message-crate" }));
+const setStagingRoot = vi.hoisted(() => vi.fn());
 const openDataFolder = vi.hoisted(() => vi.fn());
 
 const startLocalServer = vi.hoisted(() => vi.fn());
@@ -33,15 +34,12 @@ vi.mock("../../lib/tauri-check", () => ({
 vi.mock("../../lib/tauri", () => ({
   probeFfmpegTools: (...args: unknown[]) => probeFfmpegTools(...args),
   setFfmpegToolsDir: (...args: unknown[]) => setFfmpegToolsDir(...args),
+  invokeStagingRoot: async () => ({
+    root: desktopStaging.root || desktopStaging.defaultRoot,
+    defaultRoot: desktopStaging.defaultRoot,
+  }),
+  invokeSetStagingRoot: (root: string) => setStagingRoot(root),
 }));
-
-vi.mock("../../lib/system-settings", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../lib/system-settings")>();
-  return {
-    ...actual,
-    getHomeDir: () => getHomeDir(),
-  };
-});
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
@@ -55,7 +53,15 @@ afterEach(() => {
 beforeEach(() => {
   localStorage.clear();
   tauriState.isTauri = true;
-  getHomeDir.mockResolvedValue("/home/demo");
+  desktopStaging.root = "";
+  setStagingRoot.mockReset();
+  setStagingRoot.mockImplementation(async (root: string) => {
+    desktopStaging.root = root === desktopStaging.defaultRoot ? "" : root;
+    return {
+      root: desktopStaging.root || desktopStaging.defaultRoot,
+      defaultRoot: desktopStaging.defaultRoot,
+    };
+  });
   probeFfmpegTools.mockResolvedValue({
     ok: true,
     ffmpeg_path: "/usr/bin/ffmpeg",
@@ -187,23 +193,32 @@ describe("SystemSection", () => {
     expect(screen.queryByRole("button", { name: "Saving…" })).toBeNull();
   });
 
-  it("persists the staging directory on change", async () => {
+  it("stores the staging directory in the desktop process on change", async () => {
     const user = userEvent.setup();
     render(<SystemSection />);
-    await waitFor(() => {
-      expect(screen.getByDisplayValue("/home/demo/message-crate")).toBeTruthy();
-    });
+    const stagingInput = await screen.findByDisplayValue("/home/demo/message-crate");
 
-    const stagingInput = screen.getByDisplayValue("/home/demo/message-crate");
     await user.clear(stagingInput);
     await user.type(stagingInput, "/tmp/my-staging");
 
-    expect(localStorage.getItem("mc-staging-dir")).toBe("/tmp/my-staging");
+    await waitFor(() => expect(desktopStaging.root).toBe("/tmp/my-staging"));
+    expect(setStagingRoot).toHaveBeenLastCalledWith("/tmp/my-staging");
+  });
+
+  it("says why the desktop process refused a staging directory", async () => {
+    const user = userEvent.setup();
+    render(<SystemSection />);
+    const stagingInput = await screen.findByDisplayValue("/home/demo/message-crate");
+    setStagingRoot.mockRejectedValue("Could not save staging.json: disk full");
+
+    await user.type(stagingInput, "/x");
+
+    expect(await screen.findByText(/disk full/)).toBeInTheDocument();
   });
 
   it("says why a relative staging directory is not saved, and shows the one in use on blur", async () => {
     const user = userEvent.setup();
-    localStorage.setItem("mc-staging-dir", "/srv/staging");
+    desktopStaging.root = "/srv/staging";
     render(<SystemSection />);
     const stagingInput = await screen.findByDisplayValue("/srv/staging");
 
@@ -215,7 +230,7 @@ describe("SystemSection", () => {
 
     expect(stagingInput).toHaveValue("staging");
     expect(screen.getByText(/must be a full path/)).toBeInTheDocument();
-    expect(getStagingDir()).toBe("/srv/staging");
+    expect(desktopStaging.root).toBe("/srv/staging");
 
     await user.tab();
 

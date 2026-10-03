@@ -15,15 +15,17 @@ import {
 } from "../../lib/localServer";
 import { readPref, removePref, writePref } from "../../lib/storage";
 import {
-  defaultStagingDir,
-  getHomeDir,
   getRememberImporterPaths,
-  getStagingDir,
   isUsableStagingParent,
   setRememberImporterPaths,
-  setStagingDir,
 } from "../../lib/system-settings";
-import { type FfmpegToolsProbe, probeFfmpegTools, setFfmpegToolsDir } from "../../lib/tauri";
+import {
+  type FfmpegToolsProbe,
+  invokeSetStagingRoot,
+  invokeStagingRoot,
+  probeFfmpegTools,
+  setFfmpegToolsDir,
+} from "../../lib/tauri";
 import { isTauri } from "../../lib/tauri-check";
 import { readerLicenseUrl, readerSourceUrl } from "../../lib/thirdPartySoftware";
 
@@ -212,6 +214,9 @@ export function SystemSection() {
   const [ffmpegPath, setFfmpegPath] = useState("");
   const [stagingPath, setStagingPath] = useState("");
   const [defaultStagingPath, setDefaultStagingPath] = useState("");
+  /** The Staging Directory the desktop process holds now. */
+  const [savedStagingPath, setSavedStagingPath] = useState("");
+  const [stagingError, setStagingError] = useState<string | null>(null);
   const [rememberPaths, setRememberPaths] = useState(false);
   const [probe, setProbe] = useState<FfmpegToolsProbe | null>(null);
   const ffmpegDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -257,11 +262,14 @@ export function SystemSection() {
     setFfmpegPath(storedFfmpeg);
 
     void (async () => {
-      const home = await getHomeDir();
-      const defaultDir = defaultStagingDir(home);
-      setDefaultStagingPath(defaultDir);
-      const storedStaging = getStagingDir();
-      setStagingPath(storedStaging || defaultDir);
+      try {
+        const staging = await invokeStagingRoot();
+        setDefaultStagingPath(staging.defaultRoot);
+        setSavedStagingPath(staging.root);
+        setStagingPath(staging.root);
+      } catch (caught: unknown) {
+        setStagingError(caught instanceof Error ? caught.message : String(caught));
+      }
       await runFfmpegApply(storedFfmpeg);
     })();
 
@@ -270,20 +278,33 @@ export function SystemSection() {
     };
   }, [runFfmpegApply]);
 
+  // The desktop process keeps the setting. A run already staged keeps the
+  // folder it was made in; the new setting applies to runs started after it.
+  const saveStagingRoot = (root: string) => {
+    invokeSetStagingRoot(root).then(
+      (saved) => {
+        setSavedStagingPath(saved.root);
+        setStagingError(null);
+      },
+      (caught: unknown) => {
+        setStagingError(caught instanceof Error ? caught.message : String(caught));
+      },
+    );
+  };
+
   const onStagingPathChange = (next: string) => {
     setStagingPath(next);
-    const defaultDir = defaultStagingPath;
     const trimmed = next.trim();
-    // Empty or equal to the default → no override (import uses the default parent).
-    if (!trimmed || (defaultDir && trimmed === defaultDir)) {
-      setStagingDir("");
+    // Empty → the default.
+    if (!trimmed) {
+      saveStagingRoot("");
       return;
     }
     // Relative / filesystem root while typing: keep the field, do not persist yet.
     if (!isUsableStagingParent(trimmed)) {
       return;
     }
-    setStagingDir(trimmed);
+    saveStagingRoot(trimmed);
   };
 
   // A typed value that is neither empty, the default, nor usable is kept in the field but not saved.
@@ -294,7 +315,7 @@ export function SystemSection() {
     !isUsableStagingParent(stagingTrimmed);
 
   const onStagingPathBlur = () => {
-    if (stagingNotSaved) setStagingPath(getStagingDir() || defaultStagingPath);
+    if (stagingNotSaved) setStagingPath(savedStagingPath);
   };
 
   const onFfmpegPathChange = (next: string) => {
@@ -339,6 +360,11 @@ export function SystemSection() {
         {stagingNotSaved ? (
           <p className="col-start-2 m-0 pl-2 text-[0.75rem] text-danger">
             Not saved. The staging directory must be a full path, and not the root of a drive.
+          </p>
+        ) : null}
+        {stagingError ? (
+          <p className="col-start-2 m-0 pl-2 text-[0.75rem] text-danger" role="alert">
+            {stagingError}
           </p>
         ) : null}
         <p className={settingsHelp}>

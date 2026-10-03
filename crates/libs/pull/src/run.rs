@@ -136,10 +136,10 @@ fn next_offset(offset: usize, limit: usize, total: u64) -> Option<usize> {
 /// as a Message Crate export.
 ///
 /// The sentinel names this folder as one an export wrote. The desktop app
-/// refuses to clean or transcode a folder without it
-/// (`resolve_staging_child` in `src-tauri/src/commands/staging.rs`), which is
-/// what stands between a path bug and a recursive delete somewhere else on
-/// disk. A pulled folder that skipped the sentinel could not be used as
+/// refuses to act on a staging folder without it
+/// (`StagingFolders::folder` in `src-tauri/src/staging_folders.rs`), which is
+/// part of what stands between a path bug and a recursive delete somewhere
+/// else on disk. A pulled folder that lost the sentinel could not be used as
 /// export staging.
 ///
 /// # Errors

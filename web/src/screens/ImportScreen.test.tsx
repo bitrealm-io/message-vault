@@ -28,7 +28,9 @@ const hookState = vi.hoisted(() => ({
   mediaPartiallyRan: false,
   resumeError: null as string | null,
   sourceIdentities: null as string[] | null,
+  stagingDeleteFailure: null as { path: string; reason: string } | null,
 }));
+const dismissStagingDeleteFailureMock = vi.hoisted(() => vi.fn());
 const startImportMock = vi.hoisted(() => vi.fn());
 const resumeAtGateMock = vi.hoisted(() => vi.fn());
 const approveMock = vi.hoisted(() => vi.fn());
@@ -78,6 +80,17 @@ vi.mock("./import/useImportJob", async (importOriginal) => {
       returnToForm: returnToFormMock,
       continueAfterIdentityStop: continueAfterIdentityStopMock,
       cancelIdentityStop: cancelIdentityStopMock,
+      stagingDeleteFailure: hookState.stagingDeleteFailure,
+      // The real one never throws: a failed delete is kept for the notice.
+      discardStagingFolder: async (stagingDir: string) => {
+        try {
+          await invokeDeleteStagingMock({ staging_dir: stagingDir });
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      dismissStagingDeleteFailure: dismissStagingDeleteFailureMock,
     }),
   };
 });
@@ -250,6 +263,7 @@ describe("ImportScreen entering Import", () => {
     hookState.mediaPartiallyRan = false;
     hookState.resumeError = null;
     hookState.sourceIdentities = null;
+    hookState.stagingDeleteFailure = null;
     startImportMock.mockReset();
     resumeAtGateMock.mockReset();
     resumeAtGateMock.mockResolvedValue(undefined);
@@ -403,6 +417,24 @@ describe("ImportScreen entering Import", () => {
       staging_dir: "/home/u/message-crate/staging-260830",
     });
     expect(await screen.findByTestId("import-form")).toBeInTheDocument();
+  });
+
+  it("says which staging folder could not be deleted, until dismissed", async () => {
+    // A discard used to drop a refused delete without a word, leaving a
+    // folder of several gigabytes on disk (#1154).
+    const user = userEvent.setup();
+    getActiveImportSessionMock.mockResolvedValue(null);
+    hookState.stagingDeleteFailure = {
+      path: "/home/u/message-crate/staging-260830",
+      reason: "Permission denied",
+    };
+    renderWithProviders(<ImportScreen />);
+
+    const notice = await screen.findByRole("alert");
+    expect(notice).toHaveTextContent("/home/u/message-crate/staging-260830");
+    expect(notice).toHaveTextContent("Permission denied");
+    await user.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(dismissStagingDeleteFailureMock).toHaveBeenCalledTimes(1);
   });
 
   it("never touches disk when discarding another device's session", async () => {
@@ -989,6 +1021,7 @@ describe("ImportScreen gates", () => {
     hookState.mediaPartiallyRan = false;
     hookState.resumeError = null;
     hookState.sourceIdentities = null;
+    hookState.stagingDeleteFailure = null;
     startImportMock.mockReset();
     resumeAtGateMock.mockReset();
     resumeAtGateMock.mockResolvedValue(undefined);

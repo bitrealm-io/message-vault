@@ -237,6 +237,10 @@ released versions carry their date on the heading.
 
 #### Importing
 
+- 2026-10-03 **A message sent twice a moment apart is shown twice.** When
+  one source held a message sent twice a second or two apart, and another
+  source held one copy, matching the sources hid all but one of the three.
+  Now only the extra copy is hidden.
 - 2026-10-03 **A photo or file imported from two places is stored once, not
   once for each.** The same picture from an Apple Messages backup and from
   an SMS Backup & Restore file used to be saved twice. It is now saved once

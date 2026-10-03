@@ -782,21 +782,24 @@ async fn load_near_rows(
 }
 
 /// Walk each conversation in time order, gather each message's twins within
-/// the window, and pick one winner per cluster. A cluster counts only when
-/// it spans two sources: same-source near-duplicates are left alone.
-/// Returns `(loser, winner)` pairs.
+/// the window, and flag each cluster by the rule of the exact pass
+/// ([`exact_group_flags`]): the cluster stays shown as many times as the
+/// source that holds it most often. A cluster counts only when it spans two
+/// sources: same-source near-duplicates are left alone. A row joins one
+/// cluster at most, shown or hidden, so a row a cluster kept never starts a
+/// second one. Returns `(loser, winner)` pairs.
 fn cluster_near_dupes(
     by_conversation: HashMap<i64, Vec<NearRow>>,
     prio: &HashMap<&str, usize>,
     window_secs: i64,
 ) -> Vec<(i64, i64)> {
-    let mut flagged_ids: HashSet<i64> = HashSet::new();
+    let mut clustered: HashSet<i64> = HashSet::new();
     let mut flags: Vec<(i64, i64)> = Vec::new();
     for mut rows in by_conversation.into_values() {
         rows.sort_by(|a, b| a.secs.cmp(&b.secs).then(a.id.cmp(&b.id)));
         for i in 0..rows.len() {
             let first = &rows[i];
-            if flagged_ids.contains(&first.id) {
+            if clustered.contains(&first.id) {
                 continue;
             }
             let cluster: Vec<Cand> = std::iter::once(first)
@@ -804,7 +807,7 @@ fn cluster_near_dupes(
                     rows[i + 1..]
                         .iter()
                         .take_while(|row| row.secs - first.secs <= window_secs)
-                        .filter(|row| first.is_twin_of(row) && !flagged_ids.contains(&row.id)),
+                        .filter(|row| first.is_twin_of(row) && !clustered.contains(&row.id)),
                 )
                 .map(NearRow::candidate)
                 .collect();
@@ -812,13 +815,8 @@ fn cluster_near_dupes(
             if sources.len() < 2 {
                 continue;
             }
-            let winner = pick_winner(&cluster, prio);
-            for cand in &cluster {
-                if cand.id != winner {
-                    flagged_ids.insert(cand.id);
-                    flags.push((cand.id, winner));
-                }
-            }
+            clustered.extend(cluster.iter().map(|c| c.id));
+            flags.extend(exact_group_flags(&cluster, prio));
         }
     }
     flags

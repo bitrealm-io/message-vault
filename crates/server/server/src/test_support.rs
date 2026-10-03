@@ -850,9 +850,8 @@ pub async fn seed_conversation(state: &AppState, c: &SeedConversation<'_>) -> i6
 ///
 /// `sha` stands in for the content hash; the store never reads the bytes
 /// back here, so it only has to be 64 characters long the way a real digest
-/// is. The `messages.source` slug (`imessage`) and the per-source assets
-/// directory are one and the same name, which is what lets a delete find the
-/// file from the row.
+/// is. The file goes in the account's one assets directory, the folder
+/// every source of the account shares, which is where a delete looks for it.
 pub async fn attach_stored_file(
     state: &AppState,
     account_id: i64,
@@ -862,7 +861,7 @@ pub async fn attach_stored_file(
     let shard = state
         .cfg
         .paths
-        .assets_dir_for_account(account_id, "imessage")
+        .assets_dir_for_account(account_id)
         .join(&sha[..2]);
     std::fs::create_dir_all(&shard).unwrap();
     let path = shard.join(format!("{sha}.jpg"));

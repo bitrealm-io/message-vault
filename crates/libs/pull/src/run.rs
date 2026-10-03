@@ -243,8 +243,8 @@ pub fn run(cfg: &PullConfig, mut on_progress: Option<&mut ProgressFn<'_>>) -> Re
 struct Fetched {
     /// Conversation key → (first message as the metadata seed, converted messages).
     by_conv: BTreeMap<String, (Message, Vec<message_ir::IrMessage>)>,
-    /// sha256 → (source, relative path under the output folder).
-    assets: HashMap<String, (String, String)>,
+    /// sha256 → relative path under the output folder.
+    assets: HashMap<String, String>,
     /// sha256 → every other path a message names for the same bytes. The
     /// file is downloaded once, at the path in `assets`, then placed at each
     /// of these.
@@ -502,7 +502,7 @@ impl<'a> Pull<'a> {
     /// Returns an error when a download fails after retries or the run is cancelled.
     fn download_assets(
         &self,
-        assets: &HashMap<String, (String, String)>,
+        assets: &HashMap<String, String>,
         out: &mut Option<&mut ProgressFn<'_>>,
     ) -> Result<AssetCounts> {
         let cfg = self.cfg;
@@ -612,7 +612,7 @@ impl<'a> Pull<'a> {
         conversations: u64,
         messages: u64,
         assets: &AssetCounts,
-        seen_assets: HashMap<String, (String, String)>,
+        seen_assets: HashMap<String, String>,
     ) {
         let event = crate::journal::PullJournalEvent::BackupComplete {
             url: self.cfg.base_url.clone(),
@@ -653,14 +653,14 @@ impl<'a> Pull<'a> {
 /// and return each attachment path [`export_path`] refused, with the path
 /// used in its place.
 ///
-/// The first message to mention a sha256 decides the source and the path it
-/// downloads to; the server stores one blob per fingerprint, so later
-/// mentions are the same file. A later mention under another path goes into
+/// The first message to mention a sha256 decides the path it downloads to;
+/// the server stores one blob per fingerprint for the account, whatever the
+/// source, so later mentions are the same file. A later mention under another path goes into
 /// `other_paths`, because staging names a file by date and fingerprint and
 /// one file sent on two days has two paths.
 fn note_asset_refs(
     msg: &Message,
-    assets: &mut HashMap<String, (String, String)>,
+    assets: &mut HashMap<String, String>,
     other_paths: &mut BTreeMap<String, BTreeSet<String>>,
 ) -> Vec<(String, Option<String>)> {
     let mut refused = Vec::new();
@@ -676,9 +676,7 @@ fn note_asset_refs(
         else {
             continue;
         };
-        let (_, first) = assets
-            .entry(sha.to_string())
-            .or_insert_with(|| (msg.source.clone(), rel.clone()));
+        let first = assets.entry(sha.to_string()).or_insert_with(|| rel.clone());
         if *first != rel {
             other_paths.entry(sha.to_string()).or_default().insert(rel);
         }
@@ -698,11 +696,11 @@ fn note_asset_refs(
 /// linked or copied.
 fn place_other_paths(
     out_dir: &Path,
-    assets: &HashMap<String, (String, String)>,
+    assets: &HashMap<String, String>,
     other_paths: &BTreeMap<String, BTreeSet<String>>,
 ) -> Result<()> {
     for (sha, rels) in other_paths {
-        let Some((_source, first)) = assets.get(sha) else {
+        let Some(first) = assets.get(sha) else {
             continue;
         };
         let from = out_dir.join(first);
@@ -744,7 +742,6 @@ fn refused_path_line(path: &str, rel: Option<&str>) -> String {
 
 struct AssetDownloadJob {
     sha256: String,
-    source: String,
     dest: PathBuf,
 }
 
@@ -760,17 +757,16 @@ struct AssetDownloadStats {
 /// SHA-256 is a short hex fingerprint of the file bytes. The journal lists
 /// fingerprints already downloaded; those files are skipped when they still exist.
 fn assets_needing_download(
-    assets: &HashMap<String, (String, String)>,
+    assets: &HashMap<String, String>,
     journal_assets: &HashSet<String>,
     out_dir: &Path,
-) -> HashMap<String, (String, String)> {
+) -> HashMap<String, String> {
     let mut to_download = HashMap::new();
-    for (sha, entry) in assets {
-        let (_source, rel) = entry;
+    for (sha, rel) in assets {
         if journal_assets.contains(sha) && out_dir.join(rel).is_file() {
             continue;
         }
-        to_download.insert(sha.clone(), entry.clone());
+        to_download.insert(sha.clone(), rel.clone());
     }
     to_download
 }
@@ -790,7 +786,7 @@ struct DownloadAssetsParallelArgs<'a> {
     session: &'a crate::http::HttpSession,
     base_url: &'a str,
     key: &'a str,
-    assets: &'a HashMap<String, (String, String)>, // sha256 -> (source, rel_path)
+    assets: &'a HashMap<String, String>, // sha256 -> rel_path
     out_dir: &'a Path,
     workers: usize,
     cancel: Option<&'a CancelFlag>,
@@ -810,7 +806,7 @@ fn download_assets_parallel(args: DownloadAssetsParallelArgs<'_>) -> Result<Asse
     let mut jobs: Vec<AssetDownloadJob> = Vec::with_capacity(assets.len());
     let mut stats = AssetDownloadStats::default();
 
-    for (sha256, (source, rel)) in assets {
+    for (sha256, rel) in assets {
         let dest = out_dir.join(rel);
         if dest.is_file() {
             let meta = fs::metadata(&dest).with_context(|| format!("stat {}", dest.display()))?;
@@ -820,21 +816,13 @@ fn download_assets_parallel(args: DownloadAssetsParallelArgs<'_>) -> Result<Asse
         }
         jobs.push(AssetDownloadJob {
             sha256: sha256.clone(),
-            source: source.clone(),
             dest,
         });
     }
 
     let results = parallel_for_each(&jobs, workers, cancel, |job| {
         with_retries(MAX_RETRIES, || {
-            crate::http::download_asset(
-                session,
-                base_url,
-                key,
-                &job.source,
-                &job.sha256,
-                &job.dest,
-            )?;
+            crate::http::download_asset(session, base_url, key, &job.sha256, &job.dest)?;
             let meta = fs::metadata(&job.dest)
                 .with_context(|| format!("stat after download {}", job.dest.display()))?;
             Ok(meta.len())
@@ -985,8 +973,7 @@ mod asset_ref_tests {
     }
 
     #[test]
-    fn the_first_mention_of_a_fingerprint_decides_its_source_and_path_and_every_other_path_is_kept()
-    {
+    fn the_first_mention_of_a_fingerprint_decides_its_path_and_every_other_path_is_kept() {
         let mut assets = HashMap::new();
         let mut other_paths = BTreeMap::new();
 
@@ -1019,18 +1006,9 @@ mod asset_ref_tests {
         assert_eq!(
             assets,
             HashMap::from([
-                (
-                    "ab".to_string(),
-                    ("imessage".to_string(), "attachments/menu.pdf".to_string())
-                ),
-                (
-                    "cd".to_string(),
-                    ("imessage".to_string(), "attachments/cd".to_string())
-                ),
-                (
-                    "ef".to_string(),
-                    ("imessage".to_string(), "attachments/ef".to_string())
-                ),
+                ("ab".to_string(), "attachments/menu.pdf".to_string()),
+                ("cd".to_string(), "attachments/cd".to_string()),
+                ("ef".to_string(), "attachments/ef".to_string()),
             ])
         );
         assert_eq!(

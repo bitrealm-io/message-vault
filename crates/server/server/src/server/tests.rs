@@ -917,7 +917,7 @@ async fn the_fast_413_carries_cors_headers() {
     let sha = "0".repeat(64);
     let server = crate::test_support::serve(&state).await;
     let response = reqwest::Client::new()
-        .put(format!("{}/v1/assets/{sha}?source=imessage", server.base()))
+        .put(format!("{}/v1/assets/{sha}", server.base()))
         .bearer_auth(&user.token)
         .header(header::ORIGIN, "https://app.example")
         .header(header::CONTENT_TYPE, "image/png")
@@ -1863,7 +1863,7 @@ async fn a_small_attachment_size_limit_holds_only_the_attachment_uploads() {
     let sha = crate::assets_api::sha256_hex(&bytes);
     let (status, text) = crate::test_support::put_raw(
         &state,
-        &format!("/v1/assets/{sha}?source=whatsapp"),
+        &format!("/v1/assets/{sha}"),
         &importer.token,
         "image/png",
         bytes,
@@ -1959,7 +1959,7 @@ async fn a_chunked_attachment_upload_over_the_limit_is_413() {
 
     let status = put_chunked(
         server.base(),
-        &format!("/v1/assets/{sha}?source=imessage"),
+        &format!("/v1/assets/{sha}"),
         &user.token,
         &[b'x'; 4096],
     )
@@ -1981,10 +1981,7 @@ async fn a_chunked_part_over_its_upload_part_size_is_413() {
     let sha = "0".repeat(64);
     let client = reqwest::Client::new();
     let started: serde_json::Value = client
-        .post(format!(
-            "{}/v1/assets/{sha}/uploads?source=imessage",
-            server.base()
-        ))
+        .post(format!("{}/v1/assets/{sha}/uploads", server.base()))
         .bearer_auth(&user.token)
         .json(&serde_json::json!({ "bytes": 40 }))
         .send()
@@ -1995,7 +1992,7 @@ async fn a_chunked_part_over_its_upload_part_size_is_413() {
         .unwrap();
     assert_eq!(started["part_size"], 16);
     let path = format!(
-        "/v1/assets/{sha}/uploads/{}/parts/1?source=imessage",
+        "/v1/assets/{sha}/uploads/{}/parts/1",
         started["upload_id"].as_str().unwrap()
     );
 

@@ -11,7 +11,6 @@ import { fetchAssetObjectUrl } from "../lib/serverApi";
  */
 export function useAssetObjectUrl(
   sha256: string | null | undefined,
-  source: string | null | undefined,
   preview = false,
 ): { url: string | null; error: string | null; loading: boolean } {
   const [url, setUrl] = useState<string | null>(null);
@@ -20,8 +19,7 @@ export function useAssetObjectUrl(
 
   useEffect(() => {
     const sha = sha256?.trim();
-    const src = source?.trim();
-    if (!sha || !src) {
+    if (!sha) {
       setUrl(null);
       setError(null);
       setLoading(false);
@@ -35,7 +33,7 @@ export function useAssetObjectUrl(
     setError(null);
     setUrl(null);
 
-    fetchAssetObjectUrl(sha, src, { preview, signal: ac.signal })
+    fetchAssetObjectUrl(sha, { preview, signal: ac.signal })
       .then((next) => {
         if (cancelled) {
           URL.revokeObjectURL(next);
@@ -56,7 +54,7 @@ export function useAssetObjectUrl(
       ac.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [sha256, source, preview]);
+  }, [sha256, preview]);
 
   return { url, error, loading };
 }

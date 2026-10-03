@@ -214,19 +214,15 @@ fn mock_pages<'a>(
     (first, second)
 }
 
-/// `GET /v1/assets/{sha256}` for `source`, answering `bytes`. The key names
-/// the account, and the server refuses a parameter a route does not declare,
-/// so a download that still sent `account=` would not match.
-fn mock_asset<'a>(
-    server: &'a MockServer,
-    sha256: &str,
-    source: &str,
-    bytes: &[u8],
-) -> httpmock::Mock<'a> {
+/// `GET /v1/assets/{sha256}`, answering `bytes`. The fingerprint alone names
+/// the attachment and the key names the account, and the server refuses a
+/// parameter a route does not declare, so a download that still sent
+/// `source=` or `account=` would not match.
+fn mock_asset<'a>(server: &'a MockServer, sha256: &str, bytes: &[u8]) -> httpmock::Mock<'a> {
     server.mock(|when, then| {
         when.method(GET)
             .path(format!("/v1/assets/{sha256}"))
-            .query_param("source", source)
+            .query_param_missing("source")
             .query_param_missing("account");
         then.status(200)
             .header("content-type", "application/octet-stream")
@@ -272,8 +268,8 @@ fn a_pull_records_one_run_and_writes_the_conversation_and_every_asset_once_acros
     let _auth = mock_auth(&server);
     let (create, complete) = mock_run(&server);
     let (first, second) = mock_pages(&server, "sms-backup-restore");
-    let menu = mock_asset(&server, MENU_SHA, "sms-backup-restore", MENU_BYTES);
-    let photo = mock_asset(&server, PHOTO_SHA, "sms-backup-restore", PHOTO_BYTES);
+    let menu = mock_asset(&server, MENU_SHA, MENU_BYTES);
+    let photo = mock_asset(&server, PHOTO_SHA, PHOTO_BYTES);
     let dir = tempdir().unwrap();
     let out = dir.path().join("pulled");
 
@@ -376,8 +372,8 @@ fn an_attachment_path_that_leaves_the_output_folder_is_written_under_its_fingerp
             "offset": 0
         }));
     });
-    let _menu = mock_asset(&server, MENU_SHA, "sms-backup-restore", MENU_BYTES);
-    let _photo = mock_asset(&server, PHOTO_SHA, "sms-backup-restore", PHOTO_BYTES);
+    let _menu = mock_asset(&server, MENU_SHA, MENU_BYTES);
+    let _photo = mock_asset(&server, PHOTO_SHA, PHOTO_BYTES);
     let mut events = Vec::new();
     let mut on_progress = |event: ProgressEvent| events.push(event);
 
@@ -428,8 +424,8 @@ fn the_journal_lists_every_asset_and_marks_the_run_finished() {
     let _auth = mock_auth(&server);
     let _run = mock_run(&server);
     let _pages = mock_pages(&server, "sms-backup-restore");
-    let _menu = mock_asset(&server, MENU_SHA, "sms-backup-restore", MENU_BYTES);
-    let _photo = mock_asset(&server, PHOTO_SHA, "sms-backup-restore", PHOTO_BYTES);
+    let _menu = mock_asset(&server, MENU_SHA, MENU_BYTES);
+    let _photo = mock_asset(&server, PHOTO_SHA, PHOTO_BYTES);
     let dir = tempdir().unwrap();
     let out = dir.path().join("pulled");
 
@@ -449,8 +445,8 @@ fn a_second_run_over_the_same_folder_downloads_nothing_it_already_has() {
     let _auth = mock_auth(&server);
     let (create, complete) = mock_run(&server);
     let _pages = mock_pages(&server, "sms-backup-restore");
-    let menu = mock_asset(&server, MENU_SHA, "sms-backup-restore", MENU_BYTES);
-    let photo = mock_asset(&server, PHOTO_SHA, "sms-backup-restore", PHOTO_BYTES);
+    let menu = mock_asset(&server, MENU_SHA, MENU_BYTES);
+    let photo = mock_asset(&server, PHOTO_SHA, PHOTO_BYTES);
     let dir = tempdir().unwrap();
     let out = dir.path().join("pulled");
     let cfg = config(&out, server.base_url());
@@ -491,8 +487,8 @@ fn a_file_the_journal_lists_but_the_disk_lost_is_fetched_again() {
     let _auth = mock_auth(&server);
     let _run = mock_run(&server);
     let _pages = mock_pages(&server, "sms-backup-restore");
-    let menu = mock_asset(&server, MENU_SHA, "sms-backup-restore", MENU_BYTES);
-    let photo = mock_asset(&server, PHOTO_SHA, "sms-backup-restore", PHOTO_BYTES);
+    let menu = mock_asset(&server, MENU_SHA, MENU_BYTES);
+    let photo = mock_asset(&server, PHOTO_SHA, PHOTO_BYTES);
     let dir = tempdir().unwrap();
     let out = dir.path().join("pulled");
     let cfg = config(&out, server.base_url());
@@ -547,8 +543,8 @@ fn a_source_name_with_spaces_and_brackets_becomes_a_file_safe_suffix() {
     let _auth = mock_auth(&server);
     let _run = mock_run(&server);
     let _pages = mock_pages(&server, "whatsapp (phone 2)");
-    let _menu = mock_asset(&server, MENU_SHA, "whatsapp (phone 2)", MENU_BYTES);
-    let _photo = mock_asset(&server, PHOTO_SHA, "whatsapp (phone 2)", PHOTO_BYTES);
+    let _menu = mock_asset(&server, MENU_SHA, MENU_BYTES);
+    let _photo = mock_asset(&server, PHOTO_SHA, PHOTO_BYTES);
     let dir = tempdir().unwrap();
     let out = dir.path().join("pulled");
 
@@ -628,8 +624,8 @@ fn skipping_attachments_writes_messages_without_files_or_downloads() {
     let _auth = mock_auth(&server);
     let _run = mock_run(&server);
     let _pages = mock_pages(&server, "sms-backup-restore");
-    let menu = mock_asset(&server, MENU_SHA, "sms-backup-restore", MENU_BYTES);
-    let photo = mock_asset(&server, PHOTO_SHA, "sms-backup-restore", PHOTO_BYTES);
+    let menu = mock_asset(&server, MENU_SHA, MENU_BYTES);
+    let photo = mock_asset(&server, PHOTO_SHA, PHOTO_BYTES);
     let dir = tempdir().unwrap();
     let out = dir.path().join("pulled");
     let cfg = PullConfig {
@@ -658,8 +654,8 @@ fn a_query_becomes_the_runs_query_scope_and_progress_narrates_the_run() {
     );
     let complete = mock_complete(&server);
     let _pages = mock_pages(&server, "sms-backup-restore");
-    let _menu = mock_asset(&server, MENU_SHA, "sms-backup-restore", MENU_BYTES);
-    let _photo = mock_asset(&server, PHOTO_SHA, "sms-backup-restore", PHOTO_BYTES);
+    let _menu = mock_asset(&server, MENU_SHA, MENU_BYTES);
+    let _photo = mock_asset(&server, PHOTO_SHA, PHOTO_BYTES);
     let dir = tempdir().unwrap();
     let out = dir.path().join("pulled");
     let cfg = PullConfig {
@@ -758,7 +754,7 @@ fn an_asset_the_server_does_not_have_fails_the_run_and_cancels_it_on_the_server(
             "detail": "asset not found"
         }));
     });
-    let _photo = mock_asset(&server, PHOTO_SHA, "sms-backup-restore", PHOTO_BYTES);
+    let _photo = mock_asset(&server, PHOTO_SHA, PHOTO_BYTES);
     let dir = tempdir().unwrap();
     let out = dir.path().join("pulled");
 
@@ -766,7 +762,7 @@ fn an_asset_the_server_does_not_have_fails_the_run_and_cancels_it_on_the_server(
 
     assert_eq!(
         error.to_string(),
-        format!("asset download failed: asset not found: {MENU_SHA} (source=sms-backup-restore)")
+        format!("asset download failed: asset not found: {MENU_SHA}")
     );
     assert_eq!(menu.calls(), 1, "a 404 Not Found is not retried");
     create.assert();
@@ -789,11 +785,10 @@ fn bytes_whose_sha256_is_not_the_one_asked_for_fail_the_run_and_are_not_kept() {
     let (create, complete) = mock_run(&server);
     let cancel = mock_cancel(&server);
     let _pages = mock_pages(&server, "sms-backup-restore");
-    let _menu = mock_asset(&server, MENU_SHA, "sms-backup-restore", MENU_BYTES);
+    let _menu = mock_asset(&server, MENU_SHA, MENU_BYTES);
     let photo = mock_asset(
         &server,
         PHOTO_SHA,
-        "sms-backup-restore",
         b"<html><body>Sign in to continue</body></html>",
     );
     let dir = tempdir().unwrap();
@@ -916,7 +911,7 @@ fn every_path_a_message_names_exists_after_a_pull() {
             "offset": 0
         }));
     });
-    let menu = mock_asset(&server, MENU_SHA, "sms-backup-restore", MENU_BYTES);
+    let menu = mock_asset(&server, MENU_SHA, MENU_BYTES);
     let dir = tempdir().unwrap();
     let out = dir.path().join("pulled");
 

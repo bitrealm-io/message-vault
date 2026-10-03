@@ -135,7 +135,6 @@ pub fn download_asset(
     http: &HttpSession,
     base_url: &str,
     key: &str,
-    source: &str,
     sha256: &str,
     dest: &Path,
 ) -> Result<()> {
@@ -145,11 +144,10 @@ pub fn download_asset(
         bail!("invalid SHA-256 digest for asset download: {sha256}");
     }
     let base = trim_base_url(base_url);
-    let mut url = reqwest::Url::parse(&format!("{base}/v1/assets/{sha_clean}"))
+    // The fingerprint alone names the attachment, and the key names the
+    // account; the route takes no query.
+    let url = reqwest::Url::parse(&format!("{base}/v1/assets/{sha_clean}"))
         .with_context(|| format!("invalid server address {base}"))?;
-    // The key names the account; the route takes no `account=`, and refuses
-    // a parameter it does not declare.
-    url.query_pairs_mut().append_pair("source", source);
 
     let mut response = http
         .request_url(Method::GET, url, key)
@@ -159,9 +157,7 @@ pub fn download_asset(
 
     let status = response.status();
     if status.as_u16() == 404 {
-        return Err(
-            HttpError::new(404, format!("asset not found: {sha256} (source={source})")).into(),
-        );
+        return Err(HttpError::new(404, format!("asset not found: {sha256}")).into());
     }
     if !status.is_success() {
         let body = response.text().unwrap_or_default();
@@ -197,9 +193,7 @@ pub fn download_asset(
         let _ = std::fs::remove_file(&tmp);
         return Err(HttpError::new(
             status.as_u16(),
-            format!(
-                "asset {sha_clean} (source={source}) was answered with bytes whose SHA-256 is {digest}"
-            ),
+            format!("asset {sha_clean} was answered with bytes whose SHA-256 is {digest}"),
         )
         .into());
     }
@@ -260,15 +254,8 @@ mod tests {
         let dest = dir.path().join("asset.bin");
 
         for bad in ["a".repeat(63), "z".repeat(64), "abc123".to_string()] {
-            let err = download_asset(
-                &http,
-                &server.base_url(),
-                "mc_test",
-                "sms-backup-restore",
-                &bad,
-                &dest,
-            )
-            .expect_err("a bad fingerprint is an error");
+            let err = download_asset(&http, &server.base_url(), "mc_test", &bad, &dest)
+                .expect_err("a bad fingerprint is an error");
             assert!(
                 err.to_string().contains("invalid SHA-256 digest"),
                 "{bad}: {err}"

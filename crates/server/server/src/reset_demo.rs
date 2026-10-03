@@ -170,7 +170,6 @@ async fn dedupe_and_process_assets(
             skip_image: false,
             skip_video: false,
             skip_audio: false,
-            source: None,
             account: Some(account_id),
         },
     )
@@ -744,7 +743,7 @@ async fn import_demo_sources_with(
     for source in &DEMO_IMPORT_SOURCES {
         let export_dir = (source.staging_dir)(prepared);
         let paths = crate::import_cli::list_jsonl_files(export_dir)?;
-        let assets_dir = cfg.paths.assets_dir_for_account(account_id, source.source);
+        let assets_dir = cfg.paths.assets_dir_for_account(account_id);
         let mut conn = db.acquire().await?;
         let session = imports_api::OwnedSession::start(
             &mut conn,

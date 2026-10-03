@@ -33,7 +33,8 @@ cors_origins = [
 - `static_dir` is the folder holding the built website, served at `/`. It defaults to `static`.
 - `serve` runs without a config file when given `--data-dir <folder>`: the database is `messagecrate.db` in that folder, the accounts' files sit beside it, and every `[server]` key has its default. `--bind` and `--static-dir` override `bind` and `static_dir`, with or without a config file. The desktop app starts the server this way.
 - Source names are **not** listed in TOML — each import registers its own
-  source slug for that account under `data/<account_id>/<source_id>/`.
+  source slug for that account in the database. The files on disk carry no
+  source: an account keeps one folder of originals and one of previews.
 
 ### Which file is the database
 
@@ -78,8 +79,12 @@ The server writes its log to stderr through `tracing`: one `INFO` line per HTTP 
 
 Created on first use if missing:
 
-- `data/<account_id>/<source_id>/assets/`
-- `data/<account_id>/<source_id>/assets_converted/`
+- `data/<account_id>/assets/`
+- `data/<account_id>/assets_converted/`
+
+An attachment file is named by the SHA-256 of its bytes, so a file imported
+from two sources is stored once. It is removed when no message of the
+account, from any source, still names it.
 
 ## Accounts
 

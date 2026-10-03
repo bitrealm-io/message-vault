@@ -1315,20 +1315,14 @@ async fn deleting_messages_removes_the_accounts_attachment_files_and_only_those(
         path
     };
     let removed = [
+        write(paths.assets_dir_for_account(alice.account_id), "a.jpg"),
         write(
-            paths.assets_dir_for_account(alice.account_id, "imessage"),
-            "a.jpg",
-        ),
-        write(
-            paths.assets_converted_dir_for_account(alice.account_id, "imessage"),
+            paths.assets_converted_dir_for_account(alice.account_id),
             "a.mp4",
         ),
+        write(paths.assets_dir_for_account(alice.account_id), "b.jpg"),
         write(
-            paths.assets_dir_for_account(alice.account_id, "whatsapp"),
-            "b.jpg",
-        ),
-        write(
-            paths.assets_converted_dir_for_account(alice.account_id, "whatsapp"),
+            paths.assets_converted_dir_for_account(alice.account_id),
             "b.mp4",
         ),
     ];
@@ -1336,12 +1330,9 @@ async fn deleting_messages_removes_the_accounts_attachment_files_and_only_those(
     let kept = [
         write(account_root.join("imessage").join("other"), "keep.txt"),
         write(account_root.clone(), "notes.txt"),
+        write(paths.assets_dir_for_account(bob.account_id), "c.jpg"),
         write(
-            paths.assets_dir_for_account(bob.account_id, "imessage"),
-            "c.jpg",
-        ),
-        write(
-            paths.assets_converted_dir_for_account(bob.account_id, "imessage"),
+            paths.assets_converted_dir_for_account(bob.account_id),
             "c.mp4",
         ),
     ];
@@ -1441,7 +1432,7 @@ async fn deleting_messages_keeps_a_file_a_running_import_has_uploaded() {
     let sha = crate::assets_api::Sha256::of_bytes(bytes);
     let (status, text) = put_raw(
         &state,
-        &format!("/v1/assets/{sha}?source=imessage"),
+        &format!("/v1/assets/{sha}"),
         &alice.token,
         "application/octet-stream",
         bytes.to_vec(),
@@ -1451,7 +1442,7 @@ async fn deleting_messages_keeps_a_file_a_running_import_has_uploaded() {
     let blob = state
         .cfg
         .paths
-        .assets_dir_for_account(alice.account_id, "imessage")
+        .assets_dir_for_account(alice.account_id)
         .join(crate::assets_api::shard_rel_path(&sha, ""));
     assert!(blob.is_file(), "the upload stored {}", blob.display());
 

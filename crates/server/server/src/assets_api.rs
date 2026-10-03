@@ -16,14 +16,13 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Deserializer, Serialize};
 use sha2::{Digest, Sha256 as Sha256Hasher};
 
-use crate::extract::{Json, Path as AxumPath, Query};
+use crate::extract::{Json, Path as AxumPath};
 use axum::extract::{Request, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 
 use crate::asset_store::sidecar_path;
 use crate::asset_uploads;
-use crate::config::validate_source_id;
 use crate::server::{
     ApiError, AppState, AssetReadAccess, AuthIdentity, Created, ImportAccess, ImportOrExportAccess,
     content_type_base, discard_body, read_body_limited, resolve_import_account,
@@ -560,11 +559,6 @@ fn open_nofollow_read(path: &Path) -> Result<File> {
     }
 }
 
-#[derive(Debug, Deserialize)]
-pub(crate) struct AssetQuery {
-    source: String,
-}
-
 /// Stored asset fingerprint and path.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct Asset {
@@ -593,15 +587,14 @@ enum AssetAccess {
     Probe,
 }
 
-/// Resolve the account and source an asset route targets, check the caller may perform
-/// `access` on it, and look the blob up by sha256.
+/// Resolve the account an asset route targets and look the blob up by
+/// sha256 in that account's one assets folder.
 async fn resolve_asset_lookup(
     state: &AppState,
     auth: &AuthIdentity,
     sha256: &Sha256,
-    query: &AssetQuery,
     access: AssetAccess,
-) -> Result<(i64, String, Option<StoredAsset>), ApiError> {
+) -> Result<(i64, Option<StoredAsset>), ApiError> {
     // The handler's extractor already checked the capability for this access
     // mode; here the mode only picks the lookup strategy. A download streams
     // the file itself, so hashing it during lookup would read every byte
@@ -611,19 +604,12 @@ async fn resolve_asset_lookup(
         AssetAccess::Read => false,
         AssetAccess::Write | AssetAccess::Probe => true,
     };
-    if query.source.trim().is_empty() {
-        // Blank answers as missing does: one validation failure.
-        return Err(ApiError::validation("source is required"));
-    }
-    validate_source_id(&query.source).map_err(|e| ApiError::validation(e.to_string()))?;
     let account = resolve_import_account(auth);
-    let source_id = query.source.clone();
 
     let cfg = Arc::clone(&state.cfg);
     let sha_lookup = sha256.clone();
-    let source_lookup = source_id.clone();
     let existing = tokio::task::spawn_blocking(move || {
-        let assets_dir = cfg.paths.assets_dir_for_account(account, &source_lookup);
+        let assets_dir = cfg.paths.assets_dir_for_account(account);
         if verify_stored_bytes {
             lookup_by_sha256(&assets_dir, &sha_lookup)
         } else {
@@ -632,7 +618,7 @@ async fn resolve_asset_lookup(
     })
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("asset lookup task: {e}")))?;
-    Ok((account, source_id, existing))
+    Ok((account, existing))
 }
 
 /// Probe whether a content-addressed asset is already stored (no body).
@@ -644,8 +630,7 @@ async fn resolve_asset_lookup(
     tag = "Assets",
     security(("session" = ["import"]), ("session" = ["export"]), ("api-token" = ["import"]), ("api-token" = ["export"])),
     params(
-        ("sha256" = String, Path, description = "Content SHA-256 hex"),
-        ("source" = String, Query)
+        ("sha256" = String, Path, description = "Content SHA-256 hex")
     ),
     responses(
         (status = 200, description = "The asset is stored; a HEAD answer has no body"),
@@ -655,10 +640,9 @@ pub(crate) async fn head_asset(
     State(state): State<AppState>,
     ImportOrExportAccess(auth): ImportOrExportAccess,
     AxumPath(sha256): AxumPath<Sha256>,
-    Query(query): Query<AssetQuery>,
 ) -> Result<Json<Asset>, ApiError> {
-    let (_account, _source_id, existing) =
-        resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Probe).await?;
+    let (_account, existing) =
+        resolve_asset_lookup(&state, &auth, &sha256, AssetAccess::Probe).await?;
     let Some(stored) = existing else {
         return Err(ApiError::NotFound("asset not found".into()));
     };
@@ -674,8 +658,7 @@ pub(crate) async fn head_asset(
     tag = "Assets",
     security(("session" = []), ("api-token" = ["export"])),
     params(
-        ("sha256" = String, Path, description = "Content SHA-256 hex"),
-        ("source" = String, Query)
+        ("sha256" = String, Path, description = "Content SHA-256 hex")
     ),
     responses(
         (
@@ -689,15 +672,14 @@ pub(crate) async fn get_asset(
     State(state): State<AppState>,
     AssetReadAccess(auth): AssetReadAccess,
     AxumPath(sha256): AxumPath<Sha256>,
-    Query(query): Query<AssetQuery>,
 ) -> Result<Response, ApiError> {
-    let (account, source_id, existing) =
-        resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Read).await?;
+    let (account, existing) =
+        resolve_asset_lookup(&state, &auth, &sha256, AssetAccess::Read).await?;
     let Some(stored) = existing else {
         return Err(ApiError::NotFound("asset not found".into()));
     };
 
-    let assets_dir = state.cfg.paths.assets_dir_for_account(account, &source_id);
+    let assets_dir = state.cfg.paths.assets_dir_for_account(account);
     stream_file(&assets_dir.join(&stored.assets_path), stored.mime_type).await
 }
 
@@ -713,8 +695,7 @@ pub(crate) async fn get_asset(
     tag = "Assets",
     security(("session" = []), ("api-token" = ["export"])),
     params(
-        ("sha256" = String, Path, description = "Content SHA-256 hex of the original"),
-        ("source" = String, Query)
+        ("sha256" = String, Path, description = "Content SHA-256 hex of the original")
     ),
     responses(
         (
@@ -728,32 +709,24 @@ pub(crate) async fn get_asset_preview(
     State(state): State<AppState>,
     AssetReadAccess(auth): AssetReadAccess,
     AxumPath(sha256): AxumPath<Sha256>,
-    Query(query): Query<AssetQuery>,
 ) -> Result<Response, ApiError> {
     // The same lookup as the original: the caller's own store, so another
     // account's fingerprint names nothing here.
-    let (account, source_id, existing) =
-        resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Read).await?;
+    let (account, existing) =
+        resolve_asset_lookup(&state, &auth, &sha256, AssetAccess::Read).await?;
     let Some(stored) = existing else {
         return Err(ApiError::NotFound("asset not found".into()));
     };
     let mut conn = state.db.acquire().await?;
-    let preview = crate::db::conversation_messages::attachment_preview(
-        &mut conn,
-        account,
-        &source_id,
-        &stored.sha256,
-    )
-    .await?;
+    let preview =
+        crate::db::conversation_messages::attachment_preview(&mut conn, account, &stored.sha256)
+            .await?;
     drop(conn);
     let Some((preview_path, mime_type)) = preview else {
         return Err(ApiError::NotFound("asset has no preview".into()));
     };
 
-    let converted_dir = state
-        .cfg
-        .paths
-        .assets_converted_dir_for_account(account, &source_id);
+    let converted_dir = state.cfg.paths.assets_converted_dir_for_account(account);
     stream_file(&converted_dir.join(preview_path), mime_type).await
 }
 
@@ -824,8 +797,7 @@ fn require_content_type(headers: &HeaderMap) -> Result<(), ApiError> {
     tag = "Assets",
     security(("session" = ["import"]), ("api-token" = ["import"])),
     params(
-        ("sha256" = String, Path, description = "Content SHA-256 hex"),
-        ("source" = String, Query)
+        ("sha256" = String, Path, description = "Content SHA-256 hex")
     ),
     request_body(content_type = "application/octet-stream", description = "Raw asset bytes, sent with the asset's own media type as Content-Type"),
     responses(
@@ -844,12 +816,11 @@ pub(crate) async fn replace_asset(
     ImportAccess(auth): ImportAccess,
     headers: HeaderMap,
     AxumPath(sha256): AxumPath<Sha256>,
-    Query(query): Query<AssetQuery>,
     request: Request,
 ) -> Result<Response, ApiError> {
     require_content_type(&headers)?;
-    let (account, source_id, existing) =
-        resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Write).await?;
+    let (account, existing) =
+        resolve_asset_lookup(&state, &auth, &sha256, AssetAccess::Write).await?;
 
     let mime = upload_content_type(&headers);
     let max_body_bytes = usize::try_from(state.asset_max_bytes().await?).unwrap_or(usize::MAX);
@@ -861,7 +832,7 @@ pub(crate) async fn replace_asset(
 
     // Write the upload into the account assets tree. Storing it copies it into
     // place and then removes it (`consume_source`).
-    let assets_dir = state.cfg.paths.assets_dir_for_account(account, &source_id);
+    let assets_dir = state.cfg.paths.assets_dir_for_account(account);
     let incoming_dir = assets_dir.join(".incoming");
     tokio::fs::create_dir_all(&incoming_dir)
         .await
@@ -912,7 +883,7 @@ pub(crate) async fn replace_asset(
     }
     let Json(body) = Asset::stored(stored, false);
     Ok(Created {
-        location: format!("/v1/assets/{sha256}?source={source_id}"),
+        location: format!("/v1/assets/{sha256}"),
         body,
     }
     .into_response())
@@ -955,8 +926,7 @@ pub(crate) struct ReplaceAssetUploadPartResponse {
     tag = "Assets",
     security(("session" = ["import"]), ("api-token" = ["import"])),
     params(
-        ("sha256" = String, Path, description = "Content SHA-256 hex"),
-        ("source" = String, Query)
+        ("sha256" = String, Path, description = "Content SHA-256 hex")
     ),
     request_body = CreateAssetUploadRequest,
     responses(
@@ -978,12 +948,11 @@ pub(crate) async fn create_asset_upload(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
     AxumPath(sha256): AxumPath<Sha256>,
-    Query(query): Query<AssetQuery>,
     Json(body): Json<CreateAssetUploadRequest>,
 ) -> Result<Response, ApiError> {
-    let (account, source_id, _existing) =
-        resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Write).await?;
-    let assets_dir = state.cfg.paths.assets_dir_for_account(account, &source_id);
+    let (account, _existing) =
+        resolve_asset_lookup(&state, &auth, &sha256, AssetAccess::Write).await?;
+    let assets_dir = state.cfg.paths.assets_dir_for_account(account);
     let mime = body.mime.clone();
     let bytes = body.bytes;
     let sha = sha256.clone();
@@ -1006,10 +975,7 @@ pub(crate) async fn create_asset_upload(
         })
         .into_response()),
         (None, Some(start)) => Ok(Created {
-            location: format!(
-                "/v1/assets/{sha256}/uploads/{}?source={source_id}",
-                start.upload_id
-            ),
+            location: format!("/v1/assets/{sha256}/uploads/{}", start.upload_id),
             body: CreateAssetUploadResponse {
                 upload_id: Some(start.upload_id),
                 part_size: Some(start.part_size),
@@ -1034,8 +1000,7 @@ pub(crate) async fn create_asset_upload(
     params(
         ("sha256" = String, Path, description = "Content SHA-256 hex"),
         ("upload_id" = String, Path),
-        ("part" = u32, Path),
-        ("source" = String, Query)
+        ("part" = u32, Path)
     ),
     request_body(content_type = "application/octet-stream", description = "Raw part bytes"),
     responses(
@@ -1049,16 +1014,15 @@ pub(crate) async fn replace_asset_upload_part(
     ImportAccess(auth): ImportAccess,
     headers: HeaderMap,
     AxumPath((sha256, upload_id, part)): AxumPath<(Sha256, String, u32)>,
-    Query(query): Query<AssetQuery>,
     request: Request,
 ) -> Result<Json<ReplaceAssetUploadPartResponse>, ApiError> {
     require_content_type(&headers)?;
-    let (account, source_id, _existing) =
-        resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Write).await?;
+    let (account, _existing) =
+        resolve_asset_lookup(&state, &auth, &sha256, AssetAccess::Write).await?;
     if part == 0 {
         return Err(ApiError::validation("part number must be >= 1"));
     }
-    let assets_dir = state.cfg.paths.assets_dir_for_account(account, &source_id);
+    let assets_dir = state.cfg.paths.assets_dir_for_account(account);
     // The part size this upload started with, not the one the Server
     // Settings give now: lowering the limit holds from the next upload.
     let part_size = {
@@ -1103,8 +1067,7 @@ pub(crate) async fn replace_asset_upload_part(
     security(("session" = ["import"]), ("api-token" = ["import"])),
     params(
         ("sha256" = String, Path, description = "Content SHA-256 hex"),
-        ("upload_id" = String, Path),
-        ("source" = String, Query)
+        ("upload_id" = String, Path)
     ),
     responses(
         (
@@ -1122,13 +1085,12 @@ pub(crate) async fn complete_asset_upload(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
     AxumPath((sha256, upload_id)): AxumPath<(Sha256, String)>,
-    Query(query): Query<AssetQuery>,
 ) -> Result<Response, ApiError> {
-    let (account, source_id, existing) =
-        resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Write).await?;
+    let (account, existing) =
+        resolve_asset_lookup(&state, &auth, &sha256, AssetAccess::Write).await?;
     if let Some(stored) = existing {
         // Drop staging if a concurrent single-PUT won the race.
-        let assets_dir = state.cfg.paths.assets_dir_for_account(account, &source_id);
+        let assets_dir = state.cfg.paths.assets_dir_for_account(account);
         let sha = sha256.clone();
         let uid = upload_id.clone();
         let dropped = tokio::task::spawn_blocking(move || {
@@ -1152,7 +1114,7 @@ pub(crate) async fn complete_asset_upload(
         .lock(format!("{account}:{sha256}"))
         .await;
 
-    let assets_dir = state.cfg.paths.assets_dir_for_account(account, &source_id);
+    let assets_dir = state.cfg.paths.assets_dir_for_account(account);
     let sha = sha256.clone();
     let uid = upload_id.clone();
     let (stored, already_present) = tokio::task::spawn_blocking(move || {
@@ -1168,7 +1130,7 @@ pub(crate) async fn complete_asset_upload(
     }
     let Json(body) = Asset::stored(stored, false);
     Ok(Created {
-        location: format!("/v1/assets/{sha256}?source={source_id}"),
+        location: format!("/v1/assets/{sha256}"),
         body,
     }
     .into_response())
@@ -1198,8 +1160,7 @@ pub(crate) struct AssetUpload {
     security(("session" = ["import"]), ("api-token" = ["import"])),
     params(
         ("sha256" = String, Path, description = "Content SHA-256 hex"),
-        ("upload_id" = String, Path),
-        ("source" = String, Query)
+        ("upload_id" = String, Path)
     ),
     responses(
         (status = 200, body = AssetUpload),
@@ -1210,11 +1171,10 @@ pub(crate) async fn get_asset_upload(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
     AxumPath((sha256, upload_id)): AxumPath<(Sha256, String)>,
-    Query(query): Query<AssetQuery>,
 ) -> Result<Json<AssetUpload>, ApiError> {
-    let (account, source_id, _existing) =
-        resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Write).await?;
-    let assets_dir = state.cfg.paths.assets_dir_for_account(account, &source_id);
+    let (account, _existing) =
+        resolve_asset_lookup(&state, &auth, &sha256, AssetAccess::Write).await?;
+    let assets_dir = state.cfg.paths.assets_dir_for_account(account);
     let sha = sha256.clone();
     let uid = upload_id.clone();
     let manifest =
@@ -1238,8 +1198,7 @@ pub(crate) async fn get_asset_upload(
     security(("session" = ["import"]), ("api-token" = ["import"])),
     params(
         ("sha256" = String, Path, description = "Content SHA-256 hex"),
-        ("upload_id" = String, Path),
-        ("source" = String, Query)
+        ("upload_id" = String, Path)
     ),
     responses(
         (status = 204, description = "Upload aborted"),
@@ -1251,11 +1210,10 @@ pub(crate) async fn delete_asset_upload(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
     AxumPath((sha256, upload_id)): AxumPath<(Sha256, String)>,
-    Query(query): Query<AssetQuery>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    let (account, source_id, _existing) =
-        resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Write).await?;
-    let assets_dir = state.cfg.paths.assets_dir_for_account(account, &source_id);
+    let (account, _existing) =
+        resolve_asset_lookup(&state, &auth, &sha256, AssetAccess::Write).await?;
+    let assets_dir = state.cfg.paths.assets_dir_for_account(account);
     let sha = sha256.clone();
     let uid = upload_id.clone();
     tokio::task::spawn_blocking(move || asset_uploads::abort_upload(&assets_dir, &sha, &uid))

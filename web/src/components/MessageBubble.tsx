@@ -6,7 +6,7 @@ import InstagramBubble from "./messages/InstagramBubble";
 import SmsBubble from "./messages/SmsBubble";
 import WhatsAppBubble from "./messages/WhatsAppBubble";
 
-export type AttachmentClickHandler = (attachment: MessageAttachment, source: string) => void;
+export type AttachmentClickHandler = (attachment: MessageAttachment) => void;
 
 function normalizeToken(value: string | null | undefined): string {
   return (value || "").trim().toLowerCase();

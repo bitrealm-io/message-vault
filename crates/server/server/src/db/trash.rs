@@ -261,24 +261,22 @@ pub enum DeleteOutcome {
 /// A stored attachment file that no remaining message references.
 ///
 /// Attachments are stored by content hash under
-/// `data_dir/<account>/<source>/<assets_dir>/`, and several messages — in one
-/// conversation or across many — can point at the same file. A file is
-/// therefore reported here only after the delete has run and a lookup for the
-/// same `(source, sha256)` finds no attachment left, in the promoted tables or
-/// in staging. Paths are relative to the per-source directory that `source`
-/// names; the caller joins them.
+/// `data_dir/<account>/<assets_dir>/`, one folder for every source of the
+/// account, and several messages — in one conversation or across many, from
+/// one source or several — can point at the same file. A file is therefore
+/// reported here only after the delete has run and a lookup for the same
+/// sha256 finds no attachment of the account left, from any source, in the
+/// promoted tables or in staging. Paths are relative to the account's
+/// directory; the caller joins them.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum OrphanedFile {
-    /// The original bytes: `assets_path` under the source's assets directory,
-    /// plus the `.<sha256>.mime` sidecar beside it when one was written.
-    Original {
-        source: String,
-        sha256: String,
-        assets_path: String,
-    },
-    /// A browser derivative: `assets_path` under the source's converted
+    /// The original bytes: `assets_path` under the account's assets
+    /// directory, plus the `.<sha256>.mime` sidecar beside it when one was
+    /// written.
+    Original { sha256: String, assets_path: String },
+    /// A browser derivative: `assets_path` under the account's converted
     /// directory.
-    Derived { source: String, assets_path: String },
+    Derived { assets_path: String },
 }
 
 /// Permanently delete a trashed conversation, or make a trashed contact
@@ -401,10 +399,9 @@ pub struct EmptiedTrash {
 }
 
 /// One attachment's stored files, read before its message is deleted so the
-/// reference check afterwards knows what to look for: source, sha256,
-/// assets_path, derived_sha256, derived_assets_path.
+/// reference check afterwards knows what to look for: sha256, assets_path,
+/// derived_sha256, derived_assets_path.
 type AttachmentFilesRow = (
-    String,
     Option<String>,
     Option<String>,
     Option<String>,
@@ -431,7 +428,7 @@ async fn delete_conversations(
     for chunk in ids.chunks(SQLITE_IN_CHUNK) {
         let placeholders = in_placeholders(1, chunk.len());
         let sql = format!(
-            "SELECT DISTINCT m.source, a.sha256, a.assets_path,
+            "SELECT DISTINCT a.sha256, a.assets_path,
                     a.derived_sha256, a.derived_assets_path
              FROM attachments a
              JOIN messages m ON m.id = a.message_id
@@ -472,8 +469,8 @@ async fn delete_conversations(
 }
 
 /// The files among `candidates` that no attachment of `account_id` points at
-/// any more, checked one `(source, sha256)` at a time against the promoted
-/// and the staging attachment tables. Sorted and de-duplicated, so two
+/// any more, from any source, checked one sha256 at a time against the
+/// promoted and the staging attachment tables. Sorted and de-duplicated, so two
 /// deleted messages sharing one file report it once.
 async fn orphaned_files(
     conn: &mut SqliteConnection,
@@ -481,24 +478,19 @@ async fn orphaned_files(
     candidates: Vec<AttachmentFilesRow>,
 ) -> Result<Vec<OrphanedFile>, sqlx::Error> {
     let mut out = Vec::new();
-    for (source, sha256, assets_path, derived_sha256, derived_assets_path) in candidates {
+    for (sha256, assets_path, derived_sha256, derived_assets_path) in candidates {
         if let (Some(sha256), Some(assets_path)) = (sha256, assets_path)
-            && !asset_is_referenced(conn, account_id, &source, "sha256", &sha256).await?
+            && !asset_is_referenced(conn, account_id, "sha256", &sha256).await?
         {
             out.push(OrphanedFile::Original {
-                source: source.clone(),
                 sha256,
                 assets_path,
             });
         }
         if let (Some(derived_sha256), Some(assets_path)) = (derived_sha256, derived_assets_path)
-            && !asset_is_referenced(conn, account_id, &source, "derived_sha256", &derived_sha256)
-                .await?
+            && !asset_is_referenced(conn, account_id, "derived_sha256", &derived_sha256).await?
         {
-            out.push(OrphanedFile::Derived {
-                source,
-                assets_path,
-            });
+            out.push(OrphanedFile::Derived { assets_path });
         }
     }
     out.sort();
@@ -506,7 +498,7 @@ async fn orphaned_files(
     Ok(out)
 }
 
-/// True when any attachment of `account_id` from `source`, promoted or in
+/// True when any attachment of `account_id`, from any source, promoted or in
 /// staging, still carries `sha256` in `column` — `sha256` or
 /// `derived_sha256`, a literal chosen by the caller. Staging is included so
 /// an import that has already uploaded a file it is about to promote does
@@ -514,23 +506,21 @@ async fn orphaned_files(
 async fn asset_is_referenced(
     conn: &mut SqliteConnection,
     account_id: i64,
-    source: &str,
     column: &'static str,
     sha256: &str,
 ) -> Result<bool, sqlx::Error> {
     let sql = format!(
         "SELECT 1 FROM attachments a
          JOIN messages m ON m.id = a.message_id
-         WHERE m.account_id = $1 AND m.source = $2 AND a.{column} = $3
+         WHERE m.account_id = $1 AND a.{column} = $2
          UNION ALL
          SELECT 1 FROM staging_attachments sa
          JOIN staging_messages sm ON sm.id = sa.message_id
-         WHERE sm.account_id = $1 AND sm.source = $2 AND sa.{column} = $3
+         WHERE sm.account_id = $1 AND sa.{column} = $2
          LIMIT 1"
     );
     let found: Option<i64> = sqlx::query_scalar(&sql)
         .bind(account_id)
-        .bind(source)
         .bind(sha256)
         .fetch_optional(&mut *conn)
         .await?;

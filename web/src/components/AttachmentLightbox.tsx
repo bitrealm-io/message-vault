@@ -8,7 +8,6 @@ import PlainButton from "./PlainButton";
 
 export type LightboxItem = {
   attachment: MessageAttachment;
-  source: string;
 };
 
 export default function AttachmentLightbox({
@@ -32,7 +31,7 @@ export default function AttachmentLightbox({
   const showPreview = Boolean(
     attachment && hasPreview(attachment) && undrawable === attachment.sha256,
   );
-  const { url, loading, error } = useAssetObjectUrl(attachment?.sha256, item?.source, showPreview);
+  const { url, loading, error } = useAssetObjectUrl(attachment?.sha256, showPreview);
 
   // React Aria's Dialog type omits keyboard events and drops them at runtime,
   // so arrow-key navigation is handled with a window listener (as in ContactDrawer).

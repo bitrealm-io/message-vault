@@ -9,7 +9,7 @@ export default function MessageAttachments({
   onAttachmentClick,
 }: {
   message: Message;
-  onAttachmentClick?: (attachment: MessageAttachment, source: string) => void;
+  onAttachmentClick?: (attachment: MessageAttachment) => void;
 }) {
   if (!message.attachments.length) return null;
 
@@ -17,13 +17,12 @@ export default function MessageAttachments({
     <div>
       {message.attachments.map((att, i) =>
         att.sha256 && !att.missing_reason && shownMimeType(att)?.startsWith("video/") ? (
-          <VideoPlayer key={att.sha256 ?? att.path ?? i} attachment={att} source={message.source} />
+          <VideoPlayer key={att.sha256 ?? att.path ?? i} attachment={att} />
         ) : (
           <AttachmentThumbnail
             key={att.sha256 ?? att.path ?? i}
             attachment={att}
-            source={message.source}
-            onClick={() => onAttachmentClick?.(att, message.source)}
+            onClick={() => onAttachmentClick?.(att)}
           />
         ),
       )}

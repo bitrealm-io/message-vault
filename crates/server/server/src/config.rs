@@ -164,10 +164,10 @@ pub struct PathsConfig {
     /// Root for per-account data (`data/<account_id>/…`).
     #[serde(default = "default_data_dir")]
     pub data_dir: PathBuf,
-    /// Directory name for originals under each account source (default `assets`).
+    /// Directory name for an account's originals, one per account (default `assets`).
     #[serde(default = "default_assets_dir_name")]
     pub assets_dir: String,
-    /// Directory name for converted media under each account source.
+    /// Directory name for an account's converted media, one per account.
     #[serde(default = "default_assets_converted_dir_name")]
     pub assets_converted_dir: String,
 }
@@ -213,19 +213,20 @@ pub fn validate_source_id(source: &str) -> Result<()> {
 }
 
 impl PathsConfig {
-    /// Originals: `data_dir/<account_id>/<source_id>/<assets_dir>`.
-    pub fn assets_dir_for_account(&self, account_id: i64, source_id: &str) -> PathBuf {
+    /// Originals: `data_dir/<account_id>/<assets_dir>`. One folder holds the
+    /// account's attachment files from every source, addressed by SHA-256, so
+    /// one file imported from two sources is stored once.
+    pub fn assets_dir_for_account(&self, account_id: i64) -> PathBuf {
         self.data_dir
             .join(account_id.to_string())
-            .join(source_id)
             .join(&self.assets_dir)
     }
 
-    /// Converted media: `data_dir/<account_id>/<source_id>/<assets_converted_dir>`.
-    pub fn assets_converted_dir_for_account(&self, account_id: i64, source_id: &str) -> PathBuf {
+    /// Converted media: `data_dir/<account_id>/<assets_converted_dir>`, one
+    /// folder for the account's Previews from every source.
+    pub fn assets_converted_dir_for_account(&self, account_id: i64) -> PathBuf {
         self.data_dir
             .join(account_id.to_string())
-            .join(source_id)
             .join(&self.assets_converted_dir)
     }
 }
@@ -477,12 +478,12 @@ mod tests {
 
         assert_eq!(cfg.paths.data_dir, dir.path().join("data"));
         assert_eq!(
-            cfg.paths.assets_dir_for_account(7, "imessage"),
-            dir.path().join("data/7/imessage/assets")
+            cfg.paths.assets_dir_for_account(7),
+            dir.path().join("data/7/assets")
         );
         assert_eq!(
-            cfg.paths.assets_converted_dir_for_account(7, "imessage"),
-            dir.path().join("data/7/imessage/assets_converted")
+            cfg.paths.assets_converted_dir_for_account(7),
+            dir.path().join("data/7/assets_converted")
         );
         let server = cfg.require_server().unwrap();
         assert_eq!(server.bind, "127.0.0.1:8080");

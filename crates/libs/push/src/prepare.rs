@@ -699,14 +699,14 @@ fn upload_claimed(
     let Some(first) = jobs.first() else {
         return Ok(());
     };
-    preflight_existing_asset(ctx, source, &first.digest)?;
+    preflight_existing_asset(ctx, &first.digest)?;
 
     // Work-stealing style: workers pull the next job index from a shared counter.
     let results = parallel_for_each(
         jobs,
         ctx.cfg.asset_upload_workers,
         ctx.cfg.cancel.as_ref(),
-        |job| upload_one_asset(ctx, source, job).map_err(|error| error.to_string()),
+        |job| upload_one_asset(ctx, job).map_err(|error| error.to_string()),
     );
 
     // Apply journal updates in a stable order after all workers finish.
@@ -885,7 +885,7 @@ fn check_upload_file(ctx: &PrepareContext<'_>, name: &str, rel: &str) -> Result<
 /// # Errors
 ///
 /// Returns an error when the HEAD fails after retries.
-fn preflight_existing_asset(ctx: &PrepareContext<'_>, source: &str, digest: &str) -> Result<()> {
+fn preflight_existing_asset(ctx: &PrepareContext<'_>, digest: &str) -> Result<()> {
     if ctx.probe_existing.load(Ordering::Relaxed) {
         return Ok(());
     }
@@ -895,9 +895,8 @@ fn preflight_existing_asset(ctx: &PrepareContext<'_>, source: &str, digest: &str
     }
     *done = true;
     let session = ctx.session;
-    let present = message_crate_http::with_retries(ctx.cfg.max_retries, || {
-        session.head_asset(source, digest)
-    })?;
+    let present =
+        message_crate_http::with_retries(ctx.cfg.max_retries, || session.head_asset(digest))?;
     if present {
         ctx.probe_existing.store(true, Ordering::Relaxed);
     }
@@ -909,16 +908,15 @@ fn preflight_existing_asset(ctx: &PrepareContext<'_>, source: &str, digest: &str
 /// # Errors
 ///
 /// Returns the last HTTP error once retries are exhausted.
-fn upload_one_asset(ctx: &PrepareContext<'_>, source: &str, job: &AssetUploadJob) -> Result<Asset> {
+fn upload_one_asset(ctx: &PrepareContext<'_>, job: &AssetUploadJob) -> Result<Asset> {
     let session = ctx.session;
     message_crate_http::with_retries(ctx.cfg.max_retries, || {
-        if ctx.probe_existing.load(Ordering::Relaxed) && session.head_asset(source, &job.digest)? {
+        if ctx.probe_existing.load(Ordering::Relaxed) && session.head_asset(&job.digest)? {
             return Ok(Asset {
                 already_present: true,
             });
         }
         let response = session.put_asset(&AssetUpload {
-            source,
             sha256: &job.digest,
             file: &job.path,
             mime: job.mime.as_deref(),

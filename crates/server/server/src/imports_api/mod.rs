@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 pub use message_crate_api_types::ImportMode;
 use serde::{Deserialize, Serialize};
 use sqlx::SqliteConnection;
@@ -24,7 +24,7 @@ use axum::extract::{Request, State};
 use axum::http::HeaderMap;
 
 use crate::assets_api::AssetStats;
-use crate::config::{PathsConfig, validate_source_id};
+use crate::config::validate_source_id;
 #[cfg(test)]
 use crate::db::engine;
 use crate::db::imports::{self, CompleteImportArgs};
@@ -54,7 +54,7 @@ use crate::server::{
 /// Full import settings: paths, mode, and media handling.
 #[derive(Debug, Clone)]
 pub struct ImportOptions<'a> {
-    /// Content-addressed asset store when [`Self::source_from_jsonl`] is false.
+    /// The account's content-addressed asset store, shared by every source.
     pub assets_dir: &'a Path,
     /// Root for resolving relative attachment paths in JSONL.
     pub asset_root: &'a Path,
@@ -70,8 +70,6 @@ pub struct ImportOptions<'a> {
     pub import_id: Option<i64>,
     /// When true, stamp `messages.source` from each conversation's IR `export.source`.
     pub source_from_jsonl: bool,
-    /// Required when `source_from_jsonl` to resolve per-source asset dirs.
-    pub paths: Option<&'a PathsConfig>,
     /// Attachment handling mode: copy, none, convert, compress.
     pub media: MediaMode,
     /// When `source_from_jsonl` + Replace: wipe these sources before import.
@@ -109,7 +107,6 @@ impl<'a> ImportOptions<'a> {
             fill_content_keys: args.fill_content_keys,
             import_id: args.import_id,
             source_from_jsonl: false,
-            paths: None,
             media: MediaMode::Clone,
             wipe_sources: None,
         }
@@ -272,8 +269,6 @@ pub(crate) async fn import_jsonl_files(
     paths: &[PathBuf],
     opts: &ImportOptions<'_>,
 ) -> Result<ImportStats> {
-    validate_import_options(opts)?;
-
     if let Some(parent) = db_path.parent()
         && !parent.as_os_str().is_empty()
     {
@@ -288,15 +283,6 @@ pub(crate) async fn import_jsonl_files(
     println!("  sql:      opened {}", db_path.display());
     let _ = io::stdout().flush();
     import_on_conn(&mut conn, paths, opts, ImportSchemaMode::Ensure).await
-}
-
-/// A fixed source needs no check here: every caller that passes one has
-/// already put it through `validate_source_id`, or passes a constant.
-fn validate_import_options(opts: &ImportOptions<'_>) -> Result<()> {
-    if opts.source_from_jsonl && opts.paths.is_none() {
-        bail!("source_from_jsonl requires config paths for per-source assets");
-    }
-    Ok(())
 }
 
 /// Import onto an existing connection (warm serve path or tests).
@@ -325,11 +311,8 @@ pub(crate) async fn import_on_conn(
     opts: &ImportOptions<'_>,
     schema_mode: ImportSchemaMode,
 ) -> Result<ImportStats> {
-    validate_import_options(opts)?;
-    if !opts.source_from_jsonl {
-        fs::create_dir_all(opts.assets_dir)
-            .with_context(|| format!("failed to create {}", opts.assets_dir.display()))?;
-    }
+    fs::create_dir_all(opts.assets_dir)
+        .with_context(|| format!("failed to create {}", opts.assets_dir.display()))?;
     if schema_mode == ImportSchemaMode::Ensure {
         schema::ensure_schema(conn).await?;
     }
@@ -1586,7 +1569,7 @@ async fn run_import_path(
 
     // Attachment paths resolve only through assets already uploaded by
     // SHA-256; the import body never carries files of its own.
-    let assets_dir = cfg.paths.assets_dir_for_account(account, &source_id);
+    let assets_dir = cfg.paths.assets_dir_for_account(account);
 
     let opts = ImportOptions::fixed(FixedImportArgs {
         assets_dir: &assets_dir,

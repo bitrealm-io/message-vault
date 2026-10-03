@@ -431,7 +431,7 @@ async fn an_asset_put_then_get_returns_the_same_bytes() {
     // raw content rather than only text that happens to decode.
     let bytes: Vec<u8> = vec![0xff, 0x00, 0xde, 0xad, 0xbe, 0xef, b'\n', b'x'];
     let sha = Sha256::of_bytes(&bytes);
-    let path = format!("/v1/assets/{sha}?source=sms-backup-restore");
+    let path = format!("/v1/assets/{sha}");
     let server = crate::test_support::serve(&fixture.state).await;
     let put = |content_type: Option<&str>| {
         let mut request = reqwest::Client::new()
@@ -495,7 +495,7 @@ async fn a_session_reads_an_attachment_without_export_and_a_token_needs_it() {
 
     let bytes: Vec<u8> = b"a photo".to_vec();
     let sha = Sha256::of_bytes(&bytes);
-    let path = format!("/v1/assets/{sha}?source=imessage");
+    let path = format!("/v1/assets/{sha}");
     let server = crate::test_support::serve(&state).await;
     let response = reqwest::Client::new()
         .put(format!("{}{path}", server.base()))
@@ -568,7 +568,7 @@ async fn an_asset_get_for_an_unknown_sha_is_a_json_404() {
     let unknown = "0".repeat(64);
     let (status, text) = crate::test_support::get_raw(
         &fixture.state,
-        &format!("/v1/assets/{unknown}?source=sms-backup-restore"),
+        &format!("/v1/assets/{unknown}"),
         &user.token,
     )
     .await;
@@ -590,7 +590,7 @@ async fn an_upload_part_over_the_part_size_is_a_json_413() {
     let sha = "0".repeat(64);
     let (status, text) = crate::test_support::post_raw(
         &state,
-        &format!("/v1/assets/{sha}/uploads?source=sms-backup-restore"),
+        &format!("/v1/assets/{sha}/uploads"),
         &user.token,
         "application/json",
         serde_json::json!({ "bytes": 40 }).to_string(),
@@ -601,7 +601,7 @@ async fn an_upload_part_over_the_part_size_is_a_json_413() {
     let upload_id = started["upload_id"].as_str().unwrap();
     let (status, text) = crate::test_support::put_raw(
         &state,
-        &format!("/v1/assets/{sha}/uploads/{upload_id}/parts/1?source=sms-backup-restore"),
+        &format!("/v1/assets/{sha}/uploads/{upload_id}/parts/1"),
         &user.token,
         "application/octet-stream",
         vec![b'x'; 4096],
@@ -632,7 +632,7 @@ async fn an_upload_answers_its_state() {
 
     let (_, started): (String, serde_json::Value) = crate::test_support::post_created_json(
         &state,
-        &format!("/v1/assets/{sha}/uploads?source=imessage"),
+        &format!("/v1/assets/{sha}/uploads"),
         &user.token,
         serde_json::json!({ "bytes": 40 }),
     )
@@ -640,7 +640,7 @@ async fn an_upload_answers_its_state() {
     let upload_id = started["upload_id"].as_str().unwrap();
     let (status, text) = crate::test_support::put_raw(
         &state,
-        &format!("/v1/assets/{sha}/uploads/{upload_id}/parts/2?source=imessage"),
+        &format!("/v1/assets/{sha}/uploads/{upload_id}/parts/2"),
         &user.token,
         "application/octet-stream",
         bytes[16..32].to_vec(),
@@ -650,7 +650,7 @@ async fn an_upload_answers_its_state() {
 
     let upload: serde_json::Value = crate::test_support::get_json(
         &state,
-        &format!("/v1/assets/{sha}/uploads/{upload_id}?source=imessage"),
+        &format!("/v1/assets/{sha}/uploads/{upload_id}"),
         &user.token,
     )
     .await;
@@ -667,7 +667,7 @@ async fn an_upload_answers_its_state() {
 
     let (status, text) = crate::test_support::get_raw(
         &state,
-        &format!("/v1/assets/{sha}/uploads/0123456789abcdef?source=imessage"),
+        &format!("/v1/assets/{sha}/uploads/0123456789abcdef"),
         &user.token,
     )
     .await;
@@ -686,7 +686,7 @@ async fn an_upload_over_the_limit_the_owner_just_set_is_refused() {
     let owner = crate::test_support::claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let bytes: Vec<u8> = (0u8..40).collect();
     let sha = Sha256::of_bytes(&bytes);
-    let start = format!("/v1/assets/{sha}/uploads?source=imessage");
+    let start = format!("/v1/assets/{sha}/uploads");
     let declared = serde_json::json!({ "bytes": bytes.len(), "mime": "image/png" });
 
     assert_eq!(
@@ -726,7 +726,7 @@ async fn an_upload_over_the_limit_the_owner_just_set_is_refused() {
 
     let (status, text) = crate::test_support::put_raw(
         &state,
-        &format!("/v1/assets/{sha}?source=imessage"),
+        &format!("/v1/assets/{sha}"),
         &user.token,
         "image/png",
         bytes,
@@ -760,7 +760,7 @@ async fn a_multipart_upload_works_under_a_limit_below_the_configured_part_size()
     let bytes: Vec<u8> = (0u8..40).collect();
     let sha = Sha256::of_bytes(&bytes);
     let server = crate::test_support::serve(&state).await;
-    let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}?source=imessage", server.base());
+    let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}", server.base());
     let client = reqwest::Client::new();
 
     let response = client
@@ -807,7 +807,7 @@ async fn a_multipart_upload_works_under_a_limit_below_the_configured_part_size()
     let over: Vec<u8> = (0u8..41).collect();
     let (status, text) = crate::test_support::post_raw(
         &state,
-        &format!("/v1/assets/{}/uploads?source=imessage", sha256_hex(&over)),
+        &format!("/v1/assets/{}/uploads", sha256_hex(&over)),
         &user.token,
         "application/json",
         serde_json::json!({ "bytes": over.len() }).to_string(),
@@ -833,7 +833,7 @@ async fn a_multipart_upload_keeps_its_part_size_when_the_limit_is_lowered() {
     let bytes: Vec<u8> = (0u8..40).collect();
     let sha = Sha256::of_bytes(&bytes);
     let server = crate::test_support::serve(&state).await;
-    let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}?source=imessage", server.base());
+    let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}", server.base());
     let client = reqwest::Client::new();
 
     let response = client
@@ -913,7 +913,7 @@ async fn a_multipart_upload_completes_end_to_end_over_http() {
     let bytes: Vec<u8> = (0u8..40).collect();
     let sha = Sha256::of_bytes(&bytes);
     let server = crate::test_support::serve(&state).await;
-    let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}?source=imessage", server.base());
+    let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}", server.base());
     let client = reqwest::Client::new();
 
     let response = client
@@ -955,7 +955,7 @@ async fn a_multipart_upload_completes_end_to_end_over_http() {
             .headers()
             .get(reqwest::header::LOCATION)
             .and_then(|v| v.to_str().ok()),
-        Some(format!("/v1/assets/{sha}?source=imessage").as_str())
+        Some(format!("/v1/assets/{sha}").as_str())
     );
     let done: serde_json::Value = response.json().await.unwrap();
     assert_eq!(done["sha256"], sha.as_str());
@@ -1040,7 +1040,7 @@ async fn an_asset_put_keeps_its_media_type_but_not_octet_stream() {
     let (fixture, user) = crate::test_support::fixture_with_account().await;
     let server = crate::test_support::serve(&fixture.state).await;
     let client = reqwest::Client::new();
-    let url = |sha: &str| format!("{}/v1/assets/{sha}?source=imessage", server.base());
+    let url = |sha: &str| format!("{}/v1/assets/{sha}", server.base());
 
     let jpeg = b"jpeg-bytes".to_vec();
     let jpeg_sha = Sha256::of_bytes(&jpeg);
@@ -1087,7 +1087,7 @@ async fn an_asset_put_keeps_its_media_type_but_not_octet_stream() {
         .state
         .cfg
         .paths
-        .assets_dir_for_account(user.account_id, "imessage");
+        .assets_dir_for_account(user.account_id);
     assert_eq!(
         read_mime_metadata(&assets_dir, &jpeg_sha).as_deref(),
         Some("image/jpeg")
@@ -1107,7 +1107,7 @@ async fn starting_an_upload_for_a_stored_blob_answers_200_already_present() {
     let client = reqwest::Client::new();
     let bytes = b"already-stored".to_vec();
     let sha = Sha256::of_bytes(&bytes);
-    let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}?source=imessage", server.base());
+    let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}", server.base());
 
     let response = client
         .put(url(""))
@@ -1140,7 +1140,7 @@ async fn starting_an_upload_for_a_stored_blob_answers_200_already_present() {
         .state
         .cfg
         .paths
-        .assets_dir_for_account(user.account_id, "imessage")
+        .assets_dir_for_account(user.account_id)
         .join(".incoming")
         .join(sha.as_str());
     assert!(!incoming.exists(), "no upload session may be opened");
@@ -1157,7 +1157,7 @@ async fn deleting_an_upload_answers_204_and_removes_its_files() {
     let client = reqwest::Client::new();
     let bytes: Vec<u8> = (0u8..40).collect();
     let sha = Sha256::of_bytes(&bytes);
-    let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}?source=imessage", server.base());
+    let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}", server.base());
 
     let response = client
         .post(url("/uploads"))
@@ -1180,10 +1180,7 @@ async fn deleting_an_upload_answers_204_and_removes_its_files() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 
-    let assets_dir = state
-        .cfg
-        .paths
-        .assets_dir_for_account(user.account_id, "imessage");
+    let assets_dir = state.cfg.paths.assets_dir_for_account(user.account_id);
     let session = asset_uploads::session_dir(&assets_dir, &sha, &upload_id);
     assert!(session.join("manifest.json").is_file());
     assert!(session.join("part-0001").is_file());
@@ -1219,7 +1216,7 @@ async fn an_asset_put_of_the_empty_file_is_stored() {
     let (fixture, user) = crate::test_support::fixture_with_account().await;
     let server = crate::test_support::serve(&fixture.state).await;
     let sha = Sha256::of_bytes(b"");
-    let url = format!("{}/v1/assets/{sha}?source=imessage", server.base());
+    let url = format!("{}/v1/assets/{sha}", server.base());
     let client = reqwest::Client::new();
     let response = client
         .put(&url)
@@ -1257,7 +1254,7 @@ async fn a_multipart_upload_of_the_empty_file_completes_with_no_parts() {
     let (fixture, user) = crate::test_support::fixture_with_account().await;
     let server = crate::test_support::serve(&fixture.state).await;
     let sha = Sha256::of_bytes(b"");
-    let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}?source=imessage", server.base());
+    let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}", server.base());
     let client = reqwest::Client::new();
 
     let response = client
@@ -1289,7 +1286,7 @@ async fn a_multipart_upload_of_the_empty_file_completes_with_no_parts() {
         .state
         .cfg
         .paths
-        .assets_dir_for_account(user.account_id, "imessage");
+        .assets_dir_for_account(user.account_id);
     assert!(lookup_by_sha256_unverified(&assets_dir, &sha).is_some());
 }
 
@@ -1302,7 +1299,7 @@ async fn an_asset_put_with_an_empty_body_answers_422() {
     let server = crate::test_support::serve(&fixture.state).await;
     let sha = Sha256::of_bytes(b"never-sent");
     let response = reqwest::Client::new()
-        .put(format!("{}/v1/assets/{sha}?source=imessage", server.base()))
+        .put(format!("{}/v1/assets/{sha}", server.base()))
         .bearer_auth(&user.token)
         .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
         .body(Vec::new())
@@ -1321,7 +1318,7 @@ async fn an_asset_put_with_an_empty_body_answers_422() {
         .state
         .cfg
         .paths
-        .assets_dir_for_account(user.account_id, "imessage");
+        .assets_dir_for_account(user.account_id);
     assert!(lookup_by_sha256_unverified(&assets_dir, &sha).is_none());
 }
 
@@ -1337,7 +1334,7 @@ async fn completing_an_upload_for_a_blob_a_put_stored_first_answers_200() {
     let client = reqwest::Client::new();
     let bytes: Vec<u8> = (0u8..40).collect();
     let sha = Sha256::of_bytes(&bytes);
-    let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}?source=imessage", server.base());
+    let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}", server.base());
 
     let response = client
         .post(url("/uploads"))
@@ -1383,10 +1380,7 @@ async fn completing_an_upload_for_a_blob_a_put_stored_first_answers_200() {
     assert_eq!(done["already_present"], true);
     assert_eq!(done["sha256"], sha.as_str());
 
-    let assets_dir = state
-        .cfg
-        .paths
-        .assets_dir_for_account(user.account_id, "imessage");
+    let assets_dir = state.cfg.paths.assets_dir_for_account(user.account_id);
     assert!(
         !asset_uploads::session_dir(&assets_dir, &sha, &upload_id).exists(),
         "the stale session must be dropped"
@@ -1435,7 +1429,7 @@ async fn seed_attachment_with_preview(state: &AppState, account_id: i64) -> Prev
     let paths = &state.cfg.paths;
     let with_preview = Sha256::of_bytes(ORIGINAL_BYTES);
     let without_preview = Sha256::of_bytes(UNCONVERTED_BYTES);
-    let assets_dir = paths.assets_dir_for_account(account_id, "imessage");
+    let assets_dir = paths.assets_dir_for_account(account_id);
     for (sha, bytes) in [
         (&with_preview, ORIGINAL_BYTES),
         (&without_preview, UNCONVERTED_BYTES),
@@ -1447,7 +1441,7 @@ async fn seed_attachment_with_preview(state: &AppState, account_id: i64) -> Prev
     let preview_sha = Sha256::of_bytes(PREVIEW_BYTES);
     let preview_path = shard_rel_path(&preview_sha, ".jpg");
     let preview = paths
-        .assets_converted_dir_for_account(account_id, "imessage")
+        .assets_converted_dir_for_account(account_id)
         .join(&preview_path);
     fs::create_dir_all(preview.parent().unwrap()).unwrap();
     fs::write(preview, PREVIEW_BYTES).unwrap();
@@ -1537,42 +1531,22 @@ async fn the_preview_route_serves_the_preview_and_the_asset_route_the_original()
     let seeded = seed_attachment_with_preview(state, user.account_id).await;
     let sha = &seeded.with_preview;
 
-    let (status, content_type, body) = get_bytes(
-        state,
-        &format!("/v1/assets/{sha}/preview?source=imessage"),
-        &user.token,
-    )
-    .await;
+    let (status, content_type, body) =
+        get_bytes(state, &format!("/v1/assets/{sha}/preview"), &user.token).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(content_type, "image/jpeg");
     assert_eq!(body, PREVIEW_BYTES);
 
-    let (status, _content_type, body) = get_bytes(
-        state,
-        &format!("/v1/assets/{sha}?source=imessage"),
-        &user.token,
-    )
-    .await;
+    let (status, _content_type, body) =
+        get_bytes(state, &format!("/v1/assets/{sha}"), &user.token).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, ORIGINAL_BYTES, "the asset route serves the original");
-
-    // The preview belongs to the source it was made in.
-    let (status, text) = crate::test_support::get_raw(
-        state,
-        &format!("/v1/assets/{sha}/preview?source=whatsapp"),
-        &user.token,
-    )
-    .await;
-    crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
 
     // An asset with no preview has nothing at the preview route; the web app
     // shows the original for it.
     let (status, text) = crate::test_support::get_raw(
         state,
-        &format!(
-            "/v1/assets/{}/preview?source=imessage",
-            seeded.without_preview
-        ),
+        &format!("/v1/assets/{}/preview", seeded.without_preview),
         &user.token,
     )
     .await;
@@ -1594,7 +1568,7 @@ async fn a_preview_is_read_under_the_same_rule_as_the_original() {
     let other =
         crate::test_support::register_via_api(&state, "preview-other", "hunter2hunter2").await;
     let seeded = seed_attachment_with_preview(&state, user.account_id).await;
-    let path = format!("/v1/assets/{}/preview?source=imessage", seeded.with_preview);
+    let path = format!("/v1/assets/{}/preview", seeded.with_preview);
 
     let (status, text) = crate::test_support::get_raw(&state, &path, &other.token).await;
     crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
@@ -1670,13 +1644,13 @@ async fn c1_1_a_put_the_server_cannot_store_is_not_a_422() {
         .state
         .cfg
         .paths
-        .assets_dir_for_account(user.account_id, "imessage");
+        .assets_dir_for_account(user.account_id);
     std::fs::create_dir_all(&assets_dir).unwrap();
     // A file where the shard folder must go: create_dir_all in install_blob fails.
     std::fs::write(assets_dir.join(&sha[..2]), b"not a folder").unwrap();
     let (status, text) = crate::test_support::put_raw(
         &fixture.state,
-        &format!("/v1/assets/{sha}?source=imessage"),
+        &format!("/v1/assets/{sha}"),
         &user.token,
         "application/octet-stream",
         bytes,
@@ -1698,7 +1672,7 @@ async fn a_part_or_completion_for_an_unknown_upload_is_not_found() {
 
     let (status, text) = crate::test_support::put_raw(
         &fixture.state,
-        &format!("/v1/assets/{sha}/uploads/abcdef01/parts/1?source=imessage"),
+        &format!("/v1/assets/{sha}/uploads/abcdef01/parts/1"),
         &user.token,
         "application/octet-stream",
         b"part".to_vec(),
@@ -1708,7 +1682,7 @@ async fn a_part_or_completion_for_an_unknown_upload_is_not_found() {
 
     let (status, text) = crate::test_support::post_raw(
         &fixture.state,
-        &format!("/v1/assets/{sha}/uploads/abcdef01/complete?source=imessage"),
+        &format!("/v1/assets/{sha}/uploads/abcdef01/complete"),
         &user.token,
         "application/json",
         "{}",
@@ -1725,7 +1699,7 @@ async fn a_put_with_a_path_in_the_fingerprint_writes_nothing_outside_the_store()
     let server = crate::test_support::serve(&fixture.state).await;
     let response = reqwest::Client::new()
         .put(format!(
-            "{}/v1/assets/..%2F..%2F..%2F..%2Fescaped%2Fjunk?source=imessage",
+            "{}/v1/assets/..%2F..%2F..%2F..%2Fescaped%2Fjunk",
             server.base()
         ))
         .bearer_auth(&user.token)
@@ -1778,7 +1752,7 @@ async fn a_put_whose_bytes_do_not_match_leaves_no_file() {
     let server = crate::test_support::serve(&fixture.state).await;
     let sha = Sha256::of_bytes(b"the bytes the client hashed");
     let response = reqwest::Client::new()
-        .put(format!("{}/v1/assets/{sha}?source=imessage", server.base()))
+        .put(format!("{}/v1/assets/{sha}", server.base()))
         .bearer_auth(&user.token)
         .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
         .body(b"the bytes the client sent".to_vec())
@@ -1797,7 +1771,7 @@ async fn a_put_whose_bytes_do_not_match_leaves_no_file() {
         .state
         .cfg
         .paths
-        .assets_dir_for_account(user.account_id, "imessage");
+        .assets_dir_for_account(user.account_id);
     let left = files_under(&assets_dir.join(".incoming"));
     assert!(left.is_empty(), "upload files left behind: {left:?}");
 }
@@ -1813,10 +1787,7 @@ async fn a_fingerprint_with_surrounding_whitespace_is_refused_not_a_500() {
     let bytes = b"bytes under a padded fingerprint";
     let sha = Sha256::of_bytes(bytes);
     let response = reqwest::Client::new()
-        .put(format!(
-            "{}/v1/assets/%0A{sha}?source=imessage",
-            server.base()
-        ))
+        .put(format!("{}/v1/assets/%0A{sha}", server.base()))
         .bearer_auth(&user.token)
         .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
         .body(bytes.to_vec())
@@ -1843,7 +1814,7 @@ async fn a_fingerprint_in_capitals_is_stored_under_its_lower_case_name() {
     let sha = Sha256::of_bytes(bytes);
     let response = reqwest::Client::new()
         .put(format!(
-            "{}/v1/assets/{}?source=imessage",
+            "{}/v1/assets/{}",
             server.base(),
             sha.as_str().to_ascii_uppercase()
         ))
@@ -1856,6 +1827,6 @@ async fn a_fingerprint_in_capitals_is_stored_under_its_lower_case_name() {
     assert_eq!(response.status(), StatusCode::CREATED);
     assert_eq!(
         response.headers()[header::LOCATION],
-        format!("/v1/assets/{sha}?source=imessage").as_str()
+        format!("/v1/assets/{sha}").as_str()
     );
 }

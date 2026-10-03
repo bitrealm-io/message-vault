@@ -20,7 +20,6 @@ const items: LightboxItem[] = [
       is_sticker: false,
       transcription: null,
     },
-    source: "demo",
   },
   {
     attachment: {
@@ -31,7 +30,6 @@ const items: LightboxItem[] = [
       is_sticker: false,
       transcription: null,
     },
-    source: "demo",
   },
 ];
 
@@ -164,7 +162,6 @@ describe("AttachmentLightbox and previews", () => {
       sha256: "ccc",
       preview_mime_type: "image/jpeg",
     },
-    source: "demo",
   };
 
   it("opens the original of an attachment that has a preview", async () => {
@@ -172,11 +169,11 @@ describe("AttachmentLightbox and previews", () => {
     await screen.findByRole("img", { name: "IMG_0001.heic" });
 
     expect(fetchAssetObjectUrl).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(fetchAssetObjectUrl).mock.calls[0][2]?.preview).toBe(false);
+    expect(vi.mocked(fetchAssetObjectUrl).mock.calls[0][1]?.preview).toBe(false);
   });
 
   it("shows the preview when the browser cannot draw the original", async () => {
-    vi.mocked(fetchAssetObjectUrl).mockImplementation(async (_sha, _source, options) =>
+    vi.mocked(fetchAssetObjectUrl).mockImplementation(async (_sha, options) =>
       options?.preview ? "blob:preview" : "blob:original",
     );
     open(0, [heic]);
@@ -198,7 +195,7 @@ describe("AttachmentLightbox and previews", () => {
     fireEvent.error(await screen.findByRole("img", { name: "first.png" }));
 
     expect(fetchAssetObjectUrl).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(fetchAssetObjectUrl).mock.calls[0][2]?.preview).toBe(false);
+    expect(vi.mocked(fetchAssetObjectUrl).mock.calls[0][1]?.preview).toBe(false);
   });
 });
 

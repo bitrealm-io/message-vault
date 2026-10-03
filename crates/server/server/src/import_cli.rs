@@ -185,7 +185,7 @@ async fn import_under_session(
     let assets_dir = opts
         .assets_dir
         .clone()
-        .unwrap_or_else(|| cfg.paths.assets_dir_for_account(account_id, source));
+        .unwrap_or_else(|| cfg.paths.assets_dir_for_account(account_id));
     let session = imports_api::OwnedSession::start(
         conn,
         account_id,
@@ -204,7 +204,6 @@ async fn import_under_session(
         fill_content_keys: true,
         import_id: Some(session.id),
         source_from_jsonl: plan.from_jsonl,
-        paths: plan.from_jsonl.then_some(&cfg.paths),
         media: opts.media,
         wipe_sources: Some(vec![source.to_string()]),
     };

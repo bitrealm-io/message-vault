@@ -507,7 +507,7 @@ impl<'a> World<'a> {
             .unwrap();
 
         let asset = world.url(&format!(
-            "/v1/assets/{}?source=imessage",
+            "/v1/assets/{}",
             crate::assets_api::sha256_hex(ASSET_BYTES)
         ));
         let response = reqwest::Client::new()
@@ -524,7 +524,7 @@ impl<'a> World<'a> {
         world.upload_id = world
             .create(
                 &format!(
-                    "/v1/assets/{}/uploads?source=imessage",
+                    "/v1/assets/{}/uploads",
                     crate::assets_api::sha256_hex(UPLOAD_BYTES)
                 ),
                 json!({ "bytes": UPLOAD_BYTES.len() }),
@@ -584,9 +584,6 @@ impl<'a> World<'a> {
             rest = &rest[close + 1..];
         }
         path.push_str(rest);
-        if op.path.starts_with("/v1/assets/") {
-            path.push_str("?source=imessage");
-        }
         path
     }
 
@@ -637,7 +634,7 @@ impl<'a> World<'a> {
     /// Whether Alice can still send a part of her upload.
     async fn upload_survives(&self) -> bool {
         let path = format!(
-            "/v1/assets/{}/uploads/{}/parts/1?source=imessage",
+            "/v1/assets/{}/uploads/{}/parts/1",
             crate::assets_api::sha256_hex(UPLOAD_BYTES),
             self.upload_id
         );

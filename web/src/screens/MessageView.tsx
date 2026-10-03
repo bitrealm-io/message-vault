@@ -43,16 +43,14 @@ export default function MessageView({
 
   // Open the image viewer at the clicked photo. Previous/next walks the loaded messages' images.
   const handleAttachmentClick = useCallback(
-    (att: MessageAttachment, source: string) => {
+    (att: MessageAttachment) => {
       const images = messages.flatMap((m) =>
         (m.attachments || [])
           .filter((a) => a.sha256 && shownMimeType(a)?.startsWith("image/"))
-          .map((a) => ({ attachment: a, source: m.source })),
+          .map((a) => ({ attachment: a })),
       );
-      const idx = images.findIndex(
-        (item) => item.attachment.sha256 === att.sha256 && item.source === source,
-      );
-      setLightboxItems(images.length > 0 ? images : [{ attachment: att, source }]);
+      const idx = images.findIndex((item) => item.attachment.sha256 === att.sha256);
+      setLightboxItems(images.length > 0 ? images : [{ attachment: att }]);
       setLightboxIndex(idx >= 0 ? idx : 0);
     },
     [messages],

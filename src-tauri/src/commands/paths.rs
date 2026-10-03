@@ -92,7 +92,7 @@ pub fn ios_backup_encrypted(path: String) -> Option<bool> {
     if trimmed.is_empty() {
         return None;
     }
-    imessage_ir_exporter::ios_backup_encrypted_flag(Path::new(trimmed))
+    ios_backup::ios_backup_encrypted_flag(Path::new(trimmed))
 }
 
 /// Addresses an iMessage backup's device sent from, for the Import
@@ -115,13 +115,8 @@ pub async fn imessage_backup_identities(
         .join(IMESSAGE_READER_SCRATCH);
     tauri::async_runtime::spawn_blocking(move || {
         let password = backup_password.as_deref().and_then(message_ir::trimmed);
-        imessage_ir_exporter::backup_identities(
-            Path::new(path.trim()),
-            ios,
-            password,
-            &scratch_root,
-        )
-        .map_err(|e| format!("{e:#}"))
+        ios_backup::backup_identities(Path::new(path.trim()), ios, password, &scratch_root)
+            .map_err(|e| format!("{e:#}"))
     })
     .await
     .map_err(|e| e.to_string())?

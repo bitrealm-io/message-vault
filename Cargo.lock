@@ -1545,11 +1545,11 @@ dependencies = [
  "anyhow",
  "chat-db-fixture",
  "imessage-reader-protocol",
+ "ios-backup",
  "message-crate-core",
  "message-ir",
  "message-ir-format",
  "message-staging",
- "plist",
  "serde_json",
  "tempfile",
 ]
@@ -1599,6 +1599,19 @@ checksum = "4250ce6452e92010fdf7268ccc5d14faa80bb12fc741938534c58f16804e03c7"
 dependencies = [
  "block-padding",
  "hybrid-array",
+]
+
+[[package]]
+name = "ios-backup"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chat-db-fixture",
+ "imessage-reader-protocol",
+ "message-crate-core",
+ "plist",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -3994,7 +4007,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "hex",
- "imessage-ir-exporter",
+ "ios-backup",
  "media",
  "message-crate-core",
  "message-csv",

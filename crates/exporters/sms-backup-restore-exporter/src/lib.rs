@@ -10,7 +10,6 @@ mod read;
 mod run;
 mod write;
 
-pub use message_crate_core::RunResult;
 pub use read::{ReadOptions, ReadReport, read_backup};
 pub use run::run;
 pub use write::SbrArchive;

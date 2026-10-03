@@ -20,6 +20,7 @@ use imessage_reader_protocol::{
     Conversation as ConversationRecord, Event, Imessage as ImessageRecord,
     Message as MessageRecord,
 };
+use ios_backup::Helper;
 use message_crate_core::{
     ExportReport, MediaConfig, OutputFormat, ProgressEvent, RunIssue,
     stage_conversation_attachments,
@@ -34,10 +35,7 @@ use message_staging::{
     AttachmentSource, ConversationUnit, ExportWriter, ExportWriterParts, WriteQueueOptions,
 };
 
-use crate::{
-    helper::Helper,
-    run::{AttachmentEmbed, ExportOptions},
-};
+use crate::run::{AttachmentEmbed, ExportOptions};
 
 const EXPORT_SOURCE: &str = "imessage";
 const EXPORT_TOOL: &str = "imessage-ir-exporter";

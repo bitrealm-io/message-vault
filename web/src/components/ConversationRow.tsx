@@ -48,14 +48,16 @@ function GroupNames({ conv }: { conv: Conversation }) {
   );
 }
 
+/**
+ * The row title: an untitled group with people in it lists them, each kept
+ * whole on a line; every other conversation shows {@link conversationName},
+ * the name the Messages list gives it too.
+ */
 function titleContent(conv: Conversation): ReactNode {
-  if (conv.label) return conv.label;
-  if (!conv.is_group) {
-    const p = conv.participants[0];
-    if (!p) return "(unknown)";
-    return p.name;
+  if (!conv.label && conv.is_group && conv.participants.length > 0) {
+    return <GroupNames conv={conv} />;
   }
-  return <GroupNames conv={conv} />;
+  return conversationTitleText(conv);
 }
 
 /** Plain-text form of the row title, for the checkbox's accessible name. */

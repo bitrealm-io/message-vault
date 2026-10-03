@@ -2,7 +2,7 @@ import { conversationName, isGroupType } from "./conversationName";
 import type { Message, MessageConversation } from "./types";
 
 /**
- * A conversation's name as the conversation list shows it ([`conversationName`]).
+ * A conversation's name as the conversation list shows it ({@link conversationName}).
  */
 export function messageConversationName(conversation: MessageConversation): string {
   return conversationName({

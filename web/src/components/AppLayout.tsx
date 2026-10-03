@@ -232,7 +232,8 @@ export default function AppLayout() {
       if (conversationSearch) params.set("q", conversationSearch);
       if (conversationFilter) params.set("f", conversationFilter);
     }
-    // The Messages list's sort stays picked for when the person switches back.
+    // The results view and the Messages list's picked sort stay for when the
+    // person switches back.
     for (const key of [VIEW_PARAM, MESSAGE_SORT_PARAM]) {
       const value = searchParams.get(key);
       if (value) params.set(key, value);

@@ -1,0 +1,12 @@
+[package]
+name = "mms-parts"
+version = "0.1.0"
+edition = "2024"
+description = "The parts of an MMS as the message text and its attachments"
+license = "LicenseRef-FCL-1.0-ALv2"
+
+[dependencies]
+regex = { workspace = true }
+
+[lints]
+workspace = true

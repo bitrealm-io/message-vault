@@ -1041,6 +1041,7 @@ name = "go-sms-mms"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "mms-parts",
  "phone",
  "regex",
  "tempfile",
@@ -2043,6 +2044,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "mms-parts"
+version = "0.1.0"
+dependencies = [
+ "regex",
+]
+
+[[package]]
 name = "moxcms"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2798,9 +2806,9 @@ dependencies = [
  "hex",
  "html-escape",
  "message-ir",
+ "mms-parts",
  "phone",
  "quick-xml 0.42.0",
- "regex",
  "serde",
  "sha2 0.11.0",
  "tempfile",
@@ -3023,6 +3031,7 @@ dependencies = [
  "message-ir",
  "message-ir-format",
  "message-staging",
+ "mms-parts",
  "phone",
  "rayon",
  "regex",
@@ -3042,6 +3051,7 @@ dependencies = [
  "message-ir",
  "message-ir-format",
  "message-staging",
+ "mms-parts",
  "phone",
  "sbr",
  "serde_json",

@@ -58,10 +58,10 @@ Example: `<sms address="+15555550101" date="1400773261000" type="1" body="hello 
 - `sub` → `subject`
 - `contact_name` names the peer and the sender of a 1:1 MMS, read as on an `<sms>`. On a group MMS it is the members' names joined by a comma and a space (such as `Ana, Lee`), which names the group rather than the sender, so a group message takes no name from it
 - `address` plus `<addr>` list → participants; one other person is a 1:1 chat, more than one is a group
-- `text/plain` parts → `text`; SMIL (`application/smil`) controls text/image order when present
-- Non-text `data` → files under `attachments/` and `attachments_json`; in `source_fields_json.parts`, `data` is replaced with `data_len` + `data_sha256`
+- Every `text/plain` part → `text`, joined with a newline: the parts the SMIL (`application/smil`) names, by `name`, `cl`, `cid` or `fn`, in its order, then the rest in the order they are written. Nothing is sorted or removed for repeating another part
+- Every other part with content → files under `attachments/` and `attachments_json`, in the same order. A contact card (`ct="text/x-vcard" text="null" data="…"`) is an attachment, and two parts with one name, or with the same bytes, are two attachments. In `source_fields_json.parts`, `data` is replaced with `data_len` + `data_sha256`
 - Every `<mms>` / `<part>` / `<addr>` attribute → `source_fields_json`
-- Empty participant lists and undecodable attachment base64 are skipped and counted in the run report
+- Empty participant lists are skipped and counted in the run report. A part whose `data` is not base64 is dropped and counted as `skipped_unreadable_part`
 
 Example group address string: `+15555550101~+15555550102` with two From/To addrs becomes a group chat titled from those two numbers.
 

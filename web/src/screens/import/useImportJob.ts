@@ -893,28 +893,17 @@ async function finishImport(args: {
   const runEnded = sessionId == null || (posts && completeRefused == null);
   let stagingDir = store.get().stagingDir;
   if (runEnded) {
-    stagingDir = await deleteStagingFolder();
+    // An ended run's folder goes: the staged messages, the push log, journal
+    // and report, and the run record. When the delete fails, the folder link
+    // stays and the failure is shown, so the person can find what was left
+    // and remove it by hand.
+    if (stagingDir != null && (await discardStagingFolder(stagingDir))) stagingDir = null;
   } else {
     await saveCarriedRecord(pushReport, uploadMs);
   }
   // The server writes this run's saved search and Contact Group when the run
   // completes, so a window closed mid-import still gets them.
   store.set({ summaryView: finalSummary, phase: "done", running: false, stagingDir });
-}
-
-/**
- * Delete an ended run's staging directory: the staged messages, the push
- * log, journal and report, and the run record. Returns the directory the
- * screen should still show: `null` once the folder is gone, or the path
- * when deleting failed, so the person can still find what was left behind.
- */
-async function deleteStagingFolder(): Promise<string | null> {
-  const { stagingDir } = store.get();
-  if (stagingDir == null) return null;
-  // The run has ended either way. When the delete fails, the folder link
-  // stays and the failure is shown, so the person can remove what is left
-  // by hand.
-  return (await discardStagingFolder(stagingDir)) ? null : stagingDir;
 }
 
 /**

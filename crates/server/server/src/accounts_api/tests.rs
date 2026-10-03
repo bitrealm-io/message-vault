@@ -1814,7 +1814,7 @@ async fn the_demo_account_refuses_what_would_shut_or_empty_it_from_anyone() {
 async fn the_demo_account_refuses_imports_and_deletes_whatever_its_permission_row_says() {
     let fixture = test_fixture().await;
     let state = fixture.state.clone();
-    let (demo, token) = fixture.demo_account_session(true, true).await;
+    let (demo, token) = fixture.demo_account_session().await;
 
     // The profile reads the grant from the id too, so no screen offers what
     // the server refuses.

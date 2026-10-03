@@ -272,8 +272,8 @@ messages or the account. The account holder reads the same status and
 permissions under Settings, Account, and changes none. The owner sets the
 account's display name, time zone and identities on Profile as the holder does,
 which is not the holder's own profile setup, and reads there its last login and
-the app it connects with. On the Demo Account those three are fixed, for the
-owner as for the holder. The owner reads the Storage tab as the holder sees
+the app it connects with. On the Demo Account its display name, time zone
+and identities are fixed, for the owner as for the holder. The owner reads the Storage tab as the holder sees
 it, without seeing inside it. The owner's own row opens the owner's own Settings,
 which is also where the account button's Settings goes. An owner's password
 reset sets the password and nothing more: it does not end the person's

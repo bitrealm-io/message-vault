@@ -64,10 +64,10 @@ async fn every_operation_keeps_the_rules_the_document_can_show() {
             broken.push(format!("{}: {rule}", op.label()));
         }
         match demo_account_rule(&world, op, spec).await {
-            DemoAnswer::Refused(None) => {
+            DemoAnswer::RefusedAsDocumented => {
                 refuse_the_demo_account.insert(op.label());
             }
-            DemoAnswer::Refused(Some(rule)) => {
+            DemoAnswer::RefusedBreaking(rule) => {
                 refuse_the_demo_account.insert(op.label());
                 broken.push(format!("{}: {rule}", op.label()));
             }
@@ -266,10 +266,13 @@ async fn called_rules(world: &World<'_>, op: &Operation, spec: &Value) -> Vec<St
     broken
 }
 
-/// What the Demo Account was answered: `demo-account-protected`, with the
-/// rule that answer breaks if any, or anything else.
+/// What the Demo Account was answered.
 enum DemoAnswer {
-    Refused(Option<String>),
+    /// `demo-account-protected`, as the document lists it.
+    RefusedAsDocumented,
+    /// `demo-account-protected`, breaking the rule named.
+    RefusedBreaking(String),
+    /// Anything else.
     Other,
 }
 
@@ -291,12 +294,15 @@ async fn demo_account_rule(world: &World<'_>, op: &Operation, spec: &Value) -> D
     if !refused {
         return DemoAnswer::Other;
     }
-    DemoAnswer::Refused(answer.problem_rule(
+    match answer.problem_rule(
         op,
         spec,
         ProblemType::DemoAccountProtected,
         "the Demo Account",
-    ))
+    ) {
+        Some(rule) => DemoAnswer::RefusedBreaking(rule),
+        None => DemoAnswer::RefusedAsDocumented,
+    }
 }
 
 /// A response, read whole.

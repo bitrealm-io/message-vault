@@ -247,9 +247,11 @@ pub const DEMO_ACCOUNT_ID: i64 = 2;
 
 /// What the Demo Account may do, known from its id and never read from its
 /// row: export, and neither import nor delete for good
-/// (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`). The profile,
-/// the owner's account list and every guard read this, so a row changed by
-/// hand cannot make a screen offer what the server refuses.
+/// (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`).
+/// [`load_account_auth`] answers it for the Demo Account, so the profile and
+/// the owner's account list report what the guards, which refuse the Demo
+/// Account by its id, enforce: a row changed by hand cannot make a screen
+/// offer what the server refuses.
 pub const DEMO_ACCOUNT_PERMISSIONS: crate::db::permissions::Permissions =
     crate::db::permissions::Permissions {
         import: false,

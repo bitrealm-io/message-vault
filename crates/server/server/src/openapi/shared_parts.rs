@@ -115,8 +115,6 @@ pub(crate) fn split_first_sentence(text: &str) -> (&str, &str) {
     (text, "")
 }
 
-/// Replace the operation's failures with the ones its shape and its handler
-/// give it, one problem response per status.
 /// Every scope one security requirement names, across all its schemes.
 fn requirement_scopes(requirement: &Value) -> impl Iterator<Item = &str> {
     requirement
@@ -128,6 +126,8 @@ fn requirement_scopes(requirement: &Value) -> impl Iterator<Item = &str> {
         .filter_map(Value::as_str)
 }
 
+/// Replace the operation's failures with the ones its shape and its handler
+/// give it, one problem response per status.
 fn failures(path: &str, op: &mut Operation) {
     let responses = &mut op.responses.responses;
     let mut kinds: Vec<ProblemType> = Vec::new();

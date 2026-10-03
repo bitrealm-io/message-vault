@@ -3038,8 +3038,7 @@ async fn a_long_comma_list_is_refused_as_too_many_parts() {
 async fn an_address_book_load_on_the_demo_account_is_refused() {
     let fixture = crate::test_support::test_fixture().await;
     let state = fixture.state.clone();
-    // The seed's grant: export, and neither import nor delete.
-    let (demo, token) = fixture.demo_account_session(false, false).await;
+    let (demo, token) = fixture.demo_account_session().await;
     let contact_id: i64 = {
         let mut conn = state.db.acquire().await.unwrap();
         // An Unknown the demo imports made: no name, one identity.

@@ -155,27 +155,14 @@ impl TestFixture {
     }
 
     /// The Demo Account at its fixed id, logged in with its empty password,
-    /// with its row's `can_import` and `can_delete` set as given. A test sets
-    /// the row to show that the server refuses the Demo Account by its id,
-    /// whatever the row says (ADR 0016). Returns its id and session token.
-    pub async fn demo_account_session(&self, can_import: bool, can_delete: bool) -> (i64, String) {
-        let id = self
-            .account_with_id(crate::db::account_profile::DEMO_ACCOUNT_ID, "demo")
-            .await;
-        let mut conn = self.conn().await;
-        crate::db::account_profile::set_account_flags(
-            &mut conn,
-            id,
-            crate::db::account_profile::AccountFlags {
-                can_import: Some(can_import),
-                can_delete: Some(can_delete),
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap();
-        drop(conn);
-        let token = log_in(&self.state, "demo", "").await["token"]
+    /// with a row that grants every permission. A test uses it to show that
+    /// the server refuses the Demo Account by its id, whatever the row says
+    /// (ADR 0016). Returns its id and session token.
+    pub async fn demo_account_session(&self) -> (i64, String) {
+        use crate::db::account_profile::{DEMO_ACCOUNT_ID, DEMO_USERNAME};
+        // A new row's flags default to every permission on.
+        let id = self.account_with_id(DEMO_ACCOUNT_ID, DEMO_USERNAME).await;
+        let token = log_in(&self.state, DEMO_USERNAME, "").await["token"]
             .as_str()
             .unwrap()
             .to_string();

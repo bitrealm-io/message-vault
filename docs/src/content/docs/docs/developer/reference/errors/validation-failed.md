@@ -14,3 +14,5 @@ editUrl: false
 A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
 
 `errors` lists every rule the request broke, one sentence each, not only the first. Fix each one and send the request again.
+
+For an import batch whose messages have no `guid`, `line` carries the first such line of the request body, counted from 1 with blank lines included. It is a line of the batch, not of any file: a client that packed the batch from several files turns it into the file and line it came from.

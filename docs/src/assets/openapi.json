@@ -13639,7 +13639,7 @@
               "null"
             ],
             "format": "int64",
-            "description": "`malformed-body` from an import batch: the line of the request body\nthe server could not read, counted from 1 with blank lines included.\nThe body is a batch the client packed, so only the client can say\nwhich file and line of its own that line came from.",
+            "description": "`malformed-body` from an import batch: the line of the request body\nthe server could not read; `validation-failed` from an import batch:\nthe first line that broke a rule, such as a message without a guid.\nCounted from 1 with blank lines included. The body is a batch the\nclient packed, so only the client can say which file and line of its\nown that line came from.",
             "minimum": 0
           },
           "request_id": {

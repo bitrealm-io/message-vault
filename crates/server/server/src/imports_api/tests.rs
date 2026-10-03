@@ -1900,11 +1900,17 @@ async fn a_batch_with_a_message_without_a_guid_is_refused_and_stores_nothing() {
     assert_eq!(
         problem.errors.as_deref(),
         Some(
-            &["The message on line 3 of the batch has no guid; every message needs one.".to_string()]
-                [..]
+            &[
+                "The message on line 3 of the batch has no guid; every message needs one."
+                    .to_string()
+            ][..]
         )
     );
-    assert_eq!(problem.line, Some(3), "Upload maps the line back to its file");
+    assert_eq!(
+        problem.line,
+        Some(3),
+        "Upload maps the line back to its file"
+    );
     let mut conn = state.db.acquire().await.unwrap();
     let stored: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages")
         .fetch_one(&mut *conn)

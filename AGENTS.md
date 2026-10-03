@@ -196,7 +196,9 @@ only the user resolves it.
    do sleep 30; done                    # stops at the first failed job
    gh run view "$run" --json conclusion,jobs -q '.conclusion, (.jobs[] | select(.conclusion == "failure") | .name)'
    gh run watch "$run"                  # an outside failure: wait for the run to finish
-   gh run list --branch main --workflow ci.yml --event push -L 1 --json conclusion,url
+   main_run=$(gh run list --branch main --workflow ci.yml --event push --status completed -L 1 \
+                --json databaseId -q '.[0].databaseId')   # the last finished run on main
+   gh run view "$main_run" --json url,jobs -q '.url, (.jobs[] | select(.conclusion == "failure") | .name)'
    gh run rerun "$run" --failed         # only when main is not red on the same job
    [ "$(gh pr view <N> --json headRefOid -q .headRefOid)" = "$sha" ] || echo moved
    ```

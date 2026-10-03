@@ -28,16 +28,55 @@ reply and the fix, and stays open for the user.
 A judgement call is closed the same way as a hard violation. A small finding is
 fixed, never declined for being small.
 
+## Pushing and posting
+
+Before CI, the PR is pushed at most twice: in step 1, to bring it up to date,
+and in step 5, with every fix. CI is watched only on the head you mean to
+queue (AGENTS.md step 6).
+
+**Before every push**, run the local checks (AGENTS.md step 3).
+
+**After every push**, wait until GitHub reports the PR head as the commit you
+pushed (the wait in AGENTS.md step 6) before you read the diff, post a review
+pinned to it, or watch its checks. A finding's line is a line of the file at
+the commit the review is pinned to: re-read the file there and move each line
+that later commits shifted. A finding whose line can't be found there, or is
+outside the PR diff at that commit, goes in a marked top-level comment
+(AGENTS.md step 2).
+
+**Another session's commits.** The PR is queued only while every commit on it
+was reviewed by this run. When another session pushes to the branch, whether
+your push is rejected or the PR head moves past your push, keep its commits:
+merge them in (AGENTS.md step 5), never force over them. Then finish closing
+the findings, and stop before queueing: report the PR and those commits to
+the user.
+
+**Merge review.** Every merge commit you make that resolves a conflict, in
+any step, is reviewed before it is pushed. Resolve each conflict so both
+sides' intent survives (the `resolving-merge-conflicts` skill), then spawn a
+Correctness sub-agent with its step 2 brief and output rule, scoped to the
+remerge diff of the merge commit (AGENTS.md step 5), so it reviews the
+resolution alone. Fix its findings before the push. After the push, post them
+in one review pinned to the pushed head, each answered `Fixed in <sha>` and
+resolved, unless step 5 posts them with the re-review.
+
 ## Process
 
-### 1. Pin the PR
+### 1. Pin the PR and bring it up to date
 
 Take `<N>` from the argument, or from the PR for the current branch. With no
 PR, stop and say to open one ("Submitting Work").
 
-Gather, once (AGENTS.md step 1):
+Make the detached worktree at the PR head (AGENTS.md step 3) and merge the
+base into it whenever the PR is behind, whether or not it conflicts
+(AGENTS.md step 5). A conflict gets the merge review. Push the merge without
+waiting for its checks: the review must be pinned to a commit GitHub has. A
+PR already up to date is not pushed.
 
-- The diff, and the head SHA you review: the **reviewed head**.
+Then gather, once (AGENTS.md step 1):
+
+- The diff, and the head SHA you review: the **reviewed head**, which is the
+  merge you pushed, or the PR head when there was nothing to push.
 - **The spec**: the issues the PR closes, plus any `#123` in its body or
   commits. With none, the Spec review is skipped and the summary says so.
 - **The standards**: always `CLAUDE.md`, `AGENTS.md`,
@@ -47,8 +86,9 @@ Gather, once (AGENTS.md step 1):
   routes, data fetching in `web/`, and so on).
 - **Open threads** already on the PR, each marked agent or user.
 
-Done when you hold the diff, the reviewed head, the spec or its absence, the
-standards files, and the open threads.
+Done when the reviewed head is the PR head on GitHub and includes the base,
+and you hold the diff, the spec or its absence, the standards files, and the
+open threads.
 
 ### 2. Review in parallel
 
@@ -77,68 +117,77 @@ brief ends with the same output rule:
 Keep the axes separate, and post each axis's findings as its sub-agent
 returned them, so one axis cannot mask another.
 
-### 3. Post
-
 Post all findings in one review pinned to the reviewed head (AGENTS.md
 step 2). Each line comment starts with the marker, then
 `**<Axis> · <hard|judgement>**`, then the finding. A finding with `line: none`,
 or whose line is outside the diff, goes in one top-level comment instead.
 
-Done when every finding from step 2 is on the PR.
+Done when every finding is on the PR.
 
-### 4. Fix
+### 3. Fix, without pushing
 
-Work in a detached worktree at the reviewed head, and push as AGENTS.md
-step 3 says. Close every finding from step 3 and every open thread from
-step 1 (see _Closing a finding_, and AGENTS.md step 4). Run
-`./scripts/check-pr.sh` before each push. Keep the SHA of every fix commit.
+Commit a fix in the worktree for every finding from step 2 and every open
+thread from step 1 that will be closed Fixed (see _Closing a finding_). Keep
+the commits local until step 5.
 
-Done when every agent thread is resolved and every user thread has a reply.
+Done when every finding and open thread is either fixed in a local commit or
+has its Declined or Deferred reason ready.
 
-### 5. Re-review the fixes
+### 4. Re-review the fixes
 
-Run Standards and Correctness once more, on the fix commits only: give them
-the fix commit SHAs to read with `git show`. A rebase in step 4 changes those
-SHAs, so use the ones that were pushed. Post and close their findings as in
-steps 3 and 4. This is the last review of the PR's own changes.
+Spawn Standards and Correctness once more, in one message, on the local fix
+commits only: give them the SHAs to read with `git show`. They are fresh
+sub-agents and see the commits, never your reasoning for them. Fix what they
+find in more local commits. This is the last review of the PR's own changes.
 
-### 6. Resolve conflicts with the base
+Done when every re-review finding is fixed or has its reason ready.
 
-Check whether the PR conflicts with its base (AGENTS.md step 5). If it does,
-merge the base into the worktree and resolve each conflict so both sides'
-intent survives (the `resolving-merge-conflicts` skill). Run
-`./scripts/check-pr.sh`. Then spawn a Correctness sub-agent with its step 2
-brief and output rule, scoped to the remerge diff of the merge commit
-(AGENTS.md step 5), so it reviews the resolution alone. Every merge commit
-you make that resolves a conflict gets this review, including one made after
-a rejected push. Close its findings as in steps 3 and 4, and push.
+### 5. Push once
 
-Done when GitHub reports the PR `MERGEABLE`.
+Fetch the base. If it moved since step 1, merge it in (a conflict gets the
+merge review). Run the local checks, then push.
 
-### 7. Green CI
+After the push, close everything on the PR, using the pushed SHAs:
 
-Wait for the required checks (AGENTS.md step 6). A check that fails because of
-the PR is a finding. Fix it in the worktree, push, and wait again. A check that
-fails for a reason outside the PR (a red `main`, a runner fault, a network
-fetch) gets one rerun of its failed jobs. If it fails again, stop and report
-it without changing the code for it.
+- Post the re-review findings, and any merge review findings, in one review
+  pinned to the pushed head.
+- Reply in every thread, and close it (_Closing a finding_, AGENTS.md
+  step 4).
 
-### 8. Summarise and queue
+Done when the push is accepted, every agent thread is resolved, and every
+user thread has a reply.
 
-Check the PR against its base once more (AGENTS.md step 5), because the base
-may have moved while CI ran. On `CONFLICTING`, go back to step 6. Continue
-once it is `MERGEABLE`.
+### 6. Green CI
+
+Watch the required checks with `--fail-fast` (AGENTS.md step 6). A check that
+fails because of the PR is a finding: fix it, run the local checks, push, and
+watch again.
+
+A check that fails for a reason outside the PR (a red `main`, a runner fault,
+a network fetch) gets one rerun of its failed jobs. If it fails again, stop
+and report it without changing the code for it.
+
+A failed check is sorted, and the run rerun, as AGENTS.md step 6 says.
+
+Done when every required check on the commit you pushed is green, and it is
+still the PR head (_Another session's commits_).
+
+### 7. Summarise and queue
+
+Check the PR against its base once more (AGENTS.md step 5). On `CONFLICTING`,
+merge the base (with the merge review), push, and return to step 6. A PR that
+is only behind is queued as it is: the queue tests it on the latest base.
 
 Post one top-level comment, starting with the marker:
 
 - Findings per axis, and how many were Fixed, Declined, and Deferred, with
   the deferred issues linked.
-- Commits made for CI failures, and any merge of the base with the files
+- Commits made for CI failures, and each merge of the base with the files
   whose conflicts it resolved.
 - Any Spec skip, and any user thread still open.
 
-Queue the PR when "Merging" says it is ready. Otherwise, say in the summary
-and to the user what it waits on, such as an open user thread.
+Queue the PR on the commit you pushed when "Merging" says it is ready. Otherwise, say in the summary and to the user
+what it waits on, such as an open user thread.
 
 Remove the worktree. Report to the user: the PR, the counts, and whether it is
 queued.

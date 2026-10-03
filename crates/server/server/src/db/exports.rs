@@ -5,6 +5,7 @@
 use anyhow::{Context, Result};
 use chrono::Utc;
 use message_crate_api_types::{ExportQueryList, ExportRun, ExportScope, ExportStatus};
+use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Executor, Row, SqliteConnection};
 
@@ -16,6 +17,42 @@ use crate::db::conversation_messages::{
 use crate::db::sql::{SqlParam, bind_all};
 use crate::paging::{Direction, Page, SortKey};
 use crate::server::ApiError;
+
+/// Which of the three forms an Export Run's scope took, without what it
+/// asked for: the values `exports.scope_kind` holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ExportScopeKind {
+    /// Everything the account holds.
+    Everything,
+    /// A query in the search language.
+    Query,
+    /// Conversations and messages picked by hand.
+    Selection,
+}
+
+impl ExportScopeKind {
+    /// The form `scope` takes.
+    #[must_use]
+    pub fn of(scope: &ExportScope) -> Self {
+        match scope {
+            ExportScope::Everything => Self::Everything,
+            ExportScope::Query { .. } => Self::Query,
+            ExportScope::Selection { .. } => Self::Selection,
+        }
+    }
+
+    /// The form `value` spells, or `None` for any other word.
+    #[must_use]
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "everything" => Some(Self::Everything),
+            "query" => Some(Self::Query),
+            "selection" => Some(Self::Selection),
+            _ => None,
+        }
+    }
+}
 
 /// The one key `GET /v1/exports` accepts in `sort=`: `started_at`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

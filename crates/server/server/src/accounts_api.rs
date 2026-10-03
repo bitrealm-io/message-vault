@@ -27,6 +27,7 @@ use crate::credentials::{
 };
 use crate::db::audit_trail::{self, AuditAction, AuditActor, Details, NewEntry};
 use crate::db::handles::{self, Identity};
+use crate::db::permissions::Permission;
 use crate::db::storage::{self, Scope};
 use crate::db::{WriteTx, begin_write};
 use crate::db::{account_profile, imports, server_settings, session_tokens};
@@ -732,16 +733,16 @@ async fn apply_flags(
     }
     let was = before.permissions;
     let changes = [
-        ("import", was.import, req.can_import),
-        ("export", was.export, req.can_export),
-        ("delete", was.delete, req.can_delete),
+        (Permission::Import, was.import, req.can_import),
+        (Permission::Export, was.export, req.can_export),
+        (Permission::Delete, was.delete, req.can_delete),
     ];
     let mut added = Vec::new();
     let mut removed = Vec::new();
     for (name, was, asked) in changes {
         match asked {
-            Some(true) if !was => added.push(name.to_string()),
-            Some(false) if was => removed.push(name.to_string()),
+            Some(true) if !was => added.push(name),
+            Some(false) if was => removed.push(name),
             _ => {}
         }
     }

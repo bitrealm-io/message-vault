@@ -21,7 +21,13 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sqlx::{Row, SqliteConnection};
 
+use message_crate_api_types::{ExportQueryList, ExportStatus};
+
 use crate::db::account_profile;
+use crate::db::address_book::LoadMode;
+use crate::db::exports::ExportScopeKind;
+use crate::db::imports::ImportStatus;
+use crate::db::permissions::Permission;
 use crate::db::session_tokens::{AppKind, ConnectingApp};
 
 /// Days a refused login as a username no account holds is kept. Such an
@@ -216,6 +222,46 @@ pub enum RunCredential {
     ApiToken,
 }
 
+/// How a run stands, as the run's own list spells it: an Import Run's
+/// status, or an Export Run's, which never finishes with issues.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RunStatus {
+    /// Still going.
+    Running,
+    /// Finished with nothing to report.
+    Completed,
+    /// An Import Run that finished, and some items were skipped or failed.
+    CompletedWithIssues,
+    /// Ended without finishing.
+    Failed,
+    /// Ended by the person, or by the server on their behalf.
+    Cancelled,
+}
+
+impl From<ImportStatus> for RunStatus {
+    fn from(status: ImportStatus) -> Self {
+        match status {
+            ImportStatus::Running => Self::Running,
+            ImportStatus::Completed => Self::Completed,
+            ImportStatus::CompletedWithIssues => Self::CompletedWithIssues,
+            ImportStatus::Failed => Self::Failed,
+            ImportStatus::Cancelled => Self::Cancelled,
+        }
+    }
+}
+
+impl From<ExportStatus> for RunStatus {
+    fn from(status: ExportStatus) -> Self {
+        match status {
+            ExportStatus::Running => Self::Running,
+            ExportStatus::Completed => Self::Completed,
+            ExportStatus::Failed => Self::Failed,
+            ExportStatus::Cancelled => Self::Cancelled,
+        }
+    }
+}
+
 /// The credential a request came with, as the Audit Trail records it on a
 /// run: never the token itself.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -270,10 +316,10 @@ impl CredentialUsed {
 pub struct Details {
     /// `permissions_changed`: permissions turned on (`import`, `export`, `delete`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub permissions_added: Option<Vec<String>>,
+    pub permissions_added: Option<Vec<Permission>>,
     /// `permissions_changed`: permissions turned off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub permissions_removed: Option<Vec<String>>,
+    pub permissions_removed: Option<Vec<Permission>>,
     /// Conversations deleted for good.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conversations: Option<i64>,
@@ -289,7 +335,7 @@ pub struct Details {
     pub identities: Option<i64>,
     /// `address_book_loaded`: `append` or `edit`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mode: Option<String>,
+    pub mode: Option<LoadMode>,
     /// `address_book_loaded`: contacts the load made.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub contacts_created: Option<i64>,
@@ -351,24 +397,24 @@ pub struct AuditEntry {
     pub api_token_hint: Option<String>,
     /// `permissions_changed`: permissions turned on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub permissions_added: Option<Vec<String>>,
+    pub permissions_added: Option<Vec<Permission>>,
     /// `permissions_changed`: permissions turned off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub permissions_removed: Option<Vec<String>>,
+    pub permissions_removed: Option<Vec<Permission>>,
     /// A run: its status as the run's own list spells it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub status: Option<String>,
+    pub status: Option<RunStatus>,
     /// An Import Run: the source it imported, such as `imessage`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
     /// An Export Run: `everything`, `query` or `selection`. Never the query
     /// or the picked ids.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub scope_kind: Option<String>,
+    pub scope_kind: Option<ExportScopeKind>,
     /// An Export Run with a query: the list it was for, `conversations` or
     /// `messages`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub scope_list: Option<String>,
+    pub scope_list: Option<ExportQueryList>,
     /// Messages a run accepted or matched.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub messages: Option<i64>,
@@ -390,7 +436,7 @@ pub struct AuditEntry {
     pub identities: Option<i64>,
     /// `address_book_loaded`: `append` or `edit`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mode: Option<String>,
+    pub mode: Option<LoadMode>,
     /// `address_book_loaded`: contacts made.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub contacts_created: Option<i64>,
@@ -979,7 +1025,6 @@ fn run_entry(row: &sqlx::sqlite::SqliteRow, action: AuditAction) -> Result<Audit
         credential,
         api_token_label: row.try_get("api_token_label")?,
         api_token_hint: row.try_get("api_token_hint")?,
-        status: row.try_get("status")?,
         ..AuditEntry::new(
             row.try_get("id")?,
             action,
@@ -1003,7 +1048,11 @@ async fn load_import(conn: &mut SqliteConnection, id: i64) -> Result<Option<Audi
     .fetch_optional(&mut *conn)
     .await?;
     let Some(row) = row else { return Ok(None) };
+    let status: String = row.try_get("status")?;
+    let status = ImportStatus::parse(&status)
+        .with_context(|| format!("imports.status holds unknown value '{status}'"))?;
     Ok(Some(AuditEntry {
+        status: Some(status.into()),
         source: row.try_get("source")?,
         messages: row.try_get("message_count")?,
         attachments: row.try_get("attachment_count")?,
@@ -1025,9 +1074,22 @@ async fn load_export(conn: &mut SqliteConnection, id: i64) -> Result<Option<Audi
     .fetch_optional(&mut *conn)
     .await?;
     let Some(row) = row else { return Ok(None) };
+    let status: String = row.try_get("status")?;
+    let status = ExportStatus::parse(&status)
+        .with_context(|| format!("exports.status holds unknown value '{status}'"))?;
+    let scope_kind: String = row.try_get("scope_kind")?;
+    let scope_kind = ExportScopeKind::parse(&scope_kind)
+        .with_context(|| format!("exports.scope_kind holds unknown value '{scope_kind}'"))?;
+    let scope_list = match row.try_get::<Option<String>, _>("scope_list")?.as_deref() {
+        None => None,
+        Some("conversations") => Some(ExportQueryList::Conversations),
+        Some("messages") => Some(ExportQueryList::Messages),
+        Some(other) => anyhow::bail!("exports.scope_list holds unknown value '{other}'"),
+    };
     Ok(Some(AuditEntry {
-        scope_kind: row.try_get("scope_kind")?,
-        scope_list: row.try_get("scope_list")?,
+        status: Some(status.into()),
+        scope_kind: Some(scope_kind),
+        scope_list,
         messages: row.try_get("message_count")?,
         conversations: row.try_get("conversation_count")?,
         attachments: row.try_get("attachment_count")?,

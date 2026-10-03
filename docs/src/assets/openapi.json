@@ -12157,11 +12157,15 @@
             "description": "Messages a run accepted or matched."
           },
           "mode": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "`address_book_loaded`: `append` or `edit`."
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LoadMode",
+                "description": "`address_book_loaded`: `append` or `edit`."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "permissions_added": {
             "type": [
@@ -12169,7 +12173,7 @@
               "null"
             ],
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/Permission"
             },
             "description": "`permissions_changed`: permissions turned on."
           },
@@ -12179,7 +12183,7 @@
               "null"
             ],
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/Permission"
             },
             "description": "`permissions_changed`: permissions turned off."
           },
@@ -12195,18 +12199,26 @@
             ]
           },
           "scope_kind": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "An Export Run: `everything`, `query` or `selection`. Never the query\nor the picked ids."
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ExportScopeKind",
+                "description": "An Export Run: `everything`, `query` or `selection`. Never the query\nor the picked ids."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "scope_list": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "An Export Run with a query: the list it was for, `conversations` or\n`messages`."
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ExportQueryList",
+                "description": "An Export Run with a query: the list it was for, `conversations` or\n`messages`."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "source": {
             "type": [
@@ -12216,11 +12228,15 @@
             "description": "An Import Run: the source it imported, such as `imessage`."
           },
           "status": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "A run: its status as the run's own list spells it."
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RunStatus",
+                "description": "A run: its status as the run's own list spells it."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "username": {
             "type": [
@@ -13369,7 +13385,7 @@
       },
       "ExportScopeKind": {
         "type": "string",
-        "description": "Which of the three forms an Export Run's scope took, without what it\nasked for.",
+        "description": "Which of the three forms an Export Run's scope took, without what it\nasked for: the values `exports.scope_kind` holds.",
         "enum": [
           "everything",
           "query",
@@ -14801,11 +14817,15 @@
                   "description": "Messages a run accepted or matched."
                 },
                 "mode": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "`address_book_loaded`: `append` or `edit`."
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/LoadMode",
+                      "description": "`address_book_loaded`: `append` or `edit`."
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "permissions_added": {
                   "type": [
@@ -14813,7 +14833,7 @@
                     "null"
                   ],
                   "items": {
-                    "type": "string"
+                    "$ref": "#/components/schemas/Permission"
                   },
                   "description": "`permissions_changed`: permissions turned on."
                 },
@@ -14823,7 +14843,7 @@
                     "null"
                   ],
                   "items": {
-                    "type": "string"
+                    "$ref": "#/components/schemas/Permission"
                   },
                   "description": "`permissions_changed`: permissions turned off."
                 },
@@ -14839,18 +14859,26 @@
                   ]
                 },
                 "scope_kind": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "An Export Run: `everything`, `query` or `selection`. Never the query\nor the picked ids."
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ExportScopeKind",
+                      "description": "An Export Run: `everything`, `query` or `selection`. Never the query\nor the picked ids."
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "scope_list": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "An Export Run with a query: the list it was for, `conversations` or\n`messages`."
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ExportQueryList",
+                      "description": "An Export Run with a query: the list it was for, `conversations` or\n`messages`."
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "source": {
                   "type": [
@@ -14860,11 +14888,15 @@
                   "description": "An Import Run: the source it imported, such as `imessage`."
                 },
                 "status": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "A run: its status as the run's own list spells it."
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/RunStatus",
+                      "description": "A run: its status as the run's own list spells it."
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "username": {
                   "type": [
@@ -16365,6 +16397,15 @@
           }
         }
       },
+      "Permission": {
+        "type": "string",
+        "description": "One of the three permissions, by name: what the Audit Trail lists when the\nowner turns one on or off.",
+        "enum": [
+          "import",
+          "export",
+          "delete"
+        ]
+      },
       "Problem": {
         "type": "object",
         "description": "An RFC 7807 problem document: the body of every failure the server answers,\nserved as `application/problem+json` (`docs/architecture/http-api.md`).\n\n`type` is the URL of the page describing this kind of failure, one page per\ntype, or `about:blank` for an internal error. A validation failure carries\n`errors`, every field that failed, in place of `detail`. Every problem\nrepeats the response's `x-request-id` as `request_id`, so the person\nreading the failure and the operator reading the log are looking at the\nsame request.\n\nThe extension members belong to the types named here: `word` and\n`did_you_mean` to `search-query-invalid`, `retry_after` to `rate-limited`,\n`line` to `malformed-body` and `validation-failed` from an import batch.",
@@ -16543,6 +16584,17 @@
         "enum": [
           "session",
           "api_token"
+        ]
+      },
+      "RunStatus": {
+        "type": "string",
+        "description": "How a run stands, as the run's own list spells it: an Import Run's\nstatus, or an Export Run's, which never finishes with issues.",
+        "enum": [
+          "running",
+          "completed",
+          "completed_with_issues",
+          "failed",
+          "cancelled"
         ]
       },
       "SavedSearch": {

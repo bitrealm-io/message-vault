@@ -39,7 +39,7 @@ pub const COLUMNS: [&str; 6] = [
 pub(crate) const GROUP_SEPARATOR: char = ';';
 
 /// How a load applies the file.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, utoipa::ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum LoadMode {
     /// Create the contacts the file names, rename the ones it holds, and add
@@ -50,16 +50,6 @@ pub enum LoadMode {
     /// Append, and then make each contact in the file hold exactly the
     /// identities and memberships its rows list.
     Edit,
-}
-
-impl LoadMode {
-    /// The mode's name as the `mode` query parameter spells it.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            LoadMode::Append => "append",
-            LoadMode::Edit => "edit",
-        }
-    }
 }
 
 /// What a load changed.

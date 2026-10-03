@@ -17,7 +17,8 @@ use crate::db::conversation_messages::{
     DEFAULT_MESSAGE_SORT, MESSAGE_SORT_KEYS, Message, selection_where,
 };
 use crate::db::exports::{
-    self, DEFAULT_EXPORT_SORT, EXPORT_SORT_KEYS, ExportPageOpts, StartExportArgs, export_messages,
+    self, DEFAULT_EXPORT_SORT, EXPORT_SORT_KEYS, ExportPageOpts, ExportScopeKind, StartExportArgs,
+    export_messages,
 };
 use crate::db::ownership::{OwnedTable, missing_ids};
 use crate::messages_api::message_filter;
@@ -28,19 +29,6 @@ use crate::server::{ApiError, AppState, Created, ExportAccess};
 /// stays under SQLite's variable cap; the same figure `POST /v1/contacts/summaries`
 /// uses.
 pub const MAX_SELECTION_IDS: usize = 500;
-
-/// Which of the three forms an Export Run's scope took, without what it
-/// asked for.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, utoipa::ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum ExportScopeKind {
-    /// Everything the account holds.
-    Everything,
-    /// A query in the search language.
-    Query,
-    /// Conversations and messages picked by hand.
-    Selection,
-}
 
 /// An Export Run as the owner reads it under another account: the form of
 /// its scope, its tool, times, outcome and counts
@@ -76,11 +64,7 @@ pub(crate) struct OwnerExportRun {
 
 impl From<ExportRun> for OwnerExportRun {
     fn from(run: ExportRun) -> Self {
-        let scope_kind = match run.scope {
-            ExportScope::Everything => ExportScopeKind::Everything,
-            ExportScope::Query { .. } => ExportScopeKind::Query,
-            ExportScope::Selection { .. } => ExportScopeKind::Selection,
-        };
+        let scope_kind = ExportScopeKind::of(&run.scope);
         Self {
             id: run.id,
             scope_kind,

@@ -1702,27 +1702,17 @@ export interface components {
              * @description Messages a run accepted or matched.
              */
             messages?: number | null;
-            /** @description `address_book_loaded`: `append` or `edit`. */
-            mode?: string | null;
+            mode?: components["schemas"]["LoadMode"] | null;
             /** @description `permissions_changed`: permissions turned on. */
-            permissions_added?: string[] | null;
+            permissions_added?: components["schemas"]["Permission"][] | null;
             /** @description `permissions_changed`: permissions turned off. */
-            permissions_removed?: string[] | null;
+            permissions_removed?: components["schemas"]["Permission"][] | null;
             reason?: components["schemas"]["AuditReason"] | null;
-            /**
-             * @description An Export Run: `everything`, `query` or `selection`. Never the query
-             *     or the picked ids.
-             */
-            scope_kind?: string | null;
-            /**
-             * @description An Export Run with a query: the list it was for, `conversations` or
-             *     `messages`.
-             */
-            scope_list?: string | null;
+            scope_kind?: components["schemas"]["ExportScopeKind"] | null;
+            scope_list?: components["schemas"]["ExportQueryList"] | null;
             /** @description An Import Run: the source it imported, such as `imessage`. */
             source?: string | null;
-            /** @description A run: its status as the run's own list spells it. */
-            status?: string | null;
+            status?: components["schemas"]["RunStatus"] | null;
             /**
              * @description The username of the account the entry is about, as it was; for a
              *     refused login, the username as typed. Kept after the account is deleted.
@@ -2281,7 +2271,7 @@ export interface components {
         };
         /**
          * @description Which of the three forms an Export Run's scope took, without what it
-         *     asked for.
+         *     asked for: the values `exports.scope_kind` holds.
          * @enum {string}
          */
         ExportScopeKind: "everything" | "query" | "selection";
@@ -3060,27 +3050,17 @@ export interface components {
                  * @description Messages a run accepted or matched.
                  */
                 messages?: number | null;
-                /** @description `address_book_loaded`: `append` or `edit`. */
-                mode?: string | null;
+                mode?: components["schemas"]["LoadMode"] | null;
                 /** @description `permissions_changed`: permissions turned on. */
-                permissions_added?: string[] | null;
+                permissions_added?: components["schemas"]["Permission"][] | null;
                 /** @description `permissions_changed`: permissions turned off. */
-                permissions_removed?: string[] | null;
+                permissions_removed?: components["schemas"]["Permission"][] | null;
                 reason?: components["schemas"]["AuditReason"] | null;
-                /**
-                 * @description An Export Run: `everything`, `query` or `selection`. Never the query
-                 *     or the picked ids.
-                 */
-                scope_kind?: string | null;
-                /**
-                 * @description An Export Run with a query: the list it was for, `conversations` or
-                 *     `messages`.
-                 */
-                scope_list?: string | null;
+                scope_kind?: components["schemas"]["ExportScopeKind"] | null;
+                scope_list?: components["schemas"]["ExportQueryList"] | null;
                 /** @description An Import Run: the source it imported, such as `imessage`. */
                 source?: string | null;
-                /** @description A run: its status as the run's own list spells it. */
-                status?: string | null;
+                status?: components["schemas"]["RunStatus"] | null;
                 /**
                  * @description The username of the account the entry is about, as it was; for a
                  *     refused login, the username as typed. Kept after the account is deleted.
@@ -3835,6 +3815,12 @@ export interface components {
             service?: string | null;
         };
         /**
+         * @description One of the three permissions, by name: what the Audit Trail lists when the
+         *     owner turns one on or off.
+         * @enum {string}
+         */
+        Permission: "import" | "export" | "delete";
+        /**
          * @description An RFC 7807 problem document: the body of every failure the server answers,
          *     served as `application/problem+json` (`docs/architecture/http-api.md`).
          *
@@ -3947,6 +3933,12 @@ export interface components {
          * @enum {string}
          */
         RunCredential: "session" | "api_token";
+        /**
+         * @description How a run stands, as the run's own list spells it: an Import Run's
+         *     status, or an Export Run's, which never finishes with issues.
+         * @enum {string}
+         */
+        RunStatus: "running" | "completed" | "completed_with_issues" | "failed" | "cancelled";
         /** @description One row of `saved_searches`. */
         SavedSearch: {
             /**

@@ -121,7 +121,7 @@ pub(crate) async fn create_contacts(
     let counts = address_book::load(&mut conn, auth.account_id, content, query.mode).await?;
     let count = |n: u64| Some(i64::try_from(n).unwrap_or(i64::MAX));
     let details = Details {
-        mode: Some(query.mode.as_str().to_string()),
+        mode: Some(query.mode),
         contacts_created: count(counts.contacts_created),
         contacts_updated: count(counts.contacts_updated),
         contacts_deleted: count(counts.contacts_deleted),

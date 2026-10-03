@@ -31,7 +31,7 @@ pub struct Cli {
 /// One subcommand per CLI operation: import, serve, and maintenance.
 #[derive(Debug, Subcommand)]
 pub enum Commands {
-    /// Import a message-ir JSONL folder (source from export.source unless --source)
+    /// Import a message-ir JSONL folder, one Import Run per source (source from export.source unless --source)
     Import(ImportArgs),
 
     /// Work on an account's import sessions (`discard` clears a stranded one)

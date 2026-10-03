@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::accounts_api::{Admits, Reach, require_account_reach};
 use crate::db::api_tokens;
-use crate::db::audit_trail::{self, AuditAction, AuditActor, Details};
+use crate::db::audit_trail::{self, AuditAction, Details};
 use crate::db::permissions::Permissions;
 use crate::db::{account_profile, schema};
 use crate::server::{ApiError, AppState, Created, FullAccess, LoggedIn};
@@ -266,7 +266,7 @@ pub async fn create_api_token(
     Json(req): Json<CreateApiTokenRequest>,
 ) -> Result<Created<CreateApiTokenResponse>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    require_account_reach(&mut conn, &auth, account_id, HOLDER_ONLY).await?;
+    let reach = require_account_reach(&mut conn, &auth, account_id, HOLDER_ONLY).await?;
     let label = req.label;
     // A token can narrow its account's permissions, never widen them, so
     // what it stores is what the request asked and the account holds.
@@ -283,7 +283,7 @@ pub async fn create_api_token(
     audit_trail::record_about(
         &mut conn,
         AuditAction::ApiTokenCreated,
-        AuditActor::Holder,
+        reach.actor(),
         account_id,
         Details {
             api_token_label: Some(created.label.clone()),
@@ -331,7 +331,7 @@ pub async fn delete_api_token(
     LoggedIn(auth): LoggedIn,
 ) -> Result<axum::http::StatusCode, ApiError> {
     let mut conn = state.db.acquire().await?;
-    require_account_reach(&mut conn, &auth, account_id, Admits::Owner).await?;
+    let reach = require_account_reach(&mut conn, &auth, account_id, Admits::Owner).await?;
     schema::ensure_accounts_schema(&mut conn).await?;
     let token = api_tokens::list_api_tokens(&mut conn, account_id)
         .await?
@@ -345,7 +345,7 @@ pub async fn delete_api_token(
     audit_trail::record_about(
         &mut conn,
         AuditAction::ApiTokenDeleted,
-        AuditActor::Holder,
+        reach.actor(),
         account_id,
         Details {
             api_token_label: Some(token.label),

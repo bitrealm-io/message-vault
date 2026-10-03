@@ -1029,14 +1029,12 @@ pub(crate) async fn create_import(
         source_fingerprint: fingerprint_json.as_deref(),
         source_identities: identities_json.as_deref(),
     };
-    let id = crate::db::imports::start_import(&mut conn, &args).await?;
-    crate::db::audit_trail::record_run_credential(
-        &mut conn,
-        crate::db::audit_trail::Run::Import,
-        id,
-        &auth.credential,
-    )
-    .await?;
+    // The run and what started it land together, so a run never reads as
+    // one the server started.
+    let mut tx = crate::db::begin_write(&mut conn).await?;
+    let id = crate::db::imports::start_import(&mut tx, &args).await?;
+    crate::db::imports::record_credential(&mut tx, id, &auth.credential).await?;
+    tx.commit().await?;
 
     Ok(Created {
         location: format!("/v1/imports/{id}"),

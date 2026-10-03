@@ -165,8 +165,9 @@ pub async fn connecting_app_for_account(
 }
 
 /// Replace the account's session token with a new one and return the
-/// plaintext once. The Session carries on: a password change renews it, and
-/// its `logged_in` entry in the Audit Trail moves its expiry with it.
+/// plaintext once, with the Unix second it now expires at. The Session
+/// carries on: a password change renews it, and the caller records the
+/// renewed expiry in the Audit Trail.
 ///
 /// One upsert, never a lookup and then an insert: two logins at once both
 /// find no row, and the second insert would break the `account_id` primary
@@ -178,7 +179,7 @@ pub async fn connecting_app_for_account(
 pub async fn rotate_account_session_token(
     conn: &mut SqliteConnection,
     account_id: i64,
-) -> Result<String> {
+) -> Result<(String, u64)> {
     let token = generate_session_token()?;
     let token_hash = hash_api_token(&token);
     let created_at = unix_secs_string();
@@ -200,25 +201,28 @@ pub async fn rotate_account_session_token(
     .execute(&mut *conn)
     .await
     .with_context(|| format!("rotate session token for {account_id}"))?;
-    if let Some(login_entry_id) = login_entry_for_account(conn, account_id).await? {
-        audit_trail::renew_login(conn, login_entry_id, expires).await?;
-    }
-    Ok(token)
+    Ok((token, expires))
 }
 
-/// The Audit Trail's `logged_in` entry for the account's live session, when
-/// a login made it.
-async fn login_entry_for_account(
+/// The Audit Trail's `logged_in` entry for the account's session, when a
+/// login made it and it has not expired. An expired row stays until its
+/// token is presented again, and its end is read from its expiry, so ending
+/// it again would rewrite when it ended.
+pub(crate) async fn live_login_entry(
     conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<Option<i64>> {
-    let found: Option<Option<i64>> = sqlx::query_scalar(
-        "SELECT login_entry_id FROM account_session_tokens WHERE account_id = $1",
+    let found: Option<(Option<i64>, String)> = sqlx::query_as(
+        "SELECT login_entry_id, expires_at FROM account_session_tokens WHERE account_id = $1",
     )
     .bind(account_id)
     .fetch_optional(&mut *conn)
     .await?;
-    Ok(found.flatten())
+    let now = now_unix_secs();
+    // An `expires_at` that does not parse counts as expired, as in `lookup_session`.
+    Ok(found.and_then(|(login_entry_id, expires_at)| {
+        login_entry_id.filter(|_| expires_at.parse::<u64>().is_ok_and(|expires| expires > now))
+    }))
 }
 
 /// Log in: open the account's one Session and return its token once.
@@ -239,7 +243,7 @@ pub async fn open_session(
     app: Option<&ConnectingApp>,
 ) -> Result<String> {
     let actor = AuditActor::logged_in_as(account_id);
-    if let Some(previous) = login_entry_for_account(conn, account_id).await? {
+    if let Some(previous) = live_login_entry(conn, account_id).await? {
         audit_trail::record_session_end(conn, previous, AuditReason::Replaced, actor).await?;
     }
     let token = generate_session_token()?;
@@ -375,7 +379,7 @@ pub async fn revoke_account_sessions(
     account_id: i64,
     actor: AuditActor,
 ) -> Result<()> {
-    if let Some(login_entry_id) = login_entry_for_account(tx, account_id).await? {
+    if let Some(login_entry_id) = live_login_entry(tx, account_id).await? {
         audit_trail::record_session_end(tx, login_entry_id, AuditReason::Revoked, actor).await?;
     }
     sqlx::query("DELETE FROM account_session_tokens WHERE account_id = $1")

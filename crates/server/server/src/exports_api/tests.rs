@@ -26,7 +26,15 @@ async fn page(
     limit: usize,
     offset: usize,
 ) -> Result<Page<Message>, ApiError> {
-    let run = start_export_run(conn, account, scope, None, crate::search::tests::clock()).await?;
+    let run = start_export_run(
+        conn,
+        account,
+        scope,
+        None,
+        crate::search::tests::clock(),
+        &crate::db::audit_trail::CredentialUsed::Session(None),
+    )
+    .await?;
     export_messages(
         conn,
         ExportPageOpts {
@@ -42,9 +50,16 @@ async fn page(
 
 /// The four counts a run over `scope` records.
 async fn counts_of(conn: &mut SqliteConnection, scope: &ExportScope) -> ExportCounts {
-    let run = start_export_run(conn, 101, scope, None, crate::search::tests::clock())
-        .await
-        .unwrap();
+    let run = start_export_run(
+        conn,
+        101,
+        scope,
+        None,
+        crate::search::tests::clock(),
+        &crate::db::audit_trail::CredentialUsed::Session(None),
+    )
+    .await
+    .unwrap();
     ExportCounts {
         messages: run.message_count,
         conversations: run.conversation_count,

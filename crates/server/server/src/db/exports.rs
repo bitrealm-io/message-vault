@@ -478,3 +478,73 @@ pub async fn export_messages(
         offset: opts.offset,
     })
 }
+
+/// Record what started the Export Run on its row: a Session and the app it
+/// named, or an API token's label and hint as they are now.
+///
+/// # Errors
+///
+/// Returns an error when the update fails.
+pub async fn record_credential(
+    conn: &mut SqliteConnection,
+    export_id: i64,
+    credential: &crate::db::audit_trail::CredentialUsed,
+) -> Result<()> {
+    let (kind, app_kind, app_build, label, hint) = credential.run_columns();
+    sqlx::query(
+        "UPDATE exports SET credential = $1, app_kind = $2, app_build = $3,
+                api_token_label = $4, api_token_hint = $5
+         WHERE id = $6",
+    )
+    .bind(kind)
+    .bind(app_kind)
+    .bind(app_build)
+    .bind(label)
+    .bind(hint)
+    .bind(export_id)
+    .execute(&mut *conn)
+    .await
+    .with_context(|| format!("record what started export {export_id}"))?;
+    Ok(())
+}
+
+/// Ready the account's Export Runs to outlive it, just before the account is
+/// deleted: each keeps `username`, what was asked for and how much matched,
+/// a run still open is closed as `cancelled` at `now`, and its list of
+/// messages, search text and picked ids go (ADR 0020).
+///
+/// # Errors
+///
+/// Returns an error when a statement fails.
+pub async fn detach_from_account(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    username: &str,
+    now: &str,
+) -> Result<()> {
+    sqlx::query(
+        "UPDATE exports SET status = 'cancelled', finished_at = $2
+         WHERE account_id = $1 AND status = 'running'",
+    )
+    .bind(account_id)
+    .bind(now)
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query(
+        "DELETE FROM export_messages
+         WHERE export_id IN (SELECT id FROM exports WHERE account_id = $1)",
+    )
+    .bind(account_id)
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query(
+        "UPDATE exports SET username = $2, scope_query = NULL,
+                scope_conversation_ids = NULL, scope_message_ids = NULL
+         WHERE account_id = $1",
+    )
+    .bind(account_id)
+    .bind(username)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}

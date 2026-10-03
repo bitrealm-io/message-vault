@@ -252,8 +252,8 @@ async fn a_rate_limited_login_writes_nothing() {
 }
 
 /// Deleting an account leaves its entries and runs readable under its old
-/// username, adds an `account_deleted` entry, and drops the export's search
-/// text.
+/// username, ends its live Session as `revoked`, adds an `account_deleted`
+/// entry, and drops the export's search text.
 #[tokio::test]
 async fn deleting_an_account_keeps_its_entries_and_runs_under_its_username() {
     let fixture = test_fixture().await;
@@ -279,23 +279,26 @@ async fn deleting_an_account_keeps_its_entries_and_runs_under_its_username() {
 
     let items = trail(state, "/v1/audit-trail", &owner.token).await;
     assert_eq!(
-        actions(&items[..4]),
+        actions(&items[..5]),
         [
             "account_deleted",
+            "session_ended",
             "export_run",
             "logged_in",
             "account_created"
         ]
     );
-    for item in &items[..4] {
+    for item in &items[..5] {
         assert_eq!(item["username"], "alice", "{item}");
         assert_eq!(item["account_id"], Value::Null, "{item}");
     }
     assert_eq!(items[0]["actor"], "owner");
-    assert_eq!(items[1]["id"], run["id"]);
-    assert_eq!(items[1]["scope_kind"], "query");
-    assert_eq!(items[1]["scope_list"], "messages");
-    assert!(!items[1].to_string().contains("secret plans"));
+    assert_eq!(items[1]["reason"], "revoked");
+    assert_eq!(items[1]["actor"], "owner");
+    assert_eq!(items[2]["id"], run["id"]);
+    assert_eq!(items[2]["scope_kind"], "query");
+    assert_eq!(items[2]["scope_list"], "messages");
+    assert!(!items[2].to_string().contains("secret plans"));
     let kept: Option<String> = sqlx::query_scalar("SELECT scope_query FROM exports WHERE id = $1")
         .bind(run["id"].as_i64().unwrap())
         .fetch_one(&mut *fixture.conn().await)

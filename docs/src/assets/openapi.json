@@ -12037,7 +12037,7 @@
               "string",
               "null"
             ],
-            "description": "The API token's masked hint as it was then, such as `mc-api-Sd..mE`."
+            "description": "The API token's masked hint as it was then, such as `mc-api-Sd..mE`.\nOnly on the entries about the reader's own account: the owner never\nreads another account's."
           },
           "api_token_label": {
             "type": [
@@ -14681,7 +14681,7 @@
                     "string",
                     "null"
                   ],
-                  "description": "The API token's masked hint as it was then, such as `mc-api-Sd..mE`."
+                  "description": "The API token's masked hint as it was then, such as `mc-api-Sd..mE`.\nOnly on the entries about the reader's own account: the owner never\nreads another account's."
                 },
                 "api_token_label": {
                   "type": [

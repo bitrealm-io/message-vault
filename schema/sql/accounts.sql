@@ -388,11 +388,13 @@ CREATE TABLE IF NOT EXISTS audit_entries (
     -- That app's Build; set with app_kind.
     app_build TEXT,
     -- session_ended: the logged_in entry of the session that ended.
+    -- password_set by the holder: the logged_in entry of the session the
+    -- change renewed.
     session_entry_id INTEGER REFERENCES audit_entries(id),
-    -- logged_in: when the session expires, RFC 3339 UTC. A session with no
-    -- session_ended entry reads as expired from this time, so expiry needs
-    -- no entry and no sweeper. Moved forward when a password change renews
-    -- the session.
+    -- logged_in: when the session expires, RFC 3339 UTC. password_set by the
+    -- holder: when the renewed session expires. A session with no
+    -- session_ended entry reads as expired from the latest of these, so
+    -- expiry needs no entry and no sweeper, and no entry is ever changed.
     session_expires_at TEXT,
     -- JSON object of the entry's counts and names: permissions added and
     -- removed, conversations and attachments deleted, an API token's label

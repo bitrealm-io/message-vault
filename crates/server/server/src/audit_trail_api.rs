@@ -26,10 +26,15 @@ pub(crate) struct ListAuditTrailQuery {
     pub(crate) offset: Option<usize>,
 }
 
-/// One page of the Audit Trail over `scope`, newest first.
+/// One page of the Audit Trail over `scope`, newest first, as `reader` (the
+/// caller's account) is shown it: an API token's masked hint only on the
+/// entries about the reader's own account. The hint is part of the secret,
+/// and the owner never reads another account's secret (`http-api.md`,
+/// Credentials).
 pub(crate) async fn audit_trail_page(
     state: &AppState,
     scope: Scope,
+    reader: i64,
     query: ListAuditTrailQuery,
 ) -> Result<Json<Page<AuditEntry>>, ApiError> {
     let params = page_params(
@@ -39,7 +44,13 @@ pub(crate) async fn audit_trail_page(
         Some(MAX_LIST_OFFSET),
     )?;
     let mut conn = state.db.acquire().await?;
-    let (items, total) = audit_trail::page(&mut conn, scope, params.limit, params.offset).await?;
+    let (mut items, total) =
+        audit_trail::page(&mut conn, scope, params.limit, params.offset).await?;
+    for item in &mut items {
+        if item.account_id != Some(reader) {
+            item.api_token_hint = None;
+        }
+    }
     Ok(Json(Page {
         items,
         total,
@@ -68,10 +79,10 @@ pub(crate) async fn audit_trail_page(
 )]
 pub(crate) async fn list_audit_trail(
     State(state): State<AppState>,
-    Owner(_auth): Owner,
+    Owner(auth): Owner,
     Query(query): Query<ListAuditTrailQuery>,
 ) -> Result<Json<Page<AuditEntry>>, ApiError> {
-    audit_trail_page(&state, Scope::All, query).await
+    audit_trail_page(&state, Scope::All, auth.account_id, query).await
 }
 
 #[cfg(test)]

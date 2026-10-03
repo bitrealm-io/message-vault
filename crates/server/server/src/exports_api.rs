@@ -98,8 +98,8 @@ impl From<ExportRun> for OwnerExportRun {
 }
 
 /// Start an Export Run over `scope`: compile the scope, list the ids of the
-/// messages it matches now, count them, and record the run as `running`, all
-/// in one transaction. The run's pages read that list, never the scope again,
+/// messages it matches now, count them, and record the run as `running` with
+/// the credential that started it, all in one transaction. The run's pages read that list, never the scope again,
 /// so what a run hands over is fixed when it is created.
 ///
 /// # Errors
@@ -112,6 +112,7 @@ pub async fn start_export_run(
     scope: &ExportScope,
     tool: Option<&str>,
     clock: (chrono_tz::Tz, chrono::NaiveDate),
+    credential: &crate::db::audit_trail::CredentialUsed,
 ) -> Result<ExportRun, ApiError> {
     let mut tx = crate::db::begin_write(conn).await?;
     let filter = scope_filter(&mut tx, account_id, scope, clock).await?;
@@ -125,6 +126,7 @@ pub async fn start_export_run(
         },
     )
     .await?;
+    exports::record_credential(&mut tx, export_id, credential).await?;
 
     exports::list_run_messages(&mut tx, export_id, &filter).await?;
     let counts = exports::export_counts(&mut tx, export_id).await?;
@@ -349,11 +351,12 @@ pub(crate) async fn create_export(
     let tool = body.tool.as_deref().and_then(message_ir::trimmed);
     let mut conn = state.db.acquire().await?;
     let clock = crate::db::account_profile::account_clock(&mut conn, account).await?;
-    let run = start_export_run(&mut conn, account, &body.scope, tool, clock).await?;
-    crate::db::audit_trail::record_run_credential(
+    let run = start_export_run(
         &mut conn,
-        crate::db::audit_trail::Run::Export,
-        run.id,
+        account,
+        &body.scope,
+        tool,
+        clock,
         &auth.credential,
     )
     .await?;

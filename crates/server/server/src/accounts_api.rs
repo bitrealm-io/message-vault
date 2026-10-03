@@ -178,6 +178,15 @@ impl Reach {
     pub(crate) fn is_own(self) -> bool {
         matches!(self, Self::Own | Self::OwnersOwn)
     }
+
+    /// Who the Audit Trail says acted: the owner, on any account, or the
+    /// holder on their own.
+    pub(crate) fn actor(self) -> AuditActor {
+        match self {
+            Self::Owner | Self::OwnersOwn => AuditActor::Owner,
+            Self::Own => AuditActor::Holder,
+        }
+    }
 }
 
 /// Who a member route admits besides the account itself.
@@ -924,12 +933,7 @@ pub async fn delete_account(
         }
     }
 
-    let actor = if reach.is_own() {
-        AuditActor::Holder
-    } else {
-        AuditActor::Owner
-    };
-    account_profile::delete_account(&mut conn, target, actor).await?;
+    account_profile::delete_account(&mut conn, target, reach.actor()).await?;
     // The account is gone once its row is, so a folder that cannot be removed
     // (a permission error, a busy file) is logged with its path rather than
     // answered as a failure. No later account takes this id, so the folder
@@ -1076,14 +1080,6 @@ pub async fn replace_account_password(
     match reach {
         Reach::Own | Reach::OwnersOwn => {
             let token = change_password_on_conn(&mut conn, target, new_hash).await?;
-            audit_trail::record_about(
-                &mut conn,
-                AuditAction::PasswordSet,
-                AuditActor::logged_in_as(target),
-                target,
-                Details::default(),
-            )
-            .await?;
             Ok(Json(ReplaceAccountPasswordResponse { token }).into_response())
         }
         Reach::Owner => {
@@ -1177,12 +1173,8 @@ pub async fn delete_account_messages(
     drop(conn);
     let _batch_lock = state.account_import_locks.lock(target.to_string()).await;
     let mut conn = state.db.acquire().await?;
-    let actor = if reach.is_own() {
-        AuditActor::Holder
-    } else {
-        AuditActor::Owner
-    };
-    let stats = account_profile::delete_all_messages_for_account(&mut conn, target, actor).await?;
+    let stats =
+        account_profile::delete_all_messages_for_account(&mut conn, target, reach.actor()).await?;
     drop(conn);
     crate::asset_store::remove_all_attachment_files(
         &state.db,
@@ -1494,6 +1486,7 @@ pub(crate) async fn list_account_audit_trail(
     crate::audit_trail_api::audit_trail_page(
         &state,
         crate::db::audit_trail::Scope::Account(target),
+        auth.account_id,
         query,
     )
     .await

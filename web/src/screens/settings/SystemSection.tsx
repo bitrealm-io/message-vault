@@ -211,7 +211,6 @@ export function SystemSection() {
   const [stagingPath, setStagingPath] = useState("");
   const [defaultStagingPath, setDefaultStagingPath] = useState("");
   /** The Staging Directory the desktop process holds now. */
-  const [savedStagingPath, setSavedStagingPath] = useState("");
   const [stagingError, setStagingError] = useState<string | null>(null);
   const [rememberPaths, setRememberPaths] = useState(false);
   const [probe, setProbe] = useState<FfmpegToolsProbe | null>(null);
@@ -261,7 +260,6 @@ export function SystemSection() {
       try {
         const staging = await invokeStagingRoot();
         setDefaultStagingPath(staging.defaultRoot);
-        setSavedStagingPath(staging.root);
         setStagingPath(staging.root);
       } catch (caught: unknown) {
         setStagingError(caught instanceof Error ? caught.message : String(caught));
@@ -280,13 +278,15 @@ export function SystemSection() {
   // the default. A run already staged keeps the folder it was made in; the
   // new setting applies to runs started after it.
   const stagingSaveGen = useRef(0);
+  const lastStagingSave = useRef<Promise<unknown>>(Promise.resolve());
   const onStagingPathChange = (next: string) => {
     setStagingPath(next);
     const gen = ++stagingSaveGen.current;
-    invokeSetStagingRoot(next.trim()).then(
+    const save = invokeSetStagingRoot(next.trim());
+    lastStagingSave.current = save;
+    save.then(
       (saved) => {
         if (gen !== stagingSaveGen.current) return;
-        setSavedStagingPath(saved.root);
         setStagingError(null);
       },
       (caught: unknown) => {
@@ -296,13 +296,27 @@ export function SystemSection() {
     );
   };
 
-  // A value the desktop process refused stays in the field until it is left,
-  // then the field shows the folder in use again.
+  // A value the desktop process refused stays in the field until it is left.
+  // The field then shows the folder the desktop process holds, read once the
+  // last save has answered, so a value accepted after the refusal is never
+  // hidden behind the one shown before it.
   const onStagingPathBlur = () => {
     if (stagingError === null) return;
-    stagingSaveGen.current += 1;
-    setStagingPath(savedStagingPath);
+    const gen = ++stagingSaveGen.current;
     setStagingError(null);
+    lastStagingSave.current
+      .catch(() => undefined)
+      .then(() => invokeStagingRoot())
+      .then(
+        (staging) => {
+          if (gen !== stagingSaveGen.current) return;
+          setStagingPath(staging.root);
+        },
+        (caught: unknown) => {
+          if (gen !== stagingSaveGen.current) return;
+          setStagingError(caught instanceof Error ? caught.message : String(caught));
+        },
+      );
   };
 
   const onFfmpegPathChange = (next: string) => {

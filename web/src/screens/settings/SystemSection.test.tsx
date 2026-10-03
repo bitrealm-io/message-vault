@@ -218,6 +218,38 @@ describe("SystemSection", () => {
     expect(await screen.findByText(/disk full/)).toBeInTheDocument();
   });
 
+  it("shows a folder accepted after a refusal when the field is left before the answer", async () => {
+    const user = userEvent.setup();
+    render(<SystemSection />);
+    const stagingInput = await screen.findByDisplayValue("/home/demo/message-crate");
+    await user.type(stagingInput, "x", {
+      initialSelectionStart: 0,
+      initialSelectionEnd: "/home/demo/message-crate".length,
+    });
+    expect(await screen.findByText(/Not saved/)).toBeInTheDocument();
+
+    // The pasted folder replaces the refused one in one change, so the
+    // refusal is still shown when the field is left.
+    (stagingInput as HTMLInputElement).select();
+    // The desktop process accepts the pasted folder, but answers late.
+    let answer!: () => void;
+    setStagingRoot.mockImplementationOnce(
+      (root: string) =>
+        new Promise((resolve) => {
+          answer = () => {
+            desktopStaging.root = root;
+            resolve({ root, defaultRoot: desktopStaging.defaultRoot });
+          };
+        }),
+    );
+    await user.paste("/data/mc");
+    await user.tab();
+    answer();
+
+    await waitFor(() => expect(stagingInput).toHaveValue("/data/mc"));
+    expect(screen.queryByText(/Not saved/)).toBeNull();
+  });
+
   it("says why a relative staging directory is not saved, and shows the one in use on blur", async () => {
     const user = userEvent.setup();
     desktopStaging.root = "/srv/staging";

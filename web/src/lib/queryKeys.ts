@@ -116,10 +116,8 @@ export const keys = {
   /**
    * Pages of an Audit Trail: every account's (`"all"`, the owner's), the
    * logged-in account's own (`"own"`), or one account the owner has opened.
-   * Any write can add an entry, so the whole family goes stale together.
    */
   auditTrail: {
-    all: ["audit-trail"] as const,
     page: (whose: number | "all" | "own", page: number) => ["audit-trail", whose, page] as const,
   },
   serverSettings: { all: ["server-settings"] as const },

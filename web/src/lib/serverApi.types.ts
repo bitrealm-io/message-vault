@@ -1633,7 +1633,11 @@ export interface components {
             action: components["schemas"]["AuditAction"];
             /** @description Who acted. */
             actor: components["schemas"]["AuditActor"];
-            /** @description The API token's masked hint as it was then, such as `mc-api-Sd..mE`. */
+            /**
+             * @description The API token's masked hint as it was then, such as `mc-api-Sd..mE`.
+             *     Only on the entries about the reader's own account: the owner never
+             *     reads another account's.
+             */
             api_token_hint?: string | null;
             /** @description The API token's label as it was then. */
             api_token_label?: string | null;
@@ -2987,7 +2991,11 @@ export interface components {
                 action: components["schemas"]["AuditAction"];
                 /** @description Who acted. */
                 actor: components["schemas"]["AuditActor"];
-                /** @description The API token's masked hint as it was then, such as `mc-api-Sd..mE`. */
+                /**
+                 * @description The API token's masked hint as it was then, such as `mc-api-Sd..mE`.
+                 *     Only on the entries about the reader's own account: the owner never
+                 *     reads another account's.
+                 */
                 api_token_hint?: string | null;
                 /** @description The API token's label as it was then. */
                 api_token_label?: string | null;

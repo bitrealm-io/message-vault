@@ -1,8 +1,14 @@
 import { useState } from "react";
-import AuditTrailTable from "../auditTrail/AuditTrailTable";
-import { useAuditTrail } from "../auditTrail/useAuditTrail";
+import Select, { ListBoxItem, selectItemClassName } from "../../components/Select";
+import AuditTrail from "../auditTrail/AuditTrail";
 import { sectionHint } from "../settings/storage/storageUtils";
 import { useOwnerAccounts } from "./useOwnerAccounts";
+
+/** The picker's key for the full list, beside each account's id. */
+const EVERY_ACCOUNT = "all";
+
+const itemClassName = (state: { isFocused: boolean; isSelected: boolean }) =>
+  selectItemClassName(state, "sm");
 
 /**
  * Owner Home's Audit Trail: what each user did on this Message Crate, and
@@ -15,49 +21,46 @@ import { useOwnerAccounts } from "./useOwnerAccounts";
 export function OwnerAuditTrailPanel() {
   const [accountId, setAccountId] = useState<number | null>(null);
   const { accounts } = useOwnerAccounts();
-  const trail = useAuditTrail(
-    accountId === null ? { kind: "all" } : { kind: "account", id: accountId },
-  );
 
   return (
     <section>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="m-0 text-text">Audit Trail</h3>
-        <label className="flex items-center gap-2 text-[0.813rem] text-muted">
-          Account
-          <select
-            className="rounded border border-border bg-elevated px-2 py-1 text-[0.813rem] text-text"
-            value={accountId ?? ""}
-            onChange={(event) =>
-              setAccountId(event.target.value === "" ? null : Number(event.target.value))
-            }
+        <div className="flex items-center gap-2 text-[0.813rem] text-muted">
+          <span aria-hidden="true">Account</span>
+          <Select
+            aria-label="Account"
+            size="sm"
+            className="w-[12rem]"
+            selectedKey={accountId === null ? EVERY_ACCOUNT : String(accountId)}
+            onSelectionChange={(key) => {
+              if (key == null) return;
+              setAccountId(key === EVERY_ACCOUNT ? null : Number(key));
+            }}
           >
-            <option value="">Every account</option>
+            <ListBoxItem id={EVERY_ACCOUNT} className={itemClassName}>
+              Every account
+            </ListBoxItem>
             {accounts.map((account) => (
-              <option key={account.account_id} value={account.account_id}>
+              <ListBoxItem
+                key={account.account_id}
+                id={String(account.account_id)}
+                className={itemClassName}
+              >
                 {account.username}
-              </option>
+              </ListBoxItem>
             ))}
-          </select>
-        </label>
+          </Select>
+        </div>
       </div>
       <p className={sectionHint}>
         Logins, imports, exports and every change to an account, newest first. Entries are never
         changed or removed, and stay after an account is deleted.
       </p>
-      {trail.loading ? (
-        <p className="text-[0.875rem] text-muted">Loading the Audit Trail…</p>
-      ) : trail.error ? (
-        <p className="text-[0.875rem] text-danger">{trail.error}</p>
-      ) : (
-        <AuditTrailTable
-          entries={trail.entries}
-          total={trail.total}
-          page={trail.page}
-          onPageChange={trail.setPage}
-          showAccount={accountId === null}
-        />
-      )}
+      <AuditTrail
+        of={accountId === null ? { kind: "all" } : { kind: "account", id: accountId }}
+        showAccount={accountId === null}
+      />
     </section>
   );
 }

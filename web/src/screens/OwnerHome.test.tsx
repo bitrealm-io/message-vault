@@ -388,7 +388,8 @@ describe("OwnerHome", () => {
       within(rows[2]).getByText("Logged in from the website (0.10.0+aaaa1111)"),
     ).toBeInTheDocument();
 
-    await userEvent.selectOptions(await screen.findByRole("combobox", { name: "Account" }), "bob");
+    await userEvent.click(await screen.findByRole("button", { name: /Every account/ }));
+    await userEvent.click(await screen.findByRole("option", { name: "bob" }));
     await waitFor(() => expect(listAccountAuditTrail).toHaveBeenCalled());
     expect(listAccountAuditTrail.mock.calls[0][2]).toBe(101);
     await waitFor(() =>

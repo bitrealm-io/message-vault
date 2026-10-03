@@ -24,7 +24,12 @@ fn build_helper() {
         let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
         let mut command = Command::new(cargo);
         command
-            .args(["build", "-p", "imessage-reader"])
+            .args([
+                "build",
+                "-p",
+                "imessage-reader",
+                "--message-format=json-render-diagnostics",
+            ])
             .current_dir(env!("CARGO_MANIFEST_DIR"));
         if let Some(target_dir) = target_dir() {
             command.arg("--target-dir").arg(target_dir);
@@ -40,12 +45,15 @@ fn build_helper() {
             "cargo build -p imessage-reader failed: {}",
             String::from_utf8_lossy(&output.stderr)
         );
-        let exe = std::env::current_exe().expect("this test binary's path");
-        let profile_dir = exe
-            .ancestors()
-            .nth(2)
-            .expect("a test binary runs from target/<profile>/deps/");
-        let program = profile_dir.join(format!("imessage-reader{}", std::env::consts::EXE_SUFFIX));
+        // Where cargo put the program, as it reports it, so a run for
+        // another target or profile finds it too.
+        let program = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+            .filter(|message| message["reason"] == "compiler-artifact")
+            .filter(|message| message["target"]["name"] == "imessage-reader")
+            .find_map(|message| message["executable"].as_str().map(PathBuf::from))
+            .expect("cargo reported the imessage-reader executable");
         // SAFETY: the one test calls `build_helper` before it starts the
         // program, and nothing else reads the environment meanwhile.
         unsafe {

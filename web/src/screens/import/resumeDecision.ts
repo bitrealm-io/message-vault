@@ -45,7 +45,7 @@ export type FolderCheck = "present" | "missing" | "unknown";
  *
  * A session with no recorded device is treated as this install's.
  * `device_id` is optional on `POST /v1/imports`, so the server's `import`
- * command and a program holding an API token open runs without one, and
+ * command, or a program using an API token, opens a session without one, and
  * locking someone out of their own staged work over a missing field would
  * be worse than the rare case of two installs sharing a server.
  */

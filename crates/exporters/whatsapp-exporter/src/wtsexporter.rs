@@ -87,9 +87,6 @@ pub(crate) fn resolve_wtsexporter() -> Result<PathBuf> {
     {
         let candidates = [dir.join(executable), dir.join("cli").join(executable)];
         for candidate in candidates {
-            if candidate.as_os_str().is_empty() {
-                continue;
-            }
             tried.push(candidate.clone());
             if candidate.is_file() {
                 return Ok(candidate);

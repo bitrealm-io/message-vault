@@ -192,4 +192,12 @@ mod tests {
             Some(HandleType::Phone)
         );
     }
+
+    #[test]
+    fn a_participant_cell_without_a_handle_type_is_refused() {
+        // The writer always writes the field, so a cell without it is not
+        // one Message Crate wrote.
+        let parsed = serde_json::from_str::<ParticipantCell>(r#"{"handle": "+15555550101"}"#);
+        assert!(parsed.is_err(), "{parsed:?}");
+    }
 }

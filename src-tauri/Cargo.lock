@@ -1876,6 +1876,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "csv",
+ "hex",
  "media",
  "message-crate-core",
  "message-csv",
@@ -1884,6 +1885,7 @@ dependencies = [
  "message-staging",
  "phone",
  "serde_json",
+ "sha2 0.11.0",
 ]
 
 [[package]]

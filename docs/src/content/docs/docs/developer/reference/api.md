@@ -93,7 +93,7 @@ Every export route takes the `export` scope on a session or an API token. A prog
 - `tag:` — this Message Tag; name, `pre*` prefix, `#id`, `none`.
 - `kind:` — `direct` or `group`.
 - `service:` — `imessage`, `sms`, `mms`, `rcs`, `whatsapp`.
-- `source:` — the backup family it was imported from: `imessage`, `whatsapp`, `sms`.
+- `source:` — the kind of backup it was imported from, by the id its exporter writes into `export.source`: `imessage`, `whatsapp`, `sms-backup-restore`, `imazing`, `openextract`, `go-sms-pro`, `sms-backup-plus`.
 - `import:` — the Import Run that brought it in; `#id` or `last`.
 - `date:`, `first-message:`, `last-message:` — when the message was sent, and when its conversation's first and last message were sent; a day, month, year, or relative span, with comparisons and ranges. A message's `timestamp` is a UTC instant. The span's edges are midnight in the account's `time_zone` (`GET /v1/accounts/{id}`), turned into instants before the comparison.
 - `attachment:` — `image`, `video`, `audio`, `document`, `pdf`, `contact`, `other`, `any`, `none`.

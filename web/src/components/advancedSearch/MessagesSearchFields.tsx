@@ -1,4 +1,6 @@
 import { useId } from "react";
+import type { Key } from "react-aria-components";
+import { EXPORT_SOURCES } from "../../lib/exportSources";
 import { parseSelectKey } from "../../lib/selectKey";
 import Select, { ListBoxItem as SelectListBoxItem } from "../Select";
 import {
@@ -8,6 +10,7 @@ import {
   selectTriggerClass,
 } from "./advancedSearchStyles";
 import type { CountFilterInput } from "./buildAdvancedQuery";
+import ChoiceMultiSelect from "./ChoiceMultiSelect";
 import CountField from "./CountField";
 
 export default function MessagesSearchFields({
@@ -19,6 +22,8 @@ export default function MessagesSearchFields({
   onMsgTypeChange,
   participants,
   onParticipantsChange,
+  sources,
+  onSourcesChange,
 }: {
   nameOrHandle: string;
   onNameOrHandleChange: (value: string) => void;
@@ -28,6 +33,8 @@ export default function MessagesSearchFields({
   onMsgTypeChange: (value: "all" | "direct" | "group") => void;
   participants: CountFilterInput;
   onParticipantsChange: (value: CountFilterInput) => void;
+  sources: Key[];
+  onSourcesChange: (keys: Key[]) => void;
 }) {
   const msgTypeId = useId();
 
@@ -82,6 +89,14 @@ export default function MessagesSearchFields({
         </Select>
       </div>
       <CountField label="Group participants" value={participants} onChange={onParticipantsChange} />
+      {/* `source:` takes the id an import writes on each message, and the
+          backups Import reads are named here as Import names them. */}
+      <ChoiceMultiSelect
+        label="Source"
+        items={EXPORT_SOURCES}
+        value={sources}
+        onChange={onSourcesChange}
+      />
     </div>
   );
 }

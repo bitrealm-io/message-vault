@@ -81,7 +81,7 @@ export function useSearchFields(list: SearchList | null): {
 } {
   const { data, isPending, error } = useRouteQuery(
     keys.searchFields.list(list ?? "conversations"),
-    async (signal) => (await listSearchFields(list ?? "conversations", { signal })).items,
+    (signal) => listSearchFields(list ?? "conversations", { signal }),
     { staleTime: Number.POSITIVE_INFINITY, enabled: list !== null },
   );
   // A failed refetch keeps the words already fetched, and those still hold.

@@ -1511,6 +1511,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "csv",
+ "hex",
  "media",
  "message-crate-core",
  "message-csv",
@@ -1519,6 +1520,7 @@ dependencies = [
  "message-staging",
  "phone",
  "serde_json",
+ "sha2 0.11.0",
  "tempfile",
 ]
 
@@ -1609,6 +1611,7 @@ dependencies = [
  "anyhow",
  "chat-db-fixture",
  "imessage-reader-protocol",
+ "ios-backup",
  "message-crate-core",
  "plist",
  "serde_json",
@@ -1995,6 +1998,7 @@ name = "message-reexport"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "csv",
  "media",
  "message-crate-core",
@@ -2002,6 +2006,7 @@ dependencies = [
  "message-ir-format",
  "message-staging",
  "serde_json",
+ "sms-backup-plus-exporter",
  "sms-backup-restore-exporter",
  "tempfile",
 ]
@@ -3042,6 +3047,8 @@ dependencies = [
  "chrono",
  "csv",
  "hex",
+ "mail",
+ "mail-builder",
  "mailparse",
  "media",
  "message-crate-core",

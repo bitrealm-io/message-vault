@@ -8,6 +8,7 @@ use message_ir::{
 };
 use serde_json::{Value, json};
 use std::fs;
+use std::path::Path;
 
 #[test]
 fn writes_json_csv_jsonl_and_eml() {
@@ -142,18 +143,18 @@ fn unified_csv_headers_for_all_sources() {
     assert!(csv.contains("loved"));
     assert!(csv.contains("+15555550100")); // outgoing sender / owner
 
-    let sbr_doc = message_ir::testutil::sample_document("hello ir");
-    let sbr_csv_path = write_format(tmp.path(), OutputFormat::Csv, sbr_doc).unwrap();
-    let sbr_csv = fs::read_to_string(&sbr_csv_path).unwrap();
-    assert_eq!(sbr_csv.lines().next().unwrap(), CSV_HEADERS.join(","));
-    assert!(!sbr_csv.contains("xml_fields_json"));
-    assert!(sbr_csv.contains("source_fields_json"));
+    let sms_doc = message_ir::testutil::sample_document("hello ir");
+    let sms_csv_path = write_format(tmp.path(), OutputFormat::Csv, sms_doc).unwrap();
+    let sms_csv = fs::read_to_string(&sms_csv_path).unwrap();
+    assert_eq!(sms_csv.lines().next().unwrap(), CSV_HEADERS.join(","));
+    assert!(!sms_csv.contains("xml_fields_json"));
+    assert!(sms_csv.contains("source_fields_json"));
 }
 
 #[test]
 fn packaging_stem_suffix_affects_filename_not_json() {
     let mut doc = message_ir::testutil::sample_document("hello ir");
-    doc.packaging_stem_suffix = Some("__whatsapp".into());
+    doc.packaging_stem_suffix = Some("__chatapp".into());
     let tmp = tempfile::tempdir().unwrap();
     let path = write_format(tmp.path(), OutputFormat::Json, doc).unwrap();
     assert!(
@@ -161,11 +162,11 @@ fn packaging_stem_suffix_affects_filename_not_json() {
             .unwrap()
             .to_str()
             .unwrap()
-            .contains("__whatsapp")
+            .contains("__chatapp")
     );
     let raw = fs::read_to_string(&path).unwrap();
     assert!(!raw.contains("filename_suffix"));
-    assert!(!raw.contains("__whatsapp"));
+    assert!(!raw.contains("__chatapp"));
 }
 
 fn assert_docs_equal_after_normalize(mut a: ConversationDocument, mut b: ConversationDocument) {
@@ -506,7 +507,7 @@ fn hard_texts_survive_every_format() {
                 OutputFormat::Csv => read_conversation_csv(&path),
                 OutputFormat::Eml => read_conversation_eml_dir(&path),
                 OutputFormat::Mbox => read_conversation_mbox(&path),
-                OutputFormat::Xml => unreachable!(),
+                OutputFormat::Xml | OutputFormat::SmsBackupPlus => unreachable!(),
             };
             let back = match back {
                 Ok(back) => back,
@@ -588,23 +589,34 @@ fn csv_with_no_participants_reads_back_with_an_empty_roster() {
     assert_eq!(back.messages.len(), doc.messages.len());
 }
 
+/// The stem suffix belongs to the exporter that chose it, so this crate
+/// recovers whatever suffix a file carries rather than one it knows by name.
+/// A file keeps its name when it is read and written again, in every format.
 #[test]
-fn a_whatsapp_file_keeps_its_name_when_read_and_written_again() {
+fn a_file_with_a_stem_suffix_keeps_its_name_when_read_and_written_again() {
+    type Reader = fn(&Path) -> anyhow::Result<ConversationDocument>;
     let tmp = tempfile::tempdir().unwrap();
-    let mut whatsapp = message_ir::testutil::sample_document("hello ir");
-    whatsapp.packaging_stem_suffix = Some("__whatsapp".into());
-    let plain = message_ir::testutil::sample_document("hello ir");
+    let readers: [(OutputFormat, Reader); 5] = [
+        (OutputFormat::Json, read_conversation_json),
+        (OutputFormat::Jsonl, read_conversation_jsonl),
+        (OutputFormat::Csv, read_conversation_csv),
+        (OutputFormat::Eml, read_conversation_eml_dir),
+        (OutputFormat::Mbox, read_conversation_mbox),
+    ];
+    for (format, read) in readers {
+        for suffix in [Some("__chatapp"), Some("__other__app"), None] {
+            let mut doc = message_ir::testutil::sample_document("hello ir");
+            doc.packaging_stem_suffix = suffix.map(String::from);
+            let label = format!("{} {suffix:?}", format.as_str());
+            let first = tmp.path().join(format!("first-{label}"));
+            let path = write_format(&first, format, doc).unwrap();
+            let back = read(&path).unwrap();
+            assert_eq!(back.packaging_stem_suffix.as_deref(), suffix, "{label}");
 
-    for doc in [whatsapp, plain] {
-        let suffix = doc.packaging_stem_suffix.clone();
-        let first = tmp.path().join("first");
-        let path = write_format(&first, OutputFormat::Json, doc).unwrap();
-        let back = read_conversation_json(&path).unwrap();
-        assert_eq!(back.packaging_stem_suffix, suffix);
-
-        let second = tmp.path().join("second");
-        let again = write_format(&second, OutputFormat::Json, back).unwrap();
-        assert_eq!(again.file_name(), path.file_name());
+            let second = tmp.path().join(format!("second-{label}"));
+            let again = write_format(&second, format, back).unwrap();
+            assert_eq!(again.file_name(), path.file_name(), "{label}");
+        }
     }
 }
 

@@ -29,8 +29,7 @@ describe("ListRangeHeader", () => {
     render(
       <ListRangeHeader
         rangeLabel="1–20 of 100"
-        onSelectAllChange={onSelectAllChange}
-        selectAllLabel="Select all contacts"
+        selectAll={{ onChange: onSelectAllChange, label: "Select all contacts" }}
       />,
     );
     await user.click(screen.getByRole("checkbox", { name: "Select all contacts" }));
@@ -42,8 +41,7 @@ describe("ListRangeHeader", () => {
     const user = userEvent.setup();
     render(
       <ListRangeHeader
-        onSelectAllChange={onSelectAllChange}
-        selectAllLabel="Select all contacts"
+        selectAll={{ onChange: onSelectAllChange, label: "Select all contacts" }}
         actions={<button type="button">Sort</button>}
       />,
     );

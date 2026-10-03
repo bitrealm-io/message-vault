@@ -3,6 +3,21 @@
 //! through a translation. A token stores only `import` and `export`: it never
 //! carries `delete` (`docs/architecture/http-api.md`, "Credentials and reach").
 
+use serde::{Deserialize, Serialize};
+
+/// One of the three permissions, by name: what the Audit Trail lists when the
+/// owner turns one on or off.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Permission {
+    /// May call the import endpoints.
+    Import,
+    /// May call the export endpoints.
+    Export,
+    /// May destroy message data for good.
+    Delete,
+}
+
 /// Operations a credential is allowed to perform.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Permissions {

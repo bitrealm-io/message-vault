@@ -96,7 +96,9 @@ impl FromStr for MediaMode {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::parse(s).ok_or_else(|| {
-            format!("invalid media-mode '{s}' (expected disabled, clone, convert, or compress)")
+            format!(
+                "unknown attachment setting '{s}' (expected disabled, clone, convert, or compress)"
+            )
         })
     }
 }

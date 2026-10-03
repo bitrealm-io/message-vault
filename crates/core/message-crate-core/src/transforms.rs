@@ -91,7 +91,7 @@ mod tests {
             progress: None,
             output_format: OutputFormat::Json,
             resume: false,
-            source: SourceConfig::Format(FormatConfig {}),
+            source: SourceConfig::Format(FormatConfig::default()),
         }
     }
 

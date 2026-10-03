@@ -8,7 +8,8 @@ use crate::attachments::{
 use crate::attachments_emit::{attachment_digests, pending_attachment_to_ir};
 use crate::parse::{DiscoveredCsv, RawRow, SourceKind, discover_csv_files, parse_csv_file};
 use crate::parse_emit::{
-    PeerInfo, collect_peer_info, is_notification, is_outgoing, parse_message_date, resolve_sender,
+    Session, group_vendor_id, group_vendor_id_with_name, handle_type_for, is_notification,
+    is_outgoing, parse_message_date, resolve_sender, session_key,
 };
 use crate::unnamed_files::{FolderRows, UnnamedFile, unnamed_files};
 use anyhow::Result;
@@ -17,8 +18,8 @@ use message_crate_core::{
 };
 use message_csv::Zone;
 use message_ir::{
-    ExportMeta, HandleType, IrAttachment, IrParticipant, IrService, IrSource, PendingAttachment,
-    PendingConversation, PendingMessage, ProjectedRole, ProjectionHooks,
+    ConversationKey, ExportMeta, IrAttachment, IrParticipant, IrService, IrSource,
+    PendingAttachment, PendingConversation, PendingMessage, ProjectedRole, ProjectionHooks,
 };
 use message_staging::{AttachmentSource, ExportWriter};
 use serde_json::Map;
@@ -29,20 +30,10 @@ const EXPORT_SOURCE: &str = "imazing";
 const EXPORT_TOOL: &str = "iMazing";
 const EXPORT_TOOL_VERSION: &str = "3.5.5";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum TransportFamily {
     Messages,
     WhatsApp,
-}
-
-impl TransportFamily {
-    /// The conversation-key prefix that keeps Messages and WhatsApp chats with the same peer apart.
-    fn key_prefix(self) -> &'static str {
-        match self {
-            Self::Messages => "messages",
-            Self::WhatsApp => "whatsapp",
-        }
-    }
 }
 
 /// Inputs for [`convert_export`].
@@ -101,23 +92,26 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
         ingest.attach_unnamed_files();
     }
     let Ingest {
-        conversations,
+        mut conversations,
         mut report,
         ..
     } = ingest;
+    separate_groups_with_one_earliest_row(&mut conversations);
 
-    let hooks = ImazingProjection {
-        export: message_crate_core::export_meta(
-            EXPORT_SOURCE,
-            EXPORT_TOOL,
-            EXPORT_TOOL_VERSION,
-            None,
-            None,
-        ),
-    };
+    let export = message_crate_core::export_meta(
+        EXPORT_SOURCE,
+        EXPORT_TOOL,
+        EXPORT_TOOL_VERSION,
+        None,
+        None,
+    );
     let mut documents = Vec::new();
     let mut sources = Vec::new();
-    for (_key, mut convo) in conversations {
+    for (_, Conversation { key, mut convo, .. }) in conversations {
+        let hooks = ImazingProjection {
+            export: &export,
+            key: &key,
+        };
         let chat_id = convo.chat_id.clone();
         let Some(doc) = project_conversation(&chat_id, &mut convo, &hooks, &mut report) else {
             continue;
@@ -147,13 +141,160 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
     Ok(report)
 }
 
+/// One conversation being read: its key, and its messages so far.
+struct Conversation {
+    key: ConversationKey,
+    convo: PendingConversation,
+    /// For a group, its rows' digests, earliest first (`Session::row_digests`).
+    row_digests: Vec<[u8; 32]>,
+}
+
+/// Which pending conversation a session's rows go to.
+///
+/// A one-to-one conversation is one conversation across every CSV that
+/// names its address. A group session is a conversation of its own, even
+/// when another starts with the same row: `separate_groups_with_one_earliest_row`
+/// decides which ones are one group once every CSV is read.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct ConvoKey {
+    /// Keeps a Messages conversation and a WhatsApp conversation with the
+    /// same peer apart.
+    family: TransportFamily,
+    chat_id: String,
+    /// For a group, the CSV session it was read from.
+    group_session: Option<GroupSession>,
+}
+
+/// The CSV session a group was read from.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct GroupSession {
+    /// The CSV's place in discovery order.
+    csv_index: usize,
+    /// The session's `Chat Session` value.
+    session_name: String,
+}
+
+/// Give every group a key of its own when several start with the same row.
+///
+/// A group's key is its earliest row, and two groups can start with the same
+/// row: the account holder sends one message to two new groups in the same
+/// second. Of the groups that share an earliest row:
+///
+/// - Those with one session name are one group, read from two exports in
+///   the same input folder, and are merged. Groups with different session
+///   names are never merged, even when one's rows are the first rows of the
+///   other's.
+/// - Each other one hashes its earliest rows, as few as tell it apart from
+///   every one of the others ([`group_vendor_id`]).
+///
+/// Such a key depends on the groups it is told apart from, so it changes
+/// when one of them is gone from the phone, or a new one shares more of its
+/// earliest rows.
+fn separate_groups_with_one_earliest_row(conversations: &mut BTreeMap<ConvoKey, Conversation>) {
+    let mut by_chat_id: BTreeMap<(TransportFamily, String), Vec<ConvoKey>> = BTreeMap::new();
+    for key in conversations
+        .keys()
+        .filter(|key| key.group_session.is_some())
+    {
+        by_chat_id
+            .entry((key.family, key.chat_id.clone()))
+            .or_default()
+            .push(key.clone());
+    }
+    for mut keys in by_chat_id.into_values().filter(|keys| keys.len() > 1) {
+        // Longest first, so a group read from an older export folds into
+        // the newest one.
+        keys.sort_by_key(|key| std::cmp::Reverse(conversations[key].row_digests.len()));
+        let mut kept: Vec<ConvoKey> = Vec::new();
+        for key in keys {
+            let Some(same_group) = kept
+                .iter()
+                .find(|held| session_name(held) == session_name(&key))
+                .cloned()
+            else {
+                kept.push(key);
+                continue;
+            };
+            let older = conversations.remove(&key).expect("listed above");
+            merge_group_into(
+                conversations.get_mut(&same_group).expect("kept above"),
+                older,
+            );
+        }
+        if kept.len() < 2 {
+            continue;
+        }
+        let ids: Vec<String> = kept
+            .iter()
+            .map(|key| {
+                let digests = &conversations[key].row_digests;
+                let shared = kept
+                    .iter()
+                    .filter(|other| *other != key)
+                    .map(|other| {
+                        digests
+                            .iter()
+                            .zip(&conversations[other].row_digests)
+                            .take_while(|(a, b)| a == b)
+                            .count()
+                    })
+                    .max()
+                    .unwrap_or(0);
+                let same_rows = kept
+                    .iter()
+                    .any(|other| other != key && conversations[other].row_digests == *digests);
+                if same_rows {
+                    return group_vendor_id_with_name(digests, session_name(key).unwrap_or(""));
+                }
+                // One row past the longest shared run is one of its own.
+                // `group_vendor_id` takes all the rows when there are fewer.
+                group_vendor_id(digests, shared + 1)
+            })
+            .collect();
+        for (key, id) in kept.iter().zip(ids) {
+            let conversation = conversations.get_mut(key).expect("kept above");
+            if let ConversationKey::Group { vendor_id, .. } = &mut conversation.key {
+                *vendor_id = id;
+            }
+            conversation.convo.chat_id = conversation.key.chat_id();
+        }
+    }
+}
+
+/// The session name of a group's [`ConvoKey`].
+fn session_name(key: &ConvoKey) -> Option<&str> {
+    key.group_session
+        .as_ref()
+        .map(|session| session.session_name.as_str())
+}
+
+/// Fold `other`, the same group read from another export, into `into`.
+fn merge_group_into(into: &mut Conversation, other: Conversation) {
+    into.convo.messages.extend(other.convo.messages);
+    if let (
+        ConversationKey::Group { members, .. },
+        ConversationKey::Group {
+            members: other_members,
+            ..
+        },
+    ) = (&mut into.key, other.key)
+    {
+        for member in other_members {
+            let same = |held: &IrParticipant| {
+                held.handle == member.handle && held.display_name == member.display_name
+            };
+            if !members.iter().any(same) {
+                members.push(member);
+            }
+        }
+    }
+}
+
 /// Parse-time state shared across every CSV file in one export.
 struct Ingest {
     tz: Zone,
     copy_attachments: bool,
-    /// Keyed by `<family>|<chat id>` so a Messages chat and a WhatsApp chat
-    /// with the same peer stay separate conversations.
-    conversations: BTreeMap<String, PendingConversation>,
+    conversations: BTreeMap<ConvoKey, Conversation>,
     /// Every row matched to a file, in the order the rows were read.
     claims: Vec<FileClaim>,
     /// Each chat folder's row texts, keyed by the row's `Message Date` as
@@ -173,7 +314,7 @@ struct FileClaim {
     /// Where the row sits in the export: the CSV's place in discovery order,
     /// then the row's place in that CSV.
     order: (usize, usize),
-    convo_key: String,
+    convo_key: ConvoKey,
     message: usize,
 }
 
@@ -240,46 +381,61 @@ impl Ingest {
         }
     }
 
-    /// Work out who one chat session is with, then add each of its rows.
+    /// Work out the key of one chat session, then add each of its rows.
+    ///
+    /// The rows of one session in one CSV are one conversation; a real
+    /// export writes one session to each CSV.
     fn ingest_session(
         &mut self,
         csv: &CsvContext<'_>,
         discovered: &DiscoveredCsv,
-        session: &str,
+        session_name: &str,
         rows: &[(usize, &RawRow)],
     ) {
         let session_rows: Vec<&RawRow> = rows.iter().map(|(_, row)| *row).collect();
-        let peer = collect_peer_info(discovered.kind, session, &session_rows);
-        if peer.unresolved_chat {
+        let session = session_key(discovered.kind, session_name, &session_rows);
+        if session.key.is_name_only() {
             self.report.bump("name_only_chat", 1);
         }
         self.report.bump(
             "unresolved_group_participants",
-            peer.unresolved_roster_labels,
+            session.unresolved_roster_labels,
         );
-        let family = TransportFamily::from_kind(discovered.kind);
-        let convo_key = format!("{}|{}", family.key_prefix(), peer.chat_id);
+        let chat_id = session.key.chat_id();
+        let convo_key = ConvoKey {
+            family: TransportFamily::from_kind(discovered.kind),
+            chat_id: chat_id.clone(),
+            group_session: session.key.is_group().then(|| GroupSession {
+                csv_index: csv.index,
+                session_name: session_name.to_string(),
+            }),
+        };
         self.conversations
             .entry(convo_key.clone())
             .or_insert_with(|| {
+                let is_group = session.key.is_group();
                 let mut convo = PendingConversation::new(
-                    peer.chat_id.clone(),
-                    peer.group,
-                    peer.group.then(|| session.to_string()),
+                    chat_id,
+                    is_group,
+                    is_group.then(|| session_name.to_string()),
                     Vec::new(),
                 );
                 convo
                     .extra
                     .insert("source_kind".into(), discovered.kind.as_str().to_string());
-                if peer.unresolved_chat {
+                if session.key.is_name_only() {
                     convo
                         .extra
                         .insert(message_ir::CHAT_ID_IS_NAME.into(), "1".into());
                 }
-                convo
+                Conversation {
+                    key: session.key.clone(),
+                    convo,
+                    row_digests: session.row_digests.clone(),
+                }
             });
         for &(row_index, row) in rows {
-            let Some(message) = self.message_from_row(discovered, row, &peer, csv, row_index)
+            let Some(message) = self.message_from_row(discovered, row, &session, csv, row_index)
             else {
                 continue;
             };
@@ -287,6 +443,7 @@ impl Ingest {
                 .conversations
                 .get_mut(&convo_key)
                 .expect("conversation inserted above")
+                .convo
                 .messages;
             let source = message.extra_str(&attachment_source_key(0));
             if !source.is_empty() {
@@ -309,7 +466,7 @@ impl Ingest {
         &mut self,
         discovered: &DiscoveredCsv,
         row: &RawRow,
-        peer: &PeerInfo,
+        session: &Session,
         csv: &CsvContext<'_>,
         row_index: usize,
     ) -> Option<PendingMessage> {
@@ -319,13 +476,8 @@ impl Ingest {
         };
         let is_notification = is_notification(&row.msg_type);
         let is_from_me = !is_notification && is_outgoing(&row.msg_type);
-        let (sender_handle, sender_display_name) = resolve_sender(
-            row,
-            is_from_me,
-            is_notification,
-            &peer.chat_id,
-            &peer.contact_name,
-        );
+        let (sender_handle, sender_display_name) =
+            resolve_sender(row, is_from_me, is_notification, session);
         let (attachments, attachment_extra) = attachment_for_row(row, csv, row_index);
         let service = if row.service.trim().is_empty() {
             match discovered.kind {
@@ -342,7 +494,7 @@ impl Ingest {
             if is_notification { "true" } else { "false" }.into(),
         );
         extra.insert("subject".into(), row.subject.clone());
-        extra.insert("contact_name".into(), peer.contact_name.clone());
+        extra.insert("contact_name".into(), session.contact_name.clone());
         extra.insert("service".into(), service);
         extra.insert("imazing_status".into(), row.status.clone());
         extra.insert("imazing_type".into(), row.msg_type.clone());
@@ -439,6 +591,7 @@ impl Ingest {
             .conversations
             .get_mut(&first.convo_key)
             .expect("a claim names a conversation that exists")
+            .convo
             .messages[first.message];
         message.extra.insert(
             attachment_source_key(message.attachments.len()),
@@ -576,54 +729,6 @@ fn collect_attachment_sources(convo: &PendingConversation, out: &mut Vec<Option<
     }
 }
 
-/// iMazing identifiers are E.164 phones, emails, or (rarely) name stems;
-/// infer the type from the handle shape.
-fn handle_type_for(handle: &str) -> HandleType {
-    if handle.contains('@') {
-        HandleType::Email
-    } else {
-        HandleType::Phone
-    }
-}
-
-/// Peer handles for a group: its chat id is its members' addresses joined by
-/// commas. A one-to-one chat has none here; its one peer is added by the
-/// caller.
-fn imazing_peers(is_group: bool, chat_id: &str) -> Vec<String> {
-    if is_group {
-        chat_id
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect()
-    } else {
-        Vec::new()
-    }
-}
-
-/// The people a Messages group session names, for a group whose rows carry
-/// no address: `Alice Example & Bob Example` names two.
-///
-/// Each is a participant with the name and no handle, because the source
-/// named the person and recorded no address for them. The group's chat id is
-/// a stem of the session name. It reaches nobody, so it is no one's handle.
-fn named_group_members(session: &str) -> Vec<IrParticipant> {
-    let mut names: Vec<&str> = Vec::new();
-    for name in session.split(" & ").map(str::trim) {
-        if !name.is_empty() && !names.contains(&name) {
-            names.push(name);
-        }
-    }
-    names
-        .into_iter()
-        .map(|name| IrParticipant {
-            handle: None,
-            display_name: Some(name.to_string()),
-            handle_type: None,
-        })
-        .collect()
-}
-
 /// `__whatsapp` for WhatsApp chats so their files do not collide with Messages files for the same peer.
 fn imazing_packaging_stem_suffix(source_kind: &str) -> Option<String> {
     if source_kind == "whatsapp" {
@@ -633,12 +738,15 @@ fn imazing_packaging_stem_suffix(source_kind: &str) -> Option<String> {
     }
 }
 
-/// iMazing deltas of the shared [`message_ir::pending_to_document`] projection.
-struct ImazingProjection {
-    export: ExportMeta,
+/// iMazing deltas of the shared [`message_ir::pending_to_document`]
+/// projection, for one conversation.
+struct ImazingProjection<'a> {
+    export: &'a ExportMeta,
+    /// The key of the conversation being projected.
+    key: &'a ConversationKey,
 }
 
-impl ProjectionHooks for ImazingProjection {
+impl ProjectionHooks for ImazingProjection<'_> {
     fn export(&self) -> ExportMeta {
         self.export.clone()
     }
@@ -669,37 +777,24 @@ impl ProjectionHooks for ImazingProjection {
         pending_attachment_to_ir(att, msg)
     }
 
-    fn participants(&self, chat_id: &str, convo: &PendingConversation) -> Vec<IrParticipant> {
-        if convo.is_group && convo.extra.contains_key(message_ir::CHAT_ID_IS_NAME) {
-            // A group's display name is its session string (`ingest_session`).
-            return named_group_members(convo.display_name.as_deref().unwrap_or(""));
+    /// A group's members come from its key, never from its chat id. A
+    /// one-to-one conversation's one participant is the person it is with:
+    /// their address, or for a conversation keyed by a name, the name and no
+    /// address.
+    fn participants(&self, _chat_id: &str, convo: &PendingConversation) -> Vec<IrParticipant> {
+        match self.key {
+            ConversationKey::Group { members, .. } => members.clone(),
+            ConversationKey::OneToOne(handle) => vec![IrParticipant {
+                handle: Some(handle.clone()),
+                display_name: convo.first_contact_name(),
+                handle_type: Some(handle_type_for(handle)),
+            }],
+            ConversationKey::NameOnly(_) => vec![IrParticipant {
+                handle: None,
+                display_name: convo.first_contact_name(),
+                handle_type: None,
+            }],
         }
-        let peers = imazing_peers(convo.is_group, chat_id);
-        let mut participants: Vec<IrParticipant> = peers
-            .iter()
-            .map(|h| IrParticipant {
-                handle: Some(h.clone()),
-                display_name: None,
-                handle_type: Some(handle_type_for(h)),
-            })
-            .collect();
-        if participants.is_empty() && !convo.is_group && !chat_id.is_empty() {
-            if convo.extra.contains_key(message_ir::CHAT_ID_IS_NAME) {
-                // The source named this person and recorded no address.
-                participants.push(IrParticipant {
-                    handle: None,
-                    display_name: convo.first_contact_name(),
-                    handle_type: None,
-                });
-            } else {
-                participants.push(IrParticipant {
-                    handle: Some(chat_id.to_string()),
-                    display_name: convo.first_contact_name(),
-                    handle_type: Some(handle_type_for(chat_id)),
-                });
-            }
-        }
-        participants
     }
 
     fn packaging_stem_suffix(&self, convo: &PendingConversation) -> Option<String> {

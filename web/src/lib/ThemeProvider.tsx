@@ -61,11 +61,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener("change", onChange);
   }, []);
 
+  const resolvedMode = resolveMode(mode, prefersDark);
+
   useEffect(() => {
     if (!hydrated) return;
-    void prefersDark;
-    applyTheme(mode, seeds);
-  }, [hydrated, mode, seeds, prefersDark]);
+    applyTheme(resolvedMode, seeds);
+  }, [hydrated, resolvedMode, seeds]);
 
   const setMode = useCallback((next: ThemeMode) => {
     setModeState(next);
@@ -99,8 +100,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setSeedsState(preset.seeds);
     writePref(THEME_SEEDS_KEY, formatThemeShare(preset.seeds));
   }, []);
-
-  const resolvedMode = resolveMode(mode, prefersDark);
 
   const value = useMemo(
     () => ({

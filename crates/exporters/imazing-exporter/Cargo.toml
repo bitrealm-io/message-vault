@@ -10,6 +10,7 @@ autotests = false
 anyhow = { workspace = true }
 chrono = { workspace = true }
 csv = { workspace = true }
+hex = { workspace = true }
 message-csv = { path = "../../libs/csv" }
 message-crate-core = { path = "../../core/message-crate-core" }
 message-ir = { path = "../../libs/ir" }
@@ -18,6 +19,7 @@ message-staging = { path = "../../libs/staging" }
 media = { path = "../../libs/media" }
 phone = { path = "../../libs/phone" }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 
 [dev-dependencies]
 message-crate-core = { path = "../../core/message-crate-core", features = ["testutil"] }

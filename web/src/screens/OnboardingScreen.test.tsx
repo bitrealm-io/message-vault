@@ -25,8 +25,8 @@ let identities: { address: string; service: Service }[] = [];
 
 vi.mock("../lib/serverApi", () => ({
   updateAccountProfile: (...args: unknown[]) => apiPost(...(args as [])),
-  listAccountIdentities: async () => ({
-    items: identities.map(({ address, service }) => ({
+  listAccountIdentities: async () =>
+    identities.map(({ address, service }) => ({
       address,
       service,
       start_date: null,
@@ -35,10 +35,6 @@ vi.mock("../lib/serverApi", () => ({
       direct_messages: 0,
       group_messages: 0,
     })),
-    total: identities.length,
-    limit: 40,
-    offset: 0,
-  }),
 }));
 
 // What the server says the account already holds; a test sets it to what the owner filled in.

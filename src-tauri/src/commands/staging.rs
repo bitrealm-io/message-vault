@@ -72,7 +72,7 @@ pub fn set_staging_root(
     folders: tauri::State<'_, Mutex<StagingFolders>>,
     root: String,
 ) -> Result<StagingRoot, String> {
-    let mut folders = lock(&folders);
+    let folders = lock(&folders);
     folders.set_root(&root)?;
     folders.describe()
 }
@@ -407,28 +407,27 @@ fn save_run_record(folder: &Path, record: &serde_json::Value) -> Result<(), Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::staging_folders::Scratch;
     use media::MediaMode;
 
-    /// A record of staging folders in its own temporary app-data and home
-    /// folders, and one folder made in it.
+    /// A record of staging folders in its own temporary folders, and one
+    /// folder made in it.
     struct Made {
         folders: Mutex<StagingFolders>,
         run: PathBuf,
-        _dirs: [tempfile::TempDir; 2],
+        _scratch: Scratch,
     }
 
     fn made() -> Made {
-        let app_data = tempfile::tempdir().unwrap();
-        let home = tempfile::tempdir().unwrap();
-        let mut folders = StagingFolders::load(
-            app_data.path().join(staging_folders::RECORD_FILE),
-            Some(home.path().to_path_buf()),
-        );
-        let run = folders.create("imessage-ios", "261002-101500").unwrap();
+        let scratch = Scratch::new();
+        let run = scratch
+            .folders
+            .create("imessage-ios", "261002-101500")
+            .unwrap();
         Made {
-            folders: Mutex::new(folders),
+            folders: Mutex::new(scratch.reopen()),
             run,
-            _dirs: [app_data, home],
+            _scratch: scratch,
         }
     }
 

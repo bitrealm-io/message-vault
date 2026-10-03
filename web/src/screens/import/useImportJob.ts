@@ -677,7 +677,9 @@ function waitAtReview(phase: "staging_review" | "media_review"): void {
  * `cancelled` overrides `importOutcome`'s verdict outright: the person asked
  * for this, so it is never read as a failure. `paused` does the same for an
  * Upload stopped by Pause, and also skips `/complete`: the run stays at
- * `pushing` with its folder, and the next visit offers to resume it.
+ * `pushing` with its folder, and the next visit offers to resume it. A
+ * finished Upload whose `/complete` the server refuses ends the same way,
+ * with the server's error among the run's issues on screen.
  *
  * `skipComplete` is that one exception. A cancellation mid Media is routed
  * to the same recovery as a crash at that stage, and only an explicit
@@ -757,13 +759,13 @@ async function finishImport(args: {
       return { ...step, durationMs: duration };
     }),
   );
-  const ok = outcome === "completed" || outcome === "completed_with_issues";
+  let completeRefused: string | null = null;
   if (sessionId && !skipComplete && !paused) {
     try {
+      // The server counts the messages and attachments the run holds: a
+      // resumed Upload's report counts only what the resume sent.
       await completeImport(sessionId, {
         status: outcome,
-        message_count: pushReport?.messages_inserted,
-        attachment_count: pushReport?.assets_uploaded,
         bytes_uploaded: pushReport?.assets_bytes,
         parse_ms: parseMs,
         attachments_ms: attachmentsMs,
@@ -783,16 +785,40 @@ async function finishImport(args: {
         },
         issues: finalSummary.issues,
       });
-    } catch {
-      // Completing the run on the server is optional. The summary still shows local results.
+    } catch (e: unknown) {
+      completeRefused = e instanceof Error ? e.message : String(e);
     }
   }
-  // Once the server holds the import, the staging directory is a second,
-  // unprotected copy of the person's messages in a temp folder, so it goes:
-  // the push log, journal and report with it. The server's own import record
-  // (counts, timings, issues) is what stays. A failed, cancelled or paused
-  // run keeps its folder, since the staged files are what a resume reads.
-  const stagingDir = ok ? await deleteStagingAfterSuccess() : store.get().stagingDir;
+  const ok = outcome === "completed" || outcome === "completed_with_issues";
+  if (completeRefused != null) {
+    // The server still holds the run as running. A run whose Upload went
+    // through stays at `pushing`, paused, and the next visit resumes it: the
+    // resumed push finds every message already sent and posts `/complete`
+    // again. The error is shown here only, since the server never took the
+    // issues it would be recorded with.
+    if (ok) {
+      finalSummary.status = "paused";
+      setRowByLabel(UPLOAD_LABEL, { status: "error", detail: "Paused" });
+    }
+    finalSummary.issues = [
+      ...finalSummary.issues,
+      {
+        kind: "error",
+        step: "upload",
+        item: "Import",
+        reason: `Message Crate didn't record the import as finished: ${completeRefused}`,
+      },
+    ];
+  }
+  // Once the server holds the finished import, the staging directory is a
+  // second, unprotected copy of the person's messages in a temp folder, so
+  // it goes: the push log, journal and report with it. The server's own
+  // import record (counts, timings, issues) is what stays. A failed,
+  // cancelled or paused run keeps its folder, since the staged files are
+  // what a resume reads, and so does a run whose completion the server did
+  // not take, since it is still running there.
+  const stagingDir =
+    ok && completeRefused == null ? await deleteStagingAfterSuccess() : store.get().stagingDir;
   // The server writes this run's saved search and Contact Group when the run
   // completes, so a window closed mid-import still gets them.
   store.set({ summaryView: finalSummary, phase: "done", running: false, stagingDir });

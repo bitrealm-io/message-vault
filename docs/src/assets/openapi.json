@@ -10299,18 +10299,11 @@
       },
       "CompleteImportRequest": {
         "type": "object",
-        "description": "Final stats and issues for a running Import Run. The outcome is stated\nonce, as `status`.",
+        "description": "Final stats and issues for a running Import Run. The outcome is stated\nonce, as `status`. The run's message and attachment counts are not part\nof it: the server counts what the run holds, since a resumed Upload's\nclient knows only what the resume sent.",
         "required": [
           "status"
         ],
         "properties": {
-          "attachment_count": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64"
-          },
           "attachments_ms": {
             "type": [
               "integer",
@@ -10337,13 +10330,6 @@
             "items": {
               "$ref": "#/components/schemas/CompleteImportIssueRequest"
             }
-          },
-          "message_count": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64"
           },
           "parse_ms": {
             "type": [

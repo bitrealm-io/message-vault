@@ -371,8 +371,6 @@ async fn imports_complete_and_detail_surface_timings_and_issues() {
     let (_dir, state, token, import_id) = test_state().await;
     let body = CompleteImportRequest {
         status: "completed".into(),
-        message_count: Some(10),
-        attachment_count: Some(2),
         bytes_uploaded: Some(100),
         duration_ms: Some(48_000),
         parse_ms: Some(18_000),
@@ -408,8 +406,9 @@ async fn imports_complete_and_detail_surface_timings_and_issues() {
     .await
     .unwrap();
     assert_eq!(response.0.status.as_str(), "completed");
-    assert_eq!(response.0.message_count, 10);
-    assert_eq!(response.0.attachment_count, 2);
+    // Counted from what the run holds, which is nothing here.
+    assert_eq!(response.0.message_count, 0);
+    assert_eq!(response.0.attachment_count, 0);
     assert_eq!(response.0.bytes_uploaded, 100);
 
     let detail = get_import(
@@ -439,8 +438,6 @@ async fn imports_complete_stores_completed_with_issues_status() {
     let (_dir, state, token, import_id) = test_state().await;
     let body = CompleteImportRequest {
         status: "completed_with_issues".into(),
-        message_count: Some(10),
-        attachment_count: Some(2),
         bytes_uploaded: Some(100),
         duration_ms: None,
         parse_ms: None,
@@ -466,8 +463,6 @@ async fn imports_complete_rejects_unknown_status() {
     let (_dir, state, token, import_id) = test_state().await;
     let body = CompleteImportRequest {
         status: "victorious".into(),
-        message_count: None,
-        attachment_count: None,
         bytes_uploaded: None,
         duration_ms: None,
         parse_ms: None,
@@ -502,8 +497,6 @@ async fn imports_complete_rejects_invalid_issue_kind_before_db_write() {
     let (_dir, state, token, import_id) = test_state().await;
     let body = CompleteImportRequest {
         status: "completed".into(),
-        message_count: Some(10),
-        attachment_count: Some(2),
         bytes_uploaded: Some(100),
         duration_ms: Some(48_000),
         parse_ms: Some(18_000),

@@ -85,14 +85,62 @@ fn smssync_addresses(raw_address: &str) -> Vec<Handle> {
     addresses
 }
 
+/// The domain SMS Backup+ puts after a number or name it has no email
+/// address for: `+14075555678@unknown.email`.
+const UNKNOWN_EMAIL_DOMAIN: &str = "unknown.email";
+
+/// The handle in one mail address (`addr-spec`, no display name). SMS Backup+
+/// writes a contact with an email address as that address, and anyone else as
+/// `<number or name>@unknown.email`, whose part before the `@` is the handle.
+fn mail_address_handle(addr_spec: &str) -> Option<Handle> {
+    let addr_spec = addr_spec.trim();
+    match addr_spec.rsplit_once('@') {
+        Some((local, domain)) if domain.eq_ignore_ascii_case(UNKNOWN_EMAIL_DOMAIN) => {
+            Handle::parse(local)
+        }
+        _ => Handle::parse(addr_spec),
+    }
+}
+
 /// The address in a `From` header, which SMS Backup+ writes as
-/// `"Bob" <+14075555678@unknown.email>`: the part before the `@`.
+/// `"Bob" <+14075555678@unknown.email>`. Only the part inside `<…>` is read:
+/// a digit in the display name is not part of the number.
 fn from_address(from: &str) -> Option<Handle> {
     let addr_spec = from
         .split_once('<')
         .map_or(from, |(_, rest)| rest.split('>').next().unwrap_or(rest));
-    let local = addr_spec.split('@').next().unwrap_or(addr_spec);
-    Handle::parse(local)
+    mail_address_handle(addr_spec)
+}
+
+/// The recipients a `To` header names, once each by key, leaving out the
+/// owner's numbers and email addresses. Empty when the header cannot be read.
+///
+/// SMS Backup+ names every recipient of a sent MMS in `To`, but only one of
+/// them in `X-smssync-address`.
+fn to_recipients(to: &str, owners: &OwnerHandleSet, owner_emails: &[String]) -> Vec<Handle> {
+    let Ok(list) = mailparse::addrparse(to) else {
+        return Vec::new();
+    };
+    let mut recipients = Vec::new();
+    let mut seen = HashSet::new();
+    for single in list.iter().flat_map(|addr| match addr {
+        mailparse::MailAddr::Single(info) => std::slice::from_ref(info),
+        mailparse::MailAddr::Group(group) => group.addrs.as_slice(),
+    }) {
+        if owner_emails
+            .iter()
+            .any(|e| single.addr.trim().eq_ignore_ascii_case(e))
+        {
+            continue;
+        }
+        let Some(handle) = mail_address_handle(&single.addr) else {
+            continue;
+        };
+        if !owners.is_owner(&handle) && seen.insert(handle.key().to_string()) {
+            recipients.push(handle);
+        }
+    }
+    recipients
 }
 
 /// The contact name from an `SMS with <name>` subject, unless it is a number.
@@ -207,8 +255,8 @@ pub(crate) fn parse_flat_eml_mail(
     }
     let (timestamp_secs, has_milliseconds) = timestamp_seconds(headers)?;
     let name_alias = contact_name_from_subject(&headers.subject);
-    let addresses = FlatAddresses::from_headers(headers, owners);
     let sent = is_sent(headers, owner_emails);
+    let addresses = FlatAddresses::from_headers(headers, owners, sent, owner_emails);
     let conversation = addresses.conversation(headers, sent, name_alias.as_deref())?;
 
     let file_key = hex::encode(Sha256::digest(path.to_string_lossy().as_bytes()));
@@ -235,8 +283,9 @@ pub(crate) fn parse_flat_eml_mail(
     })
 }
 
-/// The addresses on a flat EML: everyone in the SMS Backup+ address header,
-/// the first of them, and those that are not the owner's.
+/// The addresses on a flat EML: the first of them, and those that are not
+/// the owner's. They come from the SMS Backup+ address header, or from `To`
+/// when a sent message names two or more recipients there.
 struct FlatAddresses {
     /// The first address in the header.
     first: Option<Handle>,
@@ -253,7 +302,25 @@ struct FlatConversation {
 }
 
 impl FlatAddresses {
-    fn from_headers(headers: &MailHeaders, owners: &OwnerHandleSet) -> Self {
+    /// A sent message with two or more recipients in `To` is a group of
+    /// those recipients. `To` decides nothing for one recipient: it may give
+    /// that person's email address where `X-smssync-address` gives the
+    /// number, and the number is what keys the one-to-one conversation.
+    fn from_headers(
+        headers: &MailHeaders,
+        owners: &OwnerHandleSet,
+        sent: bool,
+        owner_emails: &[String],
+    ) -> Self {
+        if sent {
+            let recipients = to_recipients(&headers.to, owners, owner_emails);
+            if recipients.len() >= 2 {
+                return Self {
+                    first: recipients.first().cloned(),
+                    non_owner: recipients,
+                };
+            }
+        }
         let addresses = smssync_addresses(&headers.smssync_address);
         let first = addresses.first().cloned();
         let non_owner = addresses
@@ -307,16 +374,16 @@ impl FlatAddresses {
     }
 
     /// The sender of an incoming group message: the `From` header's address
-    /// when it is one of the peers, else the first peer.
+    /// when it is one of the peers, else nobody. Where the sender sits in the
+    /// address list is arbitrary, so the first peer would be a guess, and a
+    /// contact with an email address is named in `From` by that address
+    /// alone.
     fn group_sender(&self, headers: &MailHeaders) -> Option<Handle> {
-        from_address(&headers.from)
-            .and_then(|from| {
-                self.non_owner
-                    .iter()
-                    .find(|peer| peer.key() == from.key())
-                    .cloned()
-            })
-            .or_else(|| self.non_owner.first().cloned())
+        let from = from_address(&headers.from)?;
+        self.non_owner
+            .iter()
+            .find(|peer| peer.key() == from.key())
+            .cloned()
     }
 }
 
@@ -553,5 +620,67 @@ old message\r\n"
         )
         .unwrap();
         assert_eq!(msg.sender.unwrap().key(), "+447911123456");
+    }
+
+    /// A digit in the display name of `From` is not part of the number:
+    /// `"Mom 2" <+14075555678@unknown.email>` is from 4075555678.
+    #[test]
+    fn a_name_with_a_digit_does_not_move_the_sender() {
+        let msg = parse(
+            "From: \"Mom 2\" <+14075555678@unknown.email>\nTo: me@example.com\nSubject: SMS with group\nX-smssync-type: 132\nX-smssync-address: 4075551111~4075555678~5555550100\nX-smssync-date: 1609459200000\nContent-Type: text/plain; charset=utf-8\n\nhi\n",
+            &["5555550100"],
+        )
+        .unwrap();
+        assert_eq!(msg.conversation_type, "group");
+        assert_eq!(msg.sender.unwrap().key(), "+14075555678");
+    }
+
+    /// A received group message whose `From` names nobody in the group has
+    /// no sender: the first address of the list would be a guess.
+    #[test]
+    fn a_group_message_from_nobody_in_the_group_has_no_sender() {
+        for from in [
+            "Bob <bob@gmail.com>",
+            "\"Carol\" <+14075559999@unknown.email>",
+        ] {
+            let msg = parse(
+                &format!("From: {from}\nTo: me@example.com\nSubject: SMS with group\nX-smssync-type: 132\nX-smssync-address: 4075551111~4075555678\nX-smssync-date: 1609459200000\nContent-Type: text/plain; charset=utf-8\n\nhi\n"),
+                &["5555550100"],
+            )
+            .unwrap();
+            assert_eq!(msg.conversation_type, "group", "{from}");
+            assert!(msg.sender.is_none(), "{from}: {:?}", msg.sender);
+        }
+    }
+
+    /// SMS Backup+ names one address in `X-smssync-address` for a sent MMS
+    /// and every recipient in `To`, so `To` is what makes it a group.
+    #[test]
+    fn a_sent_mms_to_three_recipients_is_a_group_of_three() {
+        let msg = parse(
+            "From: me@example.com\nTo: \"Alice\" <+14075551111@unknown.email>, Bob <4075552222@unknown.email>,\n \"Carol\" <carol@example.org>\nSubject: SMS with Alice\nX-smssync-type: 128\nX-smssync-address: 4075551111\nX-smssync-date: 1609459200000\nContent-Type: text/plain; charset=utf-8\n\nhi all\n",
+            &["5555550100"],
+        )
+        .unwrap();
+        assert!(msg.is_from_me);
+        assert_eq!(msg.conversation_type, "group");
+        let mut keys: Vec<&str> = msg.participants.iter().map(Handle::key).collect();
+        keys.sort_unstable();
+        assert_eq!(keys, ["+14075551111", "+14075552222", "carol@example.org"]);
+        assert!(msg.sender.is_none());
+    }
+
+    /// A sent message with one recipient in `To` stays one-to-one with the
+    /// number in `X-smssync-address`, even when `To` gives that person's
+    /// email address instead of the number.
+    #[test]
+    fn a_sent_message_to_one_recipient_stays_one_to_one() {
+        let msg = parse(
+            "From: me@example.com\nTo: \"Alice\" <alice@example.org>\nSubject: SMS with Alice\nX-smssync-type: 2\nX-smssync-address: 4075551111\nX-smssync-date: 1609459200000\nContent-Type: text/plain; charset=utf-8\n\nhi\n",
+            &["5555550100"],
+        )
+        .unwrap();
+        assert_eq!(msg.conversation_type, "individual");
+        assert_eq!(msg.chat_key, "+14075551111");
     }
 }

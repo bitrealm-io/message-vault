@@ -24,6 +24,10 @@ const EXPORT_SOURCE: &str = "sms-backup-plus";
 const EXPORT_TOOL: &str = "SMS Backup+";
 const EXPORT_TOOL_VERSION: &str = "1.5.11";
 
+/// Report counter: received group messages whose `From` names nobody in the
+/// group, kept with no sender. Counted before copies are reduced to one.
+const GROUP_MESSAGES_WITHOUT_SENDER: &str = "group_messages_without_sender";
+
 /// The EML's path relative to the input root it was found under, for the vendor `source` bag.
 ///
 /// An EML given as an input itself is recorded under its file name: its path
@@ -506,6 +510,9 @@ impl<'a> EmlIngest<'a> {
     fn add_parsed(&mut self, msg: ParsedMessage) -> Result<()> {
         if msg.chat_key.is_empty() {
             self.report.bump("unknown_chat_messages", 1);
+        }
+        if msg.conversation_type == "group" && !msg.is_from_me && msg.sender.is_none() {
+            self.report.bump(GROUP_MESSAGES_WITHOUT_SENDER, 1);
         }
         let atts = queue_attachments(&msg.attachments, self.spool)?;
         add_message(&mut self.conversations, msg, atts, &mut self.report);

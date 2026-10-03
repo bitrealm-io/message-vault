@@ -122,3 +122,39 @@ fn a_call_log_mail_is_skipped_and_counted_in_the_summary() {
         result.messages
     );
 }
+
+/// A received group MMS whose `From` names nobody in the group is written
+/// with no sender, and the summary counts it.
+#[test]
+fn a_group_message_with_no_readable_sender_is_kept_and_counted() {
+    let tmp = tempfile::tempdir().unwrap();
+    let input = tmp.path().join("backup");
+    fs::create_dir_all(&input).unwrap();
+    fs::write(
+        input.join("1.eml"),
+        "From: Bob <bob@example.org>\n\
+         To: me@example.com\n\
+         Subject: SMS with group\n\
+         X-smssync-type: 132\n\
+         X-smssync-address: 4075551111~4075555678\n\
+         X-smssync-date: 1609459200000\n\
+         Content-Type: text/plain; charset=utf-8\n\
+         \n\
+         Hello group\n",
+    )
+    .unwrap();
+    let output = tmp.path().join("out");
+
+    let result = crate::run(&jsonl_run_config(&[&input], &output, source(true))).expect("run");
+
+    let written = assert_run_wrote_jsonl(&result, &output, 1);
+    assert!(written.contains("Hello group"), "{written}");
+    assert!(
+        result
+            .messages
+            .iter()
+            .any(|l| l == "  group_messages_without_sender: 1"),
+        "{:?}",
+        result.messages
+    );
+}

@@ -194,23 +194,23 @@ const RANK_JOIN_SQL: &str = "
 /// `validation-failed` when `order` names `relevance` and the filter has no
 /// free-text word to rank by, or names `-relevance`, which has no meaning;
 /// otherwise an error when a statement fails.
-pub async fn load_search_page(
+pub async fn load_message_list_page(
     conn: &mut SqliteConnection,
     filter: &crate::search::Filter,
     order: &[SortKey<MessageListSort>],
     limit: usize,
     offset: usize,
 ) -> Result<Vec<Message>, ApiError> {
-    let (sql, params) = search_page_sql(filter, order, limit, offset)?;
+    let (sql, params) = message_list_page_sql(filter, order, limit, offset)?;
     fetch_message_page(conn, &sql, &params).await
 }
 
-/// The statement [`load_search_page`] runs, and its parameters.
+/// The statement [`load_message_list_page`] runs, and its parameters.
 ///
 /// # Errors
 ///
-/// As [`load_search_page`], for a sort it refuses.
-pub(crate) fn search_page_sql(
+/// As [`load_message_list_page`], for a sort it refuses.
+pub(crate) fn message_list_page_sql(
     filter: &crate::search::Filter,
     order: &[SortKey<MessageListSort>],
     limit: usize,

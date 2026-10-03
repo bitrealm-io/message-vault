@@ -12,7 +12,7 @@ use axum::extract::State;
 
 use crate::db::conversation_messages::{
     DEFAULT_MESSAGE_LIST_SORT, DEFAULT_MESSAGE_SORT, MESSAGE_LIST_SORT_KEYS, Message,
-    count_matching_messages, load_messages, load_search_page,
+    count_matching_messages, load_message_list_page, load_messages,
 };
 use crate::db::sql::SqlParam;
 use crate::paging::{ListRequest, Page, PageQuery};
@@ -80,7 +80,7 @@ pub(crate) async fn list_messages(
     )
     .await?;
     let filter = message_filter(auth.account_id, &list.q, list.clock)?;
-    let items = load_search_page(
+    let items = load_message_list_page(
         &mut conn,
         &filter,
         &list.order,

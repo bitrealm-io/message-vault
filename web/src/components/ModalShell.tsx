@@ -80,10 +80,10 @@ export default function ModalShell({
         isDismissable={dismissable}
         isKeyboardDismissDisabled={!keyboardDismissable}
         onOpenChange={onOpenChange}
-        className={`fixed inset-0 bg-[rgba(0,0,0,0.2)] ${Z_DRAWER_SCRIM}`}
+        className={`fixed inset-0 bg-scrim ${Z_DRAWER_SCRIM}`}
       >
         <Modal
-          className={`fixed top-0 right-0 bottom-0 w-[320px] overflow-auto bg-panel p-6 shadow-[-2px_0_8px_rgba(0,0,0,0.1)] outline-none ${Z_DRAWER}`}
+          className={`fixed top-0 right-0 bottom-0 w-[320px] overflow-auto bg-panel p-6 shadow-drawer outline-none ${Z_DRAWER}`}
         >
           <Dialog aria-label={label} className="relative outline-none" {...dialogProps}>
             {title != null ? (
@@ -108,7 +108,7 @@ export default function ModalShell({
       className={`fixed inset-0 flex items-center justify-center bg-scrim p-4 ${Z_MODAL}`}
     >
       <Modal
-        className="relative w-full rounded-lg border border-border bg-panel p-5 shadow-[0_16px_48px_rgba(0,0,0,0.25)] outline-none"
+        className="relative w-full rounded-lg border border-border bg-panel p-5 shadow-modal outline-none"
         style={{ maxWidth }}
       >
         <Dialog aria-label={label} className="outline-none" {...dialogProps}>

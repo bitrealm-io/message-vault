@@ -570,6 +570,11 @@ released versions carry their date on the heading.
 
 #### Accounts, Settings and screens
 
+- 2026-10-03 **The contact panel opened from a conversation covers the column
+  resize handles, and the Sources panel dims the screen the way every other
+  dialog does.** The contact panel sat below the handles, so a handle could
+  show through it. The shade behind the Sources panel now follows the light
+  or the dark theme instead of one fixed grey.
 - 2026-09-22 **Changing a password checks things in a sensible order and
   says so in full sentences.** Message Crate now checks the current password
   first, then that the new password was typed the same way twice, then that

@@ -29,7 +29,7 @@ export const pageCenter =
  * out of the form and over the "or" rule below it.
  */
 export const authCard =
-  "box-border flex min-h-[38rem] w-full max-w-xl flex-col bg-panel border border-border rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.15)] p-8";
+  "box-border flex min-h-[38rem] w-full max-w-xl flex-col bg-panel border border-border rounded-lg shadow-card p-8";
 
 /** Content region of an auth card: everything above the pinned action row. */
 export const authCardBody = "flex min-h-0 flex-1 flex-col";
@@ -66,4 +66,4 @@ export const accentLink =
   "text-[0.813rem] text-accent cursor-pointer bg-transparent border-none p-0 hover:underline";
 
 /** Floating panels / menus (advanced search, selects, date pickers, recent searches). */
-export const popupShadow = "shadow-[0_10px_32px_rgba(0,0,0,0.28),0_2px_8px_rgba(0,0,0,0.14)]";
+export const popupShadow = "shadow-popup";

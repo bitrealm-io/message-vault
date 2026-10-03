@@ -5,6 +5,7 @@ import { type ContactDetail, useContactDetail, useUpdateContact } from "../lib/c
 import { contactLabelText } from "../lib/contactLabel";
 import { useTrashContact } from "../lib/trash";
 import { UNKNOWN_GROUP_LABEL } from "../lib/unknownGroup";
+import { Z_DRAWER } from "../lib/zLayers";
 import Button from "./Button";
 import ContactLabel from "./ContactLabel";
 import { ContactDrawerHandles } from "./contactDrawer/ContactDrawerHandles";
@@ -241,7 +242,7 @@ function OneContactDrawer({
   const panelClass =
     variant === "docked"
       ? "flex h-full min-h-0 min-w-0 flex-col overflow-auto [scrollbar-gutter:stable] bg-panel px-6 pb-6 pt-2 outline-none"
-      : "fixed top-0 bottom-0 z-40 w-[min(920px,calc(100vw-14rem))] overflow-auto [scrollbar-gutter:stable] border-l border-border bg-panel p-6 shadow-[2px_0_12px_rgba(0,0,0,0.18)] outline-none";
+      : `fixed top-0 bottom-0 w-[min(920px,calc(100vw-14rem))] overflow-auto [scrollbar-gutter:stable] border-l border-border bg-panel p-6 shadow-contact-drawer outline-none ${Z_DRAWER}`;
 
   const panelStyle =
     variant === "overlay"

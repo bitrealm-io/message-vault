@@ -1,4 +1,4 @@
-import { contactAvatarColor, contactInitials } from "../lib/contactInitials";
+import { contactAvatarClass, contactInitials } from "../lib/contactInitials";
 
 /** Colored circle with contact initials (matches web-next BrowseContactRow). */
 export default function ContactInitialCircle({
@@ -19,11 +19,10 @@ export default function ContactInitialCircle({
   return (
     <span
       aria-hidden
-      className="inline-flex shrink-0 select-none items-center justify-center rounded-full font-semibold leading-none text-white"
+      className={`inline-flex shrink-0 select-none items-center justify-center rounded-full font-semibold leading-none text-avatar-text ${contactAvatarClass(avatarInput)}`}
       style={{
         width: size,
         height: size,
-        backgroundColor: contactAvatarColor(avatarInput),
         fontSize: size <= 28 ? "11px" : "13px",
       }}
     >

@@ -473,9 +473,9 @@ released versions carry their date on the heading.
 #### Search
 
 - 2026-10-03 **A search pasted and run at once is the search that runs.**
-  Pasting a search and pressing Enter straight away searched for nothing,
-  and text typed very fast lost letters, so the search ran on the last one.
-  The box now keeps everything you put in it, and Enter runs it.
+  Pasting a search and pressing Enter straight away searched for nothing.
+  Typing very fast lost letters, and the search ran on the last letter
+  typed. The box now keeps everything you put in it, and Enter runs it.
 - 2026-09-23 **Excluding something from a search no longer hides the rows
   that have nothing to compare.** A search with `-` in front of a word left
   out every row with no value for that word, so those rows appeared under

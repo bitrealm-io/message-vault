@@ -408,6 +408,25 @@ pub enum IrDirection {
     Outgoing,
 }
 
+impl IrMessage {
+    /// Whether this is an SMS or an MMS, from any source, iMessage's SMS
+    /// fallback included. An MMS carries the `Sms` service with the `Mms`
+    /// kind. A message whose service is unknown (a Mac `chat.db` row with no
+    /// service, or one pulled back from the server as `unknown`) is one when
+    /// its kind says SMS or MMS, as every other layer reads it. RCS and every
+    /// other service are not. The SMS Backup & Restore and SMS Backup+
+    /// exports hold these and leave every other message out.
+    pub fn is_sms_or_mms(&self) -> bool {
+        match self.service {
+            IrService::Sms => true,
+            IrService::Unknown => {
+                matches!(self.message_kind, IrMessageKind::Sms | IrMessageKind::Mms)
+            }
+            _ => false,
+        }
+    }
+}
+
 impl IrDirection {
     /// Lowercase storage id (`incoming` / `outgoing`).
     pub fn as_str(self) -> &'static str {

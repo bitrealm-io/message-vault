@@ -117,7 +117,22 @@ describe("ExportScreen", () => {
       input_dir: staging,
       output_dir: "/home/demo/out",
       output_format: "csv",
+      run_started_ms: expect.any(Number),
     });
+  });
+
+  it("hands the conversion the time the Export Run started, before the pull", async () => {
+    let pulled = 0;
+    invokePull.mockImplementation(async () => {
+      pulled = Date.now();
+    });
+    const before = Date.now();
+    await exportAs("/home/demo/out", "CSV (.csv)");
+
+    await waitFor(() => expect(invokeFormat).toHaveBeenCalledTimes(1));
+    const started = invokeFormat.mock.calls[0][0].run_started_ms as number;
+    expect(started).toBeGreaterThanOrEqual(before);
+    expect(started).toBeLessThanOrEqual(pulled);
   });
 
   it("removes the staging folder once the conversion finishes", async () => {

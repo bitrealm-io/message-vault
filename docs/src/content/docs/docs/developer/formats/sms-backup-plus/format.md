@@ -50,3 +50,30 @@ Message Crate has no model for a call, so the exporter skips every `CALLLOG` mai
 ## Import mapping and deduplication
 
 Source-field mapping and online cover-key deduplication: [SMS Backup+ mapping](/docs/developer/formats/sms-backup-plus/mapping/).
+
+## Writing SMS Backup+ mail
+
+The **EML (SMS Backup+)** export format writes SMS and MMS back out as this mail, through `SmsBackupPlusArchive` in `sms-backup-plus-exporter` (ADR 0021). A message that is not SMS or MMS is left out and counted, and the run's log says how many.
+A message whose service is unknown counts as SMS or MMS when its kind says so, as it does for the Android XML export.
+
+Each conversation is one folder, named as the EML archive names its folders, holding one `.eml` per message, named as the EML archive names its files.
+
+Every mail carries `Subject` (`SMS with <name>`: the sender of a received message, the other person of a sent one-to-one message, and otherwise a member's number, since the import takes the name as the sender's), `From`, `To`, `Date`, `Message-ID` and `References` (`<…@sms-backup-plus.local>`), `MIME-Version`, `Content-Type`, `Content-Transfer-Encoding`, and:
+
+| Header | Value |
+|---|---|
+| `X-smssync-datatype` | `SMS`, or `MMS` for an MMS or a message with an attachment |
+| `X-smssync-address` | The other person's address; in a group, every other person's, joined by `~` |
+| `X-smssync-date` | The message time in epoch milliseconds |
+| `X-smssync-type` | `1` received or `2` sent for SMS; `132` received or `128` sent for MMS |
+| `X-smssync-backup-time` | The start of the Export Run that wrote the file, or of the Convert run, in epoch milliseconds |
+
+`From` and `To` name a phone number as `<number>@unknown.email` and an email address as itself, as SMS Backup+ does, so the import reads each handle back as it went out.
+A received group message whose sender is unknown names an address no member has, and comes back with no sender.
+
+An SMS is `text/plain`. An MMS is `multipart/mixed`: the text, then each stored attachment with its content type and file name.
+Every `text/plain` part of an MMS is message text to the import, as it is on the phone, so a text file attached to a message is written as `application/octet-stream` under its own name, and comes back as a file of that type.
+An attachment whose file is gone is left out of the mail and counted as missing in the run's log.
+A carriage return in the text comes back from the import as a newline, because the import reads a mail's line breaks as newlines.
+
+The database does not keep the phone's row and thread ids, read and status flags, protocol, or the app's build, so `X-smssync-id`, `-thread`, `-read`, `-status`, `-protocol` and `-version` are never written. `X-GM-THRID` and `X-Gmail-Labels` are Gmail's, not the app's, and are never written either.

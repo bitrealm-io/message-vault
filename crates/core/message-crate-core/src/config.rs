@@ -29,6 +29,9 @@ pub enum OutputFormat {
     /// One XML file holding every conversation, written by the merged archive
     /// the caller supplies; the crate that owns that archive names the file.
     Xml,
+    /// SMS Backup+ mail: a folder of `.eml` files per conversation with the
+    /// `X-smssync-*` headers, holding only SMS and MMS.
+    SmsBackupPlus,
 }
 
 impl fmt::Display for OutputFormat {
@@ -40,6 +43,7 @@ impl fmt::Display for OutputFormat {
             Self::Json => "JSON (common message)",
             Self::Jsonl => "JSONL (common message lines)",
             Self::Xml => "XML (one file)",
+            Self::SmsBackupPlus => "EML (SMS Backup+)",
         })
     }
 }
@@ -54,6 +58,7 @@ impl OutputFormat {
             Self::Json => "json",
             Self::Jsonl => "jsonl",
             Self::Xml => "xml",
+            Self::SmsBackupPlus => "sms-backup-plus",
         }
     }
 
@@ -88,7 +93,8 @@ pub struct ExporterConfig {
     /// nothing; the desktop app sets a sink and drives its progress bar
     /// from the events. Log lines are never read for counts.
     pub progress: Option<ProgressSink>,
-    /// Packaging format (`csv` / `eml` / `mbox` / `json` / `jsonl` / `xml`).
+    /// Packaging format (`csv` / `eml` / `mbox` / `json` / `jsonl` / `xml` /
+    /// `sms-backup-plus`).
     pub output_format: OutputFormat,
     /// Continue an interrupted export in the same output directory: previous
     /// output is kept, and conversations already written are skipped. Only
@@ -182,8 +188,14 @@ pub enum SourceConfig {
 }
 
 #[derive(Debug, Clone, Default)]
-/// Empty marker: convert an existing export folder to another output format.
-pub struct FormatConfig {}
+/// Convert an existing export folder to another output format.
+pub struct FormatConfig {
+    /// When the Export Run this conversion is part of started. Export pulls
+    /// JSON Lines from the server and then converts them, so its run starts
+    /// well before the conversion does. `None` for Settings → Convert, which
+    /// is a run of its own.
+    pub run_started: Option<chrono::DateTime<chrono::Utc>>,
+}
 
 #[derive(Debug, Clone)]
 /// GO SMS Pro extras: owner phone numbers used to mark outgoing messages.
@@ -296,7 +308,7 @@ mod tests {
             progress: None,
             output_format: OutputFormat::Json,
             resume: false,
-            source: SourceConfig::Format(FormatConfig {}),
+            source: SourceConfig::Format(FormatConfig::default()),
         }
     }
 

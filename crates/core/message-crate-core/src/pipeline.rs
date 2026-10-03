@@ -135,7 +135,29 @@ pub struct ExportReport {
     pub extra: std::collections::BTreeMap<String, u64>,
 }
 
+/// The report counter for messages an export left out because its format
+/// holds only SMS and MMS: an iMessage or a WhatsApp message written as an
+/// SMS would come back from a re-import as an SMS under a new id (ADR 0021).
+pub const NOT_SMS_OR_MMS_LEFT_OUT: &str = "messages_not_sms_or_mms_left_out";
+
+/// The report counter for attachments an export could not write because
+/// their file was gone. Convert's log says how many.
+pub const ATTACHMENTS_MISSING: &str = "attachments_missing";
+
 impl ExportReport {
+    /// The run's log line for [`NOT_SMS_OR_MMS_LEFT_OUT`]: how many messages
+    /// were left out of `format`, the format that holds only SMS and MMS, and
+    /// why. `None` when none were left out.
+    pub fn not_sms_or_mms_line(&self, format: &str) -> Option<String> {
+        let left_out = self.extra(NOT_SMS_OR_MMS_LEFT_OUT);
+        (left_out > 0).then(|| {
+            format!(
+                "Left out {left_out} message(s) that are not SMS or MMS, because {format} holds \
+                 only SMS and MMS"
+            )
+        })
+    }
+
     /// Refuse a run whose media pass failed on every file it tried, when
     /// the mode needed ffmpeg: that is a missing tool, not a bad file.
     ///
@@ -347,6 +369,20 @@ pub fn export_meta(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_not_sms_or_mms_line_names_the_format_and_the_count() {
+        let mut report = ExportReport::default();
+        assert_eq!(report.not_sms_or_mms_line("SMS Backup+"), None);
+        report.bump(NOT_SMS_OR_MMS_LEFT_OUT, 3);
+        assert_eq!(
+            report.not_sms_or_mms_line("SMS Backup+").as_deref(),
+            Some(
+                "Left out 3 message(s) that are not SMS or MMS, because SMS Backup+ holds only \
+                 SMS and MMS"
+            )
+        );
+    }
 
     #[test]
     fn discover_files_walks_and_filters() {

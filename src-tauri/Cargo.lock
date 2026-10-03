@@ -2420,6 +2420,7 @@ name = "message-reexport"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "csv",
  "media",
  "message-crate-core",
@@ -2427,6 +2428,7 @@ dependencies = [
  "message-ir-format",
  "message-staging",
  "serde_json",
+ "sms-backup-plus-exporter",
  "sms-backup-restore-exporter",
 ]
 
@@ -3922,6 +3924,8 @@ dependencies = [
  "chrono",
  "csv",
  "hex",
+ "mail",
+ "mail-builder",
  "mailparse",
  "media",
  "message-crate-core",

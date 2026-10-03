@@ -88,7 +88,7 @@ fn smssync_addresses(raw_address: &str) -> Vec<Handle> {
 
 /// The domain SMS Backup+ puts after a number or name it has no email
 /// address for: `+14075555678@unknown.email`.
-const UNKNOWN_EMAIL_DOMAIN: &str = "unknown.email";
+pub(crate) const UNKNOWN_EMAIL_DOMAIN: &str = "unknown.email";
 
 /// Two or more other participants make a group conversation.
 const GROUP_MIN_PARTICIPANTS: usize = 2;

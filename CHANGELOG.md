@@ -129,6 +129,11 @@ released versions carry their date on the heading.
   for the password before the import starts. The encrypted backup you made
   for your iPhone messages now serves for WhatsApp too; a second,
   unencrypted backup is no longer needed.
+- 2026-10-03 **Export and Convert write SMS Backup+ mail.** Choose **EML
+  (SMS Backup+)** to get your SMS and MMS back as the mail SMS Backup+
+  writes, one folder per conversation, which the SMS Backup+ import reads
+  again and any mail program can keep. Other messages are left out, and the
+  log says how many.
 
 ### Design
 

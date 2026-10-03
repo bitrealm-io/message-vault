@@ -133,6 +133,7 @@ export default function ExportScreen() {
     const exportCancel = createRunCancel();
     runCancel.current = exportCancel;
     const request = { savePath, format };
+    const runStartedMs = Date.now();
 
     const pullInto = (outDir: string) =>
       run(
@@ -166,6 +167,7 @@ export default function ExportScreen() {
                 input_dir: stagingDir,
                 output_dir: savePath,
                 output_format: format,
+                run_started_ms: runStartedMs,
               }),
             ),
             request,

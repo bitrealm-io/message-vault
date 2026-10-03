@@ -2655,11 +2655,61 @@ async fn the_contact_list_is_a_page_and_summaries_are_items() {
         &state,
         "/v1/contacts/summaries",
         &user.token,
-        serde_json::json!({ "ids": [] }),
+        serde_json::json!({ "ids": [1] }),
     )
     .await;
     assert!(summaries["items"].is_array());
     assert!(summaries.get("contacts").is_none());
+}
+
+/// Summaries are for the contacts a body names, at most
+/// `MAX_CONTACT_SUMMARY_IDS` of them, so an empty list names none and is
+/// refused rather than answered with an empty page as though it had been
+/// read. Every contact is listed by `GET /v1/contacts`.
+#[tokio::test]
+async fn summaries_of_no_contacts_are_refused() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let (status, text) = crate::test_support::post_raw(
+        &fixture.state,
+        "/v1/contacts/summaries",
+        &user.token,
+        "application/json",
+        r#"{"ids":[]}"#,
+    )
+    .await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    let (status, text) = crate::test_support::post_raw(
+        &fixture.state,
+        "/v1/contacts/summaries",
+        &user.token,
+        "application/json",
+        "{}",
+    )
+    .await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+}
+
+/// The reference states the bounds the handler keeps on a summary's `ids`,
+/// so a client built from it knows an empty list is refused.
+#[test]
+fn the_reference_states_the_summary_id_bounds() {
+    let doc: serde_json::Value =
+        serde_json::from_str(&crate::openapi::dump_openapi_json()).unwrap();
+    let ids = &doc["components"]["schemas"]["SummarizeContactsRequest"]["properties"]["ids"];
+    assert_eq!(ids["minItems"], 1, "{ids}");
+    assert_eq!(
+        ids["maxItems"],
+        crate::paging::MAX_CONTACT_SUMMARY_IDS,
+        "{ids}"
+    );
 }
 
 async fn trashed_contact_row_count(conn: &mut SqliteConnection, account_id: i64, id: i64) -> i64 {

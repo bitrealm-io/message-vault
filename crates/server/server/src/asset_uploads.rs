@@ -312,6 +312,23 @@ fn existing_session(
     Ok(session)
 }
 
+/// The manifest of an upload in progress.
+///
+/// # Errors
+///
+/// Returns [`AssetError::UploadNotFound`] when no upload with that id is
+/// under way for the fingerprint, and an error when the upload id is invalid,
+/// the upload was started for another fingerprint, or the manifest is
+/// unreadable.
+pub fn read_upload(
+    assets_root: &Path,
+    sha: &Sha256,
+    upload_id: &str,
+) -> Result<UploadManifest, AssetError> {
+    let session = existing_session(assets_root, sha, upload_id)?;
+    read_manifest_for(&session, sha).map_err(|e| gone_if_removed(&session, e))
+}
+
 /// Write (or overwrite) one part. `body` is the full part payload.
 pub fn put_part(
     assets_root: &Path,
@@ -768,6 +785,8 @@ mod tests {
         let err = put_part(dir.path(), &sha, &upload_id, 1, b"hello").unwrap_err();
         assert!(matches!(err, AssetError::UploadNotFound), "{err}");
         let err = complete_upload(dir.path(), &sha, &upload_id).unwrap_err();
+        assert!(matches!(err, AssetError::UploadNotFound), "{err}");
+        let err = read_upload(dir.path(), &sha, &upload_id).unwrap_err();
         assert!(matches!(err, AssetError::UploadNotFound), "{err}");
     }
 

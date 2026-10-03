@@ -63,8 +63,7 @@ impl CreateSessionResponse {
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct Session {
     sources: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    account_id: Option<i64>,
+    account_id: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     username: Option<String>,
 }
@@ -90,7 +89,7 @@ pub(crate) async fn get_session(
     let sources = list_account_sources(&state.db, account_id).await?;
     Ok(Json(Session {
         sources,
-        account_id: Some(account_id),
+        account_id,
         username,
     }))
 }

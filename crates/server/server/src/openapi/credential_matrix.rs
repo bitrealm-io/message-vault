@@ -513,7 +513,9 @@ impl<'a> World<'a> {
         let response = reqwest::Client::new()
             .put(asset)
             .bearer_auth(&world.tokens.alice)
-            .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+            // Stored as an image, so its download answers in a media type of its
+            // own and not the fallback.
+            .header(reqwest::header::CONTENT_TYPE, "image/png")
             .body(ASSET_BYTES)
             .send()
             .await
@@ -686,7 +688,7 @@ pub(super) fn body_for(op: &Operation, n: usize) -> Option<(&'static str, Vec<u8
                 .to_vec(),
         )),
         ("post", "/v1/contacts/address-book") => json(json!({})),
-        ("post", "/v1/contacts/summaries") => json(json!({ "ids": [] })),
+        ("post", "/v1/contacts/summaries") => json(json!({ "ids": [1] })),
         ("post", "/v1/contacts/unmatched-identities") => json(json!({ "identifiers": [] })),
         ("patch", "/v1/contacts/{id}") => json(json!({ "name": "Samantha" })),
         ("post", "/v1/exports") => json(json!({ "scope": { "kind": "everything" } })),

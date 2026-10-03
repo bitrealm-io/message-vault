@@ -551,25 +551,29 @@ when the two differ, and CI checks the web app's generated types against it.
 An operation's error responses are built from shared parts, never written out
 by hand. The credential a route accepts brings its `401` and `403`; a request
 body brings `400`, `413`, `415` and `422`; an id in the path brings `404` and
-`422`; and every `/v1` route brings `422` for a query parameter it does not
-declare. The handler adds only what is its own, such as `409` for a run in the
-wrong state, by naming the problem type (`crate::problem::openapi`).
+`422`; every `/v1` route brings `422` for a query parameter it does not
+declare; and every `/v1` route that answers JSON brings `406` for an `Accept`
+that names nothing JSON. `405` is said once, in the document's own
+description, because it answers a method no operation has. The handler adds
+only what is its own, such as `409` for a run in the wrong state, by naming
+the problem type (`crate::problem::openapi`).
 Every error response is declared as `application/problem+json`, names the
 problem types it can carry (in its description and in `x-problem-types`), and
-has a description. The first sentence of a
-handler's doc comment is the operation's summary, and the rest is its
-description.
+has a description. The first sentence of a handler's doc comment is the
+operation's summary, and the rest is its description.
 Why: every mismatch between the reference and the handlers that the September
 2026 review found was in a hand-written list.
 
 A rule that can be checked by walking every operation in the document is
 checked that way, by one test, as `openapi/credential_matrix.rs` checks every
 route's reach: the page shape and paging parameters on every list, a
-`Location` on every `201`, a problem document on every failure, `401` without
-a credential, a refused unknown query parameter, `415` for a body without an
-accepted `Content-Type`, `400` for a JSON body that is not JSON, kebab-case
-paths and the nesting depth. Why: a rule checked one route at a time is
-checked on the routes someone remembered.
+`Location` on every `201` that the credential which made it can `GET`, a
+problem document on every failure, `401` without a credential, a refused
+unknown query parameter, `415` for a body without an accepted `Content-Type`,
+`400` for a JSON body that is not JSON, `406` exactly where the document lists
+it, a successful `GET` in a media type its document declares, no body on a
+`HEAD` answer, kebab-case paths and the nesting depth. Why: a rule checked one
+route at a time is checked on the routes someone remembered.
 
 The shared failures are checked by calling each operation into them, and the
 status and problem type the server answers must be ones the document lists.

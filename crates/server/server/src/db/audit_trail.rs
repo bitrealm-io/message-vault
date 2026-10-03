@@ -277,34 +277,40 @@ pub enum CredentialUsed {
     },
 }
 
-/// A run row's columns that record what started it: `credential`,
-/// `app_kind`, `app_build`, `api_token_label` and `api_token_hint`.
-pub(crate) type RunCredentialColumns<'a> = (
-    &'static str,
-    Option<&'a str>,
-    Option<&'a str>,
-    Option<&'a str>,
-    Option<&'a str>,
-);
+/// A run row's columns that record what started it, as
+/// [`CredentialUsed::run_columns`] fills them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RunCredentialColumns<'a> {
+    /// `credential`: `session` or `api_token`.
+    pub(crate) credential: &'static str,
+    /// `app_kind`: the app a Session's request named.
+    pub(crate) app_kind: Option<&'a str>,
+    /// `app_build`: that app's Build.
+    pub(crate) app_build: Option<&'a str>,
+    /// `api_token_label`: the token's label as it is now.
+    pub(crate) api_token_label: Option<&'a str>,
+    /// `api_token_hint`: the token's masked hint as it is now.
+    pub(crate) api_token_hint: Option<&'a str>,
+}
 
 impl CredentialUsed {
     /// The run row's columns for this credential.
     pub(crate) fn run_columns(&self) -> RunCredentialColumns<'_> {
         match self {
-            Self::Session(app) => (
-                "session",
-                app.as_ref().map(|app| app.kind.as_str()),
-                app.as_ref().map(|app| app.build.as_str()),
-                None,
-                None,
-            ),
-            Self::ApiToken { label, hint } => (
-                "api_token",
-                None,
-                None,
-                Some(label.as_str()),
-                Some(hint.as_str()),
-            ),
+            Self::Session(app) => RunCredentialColumns {
+                credential: "session",
+                app_kind: app.as_ref().map(|app| app.kind.as_str()),
+                app_build: app.as_ref().map(|app| app.build.as_str()),
+                api_token_label: None,
+                api_token_hint: None,
+            },
+            Self::ApiToken { label, hint } => RunCredentialColumns {
+                credential: "api_token",
+                app_kind: None,
+                app_build: None,
+                api_token_label: Some(label.as_str()),
+                api_token_hint: Some(hint.as_str()),
+            },
         }
     }
 }
@@ -824,53 +830,67 @@ macro_rules! session_expiry_sql {
     };
 }
 
-/// Where a row of [`SOURCES_SQL`] comes from, by the one-letter tag the
-/// query gives it. The letters also break a tie between rows at the same
-/// time, newest source first: an expiry, then an Export Run, an Import Run,
-/// and an entry.
+/// Where a row of [`sources_sql`] comes from, by the one-letter tag the
+/// query gives it. The tags also break a tie between rows at the same time,
+/// the greatest first: an expiry, then an Export Run, an Import Run, and an
+/// entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Source {
-    /// An entry of `audit_entries`: `e`.
+    /// An entry of `audit_entries`.
     Entry,
-    /// A Session that ran out, read from its `logged_in` entry: `x`.
+    /// A Session that ran out, read from its `logged_in` entry.
     Expiry,
-    /// An Import Run: `i`.
+    /// An Import Run.
     ImportRun,
-    /// An Export Run: `o`.
+    /// An Export Run.
     ExportRun,
 }
 
 impl Source {
+    const ALL: [Self; 4] = [Self::Entry, Self::Expiry, Self::ImportRun, Self::ExportRun];
+
+    /// The tag the query gives the source's rows.
+    const fn tag(self) -> &'static str {
+        match self {
+            Self::Entry => "e",
+            Self::Expiry => "x",
+            Self::ImportRun => "i",
+            Self::ExportRun => "o",
+        }
+    }
+
     fn from_tag(tag: &str) -> Result<Self> {
-        Ok(match tag {
-            "e" => Self::Entry,
-            "x" => Self::Expiry,
-            "i" => Self::ImportRun,
-            "o" => Self::ExportRun,
-            other => anyhow::bail!("unknown Audit Trail source {other}"),
-        })
+        Self::ALL
+            .into_iter()
+            .find(|source| source.tag() == tag)
+            .with_context(|| format!("unknown Audit Trail source {tag}"))
     }
 }
 
 /// The union of the trail's sources as `(src, id, at, account_id)` rows,
 /// `src` being a [`Source`] tag.
-const SOURCES_SQL: &str = concat!(
-    "
-    SELECT 'e' AS src, id, at, account_id FROM audit_entries
+fn sources_sql() -> String {
+    format!(
+        "
+    SELECT '{entry}' AS src, id, at, account_id FROM audit_entries
     UNION ALL
-    SELECT 'x', id, expires_at, account_id FROM (
-        SELECT l.id, l.account_id, ",
-    session_expiry_sql!(),
-    " AS expires_at FROM audit_entries l
+    SELECT '{expiry}', id, expires_at, account_id FROM (
+        SELECT l.id, l.account_id, {expires_at} AS expires_at FROM audit_entries l
          WHERE l.action = 'logged_in'
            AND NOT EXISTS (SELECT 1 FROM audit_entries e
                             WHERE e.session_entry_id = l.id AND e.action = 'session_ended')
     ) WHERE expires_at <= $1
     UNION ALL
-    SELECT 'i', id, started_at, account_id FROM imports
+    SELECT '{import}', id, started_at, account_id FROM imports
     UNION ALL
-    SELECT 'o', id, started_at, account_id FROM exports"
-);
+    SELECT '{export}', id, started_at, account_id FROM exports",
+        entry = Source::Entry.tag(),
+        expiry = Source::Expiry.tag(),
+        import = Source::ImportRun.tag(),
+        export = Source::ExportRun.tag(),
+        expires_at = session_expiry_sql!(),
+    )
+}
 
 /// One page of the Audit Trail, newest first, and how many entries it holds
 /// in all.
@@ -889,7 +909,8 @@ pub async fn page(
         Scope::All => ("", None),
         Scope::Account(id) => ("WHERE account_id = $2", Some(id)),
     };
-    let count_sql = format!("SELECT COUNT(*) FROM ({SOURCES_SQL}) {filter}");
+    let sources = sources_sql();
+    let count_sql = format!("SELECT COUNT(*) FROM ({sources}) {filter}");
     let mut count = sqlx::query_scalar::<_, i64>(&count_sql).bind(&now);
     if let Some(id) = account {
         count = count.bind(id);
@@ -897,7 +918,7 @@ pub async fn page(
     let total = count.fetch_one(&mut *conn).await?;
 
     let page_sql = format!(
-        "SELECT src, id FROM ({SOURCES_SQL}) {filter}
+        "SELECT src, id FROM ({sources}) {filter}
          ORDER BY at DESC, src DESC, id DESC LIMIT {limit} OFFSET {offset}"
     );
     let mut rows = sqlx::query_as::<_, (String, i64)>(&page_sql).bind(&now);
@@ -1080,12 +1101,13 @@ async fn load_export(conn: &mut SqliteConnection, id: i64) -> Result<Option<Audi
     let scope_kind: String = row.try_get("scope_kind")?;
     let scope_kind = ExportScopeKind::parse(&scope_kind)
         .with_context(|| format!("exports.scope_kind holds unknown value '{scope_kind}'"))?;
-    let scope_list = match row.try_get::<Option<String>, _>("scope_list")?.as_deref() {
-        None => None,
-        Some("conversations") => Some(ExportQueryList::Conversations),
-        Some("messages") => Some(ExportQueryList::Messages),
-        Some(other) => anyhow::bail!("exports.scope_list holds unknown value '{other}'"),
-    };
+    let scope_list: Option<String> = row.try_get("scope_list")?;
+    let scope_list = scope_list
+        .map(|list| {
+            ExportQueryList::parse(&list)
+                .with_context(|| format!("exports.scope_list holds unknown value '{list}'"))
+        })
+        .transpose()?;
     Ok(Some(AuditEntry {
         status: Some(status.into()),
         scope_kind: Some(scope_kind),

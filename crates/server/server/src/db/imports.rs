@@ -1065,17 +1065,17 @@ pub async fn record_credential(
     import_id: i64,
     credential: &crate::db::audit_trail::CredentialUsed,
 ) -> Result<()> {
-    let (kind, app_kind, app_build, label, hint) = credential.run_columns();
+    let columns = credential.run_columns();
     sqlx::query(
         "UPDATE imports SET credential = $1, app_kind = $2, app_build = $3,
                 api_token_label = $4, api_token_hint = $5
          WHERE id = $6",
     )
-    .bind(kind)
-    .bind(app_kind)
-    .bind(app_build)
-    .bind(label)
-    .bind(hint)
+    .bind(columns.credential)
+    .bind(columns.app_kind)
+    .bind(columns.app_build)
+    .bind(columns.api_token_label)
+    .bind(columns.api_token_hint)
     .bind(import_id)
     .execute(&mut *conn)
     .await

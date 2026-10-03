@@ -83,8 +83,9 @@ impl From<ExportRun> for OwnerExportRun {
 
 /// Start an Export Run over `scope`: compile the scope, list the ids of the
 /// messages it matches now, count them, and record the run as `running` with
-/// the credential that started it, all in one transaction. The run's pages read that list, never the scope again,
-/// so what a run hands over is fixed when it is created.
+/// the credential that started it, all in one transaction. The run's pages
+/// read that list, never the scope again, so what a run hands over is fixed
+/// when it is created.
 ///
 /// # Errors
 ///

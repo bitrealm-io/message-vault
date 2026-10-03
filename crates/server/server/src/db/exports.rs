@@ -102,21 +102,23 @@ const EXPORT_COLUMNS: &str = "id, scope_kind, scope_query, scope_conversation_id
 /// Map one `exports` row by column position.
 fn export_from_row(row: &SqliteRow) -> Result<ExportRun> {
     let kind: String = row.try_get(1)?;
-    let scope = match kind.as_str() {
-        "everything" => ExportScope::Everything,
-        "query" => ExportScope::Query {
-            list: match row.try_get::<Option<String>, _>(14)?.as_deref() {
-                Some("conversations") => ExportQueryList::Conversations,
-                Some("messages") => ExportQueryList::Messages,
-                other => anyhow::bail!("exports.scope_list holds unknown value {other:?}"),
-            },
-            q: row.try_get::<Option<String>, _>(2)?.unwrap_or_default(),
-        },
-        "selection" => ExportScope::Selection {
+    let scope = match ExportScopeKind::parse(&kind) {
+        Some(ExportScopeKind::Everything) => ExportScope::Everything,
+        Some(ExportScopeKind::Query) => {
+            let list: Option<String> = row.try_get(14)?;
+            ExportScope::Query {
+                list: list
+                    .as_deref()
+                    .and_then(ExportQueryList::parse)
+                    .with_context(|| format!("exports.scope_list holds unknown value {list:?}"))?,
+                q: row.try_get::<Option<String>, _>(2)?.unwrap_or_default(),
+            }
+        }
+        Some(ExportScopeKind::Selection) => ExportScope::Selection {
             conversation_ids: id_list(row.try_get(3)?)?,
             message_ids: id_list(row.try_get(4)?)?,
         },
-        other => anyhow::bail!("exports.scope_kind holds unknown value '{other}'"),
+        None => anyhow::bail!("exports.scope_kind holds unknown value '{kind}'"),
     };
     Ok(ExportRun {
         id: row.try_get(0)?,
@@ -527,17 +529,17 @@ pub async fn record_credential(
     export_id: i64,
     credential: &crate::db::audit_trail::CredentialUsed,
 ) -> Result<()> {
-    let (kind, app_kind, app_build, label, hint) = credential.run_columns();
+    let columns = credential.run_columns();
     sqlx::query(
         "UPDATE exports SET credential = $1, app_kind = $2, app_build = $3,
                 api_token_label = $4, api_token_hint = $5
          WHERE id = $6",
     )
-    .bind(kind)
-    .bind(app_kind)
-    .bind(app_build)
-    .bind(label)
-    .bind(hint)
+    .bind(columns.credential)
+    .bind(columns.app_kind)
+    .bind(columns.app_build)
+    .bind(columns.api_token_label)
+    .bind(columns.api_token_hint)
     .bind(export_id)
     .execute(&mut *conn)
     .await

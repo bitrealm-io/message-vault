@@ -7,12 +7,10 @@ import { Z_RANGE_PILL } from "../lib/zLayers";
   `styleTokens.test.ts` checks that the two are the same size.
 */
 export const RANGE_PILL_SCROLL_PAD_CLASS = "pb-14";
-/** The same room as a height, for the spacer after a list's rows. */
-const RANGE_PILL_SPACER_CLASS = "h-14";
 
 /** The spacer after a list's rows, as high as the padding is deep. */
 export function RangePillSpacer() {
-  return <div aria-hidden className={`shrink-0 ${RANGE_PILL_SPACER_CLASS}`} />;
+  return <div aria-hidden className="h-14 shrink-0" />;
 }
 
 /** Viewport pixels the pill covers (`bottom-3` + pill). Range math ignores this band. */

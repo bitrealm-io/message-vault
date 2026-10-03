@@ -34,9 +34,9 @@ const HEX_DATA_FILES = new Set(["lib/theme.ts", "components/theme/ThemeColorRow.
 
 describe("colors are theme tokens", () => {
   it("no component writes a hex color, an rgb() color or a palette color", () => {
-    // A hex color after a quote, a backtick or a bracket; or after a space, a
-    // parenthesis, a comma or a colon, where `(#1245)` is an issue number, so
-    // a short one there counts only when it holds a letter.
+    // A hex color counts after a quote, a backtick or a bracket. After a space,
+    // a parenthesis, a comma or a colon, `(#1245)` is an issue number, so a
+    // short hex counts there only when it holds a letter.
     const hex =
       /["'`[]#[0-9a-fA-F]{3,8}\b|[\s(,:]#([0-9a-fA-F]{6}|[0-9a-fA-F]{8}|(?=\d*[a-fA-F])[0-9a-fA-F]{3,4})\b/;
     const rgb = /(?<![a-zA-Z])(rgba?|hsla?)\(/;

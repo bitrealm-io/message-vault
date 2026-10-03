@@ -638,13 +638,6 @@ async fn apply_profile_update(
             ProfileHandleKind::Email => {
                 account_profile::link_account_handle(conn, account_id, raw, HandleType::Email)
                     .await?;
-                account_profile::upsert_account_email(
-                    conn,
-                    account_id,
-                    &raw.to_ascii_lowercase(),
-                    false,
-                )
-                .await?;
             }
             ProfileHandleKind::Whatsapp => {
                 account_profile::link_account_handle_with_service(

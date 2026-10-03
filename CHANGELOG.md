@@ -604,6 +604,10 @@ released versions carry their date on the heading.
 
 #### Accounts, Settings and screens
 
+- 2026-10-03 **Two accounts can each have the same email address.** When a
+  second account added an email address that another account already had,
+  the address was linked as its identity but left off its profile. Each
+  account now lists every email address it holds.
 - 2026-09-22 **Changing a password checks things in a sensible order and
   says so in full sentences.** Message Crate now checks the current password
   first, then that the new password was typed the same way twice, then that

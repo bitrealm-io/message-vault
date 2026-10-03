@@ -80,8 +80,7 @@ pub fn write_seed_toml(config_dir: &Path) -> Result<()> {
 display_name = "Demo User"
 # (raw handle, handle type) pairs linked into `account_handles` by reset-demo.
 handle_specs = [["{OWNER_PHONE}", "phone"]]
-# Each email is an identity too: reset-demo writes it to `account_emails` and
-# links it into `account_handles`.
+# Each email is an identity too: reset-demo links it into `account_handles`.
 emails = ["{OWNER_EMAIL}"]
 
 [account]

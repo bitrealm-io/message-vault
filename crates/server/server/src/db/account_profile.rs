@@ -23,34 +23,28 @@ pub async fn load_account_profile(
     conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<AccountProfile> {
-    let emails = query_account_strings(
-        conn,
-        "SELECT email FROM account_emails WHERE account_id = $1 ORDER BY email",
-        account_id,
-    )
-    .await?;
-    let phones = query_account_strings(
-        conn,
-        "SELECT h.normalized FROM handles h
-         JOIN account_handles ah ON ah.handle_id = h.id
-         WHERE ah.account_id = $1 AND h.handle_type = 'phone'
-         ORDER BY h.normalized",
-        account_id,
-    )
-    .await?;
+    let emails = account_handle_addresses(conn, account_id, HandleType::Email).await?;
+    let phones = account_handle_addresses(conn, account_id, HandleType::Phone).await?;
     Ok(AccountProfile { emails, phones })
 }
 
-/// Run a one-column query bound to `account_id` and collect the strings.
-async fn query_account_strings(
+/// The normalized addresses of the account's handles of `handle_type`, A to
+/// Z, from `account_handles`.
+async fn account_handle_addresses(
     conn: &mut SqliteConnection,
-    sql: &str,
     account_id: i64,
+    handle_type: HandleType,
 ) -> Result<Vec<String>> {
-    Ok(sqlx::query_scalar::<_, String>(sql)
-        .bind(account_id)
-        .fetch_all(&mut *conn)
-        .await?)
+    Ok(sqlx::query_scalar::<_, String>(
+        "SELECT h.normalized FROM handles h
+         JOIN account_handles ah ON ah.handle_id = h.id
+         WHERE ah.account_id = $1 AND h.handle_type = $2
+         ORDER BY h.normalized",
+    )
+    .bind(account_id)
+    .bind(handle_type.as_str())
+    .fetch_all(&mut *conn)
+    .await?)
 }
 
 /// Ensure an `accounts` row exists at `account_id`, with the id as its stub
@@ -643,34 +637,14 @@ pub async fn upsert_account_phone(
     Ok(())
 }
 
-/// Upsert an `account_emails` row.
-pub async fn upsert_account_email(
-    conn: &mut SqliteConnection,
-    account_id: i64,
-    email: &str,
-    is_primary: bool,
-) -> Result<()> {
-    sqlx::query(
-        "INSERT INTO account_emails (account_id, email, is_primary) VALUES ($1, $2, $3)
-         ON CONFLICT DO NOTHING",
-    )
-    .bind(account_id)
-    .bind(email)
-    .bind(is_primary as i32)
-    .execute(&mut *conn)
-    .await?;
-    Ok(())
-}
-
 /// Unlink one of the account's identities (`account_handles`): the linked
 /// handle with this address and, for a phone number, this `service`. One
 /// number can be linked twice, as a Text message identity and as a WhatsApp
 /// identity, and removing one leaves the other.
 ///
 /// An email address is one identity whatever service its `handles` row
-/// records, so `service` is ignored for one; the matching `account_emails`
-/// row goes too. The `handles` row itself stays, so conversation history
-/// stays intact. True when anything was unlinked.
+/// records, so `service` is ignored for one. The `handles` row itself stays,
+/// so conversation history stays intact. True when anything was unlinked.
 pub async fn unlink_account_handle(
     conn: &mut SqliteConnection,
     account_id: i64,
@@ -681,7 +655,7 @@ pub async fn unlink_account_handle(
     let (normalized, _) = normalize_handle(raw, handle_type);
     let is_email = matches!(handle_type, HandleType::Email);
     let service = (!is_email).then_some(service.as_str());
-    let mut removed = sqlx::query(
+    let removed = sqlx::query(
         "DELETE FROM account_handles
          WHERE account_id = $1 AND handle_id IN (
              SELECT id FROM handles
@@ -695,14 +669,6 @@ pub async fn unlink_account_handle(
     .execute(&mut *conn)
     .await?
     .rows_affected();
-    if is_email {
-        removed += sqlx::query("DELETE FROM account_emails WHERE account_id = $1 AND email = $2")
-            .bind(account_id)
-            .bind(normalized.as_str())
-            .execute(&mut *conn)
-            .await?
-            .rows_affected();
-    }
     Ok(removed > 0)
 }
 
@@ -711,6 +677,32 @@ mod tests {
     use super::*;
 
     const ACCOUNT_ID: i64 = 7;
+
+    /// An account's email addresses are its email identities: one linked in
+    /// `account_handles` is in the profile's `emails`, with nothing else to
+    /// write (#1027).
+    #[tokio::test]
+    async fn the_profile_lists_the_email_identities() {
+        let fixture = crate::test_support::test_fixture().await;
+        fixture.account_with_id(ACCOUNT_ID, "Alice").await;
+        let mut conn = fixture.conn().await;
+        link_account_handle(
+            &mut conn,
+            ACCOUNT_ID,
+            "Alice@Example.com",
+            HandleType::Email,
+        )
+        .await
+        .unwrap();
+        link_account_handle(&mut conn, ACCOUNT_ID, "+15555550100", HandleType::Phone)
+            .await
+            .unwrap();
+
+        let profile = load_account_profile(&mut conn, ACCOUNT_ID).await.unwrap();
+
+        assert_eq!(profile.emails, vec!["alice@example.com".to_string()]);
+        assert_eq!(profile.phones, vec!["+15555550100".to_string()]);
+    }
 
     #[tokio::test]
     async fn resolve_by_username_case_insensitive() {

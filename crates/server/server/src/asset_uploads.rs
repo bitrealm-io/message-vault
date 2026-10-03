@@ -326,7 +326,7 @@ pub fn read_upload(
     upload_id: &str,
 ) -> Result<UploadManifest, AssetError> {
     let session = existing_session(assets_root, sha, upload_id)?;
-    read_manifest_for(&session, sha)
+    read_manifest_for(&session, sha).map_err(|e| gone_if_removed(&session, e))
 }
 
 /// Write (or overwrite) one part. `body` is the full part payload.
@@ -785,6 +785,8 @@ mod tests {
         let err = put_part(dir.path(), &sha, &upload_id, 1, b"hello").unwrap_err();
         assert!(matches!(err, AssetError::UploadNotFound), "{err}");
         let err = complete_upload(dir.path(), &sha, &upload_id).unwrap_err();
+        assert!(matches!(err, AssetError::UploadNotFound), "{err}");
+        let err = read_upload(dir.path(), &sha, &upload_id).unwrap_err();
         assert!(matches!(err, AssetError::UploadNotFound), "{err}");
     }
 

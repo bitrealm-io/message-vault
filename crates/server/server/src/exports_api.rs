@@ -16,7 +16,7 @@ use sqlx::{Connection, SqliteConnection};
 use crate::db::conversation_messages::{
     DEFAULT_MESSAGE_SORT, MESSAGE_SORT_KEYS, Message, selection_where,
 };
-use crate::db::dialect::BEGIN_IMMEDIATE_SQL;
+use crate::db::engine::BEGIN_IMMEDIATE_SQL;
 use crate::db::exports::{
     self, DEFAULT_EXPORT_SORT, EXPORT_SORT_KEYS, ExportPageOpts, StartExportArgs, export_messages,
 };

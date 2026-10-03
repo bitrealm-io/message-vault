@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Connection, Row, SqliteConnection};
 
-use crate::db::dialect;
+use crate::db::engine::BEGIN_IMMEDIATE_SQL;
 use crate::paging::{Direction, SortKey};
 
 /// Where a live import session is in its lifecycle.
@@ -642,7 +642,7 @@ pub async fn complete_import(
 
     // The update and the issue inserts land as one unit, and a failed
     // commit rolls back (sqlx drops the transaction).
-    let mut tx = conn.begin_with(dialect::BEGIN_IMMEDIATE_SQL).await?;
+    let mut tx = conn.begin_with(BEGIN_IMMEDIATE_SQL).await?;
     let updated = sqlx::query(
         r"
         UPDATE imports

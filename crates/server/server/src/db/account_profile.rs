@@ -4,8 +4,9 @@ use anyhow::{Context, Result, bail};
 use message_ir::{HandleService, HandleType};
 use sqlx::{Connection, SqliteConnection};
 
+use crate::db::engine::BEGIN_IMMEDIATE_SQL;
 use crate::db::handles::{normalize_handle, upsert_handle_row};
-use crate::db::{dialect, schema};
+use crate::db::schema;
 
 /// Contact points linked to an account, for profile display.
 #[derive(Debug, Clone)]
@@ -352,7 +353,7 @@ pub async fn delete_all_messages_for_account(
     account_id: i64,
 ) -> Result<DeletedMessagesStats> {
     schema::ensure_schema(conn).await?;
-    let mut tx = conn.begin_with(dialect::BEGIN_IMMEDIATE_SQL).await?;
+    let mut tx = conn.begin_with(BEGIN_IMMEDIATE_SQL).await?;
     let attachment_count: i64 = sqlx::query_scalar(
         r"
         SELECT COUNT(*)

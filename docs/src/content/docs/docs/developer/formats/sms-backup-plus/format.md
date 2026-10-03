@@ -30,9 +30,12 @@ contact card, which need not be the account the backup went to. The run
 knows the owner only by the phone numbers and email addresses it is given, so
 they should include every number the archive spans and any email address on
 the owner's own contact card. A received MMS whose `To` names two or more
-addresses and none of the owner's is not read as a group: it is keyed by
-`X-smssync-address` and counted as `group_messages_owner_not_named` in the run
-summary.
+addresses and none of the owner's is not read as a group. It goes to the
+one-to-one conversation of the address in `From`, who wrote it. When `From`
+gives no address, it goes to the `X-smssync-address` conversation with no
+sender, since that number is not known to have written it. Either way it is
+counted as `group_messages_owner_not_named` in the run summary. The counter
+counts stored messages, after duplicates are dropped.
 
 The body is the `text/plain` part. SMS Backup+ writes every message body as
 plain text — zero of 20,000 sampled carry a `text/html` part — so there is

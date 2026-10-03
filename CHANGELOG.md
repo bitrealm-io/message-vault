@@ -226,7 +226,8 @@ released versions carry their date on the heading.
   one of its members alone. A group text you sent and the replies to it now
   land together in one group conversation, each reply credited to the person
   who sent it. A group text whose sender matches nobody in the group shows
-  no sender instead of the first member.
+  no sender instead of the first member. Each such group text is also listed
+  among the import's issues.
 - 2026-09-23 **A group text from an SMS Backup & Restore backup is no longer
   credited to the wrong person when the backup names no sender.** A group
   MMS without a sender address was shown as sent by whichever member the

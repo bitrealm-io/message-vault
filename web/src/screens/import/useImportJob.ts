@@ -3,7 +3,7 @@ import {
   type ImportIssue,
   type ImportSummaryView,
 } from "../../components/import/ImportSummaryPanel";
-import { getBaseUrl } from "../../lib/api";
+import { getAccountId, getBaseUrl } from "../../lib/api";
 import { formatAttachmentProgress } from "../../lib/attachmentProgressCopy";
 import { useAuth } from "../../lib/auth";
 import { needsIdentityStop, parseSourceIdentities } from "../../lib/backupIdentity";
@@ -390,13 +390,68 @@ let scratch: RunScratch = freshScratch();
 
 const store = importRunStore;
 
-/** Put the store and the scratch back to a fresh form. Tests call this between cases. */
+/** Put the store and the scratch back to a fresh form, started by no account. */
 export function resetImportRun(): void {
   scratch = freshScratch();
   store.reset(initialImportRunState(initialSteps()));
 }
 
 resetImportRun();
+
+/**
+ * What the Import screen's actions are doing now, whichever account started
+ * them: a stage, a probe, a Review being cancelled. Settles once they stop.
+ * `takeRunFor` waits on it before another account's run replaces them.
+ */
+let work: Promise<void> | null = null;
+
+/** Run `action` as the Import screen's work of the moment (`work`). */
+function asWork(action: () => Promise<void>): Promise<void> {
+  const tracked = action().finally(() => {
+    if (work === tracked) work = null;
+  });
+  work = tracked;
+  return tracked;
+}
+
+/**
+ * Make the store `accountId`'s, before that account starts or resumes a run.
+ *
+ * A store already the account's is left as it is. A run another account
+ * started is stopped and let settle first, so nothing it does afterwards
+ * lands in the new run: its stage is cancelled, which leaves the run open on
+ * the server for that account to resume from its staged folder. Then the
+ * store goes back to a fresh form, named with `accountId` (#1085).
+ */
+async function takeRunFor(accountId: number | null): Promise<void> {
+  while (store.get().accountId !== accountId) {
+    const running = work;
+    if (running == null) {
+      resetImportRun();
+      store.set({ accountId });
+      return;
+    }
+    await scratch.runCancel.cancel();
+    await running.catch(() => {});
+  }
+}
+
+/**
+ * True when the account logged in now is not the one that started the run:
+ * that account logged out while a stage ran. The server calls the run makes
+ * go with the session logged in now, so the run must not make another.
+ */
+function accountLeft(): boolean {
+  return getAccountId() !== store.get().accountId;
+}
+
+/**
+ * Stop the run where it got to, the way a Cancel does, once the account that
+ * started it has left. The run stays open for that account to resume.
+ */
+function stopIfAccountLeft(): void {
+  if (accountLeft()) throw new Error(CANCELLED_MESSAGE);
+}
 
 function updateSteps(update: (steps: ImportStep[]) => ImportStep[]): void {
   store.set((state) => ({ steps: update(state.steps) }));
@@ -612,9 +667,13 @@ function recordError(step: ImportIssue["step"], message: string): void {
  * `CANCELLED_MESSAGE` the way a job cancelled while it runs does.
  */
 function runJob(invokeFn: () => Promise<void>): Promise<TauriJobResult> {
+  const guarded = scratch.runCancel.guard(invokeFn);
   return awaitTauriJob(
     "Import Run",
-    scratch.runCancel.guard(invokeFn),
+    async () => {
+      stopIfAccountLeft();
+      await guarded();
+    },
     undefined,
     applyProgress,
     recordIssue,
@@ -1217,6 +1276,8 @@ async function runImport(
       store.set({ stagingDir: outputDir });
 
       const backupStat = await invokePathStat(form.backupPath).catch(() => null);
+      // The run is created in the account of the session logged in now.
+      stopIfAccountLeft();
       const importSession = await createImport({
         ...importSessionCreateBody(form.source),
         stage: "parse",
@@ -1355,8 +1416,17 @@ async function cancel(): Promise<void> {
  */
 export function useImportJob() {
   const fetchAccountProfile = useFetchAccountProfile();
-  const { token } = useAuth();
+  const auth = useAuth();
+  const token = auth.token;
+  const accountId = auth.accountId ?? null;
+  // The logged-in account's run, or the fresh form when another account's
+  // run is in the store (#1085).
   const state: ImportRunState = useImportRunState();
+
+  /** True when the run in the store is this account's to act on. */
+  function ownsRun(): boolean {
+    return store.get().accountId === accountId;
+  }
 
   /**
    * Start an import. For a fresh iMessage start this first reads which
@@ -1372,51 +1442,69 @@ export function useImportJob() {
     resumeWrite?: ResumeWrite,
   ): Promise<void> {
     if (!isTauri()) return;
+    await takeRunFor(accountId);
     // A second call while one is already probing or running is a no-op.
     if (scratch.startImport) return;
     scratch.startImport = true;
-    try {
-      let identities: string[] | null = null;
-      if (!resume && !resumeWrite && isImessageMethod(form.source)) {
-        // The probe reads the backup (and, for an encrypted one, decrypts
-        // it) before any run exists, which can take seconds: mark the run
-        // busy for that stretch so the Import button reflects it.
-        store.set({ running: true });
-        try {
-          identities = await invokeImessageBackupIdentities({
-            path: form.backupPath,
-            ios: form.source === "imessage-ios",
-            backupPassword: form.backupPassword,
-          }).catch(() => []);
-          store.set({ sourceIdentities: identities });
-          const profile = await fetchAccountProfile();
-          if (needsIdentityStop(identities, profile)) {
-            scratch.pendingIdentityForm = form;
-            store.set({ phase: "identity_stop" });
-            return;
-          }
-        } finally {
-          store.set({ running: false });
-        }
-      } else {
-        store.set({ sourceIdentities: resumeWrite ? (resumeWrite.identities ?? null) : null });
+    const started = scratch;
+    await asWork(async () => {
+      try {
+        await startRun(form, resume, resumeWrite);
+      } finally {
+        started.startImport = false;
       }
-      await runImport(token, form, identities, resume, resumeWrite);
-    } finally {
-      scratch.startImport = false;
+    });
+  }
+
+  /** `startImport`, once the store is this account's and no other start is under way. */
+  async function startRun(
+    form: ImportJobFormValues,
+    resume?: ResumePush,
+    resumeWrite?: ResumeWrite,
+  ): Promise<void> {
+    let identities: string[] | null = null;
+    if (!resume && !resumeWrite && isImessageMethod(form.source)) {
+      // The probe reads the backup (and, for an encrypted one, decrypts
+      // it) before any run exists, which can take seconds: mark the run
+      // busy for that stretch so the Import button reflects it.
+      store.set({ running: true });
+      try {
+        identities = await invokeImessageBackupIdentities({
+          path: form.backupPath,
+          ios: form.source === "imessage-ios",
+          backupPassword: form.backupPassword,
+        }).catch(() => []);
+        store.set({ sourceIdentities: identities });
+        const profile = await fetchAccountProfile();
+        // The account logged out during the probe: the profile just read
+        // is another account's, and no run exists yet to resume.
+        if (accountLeft()) return;
+        if (needsIdentityStop(identities, profile)) {
+          scratch.pendingIdentityForm = form;
+          store.set({ phase: "identity_stop" });
+          return;
+        }
+      } finally {
+        store.set({ running: false });
+      }
+    } else {
+      store.set({ sourceIdentities: resumeWrite ? (resumeWrite.identities ?? null) : null });
     }
+    await runImport(token, form, identities, resume, resumeWrite);
   }
 
   /** Continue past the identity stop with the parked form. */
   async function continueAfterIdentityStop(): Promise<void> {
+    if (!ownsRun()) return;
     const form = scratch.pendingIdentityForm;
     if (!form) return;
     scratch.pendingIdentityForm = null;
-    await runImport(token, form, store.get().sourceIdentities);
+    await asWork(() => runImport(token, form, store.get().sourceIdentities));
   }
 
   /** Leave the identity stop; nothing was created, so only the phase moves. */
   function cancelIdentityStop(): void {
+    if (!ownsRun()) return;
     scratch.pendingIdentityForm = null;
     returnToForm();
   }
@@ -1424,6 +1512,7 @@ export function useImportJob() {
   /** Approve the waiting review: Media after the Staging Review when there is one, Upload otherwise. */
   async function approve(): Promise<void> {
     if (!isTauri()) return;
+    if (!ownsRun()) return;
     if (scratch.reviewAction) return;
     const form = scratch.form;
     const {
@@ -1441,24 +1530,27 @@ export function useImportJob() {
 
     scratch.reviewAction = true;
     scratch.runCancel = createRunCancel();
-    try {
-      // The review's own stage did not reach the server, so it is written
-      // first: a later visit must find the run at this review.
-      if (reviewError != null) {
-        const recorded =
-          phase === "media_review"
-            ? await moveStageAtReview(sessionId, "awaiting_gate_2", stagingSummary ?? undefined)
-            : await moveStageAtReview(sessionId, "awaiting_gate_1");
-        if (!recorded) return;
+    const approving = scratch;
+    await asWork(async () => {
+      try {
+        // The review's own stage did not reach the server, so it is written
+        // first: a later visit must find the run at this review.
+        if (reviewError != null) {
+          const recorded =
+            phase === "media_review"
+              ? await moveStageAtReview(sessionId, "awaiting_gate_2", stagingSummary ?? undefined)
+              : await moveStageAtReview(sessionId, "awaiting_gate_1");
+          if (!recorded) return;
+        }
+        if (phase === "staging_review" && mediaJobVerb(form.attachmentMedia) !== null) {
+          await runMediaPass(form, sessionId, outputDir, approvedSummary);
+        } else {
+          await runPush(token, form, sessionId, outputDir, approvedSummary);
+        }
+      } finally {
+        approving.reviewAction = false;
       }
-      if (phase === "staging_review" && mediaJobVerb(form.attachmentMedia) !== null) {
-        await runMediaPass(form, sessionId, outputDir, approvedSummary);
-      } else {
-        await runPush(token, form, sessionId, outputDir, approvedSummary);
-      }
-    } finally {
-      scratch.reviewAction = false;
-    }
+    });
   }
 
   /**
@@ -1492,6 +1584,15 @@ export function useImportJob() {
     resumedForm: ImportJobFormValues,
   ): Promise<void> {
     if (!isTauri()) return;
+    await takeRunFor(accountId);
+    await asWork(() => resumeRunAtGate(session, resumedForm));
+  }
+
+  /** `resumeAtGate`, once the store is this account's. */
+  async function resumeRunAtGate(
+    session: ActiveImportSession,
+    resumedForm: ImportJobFormValues,
+  ): Promise<void> {
     if (
       session.stage !== "awaiting_gate_1" &&
       session.stage !== "awaiting_gate_2" &&
@@ -1609,9 +1710,16 @@ export function useImportJob() {
     continueAfterIdentityStop,
     cancelIdentityStop,
     approve,
-    cancelRun,
+    // Another account's run is that account's to cancel, stop or leave.
+    cancelRun: async () => {
+      if (ownsRun()) await asWork(cancelRun);
+    },
     resumeAtGate,
-    cancel,
-    returnToForm,
+    cancel: async () => {
+      if (ownsRun()) await cancel();
+    },
+    returnToForm: () => {
+      if (ownsRun()) returnToForm();
+    },
   };
 }

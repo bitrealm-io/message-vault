@@ -2,7 +2,7 @@
 //! structure, then write the chosen output format via [`ExportWriter`].
 
 use crate::attachments::{
-    FolderFiles, ResolveAttachmentArgs, RowAttachment, file_name_second, mime_hint,
+    FolderFiles, NumberedName, ResolveAttachmentArgs, RowAttachment, file_name_second, mime_hint,
     resolve_attachment_cell, written_name,
 };
 use crate::attachments_emit::{attachment_digests, pending_attachment_to_ir};
@@ -204,8 +204,14 @@ impl Ingest {
         let folder = csv_folder(discovered).to_path_buf();
         // Only a run that copies attachments looks for a row's file.
         let files = self.copy_attachments.then(|| FolderFiles::read(&folder));
-        let ordinals = attachment_ordinals(&rows);
-        let same_second = attachments_by_second(&rows, &ordinals);
+        // Each row's second as iMazing writes it into a file name, worked
+        // out once for every use below.
+        let seconds: Vec<String> = rows
+            .iter()
+            .map(|row| file_name_second(&row.message_date))
+            .collect();
+        let ordinals = attachment_ordinals(&rows, &seconds);
+        let same_second = attachments_by_second(&rows, &seconds, &ordinals);
         let texts = self.folder_texts.entry(folder).or_default();
         let mut by_session: BTreeMap<String, Vec<(usize, &RawRow)>> = BTreeMap::new();
         for (row_index, row) in rows.iter().enumerate() {
@@ -213,7 +219,7 @@ impl Ingest {
             // (`attach_unnamed_files`), so only it needs the texts.
             if self.copy_attachments && !row.text.is_empty() {
                 texts
-                    .entry(file_name_second(&row.message_date))
+                    .entry(seconds[row_index].clone())
                     .or_default()
                     .push(row.text.clone());
             }
@@ -225,6 +231,7 @@ impl Ingest {
         let csv = CsvContext {
             index: csv_index,
             files: files.as_ref(),
+            seconds: &seconds,
             ordinals: &ordinals,
             same_second: &same_second,
         };
@@ -466,12 +473,14 @@ fn attachment_for_row(
     }
     let (cell, source) = resolve_attachment_cell(ResolveAttachmentArgs {
         row: RowAttachment {
-            csv_name: &row.attachment,
-            message_date: &row.message_date,
-            ordinal: csv.ordinals[row_index],
+            name: NumberedName {
+                csv_name: &row.attachment,
+                ordinal: csv.ordinals[row_index],
+            },
+            second: &csv.seconds[row_index],
             same_second: csv
                 .same_second
-                .get(&file_name_second(&row.message_date))
+                .get(csv.seconds[row_index].as_str())
                 .map_or(&[], Vec::as_slice),
         },
         attachment_type: &row.attachment_type,
@@ -509,10 +518,12 @@ struct CsvContext<'a> {
     index: usize,
     /// The files of the CSV's chat folder, when the run copies attachments.
     files: Option<&'a FolderFiles>,
+    /// Each row's [`file_name_second`].
+    seconds: &'a [String],
     /// Each row's ordinal ([`attachment_ordinals`]).
     ordinals: &'a [usize],
     /// The rows that name a file, by their second ([`attachments_by_second`]).
-    same_second: &'a HashMap<String, Vec<(&'a str, usize)>>,
+    same_second: &'a HashMap<&'a str, Vec<NumberedName<'a>>>,
 }
 
 /// Each row's place among the rows of its CSV that share its `Message Date`
@@ -520,15 +531,15 @@ struct CsvContext<'a> {
 /// files of such rows `X.ext`, `X 2.ext`, and on, in that order. Two cells
 /// that iMazing writes as one name, such as two long names that cut to the
 /// same 40 characters, are numbered together.
-fn attachment_ordinals(rows: &[RawRow]) -> Vec<usize> {
-    let mut seen: HashMap<(String, String), usize> = HashMap::new();
+///
+/// `seconds` holds each row's [`file_name_second`].
+fn attachment_ordinals(rows: &[RawRow], seconds: &[String]) -> Vec<usize> {
+    let mut seen: HashMap<(&str, String), usize> = HashMap::new();
     rows.iter()
-        .map(|row| {
+        .zip(seconds)
+        .map(|(row, second)| {
             let count = seen
-                .entry((
-                    file_name_second(&row.message_date),
-                    written_name(&row.attachment),
-                ))
+                .entry((second.as_str(), written_name(&row.attachment)))
                 .or_default();
             *count += 1;
             *count
@@ -536,20 +547,21 @@ fn attachment_ordinals(rows: &[RawRow]) -> Vec<usize> {
         .collect()
 }
 
-/// The `Attachment` cell and ordinal of every row of a CSV that names a
-/// file, keyed by the row's [`file_name_second`], so a row can leave out a
-/// file that another row of its second names by a longer name.
+/// The [`NumberedName`] of every row of a CSV that names a file, keyed by
+/// the row's [`file_name_second`] (`seconds`), so a row can leave out a file
+/// that another row of its second names by a longer name.
 fn attachments_by_second<'a>(
     rows: &'a [RawRow],
+    seconds: &'a [String],
     ordinals: &[usize],
-) -> HashMap<String, Vec<(&'a str, usize)>> {
-    let mut by_second: HashMap<String, Vec<(&str, usize)>> = HashMap::new();
-    for (row, &ordinal) in rows.iter().zip(ordinals) {
+) -> HashMap<&'a str, Vec<NumberedName<'a>>> {
+    let mut by_second: HashMap<&str, Vec<NumberedName<'a>>> = HashMap::new();
+    for ((row, second), &ordinal) in rows.iter().zip(seconds).zip(ordinals) {
         if !row.attachment.is_empty() {
-            by_second
-                .entry(file_name_second(&row.message_date))
-                .or_default()
-                .push((row.attachment.as_str(), ordinal));
+            by_second.entry(second).or_default().push(NumberedName {
+                csv_name: &row.attachment,
+                ordinal,
+            });
         }
     }
     by_second

@@ -26,6 +26,7 @@ Media files sit beside the CSV in each chat folder. There is no `Attachments/` s
 
 The timestamp is the row's `Message Date` with each `:` replaced by a space, and it matches to the second: no file is off by a second or by whole hours.
 A `Message Date` written without seconds stands for second `00`, because iMazing always writes the seconds into a file name.
+
 The label comes from the chat, and a row can't rebuild it: it differs from the chat folder's label in 71 of 298 Messages folders and from `Chat Session` in 142.
 The name is the row's `Attachment` cell, which is always a bare basename, as iMazing changed it when it wrote the file.
 It can itself hold ` - `, so the file name can't be split on ` - `.
@@ -33,12 +34,19 @@ It can itself hold ` - `, so the file name can't be split on ` - `.
 iMazing changes the basename in four ways.
 It converts the extension: heic to jpg, caf to mp3, opus to mp3, and webp to png.
 It cuts a stem longer than 40 characters to its first 40.
-It removes non-ASCII characters from the stem; U+202F, U+2019, U+202D, U+2026 and U+00AE occur.
-And when several rows of one conversation share a `Message Date` and would get one file name, it names their files `X.ext`, `X 2.ext`, and on to `X N.ext`, because one folder can't hold two files of one name.
+It removes non-ASCII characters from the stem. U+202F, U+2019, U+202D, U+2026 and U+00AE occur.
+
+When several rows of one conversation share a `Message Date` and would get one file name, it names their files `X.ext`, `X 2.ext`, and on to `X N.ext`, because one folder can't hold two files of one name.
 
 The importer looks for a row's file in the row's own chat folder only, never in another conversation's, because a file of the same name elsewhere belongs to another message.
-The file's name must start with the row's timestamp and ` - `, and end with ` - ` and the first name that any file ends with, of the cell as written, the cell with its extension converted, and either of those with every non-ASCII character removed from the stem and the stem cut to its first 40 characters.
+The file's name must start with the row's timestamp and ` - `, and end with ` - ` and a name iMazing may have written for the row.
 The label between the two is not compared, because a row can't rebuild it.
+The names are tried in this order, and the first that any file ends with is the one used:
+
+1. the `Attachment` cell as written;
+2. the cell with its extension converted;
+3. either of these with every non-ASCII character removed from the stem and the stem cut to its first 40 characters.
+
 A file whose name ends with a longer name that another row of the same second gives is that row's, so a row naming `photo.jpg` doesn't take the file of a row naming `Holiday - photo.jpg`.
 
 Rows of one CSV whose `Message Date` and written name (the stem without non-ASCII characters, cut to 40, with the extension converted) are the same are numbered in CSV order: the first takes the plain name and the k-th the name whose stem ends with ` k`.

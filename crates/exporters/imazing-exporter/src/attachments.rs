@@ -77,18 +77,18 @@ impl FolderFiles {
     /// when two or more do, because then nothing tells which file is the
     /// row's.
     pub(crate) fn find(&self, row: &RowAttachment<'_>) -> Option<PathBuf> {
-        let start = format!("{} - ", file_name_second(row.message_date));
+        let start = format!("{} - ", row.second);
         let others: Vec<String> = row
             .same_second
             .iter()
-            .filter(|&&(name, ordinal)| (name, ordinal) != (row.csv_name, row.ordinal))
-            .flat_map(|&(name, ordinal)| names_on_disk(name, ordinal))
+            .filter(|&&other| other != row.name)
+            .flat_map(names_on_disk)
             .map(|name| format!(" - {name}"))
             .collect();
         let fits = |file: &str, end: &str| {
             file.len() >= start.len() + end.len() && file.starts_with(&start) && file.ends_with(end)
         };
-        for name in names_on_disk(row.csv_name, row.ordinal) {
+        for name in names_on_disk(&row.name) {
             let end = format!(" - {name}");
             let mut matches = self.files.iter().filter(|(file, _)| {
                 fits(file, &end)
@@ -106,16 +106,24 @@ impl FolderFiles {
 
 /// What a row tells about the file iMazing wrote for its attachment.
 pub(crate) struct RowAttachment<'a> {
+    /// The row's `Attachment` cell and its number.
+    pub name: NumberedName<'a>,
+    /// The row's `Message Date` as iMazing writes it into a file name
+    /// ([`file_name_second`]).
+    pub second: &'a str,
+    /// The [`NumberedName`] of every row of the CSV at this row's second,
+    /// this row's among them.
+    pub same_second: &'a [NumberedName<'a>],
+}
+
+/// A row's `Attachment` cell and its place among the rows of its CSV that
+/// share its second and [`written_name`].
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct NumberedName<'a> {
     /// The row's `Attachment` cell, a bare basename.
     pub csv_name: &'a str,
-    /// The row's `Message Date` as the CSV writes it.
-    pub message_date: &'a str,
-    /// Which of the rows of its CSV that share its `Message Date` and
-    /// [`written_name`] this row is, counting from 1 in CSV order.
+    /// Which of those rows this row is, counting from 1 in CSV order.
     pub ordinal: usize,
-    /// The `Attachment` cell and ordinal of every row of the CSV at this
-    /// row's `Message Date`, this row's among them.
-    pub same_second: &'a [(&'a str, usize)],
 }
 
 /// The name iMazing writes for a file whose `Attachment` cell is `csv_name`:
@@ -142,7 +150,8 @@ pub(crate) fn written_name(csv_name: &str) -> String {
 /// When rows of one CSV share a second and a [`written_name`], iMazing writes
 /// `X.ext` for the first and `X 2.ext`, `X 3.ext`, … for the rest, so the
 /// `ordinal`-th row's stem ends with ` {ordinal}` from the second on.
-fn names_on_disk(csv_name: &str, ordinal: usize) -> Vec<String> {
+fn names_on_disk(name: &NumberedName<'_>) -> Vec<String> {
+    let NumberedName { csv_name, ordinal } = *name;
     let (stem, extension) = split_name(csv_name);
     let extensions = match extension {
         None => vec![None],
@@ -230,8 +239,8 @@ pub(crate) fn resolve_attachment_cell(
     let cell = AttachmentCell {
         meta: message_ir::AttachmentMeta {
             path: None,
-            original_name: Some(row.csv_name.to_string()),
-            mime_type: mime_hint(attachment_type, row.csv_name),
+            original_name: Some(row.name.csv_name.to_string()),
+            mime_type: mime_hint(attachment_type, row.name.csv_name),
             digest_sha256: None,
             size_bytes: None,
             missing_reason: None,
@@ -317,9 +326,11 @@ mod tests {
     /// in that second.
     fn row(csv_name: &str) -> RowAttachment<'_> {
         RowAttachment {
-            csv_name,
-            message_date: "2020-01-01 12:00:00",
-            ordinal: 1,
+            name: NumberedName {
+                csv_name,
+                ordinal: 1,
+            },
+            second: "2020-01-01 12 00 00",
             same_second: &[],
         }
     }
@@ -403,19 +414,29 @@ mod tests {
         assert_eq!(FolderFiles::read(&chat).find(&row("photo.jpg")), None);
     }
 
+    fn numbered(csv_name: &str, ordinal: usize) -> NumberedName<'_> {
+        NumberedName { csv_name, ordinal }
+    }
+
     /// The candidate names in order: as written, converted, then each with
     /// the stem made ASCII and cut to 40 characters. A name iMazing would
     /// leave as it is gives only itself.
     #[test]
     fn the_names_on_disk_are_tried_as_written_first() {
-        assert_eq!(names_on_disk("IMG_0001.jpg", 1), vec!["IMG_0001.jpg"]);
         assert_eq!(
-            names_on_disk("IMG_0001.heic", 1),
+            names_on_disk(&numbered("IMG_0001.jpg", 1)),
+            vec!["IMG_0001.jpg"]
+        );
+        assert_eq!(
+            names_on_disk(&numbered("IMG_0001.heic", 1)),
             vec!["IMG_0001.heic", "IMG_0001.jpg"]
         );
-        assert_eq!(names_on_disk("IMG_0001.HEIC", 1), vec!["IMG_0001.HEIC"]);
         assert_eq!(
-            names_on_disk("Caf\u{e9} \u{2019}menu\u{2019}.webp", 2),
+            names_on_disk(&numbered("IMG_0001.HEIC", 1)),
+            vec!["IMG_0001.HEIC"]
+        );
+        assert_eq!(
+            names_on_disk(&numbered("Caf\u{e9} \u{2019}menu\u{2019}.webp", 2)),
             vec![
                 "Caf\u{e9} \u{2019}menu\u{2019} 2.webp",
                 "Caf\u{e9} \u{2019}menu\u{2019} 2.png",
@@ -423,7 +444,10 @@ mod tests {
                 "Caf menu 2.png",
             ]
         );
-        assert_eq!(names_on_disk("sticker_0001", 3), vec!["sticker_0001 3"]);
+        assert_eq!(
+            names_on_disk(&numbered("sticker_0001", 3)),
+            vec!["sticker_0001 3"]
+        );
     }
 
     /// Two cells that iMazing writes as one name are numbered together.

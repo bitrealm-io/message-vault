@@ -126,10 +126,11 @@ _Avoid_: Test data, Sample data, Demo mode
 The account that holds Demo Data, with the username `demo`. It has no
 password and can never be given one, so anyone who reaches the Message Crate
 can enter it. It may export, and move things to the trash and restore them; it
-may not import or delete for good, so a person's own messages never land in it
-and one visitor cannot empty it for the next. Its status, its permissions and
-its own identities are fixed; the names, groups, tags and searches a visitor
-makes in it stay until it is reset. The owner can delete it, or reset it to
+may not import, delete for good, or load an address book, so a person's own
+messages and contacts never land in it and one visitor cannot empty it for the
+next. Its status, its permissions, its own identities, its display name and its
+time zone are fixed; the names, groups, tags and searches a visitor makes in it
+stay until it is reset. The owner can delete it, or reset it to
 how it started, and change nothing else about it.
 _Avoid_: Demo user, Guest, Sample account
 
@@ -271,7 +272,8 @@ messages or the account. The account holder reads the same status and
 permissions under Settings, Account, and changes none. The owner sets the
 account's display name, time zone and identities on Profile as the holder does,
 which is not the holder's own profile setup, and reads there its last login and
-the app it connects with. The owner reads the Storage tab as the holder sees
+the app it connects with. On the Demo Account those three are fixed, for the
+owner as for the holder. The owner reads the Storage tab as the holder sees
 it, without seeing inside it. The owner's own row opens the owner's own Settings,
 which is also where the account button's Settings goes. An owner's password
 reset sets the password and nothing more: it does not end the person's

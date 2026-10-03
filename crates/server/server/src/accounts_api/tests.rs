@@ -1814,21 +1814,15 @@ async fn the_demo_account_refuses_what_would_shut_or_empty_it_from_anyone() {
 async fn the_demo_account_refuses_imports_and_deletes_whatever_its_permission_row_says() {
     let fixture = test_fixture().await;
     let state = fixture.state.clone();
-    let demo = fixture
-        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
-        .await;
-    {
-        let mut conn = fixture.conn().await;
-        sqlx::query("UPDATE accounts SET can_import = 1, can_delete = 1 WHERE id = $1")
-            .bind(demo)
-            .execute(&mut *conn)
-            .await
-            .unwrap();
-    }
-    let token = log_in(&state, "demo", "").await["token"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    let (demo, token) = fixture.demo_account_session(true, true).await;
+
+    // The profile reads the grant from the id too, so no screen offers what
+    // the server refuses.
+    let profile: Account = get_json(&state, &format!("/v1/accounts/{demo}"), &token).await;
+    assert!(
+        !profile.can_import && profile.can_export && !profile.can_delete,
+        "the Demo Account's profile must report export only, whatever its row says"
+    );
 
     let (status, text) = post_raw(
         &state,

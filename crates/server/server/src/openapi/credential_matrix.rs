@@ -317,6 +317,18 @@ impl Shared {
         let owner_session = insert_account_session_token(&mut conn, OWNER_ACCOUNT_ID)
             .await
             .unwrap();
+        // The Demo Account, with the schema's default row: every permission
+        // on, so whatever refuses it does so by its id
+        // (`document_rules`, ADR 0016).
+        account_profile::insert_account_at(
+            &mut conn,
+            account_profile::DEMO_ACCOUNT_ID,
+            account_profile::DEMO_USERNAME,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
         drop(conn);
         let server = crate::test_support::serve(&fixture.state).await;
         Self {
@@ -523,6 +535,21 @@ impl<'a> World<'a> {
             .unwrap()
             .to_string();
         world
+    }
+
+    /// A new Session for the Demo Account. An account holds one Session at a
+    /// time, and a call may end it, so each call asks for its own.
+    pub(super) async fn demo_session(&self) -> String {
+        let mut conn = self.shared.fixture.conn().await;
+        crate::db::session_tokens::revoke_account_sessions(
+            &mut conn,
+            account_profile::DEMO_ACCOUNT_ID,
+        )
+        .await
+        .unwrap();
+        insert_account_session_token(&mut conn, account_profile::DEMO_ACCOUNT_ID)
+            .await
+            .unwrap()
     }
 
     pub(super) fn url(&self, path: &str) -> String {

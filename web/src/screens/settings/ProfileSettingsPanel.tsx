@@ -107,11 +107,8 @@ export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: 
       {profile.is_owner ? null : (
         <>
           <IdentitiesSection profile={profile} managedAccountId={managedAccountId} />
-          {managed ? (
-            <AccountActivitySection profile={profile} />
-          ) : fixed ? null : (
-            <AddressBookSection />
-          )}
+          {managed && <AccountActivitySection profile={profile} />}
+          {!managed && !fixed && <AddressBookSection />}
         </>
       )}
     </div>

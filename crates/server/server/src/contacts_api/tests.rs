@@ -3038,17 +3038,10 @@ async fn a_long_comma_list_is_refused_as_too_many_parts() {
 async fn an_address_book_load_on_the_demo_account_is_refused() {
     let fixture = crate::test_support::test_fixture().await;
     let state = fixture.state.clone();
-    let demo = fixture
-        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
-        .await;
+    // The seed's grant: export, and neither import nor delete.
+    let (demo, token) = fixture.demo_account_session(false, false).await;
     let contact_id: i64 = {
         let mut conn = state.db.acquire().await.unwrap();
-        // The seed's grant: export, and neither import nor delete.
-        sqlx::query("UPDATE accounts SET can_import = 0, can_delete = 0 WHERE id = $1")
-            .bind(demo)
-            .execute(&mut *conn)
-            .await
-            .unwrap();
         // An Unknown the demo imports made: no name, one identity.
         let handle: i64 = sqlx::query_scalar(
             "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
@@ -3077,10 +3070,6 @@ async fn an_address_book_load_on_the_demo_account_is_refused() {
         .unwrap();
         contact
     };
-    let token = crate::test_support::log_in(&state, "demo", "").await["token"]
-        .as_str()
-        .unwrap()
-        .to_string();
     let visitor = RegisteredAccount {
         account_id: demo,
         username: "demo".into(),

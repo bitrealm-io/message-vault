@@ -39,7 +39,8 @@ The demo text is sampled from *Pride and Prejudice*, which is why the conversati
 ## What the Demo Account cannot do
 
 The Demo Account may export, and move things to the Trash and restore them.
-It may not import, delete for good, or load an address book, and its display name and time zone stay as they are.
+It may not import, delete for good, or load an address book.
+Its display name and time zone stay as they are.
 Anyone who reaches this Message Crate can enter it, so those limits keep a person's own messages out of the demo data and keep one visitor from emptying it for the next.
 
 Names given to contacts, groups, tags, and saved searches made here stay until the Owner resets the Demo Account.

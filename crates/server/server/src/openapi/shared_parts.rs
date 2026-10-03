@@ -117,6 +117,17 @@ pub(crate) fn split_first_sentence(text: &str) -> (&str, &str) {
 
 /// Replace the operation's failures with the ones its shape and its handler
 /// give it, one problem response per status.
+/// Every scope one security requirement names, across all its schemes.
+fn requirement_scopes(requirement: &Value) -> impl Iterator<Item = &str> {
+    requirement
+        .as_object()
+        .into_iter()
+        .flat_map(|schemes| schemes.values())
+        .filter_map(Value::as_array)
+        .flatten()
+        .filter_map(Value::as_str)
+}
+
 fn failures(path: &str, op: &mut Operation) {
     let responses = &mut op.responses.responses;
     let mut kinds: Vec<ProblemType> = Vec::new();
@@ -170,12 +181,9 @@ fn failures(path: &str, op: &mut Operation) {
         // (`server::require_import_access`, `server::require_delete_access`),
         // so a route every credential of which needs one of them can answer it.
         let every_needs = |scope: &str| {
-            requirements.iter().all(|r| {
-                r.as_object().is_some_and(|r| {
-                    r.values()
-                        .any(|s| s.as_array().is_some_and(|s| s.iter().any(|s| s == scope)))
-                })
-            })
+            requirements
+                .iter()
+                .all(|requirement| requirement_scopes(requirement).any(|named| named == scope))
         };
         if every_needs("import") || every_needs("delete") {
             kinds.push(ProblemType::DemoAccountProtected);

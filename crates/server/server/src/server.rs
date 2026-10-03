@@ -165,14 +165,18 @@ pub fn refuse_for_demo_account(target: i64, what: &str) -> Result<(), ApiError> 
 
 /// Allow a credential that may import. The Demo Account never may, whatever
 /// its permission row says: an import would put real messages into an
-/// account anyone can enter.
+/// account anyone can enter. It is refused every import route, a read of an
+/// Import Run included, because it never has one to read.
 ///
 /// # Errors
 ///
 /// Returns `demo-account-protected` for the Demo Account, and forbidden when
 /// import is not permitted.
 pub fn require_import_access(auth: &AuthIdentity) -> Result<(), ApiError> {
-    refuse_for_demo_account(auth.account_id, "messages come only from its seed")?;
+    refuse_for_demo_account(
+        auth.account_id,
+        "imports are closed, because its messages come only from its seed",
+    )?;
     if auth.permissions().import {
         return Ok(());
     }

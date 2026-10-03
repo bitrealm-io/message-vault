@@ -316,12 +316,7 @@ pub(crate) async fn seeded() -> (sqlx::SqlitePool, tempfile::TempDir, Fixture) {
         ..Fixture::default()
     };
 
-    sqlx::query("INSERT INTO account_handles (account_id, handle_id) VALUES ($1, $2)")
-        .bind(a)
-        .bind(f.me_handle)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
+    crate::test_support::link_identity(&mut conn, a, f.me_handle).await;
     f.ana_handle = handle(&mut conn, a, "+15550001", "imessage").await;
     f.bo_handle = handle(&mut conn, a, "+15550002", "sms").await;
     f.jane_handle = handle(&mut conn, a, "jane.doe@example.com", "imessage").await;

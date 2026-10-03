@@ -165,9 +165,9 @@ pub(super) async fn resolve_incoming_sender_handle(
     // the same way a participant does, which also replaces a trashed one
     // (ADR-0013). A handle already in the cache went through here, or
     // through a participant or a one-to-one chat, earlier in this run, and
-    // each of those gave it a contact. A sender at one of the account's
-    // identities is the holder, who never gets a contact (#1093); the
-    // message still records the address it came from.
+    // each of those gave it a contact unless it is one of the account's
+    // identities. A sender at one is the holder, who never gets a contact
+    // here (#1093); the message still records the address it came from.
     if !cached && !is_account_identity(identities, address, handle_type) {
         ensure_contact_for_handle(tx, account_id, import_id, handle_id, None, stats).await?;
     }

@@ -407,7 +407,10 @@ impl ContentKeyInputs {
             return Ok(None);
         }
 
-        let participant_rows: Vec<(i64, String)> = sqlx::query_as(
+        // The holder is never a participant: a group imported before one of
+        // these identities was linked still lists it, and one imported after
+        // does not, so it is left out of the key on both (#1093).
+        let participant_sql = format!(
             r"
             SELECT p.conversation_id, h.normalized
             FROM participants p
@@ -415,22 +418,15 @@ impl ContentKeyInputs {
             JOIN handles h ON h.id = p.handle_id
             WHERE c.account_id = $1
               AND h.normalized IS NOT NULL AND h.normalized != ''
-              -- The holder is never a participant: a group imported before
-              -- one of these identities was linked still lists it, and one
-              -- imported after does not, so it is left out of the key on
-              -- both (#1093).
-              AND NOT EXISTS (
-                SELECT 1 FROM account_handles ah
-                JOIN handles ih ON ih.id = ah.handle_id
-                WHERE ah.account_id = c.account_id
-                  AND ih.normalized = h.normalized AND ih.handle_type = h.handle_type
-              )
+              AND NOT {holder}
             ORDER BY p.conversation_id, h.normalized
             ",
-        )
-        .bind(account_id)
-        .fetch_all(&mut *conn)
-        .await?;
+            holder = crate::db::account_profile::is_account_identity_sql("h", "c.account_id"),
+        );
+        let participant_rows: Vec<(i64, String)> = sqlx::query_as(&participant_sql)
+            .bind(account_id)
+            .fetch_all(&mut *conn)
+            .await?;
         let mut group_handles: HashMap<i64, Vec<String>> = HashMap::new();
         for (conversation_id, handle) in participant_rows {
             group_handles

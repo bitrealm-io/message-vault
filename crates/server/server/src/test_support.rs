@@ -82,6 +82,17 @@ pub async fn serve_router(app: axum::Router) -> TestServer {
     }
 }
 
+/// Link the `handles` row `handle_id` to `account_id` as one of its
+/// identities, as adding one in Settings does.
+pub async fn link_identity(conn: &mut sqlx::SqliteConnection, account_id: i64, handle_id: i64) {
+    sqlx::query("INSERT INTO account_handles (account_id, handle_id) VALUES ($1, $2)")
+        .bind(account_id)
+        .bind(handle_id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+}
+
 /// An empty database with schema applied and no accounts.
 ///
 /// Public registration is turned on, because most of the suite reaches the

@@ -1149,12 +1149,7 @@ async fn the_holders_own_address_does_not_change_a_groups_content_key() {
         add_participant(&mut conn, y, member).await;
     }
     let holder = handle(&mut conn, "+15555550199").await;
-    sqlx::query("INSERT INTO account_handles (account_id, handle_id) VALUES ($1, $2)")
-        .bind(TEST_ACCOUNT_ID)
-        .bind(holder)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
+    crate::test_support::link_identity(&mut conn, TEST_ACCOUNT_ID, holder).await;
     let mut ids = Vec::new();
     for (conversation_id, source, guid) in [(x, "imessage", "a-1"), (y, "sms-backup-plus", "b-1")] {
         ids.push(

@@ -437,11 +437,16 @@ impl ProjectionHooks for WhatsappProjection {
             .then_with(|| a.extra_str("key_id").cmp(b.extra_str("key_id")))
     }
 
-    /// `key_id` alone: it tells WhatsApp messages apart, including
-    /// same-second messages with identical text. The attachments stay out,
-    /// so whether a media file was found leaves the GUID unchanged.
-    fn guid_materials(&self, msg: &PendingMessage) -> Vec<String> {
-        vec![msg.extra_str("key_id").to_string()]
+    /// None: whether a media file was found must leave the GUID unchanged,
+    /// and `key_id` already tells WhatsApp messages apart.
+    fn attachment_digests(&self, _msg: &PendingMessage) -> Vec<String> {
+        Vec::new()
+    }
+
+    /// `key_id`: it tells WhatsApp messages apart, including same-millisecond
+    /// messages with identical text.
+    fn vendor_key(&self, msg: &PendingMessage) -> Option<String> {
+        message_ir::trimmed(msg.extra_str("key_id")).map(str::to_string)
     }
 
     fn attachment_to_ir(&self, att: &PendingAttachment, msg: &PendingMessage) -> IrAttachment {

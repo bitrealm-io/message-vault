@@ -1057,6 +1057,45 @@ describe("useImportJob wiring", () => {
     expect(invokeDeleteStagingMock).not.toHaveBeenCalled();
   });
 
+  it("keeps the staged files when Message Crate does not take the run's completion", async () => {
+    const { result } = renderHook(() => useImportJob());
+    await act(() => result.current.startImport(form({ attachmentMedia: "copy" })));
+    runMock.mockImplementationOnce(runResult({ summary: "Push finished.", report: okReport() }));
+    completeImportMock.mockRejectedValue(new TypeError("Failed to fetch"));
+    await act(() => result.current.approve());
+
+    expect(completeImportMock).toHaveBeenCalled();
+    // The run is left at `pushing`; its resume needs this folder.
+    expect(invokeDeleteStagingMock).not.toHaveBeenCalled();
+    expect(result.current.stagingDir).toBe("/home/sam/message-crate/staging-iphone");
+    // Not finished, so not shown as an import with a Saved Search and a
+    // Contact Group: it is paused, and the next visit resumes it.
+    expect(result.current.summaryView?.status).toBe("paused");
+    expect(result.current.summaryView?.issues).toContainEqual(
+      expect.objectContaining({
+        kind: "error",
+        step: "upload",
+        reason: "Message Crate didn't record the import as finished: Failed to fetch",
+      }),
+    );
+  });
+
+  it("leaves the run's message and attachment counts to the server", async () => {
+    // A resumed Upload's push report counts only what the resume sent, so a
+    // count from the client would record a run that completed after a
+    // resume as holding no messages, and the server makes no Saved Search
+    // for that.
+    const { result } = renderHook(() => useImportJob());
+    await act(() => result.current.startImport(form({ attachmentMedia: "copy" })));
+    runMock.mockImplementationOnce(runResult({ summary: "Push finished.", report: okReport() }));
+    await act(() => result.current.approve());
+
+    expect(completeImportMock).toHaveBeenCalledTimes(1);
+    const body = completeImportMock.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(body).not.toHaveProperty("message_count");
+    expect(body).not.toHaveProperty("attachment_count");
+  });
+
   it("sends Cancel again once a job has started, when it was pressed while the job was starting", async () => {
     // A Cancel that reached the desktop side before the job started stopped
     // nothing, because no job was running yet, so it has to be sent again.

@@ -1671,7 +1671,7 @@
           "Accounts"
         ],
         "summary": "Destroy one account's conversations, messages, and attachments.",
-        "description": "The account itself, its contacts, and its login survive.\n\nThe owner may, on any account. The account itself may with a\nsession that carries the `delete` permission, and confirms in the body.\nAn API token is refused whatever its scopes: permanent deletion is a\nperson's act (`docs/architecture/http-api.md`, \"Credentials and reach\").",
+        "description": "The account itself, its contacts, and its login survive.\n\nThe rows go in one transaction, between two batches of a running Import\nRun and never inside one. The attachment files go after it, unless the\naccount has a running Import Run: that run may have uploaded files for a\nbatch it has not sent yet, so every file stays on disk.\n\nThe owner may, on any account. The account itself may with a\nsession that carries the `delete` permission, and confirms in the body.\nAn API token is refused whatever its scopes: permanent deletion is a\nperson's act (`docs/architecture/http-api.md`, \"Credentials and reach\").",
         "operationId": "delete_account_messages",
         "parameters": [
           {
@@ -10299,18 +10299,11 @@
       },
       "CompleteImportRequest": {
         "type": "object",
-        "description": "Final stats and issues for a running Import Run. The outcome is stated\nonce, as `status`.",
+        "description": "Final stats and issues for a running Import Run. The outcome is stated\nonce, as `status`. The run's message and attachment counts are not part\nof it: the server counts what the run holds, since a resumed Upload's\nclient knows only what the resume sent.",
         "required": [
           "status"
         ],
         "properties": {
-          "attachment_count": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64"
-          },
           "attachments_ms": {
             "type": [
               "integer",
@@ -10337,13 +10330,6 @@
             "items": {
               "$ref": "#/components/schemas/CompleteImportIssueRequest"
             }
-          },
-          "message_count": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64"
           },
           "parse_ms": {
             "type": [
@@ -11134,7 +11120,7 @@
           "attachments": {
             "type": "integer",
             "format": "int64",
-            "description": "Attachment rows deleted (on-disk files are removed too).",
+            "description": "Attachment rows deleted. Their files are removed too, unless the\naccount has a running Import Run.",
             "minimum": 0
           },
           "conversations": {

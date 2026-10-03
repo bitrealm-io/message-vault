@@ -83,9 +83,9 @@ where
     Ok(s.map(|s| message_ir::HandleType::parse(&s)))
 }
 
-/// Timestamp formatting and stable GUID derivation (defined in `message-ir`,
-/// where the shared projection uses them; re-exported here for existing callers).
-pub use message_ir::{format_local_ts, stable_guid};
+/// Timestamp formatting (defined in `message-ir`, where the shared
+/// projection uses it; re-exported here for existing callers).
+pub use message_ir::format_local_ts;
 
 /// Serialize a value for a CSV JSON cell (`null` on failure).
 pub fn json_cell(value: &impl Serialize) -> String {

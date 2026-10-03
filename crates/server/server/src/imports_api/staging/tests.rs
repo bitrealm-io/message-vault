@@ -351,3 +351,77 @@ async fn an_individual_chat_id_takes_the_type_its_participant_has_in_the_header(
             .unwrap();
     assert_eq!(contacts, 1, "the one person in the chat is one contact");
 }
+
+/// An Apple Messages conversation header with `chat_identifier`, `kind` and
+/// the participants JSON array `participants`.
+fn imessage_header(chat_identifier: &str, kind: &str, participants: &str) -> String {
+    whatsapp_header(chat_identifier, kind, participants)
+        .replace(r#""source":"whatsapp""#, r#""source":"imessage""#)
+}
+
+/// An incoming line from `sender` on a service the model does not know, as
+/// Apple Messages writes a message sent by satellite.
+fn incoming_unknown_service(guid: &str, sender: &str) -> String {
+    incoming(guid, sender).replace(
+        r#""service":"imessage","message_kind":"imessage""#,
+        r#""service":"unknown","message_kind":"unknown""#,
+    )
+}
+
+/// A participant's message over a service the model does not know is the
+/// participant's: the sender is the same `phone` identity on the same
+/// contact. Typed by the service, the sender was `other`, a second identity
+/// on a new contact with no name (#1144).
+#[tokio::test]
+async fn a_participants_message_on_an_unknown_service_is_from_the_participant() {
+    let (pool, _dir) = crate::db::engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    let body = imessage_header(
+        "+15555550101",
+        "individual",
+        r#"[{"handle":"+15555550101","display_name":"Sam","handle_type":"phone"}]"#,
+    ) + &incoming("g-sat-1", "+15555550101")
+        + &incoming_unknown_service("g-sat-2", "+15555550101");
+    import_one(&mut conn, "+15555550101.jsonl", &body)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        handle_types(&mut conn).await,
+        [("+15555550101".to_string(), "phone".to_string())]
+    );
+    let contacts: i64 = sqlx::query_scalar(
+        "SELECT COUNT(DISTINCT contact_id) FROM contact_handles WHERE account_id = $1",
+    )
+    .bind(TEST_ACCOUNT)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(contacts, 1, "both messages are from the one contact");
+}
+
+/// A sender the header does not list is typed by the address alone: a phone
+/// number is a `phone` identity whatever service the message came over. It
+/// was `other` on any service but SMS, iMessage, WhatsApp and RCS (#1144).
+#[tokio::test]
+async fn a_sender_who_is_not_a_participant_is_typed_by_the_address_not_the_service() {
+    let (pool, _dir) = crate::db::engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    let body = imessage_header(
+        "chat1000000005",
+        "group",
+        r#"[{"handle":"+15555550702","display_name":null,"handle_type":"phone"}]"#,
+    ) + &incoming_unknown_service("g-sat-3", "+15555550199");
+    import_one(&mut conn, "chat1000000005.jsonl", &body)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        handle_types(&mut conn).await,
+        [
+            ("+15555550199".to_string(), "phone".to_string()),
+            ("+15555550702".to_string(), "phone".to_string()),
+            ("chat1000000005".to_string(), "other".to_string()),
+        ]
+    );
+}

@@ -63,6 +63,46 @@ describe("ProfileDangerZone", () => {
     expect(logout).not.toHaveBeenCalled();
   });
 
+  it("tells an account without the delete permission to ask the owner", async () => {
+    // The server refuses both deletes to such an account, and deleting the
+    // account would delete its messages, so neither is offered.
+    const user = userEvent.setup({ delay: null });
+    render(
+      <QueryClientProvider client={testQueryClient()}>
+        <MemoryRouter>
+          <ProfileDangerZone isDemo={false} username="carol" hasPassword canDelete={false} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Danger zone/ }));
+    expect(screen.getByText(/Ask the owner/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete account" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Delete all messages" })).toBeDisabled();
+  });
+
+  it("lets the owner delete an account that may not delete itself", async () => {
+    const user = userEvent.setup({ delay: null });
+    render(
+      <QueryClientProvider client={testQueryClient()}>
+        <MemoryRouter>
+          <ProfileDangerZone
+            isDemo={false}
+            username="carol"
+            hasPassword
+            canDelete={false}
+            managedAccountId={7}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Danger zone/ }));
+    expect(screen.queryByText(/Ask the owner/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete account" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Delete all messages" })).toBeEnabled();
+  });
+
   it("marks every screen that shows the account's messages stale once they are deleted", async () => {
     // Messages, contacts, the Trash, Storage and the counts on the profile all
     // showed the deleted messages from the cache until they were next fetched.

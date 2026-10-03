@@ -1085,6 +1085,11 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
         opened.cfg.paths.db.display()
     );
     let state = AppState::new(opened, server.asset_part_size);
+    if crate::server_api::recover_stopped_demo_build(&state).await? {
+        eprintln!(
+            "  demo: the server stopped during a Demo Account build; the part-built Demo Account was removed"
+        );
+    }
     // Reported as they stand now; each upload reads them again. Any stored
     // limit starts the server: a part is never larger than the limit.
     let upload_limits = state.upload_limits().await?;
@@ -1094,13 +1099,18 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
         upload_limits.part_size as u64 / message_ir::MIB
     );
 
+    let demo_build = state.demo_build.clone();
     let app = http_app(state);
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     eprintln!("message-crate-server serve listening on http://{bind}");
     eprintln!(
         "  routes: `message-crate-server dump-openapi` lists them all; set [server] openapi_ui = true for /docs"
     );
-    serve_until_shutdown(listener, app).await?;
+    let served = serve_until_shutdown(listener, app).await;
+    // A Demo Account build the owner started would otherwise end part-way
+    // when the process exits (#1215).
+    demo_build.stop().await;
+    served?;
     Ok(())
 }
 

@@ -398,7 +398,8 @@ pub enum DemoAccountStatus {
     Building,
     /// It exists and no build is running.
     Ready,
-    /// The last build failed and the account was removed.
+    /// The last build failed, or the server stopped during it, and the
+    /// account was removed.
     Failed,
 }
 
@@ -421,10 +422,23 @@ pub struct ReplaceDemoAccountRequest {
 }
 
 /// The Demo Account build in this server's memory: none, one running, or the
-/// last one failed. A restart forgets it, and the database then says whether
-/// the account exists.
+/// last one failed. A restart forgets it; the database then says whether the
+/// account exists, and whether a build the server stopped part-way left one
+/// ([`recover_stopped_demo_build`]).
 #[derive(Debug, Clone, Default)]
-pub(crate) struct DemoBuild(std::sync::Arc<std::sync::Mutex<DemoBuildState>>);
+pub(crate) struct DemoBuild(std::sync::Arc<DemoBuildShared>);
+
+#[derive(Debug, Default)]
+struct DemoBuildShared {
+    state: std::sync::Mutex<DemoBuildState>,
+    /// The task running the build, for shutdown to wait on.
+    task: std::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
+    /// Cancelled when the server stops.
+    stopping: tokio_util::sync::CancellationToken,
+}
+
+/// Why the build failed, when the server stopped during it.
+const STOPPED_DURING_BUILD: &str = "the server stopped before the Demo Account build finished";
 
 #[derive(Debug, Clone, Default)]
 enum DemoBuildState {
@@ -435,26 +449,24 @@ enum DemoBuildState {
 }
 
 impl DemoBuild {
-    fn get(&self) -> DemoBuildState {
+    fn lock_state(&self) -> std::sync::MutexGuard<'_, DemoBuildState> {
         self.0
+            .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
+    }
+
+    fn get(&self) -> DemoBuildState {
+        self.lock_state().clone()
     }
 
     fn set(&self, state: DemoBuildState) {
-        *self
-            .0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = state;
+        *self.lock_state() = state;
     }
 
     /// Mark a build of `size` as running, unless one already is.
     fn start(&self, size: DemoDataSize) -> bool {
-        let mut state = self
-            .0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut state = self.lock_state();
         if matches!(*state, DemoBuildState::Building(_)) {
             return false;
         }
@@ -462,11 +474,117 @@ impl DemoBuild {
         true
     }
 
+    /// Run `building`, a build marked with [`DemoBuild::start`], in a task
+    /// of its own, and set the state from how it ends. Whatever way it ends,
+    /// the state leaves `Building`, so a later build or delete is not
+    /// refused for good:
+    ///
+    /// - It finishes, or fails and removes what it wrote: `Idle` or `Failed`.
+    /// - It panics: what it wrote is removed here, and the state is `Failed`.
+    /// - The server stops ([`DemoBuild::stop`]): it is dropped where it is,
+    ///   the Demo Account it left is removed, and the build's record stays
+    ///   in the database, so the next start reports the build as failed.
+    pub(crate) fn run(
+        &self,
+        cfg: std::sync::Arc<crate::config::Config>,
+        db: sqlx::SqlitePool,
+        building: impl std::future::Future<Output = anyhow::Result<u64>> + Send + 'static,
+    ) {
+        let build = self.clone();
+        let stopping = self.0.stopping.clone();
+        let task = tokio::spawn(async move {
+            let started = std::time::Instant::now();
+            let mut building = tokio::spawn(building);
+            let ended = tokio::select! {
+                ended = &mut building => ended,
+                () = stopping.cancelled() => {
+                    building.abort();
+                    building.await
+                }
+            };
+            let state = match ended {
+                Ok(Ok(messages)) => {
+                    tracing::info!(
+                        messages,
+                        seconds = started.elapsed().as_secs_f64(),
+                        "Demo Account built"
+                    );
+                    DemoBuildState::Idle
+                }
+                Ok(Err(error)) => {
+                    tracing::error!("Demo Account build failed: {error:#}");
+                    DemoBuildState::Failed(format!("{error:#}"))
+                }
+                Err(stopped) if stopped.is_cancelled() => {
+                    tracing::warn!("{STOPPED_DURING_BUILD}");
+                    if let Err(error) =
+                        crate::reset_demo::remove_part_built_demo_account(&cfg, &db).await
+                    {
+                        tracing::error!(
+                            "could not remove the part-built Demo Account: {error:#}; the next start removes it"
+                        );
+                    }
+                    DemoBuildState::Failed(STOPPED_DURING_BUILD.into())
+                }
+                Err(panicked) => {
+                    tracing::error!("Demo Account build stopped unexpectedly: {panicked}");
+                    if let Err(error) = crate::reset_demo::remove_failed_demo_build(&cfg, &db).await
+                    {
+                        tracing::error!("could not remove the part-built Demo Account: {error:#}");
+                    }
+                    DemoBuildState::Failed(format!(
+                        "the Demo Account build stopped unexpectedly: {panicked}"
+                    ))
+                }
+            };
+            build.set(state);
+        });
+        *self
+            .0
+            .task
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(task);
+    }
+
+    /// Stop a running build and wait until it has removed what it wrote.
+    /// The server calls this once it has stopped serving, so the build does
+    /// not end part-way when the process exits.
+    pub(crate) async fn stop(&self) {
+        self.0.stopping.cancel();
+        let task = self
+            .0
+            .task
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some(task) = task {
+            let _ = task.await;
+        }
+    }
+
     /// Whether a build is running. Deleting the Demo Account waits for it,
     /// and logging in to it is refused until it ends.
     pub(crate) fn is_building(&self) -> bool {
         matches!(self.get(), DemoBuildState::Building(_))
     }
+}
+
+/// On start: remove the Demo Account a build left when the server stopped
+/// during it, and report that build as failed, so a part-built Demo Account
+/// is never `ready` (#1215). Returns whether there was one.
+///
+/// # Errors
+///
+/// Returns an error when the database cannot be read or the account cannot
+/// be removed.
+pub(crate) async fn recover_stopped_demo_build(state: &AppState) -> anyhow::Result<bool> {
+    let stopped = crate::reset_demo::remove_stopped_demo_build(&state.cfg, &state.db).await?;
+    if stopped {
+        state
+            .demo_build
+            .set(DemoBuildState::Failed(STOPPED_DURING_BUILD.into()));
+    }
+    Ok(stopped)
 }
 
 /// Where the Demo Account stands: the build in memory first, then the database.
@@ -560,27 +678,15 @@ pub async fn replace_demo_account(
         state.demo_build.set(DemoBuildState::Idle);
         return Err(error);
     }
-    let build = state.demo_build.clone();
-    let db = state.db.clone();
-    let cfg = state.cfg.clone();
-    let generate = state.demo_bundle_generator;
-    tokio::spawn(async move {
-        let started = std::time::Instant::now();
-        match crate::reset_demo::build_demo_account(db, cfg, req.size.into(), generate).await {
-            Ok(messages) => {
-                tracing::info!(
-                    messages,
-                    seconds = started.elapsed().as_secs_f64(),
-                    "Demo Account built"
-                );
-                build.set(DemoBuildState::Idle);
-            }
-            Err(error) => {
-                tracing::error!("Demo Account build failed: {error:#}");
-                build.set(DemoBuildState::Failed(format!("{error:#}")));
-            }
-        }
-    });
+    let building = crate::reset_demo::build_demo_account(
+        state.db.clone(),
+        state.cfg.clone(),
+        req.size.into(),
+        state.demo_bundle_generator,
+    );
+    state
+        .demo_build
+        .run(state.cfg.clone(), state.db.clone(), building);
     Ok((
         axum::http::StatusCode::ACCEPTED,
         Json(DemoAccount {

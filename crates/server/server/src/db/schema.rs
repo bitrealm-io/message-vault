@@ -79,16 +79,79 @@ const fn fingerprint_of(files: &[&str]) -> i64 {
     (hash & 0x7fff_ffff) as i64
 }
 
+/// The mark that makes a SQLite file a Message Crate database: the value of
+/// SQLite's `PRAGMA application_id`, the four bytes `MsCr`. Every database
+/// this server builds carries it, and the server changes no file without it
+/// except one that holds nothing at all ([`DatabaseKind`]).
+///
+/// A mark of its own, rather than the absence of anything else, because
+/// another program's SQLite file (Apple's `chat.db`, a backup) has tables
+/// and a `user_version` of its own, and rebuilding it would drop that
+/// program's data (#1070).
+pub const APPLICATION_ID: i64 = 0x4d73_4372;
+
+/// What a SQLite file is, read from its mark and its catalog.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DatabaseKind {
+    /// No mark and nothing in the catalog: a file SQLite has just created,
+    /// or one of zero bytes. The server may build a database in it.
+    Empty,
+    /// Carries [`APPLICATION_ID`]: a database this server, or an earlier
+    /// build of it, made.
+    MessageCrate,
+    /// Anything else: another program's database. The server never changes it.
+    Foreign,
+}
+
+/// Read what the database behind `conn` is, without changing it.
+///
+/// # Errors
+///
+/// Returns an error when the pragma or the catalog cannot be read, as for a
+/// file that is not SQLite at all.
+pub async fn database_kind(conn: &mut SqliteConnection) -> Result<DatabaseKind> {
+    let application_id: i64 = sqlx::query_scalar("PRAGMA application_id")
+        .fetch_one(&mut *conn)
+        .await?;
+    if application_id == APPLICATION_ID {
+        return Ok(DatabaseKind::MessageCrate);
+    }
+    let objects: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master")
+        .fetch_one(&mut *conn)
+        .await?;
+    if application_id == 0 && objects == 0 {
+        Ok(DatabaseKind::Empty)
+    } else {
+        Ok(DatabaseKind::Foreign)
+    }
+}
+
+/// The refusal for a file that is not a Message Crate database, naming it.
+pub fn not_a_message_crate_database(path: &std::path::Path) -> anyhow::Error {
+    anyhow::anyhow!(
+        "{} is not a Message Crate database, so it was left as it is. \
+         The server opens only a database it made: give the path of one, or a path \
+         where no file exists for `serve` or `create-database` to make one",
+        path.display()
+    )
+}
+
 /// Bring the database to [`SCHEMA_FINGERPRINT`].
 ///
 /// A database already stamped with the current fingerprint is left
-/// untouched. Anything else — a fresh file, a pre-fingerprint database, or one
-/// stamped by a server with different SQL — is rebuilt empty and stamped;
-/// the user re-imports afterwards.
+/// untouched. An empty file, or a Message Crate database stamped by a server
+/// with different SQL, is rebuilt empty and stamped; the user re-imports
+/// afterwards. Any other file is refused before a statement changes it
+/// ([`DatabaseKind::Foreign`]).
 ///
 /// The only kind of migration is a full rebuild: schema changes require a
 /// fresh reload of data, never in-place column patches.
 async fn migrate_schema(conn: &mut SqliteConnection) -> Result<()> {
+    if database_kind(conn).await? == DatabaseKind::Foreign {
+        anyhow::bail!(
+            "the database is not a Message Crate database (its application_id is not {APPLICATION_ID:#x}), so it was left as it is"
+        );
+    }
     let stamped = user_version(conn).await?;
     if stamped == SCHEMA_FINGERPRINT {
         return Ok(());
@@ -101,6 +164,9 @@ async fn migrate_schema(conn: &mut SqliteConnection) -> Result<()> {
         );
     }
     rebuild_schema(conn).await?;
+    sqlx::query(&format!("PRAGMA application_id = {APPLICATION_ID}"))
+        .execute(&mut *conn)
+        .await?;
     stamp_user_version(conn, SCHEMA_FINGERPRINT).await?;
     Ok(())
 }
@@ -441,9 +507,7 @@ pub async fn ensure_accounts_schema(conn: &mut SqliteConnection) -> Result<()> {
 }
 
 /// True when `table` exists. [`crate::process_assets::run`] uses it to fall
-/// back to the account folders on a database with no `accounts` table, and
-/// [`crate::reset_demo::database_is_new`] to tell a new database from one
-/// that was ever started.
+/// back to the account folders on a database with no `accounts` table.
 pub async fn table_exists(conn: &mut SqliteConnection, name: &str) -> Result<bool> {
     let found: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = $1")

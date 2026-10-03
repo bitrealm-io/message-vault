@@ -1594,7 +1594,7 @@ describe("useImportJob wiring", () => {
         ...baseForm,
         source: "whatsapp-android",
         whatsappKey: "0123abcd4567",
-        whatsappOwnerPhone: "+15551234567",
+        whatsappOwnerPhone: "+15555550119",
       }),
     );
 
@@ -1702,22 +1702,22 @@ describe("useImportJob wiring", () => {
     }
 
     it("stops at identity_stop when nothing the backup sent from is on the profile", async () => {
-      invokeImessageBackupIdentitiesMock.mockResolvedValue(["+15550001111"]);
-      loadAccountProfileMock.mockResolvedValue({ phones: ["+15559999999"], emails: [] });
+      invokeImessageBackupIdentitiesMock.mockResolvedValue(["+15555550110"]);
+      loadAccountProfileMock.mockResolvedValue({ phones: ["+15555550180"], emails: [] });
       const { result } = renderHook(() => useImportJob());
       await act(async () => {
         await result.current.startImport(imessageForm());
       });
       expect(result.current.phase).toBe("identity_stop");
-      expect(result.current.sourceIdentities).toEqual(["+15550001111"]);
+      expect(result.current.sourceIdentities).toEqual(["+15555550110"]);
       // Nothing was created: no session POST, no extract.
       expect(createImportMock).not.toHaveBeenCalled();
       expect(invokeExtractMock).not.toHaveBeenCalled();
     });
 
     it("continueAfterIdentityStop proceeds and sends the identities on the session", async () => {
-      invokeImessageBackupIdentitiesMock.mockResolvedValue(["+15550001111"]);
-      loadAccountProfileMock.mockResolvedValue({ phones: ["+15559999999"], emails: [] });
+      invokeImessageBackupIdentitiesMock.mockResolvedValue(["+15555550110"]);
+      loadAccountProfileMock.mockResolvedValue({ phones: ["+15555550180"], emails: [] });
       const { result } = renderHook(() => useImportJob());
       await act(async () => {
         await result.current.startImport(imessageForm());
@@ -1726,12 +1726,12 @@ describe("useImportJob wiring", () => {
         await result.current.continueAfterIdentityStop();
       });
       expect(createImportMock).toHaveBeenCalledWith(
-        expect.objectContaining({ source_identities: ["+15550001111"] }),
+        expect.objectContaining({ source_identities: ["+15555550110"] }),
       );
     });
 
     it("cancelIdentityStop returns to the form with nothing created", async () => {
-      invokeImessageBackupIdentitiesMock.mockResolvedValue(["+15550001111"]);
+      invokeImessageBackupIdentitiesMock.mockResolvedValue(["+15555550110"]);
       loadAccountProfileMock.mockResolvedValue({ phones: [], emails: [] });
       const { result } = renderHook(() => useImportJob());
       await act(async () => {
@@ -1745,15 +1745,15 @@ describe("useImportJob wiring", () => {
     });
 
     it("proceeds without a stop when an identity matches, sending the list", async () => {
-      invokeImessageBackupIdentitiesMock.mockResolvedValue(["+15550001111"]);
-      loadAccountProfileMock.mockResolvedValue({ phones: ["+1 555 000 1111"], emails: [] });
+      invokeImessageBackupIdentitiesMock.mockResolvedValue(["+15555550110"]);
+      loadAccountProfileMock.mockResolvedValue({ phones: ["+1 555 555 0110"], emails: [] });
       const { result } = renderHook(() => useImportJob());
       await act(async () => {
         await result.current.startImport(imessageForm());
       });
       expect(result.current.phase).not.toBe("identity_stop");
       expect(createImportMock).toHaveBeenCalledWith(
-        expect.objectContaining({ source_identities: ["+15550001111"] }),
+        expect.objectContaining({ source_identities: ["+15555550110"] }),
       );
     });
 
@@ -1781,12 +1781,12 @@ describe("useImportJob wiring", () => {
         await result.current.startImport(imessageForm(), undefined, {
           sessionId: 42,
           stagingDir: "/home/u/message-crate/staging-260830",
-          identities: ["+15550001111"],
+          identities: ["+15555550110"],
         });
       });
       expect(invokeImessageBackupIdentitiesMock).not.toHaveBeenCalled();
       expect(result.current.phase).toBe("staging_review");
-      expect(result.current.sourceIdentities).toEqual(["+15550001111"]);
+      expect(result.current.sourceIdentities).toEqual(["+15555550110"]);
     });
 
     it("resume_write reads the backup with the password the form carries", async () => {
@@ -2096,7 +2096,7 @@ const validSnapshot = {
   maxResolution: "720p",
   maxFps: "30",
   minSizeMb: "20",
-  ownerPhones: ["+15551234567"],
+  ownerPhones: ["+15555550119"],
   ownerEmails: [],
   obfuscate: false,
   isAndroidSms: false,
@@ -2142,7 +2142,7 @@ describe("restoreFormFromSnapshot", () => {
     ["an empty object", {}],
     ["a snapshot missing most fields", { source: "imessage-ios" }],
     ["an invalid attachmentMedia", { ...validSnapshot, attachmentMedia: "not-a-real-mode" }],
-    ["a non-array ownerPhones", { ...validSnapshot, ownerPhones: "+15551234567" }],
+    ["a non-array ownerPhones", { ...validSnapshot, ownerPhones: "+15555550119" }],
     ["a non-boolean obfuscate", { ...validSnapshot, obfuscate: "yes" }],
     ["a non-boolean backupPasswordGiven", { ...validSnapshot, backupPasswordGiven: "yes" }],
     ["a snapshot with no whatsappKeyGiven", { ...validSnapshot, whatsappKeyGiven: undefined }],
@@ -2555,8 +2555,8 @@ describe("one desktop app, two accounts (#1085)", () => {
   });
 
   it("does not offer account A's parked form to account B", async () => {
-    invokeImessageBackupIdentitiesMock.mockResolvedValue(["+15550001111"]);
-    loadAccountProfileMock.mockResolvedValue({ phones: ["+15550109999"], emails: [] });
+    invokeImessageBackupIdentitiesMock.mockResolvedValue(["+15555550110"]);
+    loadAccountProfileMock.mockResolvedValue({ phones: ["+15555550116"], emails: [] });
     const a = renderHook(() => useImportJob());
     await act(() => a.result.current.startImport({ ...form(), backupPassword: "secret-of-A" }));
     expect(a.result.current.phase).toBe("identity_stop");

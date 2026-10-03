@@ -668,9 +668,9 @@ fn document_with_hard_fields() -> ConversationDocument {
     second.guid = "bbccddeeff0011223344556677889900".into();
     second.timestamp_unix_ms += 60_000;
     second.direction = IrDirection::Outgoing;
-    second.sender_handle = Some("me@icloud.com".into());
+    second.sender_handle = Some("me@example.com".into());
     second.sender_display_name = Some("Me".into());
-    second.owner_handle = Some("me@icloud.com".into());
+    second.owner_handle = Some("me@example.com".into());
     second.text = "from my Apple ID".into();
     second.attachments = vec![message_ir::IrAttachment {
         // The SHA-256 of `card`.

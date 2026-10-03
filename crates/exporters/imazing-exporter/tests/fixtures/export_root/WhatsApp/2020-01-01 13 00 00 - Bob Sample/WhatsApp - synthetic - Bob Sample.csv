@@ -1,0 +1,3 @@
+Chat Session,Message Date,Sent Date,Type,Sender ID,Sender Name,Status,Forwarded,Replying to,Text,Reactions,Attachment,Attachment type,Attachment info
+Bob Sample,2020-01-01 13:00:00,,Incoming,+13215550100,Bob Sample,Read,,,Hello from WhatsApp,,,,
+Bob Sample,2020-01-01 13:01:00,2020-01-01 13:01:01,Outgoing,,,Sent,,,Reply from me,,,,

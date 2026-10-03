@@ -1056,8 +1056,8 @@ describe("ImportScreen gates", () => {
 
   it("shows the Staging Review inside the run, with approve and cancel wired to the hook", async () => {
     hookState.phase = "staging_review";
-    hookState.stagingSummary = stagingSummary({ contactIdentifiers: ["+15551234567"] });
-    hookState.sourceIdentities = ["+15550001111"];
+    hookState.stagingSummary = stagingSummary({ contactIdentifiers: ["+15555550119"] });
+    hookState.sourceIdentities = ["+15555550110"];
     const user = userEvent.setup();
     renderWithProviders(<ImportScreen />);
 
@@ -1077,7 +1077,7 @@ describe("ImportScreen gates", () => {
     hookState.phase = "media_review";
     hookState.stagingSummary = stagingSummary();
     hookState.mediaSummary = stagingSummary();
-    hookState.sourceIdentities = ["+15550001111"];
+    hookState.sourceIdentities = ["+15555550110"];
     const user = userEvent.setup();
     renderWithProviders(<ImportScreen />);
 
@@ -1169,7 +1169,7 @@ describe("ImportScreen gates", () => {
 
   it("shows the identity stop screen for the identity_stop phase", async () => {
     hookState.phase = "identity_stop";
-    hookState.sourceIdentities = ["+15550001111"];
+    hookState.sourceIdentities = ["+15555550110"];
     renderWithProviders(<ImportScreen />);
 
     expect(
@@ -1179,7 +1179,7 @@ describe("ImportScreen gates", () => {
 
   it("shows a factual line when adding an identity to the profile fails", async () => {
     hookState.phase = "identity_stop";
-    hookState.sourceIdentities = ["+15550001111"];
+    hookState.sourceIdentities = ["+15555550110"];
     apiPostMock.mockRejectedValue(new Error("network down"));
     const user = userEvent.setup();
     renderWithProviders(<ImportScreen />);

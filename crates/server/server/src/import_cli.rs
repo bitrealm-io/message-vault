@@ -302,7 +302,7 @@ mod tests {
     const ALICE: i64 = 7;
 
     /// The number the conversation is with.
-    const PHONE: &str = "+14075551234";
+    const PHONE: &str = "+14075550107";
 
     /// One incoming text from `phone`.
     fn conversation_with(phone: &str) -> String {

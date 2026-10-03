@@ -53,7 +53,7 @@ fn copies_ios_style_media_true_data_paths() {
     fs::write(&src, b"fake-jpeg").expect("write media");
 
     let json = serde_json::json!({
-        "15555550999@s.whatsapp.net": {
+        "15555550167@s.whatsapp.net": {
             "name": "Media Peer",
             "type": "ios",
             "media_base": format!("{media_base}/"),
@@ -100,7 +100,7 @@ fn copies_ios_style_media_true_data_paths() {
             .unwrap_or(0),
         0
     );
-    let csv = out.path().join("+15555550999__whatsapp.csv");
+    let csv = out.path().join("+15555550167__whatsapp.csv");
     let body = fs::read_to_string(&csv).expect("csv");
     assert!(body.contains("look at this"));
     assert!(

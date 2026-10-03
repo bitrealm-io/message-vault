@@ -682,7 +682,7 @@ async fn imports_create_stores_source_identities() {
         device_id: None,
         form: None,
         source_fingerprint: None,
-        source_identities: Some(serde_json::json!(["+15550001111", "owner@example.com"])),
+        source_identities: Some(serde_json::json!(["+15555550110", "owner@example.com"])),
     };
     let _ = create_import(
         State(state.clone()),
@@ -697,7 +697,7 @@ async fn imports_create_stores_source_identities() {
         .expect("a running run is listed");
     assert_eq!(
         session.source_identities,
-        serde_json::json!(["+15550001111", "owner@example.com"])
+        serde_json::json!(["+15555550110", "owner@example.com"])
     );
 }
 
@@ -1852,14 +1852,14 @@ async fn a_small_attachment_size_limit_holds_only_the_attachment_uploads() {
     )
     .await;
     let mut batch = String::from(concat!(
-        r#"{"schema_version":4,"export":{"source":"whatsapp","tool":"t","tool_version":"0","owner_handle":"+15550000001","owner_display_name":"Me"},"#,
-        r#""conversation":{"chat_identifier":"+15550000002","conversation_type":"individual","group_title":null,"#,
-        r#""participants":[{"handle":"+15550000002","display_name":null}],"#,
+        r#"{"schema_version":4,"export":{"source":"whatsapp","tool":"t","tool_version":"0","owner_handle":"+15555550106","owner_display_name":"Me"},"#,
+        r#""conversation":{"chat_identifier":"+15555550107","conversation_type":"individual","group_title":null,"#,
+        r#""participants":[{"handle":"+15555550107","display_name":null}],"#,
         r#""stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1700000000000,"last_timestamp_unix_ms":1700000000000}}}"#,
         "\n",
     ));
     batch.push_str(&format!(
-        r#"{{"guid":"g-1","timestamp_unix_ms":1700000000000,"direction":"incoming","service":"whatsapp","message_kind":"sms","sender_handle":"+15550000002","sender_display_name":null,"subject":null,"text":"{}","attachments":[],"imessage":null,"source":null}}"#,
+        r#"{{"guid":"g-1","timestamp_unix_ms":1700000000000,"direction":"incoming","service":"whatsapp","message_kind":"sms","sender_handle":"+15555550107","sender_display_name":null,"subject":null,"text":"{}","attachments":[],"imessage":null,"source":null}}"#,
         "a".repeat(4096)
     ));
     batch.push('\n');

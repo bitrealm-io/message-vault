@@ -4,7 +4,7 @@
 //! `m-retrieve-conf` with From and To, a sent one an `m-send-req` in an
 //! `S_` file, and a message never downloaded is a 17-byte stub.
 //!
-//! The peer is `+14075551234` and the owner `+15555550100`; the picture is
+//! The peer is `+14075550107` and the owner `+15555550100`; the picture is
 //! a JPEG magic followed by filler.
 
 use crate::emit::{ConvertExportArgs, convert_export};
@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const PEER: &str = "+14075551234";
+const PEER: &str = "+14075550107";
 const OWNER: &str = "+15555550100";
 
 /// The backup folder: five PDUs and two stray files.
@@ -215,7 +215,7 @@ fn a_sent_pdu_to_several_people_is_a_group_conversation() {
     fs::create_dir_all(&input).unwrap();
     let group = PduBuilder::sent()
         .to(PEER)
-        .to("+14075559876")
+        .to("+14075550109")
         .to(OWNER)
         .text("hello all")
         .build();
@@ -227,7 +227,7 @@ fn a_sent_pdu_to_several_people_is_a_group_conversation() {
     let files = csv_files(&output);
     assert_eq!(files.len(), 1, "{files:?}");
     let name = files[0].file_name().unwrap().to_string_lossy().into_owned();
-    assert_eq!(name, "group_+14075551234_+14075559876.csv");
+    assert_eq!(name, "group_+14075550107_+14075550109.csv");
     let rows = csv_rows(&files[0]);
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0]["direction"], "outgoing");

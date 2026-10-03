@@ -637,7 +637,7 @@ async fn the_owner_reads_the_server_totals_summed_over_every_account() {
 
     for (account_id, handle, bodies) in [
         (alice.account_id, "+15555550100", &["hi", "thérè"][..]),
-        (bob.account_id, "+15555550200", &["yo"][..]),
+        (bob.account_id, "+15555550135", &["yo"][..]),
     ] {
         let messages: Vec<SeedMessage> = bodies
             .iter()

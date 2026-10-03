@@ -5,18 +5,18 @@ use crate::testutil::{BuildPart, PduBuilder};
 
 #[test]
 fn a_received_message_decodes_its_headers_and_parts() {
-    let bytes = PduBuilder::received("+14075551234")
+    let bytes = PduBuilder::received("+14075550107")
         .to("+15555550100")
-        .cc("+14075559876")
+        .cc("+14075550109")
         .subject("Hi there")
         .text("hello")
         .part(BuildPart::jpeg("pic.jpg", 64))
         .build();
     let msg = decode(&bytes).unwrap();
     assert_eq!(msg.message_type, Some(MessageType::RetrieveConf));
-    assert_eq!(msg.from.as_deref(), Some("+14075551234/TYPE=PLMN"));
+    assert_eq!(msg.from.as_deref(), Some("+14075550107/TYPE=PLMN"));
     assert_eq!(msg.to, ["+15555550100/TYPE=PLMN"]);
-    assert_eq!(msg.cc, ["+14075559876/TYPE=PLMN"]);
+    assert_eq!(msg.cc, ["+14075550109/TYPE=PLMN"]);
     assert_eq!(msg.date, Some(1_609_459_200));
     assert_eq!(msg.subject.as_deref(), Some("Hi there"));
     assert_eq!(msg.headers["transaction-id"], "T1");
@@ -36,20 +36,20 @@ fn a_received_message_decodes_its_headers_and_parts() {
 
 #[test]
 fn a_sent_message_has_the_insert_address_token_and_no_from() {
-    let bytes = PduBuilder::sent().to("+14075551234").text("x").build();
+    let bytes = PduBuilder::sent().to("+14075550107").text("x").build();
     let msg = decode(&bytes).unwrap();
     assert_eq!(msg.message_type, Some(MessageType::SendReq));
     assert_eq!(msg.from, None);
-    assert_eq!(msg.to, ["+14075551234/TYPE=PLMN"]);
+    assert_eq!(msg.to, ["+14075550107/TYPE=PLMN"]);
 }
 
 #[test]
 fn nothing_after_content_type_is_read_as_a_header() {
     // A picture whose bytes are a To header (0x97) and a From header (0x89)
     // with plausible values. Under a byte scan those became addresses.
-    let mut picture = b"\x97\x0b\xea+19999999999\0".to_vec();
-    picture.extend_from_slice(b"\x89\x0d\x80\x0b\xea+18888888888\0");
-    let bytes = PduBuilder::received("+14075551234")
+    let mut picture = b"\x97\x0b\xea+19995550101\0".to_vec();
+    picture.extend_from_slice(b"\x89\x0d\x80\x0b\xea+18885550100\0");
+    let bytes = PduBuilder::received("+14075550107")
         .to("+15555550100")
         .part(BuildPart {
             content_type: "image/jpeg",
@@ -60,7 +60,7 @@ fn nothing_after_content_type_is_read_as_a_header() {
         .build();
     let msg = decode(&bytes).unwrap();
     assert_eq!(msg.to, ["+15555550100/TYPE=PLMN"]);
-    assert_eq!(msg.from.as_deref(), Some("+14075551234/TYPE=PLMN"));
+    assert_eq!(msg.from.as_deref(), Some("+14075550107/TYPE=PLMN"));
     assert_eq!(msg.parts[1].data, picture);
 }
 
@@ -84,7 +84,7 @@ fn the_first_header_must_be_the_message_type() {
 fn an_unknown_header_code_is_an_error_at_its_byte() {
     // 0x40 is past the codes OMA MMS 1.3 table 25 assigns, so the walk
     // cannot know its value's shape.
-    let bytes = PduBuilder::received("+14075551234")
+    let bytes = PduBuilder::received("+14075550107")
         .raw_header(&[0xc0, 0x80])
         .build();
     let err = decode(&bytes).unwrap_err();
@@ -94,7 +94,7 @@ fn an_unknown_header_code_is_an_error_at_its_byte() {
     // as names inside an X-Mms-Attributes list; as a header they have no
     // value shape.
     for code in [0xae, 0xb0] {
-        let bytes = PduBuilder::received("+14075551234")
+        let bytes = PduBuilder::received("+14075550107")
             .raw_header(&[code, 0x80])
             .build();
         let err = decode(&bytes).unwrap_err();
@@ -141,7 +141,7 @@ fn a_non_multipart_body_is_one_part_of_the_declared_type() {
 #[test]
 fn timed_and_token_headers_decode_to_their_names() {
     let bytes = PduBuilder::sent()
-        .to("+14075551234")
+        .to("+14075550107")
         // Expiry: relative 604800 s. Read-Report yes. Sender-Visibility Show.
         .raw_header(&[
             0x88, 0x05, 0x81, 0x03, 0x09, 0x3a, 0x80, 0x90, 0x80, 0x94, 0x81,
@@ -272,12 +272,12 @@ fn every_other_header_code_decodes_under_its_name() {
 fn an_mms_1_3_content_class_header_does_not_drop_the_message() {
     // X-Mms-Content-Class (0x3A, 0xBA on the wire) = text (0x80), an
     // optional header of M-Retrieve.conf in OMA MMS 1.3 table 5.
-    let bytes = PduBuilder::received("+14075551234")
+    let bytes = PduBuilder::received("+14075550107")
         .raw_header(&[0xba, 0x80])
         .text("hello")
         .build();
     let msg = decode(&bytes).expect("a 1.3 header is known");
-    assert_eq!(msg.from.as_deref(), Some("+14075551234/TYPE=PLMN"));
+    assert_eq!(msg.from.as_deref(), Some("+14075550107/TYPE=PLMN"));
     assert_eq!(msg.headers["content-class"], "text");
     assert_eq!(msg.parts[1].data, b"hello");
 }

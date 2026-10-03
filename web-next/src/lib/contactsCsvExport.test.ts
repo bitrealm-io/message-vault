@@ -23,7 +23,7 @@ describe("exportContactsCsvFromDb", () => {
     const account = await createAccount({
       username: `csvx_${Date.now()}`,
       preferredName: "Csv Export",
-      phone: "+15555550300",
+      phone: "+15555550143",
     });
     accountId = account.id;
     saveAccount(accountId, { read_only: false });
@@ -43,7 +43,7 @@ describe("exportContactsCsvFromDb", () => {
       createContact({
         firstName: "Ada",
         lastName: "Lovelace",
-        phones: ["+15551234567", "ada@example.com"],
+        phones: ["+15555550119", "ada@example.com"],
         labels,
       });
 
@@ -54,7 +54,7 @@ describe("exportContactsCsvFromDb", () => {
       assert.equal(header.indexOf("label_6"), 8);
 
       const row = parseCsvLine(lines[1]!);
-      assert.equal(row[0], "+15551234567");
+      assert.equal(row[0], "+15555550119");
       assert.ok(!row[0]!.includes("@"));
       assert.equal(row[1], "Ada");
       assert.equal(row[2], "Lovelace");

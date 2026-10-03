@@ -364,7 +364,7 @@ mod tests {
             "participants": [
               { "name": "Robert Smith", "handle": "+15555550100", "service": "imessage", "contact_id": 3 },
               { "name": "Sarah Vale", "handle": null, "service": null, "contact_id": 7 },
-              { "name": "+15555550200", "handle": "+15555550200", "service": "imessage" }
+              { "name": "+15555550135", "handle": "+15555550135", "service": "imessage" }
             ]
           },
           "attachments": [
@@ -406,7 +406,7 @@ mod tests {
         assert_eq!(participants[1].handle, None);
         assert_eq!(participants[1].display_name.as_deref(), Some("Sarah Vale"));
         // A name that is only the handle is still not a display name.
-        assert_eq!(participants[2].handle.as_deref(), Some("+15555550200"));
+        assert_eq!(participants[2].handle.as_deref(), Some("+15555550135"));
         assert_eq!(participants[2].display_name, None);
     }
 

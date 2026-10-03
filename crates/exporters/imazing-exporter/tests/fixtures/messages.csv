@@ -1,4 +1,4 @@
 Chat Session,Message Date,Delivered Date,Read Date,Edited Date,Deleted Date,Service,Type,Sender ID,Sender Name,Status,Replying to,Subject,Text,Reactions,Attachment,Attachment type
-Bob McRoy,2020-01-01 12:00:00,,,,,SMS,Incoming,+13212462167,Bob McRoy,Read,,,Hello from Bob,,,
-Bob McRoy,2020-01-01 12:01:00,,,,,SMS,Outgoing,,,Read,,,Hi Bob,,,
-Bob McRoy,2020-01-01 12:02:00,,,,,iMessage,Incoming,+13212462167,Bob McRoy,Read,,,Photo,,image000000.jpg,Image
+Bob Sample,2020-01-01 12:00:00,,,,,SMS,Incoming,+13215550100,Bob Sample,Read,,,Hello from Bob,,,
+Bob Sample,2020-01-01 12:01:00,,,,,SMS,Outgoing,,,Read,,,Hi Bob,,,
+Bob Sample,2020-01-01 12:02:00,,,,,iMessage,Incoming,+13215550100,Bob Sample,Read,,,Photo,,image000000.jpg,Image

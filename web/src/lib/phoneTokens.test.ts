@@ -36,35 +36,35 @@ describe("removePhoneToken", () => {
 
 describe("normalizePhoneDigits", () => {
   it("strips non-digits", () => {
-    expect(normalizePhoneDigits("+1 555-123-4567")).toBe("15551234567");
+    expect(normalizePhoneDigits("+1 555-555-0119")).toBe("15555550119");
   });
 });
 
 describe("phonesMatch", () => {
   it("matches a 10-digit US number to E.164 with country code", () => {
-    expect(phonesMatch("9412660605", "+19412660605")).toBe(true);
+    expect(phonesMatch("9415550100", "+19415550100")).toBe(true);
   });
 
   it("matches formatted US national to E.164", () => {
-    expect(phonesMatch("(941) 266-0605", "+19412660605")).toBe(true);
+    expect(phonesMatch("(941) 555-0100", "+19415550100")).toBe(true);
   });
 
   it("does not match a different number", () => {
-    expect(phonesMatch("9412660606", "+19412660605")).toBe(false);
+    expect(phonesMatch("9415550101", "+19415550100")).toBe(false);
   });
 
   it("does not treat a short code as a suffix of a longer number", () => {
-    expect(phonesMatch("60605", "+19412660605")).toBe(false);
+    expect(phonesMatch("50100", "+19415550100")).toBe(false);
   });
 });
 
 describe("ownerPhonesMatchProfile", () => {
   it("matches when digits overlap despite formatting", () => {
-    expect(ownerPhonesMatchProfile(["+1 555-123-4567"], ["15551234567"])).toBe(true);
+    expect(ownerPhonesMatchProfile(["+1 555-555-0119"], ["15555550119"])).toBe(true);
   });
 
   it("matches a 10-digit owner phone to an E.164 profile phone", () => {
-    expect(ownerPhonesMatchProfile(["9412660605"], ["+19412660605"])).toBe(true);
+    expect(ownerPhonesMatchProfile(["9415550100"], ["+19415550100"])).toBe(true);
   });
 
   it("returns false when no overlap", () => {

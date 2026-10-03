@@ -833,7 +833,7 @@ async fn load_demo_address_book(
     let counts = loaded.map_err(|e| anyhow::anyhow!("load the demo address book: {e}"))?;
     println!(
         "  contacts: {} named from the address book ({} Unknowns named in place, {} new; {} identities moved from Unknowns, {} added)",
-        counts.contacts_updated + counts.contacts_created,
+        counts.contacts_named(),
         counts.contacts_updated,
         counts.contacts_created,
         counts.identities_moved,

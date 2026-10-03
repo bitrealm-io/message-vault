@@ -79,6 +79,17 @@ pub struct LoadCounts {
     pub notes: Vec<String>,
 }
 
+impl LoadCounts {
+    /// The contacts the load created or updated. For a file that only gives
+    /// names, such as the demo address book, these are the contacts it named:
+    /// a nameless contact named in place counts as updated, and a new one as
+    /// created.
+    #[must_use]
+    pub fn contacts_named(&self) -> u64 {
+        self.contacts_created + self.contacts_updated
+    }
+}
+
 /// Why a load did not happen.
 #[derive(Debug)]
 pub enum LoadError {

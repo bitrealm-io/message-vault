@@ -1825,6 +1825,29 @@ async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
         hidden, 1,
         "the overlap copy is hidden as a duplicate of the iMessage message"
     );
+    // Issue #1107: each of the build's runs has its Contact Group and its
+    // Saved Search, as a run a person imports does.
+    let runs: Vec<(String, i64, i64)> = sqlx::query_as(
+        "SELECT i.source,
+                (SELECT COUNT(*) FROM contact_groups g
+                 WHERE g.account_id = i.account_id AND g.kind = 'import'
+                   AND g.name = i.source || ' import ' || substr(i.finished_at, 1, 10)),
+                (SELECT COUNT(*) FROM saved_searches s
+                 WHERE s.account_id = i.account_id AND s.query = 'import:#' || i.id)
+         FROM imports i WHERE i.account_id = $1 ORDER BY i.id",
+    )
+    .bind(DEMO_ACCOUNT_ID)
+    .fetch_all(&mut *conn)
+    .await
+    .expect("read the demo's runs");
+    let expected: Vec<(String, i64, i64)> = DEMO_IMPORT_SOURCES
+        .iter()
+        .map(|source| (source.source.to_string(), 1, 1))
+        .collect();
+    assert_eq!(
+        runs, expected,
+        "one Contact Group and one Saved Search per run"
+    );
     close_test_db(pool, conn).await;
 
     let pool = engine::open_pool_for_path(&db)

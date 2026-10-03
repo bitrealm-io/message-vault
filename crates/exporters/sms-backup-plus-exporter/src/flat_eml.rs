@@ -322,6 +322,10 @@ pub(crate) fn parse_flat_eml_mail(
     let addresses = FlatAddresses::from_headers(headers, owner, sent);
     let conversation = addresses.conversation(headers, sent, name_alias.as_deref())?;
     let owner_not_named = addresses.owner_not_named;
+    // The subject names the `X-smssync-address` contact, who is not known to
+    // have written a mail that does not name the owner. It keys only a
+    // conversation nothing else identifies.
+    let name_alias = name_alias.filter(|_| !owner_not_named || conversation.chat_key.is_empty());
 
     let file_key = hex::encode(Sha256::digest(path.to_string_lossy().as_bytes()));
     let body = extract_body(
@@ -351,7 +355,8 @@ pub(crate) fn parse_flat_eml_mail(
 
 /// The addresses on a flat EML: the first of them, and those that are not
 /// the owner's. They come from `From` and `To` when an MMS names two or more
-/// other participants there, else from the SMS Backup+ address header.
+/// other participants there, from `From` alone when a received one does not
+/// name the owner, else from the SMS Backup+ address header.
 struct FlatAddresses {
     /// The first address in the header.
     first: Option<Handle>,
@@ -373,7 +378,9 @@ struct FlatConversation {
 impl FlatAddresses {
     /// An MMS that names two or more other participants in `From` and `To`
     /// is a group of them. A received one whose `To` does not name the owner
-    /// is not trusted, since the owner would count as a participant.
+    /// is not trusted, since the owner would count as a participant: it goes
+    /// to the one-to-one conversation of the address in `From`, who wrote it,
+    /// or, when `From` gives none, to `X-smssync-address`.
     /// Otherwise the addresses come from
     /// `X-smssync-address`: `To` decides nothing for one participant, because
     /// it may give that person's email address where `X-smssync-address`
@@ -388,7 +395,16 @@ impl FlatAddresses {
                     owner_not_named: false,
                 };
             }
-            MailParticipants::OwnerNotNamed => true,
+            MailParticipants::OwnerNotNamed => {
+                if let Some(from) = from_address(&headers.from) {
+                    return Self {
+                        first: Some(from.clone()),
+                        non_owner: vec![from],
+                        owner_not_named: true,
+                    };
+                }
+                true
+            }
             MailParticipants::NotAGroup => false,
         };
         let addresses = smssync_addresses(&headers.smssync_address);
@@ -443,8 +459,15 @@ impl FlatAddresses {
             conversation_type: IrConversationType::Individual,
             group_title: None,
             participants: peer.iter().cloned().collect(),
-            sender: peer.filter(|_| !sent),
+            sender: peer.filter(|_| !sent && self.peer_is_sender(headers)),
         })
+    }
+
+    /// True when the one-to-one peer is who wrote an incoming message. For a
+    /// mail that does not name the owner, only the address in `From` says
+    /// who wrote it, and the peer is that address or nobody.
+    fn peer_is_sender(&self, headers: &MailHeaders) -> bool {
+        !self.owner_not_named || from_address(&headers.from).is_some()
     }
 
     /// The sender of an incoming group message: the `From` header's address
@@ -824,16 +847,40 @@ old message\r\n"
     /// A received group MMS names the owner in `To` under the address on
     /// their own contact card. When that is no number or email address the
     /// owner gave, the owner would count as a participant, so the message is
-    /// keyed by `X-smssync-address` and marked.
+    /// not filed as a group. `From` names who wrote it, so it goes to that
+    /// person's one-to-one conversation, and neither the `X-smssync-address`
+    /// peer nor the subject's name is taken for its sender.
     #[test]
-    fn a_received_group_mms_that_does_not_name_the_owner_is_not_trusted() {
+    fn a_received_group_mms_that_does_not_name_the_owner_is_filed_under_its_from() {
         let msg = parse(
-            "From: \"Carol\" <carol@example.org>\nTo: <me@icloud.example>, \"Alice\" <+14075551111@unknown.email>\nSubject: SMS with Carol\nX-smssync-type: 132\nX-smssync-address: 4075551111\nX-smssync-date: 1609459260000\nContent-Type: text/plain; charset=utf-8\n\nhello\n",
+            "From: carol@example.org\nTo: <me@icloud.example>, <+14075551111@unknown.email>\nSubject: SMS with Alice\nX-smssync-type: 132\nX-smssync-address: 4075551111\nX-smssync-date: 1609459260000\nContent-Type: text/plain; charset=utf-8\n\nhello\n",
+            &["5555550100"],
+        )
+        .unwrap();
+        assert_eq!(msg.conversation_type, IrConversationType::Individual);
+        assert_eq!(msg.chat_key, "carol@example.org");
+        assert_eq!(
+            msg.sender.map(Handle::into_key).as_deref(),
+            Some("carol@example.org")
+        );
+        assert_eq!(msg.name_alias, None);
+        assert!(msg.owner_not_named);
+    }
+
+    /// When a received group MMS names neither the owner nor, in `From`, its
+    /// sender, it stays in the `X-smssync-address` conversation with no
+    /// sender: the peer there is not known to have written it.
+    #[test]
+    fn a_received_group_mms_naming_neither_the_owner_nor_a_sender_has_no_sender() {
+        let msg = parse(
+            "From: \nTo: <me@icloud.example>, <+14075551111@unknown.email>\nSubject: SMS with Alice\nX-smssync-type: 132\nX-smssync-address: 4075551111\nX-smssync-date: 1609459260000\nContent-Type: text/plain; charset=utf-8\n\nhello\n",
             &["5555550100"],
         )
         .unwrap();
         assert_eq!(msg.conversation_type, IrConversationType::Individual);
         assert_eq!(msg.chat_key, "+14075551111");
+        assert!(msg.sender.is_none(), "{:?}", msg.sender);
+        assert_eq!(msg.name_alias, None);
         assert!(msg.owner_not_named);
     }
 

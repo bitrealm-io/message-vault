@@ -40,8 +40,9 @@ pub(crate) struct ParsedMessage {
     /// Source `.eml` path (relative when under an input root).
     pub eml_path: String,
     /// A received MMS whose `To` names a group but not the owner by any
-    /// number or email address they gave, so it was keyed by
-    /// `X-smssync-address` instead.
+    /// number or email address they gave, so it was filed one-to-one under
+    /// the address in `From`, or under `X-smssync-address` with no sender
+    /// when `From` gives none.
     pub owner_not_named: bool,
 }
 

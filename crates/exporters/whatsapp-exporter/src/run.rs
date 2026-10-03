@@ -187,8 +187,8 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
 ///
 /// # Errors
 ///
-/// Returns an error when the output holds files and no sentinel, or the
-/// scratch folder cannot be created.
+/// Returns an error when the output cannot be read or marked, holds files and
+/// no sentinel, or the scratch folder cannot be created.
 fn mark_output_and_make_scratch_dir(config: &ExporterConfig) -> Result<tempfile::TempDir> {
     if !config.resume {
         message_ir_format::mark_export_folder(&config.output)?;
@@ -202,9 +202,9 @@ fn mark_output_and_make_scratch_dir(config: &ExporterConfig) -> Result<tempfile:
 #[cfg(test)]
 mod tests {
     use message_crate_core::testutil::jsonl_run_config;
-    use message_crate_core::{SourceConfig, WhatsappConfig};
+    use message_crate_core::{ExporterConfig, SourceConfig, WhatsappConfig};
     use std::fs;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
     /// The names in `dir`, sorted.
     fn entries(dir: &Path) -> Vec<String> {
@@ -258,11 +258,9 @@ mod tests {
         }
     }
 
-    /// wtsexporter writes into the output folder before the writer opens it,
-    /// and the writer's clean refuses a folder with no sentinel that is not
-    /// empty. The scratch folder is made only after the output is marked.
-    #[test]
-    fn the_writer_accepts_an_output_that_holds_the_wtsexporter_scratch_folder() {
+    /// An empty output folder `out` in a new temporary folder, and a WhatsApp
+    /// run's config that writes into it.
+    fn empty_whatsapp_output() -> (tempfile::TempDir, PathBuf, ExporterConfig) {
         let tmp = tempfile::tempdir().unwrap();
         let output = tmp.path().join("out");
         fs::create_dir_all(&output).unwrap();
@@ -271,6 +269,15 @@ mod tests {
             &output,
             SourceConfig::Whatsapp(WhatsappConfig::default()),
         );
+        (tmp, output, config)
+    }
+
+    /// wtsexporter writes into the output folder before the writer opens it,
+    /// and the writer's clean refuses a folder with no sentinel that is not
+    /// empty. The scratch folder is made only after the output is marked.
+    #[test]
+    fn the_writer_accepts_an_output_that_holds_the_wtsexporter_scratch_folder() {
+        let (_tmp, output, config) = empty_whatsapp_output();
 
         let work = super::mark_output_and_make_scratch_dir(&config).unwrap();
         fs::write(output.join("wtsexporter_result.json"), "{}").unwrap();
@@ -283,16 +290,9 @@ mod tests {
     /// wtsexporter run that fails afterwards has not deleted it.
     #[test]
     fn making_the_scratch_folder_keeps_an_earlier_export() {
-        let tmp = tempfile::tempdir().unwrap();
-        let output = tmp.path().join("out");
-        fs::create_dir_all(&output).unwrap();
+        let (_tmp, output, config) = empty_whatsapp_output();
         message_ir_format::mark_export_folder(&output).unwrap();
         fs::write(output.join("earlier.jsonl"), "{}").unwrap();
-        let config = jsonl_run_config(
-            &[],
-            &output,
-            SourceConfig::Whatsapp(WhatsappConfig::default()),
-        );
 
         let _work = super::mark_output_and_make_scratch_dir(&config).unwrap();
 

@@ -6,12 +6,13 @@ use std::fs;
 use std::path::Path;
 
 /// Sentinel file written into export directories so `clean_previous_ir_output` can
-/// distinguish a real export directory from a user directory that was pointed at
-/// by mistake.
+/// distinguish a real export directory from a person's own folder that was
+/// pointed at by mistake.
 pub const EXPORT_SENTINEL: &str = ".message-crate-export";
 
-/// Write a sentinel file marking `output_dir` as an export target. Only
-/// [`mark_export_folder`] calls it, after checking the folder is empty.
+/// Write a sentinel file marking `output_dir` as an export target. Outside
+/// tests, only [`mark_export_folder`] calls it, after checking the folder is
+/// empty.
 fn write_export_sentinel(output_dir: &Path) -> Result<()> {
     fs::write(output_dir.join(EXPORT_SENTINEL), "")?;
     Ok(())
@@ -127,7 +128,7 @@ mod tests {
     }
 
     #[test]
-    fn refuses_a_folder_of_the_users_own_files() {
+    fn refuses_a_folder_of_the_persons_own_files() {
         let tmp = tempfile::tempdir().unwrap();
         fs::write(tmp.path().join("notes.txt"), "mine").unwrap();
 

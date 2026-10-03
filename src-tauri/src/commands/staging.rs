@@ -1,13 +1,15 @@
-//! `summarize_staging`, `transcode_staging`, and `delete_staging` commands.
+//! `summarize_staging`, `transcode_staging`, `delete_staging`, and the
+//! Import Run record commands.
 //!
 //! These back the two reviews a staged import stops at (Decision 16):
 //! `summarize_staging` recomputes what a staged folder holds so the first
 //! review can show it, `transcode_staging` runs the convert/compress pass the
 //! exporter deferred (see `extract::exporter_attachment_media`), and
 //! `delete_staging` removes the staging folder — when a review is closed
-//! without approving, when a resumable run is discarded, and when an import
-//! finishes successfully, since the server then holds everything the folder
-//! held.
+//! without approving, when a paused run is discarded, and when the server
+//! records the run as finished, since nothing will read the folder again.
+//! `read_import_run_record` and `save_import_run_record` keep the record of a
+//! paused run's earlier parts in its folder ([`RUN_RECORD_NAME`]).
 //!
 //! `summarize_staging` and `transcode_staging` take only the folder. They
 //! read the run's media settings from it, where `extract` recorded them
@@ -17,15 +19,15 @@
 //!
 //! ## The staging-child guard
 //!
-//! All three commands take both a `staging_dir` to act on and a
+//! Every command here takes both a `staging_dir` to act on and a
 //! `staging_root` naming the Staging Directory it must live under —
 //! both strings come from the same caller, so containment alone only proves
 //! the two are consistent with each other, not that `staging_dir` was ever
-//! a folder this app wrote. [`resolve_staging_child`] is the one guard all
-//! three route through: it resolves both paths the way `open_path` already
+//! a folder this app wrote. [`resolve_staging_child`] is the one guard they
+//! all route through: it resolves both paths the way `open_path` already
 //! does ([`paths::resolve_openable_path`]/[`paths::resolve_staging_root`]),
 //! requires the target to be a direct child of the root (never the root
-//! itself, never a grandchild), and — for the two commands that write to or
+//! itself, never a grandchild), and — for the commands that write to or
 //! remove the folder — requires the `.message-crate-export` sentinel
 //! `ir-format` writes into every folder it exports into. The sentinel check
 //! is the decisive half: even a hostile or buggy `staging_root` value cannot
@@ -347,6 +349,93 @@ fn delete_staging_dir(staging_root: &str, staging_dir: &str) -> Result<(), Strin
         .map_err(|error| format!("Could not delete {}: {error}", resolved.display()))
 }
 
+/// File in a staging folder holding the Import Run's record so far: the
+/// Import Errors, timings and counts of the parts that ran before the run
+/// paused or stopped at a Review.
+///
+/// A paused run posts no completion, so the server never sees what its
+/// earlier parts recorded. The window writes the record here, beside the
+/// push journal, and reads it back when the run resumes, so the completion
+/// it finally posts covers the whole run. The leading dot keeps it out of
+/// every listing of conversation files, and it is deleted with the folder.
+/// It has no `.json` extension, for the reason the media settings file has
+/// none (`message_staging::MEDIA_SETTINGS_FILE`): a fresh export into the
+/// folder would delete it as an earlier run's output.
+pub const RUN_RECORD_NAME: &str = ".message-crate-run";
+
+/// Arguments for [`save_import_run_record`].
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveRunRecordArgs {
+    /// Staging folder of the Import Run.
+    pub staging_dir: String,
+    /// Staging Directory root the folder must live under.
+    pub staging_root: String,
+    /// The record as the window builds it. Its shape belongs to the window.
+    pub record: serde_json::Value,
+}
+
+/// Read the Import Run's record from its staging folder.
+///
+/// Returns `None` when the folder holds no record: a run that has not yet
+/// paused or stopped at a Review has not written one.
+///
+/// # Errors
+///
+/// Returns an error when the folder fails the staging-child guard, or the
+/// record cannot be read or is not JSON.
+#[tauri::command(async)]
+pub fn read_import_run_record(args: StagingArgs) -> Result<Option<serde_json::Value>, String> {
+    read_run_record(&args.staging_root, &args.staging_dir)
+}
+
+/// Write the Import Run's record into its staging folder, replacing the one
+/// there.
+///
+/// # Errors
+///
+/// Returns an error when the folder fails the staging-child guard (the
+/// sentinel included, since this writes into the folder) or the file cannot
+/// be written.
+#[tauri::command(async)]
+pub fn save_import_run_record(args: SaveRunRecordArgs) -> Result<(), String> {
+    save_run_record(&args.staging_root, &args.staging_dir, &args.record)
+}
+
+/// The work of [`read_import_run_record`].
+fn read_run_record(
+    staging_root: &str,
+    staging_dir: &str,
+) -> Result<Option<serde_json::Value>, String> {
+    let resolved = resolve_staging_child(staging_dir, staging_root, false)?;
+    let path = resolved.join(RUN_RECORD_NAME);
+    let bytes = match std::fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(format!("Could not read {}: {error}", path.display())),
+    };
+    serde_json::from_slice(&bytes)
+        .map(Some)
+        .map_err(|error| format!("{} is not readable: {error}", path.display()))
+}
+
+/// The work of [`save_import_run_record`]. It writes a temporary file and
+/// renames it over the record, so a crash mid-write leaves the previous
+/// record whole.
+fn save_run_record(
+    staging_root: &str,
+    staging_dir: &str,
+    record: &serde_json::Value,
+) -> Result<(), String> {
+    let resolved = resolve_staging_child(staging_dir, staging_root, true)?;
+    let path = resolved.join(RUN_RECORD_NAME);
+    let tmp = resolved.join(format!("{RUN_RECORD_NAME}.tmp"));
+    let body = serde_json::to_vec(record).map_err(|error| error.to_string())?;
+    std::fs::write(&tmp, body)
+        .and_then(|()| std::fs::rename(&tmp, &path))
+        .map_err(|error| format!("Could not write {}: {error}", path.display()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -606,5 +695,51 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(transcode_summary(&report), "Converted 5 files.");
+    }
+
+    #[test]
+    fn a_saved_run_record_reads_back_as_written() {
+        let root = tempfile::tempdir().unwrap();
+        let staged = stage_export(root.path(), "staging-run-1");
+        let root_str = root.path().to_str().unwrap();
+        let staged_str = staged.to_str().unwrap();
+        let record = serde_json::json!({ "issues": [{ "kind": "skip" }], "uploadMs": 1200 });
+
+        save_run_record(root_str, staged_str, &record).unwrap();
+
+        assert_eq!(read_run_record(root_str, staged_str).unwrap(), Some(record));
+        assert!(
+            !staged.join(format!("{RUN_RECORD_NAME}.tmp")).exists(),
+            "the temporary file is renamed over the record"
+        );
+    }
+
+    #[test]
+    fn a_folder_with_no_run_record_reads_as_none() {
+        let root = tempfile::tempdir().unwrap();
+        let staged = stage_export(root.path(), "staging-run-1");
+
+        let read = read_run_record(root.path().to_str().unwrap(), staged.to_str().unwrap());
+
+        assert_eq!(read, Ok(None));
+    }
+
+    #[test]
+    fn saving_a_run_record_refuses_a_folder_without_the_sentinel() {
+        // The record is written into the folder, so the guard a delete
+        // passes applies: a folder this app never exported into is refused.
+        let root = tempfile::tempdir().unwrap();
+        let plain = root.path().join("not-an-export");
+        fs::create_dir_all(&plain).unwrap();
+
+        let err = save_run_record(
+            root.path().to_str().unwrap(),
+            plain.to_str().unwrap(),
+            &serde_json::json!({}),
+        )
+        .unwrap_err();
+
+        assert!(err.contains(EXPORT_SENTINEL), "{err}");
+        assert!(!plain.join(RUN_RECORD_NAME).exists());
     }
 }

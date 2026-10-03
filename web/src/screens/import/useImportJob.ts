@@ -31,6 +31,8 @@ import {
   invokeImessageBackupIdentities,
   invokePathStat,
   invokePush,
+  invokeReadImportRunRecord,
+  invokeSaveImportRunRecord,
   invokeSummarizeStaging,
   invokeTranscodeStaging,
   type OwnerHandleCount,
@@ -73,6 +75,16 @@ import {
   initialImportRunState,
   useImportRunState,
 } from "./importRunStore";
+import {
+  EMPTY_RUN_RECORD,
+  filesSkippedOverRun,
+  parseRunRecord,
+  RUN_ERROR_ITEM,
+  type RunPart,
+  type RunRecord,
+  recordToCarry,
+  wholeRun,
+} from "./runRecord";
 
 export type { ImportPhase, ImportStep } from "./importProgressState";
 
@@ -234,7 +246,7 @@ export type ResumePush = {
   stagingDir: string;
   /** The plan approved at the last gate this session passed, parsed from
    * its stored `summary` (`parseStoredStagingSummary`). Undefined when the
-   * session recorded nothing usable — `runPush`/`finishImport` already
+   * session recorded nothing usable — `runPush` and `importOutcome`
    * tolerate that absence, they just can't diff a resumed push's expected
    * omissions against it, which demotes an honest `completed` outcome to
    * `completed_with_issues` for exactly the interrupted-and-resumed case. */
@@ -346,6 +358,11 @@ type RunScratch = {
    * while that probe is in flight would otherwise start two runs.
    */
   startImport: boolean;
+  /**
+   * What the run's earlier parts recorded, read from the staging folder when
+   * the run resumes (`runRecord.ts`). Empty for a run that started here.
+   */
+  carried: RunRecord;
 };
 
 function freshScratch(): RunScratch {
@@ -364,6 +381,7 @@ function freshScratch(): RunScratch {
     reviewAction: false,
     runCancel: createRunCancel(),
     startImport: false,
+    carried: EMPTY_RUN_RECORD,
   };
 }
 
@@ -430,6 +448,56 @@ function beginRun(form: ImportJobFormValues, firstStep: ImportIssue["step"]): vo
   scratch.attachmentMode = form.attachmentMedia;
   scratch.form = form;
   scratch.runCancel = createRunCancel();
+  scratch.carried = EMPTY_RUN_RECORD;
+}
+
+/** This part of the run as it stands now. */
+function currentPart(report: PushFinishedReport | null, uploadMs: number | null): RunPart {
+  return {
+    issues: scratch.issues,
+    durationMs: performance.now() - scratch.importStartedAt,
+    ...scratch.durations,
+    uploadMs,
+    filesParsed: scratch.counts.filesParsed,
+    messagesParsed: scratch.counts.messagesParsed,
+    report,
+  };
+}
+
+/**
+ * Pick up what the run's earlier parts recorded, from its staging folder. A
+ * record that cannot be read leaves the run with only what this part
+ * records: the resume itself goes ahead.
+ */
+async function loadCarriedRecord(stagingDir: string): Promise<void> {
+  try {
+    scratch.carried = parseRunRecord(await invokeReadImportRunRecord({ staging_dir: stagingDir }));
+  } catch {
+    scratch.carried = EMPTY_RUN_RECORD;
+  }
+}
+
+/**
+ * Write the run's record so far into its staging folder, for the part that
+ * resumes it. Called wherever the run stops with the run still open: at a
+ * Review, and when `finishImport` leaves the run open. A failed write loses
+ * only this part's record; the run itself is unaffected.
+ */
+async function saveCarriedRecord(
+  report: PushFinishedReport | null = null,
+  uploadMs: number | null = null,
+): Promise<void> {
+  const { stagingDir } = store.get();
+  if (stagingDir == null) return;
+  try {
+    await invokeSaveImportRunRecord({
+      staging_dir: stagingDir,
+      record: recordToCarry(scratch.carried, currentPart(report, uploadMs)),
+    });
+  } catch {
+    // Nothing to show: the run goes on, and a resume starts from the
+    // record the folder already held.
+  }
 }
 
 function applyProgress(event: ImportProgressEvent): void {
@@ -531,7 +599,10 @@ function recordIssue(issue: ImportIssueEvent): void {
 }
 
 function recordError(step: ImportIssue["step"], message: string): void {
-  scratch.issues = [...scratch.issues, { kind: "error", step, item: "Import", reason: message }];
+  scratch.issues = [
+    ...scratch.issues,
+    { kind: "error", step, item: RUN_ERROR_ITEM, reason: message },
+  ];
 }
 
 /**
@@ -638,88 +709,69 @@ function waitAtReview(phase: "staging_review" | "media_review"): void {
 }
 
 /**
- * Build the finished-import summary, record it, and (usually) post
- * `/complete`, the terminal step for every path except one: a failure
- * before either review, a failed Media stage, or an Upload that ran to
- * completion or failed all complete normally.
+ * Build the run's summary, record it, and end the run or leave it open.
  *
- * `cancelled` overrides `importOutcome`'s verdict outright: the person asked
- * for this, so it is never read as a failure. `paused` does the same for an
- * Upload stopped by Pause, and also skips `/complete`: the run stays at
- * `pushing` with its folder, and the next visit offers to resume it. A
- * finished Upload whose `/complete` the server refuses ends the same way,
- * with the server's error among the run's issues on screen.
+ * A run ends when the server takes `/complete`, and its staging folder is
+ * deleted then: the server holds the record, and nothing will read the
+ * folder again (#1233). That covers a finished Upload, and a failed Staging
+ * or Media stage, which is discarded at once because nothing complete exists
+ * to upload; ending it also frees the account to start a new import.
  *
- * `skipComplete` is that one exception. A cancellation mid Media is routed
- * to the same recovery as a crash at that stage, and only an explicit
- * cancel from a review ends a waiting run: `/complete` is what ends one.
- * Posting it here would free the one-live-run slot and drop the run out of
- * `GET /v1/imports?status=running`, stranding the staged folder (and the
- * time already spent on it) with no run left to resume it through. The
- * caller sets this for a cancelled Media stage and for a cancelled Staging:
- * both resume from what is already on disk, so both are worth keeping. A
- * genuine failure at either stage still completes normally (a broken ffmpeg
- * or an unreadable backup must not lock the account out of importing).
+ * Every other way out leaves the run open on the server, at the stage it
+ * reached, with its folder and the record of this part in it
+ * (`saveCarriedRecord`), and the next visit to Import offers it again:
+ *
+ * - `paused`: an Upload that did not send every conversation, by Pause or
+ *   by failure (`importOutcome`). It posts no `/complete`.
+ * - `skipComplete`: a cancelled Staging or Media stage, and a stage change
+ *   the server did not record. Both resume from what is on disk; posting
+ *   `/complete` would free the run's slot and strand the folder.
+ * - A `/complete` the server refuses: the server still holds the run as
+ *   running. A finished Upload then shows as paused, and its resume finds
+ *   every message sent and posts `/complete` again.
+ *
+ * The summary and the completion cover the whole run, the earlier parts'
+ * record (`scratch.carried`) included.
  */
 async function finishImport(args: {
   sessionId: number | null;
-  threw: boolean;
-  cancelled?: boolean;
-  paused?: boolean;
+  status: "completed" | "completed_with_issues" | "failed" | "cancelled" | "paused";
   pushReport: PushFinishedReport | null;
   uploadMs: number | null;
   skipComplete?: boolean;
-  /**
-   * The plan the person approved at their last review: the Media
-   * Review's recomputed summary when there was a Media stage, the Staging
-   * Review's otherwise. Only `runPush` has one to offer; every other call
-   * into this function ends in `pushReport: null`, which fails the outcome
-   * regardless of `approved`, so leaving it undefined there is a no-op.
-   */
-  approved?: StagingSummary;
 }): Promise<void> {
-  const { sessionId, threw, cancelled, paused, pushReport, uploadMs, skipComplete, approved } =
-    args;
-  const { parseMs, attachmentsMs, prepareMs } = scratch.durations;
-  const durationMs = performance.now() - scratch.importStartedAt;
-  const outcome: ImportSummaryView["status"] = paused
-    ? "paused"
-    : cancelled
-      ? "cancelled"
-      : importOutcome({
-          report: pushReport ?? undefined,
-          threw,
-          issues: scratch.issues,
-          approved,
-        });
+  const { sessionId, status, pushReport, uploadMs, skipComplete } = args;
+  const carried = scratch.carried;
+  const whole = wholeRun(carried, currentPart(pushReport, uploadMs));
   const finalSummary: ImportSummaryView = {
-    status: outcome,
-    ...scratch.counts,
-    filesTotal: pushReport?.conversations_total ?? scratch.counts.filesParsed,
-    filesSucceeded: pushReport?.conversations_ok,
+    status,
+    messagesParsed: whole.messagesParsed,
+    filesTotal: pushReport?.conversations_total ?? whole.filesParsed,
+    filesSucceeded: whole.filesSucceeded,
     filesFailed: pushReport?.conversations_failed,
-    filesSkipped: pushReport?.conversations_skipped,
-    messagesAttempted: pushReport?.messages_attempted,
-    messagesInserted: pushReport?.messages_inserted,
-    messagesDeduped: pushReport?.messages_deduped,
+    filesSkipped: pushReport ? filesSkippedOverRun(carried, pushReport) : undefined,
+    messagesAttempted: whole.messagesAttempted,
+    messagesInserted: whole.messagesInserted,
+    messagesDeduped: whole.messagesDeduped,
     messagesFailed: pushReport?.messages_failed,
-    attachmentsUploaded: pushReport?.assets_uploaded,
-    parseMs,
-    attachmentsMs,
-    prepareMs,
-    uploadMs,
-    durationMs,
-    issues: scratch.issues,
+    attachmentsUploaded: whole.attachmentsUploaded,
+    parseMs: whole.parseMs,
+    attachmentsMs: whole.attachmentsMs,
+    prepareMs: whole.prepareMs,
+    uploadMs: whole.uploadMs,
+    durationMs: whole.durationMs ?? null,
+    issues: whole.issues,
   };
   // Keyed by label: the Staging row folds reading, attachments and prepare
   // into one duration, and a mode with no Media stage has fewer rows.
+  const { parseMs, attachmentsMs, prepareMs } = whole;
   const stagingMs =
     parseMs != null || attachmentsMs != null || prepareMs != null
       ? (parseMs ?? 0) + (attachmentsMs ?? 0) + (prepareMs ?? 0)
       : null;
   const durationByLabel = new Map<string, number | null>([
     [STAGING_LABEL, stagingMs],
-    [UPLOAD_LABEL, uploadMs],
+    [UPLOAD_LABEL, whole.uploadMs ?? null],
   ]);
   updateSteps((current) =>
     current.map((step) => {
@@ -728,19 +780,20 @@ async function finishImport(args: {
       return { ...step, durationMs: duration };
     }),
   );
+  const posts = sessionId != null && !skipComplete && status !== "paused";
   let completeRefused: string | null = null;
-  if (sessionId && !skipComplete && !paused) {
+  if (posts) {
     try {
       // The server counts the messages and attachments the run holds: a
       // resumed Upload's report counts only what the resume sent.
       await completeImport(sessionId, {
-        status: outcome,
-        bytes_uploaded: pushReport?.assets_bytes,
-        parse_ms: parseMs,
-        attachments_ms: attachmentsMs,
-        prepare_ms: prepareMs,
-        upload_ms: uploadMs,
-        duration_ms: durationMs,
+        status,
+        bytes_uploaded: whole.bytesUploaded,
+        parse_ms: whole.parseMs,
+        attachments_ms: whole.attachmentsMs,
+        prepare_ms: whole.prepareMs,
+        upload_ms: whole.uploadMs,
+        duration_ms: whole.durationMs,
         summary: {
           files_total: finalSummary.filesTotal,
           files_succeeded: finalSummary.filesSucceeded,
@@ -758,54 +811,51 @@ async function finishImport(args: {
       completeRefused = e instanceof Error ? e.message : String(e);
     }
   }
-  const ok = outcome === "completed" || outcome === "completed_with_issues";
   if (completeRefused != null) {
-    // The server still holds the run as running. A run whose Upload went
-    // through stays at `pushing`, paused, and the next visit resumes it: the
-    // resumed push finds every message already sent and posts `/complete`
-    // again. The error is shown here only, since the server never took the
-    // issues it would be recorded with.
-    if (ok) {
+    if (status === "completed" || status === "completed_with_issues") {
       finalSummary.status = "paused";
       setRowByLabel(UPLOAD_LABEL, { status: "error", detail: "Paused" });
     }
+    // Shown here only, since the server never took the issues it would be
+    // recorded with.
     finalSummary.issues = [
       ...finalSummary.issues,
       {
         kind: "error",
         step: "upload",
-        item: "Import",
+        item: RUN_ERROR_ITEM,
         reason: `Message Crate didn't record the import as finished: ${completeRefused}`,
       },
     ];
   }
-  // Once the server holds the finished import, the staging directory is a
-  // second, unprotected copy of the person's messages in a temp folder, so
-  // it goes: the push log, journal and report with it. The server's own
-  // import record (counts, timings, issues) is what stays. A failed,
-  // cancelled or paused run keeps its folder, since the staged files are
-  // what a resume reads, and so does a run whose completion the server did
-  // not take, since it is still running there.
-  const stagingDir =
-    ok && completeRefused == null ? await deleteStagingAfterSuccess() : store.get().stagingDir;
+  // A run with no server record at all (its creation failed) is ended too:
+  // nothing will ever offer its folder again.
+  const runEnded = sessionId == null || (posts && completeRefused == null);
+  let stagingDir = store.get().stagingDir;
+  if (runEnded) {
+    stagingDir = await deleteStagingFolder();
+  } else {
+    await saveCarriedRecord(pushReport, uploadMs);
+  }
   // The server writes this run's saved search and Contact Group when the run
   // completes, so a window closed mid-import still gets them.
   store.set({ summaryView: finalSummary, phase: "done", running: false, stagingDir });
 }
 
 /**
- * Delete the finished run's staging directory. Returns the directory the
- * screen should still show: `null` once the folder is gone, or the path when
- * deleting failed, so the person can still find what was left behind.
+ * Delete an ended run's staging directory: the staged messages, the push
+ * log, journal and report, and the run record. Returns the directory the
+ * screen should still show: `null` once the folder is gone, or the path
+ * when deleting failed, so the person can still find what was left behind.
  */
-async function deleteStagingAfterSuccess(): Promise<string | null> {
+async function deleteStagingFolder(): Promise<string | null> {
   const { stagingDir } = store.get();
   if (stagingDir == null) return null;
   try {
     await invokeDeleteStaging({ staging_dir: stagingDir });
     return null;
   } catch {
-    // The import itself succeeded; the folder link stays so the person can
+    // The run has ended either way; the folder link stays so the person can
     // remove what is left by hand.
     return stagingDir;
   }
@@ -837,11 +887,10 @@ async function runPush(
     failActiveStep();
     await finishImport({
       sessionId,
-      threw: true,
+      status: "failed",
       pushReport: null,
       uploadMs: null,
       skipComplete: true,
-      approved: approvedPlan,
     });
     return;
   }
@@ -881,12 +930,21 @@ async function runPush(
     }
   }
   const uploadMs = performance.now() - uploadStartedAt;
-  // A paused Upload is not completed: the run stays at `pushing` with its
-  // folder, and resuming it sends only what the push journal does not list.
-  const paused = pausedBeforeStart || pushResult?.report?.cancelled === true;
-  if (paused) {
+  const report = pushResult?.report ?? null;
+  // An Upload that did not send every conversation, paused or failed, is
+  // paused: the run stays at `pushing` with its folder, and resuming it
+  // sends only what the push journal does not list.
+  const status = pausedBeforeStart
+    ? "paused"
+    : importOutcome({
+        report: report ?? undefined,
+        threw,
+        issues: wholeRun(scratch.carried, currentPart(report, uploadMs)).issues,
+        approved: approvedPlan,
+      });
+  if (status === "paused") {
     setRowByLabel(UPLOAD_LABEL, { status: "error", detail: "Paused", durationMs: uploadMs });
-  } else if (!threw) {
+  } else {
     setRowByLabel(UPLOAD_LABEL, {
       status: "done",
       detail: "Upload complete",
@@ -894,21 +952,14 @@ async function runPush(
     });
   }
 
-  await finishImport({
-    sessionId,
-    threw,
-    paused,
-    pushReport: pushResult?.report ?? null,
-    uploadMs,
-    approved: approvedPlan,
-  });
+  await finishImport({ sessionId, status, pushReport: report, uploadMs });
 }
 
 /**
  * Convert or compress the staged files after the Staging Review, then
  * recompute the summary against the folder as it now stands (the folder is
  * the truth, not the last estimate) and stop at the Media Review. A
- * failed stage ends the import the same way a failed Upload does, never a
+ * failed stage ends the import as failed and deletes its folder, never a
  * silent fall-through to Upload.
  *
  * `approvedSummary` is undefined on a resume whose stored plan failed to
@@ -938,7 +989,7 @@ async function runMediaPass(
     failActiveStep();
     await finishImport({
       sessionId,
-      threw: true,
+      status: "failed",
       pushReport: null,
       uploadMs: null,
       skipComplete: true,
@@ -971,13 +1022,12 @@ async function runMediaPass(
     // which is exactly where it got to. A cancellation also skips
     // `/complete` outright (see finishImport), so the run stays running and
     // resumable instead of completing and freeing the slot out from under a
-    // staged folder nobody can reach any more. A failed stage still
-    // completes normally: the account must not be locked out of importing
-    // by a broken ffmpeg.
+    // staged folder nobody can reach any more. A failed stage is discarded:
+    // it completes as failed and its folder goes, so a broken ffmpeg does
+    // not lock the account out of importing.
     await finishImport({
       sessionId,
-      threw,
-      cancelled,
+      status: cancelled ? "cancelled" : "failed",
       pushReport: null,
       uploadMs: null,
       skipComplete: cancelled,
@@ -996,14 +1046,15 @@ async function runMediaPass(
     const actual = await summarizeStagingWithProgress({ staging_dir: outputDir });
     store.set({ mediaSummary: actual, mediaFailedCount: transcodeReport?.failed ?? null });
     await moveStageAtReview(sessionId, "awaiting_gate_2", approvedSummary);
+    await saveCarriedRecord();
     waitAtReview("media_review");
   } catch (e: unknown) {
     // The stage itself succeeded; only the recompute after it failed. Still
-    // a failed import, not an unhandled rejection on a frozen review, and
-    // still no later stage written, so the run stays at `transcode`.
+    // a failed Media stage, not an unhandled rejection on a frozen review:
+    // the run completes as failed and its folder goes.
     recordError("media", e instanceof Error ? e.message : String(e));
     store.set({ computingSummary: false });
-    await finishImport({ sessionId, threw: true, pushReport: null, uploadMs: null });
+    await finishImport({ sessionId, status: "failed", pushReport: null, uploadMs: null });
   }
 }
 
@@ -1107,6 +1158,7 @@ async function runImport(
       // parses. Straight to Upload.
       const outputDir = resume.stagingDir;
       sessionId = resume.sessionId;
+      await loadCarriedRecord(outputDir);
       store.set({
         stagingDir: outputDir,
         importSessionId: sessionId,
@@ -1131,6 +1183,7 @@ async function runImport(
       // the conversations already written.
       outputDir = resumeWrite.stagingDir;
       sessionId = resumeWrite.sessionId;
+      await loadCarriedRecord(outputDir);
       store.set({ stagingDir: outputDir, importSessionId: sessionId });
       setRowByLabel(STAGING_LABEL, { detail: "Extracting…" });
       await moveStage(sessionId, "write");
@@ -1194,6 +1247,9 @@ async function runImport(
     });
 
     await moveStageAtReview(sessionId, "awaiting_gate_1");
+    // Staging's issues and times are only in memory until now, and the run
+    // may be resumed from this Review after the app closes.
+    await saveCarriedRecord();
     // The extract itself is done and staged: an error from here on is a
     // failed read of a folder that already holds the staged work, not a run
     // that failed. Routing it through the outer catch (below) would post
@@ -1230,8 +1286,7 @@ async function runImport(
     store.set({ computingSummary: false });
     await finishImport({
       sessionId,
-      threw: !cancelled,
-      cancelled,
+      status: cancelled ? "cancelled" : "failed",
       pushReport: null,
       uploadMs: null,
       skipComplete: cancelled || stageNotRecorded,
@@ -1426,6 +1481,7 @@ export function useImportJob() {
     const approved = parseStoredStagingSummary(session.summary);
 
     beginRun(resumedForm, session.stage === "transcode" ? "media" : "parse");
+    await loadCarriedRecord(outputDir);
     store.set({
       resumeError: null,
       reviewError: null,

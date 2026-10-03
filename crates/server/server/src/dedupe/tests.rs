@@ -791,14 +791,13 @@ async fn a_near_time_message_one_source_holds_twice_stays_shown_twice() {
     let (pool, _dir) = engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
     setup_db(&mut conn).await;
-    let ids = insert_ok_rows(
+    let ids = insert_incoming_oks(
         &mut conn,
         &[
             ("b1", "sms-backup-plus", "2015-03-12T18:04:22Z"),
             ("a1", "go-sms-pro", "2015-03-12T18:04:23Z"),
             ("a2", "go-sms-pro", "2015-03-12T18:04:24Z"),
         ],
-        0,
     )
     .await;
 
@@ -833,7 +832,7 @@ async fn two_sources_that_each_hold_a_near_time_message_twice_show_it_twice() {
         let (pool, _dir) = engine::test_pool().await;
         let mut conn = pool.acquire().await.unwrap();
         setup_db(&mut conn).await;
-        let ids = insert_ok_rows(&mut conn, &rows, 0).await;
+        let ids = insert_incoming_oks(&mut conn, &rows).await;
 
         let stats = dedupe_cross_source(&mut conn, TEST_ACCOUNT_ID, None, window_secs)
             .await
@@ -1751,15 +1750,20 @@ async fn insert_oks(conn: &mut SqliteConnection, copies: &[(&str, &str)]) -> Vec
         .iter()
         .map(|&(guid, source)| (guid, source, "2015-03-12T18:04:22Z"))
         .collect();
-    insert_ok_rows(conn, &rows, 1).await
+    insert_ok_rows(conn, &rows, true).await
 }
 
-/// Inserts one "ok" for each `(guid, source, timestamp)`, sent from me when
-/// `from_me` is 1, in the order given.
+/// Inserts one incoming "ok" for each `(guid, source, timestamp)`, in the
+/// order given.
+async fn insert_incoming_oks(conn: &mut SqliteConnection, rows: &[(&str, &str, &str)]) -> Vec<i64> {
+    insert_ok_rows(conn, rows, false).await
+}
+
+/// Inserts one "ok" for each `(guid, source, timestamp)`, in the order given.
 async fn insert_ok_rows(
     conn: &mut SqliteConnection,
     rows: &[(&str, &str, &str)],
-    from_me: i64,
+    from_me: bool,
 ) -> Vec<i64> {
     let mut ids = Vec::new();
     for (sort_order, &(guid, source, timestamp)) in (0..).zip(rows) {
@@ -1770,7 +1774,7 @@ async fn insert_ok_rows(
                     source,
                     guid,
                     timestamp,
-                    from_me,
+                    from_me: i64::from(from_me),
                     body: "ok",
                     sort_order,
                 },

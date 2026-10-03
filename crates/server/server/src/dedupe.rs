@@ -824,8 +824,11 @@ fn cluster_near_dupes(
                 continue;
             }
             let cluster_flags = exact_group_flags(&cluster, prio);
-            clustered.insert(pick_winner(&cluster, prio));
-            clustered.extend(cluster_flags.iter().map(|&(loser, _)| loser));
+            clustered.extend(
+                cluster_flags
+                    .iter()
+                    .flat_map(|&(loser, winner)| [loser, winner]),
+            );
             flags.extend(cluster_flags);
         }
     }

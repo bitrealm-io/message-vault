@@ -87,11 +87,8 @@ only the user resolves it.
    git push origin HEAD:<headRefName>
    ```
 
-   If the push is rejected because the branch moved, rebase the fix commits
-   onto it (`git fetch origin <headRefName> && git rebase origin/<headRefName>`),
-   rerun the checks, and push again. The rebase applies only while HEAD has
-   no merge commit from step 5. Step 5 says how to handle a rejected push
-   after that.
+   If the push is rejected because the branch moved, step 5 says how to
+   bring it in.
 4. **Answer every thread**, with the commit that fixes it or the reason it
    stays as it is. Then resolve it if it is an agent thread:
 
@@ -105,23 +102,27 @@ only the user resolves it.
    ```
 
    Never resolve a thread without a reply in it.
-5. **Merge the base into a conflicting pull request.** The merge queue drops
-   a pull request it cannot merge onto the base, so resolve the conflict on
-   the branch first. Merge rather than rebase: a rebase needs a force-push,
+5. **Merge the base into the pull request** before the review, whenever the
+   base has commits the pull request lacks, so the review and the pull
+   request's checks see the code as it would land. Before queueing, merge it
+   again only on `CONFLICTING`: the merge queue drops a pull request it
+   cannot merge onto the base, and tests one that is only behind on the
+   latest base itself. Merge rather than rebase: a rebase needs a force-push,
    and the queue squashes the merge commit away. GitHub reports `UNKNOWN`
    for a few seconds after a push, so wait for a settled answer:
 
    ```bash
+   git fetch origin <baseRefName>
+   git merge-base --is-ancestor origin/<baseRefName> HEAD || echo behind
    until m=$(gh pr view <N> --json mergeable -q .mergeable) && [ "$m" != UNKNOWN ]; do sleep 10; done
    echo "$m"                      # CONFLICTING means merge the base
-   git fetch origin <baseRefName>
    git merge origin/<baseRefName> # stops at each conflict, with nothing committed
    # resolve every conflict, git add the files, git commit, ./scripts/check-pr.sh
    git show --remerge-diff HEAD   # the conflict resolution alone, for review
    git push origin HEAD:<headRefName>
    ```
 
-   If this push is rejected because the branch moved, fetch it and merge
+   If a push is rejected because the branch moved, fetch it and merge
    `origin/<headRefName>` in (`git merge origin/<headRefName>`). A rebase
    would drop the merge commit and replay the base's commits one by one,
    which brings the conflict back. If that merge conflicts too, resolve it,
@@ -132,15 +133,19 @@ only the user resolves it.
    a pushed commit a few seconds after the push, and starts its checks after
    that. Until both happen, `gh pr checks` reports the previous head, or exits
    with "no required checks reported". So wait until the head is the pushed
-   commit and it has check runs, then watch. Rerun only the failed jobs of a
-   run that failed for a reason outside the pull request:
+   commit and it has check runs, then watch, stopping at the first failure.
+   Watch only the head you mean to queue: a new push to the pull request
+   cancels the run on the head before it (`ci.yml`'s concurrency group), so
+   push a fix as soon as a check fails rather than waiting for the rest.
+   Rerun only the failed jobs of a run that failed for a reason outside the
+   pull request:
 
    ```bash
    sha=$(git rev-parse HEAD)
    until [ "$(gh pr view <N> --json headRefOid -q .headRefOid)" = "$sha" ] &&
          [ "$(gh api repos/messagecrate/message-crate/commits/$sha/check-runs -q .total_count)" -gt 0 ]
    do sleep 30; done
-   gh pr checks <N> --watch --required
+   gh pr checks <N> --watch --required --fail-fast
    gh run rerun <run-id> --failed
    ```
 

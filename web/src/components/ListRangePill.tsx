@@ -2,15 +2,15 @@ import { listActivitySuffix } from "../lib/listPaging";
 import { Z_RANGE_PILL } from "../lib/zLayers";
 
 /*
-  Room under the last row so the floating range pill does not cover a row:
-  3.5rem (56px), as a list box's bottom padding or as a spacer after the rows.
+  Room under the last row so the floating range pill does not cover a row, as
+  a list box's bottom padding or as a spacer after the rows.
   `styleTokens.test.ts` checks that the two are the same size.
 */
 export const RANGE_PILL_SCROLL_PAD_CLASS = "pb-14";
 /** The same room as a height, for the spacer after a list's rows. */
-export const RANGE_PILL_SPACER_CLASS = "h-14";
+const RANGE_PILL_SPACER_CLASS = "h-14";
 
-/** The spacer after a list's rows, `RANGE_PILL_SPACER_CLASS` high. */
+/** The spacer after a list's rows, as high as the padding is deep. */
 export function RangePillSpacer() {
   return <div aria-hidden className={`shrink-0 ${RANGE_PILL_SPACER_CLASS}`} />;
 }

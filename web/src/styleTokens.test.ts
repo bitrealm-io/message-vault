@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync } from "node:fs";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { RANGE_PILL_SCROLL_PAD_CLASS, RANGE_PILL_SPACER_CLASS } from "./components/ListRangePill";
+import { RANGE_PILL_SCROLL_PAD_CLASS, RangePillSpacer } from "./components/ListRangePill";
 import { AVATAR_COLOR_CLASSES } from "./lib/contactInitials";
 import { Z_CONTACT_DRAWER, Z_DRAWER_SCRIM, Z_MODAL, Z_RESIZE_HANDLE } from "./lib/zLayers";
 
@@ -32,7 +34,11 @@ const HEX_DATA_FILES = new Set(["lib/theme.ts", "components/theme/ThemeColorRow.
 
 describe("colors are theme tokens", () => {
   it("no component writes a hex color, an rgb() color or a palette color", () => {
-    const hex = /["'`[]#[0-9a-fA-F]{3,8}\b/;
+    // A hex color after a quote, a backtick or a bracket; or after a space, a
+    // parenthesis, a comma or a colon, where `(#1245)` is an issue number, so
+    // a short one there counts only when it holds a letter.
+    const hex =
+      /["'`[]#[0-9a-fA-F]{3,8}\b|[\s(,:]#([0-9a-fA-F]{6}|[0-9a-fA-F]{8}|(?=\d*[a-fA-F])[0-9a-fA-F]{3,4})\b/;
     const rgb = /(?<![a-zA-Z])(rgba?|hsla?)\(/;
     const palette =
       /\b(bg|text|border|ring|outline|fill|stroke|shadow|from|to|via|decoration)-(white|black|(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3})\b/;
@@ -70,6 +76,11 @@ describe("z-index values come from the ladder", () => {
     expect(found).toEqual([]);
   });
 
+  it("no source writes an inline zIndex", () => {
+    const found = sources().flatMap(([path, text]) => hits(path, text, /\bzIndex\s*:/));
+    expect(found).toEqual([]);
+  });
+
   // The overlay contact drawer is not modal and stays open while Sources or a
   // dialog opens; under the scrim, that dialog dims it and takes its clicks.
   it("the overlay contact drawer sits above the resize handles and below every scrim", () => {
@@ -84,8 +95,9 @@ describe("the range pill's room", () => {
   // A list leaves room under its last row either as padding or as a spacer;
   // the two must match, or one kind of list hides its last row under the pill.
   it("is the same size as padding and as a spacer", () => {
-    expect(RANGE_PILL_SCROLL_PAD_CLASS.replace(/^pb-/, "")).toBe(
-      RANGE_PILL_SPACER_CLASS.replace(/^h-/, ""),
+    const size = RANGE_PILL_SCROLL_PAD_CLASS.replace(/^pb-/, "");
+    expect(renderToStaticMarkup(createElement(RangePillSpacer))).toMatch(
+      new RegExp(`class="[^"]*\\bh-${size}\\b`),
     );
   });
 });

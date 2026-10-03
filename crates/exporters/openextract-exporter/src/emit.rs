@@ -9,11 +9,12 @@ use message_crate_core::{
 };
 use message_ir::{
     ConversationKey, ExportMeta, HandleType, IrParticipant, IrService, IrSource,
-    PendingConversation, PendingMessage, ProjectionHooks, ensure_conversation,
+    PendingConversation, PendingMessage, ProjectionHooks,
 };
 use message_staging::{AttachmentSource, ExportWriter};
 use phone::sanitize_number;
 use serde_json::{Map, json};
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 
@@ -58,28 +59,25 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
     let mut ingest = Ingest::default();
     for path in discover_csv_files(input)? {
         message_crate_core::check_cancel(cancel)?;
-        ingest.ingest_file(input, &path);
+        ingest.ingest_file(&path);
     }
     message_crate_core::check_cancel(cancel)?;
-    let Ingest {
-        conversations,
-        keys,
-        mut report,
-    } = ingest;
+    let (conversations, mut report) = ingest.finish();
 
-    let hooks = OpenExtractProjection {
-        export: message_crate_core::export_meta(
-            EXPORT_SOURCE,
-            EXPORT_TOOL,
-            EXPORT_TOOL_VERSION,
-            None,
-            None,
-        ),
-        keys,
-    };
+    let export = message_crate_core::export_meta(
+        EXPORT_SOURCE,
+        EXPORT_TOOL,
+        EXPORT_TOOL_VERSION,
+        None,
+        None,
+    );
     let mut documents = Vec::new();
-    for (chat_id, mut convo) in conversations {
-        if let Some(doc) = project_conversation(&chat_id, &mut convo, &hooks, &mut report) {
+    for (chat_id, mut pending) in conversations {
+        let hooks = OpenExtractProjection {
+            export: &export,
+            key: pending.key.as_ref(),
+        };
+        if let Some(doc) = project_conversation(&chat_id, &mut pending.convo, &hooks, &mut report) {
             documents.push(doc);
         }
     }
@@ -98,11 +96,26 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
 /// Parse-time state shared across every CSV file in one export.
 #[derive(Default)]
 struct Ingest {
-    conversations: BTreeMap<String, PendingConversation>,
-    /// Each conversation's key, by chat id. The `unknown` conversation, of
-    /// sent rows that name nobody, has none.
-    keys: HashMap<String, ConversationKey>,
+    conversations: BTreeMap<String, Pending>,
+    /// Per-chat files that are not one-to-one. They are keyed in
+    /// [`Ingest::finish`], once every file is read, because a group's key
+    /// depends on whether another file starts with the same row.
+    group_files: Vec<GroupFile>,
     report: ExportReport,
+}
+
+/// One conversation and its key, awaiting projection.
+struct Pending {
+    /// `None` for the `unknown` conversation, of sent rows that name nobody.
+    key: Option<ConversationKey>,
+    convo: PendingConversation,
+}
+
+/// A per-chat file that is a group, before its key is known.
+struct GroupFile {
+    file_name: String,
+    members: Vec<IrParticipant>,
+    rows: Vec<RawRow>,
 }
 
 /// The conversation a set of rows belongs to.
@@ -112,6 +125,8 @@ struct Conversation {
     /// The other person's name, for a one-to-one conversation the source
     /// names; empty otherwise.
     contact_name: String,
+    /// The `Conversation` value of a group in the all-conversations CSV.
+    group_name: Option<String>,
 }
 
 impl Conversation {
@@ -119,6 +134,18 @@ impl Conversation {
         self.key
             .as_ref()
             .map_or_else(|| "unknown".to_string(), ConversationKey::chat_id)
+    }
+
+    fn is_group(&self) -> bool {
+        self.key.as_ref().is_some_and(ConversationKey::is_group)
+    }
+
+    fn group(vendor_id: String, members: Vec<IrParticipant>, group_name: Option<String>) -> Self {
+        Self {
+            key: Some(ConversationKey::Group { vendor_id, members }),
+            contact_name: String::new(),
+            group_name,
+        }
     }
 }
 
@@ -129,7 +156,7 @@ impl Ingest {
     /// A per-chat file is one conversation, whoever sent each row. In the
     /// all-conversations CSV a row's conversation is its `Conversation`
     /// value; a row with none belongs to its incoming sender.
-    fn ingest_file(&mut self, input: &Path, path: &Path) {
+    fn ingest_file(&mut self, path: &Path) {
         let rows = match parse_csv_file(path) {
             Ok(rows) => rows,
             Err(e) => {
@@ -143,11 +170,7 @@ impl Ingest {
             return;
         };
         if first.source_kind == SourceKind::PerChat {
-            let all: Vec<&RawRow> = rows.iter().collect();
-            let conversation = conversation_of(&all, None, || file_vendor_id(input, path));
-            for row in rows {
-                self.ingest_row(row, &conversation);
-            }
+            self.ingest_per_chat_file(path, rows);
             return;
         }
         let mut by_label: BTreeMap<&str, Vec<&RawRow>> = BTreeMap::new();
@@ -158,10 +181,7 @@ impl Ingest {
         }
         let labelled: HashMap<String, Conversation> = by_label
             .into_iter()
-            .map(|(label, rows)| {
-                let conversation = conversation_of(&rows, Some(label), || label.to_string());
-                (label.to_string(), conversation)
-            })
+            .map(|(label, rows)| (label.to_string(), labelled_conversation(&rows, label)))
             .collect();
         for row in rows {
             match conversation_label(&row).and_then(|label| labelled.get(label)) {
@@ -175,6 +195,50 @@ impl Ingest {
         }
     }
 
+    /// A per-chat file in which one person other than the account holder
+    /// wrote is one-to-one with them. Any other is a group, keyed later.
+    ///
+    /// A file in which nobody else wrote is a group of nobody known, so that
+    /// two such files never share a conversation. It is most likely a
+    /// one-to-one conversation whose recipient the source does not record;
+    /// the group stands in until such conversations get a kind of their own
+    /// (#1095).
+    fn ingest_per_chat_file(&mut self, path: &Path, rows: Vec<RawRow>) {
+        let all: Vec<&RawRow> = rows.iter().collect();
+        let others = other_parties(&all);
+        if let [one] = others.as_slice() {
+            let conversation = one_to_one(Some(one), None);
+            for row in rows {
+                self.ingest_row(row, &conversation);
+            }
+            return;
+        }
+        let members = others.iter().map(|party| member(party)).collect();
+        let file_name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        self.group_files.push(GroupFile {
+            file_name,
+            members,
+            rows,
+        });
+    }
+
+    /// Key the per-chat groups and add their rows; return every conversation
+    /// and the report.
+    fn finish(mut self) -> (BTreeMap<String, Pending>, ExportReport) {
+        let files = std::mem::take(&mut self.group_files);
+        let ids = group_vendor_ids(&files);
+        for (file, vendor_id) in files.into_iter().zip(ids) {
+            let conversation = Conversation::group(vendor_id, file.members, None);
+            for row in file.rows {
+                self.ingest_row(row, &conversation);
+            }
+        }
+        (self.conversations, self.report)
+    }
+
     /// Add one row to its conversation, or count why it was dropped.
     fn ingest_row(&mut self, row: RawRow, conversation: &Conversation) {
         let Some(secs) = parse_timestamp(&row.date) else {
@@ -185,26 +249,29 @@ impl Ingest {
         let is_from_me = resolve_is_from_me(&row);
         let (sender_handle, sender_display_name) = resolve_sender(&row, is_from_me, conversation);
 
-        if let Some(key) = &conversation.key
-            && !self.keys.contains_key(&chat_id)
-        {
-            if key.is_name_only() {
-                // Counted once per conversation, not once per row.
-                self.report.bump("name_only_chat", 1);
-            }
-            self.keys.insert(chat_id.clone(), key.clone());
-        }
-        let is_group = conversation
-            .key
-            .as_ref()
-            .is_some_and(ConversationKey::is_group);
-        let convo = ensure_conversation(
-            &mut self.conversations,
-            &chat_id,
-            is_group,
-            None,
-            Vec::new(),
-        );
+        let report = &mut self.report;
+        let pending = self
+            .conversations
+            .entry(chat_id.clone())
+            .or_insert_with(|| {
+                if conversation
+                    .key
+                    .as_ref()
+                    .is_some_and(ConversationKey::is_name_only)
+                {
+                    // Counted once per conversation, not once per row.
+                    report.bump("name_only_chat", 1);
+                }
+                Pending {
+                    key: conversation.key.clone(),
+                    convo: PendingConversation::new(
+                        chat_id,
+                        conversation.is_group(),
+                        conversation.group_name.clone(),
+                        Vec::new(),
+                    ),
+                }
+            });
         let mut extra = BTreeMap::new();
         extra.insert("contact_name".into(), conversation.contact_name.clone());
         extra.insert(
@@ -212,7 +279,7 @@ impl Ingest {
             if row.has_attachments { "true" } else { "false" }.into(),
         );
         extra.insert("source_kind".into(), row.source_kind.as_str().to_string());
-        convo.messages.push(PendingMessage {
+        pending.convo.messages.push(PendingMessage {
             sort_key: secs,
             is_from_me,
             sender_handle,
@@ -225,7 +292,7 @@ impl Ingest {
 }
 
 /// The `Conversation` value of a row of the all-conversations CSV, when it
-/// names someone other than the owner.
+/// names someone other than the account holder.
 fn conversation_label(row: &RawRow) -> Option<&str> {
     row.conversation
         .as_deref()
@@ -233,45 +300,33 @@ fn conversation_label(row: &RawRow) -> Option<&str> {
         .filter(|s| !s.is_empty() && !is_me(s))
 }
 
-/// The conversation of `rows`, which the source says are one conversation:
-/// a per-chat file (`label` is `None`), or every row of the all-conversations
-/// CSV with one `Conversation` value.
+/// The conversation of every row of the all-conversations CSV with one
+/// `Conversation` value, `label`.
 ///
-/// Two or more people other than the owner wrote in a group, which is keyed
-/// by `group_id` and never by who wrote. Where one person did, the
-/// conversation is one-to-one with them. Where nobody did, it is one-to-one
-/// with the person the label names; a per-chat file has no label, and its
-/// rows are a group of nobody known, keyed by the file, so that two such
-/// files never share a conversation.
-fn conversation_of(
-    rows: &[&RawRow],
-    label: Option<&str>,
-    group_id: impl FnOnce() -> String,
-) -> Conversation {
-    let others = other_parties(rows);
-    match (others.as_slice(), label) {
-        ([], None) => Conversation {
-            key: Some(ConversationKey::Group {
-                vendor_id: group_id(),
-                members: Vec::new(),
-            }),
-            contact_name: String::new(),
-        },
-        ([], Some(_)) => one_to_one(None, label),
-        ([one], _) => one_to_one(Some(one), label),
-        _ => Conversation {
-            key: Some(ConversationKey::Group {
-                vendor_id: group_id(),
-                members: others.iter().map(|party| member(party)).collect(),
-            }),
-            contact_name: String::new(),
-        },
+/// Two or more people other than the account holder wrote in a group, keyed
+/// `group:` and the label, so it never equals a person's address. Where one
+/// person did, it is one-to-one with them, and where nobody did, with the
+/// person the label names: as for iMazing, only a second person makes a
+/// group.
+fn labelled_conversation(rows: &[&RawRow], label: &str) -> Conversation {
+    match other_parties(rows).as_slice() {
+        [] => one_to_one(None, Some(label)),
+        [one] => one_to_one(Some(one), Some(label)),
+        others => Conversation::group(
+            label.to_string(),
+            others.iter().map(|party| member(party)).collect(),
+            Some(label.to_string()),
+        ),
     }
 }
 
-/// Everyone other than the owner who sent one of `rows`, once each, in the
-/// order they first wrote. A number and the same number written another way
-/// are one person.
+/// Everyone other than the account holder who sent one of `rows`, once
+/// each, in the order they first wrote. A number and the same number written
+/// another way are one person.
+///
+/// An email address does not count as a person of its own when a number
+/// wrote too: Apple Messages puts one person's number and Apple ID in the
+/// same conversation.
 fn other_parties<'a>(rows: &[&'a RawRow]) -> Vec<&'a str> {
     let mut seen = HashSet::new();
     let mut parties = Vec::new();
@@ -280,80 +335,167 @@ fn other_parties<'a>(rows: &[&'a RawRow]) -> Vec<&'a str> {
         if resolve_is_from_me(row) || sender.is_empty() {
             continue;
         }
-        let identity = match sanitize_number(sender) {
-            Some(_) => phone::normalize_lenient(sender),
-            None => sender.to_string(),
-        };
+        let identity = address(sender).unwrap_or_else(|| sender.to_string());
         if seen.insert(identity) {
             parties.push(sender);
         }
     }
+    let is_email = |party: &&str| address(party).is_some_and(|a| a.contains('@'));
+    let is_number = |party: &&str| address(party).is_some_and(|a| !a.contains('@'));
+    if parties.iter().any(is_number) {
+        parties.retain(|party| !is_email(party));
+    }
     parties
 }
 
-/// A group member: their number, or the name the source gives in its place.
-fn member(party: &str) -> IrParticipant {
-    if sanitize_number(party).is_some() {
-        IrParticipant {
-            handle: Some(phone::normalize_lenient(party)),
-            display_name: None,
-            handle_type: Some(HandleType::Phone),
-        }
+/// A sender's address: an email address in lowercase, or a number in E.164
+/// when that is unambiguous and as digits otherwise (never an invented
+/// `+0…`). `None` for a name.
+fn address(sender: &str) -> Option<String> {
+    let sender = sender.trim();
+    if sender.contains('@') {
+        return Some(sender.to_lowercase());
+    }
+    sanitize_number(sender).map(|_| phone::normalize_lenient(sender))
+}
+
+/// The handle type of an [`address`].
+fn handle_type_for(address: &str) -> HandleType {
+    if address.contains('@') {
+        HandleType::Email
     } else {
-        IrParticipant {
+        HandleType::Phone
+    }
+}
+
+/// A group member: their address, or the name the source gives in its place.
+fn member(party: &str) -> IrParticipant {
+    match address(party) {
+        Some(address) => IrParticipant {
+            handle_type: Some(handle_type_for(&address)),
+            handle: Some(address),
+            display_name: None,
+        },
+        None => IrParticipant {
             handle: None,
             display_name: Some(party.to_string()),
             handle_type: None,
-        }
+        },
     }
 }
 
 /// A one-to-one conversation with the person who wrote (`sender`), or with
 /// the person the `Conversation` value names (`label`).
 ///
-/// It is keyed by a number when either gives one, the sender's first. A chat
-/// labelled with a person's name whose rows carry that person's number is
-/// keyed by the number the source recorded. Only when neither is a number is
-/// it keyed by the name, the label's first: the exporter records the name and
-/// no address, and the server resolves it against contacts on import. With
-/// neither, the row goes to the `unknown` conversation.
+/// It is keyed by an address when either gives one, the sender's first. A
+/// chat labelled with a person's name whose rows carry that person's number
+/// is keyed by the number the source recorded. Only when neither is an
+/// address is it keyed by the name, the label's first: the exporter records
+/// the name and no address, and the server resolves it against contacts on
+/// import. With neither, the row goes to the `unknown` conversation.
 fn one_to_one(sender: Option<&str>, label: Option<&str>) -> Conversation {
     let given = |s: &&str| !s.trim().is_empty();
-    let number = [sender, label]
+    let address = [sender, label]
         .into_iter()
         .flatten()
         .filter(given)
-        .find(|s| sanitize_number(s).is_some());
+        .find_map(address);
     let name = [label, sender]
         .into_iter()
         .flatten()
         .filter(given)
-        .find(|s| sanitize_number(s).is_none())
+        .find(|s| self::address(s).is_none())
         .map(|s| s.trim().to_string());
-    let key = match (number, &name) {
-        // Format as E.164 when unambiguous. Otherwise keep digits as-is. Never invent `+0…`.
-        (Some(number), _) => Some(ConversationKey::OneToOne(phone::normalize_lenient(number))),
+    let key = match (address, &name) {
+        (Some(address), _) => Some(ConversationKey::OneToOne(address)),
         (None, Some(name)) => Some(ConversationKey::NameOnly(name.clone())),
         (None, None) => None,
     };
     Conversation {
         key,
         contact_name: name.unwrap_or_default(),
+        group_name: None,
     }
 }
 
-/// A per-chat file's id within the export: its path under the input folder,
-/// or its file name when the input is the file itself.
-fn file_vendor_id(input: &Path, path: &Path) -> String {
-    path.strip_prefix(input)
-        .ok()
-        .filter(|relative| !relative.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new(path.file_name().unwrap_or(path.as_os_str())))
-        .to_string_lossy()
-        .replace('\\', "/")
+/// The vendor id of each per-chat group in `files`, in lowercase hex.
+///
+/// It is the digest of the file's earliest row ([`row_digests`]), so it
+/// stays the same across exports while new messages arrive, when someone new
+/// writes, and wherever the export is put: OpenExtract names its files by
+/// number (`conversation_7.csv`), and the same number in two exports is not
+/// the same conversation. Files whose earliest rows are the same take the
+/// digest of all their rows, and files whose rows are all the same, such as
+/// one message sent to several people who never answered, add the file name
+/// as well. As for iMazing, the id changes when the oldest messages are gone
+/// from the phone: the group then comes in as a second conversation, never
+/// merged with another.
+fn group_vendor_ids(files: &[GroupFile]) -> Vec<String> {
+    let digests: Vec<Vec<[u8; 32]>> = files.iter().map(|file| row_digests(&file.rows)).collect();
+    let id = |index: usize, level: u8| -> String {
+        let rows = &digests[index];
+        if level == 0 {
+            return hex::encode(rows.first().copied().unwrap_or_default());
+        }
+        let mut hasher = Sha256::new();
+        for digest in rows {
+            hasher.update(digest);
+        }
+        if level >= 2 {
+            hasher.update([0x1f]);
+            hasher.update(files[index].file_name.as_bytes());
+        }
+        hex::encode(hasher.finalize())
+    };
+    let mut levels = vec![0_u8; files.len()];
+    loop {
+        let ids: Vec<String> = (0..files.len()).map(|i| id(i, levels[i])).collect();
+        let mut count: HashMap<&str, usize> = HashMap::new();
+        for id in &ids {
+            *count.entry(id).or_default() += 1;
+        }
+        let mut raised = false;
+        for (i, id) in ids.iter().enumerate() {
+            if count[id.as_str()] > 1 && levels[i] < 2 {
+                levels[i] += 1;
+                raised = true;
+            }
+        }
+        if !raised {
+            return ids;
+        }
+    }
 }
 
-/// True for the literal `Me` OpenExtract writes for the owner.
+/// SHA-256 of each row's date, sender, text and direction, joined by the
+/// ASCII unit separator, earliest row first. Rows of the same time are
+/// ordered by their digest, so the order does not depend on the CSV's.
+fn row_digests(rows: &[RawRow]) -> Vec<[u8; 32]> {
+    let mut ordered: Vec<(i64, [u8; 32])> = rows
+        .iter()
+        .map(|row| {
+            let mut hasher = Sha256::new();
+            let direction = if resolve_is_from_me(row) { "1" } else { "0" };
+            for (index, field) in [row.date.trim(), row.sender.trim(), &row.text, direction]
+                .into_iter()
+                .enumerate()
+            {
+                if index > 0 {
+                    hasher.update([0x1f]);
+                }
+                hasher.update(field.as_bytes());
+            }
+            (
+                parse_timestamp(&row.date).unwrap_or(i64::MAX),
+                hasher.finalize().into(),
+            )
+        })
+        .collect();
+    ordered.sort();
+    ordered.into_iter().map(|(_, digest)| digest).collect()
+}
+
+/// True for the literal `Me` OpenExtract writes for the account holder.
 fn is_me(s: &str) -> bool {
     s.trim().eq_ignore_ascii_case("me")
 }
@@ -374,35 +516,29 @@ fn resolve_is_from_me(row: &RawRow) -> bool {
 }
 
 /// The sender handle and display name for a row: empty for outgoing, else the
-/// row's own sender. A sender the source names without a number takes the
-/// number of the one-to-one conversation it is in.
+/// row's own sender. A sender the source names without an address takes the
+/// address of the one-to-one conversation it is in.
 fn resolve_sender(row: &RawRow, is_from_me: bool, conversation: &Conversation) -> (String, String) {
     if is_from_me {
         return (String::new(), String::new());
     }
     let sender = row.sender.trim();
-    let is_group = conversation
-        .key
-        .as_ref()
-        .is_some_and(ConversationKey::is_group);
-    if sanitize_number(sender).is_some() {
-        let display = if is_group {
-            String::new()
-        } else {
-            conversation.contact_name.clone()
-        };
-        return (phone::normalize_lenient(sender), display);
+    let contact_name = if conversation.is_group() {
+        String::new()
+    } else {
+        conversation.contact_name.clone()
+    };
+    if let Some(address) = address(sender) {
+        return (address, contact_name);
     }
     let handle = match &conversation.key {
         Some(ConversationKey::OneToOne(handle)) => handle.clone(),
         _ => String::new(),
     };
-    let display = if !sender.is_empty() {
-        sender.to_string()
-    } else if !is_group {
-        conversation.contact_name.clone()
+    let display = if sender.is_empty() {
+        contact_name
     } else {
-        String::new()
+        sender.to_string()
     };
     (handle, display)
 }
@@ -426,12 +562,13 @@ fn parse_timestamp(raw: &str) -> Option<i64> {
 }
 
 /// OpenExtract deltas of the shared [`message_ir::pending_to_document`] projection.
-struct OpenExtractProjection {
-    export: ExportMeta,
-    keys: HashMap<String, ConversationKey>,
+struct OpenExtractProjection<'a> {
+    export: &'a ExportMeta,
+    /// The key of the conversation being projected; `None` for `unknown`.
+    key: Option<&'a ConversationKey>,
 }
 
-impl ProjectionHooks for OpenExtractProjection {
+impl ProjectionHooks for OpenExtractProjection<'_> {
     fn export(&self) -> ExportMeta {
         self.export.clone()
     }
@@ -440,13 +577,18 @@ impl ProjectionHooks for OpenExtractProjection {
         IrService::Sms
     }
 
-    fn source(&self, _convo: &PendingConversation, msg: &PendingMessage) -> IrSource {
+    fn source(&self, convo: &PendingConversation, msg: &PendingMessage) -> IrSource {
         let mut fields = Map::new();
         fields.insert("source_kind".into(), json!(msg.extra_str("source_kind")));
         fields.insert(
             "has_attachments".into(),
             json!(msg.extra_flag("has_attachments")),
         );
+        // A group's `Conversation` value is kept as data, not as its title:
+        // the export does not say whether it is a name or a list of people.
+        if let Some(name) = &convo.display_name {
+            fields.insert("conversation".into(), json!(name));
+        }
         IrSource {
             android_type: None,
             fields,
@@ -454,17 +596,17 @@ impl ProjectionHooks for OpenExtractProjection {
     }
 
     /// A group's members come from its key. A one-to-one conversation's one
-    /// participant is the person it is with: their number, or for a
+    /// participant is the person it is with: their address, or for a
     /// conversation keyed by a name, the name and no address. The `unknown`
     /// conversation has no roster at all.
-    fn participants(&self, chat_id: &str, convo: &PendingConversation) -> Vec<IrParticipant> {
-        match self.keys.get(chat_id) {
+    fn participants(&self, _chat_id: &str, convo: &PendingConversation) -> Vec<IrParticipant> {
+        match self.key {
             None => Vec::new(),
             Some(ConversationKey::Group { members, .. }) => members.clone(),
             Some(ConversationKey::OneToOne(handle)) => vec![IrParticipant {
                 handle: Some(handle.clone()),
                 display_name: convo.first_contact_name(),
-                handle_type: Some(HandleType::Phone),
+                handle_type: Some(handle_type_for(handle)),
             }],
             Some(ConversationKey::NameOnly(_)) => vec![IrParticipant {
                 handle: None,

@@ -110,7 +110,9 @@ fn convert_to_documents(
     let input = dir.path().join("in");
     fs::create_dir(&input).unwrap();
     for (name, body) in files {
-        fs::write(input.join(name), body).unwrap();
+        let path = input.join(name);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, body).unwrap();
     }
     let out = dir.path().join("out");
     let report = convert_export(ConvertExportArgs {
@@ -243,9 +245,9 @@ fn senders(doc: &message_ir::ConversationDocument) -> Vec<Option<&str>> {
 }
 
 /// A per-chat file is one conversation whoever wrote each row. Three people
-/// wrote in this one, so it is one group with all three in it, keyed by the
-/// file, and every message is credited to the person who sent it. Before,
-/// each sender's rows became that person's one-to-one conversation.
+/// wrote in this one, so it is one group with all three in it, and every
+/// message is credited to the person who sent it. Before, each sender's rows
+/// became that person's one-to-one conversation.
 #[test]
 fn a_per_chat_file_with_three_senders_is_one_group() {
     let (report, documents) = convert_to_documents(&[(
@@ -256,10 +258,9 @@ fn a_per_chat_file_with_three_senders_is_one_group() {
 2020-01-01T12:02:00+00:00,Cathy Arp,And me,False,False\n\
 2020-01-01T12:03:00+00:00,Me,Great,True,False\n",
     )]);
-    let keys: Vec<_> = documents.keys().map(String::as_str).collect();
-    assert_eq!(keys, vec!["group:conversation_7.csv"]);
     assert_eq!(report.conversations, 1);
-    let doc = &documents["group:conversation_7.csv"];
+    let doc = documents.values().next().unwrap();
+    assert!(doc.conversation.chat_identifier.starts_with("group:"));
     assert_eq!(
         doc.conversation.conversation_type,
         message_ir::IrConversationType::Group
@@ -294,11 +295,8 @@ fn two_files_of_only_sent_messages_are_two_conversations() {
         ("conversation_1.csv", sent_only),
         ("conversation_2.csv", sent_only),
     ]);
-    let keys: Vec<_> = documents.keys().map(String::as_str).collect();
-    assert_eq!(
-        keys,
-        vec!["group:conversation_1.csv", "group:conversation_2.csv"]
-    );
+    assert_eq!(documents.len(), 2);
+    assert!(documents.keys().all(|key| key.starts_with("group:")));
     assert_eq!(report.duplicates_dropped, 0);
     assert_eq!(report.messages, 2);
     for doc in documents.values() {
@@ -325,6 +323,10 @@ fn an_all_conversations_group_is_apart_from_its_senders() {
     assert_eq!(keys, vec!["+15555550122", "group:Trip"]);
 
     let trip = &documents["group:Trip"];
+    // The value is kept as data, not as a title: it may be a list of names.
+    assert_eq!(trip.conversation.group_title, None);
+    let source = trip.messages[0].source.as_ref().unwrap();
+    assert_eq!(source.fields["conversation"], "Trip");
     assert_eq!(
         trip.conversation.conversation_type,
         message_ir::IrConversationType::Group
@@ -338,4 +340,64 @@ fn an_all_conversations_group_is_apart_from_its_senders() {
     let sam = &documents["+15555550122"];
     assert_eq!(sam.messages.len(), 1);
     assert_eq!(roster(sam), vec!["+15555550122"]);
+}
+
+/// A group's key comes from its rows, not from its file's name or folder.
+/// OpenExtract numbers its files, so `conversation_7.csv` in two exports is
+/// two conversations, and the same file is the same conversation wherever
+/// the export is put.
+#[test]
+fn a_per_chat_groups_key_comes_from_its_rows_not_its_file() {
+    let group = |text: &str| {
+        format!(
+            "Date,Sender,Text,Is From Me,Has Attachments\n\
+2020-01-01T12:00:00+00:00,+15555550122,{text},False,False\n\
+2020-01-01T12:01:00+00:00,+15555550133,Yes,False,False\n"
+        )
+    };
+    let trip = group("Trip?");
+    let party = group("Party?");
+    let (_, two_exports) = convert_to_documents(&[
+        ("phone_a/conversation_7.csv", &trip),
+        ("phone_b/conversation_7.csv", &party),
+    ]);
+    assert_eq!(two_exports.len(), 2);
+
+    let (_, moved) = convert_to_documents(&[("elsewhere/conversation_9.csv", &trip)]);
+    let trip_key = |documents: &std::collections::BTreeMap<String, _>| {
+        documents
+            .iter()
+            .find(|(_, doc): &(_, &message_ir::ConversationDocument)| {
+                doc.messages[0].text == "Trip?"
+            })
+            .map(|(key, _)| key.clone())
+            .unwrap()
+    };
+    assert_eq!(trip_key(&two_exports), trip_key(&moved));
+}
+
+/// One person writing from their number and their Apple ID is one person, so
+/// the conversation stays one-to-one with their number. The message from
+/// the email address keeps that address as its sender.
+#[test]
+fn a_number_and_an_email_of_one_person_are_one_to_one() {
+    let (_, documents) = convert_to_documents(&[(
+        "all_conversations.csv",
+        "Date,Conversation,Direction,Sender,Text,Is From Me,Has Attachments\n\
+2020-01-01T17:00:00+00:00,Sam Example,Received,+15555550122,From the phone,False,False\n\
+2020-01-01T17:01:00+00:00,Sam Example,Received,Sam@Example.com,From the Mac,False,False\n\
+2020-01-01T17:02:00+00:00,Sam Example,Received,5555550122,Again,False,False\n",
+    )]);
+    let keys: Vec<_> = documents.keys().map(String::as_str).collect();
+    assert_eq!(keys, vec!["+15555550122"]);
+    let sam = &documents["+15555550122"];
+    assert_eq!(roster(sam), vec!["+15555550122"]);
+    assert_eq!(
+        senders(sam),
+        vec![
+            Some("+15555550122"),
+            Some("sam@example.com"),
+            Some("+15555550122")
+        ]
+    );
 }

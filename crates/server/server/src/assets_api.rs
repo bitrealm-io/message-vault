@@ -625,7 +625,7 @@ async fn resolve_asset_lookup(
         ("source" = String, Query)
     ),
     responses(
-        (status = 200, body = Asset),
+        (status = 200, description = "The asset is stored; a HEAD answer has no body"),
     )
 )]
 pub(crate) async fn head_asset(
@@ -655,7 +655,11 @@ pub(crate) async fn head_asset(
         ("source" = String, Query)
     ),
     responses(
-        (status = 200, description = "Raw asset bytes", content_type = "application/octet-stream"),
+        (
+            status = 200,
+            description = "The asset's bytes, in the media type it was stored with, or `application/octet-stream` when none was stored",
+            content_type = "*/*"
+        ),
     )
 )]
 pub(crate) async fn get_asset(
@@ -690,7 +694,11 @@ pub(crate) async fn get_asset(
         ("source" = String, Query)
     ),
     responses(
-        (status = 200, description = "Raw preview bytes", content_type = "application/octet-stream"),
+        (
+            status = 200,
+            description = "The preview's bytes, in the preview's own media type, or `application/octet-stream` when none is stored",
+            content_type = "*/*"
+        ),
     )
 )]
 pub(crate) async fn get_asset_preview(
@@ -973,7 +981,10 @@ pub(crate) async fn create_asset_upload(
         })
         .into_response()),
         (None, Some(start)) => Ok(Created {
-            location: format!("/v1/assets/{sha256}/uploads/{}", start.upload_id),
+            location: format!(
+                "/v1/assets/{sha256}/uploads/{}?source={source_id}",
+                start.upload_id
+            ),
             body: CreateAssetUploadResponse {
                 upload_id: Some(start.upload_id),
                 part_size: Some(start.part_size),
@@ -1137,6 +1148,64 @@ pub(crate) async fn complete_asset_upload(
         body,
     }
     .into_response())
+}
+
+/// A chunked asset upload in progress: what it is assembling and which parts
+/// have arrived.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct AssetUpload {
+    upload_id: String,
+    /// SHA-256 fingerprint of the file the parts assemble into.
+    sha256: String,
+    /// Size of the whole file in bytes.
+    bytes: u64,
+    /// Size of every part but the last, fixed when the upload started.
+    part_size: usize,
+    /// Part numbers received so far (1-based), in order.
+    received_parts: Vec<u32>,
+}
+
+/// Read a chunked asset upload in progress: its size, part size and the
+/// parts received so far.
+#[utoipa::path(
+    get,
+    path = "/v1/assets/{sha256}/uploads/{upload_id}",
+    tag = "Assets",
+    security(("session" = ["import"]), ("api-token" = ["import"])),
+    params(
+        ("sha256" = String, Path, description = "Content SHA-256 hex"),
+        ("upload_id" = String, Path),
+        ("source" = String, Query)
+    ),
+    responses(
+        (status = 200, body = AssetUpload),
+        crate::problem::openapi::AssetUploadInvalid
+    )
+)]
+pub(crate) async fn get_asset_upload(
+    State(state): State<AppState>,
+    ImportAccess(auth): ImportAccess,
+    AxumPath((sha256, upload_id)): AxumPath<(String, String)>,
+    Query(query): Query<AssetQuery>,
+) -> Result<Json<AssetUpload>, ApiError> {
+    let (account, source_id, _existing) =
+        resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Write).await?;
+    let assets_dir = state.cfg.paths.assets_dir_for_account(account, &source_id);
+    let sha = sha256.clone();
+    let uid = upload_id.clone();
+    let manifest =
+        tokio::task::spawn_blocking(move || asset_uploads::read_upload(&assets_dir, &sha, &uid))
+            .await
+            .map_err(|e| ApiError::Internal(anyhow::anyhow!("upload read task: {e}")))?
+            .map_err(|e| ApiError::AssetUploadInvalid(e.to_string()))?
+            .ok_or_else(|| ApiError::NotFound("upload not found".into()))?;
+    Ok(Json(AssetUpload {
+        upload_id,
+        sha256: manifest.sha256,
+        bytes: manifest.bytes,
+        part_size: manifest.part_size,
+        received_parts: manifest.received.into_iter().collect(),
+    }))
 }
 
 /// Abort and delete a chunked asset upload's staging files.

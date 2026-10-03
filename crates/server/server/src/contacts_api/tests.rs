@@ -2626,11 +2626,46 @@ async fn the_contact_list_is_a_page_and_summaries_are_items() {
         &state,
         "/v1/contacts/summaries",
         &user.token,
-        serde_json::json!({ "ids": [] }),
+        serde_json::json!({ "ids": [1] }),
     )
     .await;
     assert!(summaries["items"].is_array());
     assert!(summaries.get("contacts").is_none());
+}
+
+/// Summaries are for the contacts a body names, at most
+/// `MAX_CONTACT_SUMMARY_IDS` of them, so an empty list names none and is
+/// refused rather than answered with an empty page as though it had been
+/// read. Every contact is listed by `GET /v1/contacts`.
+#[tokio::test]
+async fn summaries_of_no_contacts_are_refused() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let (status, text) = crate::test_support::post_raw(
+        &fixture.state,
+        "/v1/contacts/summaries",
+        &user.token,
+        "application/json",
+        r#"{"ids":[]}"#,
+    )
+    .await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    let (status, text) = crate::test_support::post_raw(
+        &fixture.state,
+        "/v1/contacts/summaries",
+        &user.token,
+        "application/json",
+        "{}",
+    )
+    .await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
 }
 
 async fn trashed_contact_row_count(conn: &mut SqliteConnection, account_id: i64, id: i64) -> i64 {

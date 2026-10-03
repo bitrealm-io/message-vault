@@ -193,6 +193,37 @@ async fn a_server_can_only_be_claimed_once() {
     assert_eq!(taken, 0);
 }
 
+/// A new Message Crate already holds the Demo Account, so a claim under its
+/// username answers `409 Conflict` as `username-taken`, and the reference
+/// lists that type for the claim beside `state-conflict`.
+#[tokio::test]
+async fn a_claim_under_a_taken_username_answers_username_taken_as_the_reference_says() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
+    fixture.account("demo").await;
+
+    let (status, text) = crate::test_support::post_logged_out(
+        &state,
+        "/v1/server/claim",
+        serde_json::json!({ "username": "demo", "password": "hunter2hunter2" }),
+    )
+    .await;
+    crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::UsernameTaken);
+
+    let doc: serde_json::Value =
+        serde_json::from_str(&crate::openapi::dump_openapi_json()).unwrap();
+    let listed = &doc["paths"]["/v1/server/claim"]["post"]["responses"]["409"]
+        [crate::openapi::shared_parts::PROBLEM_TYPES];
+    assert!(
+        listed
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|t| *t == crate::problem::ProblemType::UsernameTaken.url()),
+        "the claim's 409 lists {listed}"
+    );
+}
+
 #[tokio::test]
 async fn claiming_needs_a_password_of_one_character_or_more() {
     let fixture = test_fixture().await;

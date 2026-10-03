@@ -394,8 +394,9 @@ pub async fn post_created_json<T: DeserializeOwned>(
     );
     let location =
         location.unwrap_or_else(|| panic!("POST {path} answered 201 without a Location"));
+    let collection = path.split('?').next().unwrap_or(path);
     assert!(
-        location.starts_with(&format!("{path}/")),
+        location.starts_with(&format!("{collection}/")),
         "POST {path} Location must name a member under it, got {location}"
     );
     let parsed = serde_json::from_str(&text)

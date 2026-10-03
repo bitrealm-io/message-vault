@@ -4,7 +4,8 @@
 //! An operation's error responses are built here from what it takes: the
 //! credential brings `401` and `403`, a body brings `400`, `413`, `415` and
 //! `422`, an id in the path brings `404` and `422`, and every `/v1` route
-//! answers `422` to a query parameter it does not declare. A handler names
+//! answers `422` to a query parameter it does not declare, and `406` to an
+//! `Accept` that names nothing JSON unless it answers bytes. A handler names
 //! only the problem types that are its own, through
 //! [`crate::problem::openapi`], and this files each under its status. Every
 //! failure then has one response, declared as `application/problem+json`,
@@ -118,6 +119,7 @@ pub(crate) fn split_first_sentence(text: &str) -> (&str, &str) {
 /// Replace the operation's failures with the ones its shape and its handler
 /// give it, one problem response per status.
 fn failures(path: &str, op: &mut Operation) {
+    let bytes = answers_bytes(op);
     let responses = &mut op.responses.responses;
     let mut kinds: Vec<ProblemType> = Vec::new();
     let named: Vec<String> = responses
@@ -147,6 +149,11 @@ fn failures(path: &str, op: &mut Operation) {
     if path.starts_with("/v1/") {
         // A query parameter the route does not declare.
         kinds.push(ProblemType::ValidationFailed);
+        // An `Accept` that names nothing JSON, refused on every route that
+        // answers JSON (`server::require_json_acceptable`).
+        if !bytes {
+            kinds.push(ProblemType::NotAcceptable);
+        }
     }
     let security = serde_json::to_value(&op.security).unwrap_or(Value::Null);
     let requirements = security.as_array().map(Vec::as_slice).unwrap_or_default();
@@ -196,6 +203,17 @@ fn failures(path: &str, op: &mut Operation) {
     for (status, kinds) in by_status {
         responses.insert(status.to_string(), RefOr::T(problem_response(&kinds)));
     }
+}
+
+/// Whether the operation answers bytes rather than JSON: its `200` declares
+/// content and none of it is `application/json`. The asset download, its
+/// preview and the address book export are the three, and the `Accept`
+/// check lets them through.
+fn answers_bytes(op: &Operation) -> bool {
+    let Some(RefOr::T(ok)) = op.responses.responses.get("200") else {
+        return false;
+    };
+    !ok.content.is_empty() && !ok.content.contains_key("application/json")
 }
 
 /// The one failure response: a problem document of one of `kinds`, each

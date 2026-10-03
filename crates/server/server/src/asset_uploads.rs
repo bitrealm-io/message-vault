@@ -247,6 +247,27 @@ pub fn session_part_size(assets_root: &Path, sha256: &str, upload_id: &str) -> R
     Ok(read_manifest(&session)?.part_size)
 }
 
+/// The manifest of an upload in progress, or `None` when no upload with
+/// that id is under way for the fingerprint.
+///
+/// # Errors
+///
+/// Returns an error when the fingerprint or upload id is invalid, or the
+/// manifest is unreadable.
+pub fn read_upload(
+    assets_root: &Path,
+    sha256: &str,
+    upload_id: &str,
+) -> Result<Option<UploadManifest>> {
+    let sha = assets_api::require_sha256(sha256)?;
+    let upload_id = require_upload_id(upload_id)?;
+    let session = session_dir(assets_root, &sha, &upload_id);
+    if !session.is_dir() {
+        return Ok(None);
+    }
+    read_manifest(&session).map(Some)
+}
+
 /// Write (or overwrite) one part. `body` is the full part payload.
 pub fn put_part(
     assets_root: &Path,

@@ -160,20 +160,52 @@ pub async fn list_api_tokens(
 
     schema::ensure_accounts_schema(&mut conn).await?;
     let rows = api_tokens::list_api_tokens(&mut conn, account_id).await?;
-    // Each token shows what it may do now: its stored scopes capped by the
-    // account's permissions as they are on this request, so a permission
-    // the owner turned off after the token was made shows as off.
     let account_permissions = auth.permissions();
     let items: Vec<ApiToken> = rows
         .into_iter()
-        .map(|row| api_tokens::ApiTokenRow {
-            permissions: row.permissions.intersect(account_permissions),
-            ..row
-        })
-        .map(ApiToken::from)
+        .map(|row| shown(row, account_permissions))
         .collect();
 
     Ok(Json(page_of(items, params)))
+}
+
+/// A token as it is shown: what it may do now, its stored scopes capped by
+/// the account's permissions as they are on this request, so a permission
+/// the owner turned off after the token was made shows as off.
+fn shown(row: api_tokens::ApiTokenRow, account_permissions: Permissions) -> ApiToken {
+    ApiToken::from(api_tokens::ApiTokenRow {
+        permissions: row.permissions.intersect(account_permissions),
+        ..row
+    })
+}
+
+/// Read one named API token as the list shows it: label, permissions, masked
+/// secret and last use. The secret itself is never answered again.
+#[utoipa::path(
+    get,
+    path = "/v1/accounts/{id}/api-tokens/{token_id}",
+    tag = "Accounts",
+    security(("session" = [])),
+    params(
+        ("id" = i64, Path, description = "Account id; must be the caller's own"),
+        ("token_id" = i64, Path, description = "API token id")
+    ),
+    responses(
+        (status = 200, body = ApiToken),
+    )
+)]
+pub async fn get_api_token(
+    State(state): State<AppState>,
+    Path((account_id, id)): Path<(i64, i64)>,
+    FullAccess(auth): FullAccess,
+) -> Result<Json<ApiToken>, ApiError> {
+    let mut conn = state.db.acquire().await?;
+    require_account_reach(&mut conn, &auth, account_id, HOLDER_ONLY).await?;
+    schema::ensure_accounts_schema(&mut conn).await?;
+    let row = api_tokens::get_api_token(&mut conn, account_id, id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("API token not found".into()))?;
+    Ok(Json(shown(row, auth.permissions())))
 }
 
 /// Create a named API token. Returns the plaintext secret once, at creation;
@@ -301,6 +333,34 @@ pub async fn update_api_token(
 mod tests {
     use super::*;
     use crate::db::api_tokens::{ApiTokenLabelError, ApiTokenMutationError};
+
+    /// The `Location` of a new token names it, and a `GET` there answers the
+    /// token as the list shows it, with its masked secret and never the
+    /// secret itself.
+    #[tokio::test]
+    async fn a_new_tokens_location_answers_the_token_as_the_list_shows_it() {
+        use crate::test_support::{fixture_with_account, get_json, get_raw, post_created_json};
+
+        let (fixture, alice) = fixture_with_account().await;
+        let state = fixture.state.clone();
+        let tokens = format!("/v1/accounts/{}/api-tokens", alice.account_id);
+        let (location, created): (String, serde_json::Value) = post_created_json(
+            &state,
+            &tokens,
+            &alice.token,
+            serde_json::json!({ "label": "pull", "can_import": false }),
+        )
+        .await;
+
+        let token: serde_json::Value = get_json(&state, &location, &alice.token).await;
+        let listed: serde_json::Value = get_json(&state, &tokens, &alice.token).await;
+        assert_eq!(token, listed["items"][0], "{token}");
+        assert_eq!(token["token_hint"], created["token_hint"], "{token}");
+        assert!(token.get("token").is_none(), "{token}");
+
+        let (status, text) = get_raw(&state, &format!("{tokens}/999999"), &alice.token).await;
+        crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
+    }
 
     #[test]
     fn label_errors_map_to_validation_failed_with_the_same_message() {

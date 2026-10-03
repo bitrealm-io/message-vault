@@ -108,8 +108,8 @@ pub struct Contact {
 /// Body for `POST /v1/contacts/summaries`.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct SummarizeContactsRequest {
-    /// Contact ids to summarize; an empty list covers every contact.
-    #[serde(default)]
+    /// Contact ids to summarize: at least one, and at most 500. Every
+    /// contact is listed by `GET /v1/contacts`.
     pub ids: Vec<i64>,
 }
 
@@ -263,6 +263,9 @@ pub(crate) async fn summarize_contacts(
     FullAccess(auth): FullAccess,
     Json(body): Json<SummarizeContactsRequest>,
 ) -> Result<Json<Page<ContactSelectionSummary>>, ApiError> {
+    if body.ids.is_empty() {
+        return Err(ApiError::validation("ids must name at least one contact"));
+    }
     if body.ids.len() > MAX_CONTACT_SUMMARY_IDS {
         return Err(ApiError::validation(format!(
             "at most {MAX_CONTACT_SUMMARY_IDS} contact ids"

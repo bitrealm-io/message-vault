@@ -127,6 +127,7 @@ pub async fn get_server(State(state): State<AppState>) -> Result<Json<ServerInfo
             headers(("Location" = String, description = "`/v1/session`, the Session the claim made"))
         ),
         crate::problem::openapi::StateConflict,
+        crate::problem::openapi::UsernameTaken,
         crate::problem::openapi::RateLimited
     )
 )]

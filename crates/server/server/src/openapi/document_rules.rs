@@ -5,6 +5,7 @@
 //!
 //! Part of it reads the document: the page shape and paging parameters of
 //! every list, a `Location` on every `201`, a `404` on every path with an id,
+//! no body on the success of a `HEAD`,
 //! one-sentence summaries, declared tags, kebab-case paths and the nesting
 //! depth. The rest calls every operation through the router, on the
 //! credential matrix's fixture: with no credential it must answer `401`,
@@ -13,7 +14,11 @@
 //! that is not JSON `400`, and a list with
 //! `limit`, or an `offset` past the ceiling its description states, out of
 //! range `422`. Each answer must be a problem document carrying its
-//! `request_id`, of a status and type the operation's document lists.
+//! `request_id`, of a status and type the operation's document lists. An
+//! `Accept` that names nothing JSON must answer `406` exactly where the
+//! document lists it; a `GET` that succeeds must answer a media type its
+//! document declares; and a `201` must name in its `Location` a resource the
+//! same credential can `GET`.
 //!
 //! The failures an operation's shape brings are written into the document
 //! by `shared_parts`, so a check that reads them back from the document
@@ -36,6 +41,14 @@ use crate::problem::{Problem, ProblemType};
 /// The one route nested three deep (`docs/architecture/http-api.md`,
 /// "Naming a route").
 const MULTIPART_PART: &str = "/v1/assets/{sha256}/uploads/{upload_id}/parts/{part}";
+
+/// The creations whose `Location` names a path with no `GET` yet (#1486).
+/// The list empties when that issue is fixed, and nothing is added to it.
+const UNREADABLE_LOCATIONS: [&str; 3] = [
+    "/v1/contact-groups",
+    "/v1/message-tags",
+    "/v1/saved-searches",
+];
 
 /// The four keys of every page.
 const PAGE_KEYS: [&str; 4] = ["items", "total", "limit", "offset"];
@@ -112,6 +125,17 @@ fn read_rules(doc: &Value, op: &Operation, spec: &Value) -> Vec<String> {
     }
 
     let responses = spec["responses"].as_object().cloned().unwrap_or_default();
+    // A failure keeps its problem document's media type, as every failure
+    // does, and the HEAD answer carries the header without the body.
+    if op.method == "head" {
+        for (status, response) in &responses {
+            if status.starts_with('2') && !response["content"].is_null() {
+                broken.push(format!(
+                    "a HEAD answer has no body, and its {status} declares one"
+                ));
+            }
+        }
+    }
     if responses.contains_key("201") && spec["responses"]["201"]["headers"]["Location"].is_null() {
         broken.push("201 without a Location header".to_string());
     }
@@ -230,6 +254,28 @@ async fn called_rules(world: &World<'_>, op: &Operation, spec: &Value) -> Vec<St
         }
     }
 
+    // An `Accept` that names nothing JSON. A route that answers JSON refuses
+    // it with `406`, which its document must list; a route that answers
+    // bytes ignores it, and its document must not claim a `406` it never
+    // gives.
+    let answer = call_with(world, op, &path, token, sent(), &[("accept", "text/html")]).await;
+    if answer.status == StatusCode::NOT_ACCEPTABLE || !spec["responses"]["406"].is_null() {
+        broken.extend(answer.problem_rule(
+            op,
+            spec,
+            ProblemType::NotAcceptable,
+            "Accept: text/html",
+        ));
+    }
+
+    // A read that succeeds answers in a media type its document declares.
+    if op.method == "get" {
+        let answer = call(world, op, &path, token, None).await;
+        if answer.status == StatusCode::OK {
+            broken.extend(answer.declared_media_type_rule(spec));
+        }
+    }
+
     if op.method == "get" && page_schema_named(spec).is_some() {
         let mut out_of_range = vec!["limit=0", "limit=501"];
         // A browse list says its offset ceiling in the parameter's own
@@ -242,6 +288,36 @@ async fn called_rules(world: &World<'_>, op: &Operation, spec: &Value) -> Vec<St
             broken.extend(answer.problem_rule(op, spec, ProblemType::ValidationFailed, query));
         }
     }
+
+    // A creation names the new resource in `Location`, and the credential
+    // that made it can read it there ("Status codes"). Last, because it
+    // makes something.
+    if !spec["responses"]["201"].is_null()
+        && token.is_some()
+        && !UNREADABLE_LOCATIONS.contains(&op.path.as_str())
+    {
+        let answer = call(world, op, &path, token, sent()).await;
+        if answer.status == StatusCode::CREATED {
+            match &answer.location {
+                None => broken.push("a 201 with no Location".to_string()),
+                Some(location) => {
+                    let read = Operation {
+                        method: "get".to_string(),
+                        path: location.clone(),
+                        security: None,
+                    };
+                    let followed = call(world, &read, location, token, None).await;
+                    if followed.status != StatusCode::OK {
+                        broken.push(format!(
+                            "the 201's Location {location} answered GET with {}: {}",
+                            followed.status.as_u16(),
+                            followed.text
+                        ));
+                    }
+                }
+            }
+        }
+    }
     broken
 }
 
@@ -249,6 +325,7 @@ async fn called_rules(world: &World<'_>, op: &Operation, spec: &Value) -> Vec<St
 struct Answer {
     status: StatusCode,
     content_type: String,
+    location: Option<String>,
     text: String,
 }
 
@@ -313,6 +390,33 @@ impl Answer {
     }
 }
 
+impl Answer {
+    /// What is wrong with a `200` answer's media type, if anything: one the
+    /// operation's document does not declare for its `200`. A declared
+    /// range (`*/*`, `image/*`) covers every type in it.
+    fn declared_media_type_rule(&self, spec: &Value) -> Option<String> {
+        let answered = self
+            .content_type
+            .split(';')
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase();
+        let declared: Vec<&String> = spec["responses"]["200"]["content"]
+            .as_object()
+            .map(|content| content.keys().collect())
+            .unwrap_or_default();
+        let covered = declared.iter().any(|range| match range.split_once('/') {
+            Some(("*", "*")) => true,
+            Some((kind, "*")) => answered.split('/').next() == Some(kind),
+            _ => **range == answered,
+        });
+        (!covered).then(|| {
+            format!("a 200 answered as {answered}, and the document declares {declared:?}")
+        })
+    }
+}
+
 /// Call `op` at `path` with `token`, or no credential, sending `body` with
 /// its `Content-Type`, or with none, or no body.
 async fn call(
@@ -322,8 +426,23 @@ async fn call(
     token: Option<&str>,
     body: Option<(Option<&str>, Vec<u8>)>,
 ) -> Answer {
+    call_with(world, op, path, token, body, &[]).await
+}
+
+/// [`call`], with `headers` added to the request.
+async fn call_with(
+    world: &World<'_>,
+    op: &Operation,
+    path: &str,
+    token: Option<&str>,
+    body: Option<(Option<&str>, Vec<u8>)>,
+    headers: &[(&str, &str)],
+) -> Answer {
     let method = reqwest::Method::from_bytes(op.method.to_uppercase().as_bytes()).unwrap();
     let mut request = reqwest::Client::new().request(method, world.url(path));
+    for (name, value) in headers {
+        request = request.header(*name, *value);
+    }
     if let Some(token) = token {
         request = request.bearer_auth(token);
     }
@@ -341,10 +460,16 @@ async fn call(
         .and_then(|v| v.to_str().ok())
         .unwrap_or_default()
         .to_string();
+    let location = response
+        .headers()
+        .get(reqwest::header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
     let text = response.text().await.unwrap_or_default();
     Answer {
         status,
         content_type,
+        location,
         text,
     }
 }

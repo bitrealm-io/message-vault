@@ -170,7 +170,7 @@ pub async fn list_api_tokens(
     let account_permissions = holder_permissions(&mut conn, account_id).await?;
     let items: Vec<ApiToken> = rows
         .into_iter()
-        .map(|row| capped_and_masked_for(reach, row, account_permissions))
+        .map(|row| as_shown_to(reach, row, account_permissions))
         .collect();
 
     Ok(Json(page_of(items, params)))
@@ -193,7 +193,7 @@ async fn holder_permissions(
 /// turned off after the token was made shows as off. The masked secret is
 /// shown only to the account that holds the token, never to the owner of
 /// another account: the hint is part of the secret.
-fn capped_and_masked_for(
+fn as_shown_to(
     reach: Reach,
     row: api_tokens::ApiTokenRow,
     account_permissions: Permissions,
@@ -237,7 +237,7 @@ pub async fn get_api_token(
         .await?
         .ok_or_else(|| ApiError::NotFound("API token not found".into()))?;
     let account_permissions = holder_permissions(&mut conn, account_id).await?;
-    Ok(Json(capped_and_masked_for(reach, row, account_permissions)))
+    Ok(Json(as_shown_to(reach, row, account_permissions)))
 }
 
 /// Create a named API token. Returns the plaintext secret once, at creation;
@@ -370,10 +370,11 @@ mod tests {
     use crate::db::api_tokens::{ApiTokenLabelError, ApiTokenMutationError};
 
     /// One token read at its own path answers it as the list shows it, with
-    /// its masked secret and never the secret itself.
+    /// its masked secret and never the secret itself; a token id the account
+    /// does not hold answers `404 Not Found`.
     #[tokio::test]
     async fn a_token_reads_as_the_list_shows_it() {
-        use crate::test_support::{fixture_with_account, get_json, post_created_json};
+        use crate::test_support::{fixture_with_account, get_json, get_raw, post_created_json};
 
         let (fixture, alice) = fixture_with_account().await;
         let state = fixture.state.clone();
@@ -392,6 +393,9 @@ mod tests {
         assert_eq!(token, listed["items"][0], "{token}");
         assert_eq!(token["token_hint"], created["token_hint"], "{token}");
         assert!(token.get("token").is_none(), "{token}");
+
+        let (status, text) = get_raw(&state, &format!("{tokens}/999999"), &alice.token).await;
+        crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
     }
 
     #[test]
@@ -718,7 +722,7 @@ mod tests {
     #[tokio::test]
     async fn a_new_token_is_capped_by_its_accounts_permissions() {
         use crate::db::account_profile::AccountFlags;
-        use crate::test_support::{fixture_with_account, get_json, post_created_json};
+        use crate::test_support::{fixture_with_account, get_json, get_raw, post_created_json};
 
         let (fixture, alice) = fixture_with_account().await;
         set_flags(
@@ -752,7 +756,7 @@ mod tests {
     #[tokio::test]
     async fn the_token_list_follows_the_accounts_permissions_as_they_are_now() {
         use crate::db::account_profile::AccountFlags;
-        use crate::test_support::{fixture_with_account, get_json, post_created_json};
+        use crate::test_support::{fixture_with_account, get_json, get_raw, post_created_json};
 
         let (fixture, alice) = fixture_with_account().await;
         let collection = format!("/v1/accounts/{}/api-tokens", alice.account_id);

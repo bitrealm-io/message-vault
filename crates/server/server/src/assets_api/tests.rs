@@ -621,7 +621,7 @@ async fn an_upload_part_over_the_part_size_is_a_json_413() {
 
 /// A multipart upload read at its own path answers its size, part size and
 /// the parts received so far, so a client that lost track of an upload can
-/// resume it.
+/// resume it; an upload id nobody started answers `404 Not Found`.
 #[tokio::test]
 async fn an_upload_answers_its_state() {
     let (fixture, user) = crate::test_support::fixture_with_account().await;
@@ -664,6 +664,14 @@ async fn an_upload_answers_its_state() {
             "received_parts": [2],
         })
     );
+
+    let (status, text) = crate::test_support::get_raw(
+        &state,
+        &format!("/v1/assets/{sha}/uploads/0123456789abcdef?source=imessage"),
+        &user.token,
+    )
+    .await;
+    crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
 }
 
 /// The attachment size limit is read from the Server Settings on each upload:

@@ -2520,7 +2520,7 @@ export interface components {
             /** @description Lifecycle status. */
             status: components["schemas"]["ImportStatus"];
             /**
-             * @description What the user approved at the last Review they passed, or null. The
+             * @description What the person approved at the last Review they passed, or null. The
              *     column `PATCH /v1/imports/{id}` writes with its `summary`.
              */
             summary: unknown;
@@ -3527,7 +3527,7 @@ export interface components {
                 /** @description Lifecycle status. */
                 status: components["schemas"]["ImportStatus"];
                 /**
-                 * @description What the user approved at the last Review they passed, or null. The
+                 * @description What the person approved at the last Review they passed, or null. The
                  *     column `PATCH /v1/imports/{id}` writes with its `summary`.
                  */
                 summary: unknown;
@@ -4246,7 +4246,7 @@ export interface components {
             /** @description The stage the run moves to. */
             stage: components["schemas"]["ImportStage"];
             /**
-             * @description What the user approved at the Review they just passed, when they passed one.
+             * @description What the person approved at the Review they just passed, when they passed one.
              *
              *     Recorded here rather than at completion so an approval survives a
              *     reload: the summary shown at a Review is recomputed from the folder, but

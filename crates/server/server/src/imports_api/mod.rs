@@ -770,7 +770,7 @@ pub(crate) struct ImportRun {
     pub(crate) source_fingerprint: serde_json::Value,
     /// Addresses the backup's device sent from (JSON array), or null.
     pub(crate) source_identities: serde_json::Value,
-    /// What the user approved at the last Review they passed, or null. The
+    /// What the person approved at the last Review they passed, or null. The
     /// column `PATCH /v1/imports/{id}` writes with its `summary`.
     pub(crate) summary: serde_json::Value,
     /// Issues the run recorded, oldest first.
@@ -1371,7 +1371,7 @@ pub(crate) async fn import_run(
 pub(crate) struct UpdateImportRequest {
     /// The stage the run moves to.
     pub(crate) stage: crate::db::imports::ImportStage,
-    /// What the user approved at the Review they just passed, when they passed one.
+    /// What the person approved at the Review they just passed, when they passed one.
     ///
     /// Recorded here rather than at completion so an approval survives a
     /// reload: the summary shown at a Review is recomputed from the folder, but

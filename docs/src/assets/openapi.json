@@ -13853,7 +13853,7 @@
             "description": "Lifecycle status."
           },
           "summary": {
-            "description": "What the user approved at the last Review they passed, or null. The\ncolumn `PATCH /v1/imports/{id}` writes with its `summary`."
+            "description": "What the person approved at the last Review they passed, or null. The\ncolumn `PATCH /v1/imports/{id}` writes with its `summary`."
           },
           "tool": {
             "type": [
@@ -15830,7 +15830,7 @@
                   "description": "Lifecycle status."
                 },
                 "summary": {
-                  "description": "What the user approved at the last Review they passed, or null. The\ncolumn `PATCH /v1/imports/{id}` writes with its `summary`."
+                  "description": "What the person approved at the last Review they passed, or null. The\ncolumn `PATCH /v1/imports/{id}` writes with its `summary`."
                 },
                 "tool": {
                   "type": [
@@ -17176,7 +17176,7 @@
             "description": "The stage the run moves to."
           },
           "summary": {
-            "description": "What the user approved at the Review they just passed, when they passed one.\n\nRecorded here rather than at completion so an approval survives a\nreload: the summary shown at a Review is recomputed from the folder, but\nwhat was approved is a different question and only the run\nremembers it. Absent leaves the stored `summary_json` untouched —\nmost stage changes carry nothing, and treating absent as null would\nthrow away the plan the outcome is later judged against."
+            "description": "What the person approved at the Review they just passed, when they passed one.\n\nRecorded here rather than at completion so an approval survives a\nreload: the summary shown at a Review is recomputed from the folder, but\nwhat was approved is a different question and only the run\nremembers it. Absent leaves the stored `summary_json` untouched —\nmost stage changes carry nothing, and treating absent as null would\nthrow away the plan the outcome is later judged against."
           }
         }
       },

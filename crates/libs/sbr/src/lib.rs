@@ -80,7 +80,7 @@ impl SbrBackupWriter {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
         }
-        let body_path = path.with_extension("xml.sbrbody");
+        let body_path = body_path_for(path);
         if body_path.exists() {
             fs::remove_file(&body_path)
                 .with_context(|| format!("remove stale {}", body_path.display()))?;
@@ -145,8 +145,7 @@ impl SbrBackupWriter {
         let mut body = File::open(&self.body_path)
             .with_context(|| format!("open {}", self.body_path.display()))?;
 
-        let mut tmp = self.path.clone();
-        tmp.set_extension("xml.tmp");
+        let tmp = tmp_path_for(&self.path);
         {
             let mut out = BufWriter::new(
                 File::create(&tmp).with_context(|| format!("create {}", tmp.display()))?,
@@ -263,6 +262,34 @@ const DEFAULT_BACKUP_FILENAME: &str = "smses.xml";
 /// Join `smses.xml` onto an output directory (the default full-backup filename).
 pub fn default_backup_path(output_dir: &Path) -> PathBuf {
     output_dir.join(DEFAULT_BACKUP_FILENAME)
+}
+
+/// The file [`SbrBackupWriter`] buffers message bodies in beside `path`.
+fn body_path_for(path: &Path) -> PathBuf {
+    path.with_extension("xml.sbrbody")
+}
+
+/// The file [`SbrBackupWriter::finish`] writes before it renames it to `path`.
+fn tmp_path_for(path: &Path) -> PathBuf {
+    path.with_extension("xml.tmp")
+}
+
+/// Remove the default backup in `output_dir` and the two temporary files a
+/// writer that stopped before it finished leaves beside it. A file that is
+/// not there is skipped.
+///
+/// # Errors
+///
+/// Returns an error when one of the files exists and cannot be removed.
+pub fn remove_backup(output_dir: &Path) -> Result<()> {
+    let path = default_backup_path(output_dir);
+    for file in [tmp_path_for(&path), body_path_for(&path), path] {
+        if file.is_file() {
+            fs::remove_file(&file)
+                .with_context(|| format!("remove previous {}", file.display()))?;
+        }
+    }
+    Ok(())
 }
 
 /// Insert `key` only when it is not already present.

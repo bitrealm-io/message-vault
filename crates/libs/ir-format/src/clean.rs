@@ -21,8 +21,9 @@ pub fn write_export_sentinel(output_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Delete previous CSV, JSON, JSON Lines, meta, `smses.xml`, temps, staged
-/// attachments, and mail archives.
+/// Delete previous CSV, JSON, JSON Lines, meta, temps, staged attachments,
+/// and mail archives. A crate that writes a merged archive removes its own
+/// files, since this crate knows no archive by name.
 ///
 /// Only directories that contain the sentinel file `.message-crate-export`,
 /// are empty, or already contain recognizable export files are cleaned. This
@@ -105,9 +106,6 @@ fn is_export_artifact(name: &str) -> bool {
         || name.ends_with(".json.tmp")
         || name.ends_with(".jsonl")
         || name.ends_with(".jsonl.tmp")
-        || name == "smses.xml"
-        || name.ends_with(".xml.tmp")
-        || name.ends_with(".xml.sbrbody")
 }
 
 #[cfg(test)]
@@ -145,8 +143,6 @@ mod tests {
             "c.json",
             "c.meta.json",
             "d.jsonl.tmp",
-            "smses.xml",
-            "e.xml.tmp",
             "notes.txt",
         ] {
             fs::write(dir.join(name), "x").unwrap();
@@ -203,9 +199,6 @@ mod tests {
             "a.json.tmp",
             "a.jsonl",
             "a.jsonl.tmp",
-            "smses.xml",
-            "a.xml.tmp",
-            "a.xml.sbrbody",
         ] {
             assert!(is_export_artifact(name), "{name} is an export file");
         }

@@ -14,7 +14,7 @@ use message_ir_format::{
     read_conversation_mbox,
 };
 use message_staging::AttachmentSpool;
-use sms_backup_restore_exporter::{ReadOptions, SbrArchive, read_backup};
+use sms_backup_restore_exporter::{ReadOptions, SbrArchive, read_backup, remove_previous_backup};
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
@@ -87,6 +87,7 @@ fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportR
     };
 
     clean_previous_ir_output(&config.output)?;
+    remove_previous_backup(&config.output)?;
 
     if copy_attachments {
         copy_attachments_dir(input_dir, &config.output)?;

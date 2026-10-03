@@ -21,7 +21,7 @@ pub(super) fn collect_eml_paths<P: AsRef<Path>>(
     cancel: Option<&CancelFlag>,
 ) -> Result<Vec<PathBuf>> {
     if inputs.is_empty() {
-        bail!("at least one --input path is required");
+        bail!("SMS Backup+ needs a backup folder");
     }
 
     let mut paths = Vec::new();

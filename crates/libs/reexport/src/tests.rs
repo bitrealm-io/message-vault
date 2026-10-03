@@ -914,3 +914,32 @@ fn a_version_3_file_among_version_4_files_stops_the_run_and_writes_nothing() {
         "the previous export in the output is left as it was"
     );
 }
+
+/// Convert into a folder an earlier XML conversion wrote removes that
+/// backup and its temporary files, whatever format it writes now.
+#[test]
+fn convert_removes_the_backup_an_earlier_conversion_wrote() {
+    let source = tempfile::tempdir().unwrap();
+    write_fixture(source.path(), OutputFormat::Json);
+    let destination = tempfile::tempdir().unwrap();
+    convert_export(
+        source.path(),
+        &config(source.path(), destination.path(), OutputFormat::Xml),
+    )
+    .unwrap();
+    fs::write(destination.path().join("smses.xml.tmp"), "partial").unwrap();
+    fs::write(destination.path().join("smses.xml.sbrbody"), "partial").unwrap();
+
+    convert_export(
+        source.path(),
+        &config(source.path(), destination.path(), OutputFormat::Json),
+    )
+    .unwrap();
+
+    for name in ["smses.xml", "smses.xml.tmp", "smses.xml.sbrbody"] {
+        assert!(
+            !destination.path().join(name).exists(),
+            "{name} is left behind"
+        );
+    }
+}

@@ -26,7 +26,8 @@ pub enum OutputFormat {
     Json,
     /// Per-conversation common message as JSON Lines (header + one message per line).
     Jsonl,
-    /// Single SMS Backup & Restore XML backup (`smses.xml`).
+    /// One XML file holding every conversation, written by the merged archive
+    /// the caller supplies; the crate that owns that archive names the file.
     Xml,
 }
 
@@ -38,7 +39,7 @@ impl fmt::Display for OutputFormat {
             Self::Mbox => "MBOX (per conversation)",
             Self::Json => "JSON (common message)",
             Self::Jsonl => "JSONL (common message lines)",
-            Self::Xml => "XML (SMS Backup & Restore)",
+            Self::Xml => "XML (one file)",
         })
     }
 }
@@ -57,7 +58,7 @@ impl OutputFormat {
         }
     }
 
-    /// Parse a format id. `ndjson` is accepted as JSON Lines; `sbr`/`smses` as XML.
+    /// Parse a format id. `ndjson` is accepted as JSON Lines.
     ///
     /// # Errors
     ///
@@ -69,7 +70,7 @@ impl OutputFormat {
             "mbox" => Ok(Self::Mbox),
             "json" => Ok(Self::Json),
             "jsonl" | "ndjson" => Ok(Self::Jsonl),
-            "xml" | "sbr" | "smses" => Ok(Self::Xml),
+            "xml" => Ok(Self::Xml),
             other => Err(format!(
                 "unknown output format '{other}' (expected csv, eml, mbox, json, jsonl, or xml)"
             )),
@@ -328,8 +329,6 @@ mod tests {
         assert_eq!(OutputFormat::parse("jsonl"), Ok(OutputFormat::Jsonl));
         assert_eq!(OutputFormat::parse("ndjson"), Ok(OutputFormat::Jsonl));
         assert_eq!(OutputFormat::parse("xml"), Ok(OutputFormat::Xml));
-        assert_eq!(OutputFormat::parse("sbr"), Ok(OutputFormat::Xml));
-        assert_eq!(OutputFormat::parse("smses"), Ok(OutputFormat::Xml));
     }
 
     #[test]

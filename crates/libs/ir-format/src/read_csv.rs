@@ -48,11 +48,6 @@ pub fn read_conversation_csv(path: &Path) -> Result<ConversationDocument> {
     }
 
     let header = header_from_row(&cols, &rows[0]);
-    let packaging_stem_suffix = path
-        .file_stem()
-        .and_then(|n| n.to_str())
-        .and_then(crate::util::packaging_suffix_from_stem);
-
     let mut messages = Vec::with_capacity(rows.len());
     for (i, record) in rows.iter().enumerate() {
         messages.push(
@@ -61,7 +56,9 @@ pub fn read_conversation_csv(path: &Path) -> Result<ConversationDocument> {
         );
     }
 
-    Ok(header.into_document(messages, packaging_stem_suffix))
+    let mut doc = header.into_document(messages, None);
+    crate::util::recover_stem_suffix(&mut doc, path.file_stem().and_then(|n| n.to_str()));
+    Ok(doc)
 }
 
 /// Rebuild the conversation header from the first CSV row's conversation columns.

@@ -2,7 +2,7 @@
 //! write the chosen output format via [`ExportWriter`].
 
 use crate::read::{ReadOptions, ReadReport, read_backup};
-use crate::write::SbrArchive;
+use crate::write::{SbrArchive, remove_previous_backup};
 use anyhow::Result;
 use message_crate_core::{CancelFlag, ExportReport, ExportTransforms, OutputFormat};
 use message_staging::{AttachmentSource, ExportWriter};
@@ -80,6 +80,10 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
         args.transforms,
         args.resume,
     )?;
+    if !args.resume {
+        // The writer cleaned the folder of every format but this crate's own.
+        remove_previous_backup(args.output_dir)?;
+    }
     if args.output_format == OutputFormat::Xml {
         // This crate owns the backup format, so a round trip back to
         // `smses.xml` goes through its own archive writer.

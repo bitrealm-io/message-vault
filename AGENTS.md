@@ -14,7 +14,7 @@ vocabulary. Read it before writing any of those.
   its ruleset requires one, plus the ten `ci.yml` checks.
 - Before pushing, run `git fetch`, then read the pull request's real state
   with `gh pr list`, `gh pr view <number>`, and `gh pr checks <number>`.
-- Merge a pull request only when asked to.
+- Merge a pull request as "Merging" below says.
 
 ### Submitting Work
 
@@ -42,24 +42,60 @@ and requires no approval: the reviewing agent and the author share one GitHub
 account, and GitHub does not let an author approve their own pull request.
 Why: `docs/adr/0007-ci-is-the-only-gate.md`.
 
-1. **The reviewer posts each finding on its line**, all in one review:
+Review a pull request with the `pr-review` skill (`.claude/skills/pr-review/`).
+It runs the steps below, fixes what it finds, and queues the pull request.
+
+##### The marker
+
+Every comment `pr-review` posts starts with the line `<!-- pr-review -->`. The user and the agents post from one GitHub account,
+so the marker is how their threads are told apart. A thread whose first
+comment carries it is an agent thread. Any other thread is a user thread, and
+only the user resolves it.
+
+1. **Read the pull request**: its head, base, draft state, the issues it
+   closes, and the diff.
+
+   ```bash
+   gh pr view <N> --json headRefName,headRefOid,baseRefName,isDraft,closingIssuesReferences,body
+   gh pr diff <N>
+   ```
+
+2. **Post each finding on its line**, all in one review, pinned to the head
+   commit that was reviewed so a later push cannot move the lines:
 
    ```bash
    gh api repos/messagecrate/message-crate/pulls/<N>/reviews \
-     -f event=COMMENT -f body='<one-line summary of the review>' \
+     -f commit_id=<headRefOid> -f event=COMMENT \
+     -f body=$'<!-- pr-review -->\n<summary>' \
      -f 'comments[][path]=<file>' -F 'comments[][line]=<line>' \
-     -f 'comments[][body]=<the finding and why it matters>'
+     -f comments[][body]=$'<!-- pr-review -->\n<the finding and why it matters>'
    ```
 
-   Repeat the three `comments[]` fields for each finding. A finding with no
-   line goes in a top-level comment instead (`gh pr comment <N>`), and is
-   answered the same way but has nothing to resolve.
-2. **The author answers every finding in its thread**, with the commit that
-   fixes it or the reason it stays as it is, then resolves the thread:
+   Repeat the three `comments[]` fields for each finding. The marker goes in
+   each `comments[][body]`, because that comment opens the thread. A finding
+   with no line in the diff goes in a top-level comment instead
+   (`gh pr comment <N>`), with the marker on its first line. It has no thread,
+   so it is answered by a new marked `gh pr comment <N>` that quotes it.
+3. **Fix on a detached worktree** at the reviewed head. The branch may be
+   checked out in another worktree, and a detached one works either way.
+   Push without force, because the branch may carry another session's
+   commits:
+
+   ```bash
+   git fetch origin <headRefName>
+   git worktree add --detach .worktrees/review-<N> <headRefOid>
+   git push origin HEAD:<headRefName>
+   ```
+
+   If the push is rejected because the branch moved, rebase the fix commits
+   onto it (`git fetch origin <headRefName> && git rebase origin/<headRefName>`),
+   rerun the checks, and push again.
+4. **Answer every thread**, with the commit that fixes it or the reason it
+   stays as it is. Then resolve it if it is an agent thread:
 
    ```bash
    gh api repos/messagecrate/message-crate/pulls/<N>/comments/<comment-id>/replies \
-     -f body='Fixed in <sha>: <what changed>.'
+       -f body=$'<!-- pr-review -->\nFixed in <sha>: <what changed>.'
    gh api graphql -f query='query { repository(owner: "messagecrate", name: "message-crate") {
      pullRequest(number: <N>) { reviewThreads(first: 100) { nodes { id isResolved
        comments(first: 1) { nodes { databaseId path body } } } } } } }'
@@ -67,15 +103,35 @@ Why: `docs/adr/0007-ci-is-the-only-gate.md`.
    ```
 
    Never resolve a thread without a reply in it.
+5. **Wait for the required checks.** GitHub moves the pull request's head to
+   a pushed commit a few seconds after the push, and starts its checks after
+   that. Until both happen, `gh pr checks` reports the previous head, or exits
+   with "no required checks reported". So wait until the head is the pushed
+   commit and it has check runs, then watch. Rerun only the failed jobs of a
+   run that failed for a reason outside the pull request:
+
+   ```bash
+   sha=$(git rev-parse HEAD)
+   until [ "$(gh pr view <N> --json headRefOid -q .headRefOid)" = "$sha" ] &&
+         [ "$(gh api repos/messagecrate/message-crate/commits/$sha/check-runs -q .total_count)" -gt 0 ]
+   do sleep 30; done
+   gh pr checks <N> --watch --required
+   gh run rerun <run-id> --failed
+   ```
 
 #### Merging
 
 `main` requires the merge queue. `gh pr merge <N>` adds a green pull request
-to the queue, or turns on auto-merge when its checks are still running; it
+to the queue, or turns on auto-merge when its checks are still running. It
 takes no `--squash`, because the queue's merge method is fixed. The queue
 runs `ci.yml` again on the pull request merged onto the latest `main`, and
 lands it only when that run is green. Never pass `--admin`: it merges past the
 queue.
+
+A pull request that `pr-review` has reviewed is queued without asking, once
+every thread on it is resolved, its required checks are green, and it is not a
+draft. Any other
+merge waits for the user to ask for it.
 
 ## Tools
 

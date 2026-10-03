@@ -598,7 +598,8 @@ mod export_scope_tests {
 /// same request.
 ///
 /// The extension members belong to one type each: `word` and `did_you_mean`
-/// to `search-query-invalid`, `retry_after` to `rate-limited`.
+/// to `search-query-invalid`, `retry_after` to `rate-limited`, `line` to
+/// `malformed-body`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(utoipa::ToSchema))]
 pub struct Problem {
@@ -632,6 +633,12 @@ pub struct Problem {
     /// as the `Retry-After` header.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retry_after: Option<u64>,
+    /// `malformed-body` from an import batch: the line of the request body
+    /// the server could not read, counted from 1 with blank lines included.
+    /// The body is a batch the client packed, so only the client can say
+    /// which file and line of its own that line came from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<u64>,
 }
 
 impl Problem {
@@ -694,6 +701,7 @@ mod problem_tests {
             word: None,
             did_you_mean: None,
             retry_after: None,
+            line: None,
         };
         assert_eq!(problem.slug(), None);
         assert_eq!(problem.sentence(), "Internal server error");

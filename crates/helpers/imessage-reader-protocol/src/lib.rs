@@ -46,7 +46,9 @@ use serde_json::Value;
 /// 4: [`Request::BackupDomain`] and [`Event::BackupDomainDone`].
 /// 5: [`Request::Identities`] carries a scratch folder
 /// ([`IdentitiesRequest`]), and [`ExportRequest::scratch_dir`] is required.
-pub const PROTOCOL_VERSION: u32 = 5;
+/// 6: [`Event::Attachment`] carries an [`AttachmentFile`], which tells a
+/// file the backup does not hold from one that failed to decrypt.
+pub const PROTOCOL_VERSION: u32 = 6;
 
 /// The owner address behind a raw `chat.account_login` or
 /// `message.destination_caller_id` value, or `None` when nothing is left.
@@ -208,10 +210,7 @@ pub enum Event {
         values: Vec<String>,
     },
     /// The answer to [`Request::Attachment`].
-    Attachment {
-        /// The decrypted file, or `None` when the backup does not hold it.
-        path: Option<PathBuf>,
-    },
+    Attachment(AttachmentFile),
     /// The answer to [`Request::BackupDomain`].
     BackupDomainDone {
         /// Files written. Zero means the backup does not hold the domain.
@@ -225,6 +224,30 @@ pub enum Event {
         /// A sentence for the person, in the app's own words where the
         /// helper knows them.
         message: String,
+    },
+}
+
+/// What became of one attachment the app asked for ([`Request::Attachment`]).
+///
+/// A file the backup does not hold and a file the helper could not write
+/// out are different outcomes: the first is a gap in the backup, the second
+/// is a fault on this computer (a full disk, a damaged entry) that the
+/// person should hear about.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum AttachmentFile {
+    /// The file to read: the decrypted copy in the scratch folder, or the
+    /// path itself for a source that is not encrypted.
+    Ready {
+        /// Where the file is.
+        path: PathBuf,
+    },
+    /// The backup does not hold the file.
+    Missing,
+    /// The backup holds the file, and decrypting or writing it failed.
+    Failed {
+        /// Why, as the error said it.
+        reason: String,
     },
 }
 
@@ -415,9 +438,32 @@ mod tests {
         let back: Request = serde_json::from_str(&line).unwrap();
         assert!(matches!(back, Request::Export(_)));
 
-        let event = Event::Attachment { path: None };
-        let line = serde_json::to_string(&event).unwrap();
-        assert_eq!(line, r#"{"event":"attachment","path":null}"#);
+        for (answer, wire) in [
+            (
+                AttachmentFile::Ready {
+                    path: "/scratch/a.mov".into(),
+                },
+                r#"{"event":"attachment","outcome":"ready","path":"/scratch/a.mov"}"#,
+            ),
+            (
+                AttachmentFile::Missing,
+                r#"{"event":"attachment","outcome":"missing"}"#,
+            ),
+            (
+                AttachmentFile::Failed {
+                    reason: "No space left on device".into(),
+                },
+                r#"{"event":"attachment","outcome":"failed","reason":"No space left on device"}"#,
+            ),
+        ] {
+            let line = serde_json::to_string(&Event::Attachment(answer.clone())).unwrap();
+            assert_eq!(line, wire);
+            let back: Event = serde_json::from_str(&line).unwrap();
+            assert!(
+                matches!(back, Event::Attachment(a) if a == answer),
+                "{line}"
+            );
+        }
 
         let request = Request::BackupDomain(BackupDomainRequest {
             backup_path: "/tmp/backup".into(),

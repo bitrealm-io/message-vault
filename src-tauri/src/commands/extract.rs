@@ -184,6 +184,15 @@ pub fn extract(
         for line in run_result.messages {
             events::emit(&app_handle, events::LOG, line);
         }
+        // Before `extract:finished`, so the Import Run holds them when it
+        // moves on.
+        for issue in &run_result.issues {
+            events::emit(
+                &app_handle,
+                events::ISSUE,
+                events::ExtractIssueEvent::from(issue),
+            );
+        }
         Ok(payload)
     });
 

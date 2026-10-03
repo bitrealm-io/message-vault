@@ -107,9 +107,10 @@ steps 3 and 4. This is the last review of the PR's own changes.
 Check whether the PR conflicts with its base (AGENTS.md step 5). If it does,
 merge the base into the worktree and resolve each conflict so both sides'
 intent survives (the `resolving-merge-conflicts` skill). Run
-`./scripts/check-pr.sh`, then have the Correctness sub-agent review the
-resolution alone, from `git show --remerge-diff` of the merge commit. Close
-its findings as in steps 3 and 4, and push.
+`./scripts/check-pr.sh`. Then spawn a Correctness sub-agent with its step 2
+brief and output rule, scoped to the remerge diff of the merge commit
+(AGENTS.md step 5), so it reviews the resolution alone. Close its findings as
+in steps 3 and 4, and push.
 
 Done when GitHub reports the PR `MERGEABLE`.
 
@@ -131,7 +132,9 @@ Post one top-level comment, starting with the marker:
   whose conflicts it resolved.
 - Any Spec skip, and any user thread still open.
 
-Queue the PR when "Merging" says it is ready. Otherwise, say in the summary
+Check the PR against its base once more (AGENTS.md step 5), because `main`
+may have moved while CI ran. On `CONFLICTING`, go back to step 6. Queue the
+PR when it is `MERGEABLE` and "Merging" says it is ready. Otherwise, say in the summary
 and to the user what it waits on, such as an open user thread.
 
 Remove the worktree. Report to the user: the PR, the counts, and whether it is

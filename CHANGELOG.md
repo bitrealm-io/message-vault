@@ -237,6 +237,10 @@ released versions carry their date on the heading.
 
 #### Importing
 
+- 2026-10-03 **An Upload that cannot read a file in its folder stops and
+  says so.** A conversation file whose folder entry could not be read was
+  left out without a word, and the Upload reported success for a folder it
+  read only in part. It now fails and names the folder.
 - 2026-10-03 **A message sent twice a moment apart is shown twice.** When
   one source held a message sent twice a second or two apart, and another
   source held one copy, matching the sources hid all but one of the three.

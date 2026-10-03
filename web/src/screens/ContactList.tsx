@@ -36,6 +36,7 @@ import type { components } from "../lib/serverApi.types";
 import { useTimeZone } from "../lib/timeZone";
 import { UNKNOWN_GROUP } from "../lib/unknownGroup";
 import { useContactGroups } from "../lib/useContactGroups";
+import { useSelectAll } from "../lib/useSelectAll";
 
 const FILTER_DEBOUNCE_MS = 300;
 /** Fixed row height keeps virtualization slots aligned with flex-centered content. */
@@ -176,33 +177,16 @@ export default function ContactList({
 
   // Select all ticks every contact the list holds, so it loads the pages not
   // yet on screen first: Export and the Contact Groups menu then reach all of
-  // them, not the page in hand (issue #1145). A new search, group page or
-  // Clear while the pages load makes that answer stale, so it is dropped.
-  const selectAllRun = useRef(0);
-  const selectingAll = useRef(false);
-  useEffect(() => {
-    void serverQ;
-    void filter;
-    void groupFilter;
-    void clearCheckedRev;
-    selectAllRun.current += 1;
-    selectingAll.current = false;
-  }, [serverQ, filter, groupFilter, clearCheckedRev]);
-  const selectAll = async () => {
-    if (selectingAll.current) return;
-    selectingAll.current = true;
-    const run = ++selectAllRun.current;
-    try {
-      const rows = await loadAll();
-      if (run !== selectAllRun.current) return;
+  // them, not the page in hand (issue #1145). It ticks only the contacts the
+  // list shows, by the same test as the rows on screen (`shows`, below).
+  const selectAll = useSelectAll(
+    loadAll,
+    JSON.stringify([serverQ, filter, groupFilter, clearCheckedRev]),
+    (rows: Contact[]) => {
       const ids = new Set(rows.filter(shows).map((c) => c.id));
       startTransition(() => setCheckedIds(ids));
-    } catch {
-      // The list shows its own load failure; nothing is ticked.
-    } finally {
-      if (run === selectAllRun.current) selectingAll.current = false;
-    }
-  };
+    },
+  );
 
   const catalogComplete =
     !loading && !refreshing && contacts.length >= total && (total > 0 || contacts.length === 0);
@@ -260,9 +244,9 @@ export default function ContactList({
   // Filter by name and handle in the browser. Server results are used when the
   // filter has search words the client cannot apply. Select all applies the
   // same test to the rows it loads, so it ticks what the list shows.
-  // Memoized: a fresh array here would invalidate `checkedContacts` on every
-  // render, and the `onCheckedChange` effect below would then re-render the
-  // parent in a loop.
+  // Memoized so `displayContacts` keeps its identity: a fresh array there
+  // would invalidate `checkedContacts` on every render, and the
+  // `onCheckedChange` effect below would then re-render the parent in a loop.
   const shows = useCallback(
     (c: Contact) =>
       (!filterActive || advancedActive || contactMatchesFilter(c, filter)) &&
@@ -477,13 +461,15 @@ export default function ContactList({
       onSelectAllChange={(on) => {
         rangeAnchorRef.current = null;
         if (on) {
-          void selectAll();
+          void selectAll.selectAll();
           return;
         }
-        selectAllRun.current += 1;
+        selectAll.cancel();
         startTransition(() => setCheckedIds(new Set()));
       }}
       selectAllLabel="Select all contacts"
+      selectAllDisabled={selectAll.selecting}
+      selectAllError={selectAll.error}
       getId={(c) => c.id}
       getTextValue={(c) => contactLabelText(c.name, c.addresses)}
       ariaLabel="Contacts"

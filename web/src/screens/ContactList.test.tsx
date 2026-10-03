@@ -304,5 +304,36 @@ describe("ContactList", () => {
       const ids = body?.ids ?? [];
       expect([...ids].sort((a, b) => a - b)).toEqual(everyone.map((c) => c.id));
     });
+
+    it("waits while the pages load, and says why when they do not", async () => {
+      let refuse!: (error: Error) => void;
+      listContactsMock.mockImplementation(async ({ limit = 40, offset = 0 }) => {
+        if (offset > 0) {
+          return new Promise((_, reject) => {
+            refuse = reject;
+          });
+        }
+        return {
+          items: everyone.slice(offset, offset + limit),
+          total: everyone.length,
+          limit,
+          offset,
+        } as unknown as Awaited<ReturnType<typeof listContacts>>;
+      });
+      renderAll();
+      await screen.findByRole("checkbox", { name: "Select Person 0001" });
+
+      const box = screen.getByRole("checkbox", { name: "Select all contacts" });
+      fireEvent.click(box);
+      await waitFor(() => expect(box).toBeDisabled());
+
+      refuse(new Error("offset is past the end of the list"));
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Select all could not read every row: offset is past the end of the list",
+      );
+      expect(box).not.toBeDisabled();
+      expect(box).not.toBeChecked();
+      expect(screen.getByRole("checkbox", { name: "Select Person 0001" })).not.toBeChecked();
+    });
   });
 });

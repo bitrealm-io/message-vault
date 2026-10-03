@@ -59,6 +59,10 @@ type InfiniteOffsetListProps<T> = {
   selectAllIndeterminate?: boolean;
   onSelectAllChange?: (checked: boolean) => void;
   selectAllLabel?: string;
+  /** Select all waits, as while it loads every page; an empty list always does. */
+  selectAllDisabled?: boolean;
+  /** Why Select all ticked nothing, shown under the toolbar. */
+  selectAllError?: string | null;
   /** Letter for in-list section headers. Omit while searching. */
   getSectionLetter?: (item: T) => string;
 };
@@ -557,6 +561,8 @@ export default function InfiniteOffsetList<T extends object>({
   selectAllIndeterminate = false,
   onSelectAllChange,
   selectAllLabel,
+  selectAllDisabled = false,
+  selectAllError = null,
   getSectionLetter,
 }: InfiniteOffsetListProps<T>) {
   const [visibleRange, setVisibleRange] = useState<VisibleRange>({
@@ -613,7 +619,8 @@ export default function InfiniteOffsetList<T extends object>({
         selectAllIndeterminate={selectAllIndeterminate}
         onSelectAllChange={onSelectAllChange}
         selectAllLabel={selectAllLabel}
-        selectAllDisabled={items.length === 0}
+        selectAllDisabled={items.length === 0 || selectAllDisabled}
+        selectAllError={selectAllError}
       />
       {headerLetter ? (
         <div className="flex shrink-0 items-center border-b border-border bg-panel px-3 py-1">

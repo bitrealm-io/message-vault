@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import ConversationRow from "../components/ConversationRow";
 import ConversationSortMenu from "../components/ConversationSortMenu";
 import ListRangeHeader from "../components/ListRangeHeader";
@@ -24,6 +24,7 @@ import { hasFieldToken } from "../lib/searchFields";
 import { listConversations } from "../lib/serverApi";
 import type { Conversation } from "../lib/types";
 import { useMessageTags } from "../lib/useMessageTags";
+import { useSelectAll } from "../lib/useSelectAll";
 
 const QUERY_DEBOUNCE_MS = 300;
 
@@ -97,28 +98,12 @@ export default function ConversationList({
 
   // Select all ticks every conversation the list holds, so it loads the pages
   // not yet on screen first: an action that follows reaches all of them, not
-  // the page in hand (issue #1145). A new search or sort while the pages load
-  // makes that answer stale, so it is dropped.
-  const [selectingAll, setSelectingAll] = useState(false);
-  const selectAllRun = useRef(0);
-  useEffect(() => {
-    void debouncedQ;
-    void sortState;
-    selectAllRun.current += 1;
-    setSelectingAll(false);
-  }, [debouncedQ, sortState]);
-  const selectAll = async () => {
-    const run = ++selectAllRun.current;
-    setSelectingAll(true);
-    try {
-      const rows = await loadAll();
-      if (run === selectAllRun.current) setCheckedIds(new Set(rows.map((c) => c.id)));
-    } catch {
-      // The list shows its own load failure; nothing is ticked.
-    } finally {
-      if (run === selectAllRun.current) setSelectingAll(false);
-    }
-  };
+  // the page in hand (issue #1145).
+  const selectAll = useSelectAll(
+    loadAll,
+    JSON.stringify([debouncedQ, sortState]),
+    (rows: Conversation[]) => setCheckedIds(new Set(rows.map((c) => c.id))),
+  );
 
   const selectedConversation = conversations.find((c) => c.id === selectedId) ?? null;
   const targetConversations = useMemo(() => {
@@ -228,11 +213,16 @@ export default function ConversationList({
         selectAllChecked={selectAllChecked}
         selectAllIndeterminate={selectAllIndeterminate}
         onSelectAllChange={(on) => {
-          if (on) void selectAll();
-          else setCheckedIds(new Set());
+          if (on) {
+            void selectAll.selectAll();
+            return;
+          }
+          selectAll.cancel();
+          setCheckedIds(new Set());
         }}
         selectAllLabel="Select all conversations"
-        selectAllDisabled={conversations.length === 0 || selectingAll}
+        selectAllDisabled={conversations.length === 0 || selectAll.selecting}
+        selectAllError={selectAll.error}
         actions={
           <ConversationSortMenu
             sort={sortState.sort}

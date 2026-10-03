@@ -17,6 +17,7 @@ export default function ListRangeHeader({
   onSelectAllChange,
   selectAllLabel = "Select all",
   selectAllDisabled = false,
+  selectAllError = null,
 }: {
   /** When omitted, the center stays empty so actions stay right-aligned. */
   rangeLabel?: string;
@@ -29,31 +30,43 @@ export default function ListRangeHeader({
   onSelectAllChange?: (checked: boolean) => void;
   selectAllLabel?: string;
   selectAllDisabled?: boolean;
+  /** Why Select all ticked nothing, shown under the toolbar. */
+  selectAllError?: string | null;
 }) {
   const activitySuffix = listActivitySuffix(refreshing, filling);
 
   return (
-    <div className={LIST_TOOLBAR_CLASS}>
-      {onSelectAllChange ? (
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center">
-          <Checkbox
-            checked={selectAllChecked}
-            indeterminate={selectAllIndeterminate}
-            disabled={selectAllDisabled}
-            aria-label={selectAllLabel}
-            onChange={(on) => onSelectAllChange(on)}
-          />
-        </span>
-      ) : null}
-      <span className="min-w-0 flex-1 truncate text-[0.688rem] text-muted">
-        {rangeLabel != null ? (
-          <>
-            {rangeLabel}
-            {activitySuffix}
-          </>
+    <>
+      <div className={LIST_TOOLBAR_CLASS}>
+        {onSelectAllChange ? (
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center">
+            <Checkbox
+              checked={selectAllChecked}
+              indeterminate={selectAllIndeterminate}
+              disabled={selectAllDisabled}
+              aria-label={selectAllLabel}
+              onChange={(on) => onSelectAllChange(on)}
+            />
+          </span>
         ) : null}
-      </span>
-      {actions ? <div className="shrink-0">{actions}</div> : null}
-    </div>
+        <span className="min-w-0 flex-1 truncate text-[0.688rem] text-muted">
+          {rangeLabel != null ? (
+            <>
+              {rangeLabel}
+              {activitySuffix}
+            </>
+          ) : null}
+        </span>
+        {actions ? <div className="shrink-0">{actions}</div> : null}
+      </div>
+      {selectAllError ? (
+        <p
+          role="alert"
+          className="shrink-0 border-b border-border px-3 py-1.5 text-[0.75rem] text-danger"
+        >
+          {selectAllError}
+        </p>
+      ) : null}
+    </>
   );
 }

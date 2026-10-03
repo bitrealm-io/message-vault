@@ -54,39 +54,18 @@ function renderSearch(props: Partial<ComponentProps<typeof SearchBar>> = {}) {
   return { onSubmit, onChange, input: screen.getByRole("combobox", { name: placeholder }) };
 }
 
-/**
- * The bar with a parent that takes its time: each change reaches `value` on a
- * later task, as the address does in the browser, where React Router applies
- * the change as a transition after the box has drawn its old value again.
- * With `merge`, changes that arrive together are applied as the last one.
- */
-function LaggingSearch({ onSubmit, merge }: { onSubmit: (q: string) => void; merge: boolean }) {
-  const [value, setValue] = useState("");
-  const latest = useRef<string | null>(null);
+/** The Messages box's fixed props, as the header passes them. */
+const messageBox = {
+  scope: "message",
+  list: null,
+  placeholder: "Search messages",
+  advancedMode: null,
+} as const;
+
+/** Buttons that set the parent's value from outside, as a Saved Search does. */
+function SavedSearches({ setValue }: { setValue: (q: string) => void }) {
   return (
     <>
-      <SearchBar
-        value={value}
-        onChange={(q) => {
-          if (!merge) {
-            setTimeout(() => setValue(q), 0);
-            return;
-          }
-          if (latest.current === null) {
-            setTimeout(() => {
-              setValue(latest.current ?? "");
-              latest.current = null;
-            }, 0);
-          }
-          latest.current = q;
-        }}
-        onSubmit={onSubmit}
-        scope="message"
-        list={null}
-        placeholder="Search messages"
-        advancedMode={null}
-      />
-      <output data-testid="value">{value}</output>
       <button type="button" onClick={() => setValue("kind:group")}>
         Open a Saved Search
       </button>
@@ -97,9 +76,60 @@ function LaggingSearch({ onSubmit, merge }: { onSubmit: (q: string) => void; mer
   );
 }
 
-function renderLaggingSearch({ merge = false }: { merge?: boolean } = {}) {
+/**
+ * The bar with a parent that takes its time: each change reaches `value` on a
+ * later task, as the address does in the browser, where React Router applies
+ * the change as a transition after the box has drawn its old value again.
+ */
+function LaggingSearch({ onSubmit }: { onSubmit: (q: string) => void }) {
+  const [value, setValue] = useState("");
+  return (
+    <>
+      <SearchBar
+        {...messageBox}
+        value={value}
+        onChange={(q) => {
+          setTimeout(() => setValue(q), 0);
+        }}
+        onSubmit={onSubmit}
+      />
+      <output data-testid="value">{value}</output>
+      <SavedSearches setValue={setValue} />
+    </>
+  );
+}
+
+/**
+ * A late parent that applies the changes arriving together as the last one,
+ * as the router can: `a` then Backspace leaves its value at "" with no echo.
+ */
+function MergingSearch({ onSubmit }: { onSubmit: (q: string) => void }) {
+  const [value, setValue] = useState("");
+  const latest = useRef<string | null>(null);
+  return (
+    <>
+      <SearchBar
+        {...messageBox}
+        value={value}
+        onChange={(q) => {
+          if (latest.current === null) {
+            setTimeout(() => {
+              setValue(latest.current ?? "");
+              latest.current = null;
+            }, 0);
+          }
+          latest.current = q;
+        }}
+        onSubmit={onSubmit}
+      />
+      <SavedSearches setValue={setValue} />
+    </>
+  );
+}
+
+function renderLateSearch(Parent: typeof LaggingSearch) {
   const onSubmit = vi.fn();
-  render(<LaggingSearch onSubmit={onSubmit} merge={merge} />);
+  render(<Parent onSubmit={onSubmit} />);
   return { onSubmit, input: screen.getByRole("combobox", { name: "Search messages" }) };
 }
 
@@ -110,13 +140,10 @@ function AddressSearch({ onSubmit }: { onSubmit: (q: string) => void }) {
   return (
     <>
       <SearchBar
+        {...messageBox}
         value={params.get("q") ?? ""}
         onChange={(q) => setParams(q ? { q } : {}, { replace: true })}
         onSubmit={onSubmit}
-        scope="message"
-        list={null}
-        placeholder="Search messages"
-        advancedMode={null}
       />
       <output data-testid="location">{location.search}</output>
     </>
@@ -348,7 +375,7 @@ describe("SearchBar", () => {
 
     it("searches for a paste followed at once by Enter", async () => {
       const user = userEvent.setup({ delay: null });
-      const { onSubmit, input } = renderLaggingSearch();
+      const { onSubmit, input } = renderLateSearch(LaggingSearch);
 
       await user.click(input);
       // A paste is one input event, and Enter can follow it before the
@@ -363,7 +390,7 @@ describe("SearchBar", () => {
 
     it("keeps every key of text typed with no delay", async () => {
       const user = userEvent.setup({ delay: null });
-      const { input } = renderLaggingSearch();
+      const { input } = renderLateSearch(LaggingSearch);
 
       await user.type(input, "attachment:any");
 
@@ -375,7 +402,7 @@ describe("SearchBar", () => {
 
     it("shows a search set from outside the box, such as a Saved Search", async () => {
       const user = userEvent.setup();
-      const { input } = renderLaggingSearch();
+      const { input } = renderLateSearch(LaggingSearch);
 
       await user.type(input, "ada");
       await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
@@ -389,7 +416,7 @@ describe("SearchBar", () => {
       // leaves the address at "" and nothing is echoed. A Saved Search for
       // `a` afterwards is the person's choice, not an echo of the `a` typed.
       const user = userEvent.setup({ delay: null });
-      const { input } = renderLaggingSearch({ merge: true });
+      const { input } = renderLateSearch(MergingSearch);
 
       await user.type(input, "a{Backspace}");
       await act(() => new Promise((resolve) => setTimeout(resolve, 0)));

@@ -83,9 +83,9 @@ export default function AppHeader({
   searchQuery: string;
   searchTarget: HeaderSearchTarget;
   /**
-   * True on Import, Export and Settings, which have no list: their search is
-   * always empty, so the box starts again when a list comes back rather than
-   * keeping text typed there.
+   * True on Import, Export and Settings, which have no list: the box's value
+   * there is always empty, so it starts again when a list comes back rather
+   * than keeping text typed there, which searched no list.
    */
   fullScreen: boolean;
   onSearchChange: (v: string) => void;

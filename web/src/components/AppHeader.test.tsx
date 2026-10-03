@@ -16,9 +16,10 @@ afterEach(cleanup);
 
 describe("AppHeader", () => {
   it("starts the search box again when a full-screen screen gives way to a list", async () => {
-    // Import, Export and Settings have no list, so their search is always ""
-    // and what is typed there reaches nothing. Back on the conversations
-    // list, the box shows that list's search, not the leftover text.
+    // Import, Export and Settings have no list, so the box's value there is
+    // always "" and what is typed there searches no list. Back on the
+    // conversations list, the box shows that list's search, not the leftover
+    // text.
     const user = userEvent.setup();
     const props = {
       searchQuery: "",

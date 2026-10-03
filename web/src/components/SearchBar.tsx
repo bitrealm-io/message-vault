@@ -142,7 +142,9 @@ export default function SearchBar({
    * The search as the parent holds it. The box keeps its own text: a `value`
    * equal to one the box sent through `onChange` is taken as its echo, and any
    * other `value` replaces the text. A parent that rewrites what it is sent
-   * (trimmed, lowercased) would overwrite the text as it is typed.
+   * (trimmed, lowercased) would overwrite the text as it is typed. Echoes
+   * must arrive in the order they were sent, or merged into the latest one,
+   * as React Router delivers the address.
    */
   value: string;
   onChange: (v: string) => void;

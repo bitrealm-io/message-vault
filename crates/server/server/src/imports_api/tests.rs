@@ -1819,6 +1819,29 @@ async fn http_import_of_a_line_that_is_not_utf8_is_a_400_naming_the_line() {
     );
 }
 
+/// A line that breaks a rule is named by its line in the batch, blank lines
+/// counted, in the sentence and as `line`, as a line that is not JSON is: the
+/// client maps `line` back to the staged file and line it packed it from.
+#[tokio::test]
+async fn a_refusal_after_a_blank_line_names_the_line_of_the_batch() {
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+    let header = replace_run_batch("+15550100002", &[]);
+    let body = format!("{header}\n{{\"guid\":7}}\n");
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &token, "application/jsonl", body).await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    assert_eq!(problem.line, Some(3), "{text}");
+    assert!(
+        problem.errors.unwrap()[0].starts_with("Line 3 of the batch:"),
+        "{text}"
+    );
+}
+
 /// C1-7: a header that is JSON with the wrong fields was read and broke a
 /// rule, as the same mistake in a JSON body does, so it answers 422.
 #[tokio::test]

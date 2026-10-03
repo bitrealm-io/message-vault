@@ -15,4 +15,4 @@ A query parameter, path segment or body field was read and then broke a rule: a 
 
 `errors` lists every rule the request broke, one sentence each, not only the first. Fix each one and send the request again.
 
-For an import batch whose messages have no `guid`, `line` carries the first such line of the request body, counted from 1 with blank lines included. It is a line of the batch, not of any file: a client that packed the batch from several files turns it into the file and line it came from.
+For an import batch, a line that is JSON and breaks a rule of message-ir (a wrong field, a message before any header, a message without a `guid`, an old `schema_version`) answers this type, and `line` carries the first such line of the request body, counted from 1 with blank lines included. It is a line of the batch, not of any file: a client that packed the batch from several files turns it into the file and line it came from. An empty batch, an unsafe attachment path, and an attachment whose bytes do not match its stated SHA-256 answer this type too, without `line`.

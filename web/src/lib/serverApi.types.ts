@@ -3182,9 +3182,9 @@ export interface components {
          *     reading the failure and the operator reading the log are looking at the
          *     same request.
          *
-         *     The extension members belong to one type each: `word` and `did_you_mean`
-         *     to `search-query-invalid`, `retry_after` to `rate-limited`, `line` to
-         *     `malformed-body`.
+         *     The extension members belong to the types named here: `word` and
+         *     `did_you_mean` to `search-query-invalid`, `retry_after` to `rate-limited`,
+         *     `line` to `malformed-body` and `validation-failed` from an import batch.
          */
         Problem: {
             /**
@@ -3678,7 +3678,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateAccountResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3849,7 +3849,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3969,7 +3969,7 @@ export interface operations {
                     "application/json": components["schemas"]["Account"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4137,7 +4137,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateApiTokenResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4296,7 +4296,7 @@ export interface operations {
                     "application/json": components["schemas"]["UpdateApiTokenResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4676,7 +4676,7 @@ export interface operations {
                     "application/json": components["schemas"]["DeleteMessagesResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4781,7 +4781,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5036,7 +5036,7 @@ export interface operations {
                     "application/json": components["schemas"]["Asset"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5277,7 +5277,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateAssetUploadResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5529,7 +5529,7 @@ export interface operations {
                     "application/json": components["schemas"]["ReplaceAssetUploadPartResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5682,7 +5682,7 @@ export interface operations {
                     "application/json": components["schemas"]["NamedSet"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5837,7 +5837,7 @@ export interface operations {
                     "application/json": components["schemas"]["NamedSet"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6008,7 +6008,7 @@ export interface operations {
                     "application/json": components["schemas"]["UpdateMembersResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6167,7 +6167,7 @@ export interface operations {
                     "application/json": components["schemas"]["LoadCounts"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6251,7 +6251,7 @@ export interface operations {
                     "text/csv": string;
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6337,7 +6337,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_ContactSelectionSummary"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6419,7 +6419,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_String"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6637,7 +6637,7 @@ export interface operations {
                     "application/json": components["schemas"]["Contact"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7369,7 +7369,7 @@ export interface operations {
                     "application/json": components["schemas"]["ExportRun"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7803,7 +7803,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateImportResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7960,7 +7960,7 @@ export interface operations {
                     "application/json": components["schemas"]["ImportRun"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8065,7 +8065,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateImportBatchResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8168,7 +8168,7 @@ export interface operations {
                     "application/json": components["schemas"]["CompleteImportResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8466,7 +8466,7 @@ export interface operations {
                     "application/json": components["schemas"]["NamedSet"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8621,7 +8621,7 @@ export interface operations {
                     "application/json": components["schemas"]["NamedSet"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8792,7 +8792,7 @@ export interface operations {
                     "application/json": components["schemas"]["UpdateMembersResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9068,7 +9068,7 @@ export interface operations {
                     "application/json": components["schemas"]["SavedSearch"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9223,7 +9223,7 @@ export interface operations {
                     "application/json": components["schemas"]["SavedSearch"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9466,7 +9466,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateSessionResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9597,7 +9597,7 @@ export interface operations {
                     "application/json": components["schemas"]["DemoAccount"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9743,7 +9743,7 @@ export interface operations {
                     "application/json": components["schemas"]["ServerSettings"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9933,7 +9933,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateSessionResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;

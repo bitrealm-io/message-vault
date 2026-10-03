@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ComponentProps, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -269,5 +269,89 @@ describe("SearchBar", () => {
 
     expect(onChange).toHaveBeenCalledWith("identity: ");
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The bar with a parent that takes its time: each change reaches `value` on a
+ * later task, as the address does in the browser, where React Router applies
+ * the change as a transition after the box has drawn its old value again.
+ */
+function LaggingSearch({ onSubmit }: { onSubmit: (q: string) => void }) {
+  const [value, setValue] = useState("");
+  return (
+    <>
+      <SearchBar
+        value={value}
+        onChange={(q) => {
+          setTimeout(() => setValue(q), 0);
+        }}
+        onSubmit={onSubmit}
+        scope="message"
+        list={null}
+        placeholder="Search messages"
+        advancedMode={null}
+      />
+      <output data-testid="value">{value}</output>
+      <button type="button" onClick={() => setValue("kind:group")}>
+        Open a Saved Search
+      </button>
+    </>
+  );
+}
+
+function renderLaggingSearch() {
+  const onSubmit = vi.fn();
+  render(<LaggingSearch onSubmit={onSubmit} />);
+  return { onSubmit, input: screen.getByRole("combobox", { name: "Search messages" }) };
+}
+
+describe("SearchBar with a value that arrives late (#1000)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    suggestionsMock.current = [];
+    recentsMock.current = [];
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("searches for a paste followed at once by Enter", async () => {
+    const user = userEvent.setup({ delay: null });
+    const { onSubmit, input } = renderLaggingSearch();
+
+    await user.click(input);
+    // A paste is one input event, and Enter can follow it before the parent's
+    // value has caught up.
+    act(() => {
+      fireEvent.change(input, { target: { value: "attachment:any" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+    });
+
+    expect(onSubmit).toHaveBeenLastCalledWith("attachment:any");
+  });
+
+  it("keeps every key of text typed with no delay", async () => {
+    const user = userEvent.setup({ delay: null });
+    const { input } = renderLaggingSearch();
+
+    await user.type(input, "attachment:any");
+
+    expect(input).toHaveValue("attachment:any");
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(screen.getByTestId("value").textContent).toBe("attachment:any");
+    expect(input).toHaveValue("attachment:any");
+  });
+
+  it("shows a search set from outside the box, such as a Saved Search", async () => {
+    const user = userEvent.setup();
+    const { input } = renderLaggingSearch();
+
+    await user.type(input, "ada");
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    await user.click(screen.getByRole("button", { name: "Open a Saved Search" }));
+
+    expect(input).toHaveValue("kind:group");
   });
 });

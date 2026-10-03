@@ -153,6 +153,31 @@ export default function SearchBar({
   /** True while the popdown or advanced panel is open (for list-column stacking). */
   onOpenChange?: (open: boolean) => void;
 }) {
+  // The box holds its own text. `value` reaches it later than a key or a
+  // paste does (the Messages box's value is the address, which React Router
+  // updates as a transition), so a box drawn from `value` alone lost keys and
+  // ran Enter on the old text (#1000).
+  const [text, setText] = useState(value);
+  /** What the box sent to `onChange` and `value` has not echoed back yet. */
+  const sentRef = useRef<string[]>([]);
+  // `value` replaces the text only when it is not an echo of what the box
+  // sent: a Saved Search, Clear, or a route change.
+  useEffect(() => {
+    const echoed = sentRef.current.indexOf(value);
+    if (echoed >= 0) {
+      sentRef.current.splice(0, echoed + 1);
+      return;
+    }
+    sentRef.current = [];
+    setText(value);
+  }, [value]);
+
+  const change = (q: string) => {
+    sentRef.current.push(q);
+    setText(q);
+    onChange(q);
+  };
+
   const [popdownOpen, setPopdownOpen] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [recents, setRecents] = useState(() => loadRecentSearches(scope));
@@ -162,7 +187,7 @@ export default function SearchBar({
    * run the typed text. Cleared as each key press starts. */
   const ranRowRef = useRef(false);
 
-  const suggestions = useSearchSuggestions(value, list);
+  const suggestions = useSearchSuggestions(text, list);
 
   const notifyOpen = useEffectEvent((open: boolean) => {
     onOpenChange?.(open);
@@ -177,7 +202,7 @@ export default function SearchBar({
   useDismissable(showAdvanced, rootRef, closeAdvanced);
 
   const applyQuery = (q: string, { save }: { save: boolean }) => {
-    onChange(q);
+    change(q);
     onSubmit(q);
     if (save && q.trim()) {
       pushRecentSearch(scope, q);
@@ -188,7 +213,7 @@ export default function SearchBar({
 
   /** Autocomplete edits the query in place; it never runs the search. */
   const applySuggestion = (s: Suggestion) => {
-    onChange(applySuggestionToQuery(value, s));
+    change(applySuggestionToQuery(text, s));
     inputRef.current?.focus();
   };
 
@@ -232,8 +257,8 @@ export default function SearchBar({
       <ComboBox
         aria-label={placeholder}
         items={options}
-        inputValue={value}
-        onInputChange={onChange}
+        inputValue={text}
+        onInputChange={change}
         allowsCustomValue
         menuTrigger="focus"
         shouldFocusWrap
@@ -266,19 +291,19 @@ export default function SearchBar({
               if (e.key !== "Enter") return;
               // React Aria has already run the active row, if there was one.
               if (ranRowRef.current) return;
-              applyQuery(value, { save: true });
+              applyQuery(text, { save: true });
             }}
             // The bar has a Clear search button of its own, so the one the browser
             // draws inside a search input is hidden; otherwise there are two.
             className="min-w-0 flex-1 border-none bg-transparent px-2 py-2.5 text-[0.875rem] text-text outline-none [&::-webkit-search-cancel-button]:appearance-none"
           />
-          {value ? (
+          {text ? (
             <PlainButton
               aria-label="Clear search"
               // Not React Aria's combobox button: that one would open the popdown.
               slot={null}
               onPress={() => {
-                onChange("");
+                change("");
                 onSubmit("");
                 inputRef.current?.focus();
               }}

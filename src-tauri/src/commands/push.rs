@@ -67,7 +67,7 @@ pub struct PushArgs {
     pub username: String,
     /// Bearer token for the server: an API token, or the logged-in Session's
     /// token. Never a password.
-    pub key: String,
+    pub token: String,
     /// Folder of conversation files to upload.
     pub input_dir: String,
     /// Import mode. `append` adds to existing data (safe to re-run);
@@ -125,7 +125,7 @@ fn push_config(args: PushArgs) -> PushConfig {
         input: PathBuf::from(&args.input_dir),
         base_url: args.base_url,
         username: args.username,
-        key: args.key,
+        token: args.token,
         mode: args.mode,
         // A resumed Upload skips what the journal in the staging folder
         // already recorded as sent.
@@ -226,7 +226,7 @@ mod tests {
         let args: PushArgs = serde_json::from_value(json!({
             "baseUrl": "http://127.0.0.1:8080",
             "username": "",
-            "key": "token",
+            "token": "token",
             "inputDir": "/tmp/staging-root/staging-run",
             "mode": "append",
             "skipAttachments": false,
@@ -245,7 +245,7 @@ mod tests {
         let args = serde_json::from_value::<PushArgs>(json!({
             "baseUrl": "http://127.0.0.1:8080",
             "username": "",
-            "key": "token",
+            "token": "token",
             "inputDir": "/tmp/staging-root/staging-run",
             "mode": "append",
             "skipAttachments": false,
@@ -325,7 +325,7 @@ mod tests {
             let args: PushArgs = serde_json::from_value(json!({
                 "baseUrl": server.base_url(),
                 "username": "",
-                "key": "mc_test",
+                "token": "mc_test",
                 "inputDir": staging.path(),
                 "mode": "append",
                 "skipAttachments": false,

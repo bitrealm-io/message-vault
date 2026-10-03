@@ -108,7 +108,7 @@ fn text_only_config(dir: &Path, base_url: String) -> PushConfig {
         input: dir.to_path_buf(),
         base_url,
         username: "alice".into(),
-        key: "mc_test".into(),
+        token: "mc_test".into(),
         mode: ImportMode::Append,
         force: false,
         skip_attachments: false,
@@ -763,7 +763,7 @@ fn profiles_attachment_upload_phases() {
         input: dir.path().to_path_buf(),
         base_url: server.base_url(),
         username: "alice".into(),
-        key: "mc_test".into(),
+        token: "mc_test".into(),
         mode: ImportMode::Append,
         force: false,
         skip_attachments: false,
@@ -2156,7 +2156,7 @@ fn journaled_guids(dir: &Path) -> Vec<String> {
         .collect()
 }
 
-/// A mock server session that accepts the key.
+/// A mock server session that accepts the token.
 fn mock_session(server: &MockServer) -> httpmock::Mock<'_> {
     server.mock(|when, then| {
         when.method(GET).path("/v1/session");

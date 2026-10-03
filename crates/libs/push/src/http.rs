@@ -106,8 +106,8 @@ fn payload_too_large_message(kind: &str, bytes: Option<usize>) -> String {
 }
 
 /// Build `{base}/v1/assets/...` with extra path segments (percent-encoded).
-/// An attachment is addressed by its SHA-256 alone; the account is not a
-/// parameter: the API key names it.
+/// An attachment is addressed by its SHA-256 alone. The account is not a
+/// parameter, because the session token names it.
 fn asset_url(base_url: &str, segments: &[&str]) -> Result<reqwest::Url> {
     let base = trim_base_url(base_url);
     let mut url =
@@ -141,7 +141,7 @@ impl Session {
         let url = self.asset_url(&[sha256])?;
         let response = self
             .http
-            .request_url(Method::HEAD, url.clone(), &self.key)
+            .request_url(Method::HEAD, url.clone(), &self.token)
             .timeout(Duration::from_secs(15))
             .send()
             .with_context(|| format!("HEAD {url}"))?;
@@ -199,7 +199,7 @@ impl Session {
             .unwrap_or("application/octet-stream");
         let response = self
             .http
-            .request_url(Method::PUT, url.clone(), &self.key)
+            .request_url(Method::PUT, url.clone(), &self.token)
             .timeout(Duration::from_secs(600))
             .header("Content-Type", content_type)
             .body(bytes)
@@ -269,7 +269,7 @@ impl Session {
         let path = format!("/v1/imports/{import_id}/batches");
         let response = self
             .http
-            .server_request(Method::POST, &self.url, &path, &self.key)
+            .server_request(Method::POST, &self.url, &path, &self.token)
             .timeout(Duration::from_secs(600))
             .header("Content-Type", "application/jsonl")
             .body(ndjson)
@@ -306,7 +306,7 @@ impl Session {
         }
         let response = self
             .http
-            .server_request(Method::POST, &self.url, "/v1/imports", &self.key)
+            .server_request(Method::POST, &self.url, "/v1/imports", &self.token)
             .timeout(Duration::from_secs(60))
             .header("Content-Type", "application/json")
             .json(&body)
@@ -337,7 +337,7 @@ impl Session {
                 Method::POST,
                 &self.url,
                 &format!("/v1/imports/{import_id}/complete"),
-                &self.key,
+                &self.token,
             )
             .timeout(Duration::from_secs(60))
             .header("Content-Type", "application/json")
@@ -380,7 +380,7 @@ impl<'a> MultipartUpload<'a> {
         }
         let response = session
             .http
-            .request_url(Method::POST, start_url.clone(), &session.key)
+            .request_url(Method::POST, start_url.clone(), &session.token)
             .timeout(Duration::from_secs(30))
             .header("Content-Type", "application/json")
             .json(&start_body)
@@ -430,7 +430,7 @@ impl<'a> MultipartUpload<'a> {
         let response = self
             .session
             .http
-            .request_url(Method::PUT, part_url.clone(), &self.session.key)
+            .request_url(Method::PUT, part_url.clone(), &self.session.token)
             .timeout(Duration::from_secs(600))
             .header("Content-Type", "application/octet-stream")
             .body(buf)
@@ -464,7 +464,7 @@ impl<'a> MultipartUpload<'a> {
         let response = self
             .session
             .http
-            .request_url(Method::POST, complete_url.clone(), &self.session.key)
+            .request_url(Method::POST, complete_url.clone(), &self.session.token)
             .timeout(Duration::from_secs(600))
             .send()
             .with_context(|| format!("POST {complete_url}"))?;
@@ -481,7 +481,7 @@ impl<'a> MultipartUpload<'a> {
         let _ = self
             .session
             .http
-            .request_url(Method::DELETE, url, &self.session.key)
+            .request_url(Method::DELETE, url, &self.session.token)
             .timeout(Duration::from_secs(30))
             .send();
     }
@@ -499,7 +499,7 @@ mod tests {
         Session {
             http: HttpSession::new().unwrap(),
             url,
-            key: "mc-user-test".into(),
+            token: "mc-user-test".into(),
             username: "alice".into(),
             auth: AuthInfo {
                 account_id: 1,

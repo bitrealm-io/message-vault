@@ -114,7 +114,7 @@ fn export_run(scope: Value, status: &str) -> Value {
     })
 }
 
-/// The login: the key resolves to account `1`, username `alice`.
+/// The login: the token resolves to account `1`, username `alice`.
 fn mock_auth(server: &MockServer) -> httpmock::Mock<'_> {
     server.mock(|when, then| {
         when.method(GET).path("/v1/session");
@@ -215,7 +215,7 @@ fn mock_pages<'a>(
 }
 
 /// `GET /v1/assets/{sha256}`, answering `bytes`. The fingerprint alone names
-/// the attachment and the key names the account, and the server refuses a
+/// the attachment and the token names the account, and the server refuses a
 /// parameter a route does not declare, so a download that still sent
 /// `source=` or `account=` would not match.
 fn mock_asset<'a>(server: &'a MockServer, sha256: &str, bytes: &[u8]) -> httpmock::Mock<'a> {
@@ -237,7 +237,7 @@ fn config(out_dir: &Path, base_url: String) -> PullConfig {
         out_dir: out_dir.to_path_buf(),
         base_url,
         username: "alice".into(),
-        key: "mc_test".into(),
+        token: "mc_test".into(),
         query: String::new(),
         list: ExportQueryList::Messages,
         skip_attachments: false,
@@ -860,11 +860,11 @@ fn a_scope_the_server_refuses_fails_the_run_with_the_servers_sentence() {
 }
 
 #[test]
-fn a_blank_key_or_output_folder_is_refused_before_login() {
+fn a_blank_token_or_output_folder_is_refused_before_login() {
     let dir = tempdir().unwrap();
     let base_url = "http://127.0.0.1:1".to_string();
     let blank_key = PullConfig {
-        key: "  ".into(),
+        token: "  ".into(),
         ..config(dir.path(), base_url.clone())
     };
     let blank_out_dir = PullConfig {

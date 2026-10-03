@@ -40,13 +40,13 @@ struct CreateExportBody<'a> {
 pub fn create_export(
     http: &HttpSession,
     base_url: &str,
-    key: &str,
+    token: &str,
     scope: &ExportScope,
     tool: &str,
 ) -> Result<ExportRun> {
     let body = serde_json::to_vec(&CreateExportBody { scope, tool })?;
     let response = http
-        .server_request(Method::POST, base_url, "/v1/exports", key)
+        .server_request(Method::POST, base_url, "/v1/exports", token)
         .header("Content-Type", "application/json")
         .body(body)
         .timeout(Duration::from_secs(120))
@@ -60,7 +60,7 @@ pub fn create_export(
 /// Arguments for [`export_messages`].
 pub(crate) struct ExportMessagesArgs<'a> {
     pub base_url: &'a str,
-    pub key: &'a str,
+    pub token: &'a str,
     /// The run whose messages are paged.
     pub export_id: i64,
     pub limit: usize,
@@ -75,14 +75,14 @@ pub(crate) struct ExportMessagesArgs<'a> {
 pub fn export_messages(http: &HttpSession, args: ExportMessagesArgs<'_>) -> Result<Page<Message>> {
     let ExportMessagesArgs {
         base_url,
-        key,
+        token,
         export_id,
         limit,
         offset,
     } = args;
     let path = format!("/v1/exports/{export_id}/messages");
     let response = http
-        .server_request(Method::GET, base_url, &path, key)
+        .server_request(Method::GET, base_url, &path, token)
         .query(&[("limit", limit.to_string()), ("offset", offset.to_string())])
         .timeout(Duration::from_secs(120))
         .send()
@@ -103,13 +103,13 @@ pub fn export_messages(http: &HttpSession, args: ExportMessagesArgs<'_>) -> Resu
 pub fn close_export(
     http: &HttpSession,
     base_url: &str,
-    key: &str,
+    token: &str,
     export_id: i64,
     action: &str,
 ) -> Result<ExportRun> {
     let path = format!("/v1/exports/{export_id}/{action}");
     let response = http
-        .server_request(Method::POST, base_url, &path, key)
+        .server_request(Method::POST, base_url, &path, token)
         .timeout(Duration::from_secs(120))
         .send()
         .with_context(|| format!("POST {path}"))?;
@@ -134,7 +134,7 @@ pub fn close_export(
 pub fn download_asset(
     http: &HttpSession,
     base_url: &str,
-    key: &str,
+    token: &str,
     sha256: &str,
     dest: &Path,
 ) -> Result<()> {
@@ -144,13 +144,13 @@ pub fn download_asset(
         bail!("invalid SHA-256 digest for asset download: {sha256}");
     }
     let base = trim_base_url(base_url);
-    // The fingerprint alone names the attachment, and the key names the
+    // The fingerprint alone names the attachment, and the token names the
     // account; the route takes no query.
     let url = reqwest::Url::parse(&format!("{base}/v1/assets/{sha_clean}"))
         .with_context(|| format!("invalid server address {base}"))?;
 
     let mut response = http
-        .request_url(Method::GET, url, key)
+        .request_url(Method::GET, url, token)
         .timeout(Duration::from_secs(300))
         .send()
         .context("GET /v1/assets")?;

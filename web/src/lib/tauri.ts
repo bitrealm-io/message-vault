@@ -178,7 +178,7 @@ export async function invokeSaveImportRunRecord(config: {
 export interface PushConfig {
   base_url: string;
   username: string;
-  key: string;
+  token: string;
   input_dir: string;
   mode: string;
   skip_attachments: boolean;
@@ -247,7 +247,7 @@ export async function invokePush(config: PushConfig): Promise<void> {
     args: {
       baseUrl: config.base_url,
       username: config.username,
-      key: config.key,
+      token: config.token,
       inputDir: config.input_dir,
       mode: config.mode,
       skipAttachments: config.skip_attachments,
@@ -268,7 +268,7 @@ export type ExportQueryList = components["schemas"]["ExportQueryList"];
 export interface PullConfig {
   base_url: string;
   username: string;
-  key: string;
+  token: string;
   out_dir: string;
   /** Blank exports everything the account holds. */
   query: string;
@@ -283,7 +283,7 @@ export async function invokePull(config: PullConfig): Promise<void> {
     args: {
       baseUrl: config.base_url,
       username: config.username,
-      key: config.key,
+      token: config.token,
       outDir: config.out_dir,
       query: config.query,
       list: config.list,

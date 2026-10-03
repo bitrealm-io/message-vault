@@ -20,8 +20,8 @@ pub struct HttpSession {
 }
 
 /// `Authorization` header value for a session token or an API token.
-pub fn bearer_header(key: &str) -> String {
-    format!("Bearer {}", key.trim())
+pub fn bearer_header(token: &str) -> String {
+    format!("Bearer {}", token.trim())
 }
 
 /// `base_url` with surrounding whitespace and trailing slashes removed.
@@ -50,19 +50,19 @@ impl HttpSession {
         method: Method,
         base_url: &str,
         path: &str,
-        key: &str,
+        token: &str,
     ) -> RequestBuilder {
         let base = trim_base_url(base_url);
         self.client
             .request(method, format!("{base}{path}"))
-            .header("Authorization", bearer_header(key))
+            .header("Authorization", bearer_header(token))
     }
 
     /// Start a request to an already-built URL with the bearer header set.
-    pub fn request_url(&self, method: Method, url: reqwest::Url, key: &str) -> RequestBuilder {
+    pub fn request_url(&self, method: Method, url: reqwest::Url, token: &str) -> RequestBuilder {
         self.client
             .request(method, url)
-            .header("Authorization", bearer_header(key))
+            .header("Authorization", bearer_header(token))
     }
 
     /// Call `GET /v1/session` and return the account id on success.
@@ -70,11 +70,11 @@ impl HttpSession {
     /// # Errors
     ///
     /// Returns [`AuthError`] when the URL is invalid, the host is unreachable,
-    /// or the key is rejected.
+    /// or the session token is rejected.
     pub fn auth_check(
         &self,
         base_url: &str,
-        key: &str,
+        token: &str,
     ) -> std::result::Result<AuthInfo, AuthError> {
         // The token alone names the account; the reply carries the username.
         let base = trim_base_url(base_url);
@@ -89,7 +89,7 @@ impl HttpSession {
         };
         let url = format!("{base}/v1/session");
         let response = self
-            .server_request(Method::GET, base, "/v1/session", key)
+            .server_request(Method::GET, base, "/v1/session", token)
             .timeout(Duration::from_secs(15))
             .send()
             .map_err(|error| classify_auth_transport_error(&url, error))?;
@@ -199,11 +199,11 @@ fn classify_auth_http_status(status: u16, body: String) -> AuthError {
 /// # Errors
 ///
 /// Returns [`AuthError`] when the client cannot be built or login fails.
-pub fn auth_check(base_url: &str, key: &str) -> std::result::Result<AuthInfo, AuthError> {
+pub fn auth_check(base_url: &str, token: &str) -> std::result::Result<AuthInfo, AuthError> {
     let session = HttpSession::new().map_err(|error| AuthError::Client {
         detail: format!("{error:#}"),
     })?;
-    session.auth_check(base_url, key)
+    session.auth_check(base_url, token)
 }
 
 #[cfg(test)]

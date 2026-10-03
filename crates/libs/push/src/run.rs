@@ -99,7 +99,7 @@ pub struct PushConfig {
     /// account id.
     pub username: String,
     /// API token or session token for the server.
-    pub key: String,
+    pub token: String,
     /// `Append` adds to existing data; `Replace` clears then imports (with force).
     pub mode: ImportMode,
     /// If true, ignore the journal and upload/import everything again.
@@ -149,8 +149,11 @@ pub struct PushConfig {
 ///
 /// Returns [`crate::AuthError`] when the URL is invalid, the host is unreachable,
 /// or the session token is rejected.
-pub fn authenticate(base_url: &str, key: &str) -> std::result::Result<AuthInfo, crate::AuthError> {
-    message_crate_http::auth_check(base_url, key)
+pub fn authenticate(
+    base_url: &str,
+    token: &str,
+) -> std::result::Result<AuthInfo, crate::AuthError> {
+    message_crate_http::auth_check(base_url, token)
 }
 
 /// The authenticated connection one push run uses for every request.
@@ -160,7 +163,7 @@ pub(crate) struct Session {
     /// Base URL with any trailing slash removed.
     pub url: String,
     /// The session token every request carries.
-    pub key: String,
+    pub token: String,
     /// The account the session token resolved to (server-reported name, or the id).
     pub username: String,
     pub auth: AuthInfo,
@@ -309,7 +312,7 @@ pub fn run(cfg: &PushConfig, progress: Option<&mut ProgressFn<'_>>) -> Result<Pu
 fn login(cfg: &PushConfig, out: &mut Reporter<'_, '_>) -> Result<Session> {
     let url = cfg.base_url.trim_end_matches('/').to_string();
     let http = HttpSession::new()?;
-    let auth = http.auth_check(&url, &cfg.key)?;
+    let auth = http.auth_check(&url, &cfg.token)?;
     let username = auth
         .username
         .as_deref()
@@ -333,7 +336,7 @@ fn login(cfg: &PushConfig, out: &mut Reporter<'_, '_>) -> Result<Session> {
     Ok(Session {
         http,
         url,
-        key: cfg.key.clone(),
+        token: cfg.token.clone(),
         username,
         auth,
     })

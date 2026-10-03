@@ -137,7 +137,7 @@ fn sms_backup_plus_mail_survives_an_export_and_a_second_import() {
     );
 
     let report = export(before.clone(), first.path(), exported.path());
-    assert_eq!(report.extra(crate::write::LEFT_OUT), 0);
+    assert_eq!(report.extra(message_crate_core::NOT_SMS_OR_MMS_LEFT_OUT), 0);
     let after = import(exported.path(), second.path());
 
     assert_eq!(shape(&after), shape(&before));
@@ -186,8 +186,8 @@ fn a_group_keeps_who_wrote_what_and_a_text_file_stays_a_file() {
     let second = tempfile::tempdir().unwrap();
     let mut before = import(&fixture(), first.path());
     for document in &mut before {
-        let group = document.conversation.conversation_type
-            == message_ir::IrConversationType::Group;
+        let group =
+            document.conversation.conversation_type == message_ir::IrConversationType::Group;
         if group {
             document.conversation.group_title = Some("Family".into());
         }

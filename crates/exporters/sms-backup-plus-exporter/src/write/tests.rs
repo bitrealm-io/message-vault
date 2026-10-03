@@ -260,15 +260,7 @@ fn only_sms_and_mms_are_written_and_the_rest_are_counted() {
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
         .collect();
     assert_eq!(folders, ["+15555550101"]);
-    assert_eq!(report.extra(LEFT_OUT), 3);
-    assert_eq!(
-        left_out_line(&report).as_deref(),
-        Some(
-            "Left out 3 message(s) that are not SMS or MMS, because SMS Backup+ \
-             holds only SMS and MMS"
-        )
-    );
-    assert_eq!(left_out_line(&ExportReport::default()), None);
+    assert_eq!(report.extra(NOT_SMS_OR_MMS_LEFT_OUT), 3);
 }
 
 /// A message whose service is unknown but whose kind says SMS, as a Mac
@@ -284,7 +276,7 @@ fn a_message_of_unknown_service_and_sms_kind_is_written() {
 
     archive().write(tmp.path(), &[doc], &mut report).unwrap();
 
-    assert_eq!(report.extra(LEFT_OUT), 0);
+    assert_eq!(report.extra(NOT_SMS_OR_MMS_LEFT_OUT), 0);
     let folder = tmp.path().join("+15555550101");
     let mail = fs::read_dir(&folder)
         .unwrap()

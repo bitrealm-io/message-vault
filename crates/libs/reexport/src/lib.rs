@@ -9,13 +9,13 @@ use message_crate_core::{
 };
 use message_ir::{ConversationDocument, IrMessage};
 use message_ir_format::{
-    CSV_HEADERS, FormatSink, clean_previous_ir_output, read_conversation_csv,
+    CSV_HEADERS, FormatSink, MergedArchive, clean_previous_ir_output, read_conversation_csv,
     read_conversation_eml_dir, read_conversation_json, read_conversation_jsonl,
     read_conversation_mbox,
 };
 use message_staging::AttachmentSpool;
-use sms_backup_plus_exporter::{SmsBackupPlusArchive, left_out_line};
-use sms_backup_restore_exporter::{ReadOptions, SbrArchive, not_sms_or_mms_line, read_backup};
+use sms_backup_plus_exporter::SmsBackupPlusArchive;
+use sms_backup_restore_exporter::{ReadOptions, SbrArchive, read_backup};
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
@@ -44,9 +44,9 @@ struct DetectedExport {
 #[derive(Debug, Default)]
 struct ReexportReport {
     detected_format: String,
-    /// The format written, which decides the line that says what was left
-    /// out of it.
-    output_format: OutputFormat,
+    /// The name of the format written when it holds only SMS and MMS, for
+    /// the line that says how many messages were left out of it.
+    sms_only_format: Option<&'static str>,
     /// Conversations written, attachments a convert or compress pass
     /// staged, the media pass, and obfuscation.
     report: ExportReport,
@@ -58,11 +58,10 @@ impl ReexportReport {
     /// and never closes the log.
     fn log_lines(&self) -> Vec<String> {
         let mut lines = vec![format!("Detected input format: {}", self.detected_format)];
-        lines.extend(match self.output_format {
-            OutputFormat::Xml => not_sms_or_mms_line(&self.report),
-            OutputFormat::SmsBackupPlus => left_out_line(&self.report),
-            _ => None,
-        });
+        lines.extend(
+            self.sms_only_format
+                .and_then(|format| self.report.not_sms_or_mms_line(format)),
+        );
         lines.push(format!("Conversations: {}", self.report.conversations));
         if self.report.attachments_saved > 0 {
             lines.push(format!(
@@ -126,19 +125,12 @@ fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportR
 
     let mut sink = FormatSink::open(&config.output, config.output_format, transforms)?;
     report.conversations = documents.len() as u64;
-    // Each archive below writes only SMS and MMS, and nothing for a
-    // conversation with none, so only the others are counted.
-    match config.output_format {
-        OutputFormat::Xml => sink = sink.with_archive(Box::new(SbrArchive)),
-        OutputFormat::SmsBackupPlus => {
-            sink = sink.with_archive(Box::new(SmsBackupPlusArchive::new(started)));
-        }
-        _ => {}
-    }
-    if matches!(
-        config.output_format,
-        OutputFormat::Xml | OutputFormat::SmsBackupPlus
-    ) {
+    let sms_only = sms_only_archive(config.output_format, started);
+    let sms_only_format = sms_only.as_ref().map(|(_, name)| *name);
+    if let Some((archive, _)) = sms_only {
+        sink = sink.with_archive(archive);
+        // The archive writes nothing for a conversation with no SMS or MMS,
+        // so only the others are counted.
         report.conversations = documents
             .iter()
             .filter(|doc| doc.messages.iter().any(IrMessage::is_sms_or_mms))
@@ -151,9 +143,25 @@ fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportR
 
     Ok(ReexportReport {
         detected_format: detected.format.as_str().to_string(),
-        output_format: config.output_format,
+        sms_only_format,
         report,
     })
+}
+
+/// The archive that writes `format` and the format's name, for a format
+/// that holds only SMS and MMS and so leaves every other message out. `None`
+/// for every other format, which the sink writes itself.
+fn sms_only_archive(
+    format: OutputFormat,
+    started: chrono::DateTime<chrono::Utc>,
+) -> Option<(Box<dyn MergedArchive>, &'static str)> {
+    match format {
+        OutputFormat::Xml => Some((Box::new(SbrArchive), "SMS Backup & Restore")),
+        OutputFormat::SmsBackupPlus => {
+            Some((Box::new(SmsBackupPlusArchive::new(started)), "SMS Backup+"))
+        }
+        _ => None,
+    }
 }
 
 /// Where one attachment's bytes come from when it is staged again.

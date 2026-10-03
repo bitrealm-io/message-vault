@@ -329,7 +329,7 @@ fn run_refuses_an_empty_output_directory() {
 fn log_lines_name_the_detected_format_and_the_conversation_count() {
     let report = ReexportReport {
         detected_format: "mbox".to_string(),
-        output_format: OutputFormat::Csv,
+        sms_only_format: None,
         report: ExportReport {
             conversations: 3,
             ..ExportReport::default()
@@ -349,7 +349,7 @@ fn log_lines_name_the_detected_format_and_the_conversation_count() {
 fn log_lines_append_the_media_lines_after_the_count() {
     let report = ReexportReport {
         detected_format: "json".to_string(),
-        output_format: OutputFormat::Csv,
+        sms_only_format: None,
         report: ExportReport {
             conversations: 1,
             attachments_saved: 4,

@@ -15,7 +15,7 @@ mod write;
 
 pub use read::{ReadOptions, ReadReport, read_backup};
 pub use run::run;
-pub use write::{SbrArchive, not_sms_or_mms_line};
+pub use write::SbrArchive;
 
 #[cfg(test)]
 #[path = "../tests/convert_smoke.rs"]

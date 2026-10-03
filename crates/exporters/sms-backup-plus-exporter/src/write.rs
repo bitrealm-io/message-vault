@@ -16,7 +16,7 @@ use mail_builder::headers::address::Address;
 use mail_builder::headers::date::Date;
 use mail_builder::headers::text::Text;
 use mail_builder::mime::MimePart;
-use message_crate_core::ExportReport;
+use message_crate_core::{ExportReport, NOT_SMS_OR_MMS_LEFT_OUT};
 use message_ir::{
     ConversationDocument, IrConversationType, IrDirection, IrMessage, IrMessageKind,
     give_each_document_its_own_file, trimmed,
@@ -27,10 +27,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::flat_eml::UNKNOWN_EMAIL_DOMAIN;
-
-/// The export report counter for messages left out because SMS Backup+
-/// holds only SMS and MMS.
-pub(crate) const LEFT_OUT: &str = "messages_not_sms_or_mms_left_out";
 
 /// The export report counter for attachments whose file was gone, which
 /// Convert's log reports.
@@ -60,19 +56,6 @@ impl SmsBackupPlusArchive {
     }
 }
 
-/// The log line saying how many messages the archive left out and why, or
-/// `None` when it left out none.
-#[must_use]
-pub fn left_out_line(report: &ExportReport) -> Option<String> {
-    let count = report.extra(LEFT_OUT);
-    (count > 0).then(|| {
-        format!(
-            "Left out {count} message(s) that are not SMS or MMS, because SMS Backup+ holds \
-             only SMS and MMS"
-        )
-    })
-}
-
 impl MergedArchive for SmsBackupPlusArchive {
     /// Write one folder per conversation that has an SMS or MMS, and count
     /// every other message in `report`. Returns `output_dir`.
@@ -94,7 +77,7 @@ impl MergedArchive for SmsBackupPlusArchive {
                 .collect();
             let left_out = doc.messages.len() - messages.len();
             if left_out > 0 {
-                report.bump(LEFT_OUT, left_out as u64);
+                report.bump(NOT_SMS_OR_MMS_LEFT_OUT, left_out as u64);
             }
             if messages.is_empty() {
                 continue;

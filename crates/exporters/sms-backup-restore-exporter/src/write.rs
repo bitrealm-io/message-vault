@@ -1,7 +1,7 @@
 //! Write [`ConversationDocument`] messages as SMS Backup & Restore XML.
 
 use anyhow::{Context, Result};
-use message_crate_core::ExportReport;
+use message_crate_core::{ExportReport, NOT_SMS_OR_MMS_LEFT_OUT};
 use message_ir::{
     ConversationDocument, IrAttachment, IrConversationType, IrDirection, IrMessage, IrMessageKind,
     nonempty,
@@ -23,24 +23,6 @@ const MMS_ADDR_TO: &str = "151";
 /// because XML 1.0 cannot carry them (U+0000 to U+001F other than tab,
 /// line feed and carriage return).
 pub(crate) const CHARACTERS_LEFT_OUT: &str = "control_characters_left_out";
-
-/// The export report counter for messages left out of `smses.xml` because
-/// their service is neither SMS nor MMS. SMS Backup & Restore can describe
-/// only those two, and an iMessage or a WhatsApp message written as `<sms>`
-/// would come back from a re-import as an SMS under a new id (ADR 0021).
-pub(crate) const NOT_SMS_OR_MMS_LEFT_OUT: &str = "messages_not_sms_or_mms_left_out";
-
-/// The run's log line for [`NOT_SMS_OR_MMS_LEFT_OUT`]: how many messages
-/// were left out and why. `None` when the run left none out.
-pub fn not_sms_or_mms_line(report: &ExportReport) -> Option<String> {
-    let left_out = report.extra(NOT_SMS_OR_MMS_LEFT_OUT);
-    (left_out > 0).then(|| {
-        format!(
-            "Left out {left_out} message(s) that are not SMS or MMS, because SMS Backup & \
-             Restore holds only SMS and MMS"
-        )
-    })
-}
 
 /// Session that appends conversations into a single `{output}/smses.xml`.
 pub(crate) struct SbrBackupSession {

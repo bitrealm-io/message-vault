@@ -71,8 +71,8 @@ derived (converted) paths for the browser. Reactions record `sender_handle_id`
 
 Web accounts log in with **user ID** (`username`) and optional password.
 `preferred_name` is the display name. `account_handles` links the account's
-identities, its phone numbers and email addresses, used to recognize “you” in
-messages. An email address is never used for login, and two accounts can each
+identities, its phone numbers (as Text message or WhatsApp identities) and
+email addresses, used to recognize “you” in messages. An email address is never used for login, and two accounts can each
 hold the same one. GUI **session** tokens live in `account_session_tokens` (one
 per account; rotated on login; prefix `mc-user-`). Named **API tokens** for program
 import/export live in `account_api_tokens` (many per account; prefix `mc-api-`).

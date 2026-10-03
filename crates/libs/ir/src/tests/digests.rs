@@ -1,11 +1,11 @@
-//! Known answers for the two hashes the rest of the product keys on.
+//! Known answers for the file hash the rest of the product keys on.
 //!
 //! `file_sha256` is behind every digest check and asset key in push, staging
-//! and transcode. `stable_guid` is every message's identity. A change to
-//! either silently re-keys everything already in a database, so each is pinned
-//! to a value computed outside Rust (Python's `hashlib`).
+//! and transcode. A change to it silently re-keys everything already in a
+//! database, so it is pinned to values computed outside Rust (Python's
+//! `hashlib`). The message id's known answers are in `identity.rs`.
 
-use crate::{file_sha256, stable_guid};
+use crate::file_sha256;
 
 /// A file in the temp directory, removed when dropped.
 struct TempFile(std::path::PathBuf);
@@ -49,38 +49,4 @@ fn file_sha256_names_a_missing_file() {
     let path = std::env::temp_dir().join("message-ir-no-such-file");
     let err = file_sha256(&path).unwrap_err();
     assert!(err.to_string().contains("message-ir-no-such-file"), "{err}");
-}
-
-#[test]
-fn stable_guid_known_answers() {
-    assert_eq!(
-        stable_guid("+15555550101", "2021-01-01T00:00:00Z", false, "hello", &[]),
-        "07e5d3fd8d1c7e45808baa87dc9bd38f777e5880acb7001a9bd17b7319d87a54"
-    );
-    assert_eq!(
-        stable_guid(
-            "+15555550101",
-            "2021-01-01T00:00:00Z",
-            true,
-            "hello",
-            &["a".repeat(64)]
-        ),
-        "7c4cbca9c6dc661fd3090f2089dca5358cc5d1065ab385380ca305a4e5c9c9b1"
-    );
-}
-
-#[test]
-fn stable_guid_tells_apart_messages_that_differ_only_in_attachment() {
-    // Two photo-only messages sent in the same second.
-    let guid = |digest: &str| {
-        stable_guid(
-            "+15555550101",
-            "2021-01-01T00:00:00Z",
-            true,
-            "",
-            &[digest.to_string()],
-        )
-    };
-    assert_ne!(guid(&"a".repeat(64)), guid(&"b".repeat(64)));
-    assert_eq!(guid(&"a".repeat(64)), guid(&"a".repeat(64)));
 }

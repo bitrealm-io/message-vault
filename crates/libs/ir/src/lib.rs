@@ -16,15 +16,21 @@ use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 
 mod attachment_path;
+mod identity;
 mod projection;
 mod schema_version;
 #[cfg(feature = "testutil")]
 pub mod testutil;
 
 pub use attachment_path::{UNSAFE_ATTACHMENT_PATH, UnsafeAttachmentPath, safe_attachment_path};
+pub use identity::{
+    MessageCopy, MessageGuid, MessageIdentity, TimePrecision, collapse_whitespace,
+    one_copy_per_message,
+};
 pub use projection::{
     ProjectedRole, ProjectionHooks, ProjectionTally, SortKeyUnit, default_participants,
-    display_names_for_handles, ensure_conversation, pending_to_document, prepare_conversation,
+    display_names_for_handles, ensure_conversation, message_time, pending_to_document,
+    prepare_conversation,
 };
 pub use schema_version::{
     UnsupportedSchemaVersion, check_schema_version, check_schema_version_in_json,
@@ -354,8 +360,8 @@ impl IrMessageKind {
 /// One message in a conversation: sender, body text, and attachments.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IrMessage {
-    /// Stable message id; derived from content when the source has no id
-    /// (see [`stable_guid`]).
+    /// Stable message id: Apple's own for Apple Messages, otherwise a
+    /// [`MessageGuid`] made from the message's identity.
     pub guid: String,
     /// Unix milliseconds; the chronological sort key.
     pub timestamp_unix_ms: i64,
@@ -784,29 +790,6 @@ pub fn format_local_ts(secs: i64) -> Option<(String, String, String)> {
         utc.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         display,
     ))
-}
-
-/// Deterministic message GUID from chat + timestamp + direction + body + attachment digests.
-pub fn stable_guid(
-    chat_id: &str,
-    timestamp: &str,
-    is_from_me: bool,
-    text: &str,
-    att_digests: &[String],
-) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(chat_id.as_bytes());
-    hasher.update(b"|");
-    hasher.update(timestamp.as_bytes());
-    hasher.update(b"|");
-    hasher.update(if is_from_me { b"1" } else { b"0" });
-    hasher.update(b"|");
-    hasher.update(text.as_bytes());
-    for d in att_digests {
-        hasher.update(b"|");
-        hasher.update(d.as_bytes());
-    }
-    hex::encode(hasher.finalize())
 }
 
 /// Stream a file through SHA-256 in 64 KB chunks (no full read into memory).

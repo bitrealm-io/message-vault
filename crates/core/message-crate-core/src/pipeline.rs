@@ -239,6 +239,7 @@ impl ExportReport {
         self.messages += tally.messages;
         self.sent += tally.sent;
         self.received += tally.received;
+        self.duplicates_dropped += tally.duplicates;
         if tally.notifications > 0 {
             self.bump("notifications", tally.notifications);
         }
@@ -530,12 +531,14 @@ mod tests {
             sent: 2,
             received: 3,
             notifications: 3,
+            duplicates: 4,
         });
 
         assert_eq!(report.messages, 15);
         assert_eq!(report.sent, 6);
         assert_eq!(report.received, 9);
         assert_eq!(report.extra("notifications"), 5);
+        assert_eq!(report.duplicates_dropped, 4);
     }
 
     #[test]
@@ -546,6 +549,7 @@ mod tests {
             sent: 1,
             received: 0,
             notifications: 0,
+            duplicates: 0,
         });
         assert!(report.extra.is_empty());
     }

@@ -3143,3 +3143,30 @@ async fn two_conversations_on_one_identity_in_one_batch_become_one() {
         "both messages are in the one conversation, in the batch's order"
     );
 }
+
+/// #1172: a group header that lists one person twice, under two spellings of
+/// one number that normalise to one handle, is taken with `200 OK` and the
+/// group lists that person once.
+#[tokio::test]
+async fn a_participant_listed_twice_under_one_identity_is_listed_once() {
+    let (state, _fixture, token) = importer().await;
+    let header = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"chat1000000172","conversation_type":"group","group_title":"Trip","participants":[{"handle":"+1 (555) 123-4567","display_name":null},{"handle":"5551234567","display_name":null}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}"#;
+    let body = format!(
+        "{header}\n{}\n",
+        same_second_message("m1", 1_426_183_462_000)
+    );
+    post_batches_of_one_run(&state, &token, vec![body]).await;
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let participants: Vec<String> = sqlx::query_scalar(
+        "SELECT h.normalized FROM participants p JOIN handles h ON h.id = p.handle_id",
+    )
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(
+        participants,
+        ["+15551234567"],
+        "the one number is listed once"
+    );
+}

@@ -79,8 +79,8 @@ pub async fn attachment_count(conn: &mut SqliteConnection, scope: Scope) -> Resu
 /// An account stores an attachment file once for each SHA-256, whatever the
 /// source and however many messages name it, so each such file counts once:
 /// one video forwarded into ten messages, or imported from two backups,
-/// counts as one video. An attachment row with no
-/// SHA-256 has no file of its own to share, so it counts by itself.
+/// counts as one video. An attachment row with no SHA-256 has no file of its
+/// own to share, so it counts by itself.
 pub async fn attachment_bytes(conn: &mut SqliteConnection, scope: Scope) -> Result<i64> {
     let filter = match scope {
         Scope::Account(_) => "WHERE m.account_id = $1",

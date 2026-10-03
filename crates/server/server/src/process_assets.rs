@@ -260,7 +260,7 @@ impl<'a> AccountPass<'a> {
         conn: &mut SqliteConnection,
         row: &AssetRow,
     ) -> Result<()> {
-        if row.rows_without_preview == 0 || self.opts.dry_run {
+        if row.rows_without_preview == 0 {
             return Ok(());
         }
         let (Some(sha256), Some(assets_path), Some(mime_type)) = (
@@ -275,6 +275,14 @@ impl<'a> AccountPass<'a> {
             assets_path,
             mime_type,
         };
+        if self.opts.dry_run {
+            println!(
+                "[dry-run] would point {} at {} (existing preview)",
+                self.label(row),
+                blob.assets_path
+            );
+            return Ok(());
+        }
         update_derived(conn, self.account_id, &row.sha256, &blob).await?;
         println!(
             "{} -> {} (existing preview)",

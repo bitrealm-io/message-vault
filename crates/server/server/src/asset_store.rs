@@ -16,12 +16,13 @@
 //! source, promoted or in staging, names it. That test alone is not enough
 //! while the account has a running Import Run: `HEAD /v1/assets/{sha256}`
 //! may have told the run a file exists, or the run may have uploaded it,
-//! and the batch that names it has not arrived yet. So an original is removed only while a connection holds the
-//! database write lock and no run is running. Starting a run writes its row,
-//! so no run can start between that check and the last removal. While a run
-//! is running the original stays, and [`sweep_unreferenced`] removes it when
-//! the run ends. A Preview is never kept for a run, because an import never
-//! names one: the server makes Previews from originals after the fact.
+//! and the batch that names it has not arrived yet. So an original is
+//! removed only while a connection holds the database write lock and no run
+//! is running. Starting a run writes its row, so no run can start between
+//! that check and the last removal. While a run is running the original
+//! stays, and [`sweep_unreferenced`] removes it when the run ends. A
+//! Preview is never kept for a run, because an import never names one: the
+//! server makes Previews from originals after the fact.
 //!
 //! A removal that fails is logged and the rest go on. The database rows are
 //! the record, so a request answers for what the database did, and a file

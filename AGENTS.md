@@ -118,7 +118,8 @@ only the user resolves it.
    base has commits the pull request lacks, so the review and the pull
    request's checks see the code as it would land. Before merging, merge it
    again only on `CONFLICTING`: GitHub cannot merge a pull request that
-   conflicts with the base, and merges one that is only behind as it is.
+   conflicts with the base, and merges one that is only behind as it is,
+   untested on the new base (ADR 0007 says why that is accepted).
    Merge rather than rebase: a rebase needs a force-push, and the squash
    merge drops the merge commit. GitHub reports `UNKNOWN`
    for a few seconds after a push, so wait for a settled answer:

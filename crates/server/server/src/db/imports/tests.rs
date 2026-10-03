@@ -533,7 +533,7 @@ async fn complete_import_refuses_a_run_that_has_finished() {
         .unwrap_err();
     assert!(matches!(
         err.downcast_ref::<ImportLookupError>(),
-        Some(ImportLookupError::InvalidSession { .. })
+        Some(ImportLookupError::InvalidRun { .. })
     ));
     let row = get_owned_import(&mut conn, ACCOUNT_ID, discarded)
         .await
@@ -557,7 +557,7 @@ async fn complete_import_refuses_a_run_that_has_finished() {
     .unwrap_err();
     assert!(matches!(
         err.downcast_ref::<ImportLookupError>(),
-        Some(ImportLookupError::InvalidSession { .. })
+        Some(ImportLookupError::InvalidRun { .. })
     ));
     let row = get_owned_import(&mut conn, ACCOUNT_ID, completed)
         .await
@@ -585,7 +585,7 @@ async fn a_discard_that_lands_after_the_run_completed_is_refused() {
         .unwrap_err();
 
     assert!(
-        matches!(err, ImportLookupError::InvalidSession { .. }),
+        matches!(err, ImportLookupError::InvalidRun { .. }),
         "{err:?}"
     );
     let row = get_owned_import(&mut conn, ACCOUNT_ID, id).await.unwrap();
@@ -614,7 +614,7 @@ async fn a_stage_change_that_lands_after_the_run_completed_is_refused() {
     .unwrap_err();
 
     assert!(
-        matches!(err, ImportLookupError::InvalidSession { .. }),
+        matches!(err, ImportLookupError::InvalidRun { .. }),
         "{err:?}"
     );
     let stage: Option<String> = sqlx::query_scalar("SELECT stage FROM imports WHERE id = $1")

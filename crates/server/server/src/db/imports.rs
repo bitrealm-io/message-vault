@@ -300,7 +300,7 @@ pub enum ImportLookupError {
     },
     /// Run exists but cannot be reused (wrong status/source/mode).
     #[error("{message}")]
-    InvalidSession {
+    InvalidRun {
         /// Why the run cannot be reused.
         message: String,
     },
@@ -503,7 +503,7 @@ pub async fn get_owned_import(
 /// # Errors
 ///
 /// [`ImportLookupError::NotFound`] when the account owns no such import,
-/// [`ImportLookupError::InvalidSession`] when it is no longer running.
+/// [`ImportLookupError::InvalidRun`] when it is no longer running.
 pub async fn require_running_import(
     conn: &mut SqliteConnection,
     account_id: i64,
@@ -511,7 +511,7 @@ pub async fn require_running_import(
 ) -> std::result::Result<ImportRow, ImportLookupError> {
     let existing = get_owned_import(&mut *conn, account_id, import_id).await?;
     if existing.status != ImportStatus::Running {
-        return Err(ImportLookupError::InvalidSession {
+        return Err(ImportLookupError::InvalidRun {
             message: format!(
                 "import {import_id} is not running (status={})",
                 existing.status
@@ -532,7 +532,7 @@ pub async fn require_running_import(
 /// # Errors
 ///
 /// [`ImportLookupError::NotFound`] when the account owns no such import,
-/// [`ImportLookupError::InvalidSession`] when it is no longer running.
+/// [`ImportLookupError::InvalidRun`] when it is no longer running.
 pub async fn set_import_stage(
     conn: &mut SqliteConnection,
     account_id: i64,
@@ -570,7 +570,7 @@ async fn not_running(
         Err(err) => err,
         // Running again cannot happen: a run that has finished stays
         // finished. Reported as finished, which it was at the write.
-        Ok(_) => ImportLookupError::InvalidSession {
+        Ok(_) => ImportLookupError::InvalidRun {
             message: format!("import {import_id} is not running"),
         },
     }
@@ -585,7 +585,7 @@ async fn not_running(
 /// # Errors
 ///
 /// [`ImportLookupError::NotFound`] when the account owns no such import,
-/// [`ImportLookupError::InvalidSession`] when it is no longer running.
+/// [`ImportLookupError::InvalidRun`] when it is no longer running.
 pub async fn discard_import(
     conn: &mut SqliteConnection,
     account_id: i64,
@@ -647,7 +647,7 @@ pub async fn discard_running_import(
 /// Finish a running import: prefer client counts, else derive from linked
 /// messages. A run that has already finished is its permanent record and is
 /// never rewritten, so completing one is
-/// [`ImportLookupError::InvalidSession`] (`409`), checked first and again by
+/// [`ImportLookupError::InvalidRun`] (`409`), checked first and again by
 /// the update itself, so two completions racing cannot both land.
 pub async fn complete_import(
     conn: &mut SqliteConnection,
@@ -731,7 +731,7 @@ pub async fn complete_import(
     .execute(&mut *tx)
     .await?;
     if updated.rows_affected() == 0 {
-        return Err(ImportLookupError::InvalidSession {
+        return Err(ImportLookupError::InvalidRun {
             message: format!("import {import_id} finished while it was being completed"),
         }
         .into());

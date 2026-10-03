@@ -712,7 +712,7 @@ impl From<crate::db::imports::ImportLookupError> for ApiError {
             crate::db::imports::ImportLookupError::NotFound { import_id } => {
                 Self::NotFound(format!("import {import_id} not found for this account"))
             }
-            crate::db::imports::ImportLookupError::InvalidSession { message } => {
+            crate::db::imports::ImportLookupError::InvalidRun { message } => {
                 Self::StateConflict(message)
             }
             crate::db::imports::ImportLookupError::Db(err) => Self::Internal(err),

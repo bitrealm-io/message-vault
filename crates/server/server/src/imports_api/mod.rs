@@ -956,7 +956,7 @@ pub(crate) async fn import_detail(
     Ok(import_detail_response(detail, contacts))
 }
 
-/// The stage `raw` spells, or a `422` naming the six stages the server knows.
+/// The stage `raw` spells, or a `422 Unprocessable Entity` naming the six stages the server knows.
 fn parse_stage(raw: &str) -> Result<crate::db::imports::ImportStage, ApiError> {
     use crate::db::imports::ImportStage;
     ImportStage::parse(raw).ok_or_else(|| {

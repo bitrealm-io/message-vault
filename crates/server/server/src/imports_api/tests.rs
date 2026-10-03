@@ -17,7 +17,7 @@ fn write_jsonl(dir: &Path, name: &str, body: &str) -> PathBuf {
 /// A fixture holding one running Import Run at `staging_review` whose
 /// `summary_json` already carries `summary` — as if an earlier
 /// `PATCH /v1/imports/{id}` recorded the Staging Review approval.
-async fn session_with_summary(summary: serde_json::Value) -> (TestFixture, RegisteredAccount, i64) {
+async fn run_with_summary(summary: serde_json::Value) -> (TestFixture, RegisteredAccount, i64) {
     let (fixture, account) = fixture_with_account().await;
     let (_, created): (String, serde_json::Value) = post_created_json(
         &fixture.state,
@@ -26,7 +26,7 @@ async fn session_with_summary(summary: serde_json::Value) -> (TestFixture, Regis
         serde_json::json!({ "source": "imessage" }),
     )
     .await;
-    let import_id = created["id"].as_i64().expect("created session has an id");
+    let import_id = created["id"].as_i64().expect("created run has an id");
     let mut conn = fixture.state.db.acquire().await.unwrap();
     crate::db::imports::set_import_stage(
         &mut conn,
@@ -40,7 +40,7 @@ async fn session_with_summary(summary: serde_json::Value) -> (TestFixture, Regis
     (fixture, account, import_id)
 }
 
-/// The session's stored `summary_json`, decoded, or `None` when the
+/// The run's stored `summary_json`, decoded, or `None` when the
 /// column is null.
 async fn stored_summary(fixture: &TestFixture, import_id: i64) -> Option<serde_json::Value> {
     let mut conn = fixture.state.db.acquire().await.unwrap();
@@ -86,11 +86,11 @@ async fn a_stage_change_with_a_summary_stores_it() {
 async fn active_session_reports_the_summary_a_stage_change_stored() {
     // The completion call is allowed to overwrite summary_json with the
     // outcome once the run finishes — that is the intended history
-    // record. But mid-session, between an approval and completion, a
+    // record. But mid-run, between an approval and completion, a
     // reload has nowhere else to read the approved plan back from:
     // the running run on GET /v1/imports?status=running must expose it too.
     let (fixture, account, import_id) =
-        session_with_summary(serde_json::json!({"approved": true})).await;
+        run_with_summary(serde_json::json!({"approved": true})).await;
 
     let page: serde_json::Value =
         get_json(&fixture.state, "/v1/imports?status=running", &account.token).await;
@@ -105,7 +105,7 @@ async fn a_stage_change_without_a_summary_does_not_erase_the_stored_one() {
     // Most stage changes carry nothing. Treating absent as null would
     // throw away the plan the outcome is judged against.
     let (fixture, account, import_id) =
-        session_with_summary(serde_json::json!({"approved": true})).await;
+        run_with_summary(serde_json::json!({"approved": true})).await;
 
     let run: serde_json::Value = patch_json(
         &fixture.state,

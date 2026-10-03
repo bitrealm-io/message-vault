@@ -4,7 +4,7 @@ import { contactBrowseQuery } from "../lib/contactBrowseQuery";
 import { groupFromSlug, slugFromPath, slugPath } from "../lib/contactGroups";
 import { asMessagesLocationState } from "../lib/messagesLocationState";
 import { tagFromSlug, tagListQuery } from "../lib/messageTags";
-import { messagesSearch, resultsView } from "../lib/resultsView";
+import { MESSAGE_SORT_PARAM, messagesSearch, resultsView, VIEW_PARAM } from "../lib/resultsView";
 import { trashed } from "../lib/searchQuery";
 import type { Conversation } from "../lib/types";
 import { useContactGroups } from "../lib/useContactGroups";
@@ -231,6 +231,11 @@ export default function AppLayout() {
     } else {
       if (conversationSearch) params.set("q", conversationSearch);
       if (conversationFilter) params.set("f", conversationFilter);
+    }
+    // The Messages list's sort stays picked for when the person switches back.
+    for (const key of [VIEW_PARAM, MESSAGE_SORT_PARAM]) {
+      const value = searchParams.get(key);
+      if (value) params.set(key, value);
     }
     const search = params.toString();
     navigate(`/messages/${c.id}${search ? `?${search}` : ""}`, { state: { conversation: c } });

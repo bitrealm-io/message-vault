@@ -15,8 +15,7 @@ export default function SourcesPanel({
   const fetchSources = useCallback(
     async (signal: AbortSignal) => {
       if (!conversationId) return [];
-      const res = await getConversationSources(conversationId, { signal });
-      return res.items;
+      return getConversationSources(conversationId, { signal });
     },
     [conversationId],
   );

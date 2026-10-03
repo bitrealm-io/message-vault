@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Button from "../../components/Button";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import DeleteAccountDialog from "../../components/DeleteAccountDialog";
+import PlainButton from "../../components/PlainButton";
 import { useAuth } from "../../lib/auth";
 import { useRouteCache } from "../../lib/routeQuery";
 import { deleteAccount, deleteAllMessages as deleteAllMessagesRoute } from "../../lib/serverApi";
@@ -107,10 +108,9 @@ export function ProfileDangerZone({
   return (
     <>
       <section className="mt-8 border-t border-border pt-6">
-        <button
-          type="button"
+        <PlainButton
           aria-expanded={dangerZoneOpen}
-          onClick={() => setDangerZoneOpen((open) => !open)}
+          onPress={() => setDangerZoneOpen((open) => !open)}
           className="flex w-full cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-left"
         >
           <span
@@ -123,7 +123,7 @@ export function ProfileDangerZone({
           <span className="text-[0.75rem] font-semibold uppercase tracking-[0.06em] text-danger">
             Danger zone
           </span>
-        </button>
+        </PlainButton>
         <p className="ml-5 mt-[0.35rem] text-[0.813rem] text-muted">
           {managed
             ? `Delete ${username}'s messages or permanently remove the account.`

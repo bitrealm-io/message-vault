@@ -1,3 +1,4 @@
+import { Z_LIFT } from "../../lib/zLayers";
 import { dataCardBodyCellClass, dataCardHeaderCellClass } from "../DataCard";
 
 export const thClass = `${dataCardHeaderCellClass} !px-0`;
@@ -9,8 +10,7 @@ export const tdRightClass = `${tdClass} text-right`;
 export const thLeftClass = `${thClass} !px-1 !pr-0 !text-left overflow-hidden`;
 export const thRightClass = `${thClass} text-right`;
 /** Always-visible header column spacer / resize grip (absolutely pinned to the column edge). */
-export const columnResizerClass =
-  "absolute right-0 top-0 bottom-0 z-[1] w-px bg-border box-content px-1 -mr-0 bg-clip-content touch-none cursor-col-resize outline-none data-[resizing]:w-0.5 data-[resizing]:bg-accent data-[focus-visible]:bg-accent data-[focus-visible]:outline data-[focus-visible]:outline-2 data-[focus-visible]:outline-offset-[-2px] data-[focus-visible]:outline-accent";
+export const columnResizerClass = `${Z_LIFT} absolute right-0 top-0 bottom-0 w-px bg-border box-content px-1 -mr-0 bg-clip-content touch-none cursor-col-resize outline-none data-[resizing]:w-0.5 data-[resizing]:bg-accent data-[focus-visible]:bg-accent data-[focus-visible]:outline data-[focus-visible]:outline-2 data-[focus-visible]:outline-offset-[-2px] data-[focus-visible]:outline-accent`;
 export const linkClass =
   "border-none bg-transparent p-0 text-[0.813rem] font-semibold leading-snug text-accent underline decoration-accent/80 underline-offset-2 cursor-pointer outline-none hover:decoration-accent hover:opacity-90 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 export const mutedClass = "text-[0.813rem] leading-snug text-muted";

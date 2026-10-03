@@ -1,0 +1,17 @@
+From: "Bob" <+15555550102@unknown.email>
+To: owner@example.com
+Subject: SMS with Alice, Bob
+Date: Fri, 01 Jan 2021 00:03:00 +0000
+Message-ID: <a4@sms-backup-plus.local>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mc-part"
+X-smssync-datatype: MMS
+X-smssync-type: 132
+X-smssync-address: +15555550101~+15555550102
+X-smssync-date: 1609459380000
+
+--mc-part
+Content-Type: text/plain; charset=utf-8
+
+Hello group from Bob
+--mc-part--

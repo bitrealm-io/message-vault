@@ -43,10 +43,11 @@ export type FolderCheck = "present" | "missing" | "unknown";
  * Pure so the table can be read and tested on its own: the caller does the
  * network and filesystem work and hands the answers in.
  *
- * A session with no recorded device is treated as this install's. The
- * column is new, so an older session predates it, and locking someone out
- * of their own staged work over a missing field would be worse than the
- * rare case of two installs sharing a server.
+ * A session with no recorded device is treated as this install's.
+ * `device_id` is optional on `POST /v1/imports`, so the server's `import`
+ * command, or a program using an API token, opens a session without one, and
+ * locking someone out of their own staged work over a missing field would
+ * be worse than the rare case of two installs sharing a server.
  */
 export function resumeDecisionFor(args: {
   session: ActiveImportSession | null;

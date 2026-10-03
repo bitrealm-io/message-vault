@@ -5,6 +5,7 @@ import { type ContactDetail, useContactDetail, useUpdateContact } from "../lib/c
 import { contactLabelText } from "../lib/contactLabel";
 import { useTrashContact } from "../lib/trash";
 import { UNKNOWN_GROUP_LABEL } from "../lib/unknownGroup";
+import { Z_CONTACT_DRAWER } from "../lib/zLayers";
 import Button from "./Button";
 import ContactLabel from "./ContactLabel";
 import { ContactDrawerHandles } from "./contactDrawer/ContactDrawerHandles";
@@ -14,6 +15,7 @@ import {
   previewHandleStubRows,
 } from "./contactDrawer/contactDrawerTypes";
 import { PencilIcon } from "./icons";
+import PlainButton from "./PlainButton";
 
 /**
  * Overlay mode only: dock to the right edge of the list column.
@@ -241,7 +243,7 @@ function OneContactDrawer({
   const panelClass =
     variant === "docked"
       ? "flex h-full min-h-0 min-w-0 flex-col overflow-auto [scrollbar-gutter:stable] bg-panel px-6 pb-6 pt-2 outline-none"
-      : "fixed top-0 bottom-0 z-40 w-[min(920px,calc(100vw-14rem))] overflow-auto [scrollbar-gutter:stable] border-l border-border bg-panel p-6 shadow-[2px_0_12px_rgba(0,0,0,0.18)] outline-none";
+      : `fixed top-0 bottom-0 w-[min(920px,calc(100vw-14rem))] overflow-auto [scrollbar-gutter:stable] border-l border-border bg-panel p-6 shadow-contact-drawer outline-none ${Z_CONTACT_DRAWER}`;
 
   const panelStyle =
     variant === "overlay"
@@ -276,6 +278,8 @@ function OneContactDrawer({
       style={panelStyle}
     >
       <ContactDrawerHandles
+        // A new contact starts with its dialogs closed and no error left from the last one.
+        key={contactId}
         contactId={contactId}
         handleRows={handleRows}
         conversations={
@@ -384,14 +388,13 @@ function OneContactDrawer({
             >
               {trashContact.isPending ? "Moving to trash…" : "Move to trash"}
             </Button>
-            <button
-              type="button"
+            <PlainButton
               aria-label="Close"
-              onClick={onClose}
+              onPress={onClose}
               className="cursor-pointer border-none bg-transparent p-0 text-[1.25rem] leading-none text-muted outline-none hover:text-text focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
             >
               ×
-            </button>
+            </PlainButton>
           </div>
         }
       />
@@ -422,14 +425,13 @@ function ContactLoadFailed({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
         <h2 className="m-0 min-w-0 truncate text-[1.125rem] font-semibold">{name}</h2>
-        <button
-          type="button"
+        <PlainButton
           aria-label="Close"
-          onClick={onClose}
+          onPress={onClose}
           className="cursor-pointer border-none bg-transparent p-0 text-[1.25rem] leading-none text-muted outline-none hover:text-text focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
         >
           ×
-        </button>
+        </PlainButton>
       </div>
       <div
         role="alert"

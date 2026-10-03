@@ -2655,11 +2655,61 @@ async fn the_contact_list_is_a_page_and_summaries_are_items() {
         &state,
         "/v1/contacts/summaries",
         &user.token,
-        serde_json::json!({ "ids": [] }),
+        serde_json::json!({ "ids": [1] }),
     )
     .await;
     assert!(summaries["items"].is_array());
     assert!(summaries.get("contacts").is_none());
+}
+
+/// Summaries are for the contacts a body names, at most
+/// `MAX_CONTACT_SUMMARY_IDS` of them, so an empty list names none and is
+/// refused rather than answered with an empty page as though it had been
+/// read. Every contact is listed by `GET /v1/contacts`.
+#[tokio::test]
+async fn summaries_of_no_contacts_are_refused() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let (status, text) = crate::test_support::post_raw(
+        &fixture.state,
+        "/v1/contacts/summaries",
+        &user.token,
+        "application/json",
+        r#"{"ids":[]}"#,
+    )
+    .await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    let (status, text) = crate::test_support::post_raw(
+        &fixture.state,
+        "/v1/contacts/summaries",
+        &user.token,
+        "application/json",
+        "{}",
+    )
+    .await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+}
+
+/// The reference states the bounds the handler keeps on a summary's `ids`,
+/// so a client built from it knows an empty list is refused.
+#[test]
+fn the_reference_states_the_summary_id_bounds() {
+    let doc: serde_json::Value =
+        serde_json::from_str(&crate::openapi::dump_openapi_json()).unwrap();
+    let ids = &doc["components"]["schemas"]["SummarizeContactsRequest"]["properties"]["ids"];
+    assert_eq!(ids["minItems"], 1, "{ids}");
+    assert_eq!(
+        ids["maxItems"],
+        crate::paging::MAX_CONTACT_SUMMARY_IDS,
+        "{ids}"
+    );
 }
 
 async fn trashed_contact_row_count(conn: &mut SqliteConnection, account_id: i64, id: i64) -> i64 {
@@ -3058,6 +3108,82 @@ async fn a_long_comma_list_is_refused_as_too_many_parts() {
     assert_eq!(response.status(), reqwest::StatusCode::UNPROCESSABLE_ENTITY);
     let body: serde_json::Value = response.json().await.unwrap();
     assert_eq!(body["detail"], "The search has too many parts.", "{body}");
+}
+
+/// The Demo Account holds Demo Data every visitor shares (ADR 0016). A load
+/// would delete its contacts for good in Edit and store real people's names
+/// and numbers in Append, so both are refused by its id and nothing changes.
+#[tokio::test]
+async fn an_address_book_load_on_the_demo_account_is_refused() {
+    let fixture = crate::test_support::test_fixture().await;
+    let state = fixture.state.clone();
+    let (demo, token) = fixture.demo_account_session().await;
+    let contact_id = {
+        let mut conn = state.db.acquire().await.unwrap();
+        // An Unknown: no name, one identity.
+        insert_contact_with_handle(&mut conn, demo, "", "+15555550123").await
+    };
+    let visitor = RegisteredAccount {
+        account_id: demo,
+        username: "demo".into(),
+        token,
+    };
+
+    // Edit with the identity cells blank would delete the Unknown for good.
+    let edit = format!("{ADDRESS_BOOK_HEADER}\n{contact_id},,,,,\n");
+    let (status, text) = load_address_book(&fixture, &visitor, "?mode=edit", edit).await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::DemoAccountProtected,
+    );
+    // Append would store a new person, by name and number.
+    let append = format!("{ADDRESS_BOOK_HEADER}\na,Real Person,,phone,phone,+15555550199\n");
+    let (status, text) = load_address_book(&fixture, &visitor, "", append).await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::DemoAccountProtected,
+    );
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let names: Vec<String> =
+        sqlx::query_scalar("SELECT preferred_name FROM contacts WHERE account_id = $1")
+            .bind(demo)
+            .fetch_all(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(
+        names,
+        vec![String::new()],
+        "the Unknown stays and nobody is added"
+    );
+}
+
+/// The import, export and delete permissions were made for messages and
+/// imports, not for the address book: an account with none of them still
+/// loads one.
+#[tokio::test]
+async fn an_address_book_load_needs_no_import_export_or_delete_permission() {
+    let (fixture, account) = fixture_with_account().await;
+    {
+        let mut conn = fixture.conn().await;
+        account_profile::set_account_flags(
+            &mut conn,
+            account.account_id,
+            account_profile::AccountFlags {
+                can_import: Some(false),
+                can_export: Some(false),
+                can_delete: Some(false),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    }
+    let append = format!("{ADDRESS_BOOK_HEADER}\na,Ada Lovelace,,phone,phone,+15555550142\n");
+    let (status, text) = load_address_book(&fixture, &account, "", append).await;
+    assert_eq!(status, StatusCode::OK, "{text}");
 }
 
 // --- #1105: an identity in a conversation never leaves its contact for no

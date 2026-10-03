@@ -14,6 +14,7 @@ import { useTimeZone } from "../lib/timeZone";
 import Button from "./Button";
 import { TrashIcon } from "./icons";
 import { type IdentityRow, identityTotals, sortIdentityRows } from "./identityRows";
+import PlainButton from "./PlainButton";
 
 export type { IdentityRow } from "./identityRows";
 
@@ -47,9 +48,9 @@ function Count({
   const text = value.toLocaleString();
   if (onBrowse) {
     return (
-      <button type="button" className={linkClass} onClick={onBrowse} aria-label={browseLabel}>
+      <PlainButton className={linkClass} onPress={onBrowse} aria-label={browseLabel}>
         {text}
-      </button>
+      </PlainButton>
     );
   }
   return <>{text}</>;

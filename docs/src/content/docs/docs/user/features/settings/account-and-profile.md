@@ -7,13 +7,13 @@ description: What the Account and Profile tabs of Settings show and change, the 
 The menu names the logged-in account and holds two entries, **Settings** and **Log out**.
 
 Settings is divided into tabs.
-An account sees **Account**, **Profile**, **Storage**, **System**, and **Appearance**.
+An account sees **Account**, **Profile**, **Storage**, **Audit Trail**, **System**, and **Appearance**.
 The desktop app adds **Convert** between **System** and **Appearance**.
 This page covers the first two.
 
 ## What the Owner sees
 
-The Owner's Settings has three tabs, **Account**, **Profile**, and **Appearance**, under the heading **Settings for Owner**.
+The Owner's Settings has four tabs, **Account**, **Profile**, **Audit Trail**, and **Appearance**, under the heading **Settings for Owner**.
 **Storage**, **System**, and **Convert** are absent, because they concern messages and the Owner holds none.
 
 The Owner's **Account** tab holds **Username** and **Change Password** only.
@@ -144,6 +144,9 @@ With nothing typed, the list opens with **This browser**, the zone the browser r
 Picking a row saves it.
 There is no **Save** button, and every date on screen changes to the new zone.
 
+On the Demo Account the display name and the time zone cannot be changed, by the account or by the Owner.
+Every visitor shares that account, so a change one visitor made would be what the next one finds.
+
 ### My Identities
 
 **My Identities** lists the phone numbers and email addresses that are the account holder's own.
@@ -192,5 +195,9 @@ Any other number without `+` is read as a US number when it has ten digits, and 
 After the load, the section lists each number without `+` that it read with its `+` back, and each one that became a new identity.
 
 Contacts the file does not mention stay as they are.
+
+The Demo Account has no **Address book** section, and the server refuses a load into it.
+An **Edit** load would delete its contacts for good.
+An **Append** load would store real people's names and numbers in an account anyone can enter.
 
 Contacts themselves are covered in [Contacts](/docs/user/features/contacts/contacts/).

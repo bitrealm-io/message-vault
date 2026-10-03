@@ -88,10 +88,14 @@ function renderHeader(
     years = [],
     onJumpToNewest = () => {},
     onJumpToYear = () => {},
+    displayParticipants = [],
+    onOpenContact,
   }: {
     years?: number[];
     onJumpToNewest?: () => void;
     onJumpToYear?: (year: number) => void;
+    displayParticipants?: { label: string; contact_id?: string | null }[];
+    onOpenContact?: (contactId: string) => void;
   } = {},
 ) {
   return render(
@@ -103,7 +107,8 @@ function renderHeader(
             element={
               <ConversationHeader
                 conversation={c}
-                displayParticipants={[]}
+                displayParticipants={displayParticipants}
+                onOpenContact={onOpenContact}
                 years={years}
                 findOpen={false}
                 onToggleFind={() => {}}
@@ -146,7 +151,7 @@ describe("ConversationHeader", () => {
     createContactGroupMock.mockReset();
     updateContactGroupMembersMock.mockReset();
     getAccountProfileMock.mockResolvedValue(PROFILE);
-    listContactGroupsMock.mockResolvedValue({ items: [], total: 0, limit: 40, offset: 0 });
+    listContactGroupsMock.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -171,12 +176,7 @@ describe("ConversationHeader", () => {
       // The server, modelled: once created, the group is in the list the
       // members call looks the id up in.
       let groups: { id: number; name: string }[] = [];
-      listContactGroupsMock.mockImplementation(async () => ({
-        items: groups,
-        total: groups.length,
-        limit: 40,
-        offset: 0,
-      }));
+      listContactGroupsMock.mockImplementation(async () => groups);
       createContactGroupMock.mockImplementation(async ({ name }) => {
         const set = { id: 9, name };
         groups = [set];
@@ -206,12 +206,7 @@ describe("ConversationHeader", () => {
     });
 
     it("adds to an existing group of that name instead of creating a second one", async () => {
-      listContactGroupsMock.mockResolvedValue({
-        items: [{ id: 4, name: "Readers" }],
-        total: 1,
-        limit: 40,
-        offset: 0,
-      });
+      listContactGroupsMock.mockResolvedValue([{ id: 4, name: "Readers" }]);
       updateContactGroupMembersMock.mockResolvedValue({ added: 2, removed: 0 });
       const user = userEvent.setup();
       renderHeader(groupChat());
@@ -260,6 +255,22 @@ describe("ConversationHeader", () => {
     await user.click(screen.getByRole("button", { name: "Jump to ▾" }));
     await user.click(screen.getByRole("menuitem", { name: "Newest" }));
     expect(onJumpToNewest).toHaveBeenCalled();
+  });
+
+  it("lists a person named like a fixed row beside that row, and opens them", async () => {
+    const onOpenContact = vi.fn();
+    const user = userEvent.setup();
+    renderHeader(conversation(), {
+      displayParticipants: [{ label: "Sources", contact_id: "7" }],
+      onOpenContact,
+    });
+
+    await user.click(screen.getByRole("button", { name: "More for this conversation" }));
+    const rows = screen.getAllByRole("menuitem", { name: "Sources" });
+    expect(rows).toHaveLength(2);
+    await user.click(rows[0]);
+
+    expect(onOpenContact).toHaveBeenCalledWith("7");
   });
 
   it("moves the conversation to trash and navigates back to the conversations list", async () => {

@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../lib/api";
 import { loadAddressBook } from "../../lib/serverApi";
@@ -48,6 +49,18 @@ describe("AddressBookSection", () => {
     render(<AddressBookSection />);
     expect((screen.getByLabelText(/^Append/) as HTMLInputElement).checked).toBe(true);
     expect((screen.getByLabelText(/^Edit/) as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("is one radio group, named and moved through with the arrow keys", async () => {
+    render(<AddressBookSection />);
+    const group = screen.getByRole("radiogroup", { name: "How to load it" });
+
+    await userEvent.tab();
+    expect(within(group).getByRole("radio", { name: /^Append/ })).toHaveFocus();
+    await userEvent.keyboard("{ArrowDown}");
+
+    expect(within(group).getByRole("radio", { name: /^Edit/ })).toBeChecked();
+    expect(within(group).getByRole("radio", { name: /^Append/ })).not.toBeChecked();
   });
 
   it("sends the file's text as an Append unless Edit is chosen", async () => {

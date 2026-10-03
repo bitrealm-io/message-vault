@@ -253,7 +253,7 @@ fn resolve_chat(peer: &str) -> (String, String, bool) {
         // Format as E.164 when unambiguous. Otherwise keep digits as-is. Never invent `+0…`.
         return (phone::normalize_lenient(peer), String::new(), false);
     }
-    (message_crate_core::name_stem(peer), peer.to_string(), true)
+    (message_ir::name_stem(peer), peer.to_string(), true)
 }
 
 /// Whether the row is outgoing, from its direction column or its sender.

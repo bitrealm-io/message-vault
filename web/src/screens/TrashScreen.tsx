@@ -1,15 +1,17 @@
-import { useCallback, useState } from "react";
+import { type UIEvent, useCallback, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import Button from "../components/Button";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ContactLabel from "../components/ContactLabel";
 import { apiErrorMessage } from "../lib/apiErrorMessage";
 import { contactLabelText } from "../lib/contactLabel";
+import { isNearEnd } from "../lib/listPaging";
 import { keys } from "../lib/queryKeys";
-import { useRouteQuery } from "../lib/routeQuery";
+import { type PagedFetchPage, useRoutePagedList, useRouteQuery } from "../lib/routeQuery";
 import { unsupportedFieldWords, useSearchFields } from "../lib/searchFields";
 import { trashed } from "../lib/searchQuery";
 import { getConversation, listContacts, listConversations } from "../lib/serverApi";
+import type { components } from "../lib/serverApi.types";
 import {
   useDeleteContact,
   useDeleteConversation,
@@ -48,8 +50,11 @@ import { useAccountProfile } from "../lib/useAccountProfile";
  * neither list is asked.
  */
 
-/** How many trashed contacts this pane lists before it stops. */
-const CONTACT_LIMIT = 100;
+/** How many trashed contacts this pane reads at a time; scrolling near the end reads the next page. */
+const CONTACT_PAGE_SIZE = 100;
+
+/** One trashed contact as the contact list answers it. */
+type TrashedContact = components["schemas"]["ContactSummary"];
 
 /** The `tsel` param as a positive conversation id, or null when absent or malformed. */
 function selectedIdFromParam(raw: string | null): number | null {
@@ -135,15 +140,23 @@ export default function TrashScreen() {
     error,
   } = useRouteQuery(keys.trash.count(query), fetchCount, { enabled: askConversations });
 
-  const {
-    data: contactPage,
-    isPending: contactsLoading,
-    error: contactsError,
-  } = useRouteQuery(
-    keys.contacts.trashed(query),
-    (signal) => listContacts({ q: query, limit: CONTACT_LIMIT, offset: 0 }, { signal }),
-    { enabled: askContacts },
+  const fetchContactPage = useCallback<PagedFetchPage<TrashedContact>>(
+    ({ limit, offset, signal }) => listContacts({ q: query, limit, offset }, { signal }),
+    [query],
   );
+  const {
+    items: contacts,
+    total: contactTotal,
+    loading: contactsLoading,
+    filling: contactsFilling,
+    error: contactsError,
+    hasMore: moreContacts,
+    loadMore: loadMoreContacts,
+  } = useRoutePagedList(keys.contacts.trashed(query), fetchContactPage, {
+    firstPageSize: CONTACT_PAGE_SIZE,
+    fillPageSize: CONTACT_PAGE_SIZE,
+    enabled: askContacts,
+  });
 
   // AppLayout's left column sets `tsel` when a trashed conversation is clicked;
   // it stays on `/trash` rather than navigating to the thread, so this pane can
@@ -193,14 +206,13 @@ export default function TrashScreen() {
     return <div className="p-6 text-[0.875rem] text-muted">Loading…</div>;
 
   const total = data ?? 0;
-  const contacts = contactPage?.items ?? [];
   const searching = search.trim().length > 0;
   // Trash is empty only when both lists answered and both answers are empty:
   // a list that was not asked, or failed, says nothing about what it holds.
   const nothingInTrash =
     data !== undefined &&
     error === null &&
-    contactPage !== undefined &&
+    askContacts &&
     contactsError === null &&
     total === 0 &&
     contacts.length === 0 &&
@@ -352,56 +364,77 @@ export default function TrashScreen() {
                 {searching ? "No contacts match this search." : "No contacts in Trash."}
               </div>
             ) : (
-              <ul className="m-0 list-none rounded border border-border bg-elevated p-0">
-                {contacts.map((contact) => {
-                  const restoring =
-                    restoreContact.isPending && restoreContact.variables === contact.id;
-                  return (
-                    <li
-                      key={contact.id}
-                      className="flex items-center justify-between gap-4 border-0 border-b border-solid border-border px-4 py-3 last:border-b-0"
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate text-[0.875rem] text-text">
-                          <ContactLabel name={contact.name} addresses={contact.addresses} />
+              <>
+                <div className="mb-2 text-[0.875rem] text-muted">
+                  {plural(contactTotal, "contact")}
+                  {searching ? " matching this search" : ""} in Trash
+                  {moreContacts ? `, ${contacts.length} shown` : ""}.
+                </div>
+                <ul
+                  aria-label="Contacts in Trash"
+                  className="m-0 max-h-[32rem] list-none overflow-y-auto rounded border border-border bg-elevated p-0"
+                  onScroll={(e: UIEvent<HTMLUListElement>) => {
+                    const el = e.currentTarget;
+                    if (isNearEnd(el)) {
+                      loadMoreContacts();
+                    }
+                  }}
+                >
+                  {contacts.map((contact) => {
+                    const restoring =
+                      restoreContact.isPending && restoreContact.variables === contact.id;
+                    return (
+                      <li
+                        key={contact.id}
+                        className="flex items-center justify-between gap-4 border-0 border-b border-solid border-border px-4 py-3 last:border-b-0"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-[0.875rem] text-text">
+                            <ContactLabel name={contact.name} addresses={contact.addresses} />
+                          </div>
+                          <div className="text-[0.75rem] text-muted">
+                            {plural(contact.identity_count, "identity", "identities")}
+                          </div>
                         </div>
-                        <div className="text-[0.75rem] text-muted">
-                          {plural(contact.identity_count, "identity", "identities")}
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            // Every row's button reads "Restore", so the name it
+                            // answers to says which contact it restores.
+                            aria-label={`Restore ${contactLabelText(contact.name, contact.addresses)}`}
+                            disabled={restoreContact.isPending || dialogBusy}
+                            onClick={() => restoreContact.mutate(contact.id)}
+                          >
+                            {restoring ? "Restoring…" : "Restore"}
+                          </Button>
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            aria-label={`Delete ${contactLabelText(contact.name, contact.addresses)}`}
+                            disabled={!canDelete || restoreContact.isPending || dialogBusy}
+                            title={canDelete ? undefined : CANNOT_DELETE}
+                            onClick={() =>
+                              setPending({
+                                kind: "contact",
+                                id: contact.id,
+                                name: contactLabelText(contact.name, contact.addresses),
+                              })
+                            }
+                          >
+                            Delete
+                          </Button>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          // Every row's button reads "Restore", so the name it
-                          // answers to says which contact it restores.
-                          aria-label={`Restore ${contactLabelText(contact.name, contact.addresses)}`}
-                          disabled={restoreContact.isPending || dialogBusy}
-                          onClick={() => restoreContact.mutate(contact.id)}
-                        >
-                          {restoring ? "Restoring…" : "Restore"}
-                        </Button>
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          aria-label={`Delete ${contactLabelText(contact.name, contact.addresses)}`}
-                          disabled={!canDelete || restoreContact.isPending || dialogBusy}
-                          title={canDelete ? undefined : CANNOT_DELETE}
-                          onClick={() =>
-                            setPending({
-                              kind: "contact",
-                              id: contact.id,
-                              name: contactLabelText(contact.name, contact.addresses),
-                            })
-                          }
-                        >
-                          Delete
-                        </Button>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {contactsFilling ? (
+                  <p className="mt-2 text-[0.813rem] text-muted">Loading more contacts…</p>
+                ) : moreContacts ? (
+                  <p className="mt-2 text-[0.813rem] text-muted">Scroll for more.</p>
+                ) : null}
+              </>
             )}
           </section>
         </>

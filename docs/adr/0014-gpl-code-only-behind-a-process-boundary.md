@@ -167,10 +167,12 @@ The desktop app ships the reader as a Tauri `externalBin`.
 `src-tauri/build.rs` builds it from the workspace into `target/sidecar/` and
 copies it to `src-tauri/binaries/imessage-reader-<target triple>`, where
 `tauri-build` picks it up: beside the app binary for `cargo tauri dev`, and
-inside every installer for `cargo tauri build`. The app finds it beside its
-own executable at run time (`ios-backup/src/helper.rs`, `locate`), then in
-`MESSAGE_CRATE_BIN`, then on `PATH`; `MESSAGE_CRATE_IMESSAGE_READER` names
-one file outright. The Docker image is unaffected, because the server never
+inside every installer for `cargo tauri build`. The app finds it in two
+places only (`ios-backup/src/helper.rs`, `locate`): the file
+`MESSAGE_CRATE_IMESSAGE_READER` names, else beside its own executable.
+`MESSAGE_CRATE_BIN` and `PATH` are not searched, because the reader is built
+from this repository and shipped in the installer, not installed as a tool.
+The Docker image is unaffected, because the server never
 links an exporter.
 
 ### What we ship and what we owe

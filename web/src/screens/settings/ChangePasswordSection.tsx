@@ -137,10 +137,7 @@ export function ChangePasswordSection({
           )}
         </div>
         {pwMsg && (
-          <div
-            className="mt-1.5 text-[0.813rem]"
-            style={{ color: pwOk ? "var(--ok)" : "var(--danger)" }}
-          >
+          <div className={`mt-1.5 text-[0.813rem] ${pwOk ? "text-ok" : "text-danger"}`}>
             {pwMsg}
           </div>
         )}

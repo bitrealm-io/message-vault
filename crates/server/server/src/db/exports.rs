@@ -5,6 +5,7 @@
 use anyhow::{Context, Result};
 use chrono::Utc;
 use message_crate_api_types::{ExportQueryList, ExportRun, ExportScope, ExportStatus};
+use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Executor, Row, SqliteConnection};
 
@@ -16,6 +17,42 @@ use crate::db::conversation_messages::{
 use crate::db::sql::{SqlParam, bind_all};
 use crate::paging::{Direction, Page, SortKey};
 use crate::server::ApiError;
+
+/// Which of the three forms an Export Run's scope took, without what it
+/// asked for: the values `exports.scope_kind` holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ExportScopeKind {
+    /// Everything the account holds.
+    Everything,
+    /// A query in the search language.
+    Query,
+    /// Conversations and messages picked by hand.
+    Selection,
+}
+
+impl ExportScopeKind {
+    /// The form `scope` takes.
+    #[must_use]
+    pub fn of(scope: &ExportScope) -> Self {
+        match scope {
+            ExportScope::Everything => Self::Everything,
+            ExportScope::Query { .. } => Self::Query,
+            ExportScope::Selection { .. } => Self::Selection,
+        }
+    }
+
+    /// The form `value` spells, or `None` for any other word.
+    #[must_use]
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "everything" => Some(Self::Everything),
+            "query" => Some(Self::Query),
+            "selection" => Some(Self::Selection),
+            _ => None,
+        }
+    }
+}
 
 /// The one key `GET /v1/exports` accepts in `sort=`: `started_at`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,21 +102,23 @@ const EXPORT_COLUMNS: &str = "id, scope_kind, scope_query, scope_conversation_id
 /// Map one `exports` row by column position.
 fn export_from_row(row: &SqliteRow) -> Result<ExportRun> {
     let kind: String = row.try_get(1)?;
-    let scope = match kind.as_str() {
-        "everything" => ExportScope::Everything,
-        "query" => ExportScope::Query {
-            list: match row.try_get::<Option<String>, _>(14)?.as_deref() {
-                Some("conversations") => ExportQueryList::Conversations,
-                Some("messages") => ExportQueryList::Messages,
-                other => anyhow::bail!("exports.scope_list holds unknown value {other:?}"),
-            },
-            q: row.try_get::<Option<String>, _>(2)?.unwrap_or_default(),
-        },
-        "selection" => ExportScope::Selection {
+    let scope = match ExportScopeKind::parse(&kind) {
+        Some(ExportScopeKind::Everything) => ExportScope::Everything,
+        Some(ExportScopeKind::Query) => {
+            let list: Option<String> = row.try_get(14)?;
+            ExportScope::Query {
+                list: list
+                    .as_deref()
+                    .and_then(ExportQueryList::parse)
+                    .with_context(|| format!("exports.scope_list holds unknown value {list:?}"))?,
+                q: row.try_get::<Option<String>, _>(2)?.unwrap_or_default(),
+            }
+        }
+        Some(ExportScopeKind::Selection) => ExportScope::Selection {
             conversation_ids: id_list(row.try_get(3)?)?,
             message_ids: id_list(row.try_get(4)?)?,
         },
-        other => anyhow::bail!("exports.scope_kind holds unknown value '{other}'"),
+        None => anyhow::bail!("exports.scope_kind holds unknown value '{kind}'"),
     };
     Ok(ExportRun {
         id: row.try_get(0)?,
@@ -477,4 +516,74 @@ pub async fn export_messages(
         limit: opts.limit,
         offset: opts.offset,
     })
+}
+
+/// Record what started the Export Run on its row: a Session and the app it
+/// named, or an API token's label and hint as they are now.
+///
+/// # Errors
+///
+/// Returns an error when the update fails.
+pub async fn record_credential(
+    conn: &mut SqliteConnection,
+    export_id: i64,
+    credential: &crate::db::audit_trail::CredentialUsed,
+) -> Result<()> {
+    let columns = credential.run_columns();
+    sqlx::query(
+        "UPDATE exports SET credential = $1, app_kind = $2, app_build = $3,
+                api_token_label = $4, api_token_hint = $5
+         WHERE id = $6",
+    )
+    .bind(columns.credential)
+    .bind(columns.app_kind)
+    .bind(columns.app_build)
+    .bind(columns.api_token_label)
+    .bind(columns.api_token_hint)
+    .bind(export_id)
+    .execute(&mut *conn)
+    .await
+    .with_context(|| format!("record what started export {export_id}"))?;
+    Ok(())
+}
+
+/// Ready the account's Export Runs to outlive it, just before the account is
+/// deleted: each keeps `username`, what was asked for and how much matched,
+/// a run still open is closed as `cancelled` at `now`, and its list of
+/// messages, search text and picked ids go (ADR 0020).
+///
+/// # Errors
+///
+/// Returns an error when a statement fails.
+pub async fn detach_from_account(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    username: &str,
+    now: &str,
+) -> Result<()> {
+    sqlx::query(
+        "UPDATE exports SET status = 'cancelled', finished_at = $2
+         WHERE account_id = $1 AND status = 'running'",
+    )
+    .bind(account_id)
+    .bind(now)
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query(
+        "DELETE FROM export_messages
+         WHERE export_id IN (SELECT id FROM exports WHERE account_id = $1)",
+    )
+    .bind(account_id)
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query(
+        "UPDATE exports SET username = $2, scope_query = NULL,
+                scope_conversation_ids = NULL, scope_message_ids = NULL
+         WHERE account_id = $1",
+    )
+    .bind(account_id)
+    .bind(username)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
 }

@@ -6,19 +6,29 @@ import { isTauri } from "../lib/tauri-check";
 import { useSettingsAccount } from "../lib/useSettingsAccount";
 import { AccountSettingsPanel } from "./settings/AccountSettingsPanel";
 import { AppearanceSection } from "./settings/AppearanceSection";
+import { AuditTrailSection } from "./settings/AuditTrailSection";
 import { ConvertSection } from "./settings/ConvertSection";
 import { NewAccountPanel } from "./settings/NewAccountPanel";
 import { ProfileSettingsPanel } from "./settings/ProfileSettingsPanel";
 import { StorageSection } from "./settings/StorageSection";
 import { SystemSection } from "./settings/SystemSection";
 
-const ALL_TABS = ["account", "profile", "storage", "system", "convert", "appearance"] as const;
+const ALL_TABS = [
+  "account",
+  "profile",
+  "storage",
+  "audit-trail",
+  "system",
+  "convert",
+  "appearance",
+] as const;
 type SettingsTab = (typeof ALL_TABS)[number];
 
 const TAB_LABELS: Record<SettingsTab, string> = {
   account: "Account",
   profile: "Profile",
   storage: "Storage",
+  "audit-trail": "Audit Trail",
   system: "System",
   convert: "Convert",
   appearance: "Appearance",
@@ -78,7 +88,7 @@ function tabClassName({ isSelected, isDisabled }: { isSelected: boolean; isDisab
 }
 
 /** A new account has an Account section to fill in; the rest waits for the account. */
-const NEW_ACCOUNT_DISABLED_TABS: readonly SettingsTab[] = ["profile", "storage"];
+const NEW_ACCOUNT_DISABLED_TABS: readonly SettingsTab[] = ["profile", "storage", "audit-trail"];
 
 /**
  * Settings for the logged-in account, or, given `managedAccountId`, for an
@@ -175,6 +185,9 @@ export default function SettingsScreen({
             <StorageSection managedAccountId={managedAccountId} />
           </TabPanel>
         ) : null}
+        <TabPanel id="audit-trail" className="mt-6">
+          <AuditTrailSection managedAccountId={managedAccountId} />
+        </TabPanel>
         {tabs.includes("system") ? (
           <TabPanel id="system" className="mt-6">
             <SystemSection />

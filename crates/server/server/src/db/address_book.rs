@@ -39,7 +39,7 @@ pub const COLUMNS: [&str; 6] = [
 pub(crate) const GROUP_SEPARATOR: char = ';';
 
 /// How a load applies the file.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, utoipa::ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum LoadMode {
     /// Create the contacts the file names, rename the ones it holds, and add
@@ -1115,6 +1115,18 @@ async fn apply(
     Ok(counts)
 }
 
+/// An address book [`export_csv`] wrote, with how many contacts and
+/// identities it holds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WrittenAddressBook {
+    /// The CSV text.
+    pub csv: String,
+    /// The distinct contacts the file holds.
+    pub contacts: u64,
+    /// The rows that carry an identity.
+    pub identities: u64,
+}
+
 /// One row of [`export_csv`]'s query: the contact's id and name, and one of
 /// its identities as service, handle type and key, absent for a contact
 /// with no identity.
@@ -1135,7 +1147,7 @@ pub async fn export_csv(
     conn: &mut SqliteConnection,
     account_id: i64,
     only: Option<&HashSet<i64>>,
-) -> Result<String> {
+) -> Result<WrittenAddressBook> {
     let rows: Vec<ExportRow> = sqlx::query_as(
         "SELECT ct.id, trim(ct.preferred_name), h.service, h.handle_type, h.normalized
          FROM contacts ct
@@ -1166,9 +1178,14 @@ pub async fn export_csv(
         groups.entry(contact_id).or_default().push(name);
     }
 
-    let book = rows
+    let rows: Vec<ExportRow> = rows
         .into_iter()
         .filter(|(id, ..)| only.is_none_or(|only| only.contains(id)))
+        .collect();
+    let contacts: HashSet<i64> = rows.iter().map(|(id, ..)| *id).collect();
+    let identities = rows.iter().filter(|row| row.4.is_some()).count();
+    let book = rows
+        .into_iter()
         .map(|(id, name, service, handle_type, normalized)| {
             let group_names = groups
                 .get(&id)
@@ -1183,7 +1200,11 @@ pub async fn export_csv(
                 normalized.unwrap_or_default(),
             ]
         });
-    write_book(book)
+    Ok(WrittenAddressBook {
+        csv: write_book(book)?,
+        contacts: u64::try_from(contacts.len()).unwrap_or(u64::MAX),
+        identities: u64::try_from(identities).unwrap_or(u64::MAX),
+    })
 }
 
 #[cfg(test)]

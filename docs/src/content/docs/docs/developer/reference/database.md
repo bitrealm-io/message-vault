@@ -76,6 +76,18 @@ never used for login. GUI **session** tokens live in `account_session_tokens` (o
 per account; rotated on login; prefix `mc-user-`). Named **API tokens** for program
 import/export live in `account_api_tokens` (many per account; prefix `mc-api-`).
 
+### `audit_entries`
+
+The Audit Trail: what each user did, and when, for everything `imports` and
+`exports` do not already record. A row names the `action`, the `actor`, the
+account it is about and that account's `username`, with counts and names in
+`details`. A session's `logged_in` row carries `session_expires_at`, and the
+`session_ended` row that closes it points back through `session_entry_id`; a
+session with no such row reads as expired from its expiry. Deleting an account
+sets `account_id` NULL here and on its `imports` and `exports`, which keep the
+`username`. Refused logins for a username no account has are deleted after 90
+days; nothing else is.
+
 ### `handles`
 
 One row = one **platform** identity per account: `raw` (as the source wrote

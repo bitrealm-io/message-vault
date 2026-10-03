@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -78,7 +78,8 @@ describe("GroupsNav", () => {
   it("moves focus into the menu and walks it with arrow keys", async () => {
     const user = userEvent.setup();
     renderNav("/contacts");
-    await user.click(screen.getByRole("button", { name: "Contact Group options for College" }));
+    act(() => screen.getByRole("button", { name: "Contact Group options for College" }).focus());
+    await user.keyboard("{Enter}");
 
     expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Rename…" }));
 
@@ -93,12 +94,26 @@ describe("GroupsNav", () => {
     expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Delete" }));
   });
 
+  it("walks a menu opened with the pointer from its first item", async () => {
+    const user = userEvent.setup();
+    renderNav("/contacts");
+    await user.click(screen.getByRole("button", { name: "Contact Group options for College" }));
+
+    // Opened with the pointer, the menu itself has focus, and the first arrow
+    // press lands on the first item.
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Rename…" }));
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Delete" }));
+  });
+
   it("returns focus to the trigger when the menu closes", async () => {
     const user = userEvent.setup();
     renderNav("/contacts");
     const trigger = screen.getByRole("button", { name: "Contact Group options for College" });
     await user.click(trigger);
     await user.keyboard("{Escape}");
-    expect(document.activeElement).toBe(trigger);
+    // React Aria puts focus back a frame after the menu unmounts.
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
   });
 });

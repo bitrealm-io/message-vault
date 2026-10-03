@@ -5,6 +5,9 @@ edition = "2024"
 license = "LicenseRef-FCL-1.0-ALv2"
 autotests = false
 
+[features]
+testutil = []
+
 [dependencies]
 anyhow = { workspace = true }
 message-crate-core = { path = "../../core/message-crate-core" }

@@ -574,8 +574,9 @@ async fn flag_exact_content_key_dupes(
     Ok((groups, flagged))
 }
 
-/// The `(loser, winner)` pairs of one content key that two or more sources
-/// hold.
+/// The `(loser, winner)` pairs of one group of copies that two or more
+/// sources hold: the messages of one content key in the exact pass, or one
+/// cluster of the near-time pass ([`cluster_near_dupes`]).
 ///
 /// One source that holds a message twice holds two messages, so the group
 /// stays shown as many times as the source that holds it most often. The
@@ -785,9 +786,16 @@ async fn load_near_rows(
 /// the window, and flag each cluster by the rule of the exact pass
 /// ([`exact_group_flags`]): the cluster stays shown as many times as the
 /// source that holds it most often. A cluster counts only when it spans two
-/// sources: same-source near-duplicates are left alone. A row joins one
-/// cluster at most, shown or hidden, so a row a cluster kept never starts a
-/// second one. Returns `(loser, winner)` pairs.
+/// sources: same-source near-duplicates are left alone. Returns
+/// `(loser, winner)` pairs.
+///
+/// A cluster is a star around its first row, and a row from the first row's
+/// own source is never its twin, so the first row's source counts once in
+/// it however often that source holds the message. A row the cluster kept,
+/// other than the winner, therefore stays free to start or join a later
+/// cluster, where it can pair with that source's next copy. The winner and
+/// the hidden rows join no other cluster: every hidden row points at a
+/// winner, and a winner hidden later would leave a chain.
 fn cluster_near_dupes(
     by_conversation: HashMap<i64, Vec<NearRow>>,
     prio: &HashMap<&str, usize>,
@@ -815,8 +823,10 @@ fn cluster_near_dupes(
             if sources.len() < 2 {
                 continue;
             }
-            clustered.extend(cluster.iter().map(|c| c.id));
-            flags.extend(exact_group_flags(&cluster, prio));
+            let cluster_flags = exact_group_flags(&cluster, prio);
+            clustered.insert(pick_winner(&cluster, prio));
+            clustered.extend(cluster_flags.iter().map(|&(loser, _)| loser));
+            flags.extend(cluster_flags);
         }
     }
     flags

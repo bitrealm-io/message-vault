@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 use crate::personas::{OWNER_EMAIL, OWNER_PHONE, Roster};
 
 /// The columns of the address book, as the server's Export writes them.
-const ADDRESS_BOOK_HEADER: &str = "contact_id,display_name,groups,service,handle_type,identity";
+const ADDRESS_BOOK_HEADER: &str = "contact_id,display_name,groups,service,identity_type,identity";
 
 /// Write `contacts.csv`, the demo's address book, in the format the server
 /// exports and loads: one row per identity.

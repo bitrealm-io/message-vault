@@ -13,7 +13,7 @@ const exportMock = vi.mocked(exportAddressBook);
 const saveMock = vi.mocked(saveTextFile);
 
 const CSV =
-  "contact_id,display_name,groups,service,handle_type,identity\n7,,,phone,phone,+15555550100\n";
+  "contact_id,display_name,groups,service,identity_type,identity\n7,,,phone,phone,+15555550100\n";
 
 describe("ExportAddressBookButton", () => {
   beforeEach(() => {

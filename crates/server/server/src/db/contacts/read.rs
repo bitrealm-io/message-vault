@@ -46,7 +46,8 @@ pub struct ContactSummary {
     pub groups: Vec<String>,
 }
 
-/// Contact-level first/last seen and message counts for the selection table.
+/// Each contact's first and last heard from, and its message counts, for the
+/// selection table.
 /// Every date and message count is over the messages the contact sent, the
 /// same messages `messages:` counts on Contacts; the conversation counts are
 /// over the conversations the contact takes part in. Trashed conversations

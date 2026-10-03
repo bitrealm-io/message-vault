@@ -23,7 +23,7 @@ export function messageSenderName(message: Message): string | null {
   if (message.is_from_me) return "You";
   const sender = message.sender;
   if (!sender) return null;
-  const participant = message.conversation.participants.find((p) => p.handle === sender);
+  const participant = message.conversation.participants.find((p) => p.identity === sender);
   return participant?.name ?? sender;
 }
 

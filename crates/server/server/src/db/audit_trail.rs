@@ -214,7 +214,7 @@ impl AuditReason {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum RunCredential {
-    /// A logged-in Session; `app` and `app_version` name the app when the
+    /// A logged-in Session; `app` and `app_build` name the app when the
     /// request did.
     Session,
     /// An API token; `api_token_label` and `api_token_hint` name it as it
@@ -389,7 +389,7 @@ pub struct AuditEntry {
     pub app: Option<AppKind>,
     /// That app's Build, such as `0.9.0+343fe0d8`. Present exactly when `app` is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub app_version: Option<String>,
+    pub app_build: Option<String>,
     /// A run: what started it. Absent for a run the server started itself.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub credential: Option<RunCredential>,
@@ -474,7 +474,7 @@ impl AuditEntry {
             username,
             reason: None,
             app: None,
-            app_version: None,
+            app_build: None,
             credential: None,
             api_token_label: None,
             api_token_hint: None,
@@ -969,7 +969,7 @@ async fn load_entry(conn: &mut SqliteConnection, id: i64) -> Result<Option<Audit
     Ok(Some(AuditEntry {
         reason: reason.as_deref().and_then(AuditReason::parse),
         app,
-        app_version: app.and(app_build),
+        app_build: app.and(app_build),
         api_token_label: details.api_token_label,
         api_token_hint: details.api_token_hint,
         permissions_added: details.permissions_added,
@@ -1042,7 +1042,7 @@ fn run_entry(row: &sqlx::sqlite::SqliteRow, action: AuditAction) -> Result<Audit
     };
     Ok(AuditEntry {
         app,
-        app_version: app.and(app_build),
+        app_build: app.and(app_build),
         credential,
         api_token_label: row.try_get("api_token_label")?,
         api_token_hint: row.try_get("api_token_hint")?,

@@ -16,7 +16,7 @@ use sqlx::SqliteConnection;
 ///
 /// Ordered from most to least consequential. When one run does more than
 /// one of these to a contact, the record keeps the earlier variant: a
-/// contact the run created was also named and given a handle by it, and
+/// contact the run created was also named and given an identity by it, and
 /// "created" is the fact the person needs.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, utoipa::ToSchema,
@@ -32,9 +32,9 @@ pub enum ContactReason {
     /// The contact existed without a name and the backup supplied one
     /// (ADR-0006).
     Named,
-    /// The run linked a handle to a contact that already existed: the same
+    /// The run linked an identity to a contact that already existed: the same
     /// number on another service.
-    HandleAdded,
+    IdentityAdded,
 }
 
 impl ContactReason {
@@ -44,7 +44,7 @@ impl ContactReason {
             Self::ReplacedTrashed => "replaced_trashed",
             Self::Created => "created",
             Self::Named => "named",
-            Self::HandleAdded => "handle_added",
+            Self::IdentityAdded => "identity_added",
         }
     }
 
@@ -54,7 +54,7 @@ impl ContactReason {
             "replaced_trashed" => Some(Self::ReplacedTrashed),
             "created" => Some(Self::Created),
             "named" => Some(Self::Named),
-            "handle_added" => Some(Self::HandleAdded),
+            "identity_added" => Some(Self::IdentityAdded),
             _ => None,
         }
     }
@@ -128,8 +128,8 @@ pub struct ImportContact {
     /// and no name.
     pub name: String,
     /// Why the contact is on this run's record: the run created it, created
-    /// it in place of one the person had trashed, named it, or added a
-    /// handle to it.
+    /// it in place of one the person had trashed, named it, or added an
+    /// identity to it.
     pub reason: ContactReason,
 }
 

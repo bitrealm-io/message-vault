@@ -34,7 +34,7 @@ function memberContactIds(
   };
   const ids: number[] = [];
   for (const p of participants) {
-    if (p.contact_id == null || owner(p.handle)) continue;
+    if (p.contact_id == null || owner(p.identity)) continue;
     if (!ids.includes(p.contact_id)) ids.push(p.contact_id);
   }
   return ids;

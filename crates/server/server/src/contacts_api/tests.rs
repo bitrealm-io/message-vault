@@ -2084,7 +2084,7 @@ async fn list_contacts_filters_service_or() {
 }
 
 /// The header every address book starts with.
-const ADDRESS_BOOK_HEADER: &str = "contact_id,display_name,groups,service,handle_type,identity";
+const ADDRESS_BOOK_HEADER: &str = "contact_id,display_name,groups,service,identity_type,identity";
 
 /// `POST /v1/contacts` with a `text/csv` body.
 async fn load_address_book(

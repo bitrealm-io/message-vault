@@ -27,8 +27,8 @@ function message(over: Partial<Message> = {}): Message {
       conversation_type: "group",
       group_title: "Family",
       participants: [
-        { name: "Alice", handle: "+15555550100" },
-        { name: "Bob", handle: "+15555550200" },
+        { name: "Alice", identity: "+15555550100" },
+        { name: "Bob", identity: "+15555550200" },
       ],
     },
     attachments: [],

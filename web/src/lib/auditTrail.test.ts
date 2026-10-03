@@ -32,7 +32,7 @@ describe("describeAuditEntry", () => {
           account_id: null,
           username: "nobody",
           app: "desktop",
-          app_version: "0.10.0+bbbb2222",
+          app_build: "0.10.0+bbbb2222",
         }),
       ),
     ).toBe("Login refused: no account is named “nobody” from the desktop app (0.10.0+bbbb2222)");

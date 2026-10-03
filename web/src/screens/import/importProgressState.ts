@@ -1,5 +1,7 @@
+import type { ImportIssue } from "../../components/import/ImportSummaryPanel";
+import type { ImportIssueStage } from "../../components/import/importIssueStage";
 import { formatAttachmentProgress } from "../../lib/attachmentProgressCopy";
-import type { AttachmentMediaMode, ImportProgressEvent } from "../../lib/types";
+import type { AttachmentMediaMode, ImportIssueEvent, ImportProgressEvent } from "../../lib/types";
 
 export type ImportStep = {
   label: string;
@@ -77,6 +79,27 @@ const STEP_ROW_INDEX: Record<ImportProgressEvent["step"], (mode: AttachmentMedia
  */
 export function stepIndexFor(step: ImportProgressEvent["step"], mode: AttachmentMediaMode): number {
   return STEP_ROW_INDEX[step]?.(mode) ?? -1;
+}
+
+/**
+ * The Stage (CONTEXT.md) a desktop progress step belongs to. Setting up,
+ * reading the backup, copying its attachments and writing the conversation
+ * files are all Staging.
+ */
+export function stageForStep(step: ImportProgressEvent["step"]): ImportIssueStage {
+  if (step === "media") return "media";
+  if (step === "upload") return "upload";
+  return "staging";
+}
+
+/** An issue the desktop app reported, as the run records it and the server stores it. */
+export function issueFromEvent(event: ImportIssueEvent): ImportIssue {
+  return {
+    kind: event.kind,
+    stage: stageForStep(event.step),
+    item: event.item,
+    reason: event.reason,
+  };
 }
 
 /**

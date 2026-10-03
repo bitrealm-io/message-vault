@@ -210,15 +210,15 @@ CREATE TABLE IF NOT EXISTS imports (
     upload_ms INTEGER,
     -- JSON blob with a human-readable run summary for Import History.
     summary_json TEXT,
-    -- Where a live session is: parse, write, awaiting_gate_1, transcode,
-    -- awaiting_gate_2, or pushing. NULL once the run is over. `status` says
+    -- Where a running Import Run is: parse, write, staging_review, media,
+    -- media_review, or upload. NULL once the run is over. `status` says
     -- how a run ended; `stage` says where it is.
     stage TEXT,
-    -- Absolute path to this session's staging folder on the client. The
+    -- Absolute path to this run's staging folder on the client. The
     -- database holds the pointer so resuming means asking the server where
     -- to go, rather than guessing from a directory listing.
     staging_dir TEXT,
-    -- Which install created the session, so another machine can say where
+    -- Which install created the run, so another machine can say where
     -- it belongs instead of failing to open a path that was never local.
     device_id TEXT,
     -- Import form snapshot: restores the screen, and restarts the run with
@@ -228,15 +228,15 @@ CREATE TABLE IF NOT EXISTS imports (
     -- between attempts has different conversation boundaries.
     source_fingerprint TEXT,
     -- Addresses the backup's device sent from (JSON array), read by the
-    -- client before parsing. Lets a resumed Gate 1 show the identity list
-    -- without re-reading the backup.
+    -- client before parsing. Lets a resumed Staging Review show the identity
+    -- list without re-reading the backup.
     source_identities TEXT
 );
 
 CREATE INDEX IF NOT EXISTS ix_imports_account_started
     ON imports(account_id, started_at DESC);
 
--- At most one live import session per account. A partial unique index
+-- At most one running Import Run per account. A partial unique index
 -- rather than application logic, so it holds against a racing client.
 CREATE UNIQUE INDEX IF NOT EXISTS ux_imports_active_account
     ON imports(account_id) WHERE status = 'running';
@@ -317,8 +317,8 @@ CREATE TABLE IF NOT EXISTS import_issues (
     import_id INTEGER NOT NULL REFERENCES imports(id) ON DELETE CASCADE,
     -- Issue class: 'error' or 'skip'.
     kind TEXT NOT NULL,
-    -- Pipeline step where the issue happened.
-    step TEXT NOT NULL,
+    -- Stage the issue came from: staging, media, or upload.
+    stage TEXT NOT NULL,
     -- Item identifier (path, guid, or similar).
     item TEXT NOT NULL,
     -- Human-readable explanation.
@@ -339,7 +339,7 @@ CREATE TABLE IF NOT EXISTS import_contacts (
     import_id INTEGER NOT NULL REFERENCES imports(id) ON DELETE CASCADE,
     -- Contact the run touched (`contacts.id`); the row goes with the contact.
     contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
-    -- One of replaced_trashed, created, named, handle_added. When a run does
+    -- One of replaced_trashed, created, named, identity_added. When a run does
     -- more than one of these to a contact, the earlier one in that list is
     -- kept.
     reason TEXT NOT NULL,

@@ -14,10 +14,10 @@ export type ResumeDecision = {
     | "resume_push"
     // A session waiting at either review: the summary is recomputed
     // fresh from the folder (decision 39) and shown again, nothing restored.
-    | "resume_gate"
+    | "resume_review"
     // A session that died mid media pass: the pass re-runs over whatever
     // originals it had not reached yet (Task 3 makes this safe), then
-    // continues to Gate 2 exactly as the normal flow does.
+    // continues to the Media Review exactly as the normal flow does.
     | "resume_media"
     // A session whose copy was interrupted: the exporter reads the backup
     // again and skips the conversations already written.
@@ -66,13 +66,13 @@ export function resumeDecisionFor(args: {
   if (folder === "unknown") {
     return { kind: "folder_unknown", session };
   }
-  if (session.stage === "pushing") {
+  if (session.stage === "upload") {
     return { kind: "resume_push", session };
   }
-  if (session.stage === "awaiting_gate_1" || session.stage === "awaiting_gate_2") {
-    return { kind: "resume_gate", session };
+  if (session.stage === "staging_review" || session.stage === "media_review") {
+    return { kind: "resume_review", session };
   }
-  if (session.stage === "transcode") {
+  if (session.stage === "media") {
     return { kind: "resume_media", session };
   }
   // Only the copy cares whether the backup still matches: every later stage

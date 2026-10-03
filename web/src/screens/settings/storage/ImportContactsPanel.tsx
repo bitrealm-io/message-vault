@@ -17,7 +17,7 @@ const REASON_LABEL: Record<ContactReason, string> = {
   created: "New",
   replaced_trashed: "New, replaces a trashed contact",
   named: "Named",
-  handle_added: "Identity added",
+  identity_added: "Identity added",
 };
 
 /** A contact the run learned an address for but no name yet. */

@@ -520,7 +520,7 @@ export interface paths {
         put?: never;
         /**
          * Load an address book into this account.
-         * @description The body is the file itself: Message Crate's own CSV, one row per identity, with the columns `contact_id`, `display_name`, `groups`, `service`, `handle_type` and `identity`, as `POST /v1/contacts/address-book` writes it.
+         * @description The body is the file itself: Message Crate's own CSV, one row per identity, with the columns `contact_id`, `display_name`, `groups`, `service`, `identity_type` and `identity`, as `POST /v1/contacts/address-book` writes it.
          *
          *     Rows that share a `contact_id` are one contact. An id the account holds
          *     names that contact, a blank id makes a new contact for that row, and any
@@ -570,7 +570,7 @@ export interface paths {
         /**
          * Write the address book for the contacts a search matches, the checked ones among them, or every contact when the body names neither.
          * @description The answer is `text/csv`, not JSON: one row per identity, with the
-         *     columns `contact_id`, `display_name`, `groups`, `service`, `handle_type`
+         *     columns `contact_id`, `display_name`, `groups`, `service`, `identity_type`
          *     and `identity`. A contact's name and its Contact Group names, separated
          *     by `;`, repeat on each of its rows. A contact with no name has a blank
          *     `display_name`, and a contact with no identity is one row with the last
@@ -629,12 +629,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Full contact view: per-handle services, message stats, and group memberships. */
+        /** Full contact view: per-identity services, message stats, and group memberships. */
         get: operations["get_contact"];
         put?: never;
         post?: never;
         /**
-         * Delete a trashed contact the way a phone's Delete Contact does: the name and the person's edits go, the contact becomes Unknown again and leaves the trash, and every conversation it was in stays as it is, showing the handle.
+         * Delete a trashed contact the way a phone's Delete Contact does: the name and the person's edits go, the contact becomes Unknown again and leaves the trash, and every conversation it was in stays as it is, showing the identity.
          * @description Conversations are never deleted with a contact. A contact that is not in the trash answers 409.
          */
         delete: operations["delete_contact"];
@@ -713,7 +713,7 @@ export interface paths {
         };
         /**
          * One conversation, in the same shape a list row already has — so a caller that opens a conversation from a list does not have to convert between two shapes, and paging through the whole list to find one id is never necessary.
-         * @description Trash is a property the list applies, not a gate on reading: a trashed conversation still answers here.
+         * @description Trash is a property the list applies, not a bar to reading: a trashed conversation still answers here.
          */
         get: operations["get_conversation"];
         put?: never;
@@ -894,7 +894,7 @@ export interface paths {
         };
         /**
          * The messages a running Export Run matched when it was created, a page at a time, oldest first unless `sort` says otherwise.
-         * @description An import, a trash or a new day since creation changes nothing here. A message deleted since leaves its place empty: `total` stays `message_count`, a page can hold fewer than `limit` items, and a client steps `offset` by `limit`. Each page read raises the run's `messages_delivered` to the places reached.
+         * @description An import, a trash or a new day since creation changes nothing here. A message deleted since leaves its place empty: `total` stays `message_count`, a page can hold fewer than `limit` items, and a client advances `offset` by `limit`. Each page read raises the run's `messages_delivered` to the places reached.
          */
         get: operations["list_export_messages"];
         put?: never;
@@ -1273,9 +1273,9 @@ export interface paths {
          * Claim an unclaimed Message Crate by creating its owner.
          * @description Unauthenticated, because a Message Crate with no owner has no credential
          *     that could authorize this. Whoever reaches an unclaimed one first may
-         *     claim it: Message Crate is self-hosted, so its operator installs the
-         *     software, claims it, and publishes the port, in that order and at times
-         *     of their choosing. An unclaimed one is also empty, so a lost race
+         *     claim it: Message Crate is self-hosted, so whoever installs the software
+         *     claims it and then publishes the port, in that order and at times of
+         *     their choosing. An unclaimed one is also empty, so a lost race
          *     destroys nothing and announces itself at once.
          */
         post: operations["claim_server"];
@@ -1429,7 +1429,7 @@ export interface components {
              * @description The Build that app reported, such as `0.9.0+343fe0d8`. Present exactly
              *     when `app` is.
              */
-            app_version?: string | null;
+            app_build?: string | null;
             /** @description May destroy message data. */
             can_delete: boolean;
             /** @description May call the export endpoints. */
@@ -1667,7 +1667,7 @@ export interface components {
             api_token_label?: string | null;
             app?: components["schemas"]["AppKind"] | null;
             /** @description That app's Build, such as `0.9.0+343fe0d8`. Present exactly when `app` is. */
-            app_version?: string | null;
+            app_build?: string | null;
             /**
              * @description When, RFC 3339 UTC: the run's start for a run, the expiry for a
              *     session that expired.
@@ -1755,12 +1755,13 @@ export interface components {
             /** @description Login username for the owner. */
             username: string;
         };
-        /** @description One parse/convert/upload issue from the import. */
+        /** @description One error or skip a Stage of the Import Run reported. */
         CompleteImportIssueRequest: {
             item: string;
             kind: string;
             reason: string;
-            step: string;
+            /** @description Stage the issue came from. */
+            stage: components["schemas"]["ImportIssueStage"];
         };
         /**
          * @description Final stats and issues for a running Import Run. The outcome is stated
@@ -1831,13 +1832,14 @@ export interface components {
          *
          *     Ordered from most to least consequential. When one run does more than
          *     one of these to a contact, the record keeps the earlier variant: a
-         *     contact the run created was also named and given a handle by it, and
+         *     contact the run created was also named and given an identity by it, and
          *     "created" is the fact the person needs.
          * @enum {string}
          */
-        ContactReason: "replaced_trashed" | "created" | "named" | "handle_added";
+        ContactReason: "replaced_trashed" | "created" | "named" | "identity_added";
         /**
-         * @description Contact-level first/last seen and message counts for the selection table.
+         * @description Each contact's first and last heard from, and its message counts, for the
+         *     selection table.
          *     Every date and message count is over the messages the contact sent, the
          *     same messages `messages:` counts on Contacts; the conversation counts are
          *     over the conversations the contact takes part in. Trashed conversations
@@ -1959,7 +1961,7 @@ export interface components {
              * @description Messages in the conversation (excluding hidden duplicates).
              */
             message_count: number;
-            /** @description Participants with names and handles. */
+            /** @description Participants with names and identities. */
             participants: components["schemas"]["Participant"][];
             /** @description Platform service of the conversation, e.g. `imessage`. */
             service: string;
@@ -2129,8 +2131,7 @@ export interface components {
             source_fingerprint?: unknown;
             /** @description Addresses the backup's device sent from, when the client read them. */
             source_identities?: unknown;
-            /** @description Stage the run opens at. Defaults to `parse`. */
-            stage?: string | null;
+            stage?: components["schemas"]["ImportStage"] | null;
             /** @description Absolute staging path on the client that owns this Import Run. */
             staging_dir?: string | null;
             tool?: string | null;
@@ -2413,8 +2414,8 @@ export interface components {
             name: string;
             /**
              * @description Why the contact is on this run's record: the run created it, created
-             *     it in place of one the person had trashed, named it, or added a
-             *     handle to it.
+             *     it in place of one the person had trashed, named it, or added an
+             *     identity to it.
              */
             reason: components["schemas"]["ContactReason"];
         };
@@ -2423,8 +2424,15 @@ export interface components {
             item: string;
             kind: string;
             reason: string;
-            step: string;
+            /** @description Stage the issue came from. */
+            stage: components["schemas"]["ImportIssueStage"];
         };
+        /**
+         * @description The Stage of an Import Run an issue came from: the values
+         *     `import_issues.stage` holds and every issue on the wire carries.
+         * @enum {string}
+         */
+        ImportIssueStage: "staging" | "media" | "upload";
         /**
          * @description What happens to a source's messages that were imported before: `replace`
          *     wipes them first, `append` keeps them and adds only new ones.
@@ -2505,8 +2513,7 @@ export interface components {
             source_fingerprint: unknown;
             /** @description Addresses the backup's device sent from (JSON array), or null. */
             source_identities: unknown;
-            /** @description Where a running run is; null once it is over. */
-            stage?: string | null;
+            stage?: components["schemas"]["ImportStage"] | null;
             /** @description Absolute path to the staging folder on the client that owns the run. */
             staging_dir?: string | null;
             /** @description UTC time the run started. */
@@ -2514,7 +2521,7 @@ export interface components {
             /** @description Lifecycle status. */
             status: components["schemas"]["ImportStatus"];
             /**
-             * @description What the user approved at the last gate they passed, or null. The
+             * @description What the person approved at the last Review they passed, or null. The
              *     column `PATCH /v1/imports/{id}` writes with its `summary`.
              */
             summary: unknown;
@@ -2526,6 +2533,16 @@ export interface components {
              */
             upload_ms?: number | null;
         };
+        /**
+         * @description Where a running Import Run is: a part of one of its Stages, or a Review
+         *     between them (`CONTEXT.md`).
+         *
+         *     `status` records how a run ended; this records where it is. Both are
+         *     needed: a run can sit at `Write` while running, and at `Write` having
+         *     failed. `Parse` and `Write` are the two parts of the Staging Stage.
+         * @enum {string}
+         */
+        ImportStage: "parse" | "write" | "staging_review" | "media" | "media_review" | "upload";
         /** @description Counters for one import run (staging and promote results). */
         ImportStats: {
             /**
@@ -2595,7 +2612,7 @@ export interface components {
             participants: number;
             /**
              * Format: int64
-             * @description Flagged phone handles (ambiguous; review note set) inserted by this import.
+             * @description Flagged phone identities (ambiguous; review note set) inserted by this import.
              */
             phones_needing_review: number;
             /**
@@ -2671,7 +2688,7 @@ export interface components {
              *     named no owner.
              */
             owner?: string | null;
-            /** @description Sender handle for incoming messages. */
+            /** @description The sender's identity, for incoming messages. */
             sender?: string | null;
             /**
              * @description Platform service, e.g. `imessage`, when known. It rides on the
@@ -2708,7 +2725,7 @@ export interface components {
         };
         /** @description The conversation a message belongs to. */
         MessageConversation: {
-            /** @description Original chat id from the export. */
+            /** @description The conversation's identifier as the export wrote it. */
             chat_identifier: string;
             /** @description `individual` or `group`. */
             conversation_type: string;
@@ -2883,7 +2900,7 @@ export interface components {
                  * @description The Build that app reported, such as `0.9.0+343fe0d8`. Present exactly
                  *     when `app` is.
                  */
-                app_version?: string | null;
+                app_build?: string | null;
                 /** @description May destroy message data. */
                 can_delete: boolean;
                 /** @description May call the export endpoints. */
@@ -3011,7 +3028,7 @@ export interface components {
                 api_token_label?: string | null;
                 app?: components["schemas"]["AppKind"] | null;
                 /** @description That app's Build, such as `0.9.0+343fe0d8`. Present exactly when `app` is. */
-                app_version?: string | null;
+                app_build?: string | null;
                 /**
                  * @description When, RFC 3339 UTC: the run's start for a run, the expiry for a
                  *     session that expired.
@@ -3252,7 +3269,7 @@ export interface components {
                  * @description Messages in the conversation (excluding hidden duplicates).
                  */
                 message_count: number;
-                /** @description Participants with names and handles. */
+                /** @description Participants with names and identities. */
                 participants: components["schemas"]["Participant"][];
                 /** @description Platform service of the conversation, e.g. `imessage`. */
                 service: string;
@@ -3416,8 +3433,8 @@ export interface components {
                 name: string;
                 /**
                  * @description Why the contact is on this run's record: the run created it, created
-                 *     it in place of one the person had trashed, named it, or added a
-                 *     handle to it.
+                 *     it in place of one the person had trashed, named it, or added an
+                 *     identity to it.
                  */
                 reason: components["schemas"]["ContactReason"];
             }[];
@@ -3503,8 +3520,7 @@ export interface components {
                 source_fingerprint: unknown;
                 /** @description Addresses the backup's device sent from (JSON array), or null. */
                 source_identities: unknown;
-                /** @description Where a running run is; null once it is over. */
-                stage?: string | null;
+                stage?: components["schemas"]["ImportStage"] | null;
                 /** @description Absolute path to the staging folder on the client that owns the run. */
                 staging_dir?: string | null;
                 /** @description UTC time the run started. */
@@ -3512,7 +3528,7 @@ export interface components {
                 /** @description Lifecycle status. */
                 status: components["schemas"]["ImportStatus"];
                 /**
-                 * @description What the user approved at the last gate they passed, or null. The
+                 * @description What the person approved at the last Review they passed, or null. The
                  *     column `PATCH /v1/imports/{id}` writes with its `summary`.
                  */
                 summary: unknown;
@@ -3566,7 +3582,7 @@ export interface components {
                  *     named no owner.
                  */
                 owner?: string | null;
-                /** @description Sender handle for incoming messages. */
+                /** @description The sender's identity, for incoming messages. */
                 sender?: string | null;
                 /**
                  * @description Platform service, e.g. `imessage`, when known. It rides on the
@@ -3837,32 +3853,33 @@ export interface components {
         /**
          * @description One participant of a conversation, carrying the name to show for them:
          *     the Contact's name, else what that backup called them in that
-         *     conversation, else the handle.
+         *     conversation, else the identity.
          */
         Participant: {
             /**
              * Format: int64
-             * @description Linked contact id: when the handle is on a Contact, or — for a
-             *     participant with no handle — the contact the server bound the name to
+             * @description Linked contact id: when the identity is on a Contact, or — for a
+             *     participant with no identity — the contact the server bound the name to
              *     directly, since that is the only place the link is recorded for
              *     them. Matches the `id` every other contact shape uses, so a caller
              *     can compare the two without converting either.
              */
             contact_id?: number | null;
             /**
-             * @description Raw handle value (phone, email, or username). `None` when the source
-             *     named this person without recording any address for them.
+             * @description The identity as the source wrote it: a phone number, email address
+             *     or username. `None` when the source named this person without
+             *     recording any address for them.
              */
-            handle?: string | null;
+            identity?: string | null;
             /**
              * @description What to show for this person. Never empty — the server falls back to
-             *     the handle when nothing else names them, and to the name alone for
+             *     the identity when nothing else names them, and to the name alone for
              *     someone a backup named without recording any address.
              */
             name: string;
             /**
              * @description Platform service, e.g. `imessage`. `None` for the same reason as
-             *     `handle`: with no address there is nothing to carry a service on.
+             *     `identity`: with no address there is nothing to carry a service on.
              */
             service?: string | null;
         };
@@ -4128,12 +4145,12 @@ export interface components {
              * @description Attachment part the reaction applies to.
              */
             part_index: number;
-            /** @description Reactor handle for incoming reactions. */
+            /** @description The identity that reacted, for incoming reactions. */
             sender?: string | null;
         };
         /** @description One of an account's largest attachments by byte size. */
         TopAttachment: {
-            /** @description Raw text of the conversation's chat handle (via `handles`). */
+            /** @description Raw text of the identity that keys the conversation. */
             chat_identifier?: string | null;
             /**
              * Format: int64
@@ -4224,12 +4241,13 @@ export interface components {
         };
         /** @description New stage for a running Import Run. */
         UpdateImportRequest: {
-            stage: string;
+            /** @description The stage the run moves to. */
+            stage: components["schemas"]["ImportStage"];
             /**
-             * @description What the user approved at the gate they just passed, when they passed one.
+             * @description What the person approved at the Review they just passed, when they passed one.
              *
              *     Recorded here rather than at completion so an approval survives a
-             *     reload: the summary shown at a gate is recomputed from the folder, but
+             *     reload: the summary shown at a Review is recomputed from the folder, but
              *     what was approved is a different question and only the run
              *     remembers it. Absent leaves the stored `summary_json` untouched —
              *     most stage changes carry nothing, and treating absent as null would
@@ -4337,7 +4355,7 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.
              *
              *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
@@ -4414,7 +4432,7 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.
              *
              *     [`registration-closed`](https://messagecrate.app/docs/developer/reference/errors/registration-closed): This Message Crate does not let visitors create their own account: its owner has not opened registration, or nobody has claimed it yet.
              *
@@ -4517,7 +4535,7 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.
              *
              *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
@@ -4609,7 +4627,7 @@ export interface operations {
             /**
              * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
              *
-             *     [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             *     [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.
              *
              *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
@@ -4734,7 +4752,7 @@ export interface operations {
             /**
              * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
              *
-             *     [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             *     [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.
              *
              *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
@@ -4831,7 +4849,7 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.
              *
              *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
@@ -5012,7 +5030,7 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.
              *
              *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
@@ -5086,7 +5104,7 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.
              *
              *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
@@ -5270,7 +5288,7 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.
              *
              *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
@@ -5353,7 +5371,7 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.
              *
              *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
@@ -5432,7 +5450,7 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.
              *
              *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
@@ -5515,7 +5533,7 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.
              *
              *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
@@ -5591,7 +5609,7 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.
              *
              *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
@@ -5681,7 +5699,7 @@ export interface operations {
             /**
              * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
              *
-             *     [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             *     [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.
              *
              *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
@@ -5799,7 +5817,7 @@ export interface operations {
             /**
              * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
              *
-             *     [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             *     [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.
              *
              *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
@@ -5900,7 +5918,7 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.
              *
              *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
@@ -6816,7 +6834,7 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.
              *
              *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
@@ -9148,7 +9166,7 @@ export interface operations {
             query?: {
                 /** @description Page size, default 40, max 500 */
                 limit?: number;
-                /** @description Places to skip in the run's list; a client steps it by `limit`. No cap, an offset past the end is an empty page */
+                /** @description Places to skip in the run's list; a client advances it by `limit`. No cap, an offset past the end is an empty page */
                 offset?: number;
                 /** @description `date` or `-date`. Default `date`, oldest first. */
                 sort?: string;
@@ -11363,7 +11381,7 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.
              *
              *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
@@ -11438,7 +11456,7 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.
              *
              *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
@@ -11527,7 +11545,7 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.
              *
              *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
@@ -11602,7 +11620,7 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.
              *
              *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
@@ -11682,7 +11700,7 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.
              *
              *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *

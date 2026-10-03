@@ -1,9 +1,10 @@
 import StepProgress, { type Step, type StepStatus } from "../StepProgress";
+import type { ImportIssueStage } from "./importIssueStage";
 import VirtualizedImportIssuesTable from "./VirtualizedImportIssuesTable";
 
 export type ImportIssue = {
   kind: string;
-  step: string;
+  stage: ImportIssueStage;
   item: string;
   reason: string;
 };

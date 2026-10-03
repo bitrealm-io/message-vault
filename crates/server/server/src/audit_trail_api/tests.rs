@@ -168,7 +168,7 @@ async fn a_desktop_login_records_the_website_session_as_replaced() {
     );
     assert_eq!(items[0]["reason"], "logged_out");
     assert_eq!(items[1]["app"], "desktop");
-    assert_eq!(items[1]["app_version"], "0.10.0+bbbb2222");
+    assert_eq!(items[1]["app_build"], "0.10.0+bbbb2222");
     assert_eq!(items[2]["reason"], "replaced");
     assert_eq!(items[3]["app"], "website");
     // Registering opened the first Session, which the website login replaced.

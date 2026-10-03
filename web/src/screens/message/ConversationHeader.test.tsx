@@ -58,10 +58,10 @@ function groupChat(): Conversation {
     is_group: true,
     label: "Book Club",
     participants: [
-      { name: "Me", handle: "+1 (555) 010-0", contact_id: 1 },
-      { name: "Ada", handle: "+15550200", contact_id: 2 },
-      { name: "Grace", handle: "+15550300", contact_id: 3 },
-      { name: "+15550400", handle: "+15550400", contact_id: null },
+      { name: "Me", identity: "+1 (555) 010-0", contact_id: 1 },
+      { name: "Ada", identity: "+15550200", contact_id: 2 },
+      { name: "Grace", identity: "+15550300", contact_id: 3 },
+      { name: "+15550400", identity: "+15550400", contact_id: null },
     ],
   });
 }

@@ -48,7 +48,7 @@ async fn complete_import_persists_timings_and_issues() {
             summary_json: Some(r#"{"parse":{"messages":10}}"#.into()),
             issues: vec![ImportIssueInput {
                 kind: "skip".into(),
-                step: "convert".into(),
+                stage: crate::db::imports::ImportIssueStage::Media,
                 item: "photo.heic".into(),
                 reason: "convert failed".into(),
             }],
@@ -101,7 +101,7 @@ async fn complete_import_rejects_invalid_issue_kind() {
             summary_json: None,
             issues: vec![ImportIssueInput {
                 kind: "warning".into(),
-                step: "upload".into(),
+                stage: crate::db::imports::ImportIssueStage::Upload,
                 item: "archive.zip".into(),
                 reason: "not allowed".into(),
             }],
@@ -187,13 +187,13 @@ async fn list_import_issues_returns_them_oldest_first() {
             issues: vec![
                 ImportIssueInput {
                     kind: "skip".into(),
-                    step: "convert".into(),
+                    stage: crate::db::imports::ImportIssueStage::Media,
                     item: "photo.heic".into(),
                     reason: "convert failed".into(),
                 },
                 ImportIssueInput {
                     kind: "error".into(),
-                    step: "upload".into(),
+                    stage: crate::db::imports::ImportIssueStage::Upload,
                     item: "archive.zip".into(),
                     reason: "upload failed".into(),
                 },
@@ -211,9 +211,12 @@ async fn list_import_issues_returns_them_oldest_first() {
     let issues = list_import_issues(&mut conn, import_id).await.unwrap();
     assert_eq!(issues.len(), 2);
     assert_eq!(issues[0].kind, "skip");
-    assert_eq!(issues[0].step, "convert");
+    assert_eq!(issues[0].stage, crate::db::imports::ImportIssueStage::Media);
     assert_eq!(issues[1].kind, "error");
-    assert_eq!(issues[1].step, "upload");
+    assert_eq!(
+        issues[1].stage,
+        crate::db::imports::ImportIssueStage::Upload
+    );
 }
 
 #[tokio::test]
@@ -351,7 +354,7 @@ async fn active_session_round_trips_and_blocks_a_second() {
         .await
         .expect("the run is running");
     assert_eq!(active.id, id);
-    assert_eq!(active.stage.as_deref(), Some("parse"));
+    assert_eq!(active.stage, Some(ImportStage::Parse));
     assert_eq!(
         active.staging_dir.as_deref(),
         Some("/home/u/message-crate/staging-iphone-260830")
@@ -376,11 +379,11 @@ async fn stage_advances_and_discard_frees_the_slot() {
     let args = StartImportArgs::new(account, "imessage", "append", None);
     let id = start_import(&mut conn, &args).await.unwrap();
 
-    set_import_stage(&mut conn, account, id, ImportStage::Pushing, None)
+    set_import_stage(&mut conn, account, id, ImportStage::Upload, None)
         .await
         .unwrap();
     let active = running_import(&mut conn, account).await.unwrap();
-    assert_eq!(active.stage.as_deref(), Some("pushing"));
+    assert_eq!(active.stage, Some(ImportStage::Upload));
 
     discard_import(&mut conn, account, id).await.unwrap();
     assert!(
@@ -479,15 +482,15 @@ async fn completing_a_session_frees_the_slot_too() {
 
 #[test]
 fn every_stage_round_trips_through_its_string() {
-    for stage in [
-        ImportStage::Parse,
-        ImportStage::Write,
-        ImportStage::AwaitingGate1,
-        ImportStage::Transcode,
-        ImportStage::AwaitingGate2,
-        ImportStage::Pushing,
-    ] {
+    // The column's spelling is the wire's: a stage the API accepts is stored
+    // as a word every later read of the row can parse.
+    for stage in ImportStage::ALL {
         assert_eq!(ImportStage::parse(stage.as_str()), Some(stage));
+        assert_eq!(serde_json::to_value(stage).unwrap(), stage.as_str());
+    }
+    for stage in ImportIssueStage::ALL {
+        assert_eq!(ImportIssueStage::parse(stage.as_str()), Some(stage));
+        assert_eq!(serde_json::to_value(stage).unwrap(), stage.as_str());
     }
     assert_eq!(ImportStage::parse("gate_1"), None);
 }
@@ -503,7 +506,7 @@ async fn complete_import_refuses_a_run_that_has_finished() {
         status: "completed_with_issues".into(),
         issues: vec![ImportIssueInput {
             kind: "skip".into(),
-            step: "convert".into(),
+            stage: crate::db::imports::ImportIssueStage::Media,
             item: "photo.heic".into(),
             reason: "convert failed".into(),
         }],
@@ -528,7 +531,7 @@ async fn complete_import_refuses_a_run_that_has_finished() {
         .unwrap_err();
     assert!(matches!(
         err.downcast_ref::<ImportLookupError>(),
-        Some(ImportLookupError::InvalidSession { .. })
+        Some(ImportLookupError::InvalidRun { .. })
     ));
     let row = get_owned_import(&mut conn, ACCOUNT_ID, discarded)
         .await
@@ -552,7 +555,7 @@ async fn complete_import_refuses_a_run_that_has_finished() {
     .unwrap_err();
     assert!(matches!(
         err.downcast_ref::<ImportLookupError>(),
-        Some(ImportLookupError::InvalidSession { .. })
+        Some(ImportLookupError::InvalidRun { .. })
     ));
     let row = get_owned_import(&mut conn, ACCOUNT_ID, completed)
         .await
@@ -580,7 +583,7 @@ async fn a_discard_that_lands_after_the_run_completed_is_refused() {
         .unwrap_err();
 
     assert!(
-        matches!(err, ImportLookupError::InvalidSession { .. }),
+        matches!(err, ImportLookupError::InvalidRun { .. }),
         "{err:?}"
     );
     let row = get_owned_import(&mut conn, ACCOUNT_ID, id).await.unwrap();
@@ -603,13 +606,13 @@ async fn a_stage_change_that_lands_after_the_run_completed_is_refused() {
     complete_elsewhere(&mut other, id).await;
     let err = crate::db::write_tx::commit_during(
         other,
-        set_import_stage(&mut conn, ACCOUNT_ID, id, ImportStage::Pushing, None),
+        set_import_stage(&mut conn, ACCOUNT_ID, id, ImportStage::Upload, None),
     )
     .await
     .unwrap_err();
 
     assert!(
-        matches!(err, ImportLookupError::InvalidSession { .. }),
+        matches!(err, ImportLookupError::InvalidRun { .. }),
         "{err:?}"
     );
     let stage: Option<String> = sqlx::query_scalar("SELECT stage FROM imports WHERE id = $1")

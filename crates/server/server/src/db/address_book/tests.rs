@@ -2,7 +2,7 @@ use super::*;
 use crate::db::handles::upsert_handle_row;
 
 const ACCOUNT: i64 = 7;
-const HEADER: &str = "contact_id,display_name,groups,service,handle_type,identity";
+const HEADER: &str = "contact_id,display_name,groups,service,identity_type,identity";
 
 /// A database with the schema and one account, and a connection to it. The
 /// pool and the directory are returned so they outlive the test body.
@@ -331,13 +331,13 @@ async fn an_unknown_service_is_refused_with_its_row() {
 }
 
 #[tokio::test]
-async fn an_unknown_handle_type_is_refused_with_its_row() {
+async fn an_unknown_identity_type_is_refused_with_its_row() {
     let (mut conn, _pool, _dir) = account().await;
     let text = file(&["a,Ada,,phone,mobile,+15555550100"]);
     let reasons = refused(&mut conn, &text, LoadMode::Append).await;
     assert_eq!(reasons.len(), 1, "{reasons:?}");
     assert!(
-        reasons[0].starts_with("row 2: handle_type \"mobile\""),
+        reasons[0].starts_with("row 2: identity_type \"mobile\""),
         "{reasons:?}"
     );
 }
@@ -1057,7 +1057,7 @@ async fn a_row_with_fewer_fields_than_the_header_reads_the_missing_cells_as_blan
 #[tokio::test]
 async fn a_file_a_spreadsheet_saved_loads() {
     let (mut conn, _pool, _dir) = account().await;
-    let text = "\u{feff}display_name,contact_id,identity,service,handle_type,groups\r\n\
+    let text = "\u{feff}display_name,contact_id,identity,service,identity_type,groups\r\n\
                 \"Lovelace, Ada\",a,+15555550100,phone,phone,Family\r\n\
                 ,,,,,\r\n";
     let counts = loaded(&mut conn, text, LoadMode::Append).await;

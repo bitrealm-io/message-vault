@@ -79,13 +79,13 @@ export type ThreadParticipantPreviewSource = {
   /** As the server sends it: a number. The UI carries contact ids as strings. */
   contact_id?: number | null;
   /** Null/undefined when the source named this participant without an address. */
-  handle?: string | null;
+  identity?: string | null;
   name: string;
 };
 
-/** The participant's name, then handle — same order as chips. */
+/** The participant's name, then identity — same order as chips. */
 function threadParticipantDisplayName(p: ThreadParticipantPreviewSource): string {
-  return p.name.trim() || p.handle?.trim() || "Contact";
+  return p.name.trim() || p.identity?.trim() || "Contact";
 }
 
 export function contactPreviewFromThreadParticipants(
@@ -96,7 +96,7 @@ export function contactPreviewFromThreadParticipants(
     (p) => p.contact_id != null && String(p.contact_id) === contactId,
   );
   if (matched.length === 0) return null;
-  const addresses = matched.map((p) => p.handle).filter((h): h is string => !!h && h.length > 0);
+  const addresses = matched.map((p) => p.identity).filter((h): h is string => !!h && h.length > 0);
   const named = matched.find((p) => Boolean(p.name.trim()));
   const uniqueCount = previewHandleStubRows(addresses, undefined).length;
   return {

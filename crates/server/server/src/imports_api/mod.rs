@@ -145,7 +145,7 @@ pub struct ImportStats {
     pub messages_appended: u64,
     /// Import mode.
     pub mode: ImportMode,
-    /// Flagged phone handles (ambiguous; review note set) inserted by this import.
+    /// Flagged phone identities (ambiguous; review note set) inserted by this import.
     pub phones_needing_review: u64,
     /// Identities of type `other` this import met for people: a name the
     /// backup gave with no address, or a sender such as `AMAZON`. Each one is
@@ -575,7 +575,7 @@ pub(crate) struct CreateImportRequest {
     pub(crate) tool: Option<String>,
     /// Stage the run opens at. Defaults to `parse`.
     #[serde(default)]
-    pub(crate) stage: Option<String>,
+    pub(crate) stage: Option<crate::db::imports::ImportStage>,
     /// Absolute staging path on the client that owns this Import Run.
     #[serde(default)]
     pub(crate) staging_dir: Option<String>,
@@ -628,11 +628,12 @@ pub(crate) struct CompleteImportRequest {
     pub(crate) issues: Vec<CompleteImportIssueRequest>,
 }
 
-/// One parse/convert/upload issue from the import.
+/// One error or skip a Stage of the Import Run reported.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub(crate) struct CompleteImportIssueRequest {
     pub(crate) kind: String,
-    pub(crate) step: String,
+    /// Stage the issue came from.
+    pub(crate) stage: crate::db::imports::ImportIssueStage,
     pub(crate) item: String,
     pub(crate) reason: String,
 }
@@ -714,7 +715,8 @@ pub(crate) struct ListImportsQuery {
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct ImportIssue {
     pub(crate) kind: String,
-    pub(crate) step: String,
+    /// Stage the issue came from.
+    pub(crate) stage: crate::db::imports::ImportIssueStage,
     item: String,
     reason: String,
 }
@@ -757,7 +759,7 @@ pub(crate) struct ImportRun {
     /// Time spent uploading, when finished.
     pub(crate) upload_ms: Option<i64>,
     /// Where a running run is; null once it is over.
-    pub(crate) stage: Option<String>,
+    pub(crate) stage: Option<crate::db::imports::ImportStage>,
     /// Absolute path to the staging folder on the client that owns the run.
     pub(crate) staging_dir: Option<String>,
     /// Which install created the run.
@@ -768,7 +770,7 @@ pub(crate) struct ImportRun {
     pub(crate) source_fingerprint: serde_json::Value,
     /// Addresses the backup's device sent from (JSON array), or null.
     pub(crate) source_identities: serde_json::Value,
-    /// What the user approved at the last gate they passed, or null. The
+    /// What the person approved at the last Review they passed, or null. The
     /// column `PATCH /v1/imports/{id}` writes with its `summary`.
     pub(crate) summary: serde_json::Value,
     /// Issues the run recorded, oldest first.
@@ -1031,14 +1033,7 @@ pub(crate) async fn create_import(
     }
     validate_source_id(&body.source).map_err(|e| ApiError::validation(e.to_string()))?;
     let account = resolve_import_account(&auth);
-    let stage = match body.stage.as_deref() {
-        None => crate::db::imports::ImportStage::Parse,
-        Some(raw) => crate::db::imports::ImportStage::parse(raw).ok_or_else(|| {
-            ApiError::validation(format!(
-                "invalid import stage '{raw}'; expected one of parse, write, awaiting_gate_1, transcode, awaiting_gate_2, pushing"
-            ))
-        })?,
-    };
+    let stage = body.stage.unwrap_or(crate::db::imports::ImportStage::Parse);
     // Credentials never reach the row, whoever the client is.
     let form = body.form.as_ref().map(strip_form_credentials);
     let form_json = optional_json_string(form.as_ref(), "form")?;
@@ -1121,7 +1116,7 @@ pub(crate) async fn complete_import(
             .into_iter()
             .map(|issue| crate::db::imports::ImportIssueInput {
                 kind: issue.kind,
-                step: issue.step,
+                stage: issue.stage,
                 item: issue.item,
                 reason: issue.reason,
             })
@@ -1334,7 +1329,7 @@ pub(crate) async fn import_run(
         .into_iter()
         .map(|issue| ImportIssue {
             kind: issue.kind,
-            step: issue.step,
+            stage: issue.stage,
             item: issue.item,
             reason: issue.reason,
         })
@@ -1373,11 +1368,12 @@ pub(crate) async fn import_run(
 /// New stage for a running Import Run.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub(crate) struct UpdateImportRequest {
-    pub(crate) stage: String,
-    /// What the user approved at the gate they just passed, when they passed one.
+    /// The stage the run moves to.
+    pub(crate) stage: crate::db::imports::ImportStage,
+    /// What the person approved at the Review they just passed, when they passed one.
     ///
     /// Recorded here rather than at completion so an approval survives a
-    /// reload: the summary shown at a gate is recomputed from the folder, but
+    /// reload: the summary shown at a Review is recomputed from the folder, but
     /// what was approved is a different question and only the run
     /// remembers it. Absent leaves the stored `summary_json` untouched —
     /// most stage changes carry nothing, and treating absent as null would
@@ -1413,12 +1409,7 @@ pub(crate) async fn update_import(
     Json(body): Json<UpdateImportRequest>,
 ) -> Result<Json<ImportRun>, ApiError> {
     let account = resolve_import_account(&auth);
-    let stage = crate::db::imports::ImportStage::parse(&body.stage).ok_or_else(|| {
-        ApiError::validation(format!(
-            "invalid import stage '{}'; expected one of parse, write, awaiting_gate_1, transcode, awaiting_gate_2, pushing",
-            body.stage
-        ))
-    })?;
+    let stage = body.stage;
     let summary_json = optional_json_string(body.summary.as_ref(), "summary")?;
     let mut conn = state.db.acquire().await?;
     crate::db::imports::set_import_stage(

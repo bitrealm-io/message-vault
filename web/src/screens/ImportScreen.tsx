@@ -133,7 +133,7 @@ export default function ImportScreen() {
     startImport,
     approve,
     cancelRun,
-    resumeAtGate,
+    resumeAtReview,
     cancel,
     returnToForm,
     continueAfterIdentityStop,
@@ -425,10 +425,10 @@ export default function ImportScreen() {
         return;
       }
 
-      if (resume.kind === "resume_gate" || resume.kind === "resume_media") {
+      if (resume.kind === "resume_review" || resume.kind === "resume_media") {
         if (!session.staging_dir) return; // resumeDecisionFor guarantees this; defensive only.
         setResume(NO_RESUME);
-        await resumeAtGate(session, restoredForm);
+        await resumeAtReview(session, restoredForm);
         return;
       }
 

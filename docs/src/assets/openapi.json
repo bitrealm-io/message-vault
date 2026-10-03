@@ -86,7 +86,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -198,7 +198,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`registration-closed`](https://messagecrate.app/docs/developer/reference/errors/registration-closed): This Message Crate does not let visitors create their own account: its owner has not opened registration, or nobody has claimed it yet.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.\n\n[`registration-closed`](https://messagecrate.app/docs/developer/reference/errors/registration-closed): This Message Crate does not let visitors create their own account: its owner has not opened registration, or nobody has claimed it yet.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -346,7 +346,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -474,7 +474,7 @@
             ]
           },
           "403": {
-            "description": "[`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.\n\n[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.\n\n[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -661,7 +661,7 @@
             ]
           },
           "403": {
-            "description": "[`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.\n\n[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.\n\n[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -814,7 +814,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1090,7 +1090,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1197,7 +1197,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1485,7 +1485,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1629,7 +1629,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1755,7 +1755,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1899,7 +1899,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2015,7 +2015,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2151,7 +2151,7 @@
             ]
           },
           "403": {
-            "description": "[`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.\n\n[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.\n\n[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2318,7 +2318,7 @@
             ]
           },
           "403": {
-            "description": "[`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.\n\n[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.\n\n[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2464,7 +2464,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3884,7 +3884,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4842,7 +4842,7 @@
           "Contacts"
         ],
         "summary": "Load an address book into this account.",
-        "description": "The body is the file itself: Message Crate's own CSV, one row per identity, with the columns `contact_id`, `display_name`, `groups`, `service`, `handle_type` and `identity`, as `POST /v1/contacts/address-book` writes it.\n\nRows that share a `contact_id` are one contact. An id the account holds\nnames that contact, a blank id makes a new contact for that row, and any\nother text groups its rows into one new contact. `append` creates and\nrenames contacts and adds the identities and Contact Group memberships\nthe rows list. `edit` does the same and then takes off each contact in\nthe file every identity and membership its rows do not list. A contact\nthe file does not mention is left alone in both modes.\n\nA phone number written without `+`, which a spreadsheet can save in place\nof `+6595550100`, names the identity `+` and its digits when the row's\ncontact holds that key. Otherwise it is keyed as written: ten digits as a\nUS number, any other count as bare digits. `notes` names each row read\nwith its `+` back, and each such number that became a new identity.\n\nOne `'` before a cell that starts with `=`, `+`, `-`, `@`, a tab or a\ncarriage return is taken off, in any column, which undoes the `'` the\nexport writes there.\n\nThe load is one transaction. A file that breaks a rule is refused whole\nwith `422 Unprocessable Entity`, and `errors` holds one sentence for each\nbad row, starting with its row number.\n\nThe Demo Account is refused with `demo-account-protected`, in both modes,\nby its id: an Edit load deletes contacts for good and an Append load\nstores real people's names and numbers in an account anyone can enter\n(`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`). The import,\nexport and delete permissions are not asked for; they govern messages and\nimports, and any other account loads its address book with a session.",
+        "description": "The body is the file itself: Message Crate's own CSV, one row per identity, with the columns `contact_id`, `display_name`, `groups`, `service`, `identity_type` and `identity`, as `POST /v1/contacts/address-book` writes it.\n\nRows that share a `contact_id` are one contact. An id the account holds\nnames that contact, a blank id makes a new contact for that row, and any\nother text groups its rows into one new contact. `append` creates and\nrenames contacts and adds the identities and Contact Group memberships\nthe rows list. `edit` does the same and then takes off each contact in\nthe file every identity and membership its rows do not list. A contact\nthe file does not mention is left alone in both modes.\n\nA phone number written without `+`, which a spreadsheet can save in place\nof `+6595550100`, names the identity `+` and its digits when the row's\ncontact holds that key. Otherwise it is keyed as written: ten digits as a\nUS number, any other count as bare digits. `notes` names each row read\nwith its `+` back, and each such number that became a new identity.\n\nOne `'` before a cell that starts with `=`, `+`, `-`, `@`, a tab or a\ncarriage return is taken off, in any column, which undoes the `'` the\nexport writes there.\n\nThe load is one transaction. A file that breaks a rule is refused whole\nwith `422 Unprocessable Entity`, and `errors` holds one sentence for each\nbad row, starting with its row number.\n\nThe Demo Account is refused with `demo-account-protected`, in both modes,\nby its id: an Edit load deletes contacts for good and an Append load\nstores real people's names and numbers in an account anyone can enter\n(`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`). The import,\nexport and delete permissions are not asked for; they govern messages and\nimports, and any other account loads its address book with a session.",
         "operationId": "create_contacts",
         "parameters": [
           {
@@ -4984,7 +4984,7 @@
           "Contacts"
         ],
         "summary": "Write the address book for the contacts a search matches, the checked ones among them, or every contact when the body names neither.",
-        "description": "The answer is `text/csv`, not JSON: one row per identity, with the\ncolumns `contact_id`, `display_name`, `groups`, `service`, `handle_type`\nand `identity`. A contact's name and its Contact Group names, separated\nby `;`, repeat on each of its rows. A contact with no name has a blank\n`display_name`, and a contact with no identity is one row with the last\nthree columns blank. Contacts in the trash are left out.\n\nA cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return\nis written with a `'` in front, in every column, because a spreadsheet\nruns such a cell as a formula and drops the `+` of a phone number.\n`POST /v1/contacts` loads the file back and takes that `'` off.",
+        "description": "The answer is `text/csv`, not JSON: one row per identity, with the\ncolumns `contact_id`, `display_name`, `groups`, `service`, `identity_type`\nand `identity`. A contact's name and its Contact Group names, separated\nby `;`, repeat on each of its rows. A contact with no name has a blank\n`display_name`, and a contact with no identity is one row with the last\nthree columns blank. Contacts in the trash are left out.\n\nA cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return\nis written with a `'` in front, in every column, because a spreadsheet\nruns such a cell as a formula and drops the `+` of a phone number.\n`POST /v1/contacts` loads the file back and takes that `'` off.",
         "operationId": "get_address_book",
         "requestBody": {
           "content": {
@@ -5364,7 +5364,7 @@
         "tags": [
           "Contacts"
         ],
-        "summary": "Full contact view: per-handle services, message stats, and group memberships.",
+        "summary": "Full contact view: per-identity services, message stats, and group memberships.",
         "operationId": "get_contact",
         "parameters": [
           {
@@ -5466,7 +5466,7 @@
         "tags": [
           "Contacts"
         ],
-        "summary": "Delete a trashed contact the way a phone's Delete Contact does: the name and the person's edits go, the contact becomes Unknown again and leaves the trash, and every conversation it was in stays as it is, showing the handle.",
+        "summary": "Delete a trashed contact the way a phone's Delete Contact does: the name and the person's edits go, the contact becomes Unknown again and leaves the trash, and every conversation it was in stays as it is, showing the identity.",
         "description": "Conversations are never deleted with a contact. A contact that is not in the trash answers 409.",
         "operationId": "delete_contact",
         "parameters": [
@@ -6049,7 +6049,7 @@
           "Conversations"
         ],
         "summary": "One conversation, in the same shape a list row already has — so a caller that opens a conversation from a list does not have to convert between two shapes, and paging through the whole list to find one id is never necessary.",
-        "description": "Trash is a property the list applies, not a gate on reading: a trashed conversation still answers here.",
+        "description": "Trash is a property the list applies, not a bar to reading: a trashed conversation still answers here.",
         "operationId": "get_conversation",
         "parameters": [
           {
@@ -7378,7 +7378,7 @@
           "Export"
         ],
         "summary": "The messages a running Export Run matched when it was created, a page at a time, oldest first unless `sort` says otherwise.",
-        "description": "An import, a trash or a new day since creation changes nothing here. A message deleted since leaves its place empty: `total` stays `message_count`, a page can hold fewer than `limit` items, and a client steps `offset` by `limit`. Each page read raises the run's `messages_delivered` to the places reached.",
+        "description": "An import, a trash or a new day since creation changes nothing here. A message deleted since leaves its place empty: `total` stays `message_count`, a page can hold fewer than `limit` items, and a client advances `offset` by `limit`. Each page read raises the run's `messages_delivered` to the places reached.",
         "operationId": "list_export_messages",
         "parameters": [
           {
@@ -7404,7 +7404,7 @@
           {
             "name": "offset",
             "in": "query",
-            "description": "Places to skip in the run's list; a client steps it by `limit`. No cap, an offset past the end is an empty page",
+            "description": "Places to skip in the run's list; a client advances it by `limit`. No cap, an offset past the end is an empty page",
             "required": false,
             "schema": {
               "type": "integer",
@@ -10596,7 +10596,7 @@
           "Server"
         ],
         "summary": "Claim an unclaimed Message Crate by creating its owner.",
-        "description": "Unauthenticated, because a Message Crate with no owner has no credential\nthat could authorize this. Whoever reaches an unclaimed one first may\nclaim it: Message Crate is self-hosted, so its operator installs the\nsoftware, claims it, and publishes the port, in that order and at times\nof their choosing. An unclaimed one is also empty, so a lost race\ndestroys nothing and announces itself at once.",
+        "description": "Unauthenticated, because a Message Crate with no owner has no credential\nthat could authorize this. Whoever reaches an unclaimed one first may\nclaim it: Message Crate is self-hosted, so whoever installs the software\nclaims it and then publishes the port, in that order and at times of\ntheir choosing. An unclaimed one is also empty, so a lost race\ndestroys nothing and announces itself at once.",
         "operationId": "claim_server",
         "requestBody": {
           "content": {
@@ -10755,7 +10755,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -10859,7 +10859,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -10980,7 +10980,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11084,7 +11084,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11193,7 +11193,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything else only the owner may do.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11654,7 +11654,7 @@
               }
             ]
           },
-          "app_version": {
+          "app_build": {
             "type": [
               "string",
               "null"
@@ -12149,7 +12149,7 @@
               }
             ]
           },
-          "app_version": {
+          "app_build": {
             "type": [
               "string",
               "null"
@@ -12372,10 +12372,10 @@
       },
       "CompleteImportIssueRequest": {
         "type": "object",
-        "description": "One parse/convert/upload issue from the import.",
+        "description": "One error or skip a Stage of the Import Run reported.",
         "required": [
           "kind",
-          "step",
+          "stage",
           "item",
           "reason"
         ],
@@ -12389,8 +12389,9 @@
           "reason": {
             "type": "string"
           },
-          "step": {
-            "type": "string"
+          "stage": {
+            "$ref": "#/components/schemas/ImportIssueStage",
+            "description": "Stage the issue came from."
           }
         }
       },
@@ -12523,17 +12524,17 @@
       },
       "ContactReason": {
         "type": "string",
-        "description": "Why a contact is on an import run's record.\n\nOrdered from most to least consequential. When one run does more than\none of these to a contact, the record keeps the earlier variant: a\ncontact the run created was also named and given a handle by it, and\n\"created\" is the fact the person needs.",
+        "description": "Why a contact is on an import run's record.\n\nOrdered from most to least consequential. When one run does more than\none of these to a contact, the record keeps the earlier variant: a\ncontact the run created was also named and given an identity by it, and\n\"created\" is the fact the person needs.",
         "enum": [
           "replaced_trashed",
           "created",
           "named",
-          "handle_added"
+          "identity_added"
         ]
       },
       "ContactSelectionSummary": {
         "type": "object",
-        "description": "Contact-level first/last seen and message counts for the selection table.\nEvery date and message count is over the messages the contact sent, the\nsame messages `messages:` counts on Contacts; the conversation counts are\nover the conversations the contact takes part in. Trashed conversations\nare left out of both.",
+        "description": "Each contact's first and last heard from, and its message counts, for the\nselection table.\nEvery date and message count is over the messages the contact sent, the\nsame messages `messages:` counts on Contacts; the conversation counts are\nover the conversations the contact takes part in. Trashed conversations\nare left out of both.",
         "required": [
           "id",
           "name",
@@ -12743,7 +12744,7 @@
             "items": {
               "$ref": "#/components/schemas/Participant"
             },
-            "description": "Participants with names and handles."
+            "description": "Participants with names and identities."
           },
           "service": {
             "type": "string",
@@ -13102,11 +13103,15 @@
             "description": "Addresses the backup's device sent from, when the client read them."
           },
           "stage": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Stage the run opens at. Defaults to `parse`."
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ImportStage",
+                "description": "Stage the run opens at. Defaults to `parse`."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "staging_dir": {
             "type": [
@@ -13647,7 +13652,7 @@
           },
           "reason": {
             "$ref": "#/components/schemas/ContactReason",
-            "description": "Why the contact is on this run's record: the run created it, created\nit in place of one the person had trashed, named it, or added a\nhandle to it."
+            "description": "Why the contact is on this run's record: the run created it, created\nit in place of one the person had trashed, named it, or added an\nidentity to it."
           }
         }
       },
@@ -13656,7 +13661,7 @@
         "description": "One stored import issue.",
         "required": [
           "kind",
-          "step",
+          "stage",
           "item",
           "reason"
         ],
@@ -13670,10 +13675,20 @@
           "reason": {
             "type": "string"
           },
-          "step": {
-            "type": "string"
+          "stage": {
+            "$ref": "#/components/schemas/ImportIssueStage",
+            "description": "Stage the issue came from."
           }
         }
+      },
+      "ImportIssueStage": {
+        "type": "string",
+        "description": "The Stage of an Import Run an issue came from: the values\n`import_issues.stage` holds and every issue on the wire carries.",
+        "enum": [
+          "staging",
+          "media",
+          "upload"
+        ]
       },
       "ImportMode": {
         "type": "string",
@@ -13812,11 +13827,15 @@
             "description": "Addresses the backup's device sent from (JSON array), or null."
           },
           "stage": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Where a running run is; null once it is over."
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ImportStage",
+                "description": "Where a running run is; null once it is over."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "staging_dir": {
             "type": [
@@ -13834,7 +13853,7 @@
             "description": "Lifecycle status."
           },
           "summary": {
-            "description": "What the user approved at the last gate they passed, or null. The\ncolumn `PATCH /v1/imports/{id}` writes with its `summary`."
+            "description": "What the person approved at the last Review they passed, or null. The\ncolumn `PATCH /v1/imports/{id}` writes with its `summary`."
           },
           "tool": {
             "type": [
@@ -13852,6 +13871,18 @@
             "description": "Time spent uploading, when finished."
           }
         }
+      },
+      "ImportStage": {
+        "type": "string",
+        "description": "Where a running Import Run is: a part of one of its Stages, or a Review\nbetween them (`CONTEXT.md`).\n\n`status` records how a run ended; this records where it is. Both are\nneeded: a run can sit at `Write` while running, and at `Write` having\nfailed. `Parse` and `Write` are the two parts of the Staging Stage.",
+        "enum": [
+          "parse",
+          "write",
+          "staging_review",
+          "media",
+          "media_review",
+          "upload"
+        ]
       },
       "ImportStats": {
         "type": "object",
@@ -13953,7 +13984,7 @@
           "phones_needing_review": {
             "type": "integer",
             "format": "int64",
-            "description": "Flagged phone handles (ambiguous; review note set) inserted by this import.",
+            "description": "Flagged phone identities (ambiguous; review note set) inserted by this import.",
             "minimum": 0
           },
           "tapbacks": {
@@ -14114,7 +14145,7 @@
               "string",
               "null"
             ],
-            "description": "Sender handle for incoming messages."
+            "description": "The sender's identity, for incoming messages."
           },
           "service": {
             "type": [
@@ -14186,7 +14217,7 @@
         "properties": {
           "chat_identifier": {
             "type": "string",
-            "description": "Original chat id from the export."
+            "description": "The conversation's identifier as the export wrote it."
           },
           "conversation_type": {
             "type": "string",
@@ -14491,7 +14522,7 @@
                     }
                   ]
                 },
-                "app_version": {
+                "app_build": {
                   "type": [
                     "string",
                     "null"
@@ -14753,7 +14784,7 @@
                     }
                   ]
                 },
-                "app_version": {
+                "app_build": {
                   "type": [
                     "string",
                     "null"
@@ -14977,7 +15008,7 @@
             "type": "array",
             "items": {
               "type": "object",
-              "description": "Contact-level first/last seen and message counts for the selection table.\nEvery date and message count is over the messages the contact sent, the\nsame messages `messages:` counts on Contacts; the conversation counts are\nover the conversations the contact takes part in. Trashed conversations\nare left out of both.",
+              "description": "Each contact's first and last heard from, and its message counts, for the\nselection table.\nEvery date and message count is over the messages the contact sent, the\nsame messages `messages:` counts on Contacts; the conversation counts are\nover the conversations the contact takes part in. Trashed conversations\nare left out of both.",
               "required": [
                 "id",
                 "name",
@@ -15283,7 +15314,7 @@
                   "items": {
                     "$ref": "#/components/schemas/Participant"
                   },
-                  "description": "Participants with names and handles."
+                  "description": "Participants with names and identities."
                 },
                 "service": {
                   "type": "string",
@@ -15608,7 +15639,7 @@
                 },
                 "reason": {
                   "$ref": "#/components/schemas/ContactReason",
-                  "description": "Why the contact is on this run's record: the run created it, created\nit in place of one the person had trashed, named it, or added a\nhandle to it."
+                  "description": "Why the contact is on this run's record: the run created it, created\nit in place of one the person had trashed, named it, or added an\nidentity to it."
                 }
               }
             },
@@ -15773,11 +15804,15 @@
                   "description": "Addresses the backup's device sent from (JSON array), or null."
                 },
                 "stage": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "Where a running run is; null once it is over."
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ImportStage",
+                      "description": "Where a running run is; null once it is over."
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "staging_dir": {
                   "type": [
@@ -15795,7 +15830,7 @@
                   "description": "Lifecycle status."
                 },
                 "summary": {
-                  "description": "What the user approved at the last gate they passed, or null. The\ncolumn `PATCH /v1/imports/{id}` writes with its `summary`."
+                  "description": "What the person approved at the last Review they passed, or null. The\ncolumn `PATCH /v1/imports/{id}` writes with its `summary`."
                 },
                 "tool": {
                   "type": [
@@ -15915,7 +15950,7 @@
                     "string",
                     "null"
                   ],
-                  "description": "Sender handle for incoming messages."
+                  "description": "The sender's identity, for incoming messages."
                 },
                 "service": {
                   "type": [
@@ -16454,7 +16489,7 @@
       },
       "Participant": {
         "type": "object",
-        "description": "One participant of a conversation, carrying the name to show for them:\nthe Contact's name, else what that backup called them in that\nconversation, else the handle.",
+        "description": "One participant of a conversation, carrying the name to show for them:\nthe Contact's name, else what that backup called them in that\nconversation, else the identity.",
         "required": [
           "name"
         ],
@@ -16465,25 +16500,25 @@
               "null"
             ],
             "format": "int64",
-            "description": "Linked contact id: when the handle is on a Contact, or — for a\nparticipant with no handle — the contact the server bound the name to\ndirectly, since that is the only place the link is recorded for\nthem. Matches the `id` every other contact shape uses, so a caller\ncan compare the two without converting either."
+            "description": "Linked contact id: when the identity is on a Contact, or — for a\nparticipant with no identity — the contact the server bound the name to\ndirectly, since that is the only place the link is recorded for\nthem. Matches the `id` every other contact shape uses, so a caller\ncan compare the two without converting either."
           },
-          "handle": {
+          "identity": {
             "type": [
               "string",
               "null"
             ],
-            "description": "Raw handle value (phone, email, or username). `None` when the source\nnamed this person without recording any address for them."
+            "description": "The identity as the source wrote it: a phone number, email address\nor username. `None` when the source named this person without\nrecording any address for them."
           },
           "name": {
             "type": "string",
-            "description": "What to show for this person. Never empty — the server falls back to\nthe handle when nothing else names them, and to the name alone for\nsomeone a backup named without recording any address."
+            "description": "What to show for this person. Never empty — the server falls back to\nthe identity when nothing else names them, and to the name alone for\nsomeone a backup named without recording any address."
           },
           "service": {
             "type": [
               "string",
               "null"
             ],
-            "description": "Platform service, e.g. `imessage`. `None` for the same reason as\n`handle`: with no address there is nothing to carry a service on."
+            "description": "Platform service, e.g. `imessage`. `None` for the same reason as\n`identity`: with no address there is nothing to carry a service on."
           }
         }
       },
@@ -16905,7 +16940,7 @@
               "string",
               "null"
             ],
-            "description": "Reactor handle for incoming reactions."
+            "description": "The identity that reacted, for incoming reactions."
           }
         }
       },
@@ -16922,7 +16957,7 @@
               "string",
               "null"
             ],
-            "description": "Raw text of the conversation's chat handle (via `handles`)."
+            "description": "Raw text of the identity that keys the conversation."
           },
           "conversation_id": {
             "type": [
@@ -17137,10 +17172,11 @@
         ],
         "properties": {
           "stage": {
-            "type": "string"
+            "$ref": "#/components/schemas/ImportStage",
+            "description": "The stage the run moves to."
           },
           "summary": {
-            "description": "What the user approved at the gate they just passed, when they passed one.\n\nRecorded here rather than at completion so an approval survives a\nreload: the summary shown at a gate is recomputed from the folder, but\nwhat was approved is a different question and only the run\nremembers it. Absent leaves the stored `summary_json` untouched —\nmost stage changes carry nothing, and treating absent as null would\nthrow away the plan the outcome is later judged against."
+            "description": "What the person approved at the Review they just passed, when they passed one.\n\nRecorded here rather than at completion so an approval survives a\nreload: the summary shown at a Review is recomputed from the folder, but\nwhat was approved is a different question and only the run\nremembers it. Absent leaves the stored `summary_json` untouched —\nmost stage changes carry nothing, and treating absent as null would\nthrow away the plan the outcome is later judged against."
           }
         }
       },

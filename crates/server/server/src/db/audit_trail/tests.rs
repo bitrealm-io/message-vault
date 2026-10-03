@@ -39,8 +39,8 @@ async fn deleting_an_account_keeps_an_import_runs_counts_and_drops_its_details()
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO import_issues (import_id, kind, step, item, reason, created_at)
-         VALUES ($1, 'skip', 'parse', 'chat-with-bob.txt', 'unreadable', 'now')",
+        "INSERT INTO import_issues (import_id, kind, stage, item, reason, created_at)
+         VALUES ($1, 'skip', 'staging', 'chat-with-bob.txt', 'unreadable', 'now')",
     )
     .bind(import_id)
     .execute(&mut *conn)

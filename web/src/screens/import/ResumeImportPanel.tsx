@@ -30,7 +30,7 @@ const COPY: Record<ResumableKind, PanelCopy> = {
     primary: { label: "Start over", action: "resume" },
     secondary: { label: "Discard this import", action: "discard" },
   },
-  resume_gate: {
+  resume_review: {
     heading: () => "Pick up where you left off",
     body: () =>
       "Your messages are staged. Opening the import again shows you the same summary, read fresh from the folder.",

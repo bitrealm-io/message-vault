@@ -30,7 +30,7 @@ function permissions(names: string[]): string {
 /** " from the website (0.10.0+343fe0d8)", or nothing when no app was named. */
 function fromApp(entry: AuditEntry): string {
   if (!entry.app) return "";
-  return ` from the ${APP_NAMES[entry.app]}${entry.app_version ? ` (${entry.app_version})` : ""}`;
+  return ` from the ${APP_NAMES[entry.app]}${entry.app_build ? ` (${entry.app_build})` : ""}`;
 }
 
 /** What started a run: the app of a Session, or an API token by label and hint. */

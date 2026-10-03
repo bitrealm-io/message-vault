@@ -8,7 +8,7 @@ function conversation(over: Partial<MessageConversation> = {}): MessageConversat
     chat_identifier: "+15555550100",
     conversation_type: "individual",
     group_title: null,
-    participants: [{ name: "Alice", handle: "+15555550100", contact_id: 4, service: "imessage" }],
+    participants: [{ name: "Alice", identity: "+15555550100", contact_id: 4, service: "imessage" }],
     ...over,
   };
 }
@@ -39,8 +39,8 @@ describe("messageConversationName", () => {
 
   it("names a group conversation by its title, else by everyone in it", () => {
     const people = [
-      { name: "Alice", handle: "+1" },
-      { name: "Bob", handle: "+2" },
+      { name: "Alice", identity: "+1" },
+      { name: "Bob", identity: "+2" },
     ];
     expect(
       messageConversationName(

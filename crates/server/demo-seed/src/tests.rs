@@ -177,7 +177,7 @@ fn generate_writes_three_backups_the_config_files_and_a_readme() {
     let mut lines = book.lines();
     assert_eq!(
         lines.next(),
-        Some("contact_id,display_name,groups,service,handle_type,identity")
+        Some("contact_id,display_name,groups,service,identity_type,identity")
     );
     let keys: std::collections::BTreeSet<&str> = lines
         .map(|line| line.split(',').next().expect("contact_id"))

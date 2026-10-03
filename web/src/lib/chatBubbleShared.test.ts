@@ -74,7 +74,7 @@ describe("senderName / isGroupConversation", () => {
         chat_identifier: "x",
         conversation_type: "individual",
         group_title: null,
-        participants: [{ handle: "+1", name: "Ada", contact_id: null }],
+        participants: [{ identity: "+1", name: "Ada", contact_id: null }],
       },
     });
     expect(senderName(m)).toBe("Me");
@@ -88,7 +88,7 @@ describe("senderName / isGroupConversation", () => {
       group_title: null,
       participants: [
         {
-          handle: "+1555",
+          identity: "+1555",
           name: "Ada",
           contact_id: null,
         },
@@ -105,7 +105,7 @@ describe("senderName / isGroupConversation", () => {
         chat_identifier: "x",
         conversation_type: "individual",
         group_title: null,
-        participants: [{ handle: "a", name: "A", contact_id: null }],
+        participants: [{ identity: "a", name: "A", contact_id: null }],
       },
     });
     expect(isGroupConversation(one)).toBe(false);
@@ -125,8 +125,8 @@ describe("senderName / isGroupConversation", () => {
         conversation_type: "individual",
         group_title: null,
         participants: [
-          { handle: "a", name: "A", contact_id: null },
-          { handle: "b", name: "B", contact_id: null },
+          { identity: "a", name: "A", contact_id: null },
+          { identity: "b", name: "B", contact_id: null },
         ],
       },
     });
@@ -151,8 +151,8 @@ const conversation = {
   conversation_type: "group",
   group_title: null,
   participants: [
-    { handle: "+1555", name: "Ada", contact_id: null },
-    { handle: "+1556", name: "Bob", contact_id: null },
+    { identity: "+1555", name: "Ada", contact_id: null },
+    { identity: "+1556", name: "Bob", contact_id: null },
   ],
 };
 

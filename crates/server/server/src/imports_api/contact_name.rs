@@ -185,7 +185,7 @@ async fn ensure_sibling_contact_link(
     .await?
     {
         contacts::touch_contact(conn, account_id, contact_id).await?;
-        import_contacts::record(conn, import_id, contact_id, ContactReason::HandleAdded).await?;
+        import_contacts::record(conn, import_id, contact_id, ContactReason::IdentityAdded).await?;
     }
     Ok(Some(contact_id))
 }

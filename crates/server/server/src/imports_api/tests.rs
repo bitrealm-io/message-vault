@@ -14,10 +14,10 @@ fn write_jsonl(dir: &Path, name: &str, body: &str) -> PathBuf {
     path
 }
 
-/// A fixture holding one live import session at `awaiting_gate_1` whose
+/// A fixture holding one running Import Run at `staging_review` whose
 /// `summary_json` already carries `summary` — as if an earlier
-/// `PATCH /v1/imports/{id}` recorded a gate approval.
-async fn session_with_summary(summary: serde_json::Value) -> (TestFixture, RegisteredAccount, i64) {
+/// `PATCH /v1/imports/{id}` recorded the Staging Review approval.
+async fn run_with_summary(summary: serde_json::Value) -> (TestFixture, RegisteredAccount, i64) {
     let (fixture, account) = fixture_with_account().await;
     let (_, created): (String, serde_json::Value) = post_created_json(
         &fixture.state,
@@ -26,13 +26,13 @@ async fn session_with_summary(summary: serde_json::Value) -> (TestFixture, Regis
         serde_json::json!({ "source": "imessage" }),
     )
     .await;
-    let import_id = created["id"].as_i64().expect("created session has an id");
+    let import_id = created["id"].as_i64().expect("created run has an id");
     let mut conn = fixture.state.db.acquire().await.unwrap();
     crate::db::imports::set_import_stage(
         &mut conn,
         account.account_id,
         import_id,
-        crate::db::imports::ImportStage::AwaitingGate1,
+        crate::db::imports::ImportStage::StagingReview,
         Some(&summary.to_string()),
     )
     .await
@@ -40,7 +40,7 @@ async fn session_with_summary(summary: serde_json::Value) -> (TestFixture, Regis
     (fixture, account, import_id)
 }
 
-/// The session's stored `summary_json`, decoded, or `None` when the
+/// The run's stored `summary_json`, decoded, or `None` when the
 /// column is null.
 async fn stored_summary(fixture: &TestFixture, import_id: i64) -> Option<serde_json::Value> {
     let mut conn = fixture.state.db.acquire().await.unwrap();
@@ -54,7 +54,7 @@ async fn stored_summary(fixture: &TestFixture, import_id: i64) -> Option<serde_j
 
 #[tokio::test]
 async fn a_stage_change_with_a_summary_stores_it() {
-    // The gate screen posts what the user approved so it survives a
+    // The Review screen posts what the user approved so it survives a
     // reload — recomputing the summary from the folder is a different
     // question from what was actually approved.
     let (fixture, account) = fixture_with_account().await;
@@ -72,7 +72,7 @@ async fn a_stage_change_with_a_summary_stores_it() {
         &fixture.state,
         &format!("/v1/imports/{import_id}"),
         &account.token,
-        serde_json::json!({"stage": "awaiting_gate_1", "summary": {"approved": true}}),
+        serde_json::json!({"stage": "staging_review", "summary": {"approved": true}}),
     )
     .await;
 
@@ -86,11 +86,11 @@ async fn a_stage_change_with_a_summary_stores_it() {
 async fn active_session_reports_the_summary_a_stage_change_stored() {
     // The completion call is allowed to overwrite summary_json with the
     // outcome once the run finishes — that is the intended history
-    // record. But mid-session, between an approval and completion, a
+    // record. But mid-run, between an approval and completion, a
     // reload has nowhere else to read the approved plan back from:
     // the running run on GET /v1/imports?status=running must expose it too.
     let (fixture, account, import_id) =
-        session_with_summary(serde_json::json!({"approved": true})).await;
+        run_with_summary(serde_json::json!({"approved": true})).await;
 
     let page: serde_json::Value =
         get_json(&fixture.state, "/v1/imports?status=running", &account.token).await;
@@ -105,13 +105,13 @@ async fn a_stage_change_without_a_summary_does_not_erase_the_stored_one() {
     // Most stage changes carry nothing. Treating absent as null would
     // throw away the plan the outcome is judged against.
     let (fixture, account, import_id) =
-        session_with_summary(serde_json::json!({"approved": true})).await;
+        run_with_summary(serde_json::json!({"approved": true})).await;
 
     let run: serde_json::Value = patch_json(
         &fixture.state,
         &format!("/v1/imports/{import_id}"),
         &account.token,
-        serde_json::json!({"stage": "pushing"}),
+        serde_json::json!({"stage": "upload"}),
     )
     .await;
     assert_eq!(
@@ -124,6 +124,95 @@ async fn a_stage_change_without_a_summary_does_not_erase_the_stored_one() {
         stored_summary(&fixture, import_id).await,
         Some(serde_json::json!({"approved": true}))
     );
+}
+
+#[tokio::test]
+async fn a_stage_answers_by_the_words_of_context_md_only() {
+    // The stages and Reviews of an Import Run are named as CONTEXT.md names
+    // them. The old spellings are refused, not read as aliases.
+    let (fixture, account) = fixture_with_account().await;
+    let (_, created): (String, serde_json::Value) = post_created_json(
+        &fixture.state,
+        "/v1/imports",
+        &account.token,
+        serde_json::json!({ "source": "imessage" }),
+    )
+    .await;
+    let path = format!("/v1/imports/{}", created["id"]);
+
+    let (status, text) = crate::test_support::patch_raw(
+        &fixture.state,
+        &path,
+        &account.token,
+        serde_json::json!({"stage": "awaiting_gate_1"}),
+    )
+    .await;
+    let sentence = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    )
+    .sentence();
+    assert!(
+        sentence.contains(
+            "expected one of `parse`, `write`, `staging_review`, `media`, `media_review`, `upload`"
+        ),
+        "the refusal lists the stages the server knows: {sentence}"
+    );
+
+    let run: serde_json::Value = patch_json(
+        &fixture.state,
+        &path,
+        &account.token,
+        serde_json::json!({"stage": "staging_review"}),
+    )
+    .await;
+    assert_eq!(run["id"], created["id"]);
+}
+
+#[tokio::test]
+async fn an_issue_names_the_stage_it_came_from() {
+    let (fixture, account) = fixture_with_account().await;
+    let (_, created): (String, serde_json::Value) = post_created_json(
+        &fixture.state,
+        "/v1/imports",
+        &account.token,
+        serde_json::json!({ "source": "imessage" }),
+    )
+    .await;
+    let id = created["id"].as_i64().unwrap();
+    let issue = |stage: &str| {
+        serde_json::json!({
+            "status": "completed_with_issues",
+            "issues": [{ "kind": "skip", "stage": stage, "item": "a.jpg", "reason": "missing" }],
+        })
+    };
+
+    // A finer step of the desktop app is not a Stage.
+    let (status, text) = crate::test_support::post_raw(
+        &fixture.state,
+        &format!("/v1/imports/{id}/complete"),
+        &account.token,
+        "application/json",
+        issue("parse").to_string(),
+    )
+    .await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+
+    let _: serde_json::Value = post_json(
+        &fixture.state,
+        &format!("/v1/imports/{id}/complete"),
+        &account.token,
+        issue("staging"),
+    )
+    .await;
+    let run: serde_json::Value =
+        get_json(&fixture.state, &format!("/v1/imports/{id}"), &account.token).await;
+    assert_eq!(run["issues"][0]["stage"], "staging");
 }
 
 /// Open a verify connection to an on-disk test database.
@@ -2494,7 +2583,7 @@ async fn every_route_on_another_accounts_run_is_not_found_and_changes_nothing() 
                 state,
                 &run,
                 token,
-                serde_json::json!({ "stage": "pushing", "summary": { "approved": true } }),
+                serde_json::json!({ "stage": "upload", "summary": { "approved": true } }),
             )
             .await,
         ),
@@ -3738,7 +3827,7 @@ async fn s6_1_with_follows_an_identity_an_address_book_moved() {
         &mut conn,
         TEST_ACCOUNT,
         &format!(
-            "contact_id,display_name,groups,service,handle_type,identity\n\
+            "contact_id,display_name,groups,service,identity_type,identity\n\
              {a},Ada,,,,\n\
              ,Bea,,phone,phone,+15555550123\n"
         ),
@@ -3999,7 +4088,7 @@ async fn an_import_run_reads_the_same_from_every_route() {
         token,
         serde_json::json!({
             "status": "completed_with_issues",
-            "issues": [{ "kind": "skip", "step": "parse", "item": "a.jsonl", "reason": "empty" }],
+            "issues": [{ "kind": "skip", "stage": "staging", "item": "a.jsonl", "reason": "empty" }],
         }),
     )
     .await;

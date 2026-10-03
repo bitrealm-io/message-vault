@@ -14,6 +14,7 @@ import { ChevronDownIcon, ChevronRightIcon } from "../icons";
 import PlainButton from "../PlainButton";
 import { groupImportIssues, type ImportIssueGroup } from "./groupImportIssues";
 import type { ImportIssue } from "./ImportSummaryPanel";
+import { ISSUE_STAGE_LABEL } from "./importIssueStage";
 import {
   COLLAPSED_ROW_HEIGHT,
   FILENAME_ROW_PX,
@@ -21,21 +22,6 @@ import {
   MAX_VISIBLE_FILENAMES,
   tableViewportHeight,
 } from "./importIssuesTableLayout";
-
-/**
- * The Stage (CONTEXT.md) each reported step belongs to. Reading the backup,
- * copying its attachments and writing the conversation files are all
- * Staging from the person's side. A step this build does not know shows as
- * it arrived.
- */
-const STAGE_FOR_STEP: Record<string, string> = {
-  setup: "Staging",
-  parse: "Staging",
-  attachments: "Staging",
-  prepare: "Staging",
-  media: "Media",
-  upload: "Upload",
-};
 
 const headerClass = "min-w-0 px-3 py-2 text-left font-medium text-muted outline-none";
 const cellClass = "min-w-0 overflow-hidden px-3 py-2 text-text";
@@ -133,7 +119,7 @@ export default function VirtualizedImportIssuesTable({ issues }: { issues: Impor
                     </span>
                   </Cell>
                   <Cell className={`${cellClass} capitalize`}>
-                    <span className="block truncate">{STAGE_FOR_STEP[row.step] ?? row.step}</span>
+                    <span className="block truncate">{ISSUE_STAGE_LABEL[row.stage]}</span>
                   </Cell>
                   <Cell className={cellClass}>
                     <span

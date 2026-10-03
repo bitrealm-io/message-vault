@@ -122,7 +122,7 @@ async fn a_page_across_two_conversations_names_each_conversations_own_participan
             let conversation = &item["conversation"];
             (
                 conversation["id"].as_i64().unwrap(),
-                conversation["participants"][0]["handle"]
+                conversation["participants"][0]["identity"]
                     .as_str()
                     .unwrap_or_else(|| panic!("a participant is named: {item}")),
             )

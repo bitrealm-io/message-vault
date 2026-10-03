@@ -9,7 +9,7 @@ function session(overrides: Partial<ActiveImportSession> = {}): ActiveImportSess
     mode: "append",
     status: "running",
     started_at: "2026-08-30T00:00:00Z",
-    stage: "pushing",
+    stage: "upload",
     staging_dir: "/home/u/message-crate/staging-260830",
     device_id: "this-device",
     form: { source: "imessage-ios" },
@@ -55,7 +55,7 @@ describe("resumeDecisionFor", () => {
   it("says the folder could not be checked when the stat itself failed", () => {
     // An IPC error is not evidence the folder is gone: the panel must not
     // offer to discard staged work on the strength of one.
-    for (const stage of ["pushing", "awaiting_gate_1", "transcode", "write", "parse"] as const) {
+    for (const stage of ["upload", "staging_review", "media", "write", "parse"] as const) {
       expect(
         resumeDecisionFor({
           session: session({ stage }),
@@ -80,7 +80,7 @@ describe("resumeDecisionFor", () => {
 
   it("resumes the upload when a push was interrupted", () => {
     const decision = resumeDecisionFor({
-      session: session({ stage: "pushing" }),
+      session: session({ stage: "upload" }),
       deviceId: "this-device",
       folder: "present",
       fingerprint: "unknown",
@@ -102,20 +102,20 @@ describe("resumeDecisionFor", () => {
   });
 
   it("sends a session waiting at a gate back to its gate", () => {
-    for (const stage of ["awaiting_gate_1", "awaiting_gate_2"] as const) {
+    for (const stage of ["staging_review", "media_review"] as const) {
       const decision = resumeDecisionFor({
         session: session({ stage }),
         deviceId: "this-device",
         folder: "present",
         fingerprint: "unknown",
       });
-      expect(decision.kind).toBe("resume_gate");
+      expect(decision.kind).toBe("resume_review");
     }
   });
 
   it("sends a session that died converting back to the media pass", () => {
     const decision = resumeDecisionFor({
-      session: session({ stage: "transcode" }),
+      session: session({ stage: "media" }),
       deviceId: "this-device",
       folder: "present",
       fingerprint: "unknown",
@@ -126,7 +126,7 @@ describe("resumeDecisionFor", () => {
   it("still offers discard only when the folder is gone at a gate", () => {
     // Decision 36: after a review, discard only. There is nothing to
     // recompute a summary from.
-    for (const stage of ["awaiting_gate_1", "awaiting_gate_2", "transcode"] as const) {
+    for (const stage of ["staging_review", "media_review", "media"] as const) {
       expect(
         resumeDecisionFor({
           session: session({ stage }),
@@ -197,7 +197,7 @@ describe("resumeDecisionFor", () => {
     // the push — the staged folder is what those stages work from.
     expect(
       resumeDecisionFor({
-        session: session({ stage: "pushing" }),
+        session: session({ stage: "upload" }),
         deviceId: "this-device",
         folder: "present",
         fingerprint: "mismatch",

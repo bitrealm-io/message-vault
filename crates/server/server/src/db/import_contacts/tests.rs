@@ -32,9 +32,14 @@ async fn a_run_keeps_the_most_consequential_reason_for_a_contact() {
     let mut conn = pool.acquire().await.unwrap();
     let ada = contact(&mut conn, "Ada").await;
 
-    record(&mut conn, Some(import_id), ada, ContactReason::HandleAdded)
-        .await
-        .unwrap();
+    record(
+        &mut conn,
+        Some(import_id),
+        ada,
+        ContactReason::IdentityAdded,
+    )
+    .await
+    .unwrap();
     record(&mut conn, Some(import_id), ada, ContactReason::Named)
         .await
         .unwrap();
@@ -46,9 +51,14 @@ async fn a_run_keeps_the_most_consequential_reason_for_a_contact() {
         "named outranks a handle"
     );
 
-    record(&mut conn, Some(import_id), ada, ContactReason::HandleAdded)
-        .await
-        .unwrap();
+    record(
+        &mut conn,
+        Some(import_id),
+        ada,
+        ContactReason::IdentityAdded,
+    )
+    .await
+    .unwrap();
     let (rows, _) = page(&mut conn, import_id, 40, 0).await.unwrap();
     assert_eq!(
         rows[0].reason,
@@ -81,7 +91,7 @@ async fn the_tally_and_the_page_read_what_the_run_recorded() {
         &mut conn,
         Some(import_id),
         nameless,
-        ContactReason::HandleAdded,
+        ContactReason::IdentityAdded,
     )
     .await
     .unwrap();
@@ -111,7 +121,7 @@ async fn the_tally_and_the_page_read_what_the_run_recorded() {
             ImportContact {
                 id: nameless,
                 name: String::new(),
-                reason: ContactReason::HandleAdded
+                reason: ContactReason::IdentityAdded
             },
         ],
         "most consequential first, and the untouched contact is absent"

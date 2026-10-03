@@ -8,6 +8,7 @@ import {
   type StageTiming,
   setupDetail,
   stageDurations,
+  stageForStep,
   stepIndexFor,
   stepsFor,
 } from "./importProgressState";
@@ -156,5 +157,19 @@ describe("stage timing", () => {
   it("runs reading to the end of extract when only setup reported", () => {
     const timing = timeline([["setup", 100]]);
     expect(stageDurations(timing, 1000).parseMs).toBe(900);
+  });
+});
+
+describe("stageForStep", () => {
+  it.each([
+    ["setup", "staging"],
+    ["parse", "staging"],
+    ["attachments", "staging"],
+    ["prepare", "staging"],
+    ["check", "staging"],
+    ["media", "media"],
+    ["upload", "upload"],
+  ] as const)("puts the %s step in the %s Stage", (step, stage) => {
+    expect(stageForStep(step)).toBe(stage);
   });
 });

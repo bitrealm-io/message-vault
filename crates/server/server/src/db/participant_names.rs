@@ -159,7 +159,7 @@ fn participant_row(row: &SqliteRow) -> Result<(i64, Participant), sqlx::Error> {
         row.try_get::<i64, _>(0)?,
         Participant {
             name: row.try_get(1)?,
-            handle: row.try_get(2)?,
+            identity: row.try_get(2)?,
             service: row.try_get(3)?,
             contact_id: row.try_get(4)?,
         },

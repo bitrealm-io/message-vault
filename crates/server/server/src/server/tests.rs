@@ -381,13 +381,13 @@ async fn imports_complete_and_detail_surface_timings_and_issues() {
         issues: vec![
             CompleteImportIssueRequest {
                 kind: "skip".into(),
-                step: "convert".into(),
+                stage: crate::db::imports::ImportIssueStage::Media,
                 item: "photo.heic".into(),
                 reason: "convert failed".into(),
             },
             CompleteImportIssueRequest {
                 kind: "error".into(),
-                step: "upload".into(),
+                stage: crate::db::imports::ImportIssueStage::Upload,
                 item: "archive.zip".into(),
                 reason: "upload failed".into(),
             },
@@ -425,9 +425,15 @@ async fn imports_complete_and_detail_surface_timings_and_issues() {
     assert_eq!(value.summary["parse"]["messages"], 10);
     assert_eq!(value.issues.len(), 2);
     assert_eq!(value.issues[0].kind, "skip");
-    assert_eq!(value.issues[0].step, "convert");
+    assert_eq!(
+        value.issues[0].stage,
+        crate::db::imports::ImportIssueStage::Media
+    );
     assert_eq!(value.issues[1].kind, "error");
-    assert_eq!(value.issues[1].step, "upload");
+    assert_eq!(
+        value.issues[1].stage,
+        crate::db::imports::ImportIssueStage::Upload
+    );
 }
 
 #[tokio::test]
@@ -503,7 +509,7 @@ async fn imports_complete_rejects_invalid_issue_kind_before_db_write() {
         summary: None,
         issues: vec![CompleteImportIssueRequest {
             kind: "warning".into(),
-            step: "upload".into(),
+            stage: crate::db::imports::ImportIssueStage::Upload,
             item: "archive.zip".into(),
             reason: "not allowed".into(),
         }],
@@ -562,7 +568,7 @@ async fn active_session_is_empty_then_reports_the_live_one() {
         source: "imessage".into(),
         mode: ImportMode::Append,
         tool: Some("message-crate".into()),
-        stage: Some("write".into()),
+        stage: Some(crate::db::imports::ImportStage::Write),
         staging_dir: Some("/home/u/message-crate/staging-260830".into()),
         device_id: Some("device-a".into()),
         form: Some(serde_json::json!({ "source": "imessage-ios" })),
@@ -590,7 +596,7 @@ async fn active_session_is_empty_then_reports_the_live_one() {
         .await
         .expect("a running run is listed");
     assert_eq!(session.id, created.body.id);
-    assert_eq!(session.stage.as_deref(), Some("write"));
+    assert_eq!(session.stage, Some(crate::db::imports::ImportStage::Write));
     assert_eq!(
         session.staging_dir.as_deref(),
         Some("/home/u/message-crate/staging-260830")
@@ -733,7 +739,7 @@ async fn a_second_session_is_refused_with_conflict() {
 }
 
 #[tokio::test]
-async fn stage_endpoint_advances_and_rejects_an_unknown_stage() {
+async fn stage_endpoint_advances() {
     let (_dir, state, token, import_id) = test_state().await;
 
     let _ = update_import(
@@ -741,33 +747,16 @@ async fn stage_endpoint_advances_and_rejects_an_unknown_stage() {
         import_access(&state, &token).await,
         AxumPath(import_id),
         Json(UpdateImportRequest {
-            stage: "pushing".into(),
+            stage: crate::db::imports::ImportStage::Upload,
             summary: None,
         }),
     )
     .await
     .unwrap();
     assert_eq!(
-        running_import(&state, &token)
-            .await
-            .unwrap()
-            .stage
-            .as_deref(),
-        Some("pushing")
+        running_import(&state, &token).await.unwrap().stage,
+        Some(crate::db::imports::ImportStage::Upload)
     );
-
-    let err = update_import(
-        State(state.clone()),
-        import_access(&state, &token).await,
-        AxumPath(import_id),
-        Json(UpdateImportRequest {
-            stage: "halfway".into(),
-            summary: None,
-        }),
-    )
-    .await
-    .unwrap_err();
-    assert!(matches!(err, ApiError::ValidationFailed(_)));
 }
 
 #[tokio::test]

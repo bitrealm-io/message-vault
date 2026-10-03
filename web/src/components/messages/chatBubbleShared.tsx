@@ -48,7 +48,7 @@ export function bubbleBody(
 export function senderName(m: Message): string {
   if (m.is_from_me) return "Me";
   if (m.sender) {
-    const p = m.conversation.participants.find((x) => x.handle === m.sender);
+    const p = m.conversation.participants.find((x) => x.identity === m.sender);
     return p ? p.name : m.sender;
   }
   const p = m.conversation.participants[0];
@@ -81,7 +81,7 @@ const TAPBACK_KIND_EMOJI: Record<string, string> = {
 function tapbackSenderName(m: Message, t: MessageTapback): string {
   if (t.is_from_me) return "Me";
   if (t.sender) {
-    const p = m.conversation.participants.find((x) => x.handle === t.sender);
+    const p = m.conversation.participants.find((x) => x.identity === t.sender);
     if (p) return p.name;
     return t.sender;
   }

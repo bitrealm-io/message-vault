@@ -1,22 +1,9 @@
 import { discardImport, listImports, setImportStage as setStage } from "./serverApi";
+import type { components } from "./serverApi.types";
 import type { PathStat } from "./tauri";
 
-/** Where a live import session is. Mirrors the server's `ImportStage`. */
-export const IMPORT_STAGES = [
-  "parse",
-  "write",
-  "awaiting_gate_1",
-  "transcode",
-  "awaiting_gate_2",
-  "pushing",
-] as const;
-
-export type ImportStage = (typeof IMPORT_STAGES)[number];
-
-/** The server sends `stage` as a plain string; anything unknown reads as null. */
-function asImportStage(value: string | null | undefined): ImportStage | null {
-  return IMPORT_STAGES.includes(value as ImportStage) ? (value as ImportStage) : null;
-}
+/** Where a running Import Run is: the server's `ImportStage`. */
+export type ImportStage = components["schemas"]["ImportStage"];
 
 /** Identity of the backup a session was started from. */
 export type SourceFingerprint = {
@@ -57,7 +44,7 @@ export async function getActiveImportSession(
   if (!session) return null;
   return {
     ...session,
-    stage: asImportStage(session.stage),
+    stage: session.stage ?? null,
     staging_dir: session.staging_dir ?? null,
     device_id: session.device_id ?? null,
     source_fingerprint: session.source_fingerprint as SourceFingerprint | null,

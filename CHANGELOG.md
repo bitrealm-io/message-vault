@@ -780,6 +780,9 @@ released versions carry their date on the heading.
   and start the import again. Do the same with a paused Apple Messages run
   from an earlier build: its staged files don't say which reactions are
   yours, so yours would be stored as someone else's.
+- An Address Book exported by an earlier build calls its fifth column
+  `handle_type`, and loading it is refused. Rename that column to
+  `identity_type` in the file, or export the Address Book again.
 - `reset-demo` no longer writes a configuration file, and reads the one given
   with `--config`. If an earlier `reset-demo` replaced your configuration
   file, the server stops at startup with a missing `[server]` section: put

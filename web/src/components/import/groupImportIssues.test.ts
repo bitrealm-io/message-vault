@@ -5,7 +5,7 @@ import type { ImportIssue } from "./ImportSummaryPanel";
 function issue(partial: Partial<ImportIssue> & Pick<ImportIssue, "item" | "reason">): ImportIssue {
   return {
     kind: "error",
-    step: "upload",
+    stage: "upload",
     ...partial,
   };
 }
@@ -24,7 +24,7 @@ describe("groupImportIssues", () => {
     expect(groups).toEqual([
       {
         kind: "error",
-        step: "upload",
+        stage: "upload",
         reason: "source mismatch",
         items: ["a.jsonl", "b.jsonl", "c.jsonl"],
       },
@@ -43,7 +43,7 @@ describe("groupImportIssues", () => {
     expect(groups[1]?.items).toEqual(["b.jsonl"]);
   });
 
-  it("keeps error and skip with the same step and reason as two groups", () => {
+  it("keeps error and skip with the same stage and reason as two groups", () => {
     const groups = groupImportIssues([
       issue({ kind: "error", item: "a.jsonl", reason: "source mismatch" }),
       issue({ kind: "skip", item: "b.jsonl", reason: "source mismatch" }),
@@ -57,9 +57,9 @@ describe("groupImportIssues", () => {
 
   it("keeps first-seen group order and filename order", () => {
     const groups = groupImportIssues([
-      issue({ step: "upload", item: "b.jsonl", reason: "shared" }),
-      issue({ step: "parse", item: "early.jsonl", reason: "unique parse" }),
-      issue({ step: "upload", item: "c.jsonl", reason: "shared" }),
+      issue({ stage: "upload", item: "b.jsonl", reason: "shared" }),
+      issue({ stage: "staging", item: "early.jsonl", reason: "unique parse" }),
+      issue({ stage: "upload", item: "c.jsonl", reason: "shared" }),
     ]);
     expect(groups.map((group) => group.reason)).toEqual(["shared", "unique parse"]);
     expect(groups[0]?.items).toEqual(["b.jsonl", "c.jsonl"]);

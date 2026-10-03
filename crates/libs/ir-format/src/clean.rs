@@ -21,13 +21,19 @@ pub const EXPORT_SENTINEL: &str = ".message-crate-export";
 ///
 /// Returns an error when the sentinel cannot be written.
 pub fn write_export_sentinel(output_dir: &Path) -> Result<()> {
+    open_sentinel(output_dir)?;
+    Ok(())
+}
+
+/// Open the sentinel of `output_dir` for appending, creating it when it is
+/// missing.
+fn open_sentinel(output_dir: &Path) -> Result<fs::File> {
     let path = output_dir.join(EXPORT_SENTINEL);
     fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(&path)
-        .with_context(|| format!("write {}", path.display()))?;
-    Ok(())
+        .with_context(|| format!("open {}", path.display()))
 }
 
 /// Delete previous CSV, JSON, JSON Lines, meta, temps, staged attachments,
@@ -130,11 +136,7 @@ fn remove_previous(path: &Path) -> Result<()> {
 /// Returns an error when the sentinel cannot be written.
 pub(crate) fn record_archive_files(output_dir: &Path, names: &[String]) -> Result<()> {
     let path = output_dir.join(EXPORT_SENTINEL);
-    let mut sentinel = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-        .with_context(|| format!("open {}", path.display()))?;
+    let mut sentinel = open_sentinel(output_dir)?;
     for name in names {
         writeln!(sentinel, "{name}").with_context(|| format!("write {}", path.display()))?;
     }

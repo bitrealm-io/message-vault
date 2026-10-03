@@ -89,7 +89,7 @@ mod tests {
         );
         assert_eq!(
             refusal(&[], source(&["+15555550100"], &["owner@example.com"])),
-            "SMS Backup+ needs a backup folder"
+            "SMS Backup+ needs a backup directory"
         );
 
         let no_input = convert_export(ConvertExportArgs {
@@ -106,6 +106,6 @@ mod tests {
         })
         .unwrap_err()
         .to_string();
-        assert_eq!(no_input, "SMS Backup+ needs a backup folder");
+        assert_eq!(no_input, "SMS Backup+ needs a backup directory");
     }
 }

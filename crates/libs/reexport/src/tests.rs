@@ -1,7 +1,7 @@
 use super::*;
 use message_crate_core::{FormatConfig, MediaConfig, ObfuscateConfig, SourceConfig};
 use message_ir::IrAttachment;
-use message_ir_format::{read_conversation_csv, read_conversation_json};
+use message_ir_format::{MergedArchive, read_conversation_csv, read_conversation_json};
 
 fn write_fixture(dir: &Path, format: OutputFormat) {
     fs::create_dir_all(dir).unwrap();
@@ -31,31 +31,37 @@ fn config(input: &Path, output: &Path, output_format: OutputFormat) -> ExporterC
     }
 }
 
-/// The names of the conversation JSON files in `dir`, sorted, skipping
-/// `.meta.json` sidecars.
-fn json_names(dir: &Path) -> Vec<String> {
-    let mut names: Vec<String> = fs::read_dir(dir)
+/// The files in `dir` with `extension`, sorted, skipping `.meta.json`
+/// sidecars.
+fn files_with_extension(dir: &Path, extension: &str) -> Vec<PathBuf> {
+    let mut paths: Vec<PathBuf> = fs::read_dir(dir)
         .unwrap()
-        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
-        .filter(|name| name.ends_with(".json") && !name.ends_with(".meta.json"))
-        .collect();
-    names.sort();
-    names
-}
-
-/// The first file in `dir` with `extension`, skipping `.meta.json` sidecars.
-fn find_file(dir: &Path, extension: &str) -> PathBuf {
-    fs::read_dir(dir)
-        .unwrap()
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .find(|path| {
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
             path.extension().and_then(|found| found.to_str()) == Some(extension)
                 && !path
                     .file_name()
                     .and_then(|name| name.to_str())
                     .is_some_and(|name| name.ends_with(".meta.json"))
         })
+        .collect();
+    paths.sort();
+    paths
+}
+
+/// The names of the conversation JSON files in `dir`, sorted.
+fn json_names(dir: &Path) -> Vec<String> {
+    files_with_extension(dir, "json")
+        .into_iter()
+        .map(|path| path.file_name().unwrap().to_string_lossy().into_owned())
+        .collect()
+}
+
+/// The first file in `dir` with `extension`, skipping `.meta.json` sidecars.
+fn find_file(dir: &Path, extension: &str) -> PathBuf {
+    files_with_extension(dir, extension)
+        .into_iter()
+        .next()
         .unwrap_or_else(|| panic!("no .{extension} file in {}", dir.display()))
 }
 
@@ -1000,8 +1006,14 @@ fn convert_removes_the_backup_an_earlier_conversion_wrote() {
         &config(source.path(), destination.path(), OutputFormat::Xml),
     )
     .unwrap();
-    fs::write(destination.path().join("smses.xml.tmp"), "partial").unwrap();
-    fs::write(destination.path().join("smses.xml.sbrbody"), "partial").unwrap();
+    // What a conversion stopped before it finished leaves behind.
+    let names = SbrArchive.file_names();
+    for name in &names {
+        let path = destination.path().join(name);
+        if !path.exists() {
+            fs::write(path, "partial").unwrap();
+        }
+    }
 
     convert_export(
         source.path(),
@@ -1009,7 +1021,7 @@ fn convert_removes_the_backup_an_earlier_conversion_wrote() {
     )
     .unwrap();
 
-    for name in ["smses.xml", "smses.xml.tmp", "smses.xml.sbrbody"] {
+    for name in &names {
         assert!(
             !destination.path().join(name).exists(),
             "{name} is left behind"

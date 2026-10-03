@@ -313,7 +313,7 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
     } = args;
     // Checked before the output folder is cleaned, so a refused run leaves it.
     if inputs.is_empty() {
-        bail!("SMS Backup+ needs a backup folder");
+        bail!("SMS Backup+ needs a backup directory");
     }
     let verbose = Verbose {
         enabled: verbose,

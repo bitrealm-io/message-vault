@@ -390,7 +390,7 @@ impl OwnerHandleSet {
     /// value sanitizes to no usable digits.
     pub fn new(handles: &[(String, HandleType)]) -> Result<Self> {
         if handles.is_empty() {
-            bail!("the owner's phone number or email address is required");
+            bail!("the backup device's phone number or email address is required");
         }
         let mut keyed: Vec<(String, HandleType)> = Vec::new();
         for (raw, handle_type) in handles {
@@ -786,7 +786,7 @@ mod tests {
         // The exporters have no command line, so the message names no flag.
         assert_eq!(
             OwnerHandleSet::new(&[]).unwrap_err().to_string(),
-            "the owner's phone number or email address is required"
+            "the backup device's phone number or email address is required"
         );
         assert!(OwnerHandleSet::from_phones(&[]).is_err());
         assert!(OwnerHandleSet::from_phones(&["not-a-phone".into()]).is_err());

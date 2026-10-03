@@ -143,12 +143,12 @@ fn unified_csv_headers_for_all_sources() {
     assert!(csv.contains("loved"));
     assert!(csv.contains("+15555550100")); // outgoing sender / owner
 
-    let sbr_doc = message_ir::testutil::sample_document("hello ir");
-    let sbr_csv_path = write_format(tmp.path(), OutputFormat::Csv, sbr_doc).unwrap();
-    let sbr_csv = fs::read_to_string(&sbr_csv_path).unwrap();
-    assert_eq!(sbr_csv.lines().next().unwrap(), CSV_HEADERS.join(","));
-    assert!(!sbr_csv.contains("xml_fields_json"));
-    assert!(sbr_csv.contains("source_fields_json"));
+    let sms_doc = message_ir::testutil::sample_document("hello ir");
+    let sms_csv_path = write_format(tmp.path(), OutputFormat::Csv, sms_doc).unwrap();
+    let sms_csv = fs::read_to_string(&sms_csv_path).unwrap();
+    assert_eq!(sms_csv.lines().next().unwrap(), CSV_HEADERS.join(","));
+    assert!(!sms_csv.contains("xml_fields_json"));
+    assert!(sms_csv.contains("source_fields_json"));
 }
 
 #[test]

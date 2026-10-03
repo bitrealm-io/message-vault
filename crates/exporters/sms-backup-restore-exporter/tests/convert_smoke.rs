@@ -452,12 +452,17 @@ fn a_second_export_removes_the_backup_an_earlier_one_wrote() {
     convert(&fixture, tmp.path(), &owner, OutputFormat::Xml).unwrap();
     assert!(tmp.path().join("smses.xml").is_file());
     // What an export stopped before it finished leaves behind.
-    fs::write(tmp.path().join("smses.xml.tmp"), "partial").unwrap();
-    fs::write(tmp.path().join("smses.xml.sbrbody"), "partial").unwrap();
+    let names = sbr::backup_file_names();
+    for name in &names {
+        let path = tmp.path().join(name);
+        if !path.exists() {
+            fs::write(path, "partial").unwrap();
+        }
+    }
 
     convert(&fixture, tmp.path(), &owner, OutputFormat::Csv).unwrap();
 
-    for name in ["smses.xml", "smses.xml.tmp", "smses.xml.sbrbody"] {
+    for name in &names {
         assert!(!tmp.path().join(name).exists(), "{name} is left behind");
     }
     assert!(!csv_files(tmp.path()).is_empty());

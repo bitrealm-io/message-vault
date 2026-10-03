@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use message_crate_core::{CancelFlag, check_cancel, parallel_for_each};
 use message_crate_http::{auth_check as authenticate, with_retries};
-use message_ir_format::write_export_sentinel;
+use message_ir_format::mark_export_folder;
 use serde::Serialize;
 
 use crate::http::{ExportMessagesArgs, HttpSession};
@@ -132,29 +132,32 @@ fn next_offset(offset: usize, limit: usize, total: u64) -> Option<usize> {
     (u64::try_from(next).unwrap_or(u64::MAX) < total).then_some(next)
 }
 
-/// Create the output folder and its `attachments/` child, and mark the folder
-/// as a Message Crate export.
+/// Create the output folder, mark it as a Message Crate export, and create its
+/// `attachments/` child.
 ///
 /// The sentinel names this folder as one an export wrote. The desktop app
 /// refuses to clean or transcode a folder without it
 /// (`resolve_staging_child` in `src-tauri/src/commands/staging.rs`), which is
 /// what stands between a path bug and a recursive delete somewhere else on
 /// disk. A pulled folder that skipped the sentinel could not be used as
-/// export staging.
+/// export staging. Because a marked folder may be cleaned by a later export,
+/// a folder of the person's own files is refused rather than marked
+/// ([`mark_export_folder`]). The folder is marked before `attachments/` is
+/// created, so a new folder is still empty when it is checked.
 ///
 /// # Errors
 ///
 /// Returns an error when the folder, its `attachments/` child, or the
-/// sentinel cannot be written.
+/// sentinel cannot be written, or the folder holds files and no sentinel.
 fn prepare_out_dir(out_dir: &Path, skip_attachments: bool) -> Result<()> {
     fs::create_dir_all(out_dir).with_context(|| format!("create {}", out_dir.display()))?;
+    mark_export_folder(out_dir)?;
     if !skip_attachments {
         let attachments_dir = out_dir.join("attachments");
         fs::create_dir_all(&attachments_dir)
             .with_context(|| format!("create {}", attachments_dir.display()))?;
     }
-    write_export_sentinel(out_dir)
-        .with_context(|| format!("mark {} as an export folder", out_dir.display()))
+    Ok(())
 }
 
 /// Download matching messages into `cfg.out_dir` as JSON Lines plus attachments.
@@ -861,6 +864,19 @@ mod out_dir_tests {
         prepare_out_dir(&out, false).unwrap();
 
         assert!(out.join(EXPORT_SENTINEL).is_file());
+    }
+
+    #[test]
+    fn refuses_a_folder_of_the_users_own_files() {
+        // A marked folder may be cleaned by a later export, so marking a
+        // person's folder would let that export delete their files.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("budget.csv"), "mine").unwrap();
+
+        prepare_out_dir(dir.path(), false).unwrap_err();
+
+        assert!(!dir.path().join(EXPORT_SENTINEL).exists());
+        assert!(!dir.path().join("attachments").exists());
     }
 }
 

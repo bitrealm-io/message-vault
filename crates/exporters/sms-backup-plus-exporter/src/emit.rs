@@ -8,12 +8,13 @@ use crate::parse_emit::{ParsedEmlKind, collect_eml_paths, parse_one_eml};
 use crate::types::ParsedMessage;
 use anyhow::{Result, bail};
 use message_crate_core::{
-    CancelFlag, ExportReport, ExportTransforms, LogSink, OutputFormat, emit_log, prepare_outputs,
-    project_conversation,
+    CancelFlag, ExportReport, ExportTransforms, LogSink, OutputFormat, RunIssue, emit_log,
+    prepare_outputs, project_conversation,
 };
 use message_ir::{
-    ExportMeta, IrAttachment, IrParticipant, IrService, IrSource, PendingAttachment,
-    PendingConversation, PendingMessage, ProjectionHooks, default_participants, parse_android_type,
+    ConversationDocument, ExportMeta, IrAttachment, IrConversationType, IrDirection, IrParticipant,
+    IrService, IrSource, PendingAttachment, PendingConversation, PendingMessage, ProjectionHooks,
+    default_participants, parse_android_type,
 };
 use message_staging::{AttachmentSource, AttachmentSpool, ExportWriter};
 use phone::{Handle, OwnerHandleSet};
@@ -26,11 +27,13 @@ const EXPORT_TOOL: &str = "SMS Backup+";
 const EXPORT_TOOL_VERSION: &str = "1.5.11";
 
 /// Report counter: received group messages whose `From` names nobody in the
-/// group, kept with no sender. Counted before copies are reduced to one.
+/// group, kept with no sender. Counted after copies are reduced to one, and
+/// each one is also an issue in the Import Run.
 const GROUP_MESSAGES_WITHOUT_SENDER: &str = "group_messages_without_sender";
 
 /// Report counter: received MMS whose `To` names a group but none of the
 /// owner's numbers or email addresses, keyed by `X-smssync-address` instead.
+/// Counted after copies are reduced to one.
 const GROUP_MESSAGES_OWNER_NOT_NAMED: &str = "group_messages_owner_not_named";
 
 /// The EML's path relative to the input root it was found under, for the vendor `source` bag.
@@ -230,6 +233,43 @@ impl ProjectionHooks for SbpProjection {
     }
 }
 
+/// Project one conversation, then count the group messages it kept with no
+/// sender, or keyed without the owner, from the messages written: copies
+/// dropped by the projection are not counted.
+fn project_and_count(
+    chat_id: &str,
+    convo: &mut PendingConversation,
+    hooks: &SbpProjection,
+    owner_not_named: &HashSet<String>,
+    report: &mut ExportReport,
+) -> Option<ConversationDocument> {
+    let doc = project_conversation(chat_id, convo, hooks, report)?;
+    if doc.conversation.conversation_type != IrConversationType::Group {
+        return Some(doc);
+    }
+    for msg in &doc.messages {
+        let eml_path = msg
+            .source
+            .as_ref()
+            .and_then(|s| s.fields.get("eml_path"))
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
+        if owner_not_named.contains(eml_path) {
+            report.bump(GROUP_MESSAGES_OWNER_NOT_NAMED, 1);
+        }
+        if msg.direction == IrDirection::Incoming && msg.sender_handle.is_none() {
+            report.bump(GROUP_MESSAGES_WITHOUT_SENDER, 1);
+            report.issues.push(RunIssue {
+                kind: "skip".into(),
+                step: "parse".into(),
+                item: eml_path.to_string(),
+                reason: "The sender of this group message could not be read, so it is stored with no sender.".into(),
+            });
+        }
+    }
+    Some(doc)
+}
+
 const EML_PROGRESS_EVERY: u64 = 5000;
 
 /// Verbose-only log output: every method is a no-op unless
@@ -354,6 +394,7 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
     let EmlIngest {
         conversations,
         mut report,
+        owner_not_named,
         ..
     } = ingest;
 
@@ -369,7 +410,9 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
     let mut documents = Vec::new();
     for (chat_id, mut convo) in conversations {
         message_crate_core::check_cancel(cancel)?;
-        if let Some(doc) = project_conversation(&chat_id, &mut convo, &hooks, &mut report) {
+        if let Some(doc) =
+            project_and_count(&chat_id, &mut convo, &hooks, &owner_not_named, &mut report)
+        {
             documents.push(doc);
         }
     }
@@ -389,8 +432,13 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
     )?;
 
     verbose.line(format!(
-        "done: conversations={} messages={} duplicates_dropped={} attachments={}",
-        report.conversations, report.messages, report.duplicates_dropped, report.attachments_saved
+        "done: conversations={} messages={} duplicates_dropped={} attachments={} group_without_sender={} group_owner_not_named={}",
+        report.conversations,
+        report.messages,
+        report.duplicates_dropped,
+        report.attachments_saved,
+        report.extra(GROUP_MESSAGES_WITHOUT_SENDER),
+        report.extra(GROUP_MESSAGES_OWNER_NOT_NAMED),
     ));
     verbose.errors(&report);
     Ok(report)
@@ -463,6 +511,9 @@ struct EmlIngest<'a> {
     spool: Option<&'a AttachmentSpool>,
     conversations: HashMap<String, PendingConversation>,
     report: ExportReport,
+    /// EML paths of received MMS whose `To` named none of the owner's
+    /// addresses, counted once the copies are reduced to one.
+    owner_not_named: HashSet<String>,
 }
 
 impl<'a> EmlIngest<'a> {
@@ -472,6 +523,7 @@ impl<'a> EmlIngest<'a> {
             spool,
             conversations: HashMap::with_capacity((eml_count / 4).min(50_000)),
             report: ExportReport::default(),
+            owner_not_named: HashSet::new(),
         }
     }
 
@@ -513,11 +565,8 @@ impl<'a> EmlIngest<'a> {
         if msg.chat_key.is_empty() {
             self.report.bump("unknown_chat_messages", 1);
         }
-        if msg.is_group() && !msg.is_from_me && msg.sender.is_none() {
-            self.report.bump(GROUP_MESSAGES_WITHOUT_SENDER, 1);
-        }
         if msg.owner_not_named {
-            self.report.bump(GROUP_MESSAGES_OWNER_NOT_NAMED, 1);
+            self.owner_not_named.insert(msg.eml_path.clone());
         }
         let atts = queue_attachments(&msg.attachments, self.spool)?;
         add_message(&mut self.conversations, msg, atts, &mut self.report);
@@ -527,12 +576,10 @@ impl<'a> EmlIngest<'a> {
     /// One line of parse counters for the verbose log.
     fn parse_summary(&self) -> String {
         format!(
-            "parsed: flat_eml={} messages={} unknown_chat={} group_without_sender={} group_owner_not_named={} skipped_call_log={} skipped_not_sms_backup_plus={} skipped_parse_error={}",
+            "parsed: flat_eml={} messages={} unknown_chat={} skipped_call_log={} skipped_not_sms_backup_plus={} skipped_parse_error={}",
             self.report.extra("flat_eml"),
             self.report.extra("messages_before_dedupe"),
             self.report.extra("unknown_chat_messages"),
-            self.report.extra(GROUP_MESSAGES_WITHOUT_SENDER),
-            self.report.extra(GROUP_MESSAGES_OWNER_NOT_NAMED),
             self.report.extra("skipped_call_log"),
             self.report.extra("skipped_not_sms_backup_plus"),
             self.report.extra("skipped_parse_error"),
@@ -545,8 +592,7 @@ mod tests {
     use super::*;
     use crate::types::AttachmentBlob;
     use message_ir::{
-        ConversationDocument, ConversationMeta, ConversationStats, IrConversationType, IrDirection,
-        IrMessage, IrMessageKind, SCHEMA_VERSION,
+        ConversationMeta, ConversationStats, IrMessage, IrMessageKind, SCHEMA_VERSION,
     };
 
     /// An EML given as an input is recorded under its own file name. An EML
@@ -678,12 +724,13 @@ mod tests {
             ),
         };
         let mut report = ingest.report;
+        let owner_not_named = ingest.owner_not_named;
         let mut messages = Vec::new();
         let mut conversations: Vec<_> = ingest.conversations.into_iter().collect();
         conversations.sort_by(|a, b| a.0.cmp(&b.0));
         for (chat_id, mut convo) in conversations {
             if let Some(doc) =
-                message_crate_core::project_conversation(&chat_id, &mut convo, &hooks, &mut report)
+                project_and_count(&chat_id, &mut convo, &hooks, &owner_not_named, &mut report)
             {
                 messages.extend(doc.messages);
             }
@@ -727,6 +774,25 @@ mod tests {
                 .unwrap();
         }
         assert_eq!(ingest.report.extra("skipped_unreadable_part"), 3);
+    }
+
+    /// Two copies of a received MMS whose `To` names none of the owner's
+    /// addresses are one message, counted once. Its sender was read, so it
+    /// is not an issue.
+    #[test]
+    fn a_group_message_not_naming_the_owner_is_counted_once_over_two_copies() {
+        let copy = |eml_path: &str| ParsedMessage {
+            chat_key: "+15555550111_+15555550122".into(),
+            conversation_type: IrConversationType::Group,
+            sender: Handle::parse("+15555550111"),
+            owner_not_named: true,
+            ..parsed(1_600_000_000.1, true, eml_path)
+        };
+        let (msgs, report) = project(vec![copy("a.eml"), copy("b.eml")]);
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(report.extra(GROUP_MESSAGES_OWNER_NOT_NAMED), 1);
+        assert_eq!(report.extra(GROUP_MESSAGES_WITHOUT_SENDER), 0);
+        assert!(report.issues.is_empty(), "{:?}", report.issues);
     }
 
     #[test]

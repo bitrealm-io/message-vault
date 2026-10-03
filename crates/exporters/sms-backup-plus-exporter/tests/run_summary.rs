@@ -124,15 +124,14 @@ fn a_call_log_mail_is_skipped_and_counted_in_the_summary() {
 }
 
 /// A received group MMS whose `From` names nobody in the group is written
-/// with no sender, and the summary counts it.
+/// with no sender, and the summary and the Import Run's issues count it once,
+/// even when the archive holds two copies of the mail.
 #[test]
-fn a_group_message_with_no_readable_sender_is_kept_and_counted() {
+fn a_group_message_with_no_readable_sender_is_kept_and_counted_once() {
     let tmp = tempfile::tempdir().unwrap();
     let input = tmp.path().join("backup");
     fs::create_dir_all(&input).unwrap();
-    fs::write(
-        input.join("1.eml"),
-        "From: Bob <bob@example.org>\n\
+    let mail = "From: Bob <bob@example.org>\n\
          To: me@example.com\n\
          Subject: SMS with group\n\
          X-smssync-type: 132\n\
@@ -140,9 +139,9 @@ fn a_group_message_with_no_readable_sender_is_kept_and_counted() {
          X-smssync-date: 1609459200000\n\
          Content-Type: text/plain; charset=utf-8\n\
          \n\
-         Hello group\n",
-    )
-    .unwrap();
+         Hello group\n";
+    fs::write(input.join("1.eml"), mail).unwrap();
+    fs::write(input.join("2.eml"), mail).unwrap();
     let output = tmp.path().join("out");
 
     let result = crate::run(&jsonl_run_config(&[&input], &output, source(true))).expect("run");
@@ -157,4 +156,15 @@ fn a_group_message_with_no_readable_sender_is_kept_and_counted() {
         "{:?}",
         result.messages
     );
+    assert_eq!(result.issues.len(), 1, "{:?}", result.issues);
+    let issue = &result.issues[0];
+    assert_eq!(
+        (
+            issue.kind.as_str(),
+            issue.step.as_str(),
+            issue.item.as_str()
+        ),
+        ("skip", "parse", "1.eml")
+    );
+    assert!(issue.reason.contains("no sender"), "{}", issue.reason);
 }

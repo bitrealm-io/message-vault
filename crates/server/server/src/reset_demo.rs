@@ -223,20 +223,21 @@ fn reset_account_work_dir(data_dir: &Path) -> Result<tempfile::TempDir> {
         })
 }
 
-/// Generate the Demo Data set of `size` and rebuild the demo account from it,
-/// writing the active config to `config_dest`.
+/// Generate the Demo Data set of `size` and rebuild the demo account from it
+/// in the database `cfg` names. The config file is the operator's: the caller
+/// reads it, and nothing here writes it (#1216).
 ///
 /// # Errors
 ///
 /// Returns an error when generation fails, the database cannot be replaced,
 /// or import / media processing fails.
-pub async fn run_reset_demo(size: DemoSize, config_dest: &Path) -> Result<ResetDemoStats> {
+pub async fn run_reset_demo(size: DemoSize, cfg: &Config) -> Result<ResetDemoStats> {
     let work = tempfile::tempdir().context("create temporary demo bundle directory")?;
     let bundle = work.path().join("bundle");
     println!("Reset demo — generating the {size} data set");
     let seed_stats =
         demo_seed::generate_size_to(size, &bundle).context("generate demo bundle (demo-seed)")?;
-    let reset_stats = prepare_config_and_reset(&bundle, config_dest, DEMO_ACCOUNT_ID).await?;
+    let reset_stats = reset_prepared_bundle(cfg, &bundle, DEMO_ACCOUNT_ID).await?;
 
     Ok(ResetDemoStats {
         seed: seed_stats,
@@ -522,8 +523,7 @@ async fn whole_demo_account_or_none(
 
 /// Build the Demo Account in the database `db`, the one `cfg` names, from
 /// the bundle at `bundle`. There is nothing to snapshot or swap: this writes
-/// to the database directly, touching the Demo Account alone, and leaves the
-/// config file as it is.
+/// to the database directly, touching the Demo Account alone.
 async fn build_from_bundle(
     cfg: &Config,
     db: &SqlitePool,
@@ -533,55 +533,12 @@ async fn build_from_bundle(
     rebuild_demo_account(cfg, db, &prepared, DEMO_ACCOUNT_ID).await
 }
 
-/// Copy the bundle's config into place and reset the account by the
-/// snapshot-and-swap path.
-async fn prepare_config_and_reset(
-    bundle: &Path,
-    config_dest: &Path,
-    account_id: i64,
-) -> Result<ResetPreparedStats> {
-    validate_prepared_bundle(bundle)?;
-    let demo_config = bundle.join("config/config.toml");
-    if !demo_config.is_file() {
-        bail!(
-            "incomplete demo bundle under {} (need config/config.toml)",
-            bundle.display()
-        );
-    }
-    let config_parent = parent_dir_or_cwd(config_dest);
-    fs::create_dir_all(config_parent)
-        .with_context(|| format!("create config directory {}", config_parent.display()))?;
-    let temporary_config = tempfile::Builder::new()
-        .prefix(".reset-demo-config-")
-        .tempfile_in(config_parent)
-        .context("create temporary demo config")?;
-    fs::copy(&demo_config, temporary_config.path()).with_context(|| {
-        format!(
-            "copy prepared config {} to {}",
-            demo_config.display(),
-            temporary_config.path().display()
-        )
-    })?;
-    let cfg = Config::load(temporary_config.path())?;
-    let temporary_config = temporary_config.into_temp_path();
-    reset_prepared_bundle(
-        &cfg,
-        bundle,
-        account_id,
-        config_dest,
-        temporary_config.as_ref(),
-    )
-    .await
-}
-
 /// Build the new state in a prepared database next to the active one, prove
 /// nothing outside the demo account changed, then swap it in.
 async fn reset_prepared_bundle(
     cfg: &Config,
     bundle: &Path,
     account_id: i64,
-    config_dest: &Path,
-    prepared_config: &Path,
 ) -> Result<ResetPreparedStats> {
     let prepared = validate_prepared_bundle(bundle)?;
     let _operation_lock = crate::operation_lock::acquire_for_reset(&cfg.paths.db)?;
@@ -618,8 +575,6 @@ async fn reset_prepared_bundle(
         prepared_db: &prepared_db,
         active_account: &active_account,
         prepared_account: &prepared_account,
-        active_config: config_dest,
-        prepared_config,
     };
     install_reset_state_or_keep_work(&paths, db_work, data_work, &mut ready).await?;
     ready.mark_ready()?;
@@ -640,10 +595,8 @@ async fn install_reset_state_or_keep_work(
     let Err(error) = install_reset_state(paths).await else {
         return Ok(());
     };
-    let config_backup = sqlite_sidecar(paths.prepared_config, ".previous-active");
     let previous_state_still_in_work = db_work.path().join("previous-messagecrate.db").exists()
-        || data_work.path().join("previous-account").exists()
-        || config_backup.exists();
+        || data_work.path().join("previous-account").exists();
     if previous_state_still_in_work {
         ready.keep_cleared();
         let db_work = db_work.keep();
@@ -1061,11 +1014,9 @@ struct ResetPaths<'a> {
     prepared_db: &'a Path,
     active_account: &'a Path,
     prepared_account: &'a Path,
-    active_config: &'a Path,
-    prepared_config: &'a Path,
 }
 
-/// Swap the prepared database, account folder, and config into their active paths.
+/// Swap the prepared database and account folder into their active paths.
 async fn install_reset_state(paths: &ResetPaths<'_>) -> Result<()> {
     install_reset_state_with(paths, demo_seed::move_path).await
 }
@@ -1085,12 +1036,11 @@ where
     replace_reset_state_with(paths, rename)
 }
 
-/// One of the three things a reset swaps: the database file, the account
-/// folder, or the config file. Each has an active path, a prepared
-/// replacement, and a backup path the active one is moved to first so the
-/// swap can be undone.
+/// One of the two things a reset swaps: the database file or the account
+/// folder. Each has an active path, a prepared replacement, and a backup path
+/// the active one is moved to first so the swap can be undone.
 struct Swap<'a> {
-    /// What the paths hold, for messages: "database", "account directory", "config".
+    /// What the paths hold, for messages: "database" or "account directory".
     what: &'static str,
     active: &'a Path,
     prepared: &'a Path,
@@ -1170,8 +1120,8 @@ impl<'a> Swap<'a> {
 }
 
 impl<'a> ResetPaths<'a> {
-    /// The three swaps in install order: database, account folder, config.
-    fn swaps(&self) -> Result<[Swap<'a>; 3]> {
+    /// The two swaps in install order: database, then account folder.
+    fn swaps(&self) -> Result<[Swap<'a>; 2]> {
         let db_backup = self
             .prepared_db
             .parent()
@@ -1182,7 +1132,6 @@ impl<'a> ResetPaths<'a> {
             .parent()
             .context("prepared account has no parent")?
             .join("previous-account");
-        let config_backup = sqlite_sidecar(self.prepared_config, ".previous-active");
         Ok([
             Swap::new("database", self.active_db, self.prepared_db, db_backup),
             Swap::new(
@@ -1190,12 +1139,6 @@ impl<'a> ResetPaths<'a> {
                 self.active_account,
                 self.prepared_account,
                 account_backup,
-            ),
-            Swap::new(
-                "config",
-                self.active_config,
-                self.prepared_config,
-                config_backup,
             ),
         ])
     }
@@ -1207,10 +1150,7 @@ fn replace_reset_state_with<F>(paths: &ResetPaths<'_>, mut rename: F) -> Result<
 where
     F: FnMut(&Path, &Path) -> Result<()>,
 {
-    if !paths.prepared_db.is_file()
-        || !paths.prepared_account.is_dir()
-        || !paths.prepared_config.is_file()
-    {
+    if !paths.prepared_db.is_file() || !paths.prepared_account.is_dir() {
         bail!("prepared reset state is incomplete");
     }
     if let Some(parent) = paths.active_account.parent() {

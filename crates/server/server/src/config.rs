@@ -534,16 +534,11 @@ mod tests {
     }
 
     /// The config files the repository ships must load under the same rule:
-    /// the example a developer copies, the one the Docker image starts from,
-    /// and the one `reset-demo` installs.
+    /// the example a developer copies and the one the Docker image starts from.
     #[test]
     fn every_committed_config_file_loads() {
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        for file in [
-            "config/config.toml.example",
-            "config/config.docker.toml",
-            "crates/server/demo-seed/config/config.toml",
-        ] {
+        for file in ["config/config.toml.example", "config/config.docker.toml"] {
             let text = fs::read_to_string(repo.join(file)).unwrap();
             if let Err(err) = load_text(&text) {
                 panic!("{file} does not load: {err:#}");
@@ -558,8 +553,8 @@ mod tests {
     ];
 
     /// `scripts/run-dev.sh` only uncomments the `# cors_origins =` line.
-    /// That line must be a complete array or first-run / `--reset-demo` configs
-    /// are invalid TOML.
+    /// That line must be a complete array or the config it writes on a first
+    /// run is invalid TOML.
     #[test]
     fn example_cors_origins_uncomments_to_a_complete_array() {
         let example = include_str!(concat!(

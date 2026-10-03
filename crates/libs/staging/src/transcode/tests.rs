@@ -816,11 +816,11 @@ fn a_missing_original_with_no_committed_derivative_becomes_file_missing() {
         return;
     };
     // Covers the other half of the same bug: a recorded path that is
-    // gone for good (nothing shares it, and no committed derivative
-    // exists either — the shared-original-deleted-by-too_large case, or
-    // any other reason the file vanished). Before the fix this fell
-    // through the repoint branch's `if let Some(name) = …` silently,
-    // leaving the attachment dangling with no `missing_reason` at all.
+    // gone for good (nothing shares it, no committed derivative exists,
+    // and no too-large note says the pass dropped it). Before the fix
+    // this fell through the repoint branch's `if let Some(name) = …`
+    // silently, leaving the attachment dangling with no `missing_reason`
+    // at all.
     let (dir, jsonl, original) = staged_one(
         "ghost.jpg",
         b"content is irrelevant; deleted before the pass looks",
@@ -843,6 +843,127 @@ fn a_missing_original_with_no_committed_derivative_becomes_file_missing() {
     assert_eq!(att.missing_reason.as_deref(), Some("file_missing"));
     assert_eq!(att.path, None);
     assert_eq!(att.digest_sha256, None);
+}
+
+/// Write a second conversation into `dir` whose one attachment records
+/// `rel`, the path the first conversation's attachment already records:
+/// two chats that received the same bytes in the same second.
+///
+/// Returns the second conversation file's path.
+fn second_document_sharing(dir: &Path, rel: &str, size: u64) -> PathBuf {
+    let mut doc_b = message_ir::testutil::sample_document("second conversation, same file");
+    doc_b.conversation.chat_identifier = "+15555550199".into();
+    doc_b.messages[0].guid = "doc-b-guid".into();
+    doc_b.messages[0].attachments = vec![IrAttachment {
+        path: Some(rel.into()),
+        original_name: Some("shared.png".into()),
+        mime_type: None,
+        digest_sha256: None,
+        is_sticker: false,
+        transcription: None,
+        sticker_effect: None,
+        size_bytes: Some(size),
+        missing_reason: None,
+        bytes: None,
+    }];
+    doc_b.finalize_stats();
+    let jsonl_b = dir.join(format!("{}.jsonl", doc_b.filename_stem()));
+    write_conversation_jsonl_to(&jsonl_b, &doc_b).unwrap();
+    jsonl_b
+}
+
+/// The one attachment of each conversation file, in the order given.
+fn only_attachments(jsonls: &[&Path]) -> Vec<IrAttachment> {
+    jsonls
+        .iter()
+        .map(|jsonl| read_conversation_jsonl(jsonl).unwrap().messages[0].attachments[0].clone())
+        .collect()
+}
+
+#[test]
+fn two_documents_sharing_one_original_that_converts_too_large_both_record_too_large() {
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
+        return;
+    };
+    let png = test_png_bytes();
+    let (dir, jsonl_a, original) = staged_one("shared.png", &png);
+    let jsonl_b = second_document_sharing(dir.path(), "attachments/shared.png", png.len() as u64);
+
+    let report = transcode_staged(
+        dir.path(),
+        &options(MediaMode::Convert, 1),
+        None,
+        &mut |_| {},
+    )
+    .unwrap();
+
+    assert_eq!(report.too_large, 2, "each conversation records the drop");
+    assert_eq!(report.missing, 0, "the shared file was dropped, not lost");
+    assert!(!original.exists());
+    let atts = only_attachments(&[&jsonl_a, &jsonl_b]);
+    for att in &atts {
+        assert_eq!(att.missing_reason.as_deref(), Some("too_large"));
+        assert_eq!(att.path, None);
+        assert_eq!(att.digest_sha256, None);
+    }
+    assert!(
+        atts[0].size_bytes.is_some_and(|size| size > 1),
+        "the converted size, over the limit of 1 byte"
+    );
+    assert_eq!(
+        atts[0].size_bytes, atts[1].size_bytes,
+        "both conversations carry the converted size"
+    );
+}
+
+#[test]
+fn a_too_large_drop_survives_a_stop_and_a_resume() {
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
+        return;
+    };
+    let png = test_png_bytes();
+    let (dir, jsonl_a, original) = staged_one("shared.png", &png);
+    let jsonl_b = second_document_sharing(dir.path(), "attachments/shared.png", png.len() as u64);
+
+    // Stop the pass right after the first conversation's attachment.
+    let cancel = CancelFlag::default();
+    let err = transcode_staged(
+        dir.path(),
+        &options(MediaMode::Convert, 1),
+        Some(&cancel),
+        &mut |progress| {
+            if progress.done == 1 {
+                cancel.store(true, Ordering::Relaxed);
+            }
+        },
+    )
+    .expect_err("the pass stops after the first attachment");
+    assert_eq!(err.to_string(), "cancelled");
+    assert!(
+        !original.exists(),
+        "the first conversation dropped the file"
+    );
+
+    let resumed = transcode_staged(
+        dir.path(),
+        &options(MediaMode::Convert, 1),
+        None,
+        &mut |_| {},
+    )
+    .unwrap();
+
+    assert_eq!(
+        resumed.too_large, 1,
+        "the resume settles the second conversation"
+    );
+    assert_eq!(resumed.missing, 0);
+    let atts = only_attachments(&[&jsonl_a, &jsonl_b]);
+    for att in &atts {
+        assert_eq!(att.missing_reason.as_deref(), Some("too_large"));
+        assert_eq!(att.path, None);
+    }
+    assert!(atts[0].size_bytes.is_some_and(|size| size > 1));
+    assert_eq!(atts[0].size_bytes, atts[1].size_bytes);
 }
 
 #[test]

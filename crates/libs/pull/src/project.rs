@@ -235,7 +235,7 @@ fn tapbacks_json(tapbacks: &[Tapback]) -> Option<Value> {
             "kind": t.kind,
             "emoji": t.emoji,
             "is_from_me": t.is_from_me,
-            "sender": t.sender,
+            "reactor_handle": t.sender,
         }));
     }
     Some(Value::Array(items))
@@ -481,8 +481,8 @@ mod tests {
         assert_eq!(
             imessage.tapbacks,
             Some(json!([
-                { "part_index": 0, "kind": "loved", "emoji": null, "is_from_me": true, "sender": null },
-                { "part_index": 1, "kind": "emoji", "emoji": "🎉", "is_from_me": false, "sender": "+2" },
+                { "part_index": 0, "kind": "loved", "emoji": null, "is_from_me": true, "reactor_handle": null },
+                { "part_index": 1, "kind": "emoji", "emoji": "🎉", "is_from_me": false, "reactor_handle": "+2" },
             ]))
         );
     }

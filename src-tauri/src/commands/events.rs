@@ -4,7 +4,7 @@
 //! Tauri because it is not serializable. These structs match the TypeScript
 //! types in `web/src/lib/types.ts`.
 
-use message_crate_core::ProgressEvent;
+use message_crate_core::{ProgressEvent, RunIssue};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
@@ -90,6 +90,32 @@ impl From<ProgressEvent> for ExtractProgressEvent {
     }
 }
 
+/// One row of the Import Run's issues, from an exporter's [`RunIssue`].
+/// Matches `ImportIssueEvent` in `web/src/lib/types.ts`, the shape the
+/// upload sends its own issues in.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ExtractIssueEvent {
+    /// `skip` when the item was left out, `error` when it failed.
+    pub kind: String,
+    /// The step that raised it, such as `attachments`.
+    pub step: String,
+    /// What was affected.
+    pub item: String,
+    /// Why, in one sentence.
+    pub reason: String,
+}
+
+impl From<&RunIssue> for ExtractIssueEvent {
+    fn from(issue: &RunIssue) -> Self {
+        Self {
+            kind: issue.kind.clone(),
+            step: issue.step.clone(),
+            item: issue.item.clone(),
+            reason: issue.reason.clone(),
+        }
+    }
+}
+
 /// Failure details for the `extract:error` event.
 ///
 /// When `user_message` is missing, it is left out of the JSON so the
@@ -167,6 +193,28 @@ mod tests {
         assert_eq!(
             json,
             serde_json::json!({ "step": "prepare", "done": 0, "total": 3 })
+        );
+    }
+
+    /// An exporter's issue reaches the screen in the shape the upload's
+    /// issues have, so the Import Run lists both the same way.
+    #[test]
+    fn a_run_issue_is_sent_as_an_import_issue() {
+        let json = serde_json::to_value(ExtractIssueEvent::from(&RunIssue {
+            kind: "error".into(),
+            step: "attachments".into(),
+            item: "/backup/IMG_0001.MOV".into(),
+            reason: "could not be decrypted: No space left on device".into(),
+        }))
+        .unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "kind": "error",
+                "step": "attachments",
+                "item": "/backup/IMG_0001.MOV",
+                "reason": "could not be decrypted: No space left on device",
+            })
         );
     }
 }

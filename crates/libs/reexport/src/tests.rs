@@ -27,7 +27,7 @@ fn config(input: &Path, output: &Path, output_format: OutputFormat) -> ExporterC
         progress: None,
         output_format,
         resume: false,
-        source: SourceConfig::Format(FormatConfig {}),
+        source: SourceConfig::Format(FormatConfig::default()),
     }
 }
 
@@ -1271,5 +1271,40 @@ fn sms_backup_plus_writes_only_sms_and_mms_and_says_what_it_left_out() {
         report.log_lines().contains(&"Conversations: 1".to_string()),
         "only the conversation written is counted: {:?}",
         report.log_lines()
+    );
+}
+
+/// SMS Backup+ mail records the start of the Export Run it is part of as
+/// its backup time, not the later start of the conversion (#543, decision 4).
+#[test]
+fn sms_backup_plus_mail_records_the_export_runs_start() {
+    let source = tempfile::tempdir().unwrap();
+    let mut sink =
+        FormatSink::open(source.path(), OutputFormat::Jsonl, ExportTransforms::none()).unwrap();
+    sink.write_document(message_ir::testutil::sample_document("an sms"))
+        .unwrap();
+    sink.finish(&mut ExportReport::default()).unwrap();
+    let destination = tempfile::tempdir().unwrap();
+    let mut config = config(
+        source.path(),
+        destination.path(),
+        OutputFormat::SmsBackupPlus,
+    );
+    config.source = SourceConfig::Format(FormatConfig {
+        run_started_ms: Some(1_791_000_000_000),
+    });
+
+    convert_export(source.path(), &config).unwrap();
+
+    let mail = fs::read_dir(destination.path().join("+15555550101"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let mail = fs::read_to_string(mail).unwrap();
+    assert!(
+        mail.contains("X-smssync-backup-time: 1791000000000"),
+        "{mail}"
     );
 }

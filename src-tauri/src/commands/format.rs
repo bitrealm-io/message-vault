@@ -31,6 +31,7 @@ pub fn format(
     input_dir: String,
     output_dir: String,
     output_format: String,
+    run_started_ms: Option<i64>,
 ) -> Result<(), String> {
     let fmt = match output_format.as_str() {
         "json" => OutputFormat::Json,
@@ -63,7 +64,7 @@ pub fn format(
             progress: None,
             output_format: fmt,
             resume: false,
-            source: SourceConfig::Format(FormatConfig {}),
+            source: SourceConfig::Format(FormatConfig { run_started_ms }),
         };
 
         let run_result = message_reexport::run(&config)?;

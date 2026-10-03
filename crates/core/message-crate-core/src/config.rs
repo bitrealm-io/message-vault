@@ -188,8 +188,14 @@ pub enum SourceConfig {
 }
 
 #[derive(Debug, Clone, Default)]
-/// Empty marker: convert an existing export folder to another output format.
-pub struct FormatConfig {}
+/// Convert an existing export folder to another output format.
+pub struct FormatConfig {
+    /// When the Export Run this conversion is part of started, in epoch
+    /// milliseconds. Export pulls JSON Lines from the server and then
+    /// converts them, so its run starts well before the conversion does.
+    /// `None` for Settings → Convert, which is a run of its own.
+    pub run_started_ms: Option<i64>,
+}
 
 #[derive(Debug, Clone)]
 /// GO SMS Pro extras: owner phone numbers used to mark outgoing messages.
@@ -302,7 +308,7 @@ mod tests {
             progress: None,
             output_format: OutputFormat::Json,
             resume: false,
-            source: SourceConfig::Format(FormatConfig {}),
+            source: SourceConfig::Format(FormatConfig::default()),
         }
     }
 

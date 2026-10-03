@@ -1,11 +1,12 @@
 //! Convert an existing Message Crate output directory to another format.
 
 use anyhow::{Context, Result, bail};
+use chrono::TimeZone;
 use media::{CompressOptions, MediaMode};
 pub use message_crate_core::RunResult;
 use message_crate_core::{
-    ExportReport, ExportTransforms, ExporterConfig, MediaConfig, OutputFormat, document_messages,
-    prepare_outputs, stage_conversation_attachments,
+    ExportReport, ExportTransforms, ExporterConfig, MediaConfig, OutputFormat, SourceConfig,
+    document_messages, prepare_outputs, stage_conversation_attachments,
 };
 use message_ir::{ConversationDocument, IrMessage};
 use message_ir_format::{
@@ -80,8 +81,14 @@ impl ReexportReport {
 
 /// Detect the input format, copy attachments if needed, and write the new export.
 fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportReport> {
-    // SMS Backup+ mail records when its backup was made: this run's start.
-    let started = chrono::Utc::now();
+    // SMS Backup+ mail records when its backup was made: the start of the
+    // Export Run this conversion is part of, or of this run when it is one.
+    let started = match &config.source {
+        SourceConfig::Format(format) => format.run_started_ms,
+        _ => None,
+    }
+    .and_then(|ms| chrono::Utc.timestamp_millis_opt(ms).single())
+    .unwrap_or_else(chrono::Utc::now);
     // The output is cleaned below, so one that is or holds the input is
     // refused before anything is written.
     prepare_outputs(&[input_dir.to_path_buf()], &config.output)?;

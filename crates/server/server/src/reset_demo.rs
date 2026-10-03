@@ -6,7 +6,7 @@
 //! with the Demo Account; and `PUT /v1/server/demo-account`
 //! ([`build_demo_account`]), the owner's rebuild on a running server.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -790,14 +790,23 @@ async fn import_demo_sources_with(
     Ok(totals)
 }
 
-/// Load the bundle's address book into the demo account, in Edit mode, once
-/// its messages are in.
+/// Load the bundle's address book into the demo account, in Append mode,
+/// once its messages are in.
 ///
 /// The demo is built the way a person builds theirs: the imports bring the
-/// people in as Unknowns, and the address book names them. It goes through
+/// people in as Unknowns, and the person exports the address book, types the
+/// names onto the Unknowns' rows, and loads it back. [`name_unknowns_in_place`]
+/// does the typing: it gives each contact of the bundle's file the id of the
+/// Unknown the imports made for it. The load goes through
 /// [`address_book::load`], the function `POST /v1/contacts` calls, so the
-/// demo exercises the same rules a person's file does, the move from an
-/// Unknown holder among them.
+/// demo exercises the same rules a person's file does.
+///
+/// Naming the Unknown in place keeps it in the Contact Group of each Import
+/// Run that touched it (#1511). A new contact taking the Unknown's
+/// identities instead would leave the Unknown empty, so the load would
+/// delete it and the run's group would lose it. The mode is Append because
+/// Edit takes a contact out of every Contact Group its rows do not list, and
+/// the bundle's file cannot list the groups the Import Runs make.
 async fn load_demo_address_book(
     db: &SqlitePool,
     prepared: &PreparedBundle,
@@ -806,13 +815,117 @@ async fn load_demo_address_book(
     let text = fs::read_to_string(&prepared.contacts_csv)
         .with_context(|| format!("read {}", prepared.contacts_csv.display()))?;
     let mut conn = db.acquire().await?;
-    let loaded = address_book::load(&mut conn, account_id, &text, LoadMode::Edit).await;
+    let text = name_unknowns_in_place(&mut conn, account_id, &text)
+        .await
+        .context("match the demo address book to the Unknowns the imports made")?;
+    let loaded = address_book::load(&mut conn, account_id, &text, LoadMode::Append).await;
     let counts = loaded.map_err(|e| anyhow::anyhow!("load the demo address book: {e}"))?;
     println!(
-        "  contacts: {} named from the address book ({} identities moved from Unknowns, {} added)",
-        counts.contacts_created, counts.identities_moved, counts.identities_added
+        "  contacts: {} named from the address book ({} Unknowns named in place, {} new; {} identities moved from Unknowns, {} added)",
+        counts.contacts_updated + counts.contacts_created,
+        counts.contacts_updated,
+        counts.contacts_created,
+        counts.identities_moved,
+        counts.identities_added
     );
     Ok(counts)
+}
+
+/// The address book `csv_text` with each contact's `contact_id` replaced by
+/// the id of the Unknown that holds one of its identities, as a person who
+/// exported the address book after the imports would write it. A contact
+/// keeps the file's own key when no Unknown holds its identities, when the
+/// Unknown holds an identity the contact's rows do not list (Append would
+/// then leave the named contact holding it), or when another contact of the
+/// file already took that Unknown.
+async fn name_unknowns_in_place(
+    conn: &mut sqlx::SqliteConnection,
+    account_id: i64,
+    csv_text: &str,
+) -> Result<String> {
+    let mut reader = csv::Reader::from_reader(csv_text.as_bytes());
+    let headers = reader.headers()?.clone();
+    let rows = reader.records().collect::<Result<Vec<_>, _>>()?;
+
+    // Each contact of the file, in the order of its first row, with the
+    // identities its rows list, written `service/handle_type/identity`.
+    let mut keys: Vec<&str> = Vec::new();
+    let mut listed: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
+    for row in &rows {
+        let key = row.get(0).unwrap_or_default();
+        if key.is_empty() {
+            continue;
+        }
+        let identities = listed.entry(key).or_insert_with(|| {
+            keys.push(key);
+            BTreeSet::new()
+        });
+        let identity = row.get(5).map(address_book::read_cell).unwrap_or_default();
+        if !identity.is_empty() {
+            identities.insert(format!(
+                "{}/{}/{identity}",
+                row.get(3).unwrap_or_default(),
+                row.get(4).unwrap_or_default()
+            ));
+        }
+    }
+
+    let mut unknown_for: BTreeMap<&str, i64> = BTreeMap::new();
+    let mut taken: BTreeSet<i64> = BTreeSet::new();
+    for key in keys {
+        let identities = &listed[key];
+        for identity in identities {
+            let holder: Option<i64> = sqlx::query_scalar(
+                "SELECT c.id FROM handles h
+                 JOIN contact_handles ch ON ch.account_id = h.account_id AND ch.handle_id = h.id
+                 JOIN contacts c ON c.id = ch.contact_id
+                 WHERE h.account_id = $1
+                   AND h.service || '/' || h.handle_type || '/' || h.normalized = $2
+                   AND trim(c.preferred_name) = ''
+                   AND NOT EXISTS (SELECT 1 FROM trashed_contacts t
+                                   WHERE t.account_id = c.account_id AND t.contact_id = c.id)",
+            )
+            .bind(account_id)
+            .bind(identity)
+            .fetch_optional(&mut *conn)
+            .await?;
+            let Some(holder) = holder else { continue };
+            if taken.contains(&holder) {
+                continue;
+            }
+            let held: Vec<String> = sqlx::query_scalar(
+                "SELECT h.service || '/' || h.handle_type || '/' || h.normalized
+                 FROM contact_handles ch JOIN handles h ON h.id = ch.handle_id
+                 WHERE ch.account_id = $1 AND ch.contact_id = $2",
+            )
+            .bind(account_id)
+            .bind(holder)
+            .fetch_all(&mut *conn)
+            .await?;
+            if held.iter().all(|h| identities.contains(h)) {
+                taken.insert(holder);
+                unknown_for.insert(key, holder);
+                break;
+            }
+        }
+    }
+
+    let mut writer = csv::Writer::from_writer(Vec::new());
+    writer.write_record(&headers)?;
+    for row in &rows {
+        let key = row.get(0).unwrap_or_default();
+        match unknown_for.get(key) {
+            Some(id) => {
+                let id = id.to_string();
+                writer.write_record(std::iter::once(id.as_str()).chain(row.iter().skip(1)))?;
+            }
+            None => writer.write_record(row)?,
+        }
+    }
+    let bytes = writer
+        .into_inner()
+        .map_err(|e| anyhow::anyhow!("finish the address book: {e}"))?;
+    String::from_utf8(bytes).context("the address book is not UTF-8")
 }
 
 /// Check the bundle has its seed, the three staging folders, and the contacts file, and return their paths.

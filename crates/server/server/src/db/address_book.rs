@@ -350,7 +350,7 @@ fn written_cell(cell: &str) -> std::borrow::Cow<'_, str> {
 /// a spreadsheet reads as a formula follows it, which undoes
 /// [`written_cell`]. A spreadsheet can keep that `'` when it saves or drop
 /// it, and both read the same.
-fn read_cell(cell: &str) -> &str {
+pub(crate) fn read_cell(cell: &str) -> &str {
     match cell.strip_prefix(TEXT_MARK) {
         Some(rest)
             if rest

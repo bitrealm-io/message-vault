@@ -1453,9 +1453,9 @@ async fn unknowns_holding(conn: &mut SqliteConnection, wanted: &[String]) -> usi
 
 /// The demo is built the way a person builds theirs: the imports bring the
 /// people in with no names, and the address book, loaded after them through
-/// the function `POST /v1/contacts` calls, names them. Each named contact
-/// takes its identities from the Unknown the import made, on every service
-/// the number was met on, and that Unknown, left with nothing, is gone.
+/// the function `POST /v1/contacts` calls, names them. Each Unknown the
+/// import made is named in place, holding its number on every service the
+/// number was met on.
 #[tokio::test]
 async fn the_demo_address_book_names_the_unknowns_the_imports_made() {
     let temp = tempfile::tempdir().expect("create test directory");
@@ -1523,9 +1523,10 @@ async fn the_demo_address_book_names_the_unknowns_the_imports_made() {
         .expect("load the demo address book");
 
     let (pool, mut conn) = test_db(target).await;
-    assert_eq!(counts.contacts_created as usize, book.len());
-    assert!(counts.identities_moved > 0, "{counts:?}");
-    assert!(counts.contacts_deleted > 0, "{counts:?}");
+    assert!(
+        counts.contacts_updated > 0,
+        "the book names the Unknowns in place: {counts:?}"
+    );
     assert_eq!(counts.identities_removed, 0, "{counts:?}");
     assert_eq!(
         unknowns_holding(&mut conn, &wanted).await,
@@ -1588,7 +1589,7 @@ async fn the_demo_address_book_names_the_unknowns_the_imports_made() {
          JOIN contact_handles ch ON ch.handle_id = cv.chat_handle_id
          JOIN contacts c ON c.id = ch.contact_id
          WHERE cv.account_id = $1 AND cv.conversation_type = 'individual'
-           AND trim(c.preferred_name) <> '' AND c.origin = 'address_book'",
+           AND trim(c.preferred_name) <> ''",
     )
     .await;
     assert!(named_conversations > 0);
@@ -2240,4 +2241,53 @@ async fn another_account_writes_between_the_demo_builds_import_batches() {
     drop(conn);
     others.close().await;
     build.close().await;
+}
+
+/// Each of the build's three import runs has a Contact Group holding the
+/// contacts it touched, and the address book the build loads after them
+/// leaves every one of those groups with members (#1511).
+#[tokio::test]
+async fn every_import_contact_group_of_a_built_demo_has_members() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let seed_cfg = demo_seed::testutil::small_config(temp.path());
+    demo_seed::generate(&seed_cfg).expect("generate the small bundle");
+    let bundle = Path::new(&seed_cfg.out);
+    let db_path = temp.path().join("messagecrate.db");
+    let cfg = Config {
+        paths: PathsConfig {
+            db: db_path.clone(),
+            data_dir: temp.path().join("data"),
+            assets_dir: "assets".into(),
+            assets_converted_dir: "assets_converted".into(),
+        },
+        server: None,
+    };
+    let prepared = validate_prepared_bundle(bundle).expect("the generator wrote a complete bundle");
+    let build = build_pool(&db_path).await;
+    rebuild_demo_account(&cfg, &build, &prepared, DEMO_ACCOUNT_ID)
+        .await
+        .expect("build the demo account");
+    build.close().await;
+
+    let (pool, mut conn) = test_db(&db_path).await;
+    let groups: Vec<(String, i64)> = sqlx::query_as(
+        "SELECT i.source,
+                (SELECT COUNT(*) FROM contact_group_members m
+                 JOIN contact_groups g ON g.id = m.group_id
+                 WHERE g.account_id = i.account_id AND g.kind = 'import'
+                   AND g.name = i.source || ' import ' || substr(i.finished_at, 1, 10))
+         FROM imports i WHERE i.account_id = $1 ORDER BY i.id",
+    )
+    .bind(DEMO_ACCOUNT_ID)
+    .fetch_all(&mut *conn)
+    .await
+    .expect("read the demo's import Contact Groups");
+    assert_eq!(groups.len(), DEMO_IMPORT_SOURCES.len(), "{groups:?}");
+    for (source, members) in &groups {
+        assert!(
+            *members > 0,
+            "the {source} import Contact Group is empty: {groups:?}"
+        );
+    }
+    close_test_db(pool, conn).await;
 }

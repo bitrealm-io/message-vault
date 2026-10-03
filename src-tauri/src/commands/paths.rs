@@ -239,9 +239,36 @@ fn resolve_absolute(
     Ok(path)
 }
 
-/// Resolve the Staging Directory: trimmed, absolute, canonicalized
-/// when it exists on disk (else lexically normalized so a not-yet-created
-/// root still resolves), and never the filesystem root.
+/// Resolve an absolute path to the form the filesystem gives it, whether or
+/// not it exists yet.
+///
+/// The path is normalized lexically, then its nearest existing ancestor is
+/// canonicalized and the missing part appended. A path that exists comes back
+/// canonical; one that does not comes back in the same form as the folders
+/// above it, so a root and a path under it compare alike even when the root
+/// is reached through a symbolic link or, on Windows, canonicalizes to a
+/// `\\?\` path.
+fn resolve_on_disk(path: &Path) -> std::io::Result<PathBuf> {
+    let normalized = normalize_lexically(path);
+    let mut existing = normalized.as_path();
+    let mut missing = Vec::new();
+    while !existing.exists() {
+        let Some(parent) = existing.parent() else {
+            return Ok(normalized);
+        };
+        if let Some(name) = existing.file_name() {
+            missing.push(name.to_os_string());
+        }
+        existing = parent;
+    }
+    let mut resolved = existing.canonicalize()?;
+    resolved.extend(missing.iter().rev());
+    Ok(resolved)
+}
+
+/// Resolve the Staging Directory: trimmed, absolute, resolved through
+/// [`resolve_on_disk`] (so a root not made yet still resolves), and never the
+/// filesystem root.
 ///
 /// Shared by [`resolve_openable_path`] and `staging::resolve_staging_child`,
 /// so every command that checks "is this path under the staging root"
@@ -258,21 +285,19 @@ pub(crate) fn resolve_staging_root(staging_root: &str) -> Result<PathBuf, String
         "Staging directory is empty",
         "Staging directory must be absolute",
     )?;
-    let root = if root.exists() {
-        root.canonicalize()
-            .map_err(|error| format!("Could not resolve staging root: {error}"))?
-    } else {
-        normalize_lexically(&root)
-    };
+    let root = resolve_on_disk(&root)
+        .map_err(|error| format!("Could not resolve staging root: {error}"))?;
     reject_filesystem_root(&root)?;
     Ok(root)
 }
 
 /// Resolve `raw` to an absolute path that must stay under `staging_root`.
 ///
-/// When the path already exists, both sides are canonicalized so symlinks cannot
+/// When the path already exists it is canonicalized, so a symbolic link cannot
 /// escape the staging tree. When it does not exist yet (for example a staging
-/// folder that extract is about to create), lexical normalization is used.
+/// folder that extract is about to create), it is resolved through
+/// [`resolve_on_disk`], the same way as the root, so the two compare in one
+/// form.
 pub(crate) fn resolve_openable_path(raw: &str, staging_root: &str) -> Result<PathBuf, String> {
     let candidate = resolve_absolute(raw, "Path is empty", "Path must be absolute")?;
     let root = resolve_staging_root(staging_root)?;
@@ -287,11 +312,12 @@ pub(crate) fn resolve_openable_path(raw: &str, staging_root: &str) -> Result<Pat
         return Ok(canonical);
     }
 
-    let normalized = normalize_lexically(&candidate);
-    if !normalized.starts_with(&root) {
+    let resolved =
+        resolve_on_disk(&candidate).map_err(|error| format!("Could not resolve path: {error}"))?;
+    if !resolved.starts_with(&root) {
         return Err("Path is outside the staging folder".to_string());
     }
-    Ok(normalized)
+    Ok(resolved)
 }
 
 /// `/` (and a Windows drive root) would make `starts_with` true for every absolute path.
@@ -306,6 +332,64 @@ fn reject_filesystem_root(root: &Path) -> Result<(), String> {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[cfg(unix)]
+    #[test]
+    fn a_missing_folder_under_a_symlinked_root_is_inside_the_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("real");
+        fs::create_dir(&real).unwrap();
+        let link = dir.path().join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let candidate = link.join("staging-not-made-yet");
+
+        let resolved = resolve_openable_path(candidate.to_str().unwrap(), link.to_str().unwrap());
+
+        assert!(resolved.is_ok(), "{resolved:?}");
+    }
+
+    /// A Staging Directory not made yet, under a folder reached through a
+    /// symbolic link, resolves in the same form as a folder inside it.
+    #[cfg(unix)]
+    #[test]
+    fn a_missing_folder_under_a_missing_root_behind_a_symlink_is_inside_the_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("real");
+        fs::create_dir(&real).unwrap();
+        let link = dir.path().join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let root = link.join("message-crate");
+        let candidate = root.join("staging-not-made-yet");
+
+        let resolved =
+            resolve_openable_path(candidate.to_str().unwrap(), root.to_str().unwrap()).unwrap();
+
+        assert_eq!(
+            resolved,
+            real.canonicalize()
+                .unwrap()
+                .join("message-crate")
+                .join("staging-not-made-yet")
+        );
+    }
+
+    /// A missing path that leaves the root through `..` is still refused
+    /// when the root is reached through a symbolic link.
+    #[cfg(unix)]
+    #[test]
+    fn a_missing_path_outside_a_symlinked_root_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("real");
+        fs::create_dir(&real).unwrap();
+        let link = dir.path().join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let candidate = link.join("..").join("elsewhere").join("not-made-yet");
+
+        let err =
+            resolve_openable_path(candidate.to_str().unwrap(), link.to_str().unwrap()).unwrap_err();
+
+        assert_eq!(err, "Path is outside the staging folder");
+    }
 
     #[test]
     fn save_text_file_writes_the_text_and_replaces_what_was_there() {

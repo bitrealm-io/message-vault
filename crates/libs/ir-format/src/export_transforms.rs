@@ -160,7 +160,7 @@ fn obfuscate_tapback(fields: &mut Map<String, Value>, anon: &mut Obfuscator) {
     fields.retain(|key, value| {
         match (key.as_str(), value) {
             ("part_index" | "kind" | "emoji" | "is_from_me", _) => {}
-            ("reactor_handle" | "sender", Value::String(h)) => *h = anon.obfuscate_handle(h),
+            ("reactor_handle", Value::String(h)) => *h = anon.obfuscate_handle(h),
             ("reactor_display_name", Value::String(n)) if n != "Me" => {
                 *n = anon.obfuscate_display_name(n);
             }

@@ -412,13 +412,13 @@ fn obfuscate_keeps_each_tapback_and_replaces_only_who_reacted() {
     assert_eq!(tapback["kind"], json!("emoji"));
     assert_eq!(tapback["emoji"], json!("👍"));
     assert_eq!(tapback["is_from_me"], json!(false));
-    for key in ["reactor_handle", "sender"] {
-        let reactor = tapback[key]
-            .as_str()
-            .unwrap_or_else(|| panic!("{key} is kept as a string"));
-        assert!(!reactor.is_empty());
-        assert!(!reactor.contains("LEAK-"), "{key} kept {reactor}");
-    }
+    let reactor = tapback["reactor_handle"]
+        .as_str()
+        .expect("reactor_handle is kept as a string");
+    assert!(!reactor.is_empty());
+    assert!(!reactor.contains("LEAK-"), "reactor_handle kept {reactor}");
+    // `sender` is not a tapback key, so it goes with the other unknown keys.
+    assert!(tapback.get("sender").is_none(), "{tapback}");
 }
 
 #[test]

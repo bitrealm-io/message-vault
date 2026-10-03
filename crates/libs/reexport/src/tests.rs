@@ -358,13 +358,19 @@ fn looks_like_ir_jsonl_accepts_a_header_line_without_messages() {
         "a whole document on one line is JSON, not JSON Lines"
     );
 
+    // Another version is still an export by its shape; reading it is what
+    // refuses it, by name.
     let old_schema = dir.path().join("old-schema.jsonl");
     fs::write(
         &old_schema,
         r#"{"schema_version":3,"export":{},"conversation":{}}"#,
     )
     .unwrap();
-    assert!(!looks_like_ir_jsonl(&old_schema).unwrap());
+    assert!(looks_like_ir_jsonl(&old_schema).unwrap());
+
+    let no_version = dir.path().join("no-version.jsonl");
+    fs::write(&no_version, r#"{"export":{},"conversation":{}}"#).unwrap();
+    assert!(!looks_like_ir_jsonl(&no_version).unwrap());
 
     let prose = dir.path().join("prose.jsonl");
     fs::write(&prose, "not json\n").unwrap();
@@ -548,10 +554,15 @@ fn a_json_that_is_not_an_ir_export_is_refused() {
     for (name, body) in [
         // Valid JSON, wrong shape.
         ("package.json", r#"{"name":"thing","version":"1.0.0"}"#),
-        // The right keys but the wrong schema version.
+        // The right keys but no schema version.
         (
-            "old.json",
-            r#"{"schema_version":3,"export":{},"conversation":{},"messages":[]}"#,
+            "unversioned.json",
+            r#"{"export":{},"conversation":{},"messages":[]}"#,
+        ),
+        // The right keys but a schema version that is not a number.
+        (
+            "text-version.json",
+            r#"{"schema_version":"4","export":{},"conversation":{},"messages":[]}"#,
         ),
         // The right version but missing a required section.
         (
@@ -822,5 +833,84 @@ fn a_jsonl_file_with_a_json_name_is_not_a_jsonl_conversation() {
     assert_eq!(
         list_artifacts(dir.path(), OutputFormat::Jsonl).unwrap(),
         [real]
+    );
+}
+
+/// Write `dir`'s conversation in `format` again as `name`, with its
+/// `schema_version` set to 3. The reader refuses the file before it parses
+/// anything else, so the rest can keep the version-4 shape.
+fn write_version_3_copy(dir: &Path, format: OutputFormat, name: &str) {
+    let scratch = tempfile::tempdir().unwrap();
+    write_fixture(scratch.path(), format);
+    let current = fs::read_to_string(find_file(scratch.path(), format.as_str())).unwrap();
+    // A JSON file is one document; a JSON Lines file carries the version on
+    // its header line only.
+    let (header, rest) = match format {
+        OutputFormat::Jsonl => current.split_once('\n').unwrap(),
+        _ => (current.as_str(), ""),
+    };
+    let mut header: serde_json::Value = serde_json::from_str(header).unwrap();
+    assert_eq!(header["schema_version"], message_ir::SCHEMA_VERSION);
+    header["schema_version"] = 3.into();
+    let separator = if rest.is_empty() { "" } else { "\n" };
+    fs::write(dir.join(name), format!("{header}{separator}{rest}")).unwrap();
+}
+
+/// A version-3 file is an export of another version, not something else:
+/// Convert refuses it with the shared message and the file's name instead
+/// of reporting that the folder holds no export.
+#[test]
+fn a_folder_of_version_3_files_is_refused_by_name() {
+    for (format, name) in [
+        (OutputFormat::Json, "old.json"),
+        (OutputFormat::Jsonl, "old.jsonl"),
+    ] {
+        let source = tempfile::tempdir().unwrap();
+        write_version_3_copy(source.path(), format, name);
+        let destination = tempfile::tempdir().unwrap();
+
+        let error = convert_export(
+            source.path(),
+            &config(source.path(), destination.path(), OutputFormat::Csv),
+        )
+        .unwrap_err();
+        let message = format!("{error:#}");
+        assert!(
+            message.contains("This file is schema version 3; Message Crate reads version 4"),
+            "{message}"
+        );
+        assert!(
+            message.contains(name),
+            "the refusal names the file: {message}"
+        );
+    }
+}
+
+/// One version-3 file among version-4 files stops the run before the output
+/// is touched, so no conversation goes missing from the output unreported.
+#[test]
+fn a_version_3_file_among_version_4_files_stops_the_run_and_writes_nothing() {
+    let source = tempfile::tempdir().unwrap();
+    write_fixture(source.path(), OutputFormat::Jsonl);
+    write_version_3_copy(source.path(), OutputFormat::Jsonl, "old.jsonl");
+
+    let destination = tempfile::tempdir().unwrap();
+    write_fixture(destination.path(), OutputFormat::Csv);
+    let previous = find_file(destination.path(), "csv");
+
+    let error = convert_export(
+        source.path(),
+        &config(source.path(), destination.path(), OutputFormat::Csv),
+    )
+    .unwrap_err();
+    let message = format!("{error:#}");
+    assert!(
+        message.contains("This file is schema version 3; Message Crate reads version 4"),
+        "{message}"
+    );
+    assert!(message.contains("old.jsonl"), "{message}");
+    assert!(
+        previous.is_file(),
+        "the previous export in the output is left as it was"
     );
 }

@@ -76,13 +76,26 @@ fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportR
     let transforms = ExportTransforms::from_config(config);
     let copy_attachments = transforms.copies_attachments();
 
+    // Conversation files are read before the output is cleaned, so a file
+    // the read refuses, such as one of another schema version, stops the
+    // run with the previous output left as it was. An SMS backup is read
+    // after: its read stages attachments into the output.
+    let read_first = if detected.format == OutputFormat::Xml {
+        None
+    } else {
+        Some(read_conversation_files(input_dir, detected.format)?)
+    };
+
     clean_previous_ir_output(&config.output)?;
 
     if copy_attachments {
         copy_attachments_dir(input_dir, &config.output)?;
     }
 
-    let mut documents = load_documents(input_dir, detected, config, copy_attachments)?;
+    let mut documents = match read_first {
+        Some(documents) => documents,
+        None => read_sms_backup(input_dir, config, copy_attachments)?,
+    };
     if documents.is_empty() {
         bail!("no conversations loaded from {}", input_dir.display());
     }
@@ -146,50 +159,55 @@ fn apply_reexport_convert(
     .map_err(anyhow::Error::msg)
 }
 
-/// Load every conversation document from a detected export directory.
-fn load_documents(
+/// Read every conversation in an SMS Backup & Restore export, staging its
+/// attachments into the output when `copy_attachments` is set.
+fn read_sms_backup(
     input_dir: &Path,
-    detected: DetectedExport,
     config: &ExporterConfig,
     copy_attachments: bool,
 ) -> Result<Vec<ConversationDocument>> {
-    if detected.format == OutputFormat::Xml {
-        let attachments_dir = config.output.join("attachments");
-        // Each payload goes to disk as its record is read, so the backup's
-        // attachments are never all in memory; the spool is removed when
-        // the read has staged them.
-        let spool = if copy_attachments {
-            Some(AttachmentSpool::open(&config.output)?)
-        } else {
-            None
-        };
-        let (documents, report) = read_backup(
-            input_dir,
-            ReadOptions {
-                owner_phones: &[],
-                attachments_dir: Some(&attachments_dir),
-                spool: spool.as_ref(),
-                stage_attachments: true,
-                media: if copy_attachments {
-                    MediaMode::Clone
-                } else {
-                    MediaMode::Disabled
-                },
-                compress: CompressOptions::default(),
-                log: None,
-                progress: None,
-                cancel: config.cancel.as_ref(),
+    let attachments_dir = config.output.join("attachments");
+    // Each payload goes to disk as its record is read, so the backup's
+    // attachments are never all in memory; the spool is removed when
+    // the read has staged them.
+    let spool = if copy_attachments {
+        Some(AttachmentSpool::open(&config.output)?)
+    } else {
+        None
+    };
+    let (documents, report) = read_backup(
+        input_dir,
+        ReadOptions {
+            owner_phones: &[],
+            attachments_dir: Some(&attachments_dir),
+            spool: spool.as_ref(),
+            stage_attachments: true,
+            media: if copy_attachments {
+                MediaMode::Clone
+            } else {
+                MediaMode::Disabled
             },
-        )?;
-        for error in report.errors.iter().take(5) {
-            config.emit_log(format!("xml warning: {error}"));
-        }
-        return Ok(documents);
+            compress: CompressOptions::default(),
+            log: None,
+            progress: None,
+            cancel: config.cancel.as_ref(),
+        },
+    )?;
+    for error in report.errors.iter().take(5) {
+        config.emit_log(format!("xml warning: {error}"));
     }
+    Ok(documents)
+}
 
-    list_artifacts(input_dir, detected.format)?
+/// Read every conversation file or EML folder of `format` in `input_dir`.
+/// Any file the read refuses stops the whole read.
+fn read_conversation_files(
+    input_dir: &Path,
+    format: OutputFormat,
+) -> Result<Vec<ConversationDocument>> {
+    list_artifacts(input_dir, format)?
         .into_iter()
-        .map(|path| read_artifact(&path, detected.format))
+        .map(|path| read_artifact(&path, format))
         .collect()
 }
 
@@ -355,23 +373,26 @@ fn looks_like_smses(path: &Path) -> bool {
     first_line.to_ascii_lowercase().contains("<smses")
 }
 
-/// True when `path` is a conversation JSON file at the current
-/// [`message_ir::SCHEMA_VERSION`].
+/// True when `path` is a conversation JSON file: an object with a numeric
+/// `schema_version` and `export`, `conversation` and `messages` keys.
+///
+/// The version is not compared, so a file of another version is an export
+/// here and its read refuses it by name.
 fn looks_like_ir_json(path: &Path) -> Result<bool> {
     let raw = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
     let value: serde_json::Value = match serde_json::from_str(&raw) {
         Ok(value) => value,
         Err(_) => return Ok(false),
     };
-    Ok(value.get("schema_version").and_then(|value| value.as_u64())
-        == Some(message_ir::SCHEMA_VERSION as u64)
-        && value.get("export").is_some()
-        && value.get("conversation").is_some()
-        && value.get("messages").is_some())
+    Ok(has_ir_header(&value) && value.get("messages").is_some())
 }
 
-/// True when `path` is a JSON Lines conversation file at the current
-/// [`message_ir::SCHEMA_VERSION`].
+/// True when the first line of `path` is a JSON Lines conversation header:
+/// an object with a numeric `schema_version` and `export` and
+/// `conversation` keys, and no `messages`.
+///
+/// The version is not compared, so a file of another version is an export
+/// here and its read refuses it by name.
 fn looks_like_ir_jsonl(path: &Path) -> Result<bool> {
     let file = File::open(path).with_context(|| format!("open {}", path.display()))?;
     let Some(Ok(first_line)) = BufReader::new(file).lines().next() else {
@@ -381,11 +402,17 @@ fn looks_like_ir_jsonl(path: &Path) -> Result<bool> {
         Ok(value) => value,
         Err(_) => return Ok(false),
     };
-    Ok(value.get("schema_version").and_then(|value| value.as_u64())
-        == Some(message_ir::SCHEMA_VERSION as u64)
+    Ok(has_ir_header(&value) && value.get("messages").is_none())
+}
+
+/// True when `value` has a numeric `schema_version` and `export` and
+/// `conversation` keys, whatever the version.
+fn has_ir_header(value: &serde_json::Value) -> bool {
+    value
+        .get("schema_version")
+        .is_some_and(serde_json::Value::is_u64)
         && value.get("export").is_some()
         && value.get("conversation").is_some()
-        && value.get("messages").is_none())
 }
 
 /// True when `path` has every column in [`CSV_HEADERS`].

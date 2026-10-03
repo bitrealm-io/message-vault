@@ -8,11 +8,6 @@ pub(crate) fn write_tiny_reset_bundle(root: &Path) {
     fs::create_dir_all(root.join("staging").join(SBR_SOURCE)).expect("sbr dir");
     fs::create_dir_all(root.join("staging").join(WHATSAPP_SOURCE)).expect("whatsapp dir");
     fs::write(
-        root.join("config/config.toml"),
-        "[paths]\ndb = \"data/messagecrate.db\"\ndata_dir = \"data\"\n",
-    )
-    .expect("write bundle config");
-    fs::write(
         root.join("config/seed.toml"),
         r#"
 [owner]
@@ -265,14 +260,7 @@ async fn failed_reset_preserves_existing_demo_account() {
     fs::create_dir_all(invalid_bundle.join("staging").join(SBR_SOURCE))
         .expect("create Android tree");
 
-    let result = reset_prepared_bundle(
-        &cfg,
-        &invalid_bundle,
-        DEMO_ACCOUNT_ID,
-        &temp.path().join("config/config.toml"),
-        &temp.path().join("prepared-config.toml"),
-    )
-    .await;
+    let result = reset_prepared_bundle(&cfg, &invalid_bundle, DEMO_ACCOUNT_ID).await;
 
     assert!(result.is_err());
     let mut conn = test_db_conn(&db).await;
@@ -319,14 +307,7 @@ async fn a_reset_whose_rebuild_fails_leaves_the_database_and_server_ready_in_pla
         server: None,
     };
 
-    let result = reset_prepared_bundle(
-        &cfg,
-        &bundle,
-        DEMO_ACCOUNT_ID,
-        &temp.path().join("config/config.toml"),
-        &temp.path().join("prepared-config.toml"),
-    )
-    .await;
+    let result = reset_prepared_bundle(&cfg, &bundle, DEMO_ACCOUNT_ID).await;
 
     assert!(
         result.is_err(),
@@ -339,52 +320,49 @@ async fn a_reset_whose_rebuild_fails_leaves_the_database_and_server_ready_in_pla
     assert_reset_test_database(&db).await;
 }
 
+/// `reset-demo` builds the Demo Account in the database the operator's
+/// config names, wherever that is, and leaves the config file as it was,
+/// `[server]` section and all (#1216).
 #[tokio::test]
-async fn failed_preparation_preserves_active_config() {
-    let temp = tempfile::tempdir().expect("create test directory");
-    let config_dest = temp.path().join("config/config.toml");
-    fs::create_dir_all(config_dest.parent().expect("config parent")).expect("create config parent");
-    let original = b"active configuration\n";
-    fs::write(&config_dest, original).expect("write active config");
-    let invalid_bundle = temp.path().join("invalid-bundle");
-    fs::create_dir_all(&invalid_bundle).expect("create invalid bundle");
-
-    let result = prepare_config_and_reset(&invalid_bundle, &config_dest, DEMO_ACCOUNT_ID).await;
-
-    assert!(result.is_err());
-    assert_eq!(
-        fs::read(&config_dest).expect("read active config"),
-        original
-    );
-}
-
-/// A complete bundle: the reset runs, the bundle's
-/// config becomes the active one, and the database it names holds the demo.
-#[tokio::test]
-async fn a_complete_bundle_resets_and_its_config_becomes_the_active_one() {
+async fn a_reset_builds_in_the_configured_database_and_leaves_the_config_as_it_is() {
     let temp = tempfile::tempdir().expect("create test directory");
     let bundle = temp.path().join("bundle");
     write_tiny_reset_bundle(&bundle);
-    let config_dest = temp.path().join("config/config.toml");
+    let elsewhere = temp.path().join("srv/mc");
+    let config_path = temp.path().join("config/config.toml");
+    fs::create_dir_all(config_path.parent().expect("config parent")).expect("create config parent");
+    let config_text = format!(
+        "[paths]\ndb = '{}'\ndata_dir = '{}'\n\n[server]\nbind = \"127.0.0.1:8080\"\n",
+        elsewhere.join("messagecrate.db").display(),
+        elsewhere.join("data").display()
+    );
+    fs::write(&config_path, &config_text).expect("write the operator's config");
 
-    let stats = prepare_config_and_reset(&bundle, &config_dest, DEMO_ACCOUNT_ID)
+    let cfg = Config::load(&config_path).expect("load the operator's config");
+    let stats = reset_prepared_bundle(&cfg, &bundle, DEMO_ACCOUNT_ID)
         .await
         .expect("a complete bundle resets");
 
     assert_eq!(stats.import.messages, 3, "one message from each source");
     assert_eq!(
-        fs::read(&config_dest).expect("read active config"),
-        fs::read(bundle.join("config/config.toml")).expect("read bundle config")
+        fs::read_to_string(&config_path).expect("read the config"),
+        config_text,
+        "the config file is unchanged"
     );
-    // The bundle's config names the database relative to the folder above
-    // the active config's.
-    let mut conn = test_db_conn(&temp.path().join("data/messagecrate.db")).await;
+    assert!(
+        !temp.path().join("data/messagecrate.db").exists(),
+        "nothing is built at the default database path"
+    );
+    let mut conn = test_db_conn(&elsewhere.join("messagecrate.db")).await;
     let demo_messages = count(
         &mut conn,
         &format!("SELECT COUNT(*) FROM messages WHERE account_id = {DEMO_ACCOUNT_ID}"),
     )
     .await;
-    assert_eq!(demo_messages, 3);
+    assert_eq!(
+        demo_messages, 3,
+        "the Demo Account is in the configured database"
+    );
 }
 
 #[tokio::test]
@@ -477,10 +455,10 @@ fn reset_refuses_while_server_holds_database_lock() {
 }
 
 #[tokio::test]
-async fn failures_after_database_and_account_install_restore_all_active_state() {
+async fn failures_during_the_install_restore_all_active_state() {
     for failure_point in [
+        ResetInstallFailure::AtDatabase,
         ResetInstallFailure::AfterDatabase,
-        ResetInstallFailure::AfterAccount,
     ] {
         let temp = tempfile::tempdir().expect("create test directory");
         let active_db = temp.path().join("active/messagecrate.db");
@@ -503,31 +481,20 @@ async fn failures_after_database_and_account_install_restore_all_active_state() 
         fs::write(active_account.join("sentinel"), b"old data").expect("write old data");
         fs::write(prepared_account.join("sentinel"), b"new data").expect("write new data");
 
-        let active_config = temp.path().join("config/config.toml");
-        let prepared_config = temp.path().join("prepared-config/config.toml");
-        fs::create_dir_all(active_config.parent().expect("active config parent"))
-            .expect("create active config parent");
-        fs::create_dir_all(prepared_config.parent().expect("prepared config parent"))
-            .expect("create prepared config parent");
-        fs::write(&active_config, b"old config").expect("write old config");
-        fs::write(&prepared_config, b"new config").expect("write new config");
-
         let result = replace_reset_state_with(
             &ResetPaths {
                 active_db: &active_db,
                 prepared_db: &prepared_db,
                 active_account: &active_account,
                 prepared_account: &prepared_account,
-                active_config: &active_config,
-                prepared_config: &prepared_config,
             },
             |source, destination| {
+                if failure_point == ResetInstallFailure::AtDatabase && source == prepared_db {
+                    bail!("injected failure at the database rename");
+                }
                 if failure_point == ResetInstallFailure::AfterDatabase && source == prepared_account
                 {
                     bail!("injected failure after database rename");
-                }
-                if failure_point == ResetInstallFailure::AfterAccount && source == prepared_config {
-                    bail!("injected failure after account-directory rename");
                 }
                 fs::rename(source, destination).map_err(Into::into)
             },
@@ -538,10 +505,6 @@ async fn failures_after_database_and_account_install_restore_all_active_state() 
         assert_eq!(
             fs::read(active_account.join("sentinel")).expect("read data sentinel"),
             b"old data"
-        );
-        assert_eq!(
-            fs::read(&active_config).expect("read active config"),
-            b"old config"
         );
     }
 }
@@ -565,14 +528,6 @@ async fn active_sidecars_are_cleaned_immediately_before_database_rename() {
         .join(DEMO_ACCOUNT_ID.to_string());
     fs::create_dir_all(&active_account).expect("create active account");
     fs::create_dir_all(&prepared_account).expect("create prepared account");
-    let active_config = temp.path().join("config/config.toml");
-    let prepared_config = temp.path().join("prepared-config/config.toml");
-    fs::create_dir_all(active_config.parent().expect("active config parent"))
-        .expect("create active config parent");
-    fs::create_dir_all(prepared_config.parent().expect("prepared config parent"))
-        .expect("create prepared config parent");
-    fs::write(&active_config, b"old config").expect("write active config");
-    fs::write(&prepared_config, b"new config").expect("write prepared config");
 
     {
         let (pool, mut conn) = test_db(&active_db).await;
@@ -595,8 +550,6 @@ async fn active_sidecars_are_cleaned_immediately_before_database_rename() {
             prepared_db: &prepared_db,
             active_account: &active_account,
             prepared_account: &prepared_account,
-            active_config: &active_config,
-            prepared_config: &prepared_config,
         },
         |source, destination| {
             if source == active_db {
@@ -624,15 +577,11 @@ fn reset_rollback_attempts_remaining_restorations_after_one_fails() {
     let prepared_db = temp.path().join("prepared/messagecrate.db");
     let active_account = temp.path().join("data/demo");
     let prepared_account = temp.path().join("prepared-data/demo");
-    let active_config = temp.path().join("config/config.toml");
-    let prepared_config = temp.path().join("prepared-config/config.toml");
     for parent in [
         active_db.parent().expect("active db parent"),
         prepared_db.parent().expect("prepared db parent"),
         &active_account,
         &prepared_account,
-        active_config.parent().expect("active config parent"),
-        prepared_config.parent().expect("prepared config parent"),
     ] {
         fs::create_dir_all(parent).expect("create replacement fixture directory");
     }
@@ -640,8 +589,6 @@ fn reset_rollback_attempts_remaining_restorations_after_one_fails() {
     fs::write(&prepared_db, b"new db").expect("write prepared db");
     fs::write(active_account.join("sentinel"), b"old").expect("write active account");
     fs::write(prepared_account.join("sentinel"), b"new").expect("write prepared account");
-    fs::write(&active_config, b"old config").expect("write active config");
-    fs::write(&prepared_config, b"new config").expect("write prepared config");
     let mut database_restore_attempted = false;
 
     let result = replace_reset_state_with(
@@ -650,12 +597,10 @@ fn reset_rollback_attempts_remaining_restorations_after_one_fails() {
             prepared_db: &prepared_db,
             active_account: &active_account,
             prepared_account: &prepared_account,
-            active_config: &active_config,
-            prepared_config: &prepared_config,
         },
         |source, destination| {
-            if source == prepared_config {
-                bail!("injected config install failure");
+            if source == prepared_account {
+                bail!("injected account install failure");
             }
             if source.ends_with("previous-account") {
                 bail!("injected account restore failure");
@@ -684,8 +629,8 @@ fn reset_rollback_attempts_remaining_restorations_after_one_fails() {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ResetInstallFailure {
+    AtDatabase,
     AfterDatabase,
-    AfterAccount,
 }
 
 async fn seed_reset_test_database(path: &Path) {
@@ -941,17 +886,10 @@ async fn a_successful_install_removes_the_work_directories() {
     let prepared_account = data_work.path().join(DEMO_ACCOUNT_ID.to_string());
     fs::create_dir_all(&prepared_account).expect("create prepared account");
     fs::write(prepared_account.join("sentinel"), b"new data").expect("write new data");
-    let prepared_config = temp.path().join("prepared-config/config.toml");
-    fs::create_dir_all(prepared_config.parent().expect("prepared config parent"))
-        .expect("create prepared config parent");
-    fs::write(&prepared_config, b"new config").expect("write prepared config");
     let active_db = temp.path().join("active/messagecrate.db");
     fs::create_dir_all(active_db.parent().expect("active database parent"))
         .expect("create active database parent");
     let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID.to_string());
-    let active_config = temp.path().join("config/config.toml");
-    fs::create_dir_all(active_config.parent().expect("active config parent"))
-        .expect("create active config parent");
 
     install_reset_state_or_keep_work(
         &ResetPaths {
@@ -959,8 +897,6 @@ async fn a_successful_install_removes_the_work_directories() {
             prepared_db: &prepared_db,
             active_account: &active_account,
             prepared_account: &prepared_account,
-            active_config: &active_config,
-            prepared_config: &prepared_config,
         },
         db_work,
         data_work,
@@ -974,10 +910,6 @@ async fn a_successful_install_removes_the_work_directories() {
     assert_eq!(
         fs::read(active_account.join("sentinel")).expect("read installed account"),
         b"new data"
-    );
-    assert_eq!(
-        fs::read(&active_config).expect("read installed config"),
-        b"new config"
     );
     assert!(
         !db_work_path.exists(),
@@ -995,14 +927,12 @@ async fn a_failed_install_with_nothing_left_in_the_work_directories_removes_them
     let (db_work, data_work) = reset_work_dirs(temp.path());
     let db_work_path = db_work.path().to_path_buf();
     let data_work_path = data_work.path().to_path_buf();
-    // No prepared database, account or config: the install refuses before
+    // No prepared database or account: the install refuses before
     // any rename, so there is no rollback and nothing to keep.
     let prepared_db = db_work.path().join("messagecrate.db");
     let prepared_account = data_work.path().join(DEMO_ACCOUNT_ID.to_string());
-    let prepared_config = temp.path().join("prepared-config/config.toml");
     let active_db = temp.path().join("active/messagecrate.db");
     let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID.to_string());
-    let active_config = temp.path().join("config/config.toml");
 
     let mut ready =
         crate::operation_lock::ReadyWhileRebuilding::clear(&active_db).expect("clear server.ready");
@@ -1012,8 +942,6 @@ async fn a_failed_install_with_nothing_left_in_the_work_directories_removes_them
             prepared_db: &prepared_db,
             active_account: &active_account,
             prepared_account: &prepared_account,
-            active_config: &active_config,
-            prepared_config: &prepared_config,
         },
         db_work,
         data_work,
@@ -1052,10 +980,8 @@ async fn a_failed_install_that_left_previous_state_in_the_work_directories_keeps
     .expect("write leftover backup");
     let prepared_db = db_work.path().join("messagecrate.db");
     let prepared_account = data_work.path().join(DEMO_ACCOUNT_ID.to_string());
-    let prepared_config = temp.path().join("prepared-config/config.toml");
     let active_db = temp.path().join("active/messagecrate.db");
     let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID.to_string());
-    let active_config = temp.path().join("config/config.toml");
 
     let mut ready =
         crate::operation_lock::ReadyWhileRebuilding::clear(&active_db).expect("clear server.ready");
@@ -1065,8 +991,6 @@ async fn a_failed_install_that_left_previous_state_in_the_work_directories_keeps
             prepared_db: &prepared_db,
             active_account: &active_account,
             prepared_account: &prepared_account,
-            active_config: &active_config,
-            prepared_config: &prepared_config,
         },
         db_work,
         data_work,
@@ -1670,15 +1594,6 @@ async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
     let bundle = temp.path().join("bundle");
     write_tiny_reset_bundle(&bundle);
     write_overlap_conversation(&bundle);
-    let config_dest = temp.path().join("config").join("config.toml");
-    fs::create_dir_all(config_dest.parent().expect("config parent")).expect("create config parent");
-    let prepared_config = temp.path().join("prepared-config.toml");
-    let config_text = format!(
-        "[paths]\ndb = \"{}\"\ndata_dir = \"{}\"\n",
-        db.display(),
-        data_dir.display()
-    );
-    fs::write(&prepared_config, &config_text).expect("write prepared config");
     let cfg = Config {
         paths: PathsConfig {
             db: db.clone(),
@@ -1699,21 +1614,10 @@ async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
         close_test_db(pool, conn).await;
     }
 
-    let stats = reset_prepared_bundle(
-        &cfg,
-        &bundle,
-        DEMO_ACCOUNT_ID,
-        &config_dest,
-        &prepared_config,
-    )
-    .await
-    .expect("reset the demo");
+    let stats = reset_prepared_bundle(&cfg, &bundle, DEMO_ACCOUNT_ID)
+        .await
+        .expect("reset the demo");
 
-    assert_eq!(
-        fs::read_to_string(&config_dest).expect("read installed config"),
-        config_text,
-        "the prepared config is installed as the active config"
-    );
     assert!(
         !previous_file.exists(),
         "the previous demo's file is gone: {}",

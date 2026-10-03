@@ -690,6 +690,7 @@
           "Accounts"
         ],
         "summary": "List the account's named API tokens with their permissions and masked secrets.",
+        "description": "Each token's permissions are capped by the account's as they are now.",
         "operationId": "list_api_tokens",
         "parameters": [
           {
@@ -799,7 +800,7 @@
           "Accounts"
         ],
         "summary": "Create a named API token.",
-        "description": "Returns the plaintext secret once, at creation; it is never returned again.",
+        "description": "Returns the plaintext secret once, at creation; it is never returned again. The token's permissions are those the request asks for and the account holds.",
         "operationId": "create_api_token",
         "parameters": [
           {

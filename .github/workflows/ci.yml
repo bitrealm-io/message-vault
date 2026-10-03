@@ -18,17 +18,12 @@ on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
-  # The merge queue runs every required job again on the pull request merged
-  # onto the main it will land on, so two pull requests that are green on
-  # their own cannot merge into a red main. Without this trigger the queue
-  # waits forever for checks that never start.
-  merge_group:
   workflow_dispatch:
 
 # A new push to a pull request cancels its previous run, so queued Rust
 # jobs do not sit until the 6-hour default timeout on a branch nobody is
-# waiting for any more. Pushes to main, merge queue runs, and tags are never
-# cancelled: each has its own ref, and its verdict is the one that counts.
+# waiting for any more. Pushes to main and tags are never cancelled: each has
+# its own ref, and its verdict is the one that counts.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -42,9 +37,8 @@ permissions:
 
 jobs:
   # ── Always: classify what the change touches ──────────────────────────
-  # A pull request diffs against its base branch, and a merge queue run
-  # against the main it merges onto. On anything else there is no base to
-  # diff against, so every output is true and everything runs.
+  # A pull request diffs against its base branch. On anything else there is no
+  # base to diff against, so every output is true and everything runs.
   # A draft skips this job, so every job that needs it skips too.
   changes:
     name: Classify changes
@@ -66,15 +60,12 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           BASE: ${{ github.base_ref }}
-          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
         run: |
           set -euo pipefail
           case "$EVENT" in
             pull_request)
               git fetch --quiet origin "$BASE"
               range="origin/$BASE...HEAD" ;;
-            merge_group)
-              range="$QUEUE_BASE...HEAD" ;;
             *)
               printf 'rust=true\nweb=true\ndocs=true\ndocker=true\n' >> "$GITHUB_OUTPUT"
               exit 0 ;;
@@ -323,13 +314,13 @@ jobs:
   # The image used to be built for the first time on the release tag, so a
   # pull request that broke docker/Dockerfile merged green and the tag
   # failed. This job builds it without pushing whenever the Dockerfile, a
-  # Cargo manifest or the lockfile changes. Pull requests and the merge queue
-  # only: the tag job below builds and pushes the same image, and a push to
-  # main was checked by the merge queue run that produced it.
+  # Cargo manifest or the lockfile changes. Pull requests only: the tag job
+  # below builds and pushes the same image, and nightly.yml builds it from
+  # main.
   docker-build:
     name: Docker image builds
     needs: changes
-    if: (github.event_name == 'pull_request' || github.event_name == 'merge_group') && needs.changes.outputs.docker == 'true'
+    if: github.event_name == 'pull_request' && needs.changes.outputs.docker == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:

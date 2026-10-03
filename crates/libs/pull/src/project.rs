@@ -44,7 +44,7 @@ pub fn build_document(
             source: source.to_string(),
             tool: "message-crate".into(),
             tool_version: env!("CARGO_PKG_VERSION").into(),
-            owner_handle: None,
+            owner_handle: shared_owner(&messages),
             owner_display_name: Some("Me".into()),
         },
         conversation: ConversationMeta {
@@ -126,7 +126,7 @@ pub fn to_ir_message(msg: &Message, skip_attachments: bool) -> Result<IrMessage>
         message_kind,
         sender_handle: msg.sender.clone(),
         sender_display_name: None,
-        owner_handle: None,
+        owner_handle: msg.owner.clone().filter(|o| !o.trim().is_empty()),
         subject: msg.subject.clone(),
         text: msg.text.clone().unwrap_or_default(),
         attachments,
@@ -137,6 +137,18 @@ pub fn to_ir_message(msg: &Message, skip_attachments: bool) -> Result<IrMessage>
         }
         .into_option(),
     })
+}
+
+/// The owner address every message of a conversation carries, when they all
+/// carry the same one; `None` when one has none or two differ. Each message
+/// keeps its own address either way, so a conversation held at two of the
+/// holder's addresses keeps the split.
+fn shared_owner(messages: &[IrMessage]) -> Option<String> {
+    let first = messages.first()?.owner_handle.as_deref()?;
+    messages
+        .iter()
+        .all(|m| m.owner_handle.as_deref() == Some(first))
+        .then(|| first.to_string())
 }
 
 /// Copy participant handles and display names from the seed export message.
@@ -415,6 +427,40 @@ mod tests {
         assert_eq!(ir.attachments[0].size_bytes, None);
     }
 
+    /// A conversation the holder used at two addresses keeps the split: each
+    /// message carries its own owner, and the header names none, because no
+    /// one address is the owner of every message (#1098).
+    #[test]
+    fn each_message_keeps_its_owner_and_a_split_conversation_names_none_in_the_header() {
+        let mut by_phone = seed_message_with_participant(Participant {
+            handle: Some("+15555550101".into()),
+            name: "Sam".into(),
+            service: None,
+            contact_id: None,
+        });
+        by_phone.owner = Some("+15555550100".into());
+        let mut by_email = by_phone.clone();
+        by_email.owner = Some("me@example.com".into());
+        let mut blank = by_phone.clone();
+        blank.owner = Some("  ".into());
+
+        let messages = vec![
+            to_ir_message(&by_phone, false).unwrap(),
+            to_ir_message(&by_email, false).unwrap(),
+            to_ir_message(&blank, false).unwrap(),
+        ];
+        assert_eq!(
+            messages
+                .iter()
+                .map(|m| m.owner_handle.as_deref())
+                .collect::<Vec<_>>(),
+            [Some("+15555550100"), Some("me@example.com"), None]
+        );
+
+        let doc = build_document("imessage", &by_phone, messages);
+        assert_eq!(doc.export.owner_handle, None);
+    }
+
     /// RFC 3339, whole seconds and milliseconds all land on the same instant,
     /// and a number at the cut-off (10^10) is read as milliseconds.
     #[test]
@@ -550,6 +596,7 @@ mod tests {
             timestamp: "2015-03-12T18:05:22Z".into(),
             is_from_me: false,
             sender: Some("+1".into()),
+            owner: None,
             subject: None,
             text: Some("hi".into()),
             is_announcement: false,
@@ -619,6 +666,7 @@ mod tests {
             timestamp: "2015-03-12T18:05:22Z".into(),
             is_from_me: false,
             sender: Some("+1".into()),
+            owner: None,
             subject: None,
             text: Some("hi".into()),
             is_announcement: false,

@@ -53,13 +53,13 @@ type Contact = Omit<ContactSummary, "id"> & { id: string };
 
 type FilterNeedles = { text: string; handle: string | null };
 
-/** Pull plain name text and a handle:"…" value out of the filter for local matching. */
+/** Pull plain name text and an identity:"…" value out of the filter for local matching. */
 function filterNeedles(raw: string): FilterNeedles {
   const q = raw.trim();
   if (!q) return { text: "", handle: null };
 
   let handle: string | null = null;
-  const found = q.match(/(^|\s)handle:("([^"]+)"|(\S+))/i);
+  const found = q.match(/(^|\s)identity:("([^"]+)"|(\S+))/i);
   if (found) handle = found[3] ?? found[4].replace(/^"|"$/g, "");
 
   return { text: stripFieldTokens(q), handle };
@@ -471,11 +471,11 @@ export default function ContactList({
             {filterActive
               ? "No contacts match this filter"
               : groupFilter === "none"
-                ? "Every contact has a group"
+                ? "Every contact is in a Contact Group"
                 : groupFilter === UNKNOWN_GROUP
                   ? "Every contact has a name and a way to reach them"
                   : groupFilter
-                    ? "No contacts in this group"
+                    ? "No contacts in this Contact Group"
                     : "No contacts"}
           </div>
         ) : null

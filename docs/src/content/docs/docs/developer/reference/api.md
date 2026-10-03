@@ -38,7 +38,7 @@ Every import is an Import Run, and there is no import without one. A run takes f
 
 1. `POST /v1/imports` creates the run and answers `201 Created` with its id. The body names the `source`, the `mode` (`replace` or `append`, default `append`), and whether to `dedupe` across sources after each batch (default false). These settings belong to the run and are stated once, so no batch repeats them. An account has at most one running Import Run, so a second `POST` answers `409 Conflict` while the first is live. `GET /v1/imports?status=running` finds the live run.
 2. Each attachment goes up first, by its SHA-256, through `/v1/assets`. A message points at its attachment by that fingerprint, so the server must already hold the file when the message arrives.
-3. Each `POST /v1/imports/{id}/batches` adds one JSONL body to the run. The run's row says how the batch is imported, so the request carries nothing but the body. A `replace` run wipes the source once, on its first batch, and appends every batch after that.
+3. Each `POST /v1/imports/{id}/batches` adds one JSONL body to the run. The run's row says how the batch is imported, so the request carries nothing but the body. A `replace` run wipes the source once, on its first batch, and appends every batch after that. Every message needs a non-empty `guid`: a batch with a message without one is refused with `422 Unprocessable Entity`, naming its lines, and nothing in it is stored. An append skips a message whose `guid` the source already holds, so a batch sent again after its answer was lost stores nothing twice.
 4. `POST /v1/imports/{id}/complete` records how the run ended: `completed`, `completed_with_issues`, or `failed`, with its counts and issues. `POST /v1/imports/{id}/discard` gives a live run up instead and records it as `cancelled`. A run that has finished answers `409 Conflict` to a batch, a second close, or a change of stage, because its record is the history the person reads and is never rewritten.
 
 Between those steps, `PATCH /v1/imports/{id}` moves a live run to another stage, carrying the plan approved at the gate it just passed in `summary` when there is one. The desktop app uses the stage to resume an import after a restart. The stage is a field of the run, so it is written with a `PATCH` rather than posted to a `stage` sub-resource. The answer is the run, the same record `GET /v1/imports/{id}` returns.
@@ -47,7 +47,7 @@ Between those steps, `PATCH /v1/imports/{id}` moves a live run to another stage,
 
 ### Import body
 
-A batch body is `Content-Type: application/jsonl` or `application/x-ndjson`. Any other media type answers `415 Unsupported Media Type`, because attachments never travel in a batch. A body larger than the attachment size limit (`asset_max_bytes` on `GET /v1/server`, 512 MiB until the Owner changes it) answers `413 Payload Too Large`.
+A batch body is `Content-Type: application/jsonl` or `application/x-ndjson`. Any other media type answers `415 Unsupported Media Type`, because attachments never travel in a batch. A body larger than 512 MiB, a cap fixed in the server, answers `413 Payload Too Large`; the attachment size limit the Owner sets holds the attachment uploads only.
 
 A file the server cannot read answers `400 Bad Request` with a `malformed-body` problem document. Its `detail` names the line where reading stopped. For a file of the wrong schema version, `detail` names the version the file has and the version the server reads: nothing is upgraded, so the file must be exported again with current tools. Every other failure is a problem document too, described under "Failures" in the HTTP interface rules.
 
@@ -84,10 +84,10 @@ Every export route takes the `export` scope on a session or an API token. A prog
 
 - Free text and `"quoted phrases"` match the message body, the subject, and any attachment file name.
 - `body:`, `subject:` — text, `none`, `any`, restricted to that one field.
-- `name:`, `handle:` — a participant's name or handle; text, `none`, `any`.
+- `name:`, `identity:` — a participant's name or identity; text, `none`, `any`.
 - `title:` — the conversation's title; text, `none`, `any`.
-- `with:` — a participant, by name, handle, `pre*` prefix, or `#id`.
-- `from:`, `to:` — who sent it or who it went to; `me`, name, handle, `pre*` prefix, or `#id`.
+- `with:` — a participant, by name, identity, `pre*` prefix, or `#id`.
+- `from:`, `to:` — who sent it or who it went to; `me`, name, identity, `pre*` prefix, or `#id`.
 - `in:` — this one conversation; title, handle, `pre*` prefix, or `#id`.
 - `group:` — this Contact Group, on the contact or on a participant; name, `pre*` prefix, `#id`, `none`, `unknown`.
 - `tag:` — this Message Tag; name, `pre*` prefix, `#id`, `none`.

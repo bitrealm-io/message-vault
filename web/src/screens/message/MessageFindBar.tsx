@@ -1,57 +1,100 @@
-import Button from "../../components/Button";
+import { useEffect, useRef } from "react";
+
+const STEP_CLASS =
+  "cursor-pointer rounded border border-border bg-panel px-1.5 py-0.5 text-[0.75rem] text-text hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40";
 
 /**
- * Find in conversation. The term runs on the server (`GET /v1/messages` with
- * `in:#id`), so `matchCount` is every match in the conversation, or in the
- * chosen year, and the thread below shows the matches a page at a time.
+ * Find in conversation (#1391). The term runs on the server (`GET /v1/messages`
+ * with `in:#id`), so the count is every match in the conversation. Typing
+ * jumps to the newest match; ▲ and ▼ step to the older and newer one, with the
+ * messages around it; ✕ closes Find and leaves the thread where it is.
  */
 export default function MessageFindBar({
   findTerm,
   onFindTermChange,
   matchCount,
   matchPosition,
-  activeYear,
+  searching,
   onPrevMatch,
   onNextMatch,
+  onClose,
 }: {
   findTerm: string;
   onFindTermChange: (value: string) => void;
-  /** Matches in the whole conversation (or year), from the server. */
+  /** Matches in the whole conversation, from the server. */
   matchCount: number;
-  /** Zero-based position of the highlighted match among all matches. */
+  /** Zero-based position of the current match, counted from the newest. */
   matchPosition: number;
-  activeYear: number | null;
+  /** The matches for the term are still being read. */
+  searching: boolean;
+  /** ▲: the older match. */
   onPrevMatch: () => void;
+  /** ▼: the newer match. */
   onNextMatch: () => void;
+  onClose: () => void;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const typed = findTerm.trim().length > 0;
   return (
-    <div className="flex items-center gap-2 border-b border-border px-6 py-1.5">
+    <div className="flex items-center gap-2 border-b border-border px-4 py-1.5">
       <input
+        ref={inputRef}
         type="text"
         value={findTerm}
+        aria-label="Find in conversation"
         onChange={(e) => onFindTermChange(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            if (matchCount > 0) onNextMatch();
+          if (e.key === "Enter" && matchCount > 0) {
+            if (e.shiftKey) onNextMatch();
+            else onPrevMatch();
           }
+          if (e.key === "Escape") onClose();
         }}
         placeholder="Find in conversation…"
-        className="box-border flex-1 rounded border border-border bg-bg px-2 py-1 text-[0.813rem] text-text"
+        className="box-border min-w-0 flex-1 rounded border border-border bg-bg px-2 py-1 text-[0.813rem] text-text"
       />
-      {matchCount > 0 && (
-        <>
-          <span className="whitespace-nowrap text-[0.75rem] text-muted">
-            {matchPosition + 1} of {matchCount}
-            {activeYear === null ? " in this conversation" : ` in ${activeYear}`}
-          </span>
-          <Button onClick={onPrevMatch} className="!px-1.5 !py-1 !text-[0.813rem]">
-            ↑
-          </Button>
-          <Button onClick={onNextMatch} className="!px-1.5 !py-1 !text-[0.813rem]">
-            ↓
-          </Button>
-        </>
-      )}
+      {typed ? (
+        <span className="whitespace-nowrap text-[0.75rem] text-muted" aria-live="polite">
+          {matchCount > 0
+            ? `${matchPosition + 1} of ${matchCount}`
+            : searching
+              ? "Finding…"
+              : "No matches"}
+        </span>
+      ) : null}
+      <button
+        type="button"
+        aria-label="Older match"
+        title="Older match"
+        disabled={matchCount === 0}
+        onClick={onPrevMatch}
+        className={STEP_CLASS}
+      >
+        ▲
+      </button>
+      <button
+        type="button"
+        aria-label="Newer match"
+        title="Newer match"
+        disabled={matchCount === 0}
+        onClick={onNextMatch}
+        className={STEP_CLASS}
+      >
+        ▼
+      </button>
+      <button
+        type="button"
+        aria-label="Close Find"
+        title="Close Find"
+        onClick={onClose}
+        className={STEP_CLASS}
+      >
+        ✕
+      </button>
     </div>
   );
 }

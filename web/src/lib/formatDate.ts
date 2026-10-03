@@ -14,6 +14,18 @@ export function formatDay(iso: string, zone: string): string {
   });
 }
 
+/**
+ * The clock time under a bubble, read in `zone` (e.g. "8:36 AM"). The day is
+ * the separator's above it, so the bubble carries only the time.
+ */
+export function formatClockTime(timestamp: string, zone: string): string {
+  return new Date(timestamp).toLocaleTimeString([], {
+    timeZone: zone,
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 /** Month and year of a message instant in `zone` (e.g. "Sep 2024"). */
 export function formatMonthYear(iso: string, zone: string): string {
   return new Date(iso).toLocaleDateString([], {

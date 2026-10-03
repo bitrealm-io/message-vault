@@ -79,7 +79,7 @@ async function freshAfter(
 /** The conversation list, a find, the Trash count, and an open contact's counts. */
 const conversationTrashState = [
   keys.conversations.lists,
-  keys.conversations.find(42, "year:2020", 0, 50),
+  keys.conversations.find(42, "date:2020", "-date", 0, 50),
   keys.trash.all,
   keys.contacts.details,
 ];

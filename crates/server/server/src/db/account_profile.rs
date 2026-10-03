@@ -2,9 +2,9 @@
 
 use anyhow::{Context, Result, bail};
 use message_ir::{HandleService, HandleType};
-use sqlx::{Connection, SqliteConnection};
+use sqlx::SqliteConnection;
 
-use crate::db::engine::BEGIN_IMMEDIATE_SQL;
+use crate::db::begin_write;
 use crate::db::handles::{normalize_handle, upsert_handle_row};
 use crate::db::schema;
 
@@ -353,7 +353,7 @@ pub async fn delete_all_messages_for_account(
     account_id: i64,
 ) -> Result<DeletedMessagesStats> {
     schema::ensure_schema(conn).await?;
-    let mut tx = conn.begin_with(BEGIN_IMMEDIATE_SQL).await?;
+    let mut tx = begin_write(conn).await?;
     let attachment_count: i64 = sqlx::query_scalar(
         r"
         SELECT COUNT(*)
@@ -484,22 +484,23 @@ pub async fn set_account_flags(
     account_id: i64,
     flags: AccountFlags,
 ) -> Result<()> {
-    // Column names come from this compile-time array, never from the
-    // request, so formatting them into the SQL is safe; values stay bound.
-    let columns = [
-        ("disabled", flags.disabled),
-        ("can_import", flags.can_import),
-        ("can_export", flags.can_export),
-        ("can_delete", flags.can_delete),
-    ];
-    for (column, value) in columns {
-        let Some(value) = value else { continue };
-        sqlx::query(&format!("UPDATE accounts SET {column} = $1 WHERE id = $2"))
-            .bind(i32::from(value))
-            .bind(account_id)
-            .execute(&mut *conn)
-            .await?;
-    }
+    // One statement, so the flags change together or not at all. A flag
+    // left out binds NULL and keeps the stored value.
+    sqlx::query(
+        "UPDATE accounts SET
+             disabled = COALESCE($1, disabled),
+             can_import = COALESCE($2, can_import),
+             can_export = COALESCE($3, can_export),
+             can_delete = COALESCE($4, can_delete)
+         WHERE id = $5",
+    )
+    .bind(flags.disabled.map(i32::from))
+    .bind(flags.can_import.map(i32::from))
+    .bind(flags.can_export.map(i32::from))
+    .bind(flags.can_delete.map(i32::from))
+    .bind(account_id)
+    .execute(&mut *conn)
+    .await?;
     Ok(())
 }
 

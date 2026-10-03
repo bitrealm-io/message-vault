@@ -20,22 +20,76 @@ pub enum ImportFailure {
     /// a header or message with the wrong fields, or a message before any
     /// header.
     Parse { line: usize, detail: String },
+    /// Messages whose `guid` is empty. The guid index is what makes a
+    /// retried batch store nothing twice, and every exporter writes a guid,
+    /// so a message without one is refused rather than stored outside it.
+    /// `lines` holds the first [`MISSING_GUID_LINES_NAMED`] such lines, in
+    /// order, and `total` counts them all.
+    MissingGuid { lines: Vec<usize>, total: usize },
 }
 
+/// How many lines without a guid a refusal names; the rest are counted.
+pub const MISSING_GUID_LINES_NAMED: usize = 10;
+
+/// The server's `import` command reads files, so the line is a line of the file.
 impl fmt::Display for ImportFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::SchemaVersion { refusal, line } => write!(f, "{refusal} (line {line})."),
-            Self::Parse { line, detail } => {
-                write!(f, "Could not read line {line} of the file: {detail}.")
-            }
-        }
+        f.write_str(&self.sentence("the file"))
     }
 }
 
 impl std::error::Error for ImportFailure {}
 
 impl ImportFailure {
+    /// The line the failure is on, counted from 1 with blank lines included.
+    /// For messages without a guid, the first of them.
+    #[must_use]
+    pub fn line(&self) -> usize {
+        match self {
+            Self::SchemaVersion { line, .. } | Self::Parse { line, .. } => *line,
+            Self::MissingGuid { lines, .. } => lines.first().copied().unwrap_or_default(),
+        }
+    }
+
+    /// The sentence for a failure in one batch of an Import Run.
+    ///
+    /// A batch is the body of one request, which a client such as Upload
+    /// packs from parts of one or more staged files, so its line is a line of
+    /// the batch and not of any file the sender has. The client turns it into
+    /// a file and line of its own.
+    #[must_use]
+    pub fn batch_sentence(&self) -> String {
+        self.sentence("the batch")
+    }
+
+    /// The sentence, naming the line as a line of `whole`.
+    fn sentence(&self, whole: &str) -> String {
+        match self {
+            Self::SchemaVersion { refusal, line } => {
+                format!("{refusal} (line {line} of {whole}).")
+            }
+            Self::Parse { line, detail } => {
+                format!("Could not read line {line} of {whole}: {detail}.")
+            }
+            Self::MissingGuid { lines, total } => {
+                let named: Vec<String> = lines.iter().map(ToString::to_string).collect();
+                let rest = total.saturating_sub(lines.len());
+                let which = match (named.as_slice(), rest) {
+                    ([one], 0) => format!("The message on line {one} of {whole} has"),
+                    ([init @ .., last], 0) => format!(
+                        "The messages on lines {} and {last} of {whole} have",
+                        init.join(", ")
+                    ),
+                    (named, rest) => format!(
+                        "The messages on lines {} and {rest} more of {whole} have",
+                        named.join(", ")
+                    ),
+                };
+                format!("{which} no guid; every message needs one.")
+            }
+        }
+    }
+
     /// The person-actionable failure inside `err`, if there is one.
     ///
     /// The import pipeline wraps errors in `anyhow` context on the way up;
@@ -59,7 +113,20 @@ mod tests {
         };
         assert_eq!(
             f.to_string(),
-            "This file is schema version 3; Message Crate reads version 4 (line 1)."
+            "This file is schema version 3; Message Crate reads version 4 (line 1 of the file)."
+        );
+    }
+
+    #[test]
+    fn a_batch_names_the_line_as_a_line_of_the_batch() {
+        let f = ImportFailure::Parse {
+            line: 3,
+            detail: "boom".into(),
+        };
+        assert_eq!(f.line(), 3);
+        assert_eq!(
+            f.batch_sentence(),
+            "Could not read line 3 of the batch: boom."
         );
     }
 
@@ -72,6 +139,44 @@ mod tests {
         assert_eq!(
             f.to_string(),
             "Could not read line 12 of the file: expected value at line 1 column 1."
+        );
+    }
+
+    #[test]
+    fn missing_guid_names_one_line() {
+        let f = ImportFailure::MissingGuid {
+            lines: vec![3],
+            total: 1,
+        };
+        assert_eq!(f.line(), 3);
+        assert_eq!(
+            f.to_string(),
+            "The message on line 3 of the file has no guid; every message needs one."
+        );
+    }
+
+    #[test]
+    fn missing_guid_names_every_line_of_the_batch_up_to_the_limit() {
+        let f = ImportFailure::MissingGuid {
+            lines: vec![2, 5, 9],
+            total: 3,
+        };
+        assert_eq!(f.line(), 2);
+        assert_eq!(
+            f.batch_sentence(),
+            "The messages on lines 2, 5 and 9 of the batch have no guid; every message needs one."
+        );
+    }
+
+    #[test]
+    fn missing_guid_counts_the_lines_past_the_limit() {
+        let f = ImportFailure::MissingGuid {
+            lines: vec![2, 3],
+            total: 42,
+        };
+        assert_eq!(
+            f.to_string(),
+            "The messages on lines 2, 3 and 40 more of the file have no guid; every message needs one."
         );
     }
 

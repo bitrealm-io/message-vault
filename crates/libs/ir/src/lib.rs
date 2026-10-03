@@ -3,7 +3,9 @@
 //! A [`ConversationDocument`] is the in-memory form of one chat: export
 //! metadata, participants, and messages. Backup converters parse vendor
 //! formats into this type. Writing files (JSON, CSV, EML, and so on) lives
-//! in `message-ir-format`. Converting an existing export directory lives in
+//! in `message-ir-format`. The atomic, synced write those files go through
+//! ([`write_atomic`]) lives here, so attachment staging, the media pass and
+//! the journal use the same one. Converting an existing export directory lives in
 //! `message-reexport`. See the [common message](https://messagecrate.app/docs/developer/architecture/common-message/) page.
 //!
 //! Converters stage parsed rows in [`PendingMessage`] and
@@ -16,6 +18,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 
 mod attachment_path;
+mod durable;
 mod identity;
 mod projection;
 mod schema_version;
@@ -23,6 +26,7 @@ mod schema_version;
 pub mod testutil;
 
 pub use attachment_path::{UNSAFE_ATTACHMENT_PATH, UnsafeAttachmentPath, safe_attachment_path};
+pub use durable::{rename_into_place, write_atomic, write_atomic_via};
 pub use identity::{
     MessageCopy, MessageGuid, MessageIdentity, TimePrecision, collapse_whitespace,
     one_copy_per_message,

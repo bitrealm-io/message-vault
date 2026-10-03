@@ -12,6 +12,33 @@ Anyone who needs caching, request deduplication, or loading state on a new
 screen uses TanStack Query. Writing a new one for a single screen is the thing
 this decision exists to prevent.
 
+The rule is that a screen fetches the account data it shows one way. Two
+fetches are named exceptions, below, and they are the only ones. Any other fetch
+outside TanStack Query is a violation of this decision.
+
+## Two fetches that stay outside TanStack Query
+
+Both were decided with the maintainer on 2 October 2026 (issue #1111).
+
+**An attachment's bytes.** `web/src/hooks/useAssetObjectUrl.ts` downloads an
+attachment, or its preview, through `fetchAssetObjectUrl` in `serverApi.ts` and
+turns the bytes into an object URL. An object URL holds the bytes in memory
+until something revokes it, and the component that shows the attachment is the
+only thing that knows when the URL is no longer on screen. So the hook belongs
+to that component: it revokes the URL when the component unmounts or shows a
+different attachment. A cache entry has no such owner. TanStack Query drops an
+entry on its own schedule and never revokes what the entry holds, so caching the
+URL would either leak the bytes or revoke a URL still on screen. The cost is
+that two components showing the same attachment each download it.
+
+**The `/health` check.** `checkServerHealth` in `web/src/lib/serverHealth.ts`
+calls `fetch` itself, and `web/src/lib/useServerHealth.ts` runs its own backoff
+and polling. The check answers whether a server is listening at an address, and
+on the login screen that address is the one the person is still typing, which
+is not yet the server `apiClient` talks to. It carries no session and returns no
+account data, so it has no place in `serverApi.ts`, whose functions all go
+through `apiClient`, and no account to name a cache entry after.
+
 ## Why
 
 Before this decision the web app had six separate mechanisms for fetching and

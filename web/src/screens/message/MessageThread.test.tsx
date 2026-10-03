@@ -41,14 +41,15 @@ const baseProps = {
   loading: false,
   error: null as unknown,
   findTerm: "",
-  matchIds: [] as string[],
-  activeMatch: 0,
-  activeYear: null as number | null,
-  footerLabel: "Messages 0 of 0",
-  offset: 0,
-  total: 0,
-  onPrevPage: vi.fn(),
-  onNextPage: vi.fn(),
+  highlightId: null as number | null,
+  isGroup: false,
+  hasOlder: false,
+  hasNewer: false,
+  loadingOlder: false,
+  loadingNewer: false,
+  onLoadOlder: vi.fn(),
+  onLoadNewer: vi.fn(),
+  landing: { seq: 0, to: "bottom" as const },
   onAttachmentClick: vi.fn(),
 };
 
@@ -73,14 +74,44 @@ describe("MessageThread", () => {
     expect(screen.getByText("No messages in this conversation")).toBeInTheDocument();
   });
 
-  it("names the year in the empty state while a year filter is on", () => {
-    render(<MessageThread {...baseProps} messages={[]} activeYear={2021} />);
-    expect(screen.getByText("No messages in 2021")).toBeInTheDocument();
-  });
-
   it("renders messages when there are some", () => {
     render(<MessageThread {...baseProps} messages={[message()]} />);
     expect(screen.getByText("hi")).toBeInTheDocument();
     expect(screen.queryByText("No messages in this conversation")).not.toBeInTheDocument();
+  });
+
+  it("names a group's sender at the start of a run only", () => {
+    const group = {
+      id: 1,
+      chat_identifier: "x",
+      conversation_type: "group",
+      group_title: null,
+      participants: [
+        { handle: "+15555550101", name: "Ada", contact_id: null },
+        { handle: "+15555550102", name: "Bo", contact_id: null },
+      ],
+    };
+    const from = (id: number, sender: string, timestamp: string) =>
+      message({ id, sender, timestamp, text: `m${id}`, conversation: group });
+    render(
+      <MessageThread
+        {...baseProps}
+        isGroup={true}
+        messages={[
+          from(1, "+15555550101", "2026-08-11T15:00:00Z"),
+          from(2, "+15555550101", "2026-08-11T15:05:00Z"),
+          from(3, "+15555550102", "2026-08-11T15:06:00Z"),
+        ]}
+      />,
+    );
+    expect(screen.getAllByText("Ada")).toHaveLength(1);
+    expect(screen.getAllByText("Bo")).toHaveLength(1);
+  });
+
+  it("says older messages load by scrolling, with no Previous or Next", () => {
+    render(<MessageThread {...baseProps} messages={[message()]} hasOlder={true} />);
+    expect(screen.getByText("Scroll up for older messages")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Previous" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Next" })).toBeNull();
   });
 });

@@ -3,23 +3,14 @@
 //! ADR-0006: the Contact's name, else what that backup called them in that
 //! conversation, else the handle.
 //!
-//! The query's `COALESCE` does not actually end at the handle — it ends at
-//! `''`, because a participant with no address has no handle to end at. What
-//! keeps `name` non-empty is an import invariant rather than this query:
-//! import never creates a participant with neither an address nor a name, so
-//! every row has already matched one of the three earlier clauses. Read that
-//! guarantee here and enforce it in `imports_api::contact_name`, whose
-//! `resolve_name_only_participant` is the only writer of a handle-less
-//! participant row.
+//! Every participant has a handle: a person the source named with no address
+//! has a handle of type `other` holding the name. So the name is never empty.
 //!
 //! Every route that names a participant calls
 //! [`load_for_conversations`], so one person cannot show two names on one
-//! screen. `participants.contact_id` is not consulted for naming a
-//! participant who has a handle — that always routes through
-//! `contact_handles`, which is what makes renaming a Contact reach every
-//! conversation at once. A handle-less participant has no handle for
-//! `contact_handles` to key on, so for that one case `participants.contact_id`
-//! is used instead, because it is the only link to the Contact that exists.
+//! screen. A participant's Contact is the one its handle is on in
+//! `contact_handles`, which is what makes renaming a Contact, or moving the
+//! handle to another, reach every conversation at once.
 //!
 //! One conversation shape has no participants rows to read at all: a backup
 //! that recorded the thread's address and nothing about who was in it.
@@ -89,25 +80,19 @@ async fn load_participant_rows(
                 "SELECT p.conversation_id,
                         COALESCE(NULLIF(trim(c.preferred_name), ''),
                                  NULLIF(trim(p.name_alias), ''),
-                                 h.raw, '') AS name,
+                                 h.raw) AS name,
                         h.raw AS handle,
                         COALESCE(NULLIF(trim(h.service), ''), h.handle_type) AS service,
-                        -- A handle-less participant's Contact link lives on
-                        -- p.contact_id (contact_handles has no handle to key
-                        -- on for them); a handle-bearing one's link is always
-                        -- ch.contact_id, never p.contact_id. The contacts
-                        -- join below follows that rule, so a renamed Contact
-                        -- reaches a handle-less participant's name too, and
-                        -- the id is the joined contact's, so a trashed one
+                        -- The id is the joined contact's, so a trashed one
                         -- leaves no link behind.
                         c.id AS contact_id
                  FROM participants p
-                 LEFT JOIN handles h ON h.id = p.handle_id
+                 JOIN handles h ON h.id = p.handle_id
                  JOIN conversations conv ON conv.id = p.conversation_id
                  LEFT JOIN contact_handles ch
                    ON ch.handle_id = p.handle_id AND ch.account_id = conv.account_id
                  LEFT JOIN contacts c
-                   ON c.id = CASE WHEN p.handle_id IS NULL THEN p.contact_id ELSE ch.contact_id END
+                   ON c.id = ch.contact_id
                   AND c.account_id = conv.account_id
                   AND {NOT_TRASHED}
                  WHERE p.conversation_id IN ({placeholders})
@@ -140,9 +125,7 @@ async fn load_from_chat_handle(
     conversation_ids: &[i64],
 ) -> Result<HashMap<i64, Vec<Participant>>, sqlx::Error> {
     // `conv.chat_handle_id` is `NOT NULL`, so this join always matches and
-    // `handle`/`service` are never actually absent here — the column types
-    // just have to match `Participant`'s, which carry the address-less case
-    // that only a `participants` row can produce.
+    // `handle`/`service` are never absent here.
     group_rows_by_id(
         conn,
         conversation_ids,

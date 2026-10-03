@@ -20,6 +20,7 @@ import {
 } from "../../lib/importSession";
 import { importSessionCreateBody, showsAttachmentOptions } from "../../lib/importSource";
 import { CANCELLED_MESSAGE, createRunCancel, type RunCancel } from "../../lib/runCancel";
+import { registerRunningUpload } from "../../lib/runningUpload";
 import { sbrExtractFields } from "../../lib/sbrExtractFields";
 import { completeImport, createImport, getServerState } from "../../lib/serverApi";
 import { resolveImportStagingDir } from "../../lib/system-settings";
@@ -869,6 +870,30 @@ async function deleteStagingFolder(): Promise<string | null> {
  * other terminal outcome.
  */
 async function runPush(
+  token: string | null,
+  form: ImportJobFormValues,
+  sessionId: number,
+  outputDir: string,
+  approvedPlan?: StagingSummary,
+): Promise<void> {
+  // Logging out pauses this Upload before it ends the session the push
+  // sends (`lib/runningUpload.ts`), and waits until the pause is recorded.
+  const runCancel = scratch.runCancel;
+  const upload = uploadAndFinish(token, form, sessionId, outputDir, approvedPlan);
+  const pause = async () => {
+    await runCancel.cancel();
+    await upload;
+  };
+  const ended = registerRunningUpload(pause);
+  try {
+    await upload;
+  } finally {
+    ended();
+  }
+}
+
+/** `runPush` without the registration that lets logging out pause it. */
+async function uploadAndFinish(
   token: string | null,
   form: ImportJobFormValues,
   sessionId: number,

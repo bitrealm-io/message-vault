@@ -399,11 +399,23 @@ export function getConversation(
   return apiClient.get<Schema["ConversationSummary"]>(`/v1/conversations/${conversationId}`, opts);
 }
 
-/** Paging for `GET /v1/conversations/{id}/messages`. Opening a conversation
- * takes no filter: a year inside one is the search `in:#id date:YYYY`. */
+/**
+ * Paging for `GET /v1/conversations/{id}/messages`. Opening a conversation
+ * takes no filter: a year inside one is the search `in:#id date:YYYY`.
+ *
+ * The page starts at `offset`, or beside one message: `around` puts it in the
+ * middle, `before` and `after` read the page just before or after it in the
+ * page's order. Send at most one of the four; the answer's `offset` says
+ * where the page sits.
+ */
 export type ConversationMessagesParams = {
   offset?: number;
   limit?: number;
+  /** `date` (oldest first, the default) or `-date`. */
+  sort?: "date" | "-date";
+  around?: number;
+  before?: number;
+  after?: number;
 };
 
 export function listConversationMessages(
@@ -422,6 +434,8 @@ export type MessagesListParams = {
   q?: string;
   offset?: number;
   limit?: number;
+  /** `date` (oldest first, the default) or `-date`. */
+  sort?: "date" | "-date";
 };
 
 /**

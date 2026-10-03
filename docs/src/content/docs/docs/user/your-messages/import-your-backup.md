@@ -29,13 +29,16 @@ The Owner's login doesn't show **Import**, because the Owner holds no messages.
 2. **Backup Directory**: select **Browse** and pick the folder that holds the `.xml` files.
 3. **Backup Device Phone Numbers**: every number that belonged to the phone. The numbers on the account's profile are filled in already.
 
+When none of the numbers in the field is on the account's profile, **Import** stays greyed out until **Allow import from phone numbers not on my profile** is ticked.
+Adding the phone's number to the profile under **Settings → Profile** is the better fix, because messages sent from a number that isn't on the profile are not linked to the account.
+
 ### Attachments
 
 **Attachments** stays on **Copy**, which uploads every photo, video, and file as it is.
 
 **Convert** and **Compress & Convert** need the separate program ffmpeg, so they are left for a later import.
-With **Copy**, a browser shows the formats it can show. Some iPhone photos and videos are in formats that not every browser displays, and those stay that way. [Attachments and media](/docs/user/features/messages/attachments-and-media/) describes what each choice does.
-[Attachments and media](/docs/user/features/messages/attachments-and-media/) covers the other choices.
+With **Copy**, a browser shows the formats it can show. Some iPhone photos and videos are in formats that not every browser displays, and those stay that way.
+[Attachments and media](/docs/user/features/messages/attachments-and-media/) describes what each choice does.
 
 ## Start the import
 

@@ -82,7 +82,18 @@ function conversation(overrides: Partial<Conversation> = {}): Conversation {
   };
 }
 
-function renderHeader(c: Conversation) {
+function renderHeader(
+  c: Conversation,
+  {
+    years = [],
+    onJumpToNewest = () => {},
+    onJumpToYear = () => {},
+  }: {
+    years?: number[];
+    onJumpToNewest?: () => void;
+    onJumpToYear?: (year: number) => void;
+  } = {},
+) {
   return render(
     <Providers>
       <MemoryRouter initialEntries={["/messages/42"]}>
@@ -93,13 +104,11 @@ function renderHeader(c: Conversation) {
               <ConversationHeader
                 conversation={c}
                 displayParticipants={[]}
-                participantsOpen={false}
-                onToggleParticipants={() => {}}
-                sourceLabel="unknown"
-                years={[]}
-                activeYear={null}
-                onSelectAllYears={() => {}}
-                onSelectYear={() => {}}
+                years={years}
+                findOpen={false}
+                onToggleFind={() => {}}
+                onJumpToNewest={onJumpToNewest}
+                onJumpToYear={onJumpToYear}
                 onShowSources={() => {}}
               />
             }
@@ -109,6 +118,24 @@ function renderHeader(c: Conversation) {
       </MemoryRouter>
     </Providers>,
   );
+}
+
+/**
+ * Open the ⋯ menu and choose an item, opening the menu again until the item
+ * is there: an item that waits on a fetch appears once it lands.
+ */
+async function openMenuItem(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await waitFor(async () => {
+    if (!screen.queryByRole("menu")) {
+      await user.click(screen.getByRole("button", { name: "More for this conversation" }));
+    }
+    const item = screen.queryByRole("menuitem", { name });
+    if (!item) {
+      await user.keyboard("{Escape}");
+      throw new Error(`no ${name} yet`);
+    }
+  });
+  await user.click(screen.getByRole("menuitem", { name }));
 }
 
 describe("ConversationHeader", () => {
@@ -128,12 +155,16 @@ describe("ConversationHeader", () => {
 
   describe("Make a Contact Group", () => {
     it("is offered on a group chat and not on a direct conversation", async () => {
+      const user = userEvent.setup();
       renderHeader(conversation());
-      expect(screen.queryByRole("button", { name: "Make a Contact Group" })).toBeNull();
+      await user.click(screen.getByRole("button", { name: "More for this conversation" }));
+      expect(screen.queryByRole("menuitem", { name: "Make a Contact Group" })).toBeNull();
       cleanup();
 
       renderHeader(groupChat());
-      expect(await screen.findByRole("button", { name: "Make a Contact Group" })).toBeTruthy();
+      // The owner's profile decides who is left out, so the item waits for it.
+      await waitFor(() => expect(getAccountProfileMock).toHaveBeenCalled());
+      await openMenuItem(user, "Make a Contact Group");
     });
 
     it("creates the group and adds everyone but the owner and the contact-less", async () => {
@@ -150,7 +181,7 @@ describe("ConversationHeader", () => {
       const user = userEvent.setup();
       renderHeader(groupChat());
 
-      await user.click(await screen.findByRole("button", { name: "Make a Contact Group" }));
+      await openMenuItem(user, "Make a Contact Group");
       // The chat's label is offered as the name.
       const input = screen.getByDisplayValue("Book Club");
       await user.clear(input);
@@ -175,7 +206,7 @@ describe("ConversationHeader", () => {
       const user = userEvent.setup();
       renderHeader(groupChat());
 
-      await user.click(await screen.findByRole("button", { name: "Make a Contact Group" }));
+      await openMenuItem(user, "Make a Contact Group");
       const input = await screen.findByDisplayValue("Book Club");
       await user.clear(input);
       await user.type(input, "readers");
@@ -191,13 +222,42 @@ describe("ConversationHeader", () => {
     });
   });
 
+  it("says in one line who is in it, the service as the conversation list names it, and how many messages", () => {
+    renderHeader(groupChat());
+    expect(screen.getByRole("heading", { name: "Book Club" })).toBeInTheDocument();
+    expect(screen.getByText("4 people")).toBeInTheDocument();
+    // `sms` reads "Text Message", the conversation list's word, not the raw service.
+    expect(screen.getByText("Text Message")).toBeInTheDocument();
+    expect(screen.getByText("3 messages")).toBeInTheDocument();
+  });
+
+  it("offers Newest and every year, newest first, under Jump to", async () => {
+    const onJumpToNewest = vi.fn();
+    const onJumpToYear = vi.fn();
+    const user = userEvent.setup();
+    renderHeader(conversation(), { years: [2021, 2022, 2023], onJumpToNewest, onJumpToYear });
+
+    await user.click(screen.getByRole("button", { name: "Jump to ▾" }));
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+      "Newest",
+      "2023",
+      "2022",
+      "2021",
+    ]);
+    await user.click(screen.getByRole("menuitem", { name: "2021" }));
+    expect(onJumpToYear).toHaveBeenCalledWith(2021);
+
+    await user.click(screen.getByRole("button", { name: "Jump to ▾" }));
+    await user.click(screen.getByRole("menuitem", { name: "Newest" }));
+    expect(onJumpToNewest).toHaveBeenCalled();
+  });
+
   it("moves the conversation to trash and navigates back to the conversations list", async () => {
     trashConversationMock.mockResolvedValue(undefined);
     const user = userEvent.setup();
     renderHeader(conversation());
 
-    const button = screen.getByRole("button", { name: "Move to trash" });
-    await user.click(button);
+    await openMenuItem(user, "Move to trash");
 
     expect(trashConversationMock).toHaveBeenCalledWith(42, expect.anything());
     await waitFor(() => {
@@ -210,7 +270,7 @@ describe("ConversationHeader", () => {
     const user = userEvent.setup();
     renderHeader(conversation());
 
-    await user.click(screen.getByRole("button", { name: "Move to trash" }));
+    await openMenuItem(user, "Move to trash");
 
     expect(await screen.findByText("Could not move this conversation.")).toBeInTheDocument();
     expect(screen.queryByText("Conversations list")).not.toBeInTheDocument();

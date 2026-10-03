@@ -4,6 +4,10 @@ import { fetchAssetObjectUrl } from "../lib/serverApi";
 /**
  * Load an attachment as a temporary blob URL: the original, or with `preview`
  * its preview. Revokes the URL on unmount or when the id changes.
+ *
+ * Outside TanStack Query on purpose: the component showing the attachment owns
+ * the URL and revokes it, which a cache entry cannot do. One of the two named
+ * exceptions in `docs/adr/0002-one-way-to-fetch-data-in-the-web-app.md`.
  */
 export function useAssetObjectUrl(
   sha256: string | null | undefined,

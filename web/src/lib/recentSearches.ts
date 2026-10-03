@@ -5,7 +5,7 @@ import { accountKey, readPref, removePref, writePref } from "./storage";
  * Recent search queries, kept per account and per search bar. Per account, so
  * the next account on the same browser is never shown what the last one
  * searched for. Per bar, so the contacts, messages, and trash bars do not offer
- * each other's history — a `handle:` query is noise in the contacts bar, and a
+ * each other's history — an `identity:` query is noise in the contacts bar, and a
  * contact name is noise in the messages bar. With no account logged in there
  * is no history: nothing is read and nothing is saved.
  */

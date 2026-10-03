@@ -5,6 +5,9 @@ edition = "2024"
 license = "LicenseRef-FCL-1.0-ALv2"
 autotests = false
 
+[features]
+testutil = []
+
 [dependencies]
 anyhow = { workspace = true }
 message-crate-core = { path = "../../core/message-crate-core" }
@@ -14,6 +17,7 @@ message-staging = { path = "../../libs/staging" }
 message-csv = { path = "../../libs/csv" }
 media = { path = "../../libs/media" }
 phone = { path = "../../libs/phone" }
+mms-parts = { path = "../../libs/mms-parts" }
 sbr = { path = "../../libs/sbr" }
 serde_json = { workspace = true }
 

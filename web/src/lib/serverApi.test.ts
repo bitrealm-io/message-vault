@@ -311,4 +311,11 @@ describe("accounts are one collection", () => {
     await createApiToken({ label: "cli" });
     expect(post).toHaveBeenCalledWith("/v1/accounts/7/api-tokens", { label: "cli" });
   });
+
+  it("lists and revokes another account's API tokens as the owner", async () => {
+    await listApiTokens(undefined, 12);
+    expect(lastPath(get)).toBe("/v1/accounts/12/api-tokens");
+    await deleteApiToken(3, 12);
+    expect(del).toHaveBeenCalledWith("/v1/accounts/12/api-tokens/3");
+  });
 });

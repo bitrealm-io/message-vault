@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
+use axum::extract::DefaultBodyLimit;
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::{Json, Router};
@@ -143,12 +144,40 @@ pub fn require_logged_in(auth: &AuthIdentity) -> Result<(), ApiError> {
     ))
 }
 
-/// Allow a credential that may import.
+/// Refuse an act the Demo Account is never open to, whoever asks.
+///
+/// The Demo Account has no password, so anyone at the login card can enter
+/// it. Its limits are therefore fixed here, by its id, whatever its
+/// permission row says, and are not settings the owner can change
+/// (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`).
 ///
 /// # Errors
 ///
-/// Returns forbidden when import is not permitted.
+/// Returns `demo-account-protected` when `target` is the Demo Account. `what`
+/// finishes the sentence "The Demo Account's ...".
+pub fn refuse_for_demo_account(target: i64, what: &str) -> Result<(), ApiError> {
+    if account_profile::is_demo_account(target) {
+        return Err(ApiError::DemoAccountProtected(format!(
+            "The Demo Account's {what}. The owner can delete the account, and reset-demo restores it."
+        )));
+    }
+    Ok(())
+}
+
+/// Allow a credential that may import. The Demo Account never may, whatever
+/// its permission row says: an import would put real messages into an
+/// account anyone can enter. It is refused every import route, a read of an
+/// Import Run included, because it never has one to read.
+///
+/// # Errors
+///
+/// Returns `demo-account-protected` for the Demo Account, and forbidden when
+/// import is not permitted.
 pub fn require_import_access(auth: &AuthIdentity) -> Result<(), ApiError> {
+    refuse_for_demo_account(
+        auth.account_id,
+        "imports are closed, because its messages come only from its seed",
+    )?;
     if auth.permissions().import {
         return Ok(());
     }
@@ -204,12 +233,16 @@ pub fn require_import_or_export_access(auth: &AuthIdentity) -> Result<(), ApiErr
     ))
 }
 
-/// Allow a credential that may destroy message data.
+/// Allow a credential that may destroy message data. The Demo Account never
+/// may, whatever its permission row says: one visitor would empty it for the
+/// next.
 ///
 /// # Errors
 ///
-/// Returns forbidden when deletion is not permitted.
+/// Returns `demo-account-protected` for the Demo Account, and forbidden when
+/// deletion is not permitted.
 pub fn require_delete_access(auth: &AuthIdentity) -> Result<(), ApiError> {
+    refuse_for_demo_account(auth.account_id, "data cannot be deleted for good")?;
     if auth.permissions().delete {
         return Ok(());
     }
@@ -221,13 +254,15 @@ pub fn require_delete_access(auth: &AuthIdentity) -> Result<(), ApiError> {
 /// Allow a logged-in session that may destroy message data: the guard for
 /// permanent deletion out of the trash. Both halves matter. Trash is a GUI
 /// affair, so an API token is refused the way every trash route refuses it,
-/// and the account's own `can_delete` grant is what keeps the demo account
-/// from deleting anything for good while it still exports and uses the trash.
+/// and the account must hold the `delete` permission. The Demo Account is
+/// refused by its id in [`require_delete_access`], so it uses the trash and
+/// deletes nothing for good.
 ///
 /// # Errors
 ///
-/// Returns forbidden when the credential is an API token or the account may
-/// not delete.
+/// Returns forbidden when the credential is an API token,
+/// `demo-account-protected` for a Demo Account session, and forbidden when
+/// the account may not delete.
 pub fn require_full_delete_access(auth: &AuthIdentity) -> Result<(), ApiError> {
     require_full_access(auth)?;
     require_delete_access(auth)
@@ -453,6 +488,15 @@ pub enum ApiError {
         /// The line of the batch, counted from 1 with blank lines included.
         line: usize,
     },
+    /// `422` — lines of an import batch were read and broke a rule. A
+    /// `validation-failed` that also carries the first such line as `line`.
+    InvalidImportLines {
+        /// One sentence per rule, naming the lines as lines of the batch.
+        errors: Vec<String>,
+        /// The first line that broke a rule, counted from 1 with blank
+        /// lines included.
+        line: usize,
+    },
     /// `415` — `Content-Type` absent or not one the route accepts.
     UnsupportedMediaType(String),
     /// `413` — the body is over the configured cap.
@@ -514,7 +558,9 @@ impl ApiError {
     #[must_use]
     pub fn problem_type(&self) -> Option<ProblemType> {
         Some(match self {
-            Self::ValidationFailed(_) => ProblemType::ValidationFailed,
+            Self::ValidationFailed(_) | Self::InvalidImportLines { .. } => {
+                ProblemType::ValidationFailed
+            }
             Self::MalformedBody(_) | Self::MalformedImportLine { .. } => ProblemType::MalformedBody,
             Self::UnsupportedMediaType(_) => ProblemType::UnsupportedMediaType,
             Self::PayloadTooLarge(_) => ProblemType::PayloadTooLarge,
@@ -601,6 +647,10 @@ impl ApiError {
                 problem.detail = Some(detail.clone());
                 problem.line = Some(*line as u64);
             }
+            Self::InvalidImportLines { errors, line } => {
+                problem.errors = Some(errors.clone());
+                problem.line = Some(*line as u64);
+            }
             Self::MalformedBody(m)
             | Self::UnsupportedMediaType(m)
             | Self::PayloadTooLarge(m)
@@ -632,7 +682,9 @@ impl std::fmt::Display for ApiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Internal(e) => f.write_str(&error_chain(e)),
-            Self::ValidationFailed(errors) => f.write_str(&errors.join("; ")),
+            Self::ValidationFailed(errors) | Self::InvalidImportLines { errors, .. } => {
+                f.write_str(&errors.join("; "))
+            }
             Self::RateLimited { retry_after_secs } => write!(
                 f,
                 "too many authentication attempts; try again in {retry_after_secs} seconds"
@@ -715,6 +767,56 @@ impl From<crate::db::imports::StartImportError> for ApiError {
     }
 }
 
+/// The one place an asset store failure gets its status
+/// (`docs/architecture/http-api.md`, "Status codes").
+impl From<crate::assets_api::AssetError> for ApiError {
+    fn from(e: crate::assets_api::AssetError) -> Self {
+        use crate::assets_api::AssetError;
+        match e {
+            err @ (AssetError::Mismatch { .. } | AssetError::Invalid(_)) => {
+                Self::AssetUploadInvalid(err.to_string())
+            }
+            // The upload is busy, not wrong: a resource in the wrong state.
+            err @ AssetError::Locked => Self::StateConflict(err.to_string()),
+            err @ AssetError::UploadNotFound => Self::NotFound(err.to_string()),
+            AssetError::Internal(err) => Self::Internal(err),
+        }
+    }
+}
+
+/// The one place a sender's import failure gets its status: only a line that
+/// is not JSON cannot be read (`400`); everything else was read and broke a
+/// rule (`422`). A failure on one line carries it as `line`, a line of the
+/// batch, so a client can map it back to a file of its own.
+impl From<crate::imports_api::ImportFailure> for ApiError {
+    fn from(e: crate::imports_api::ImportFailure) -> Self {
+        use crate::imports_api::ImportFailure;
+        let detail = e.batch_sentence();
+        match (&e, e.line()) {
+            (ImportFailure::NotJson { .. }, Some(line)) => {
+                Self::MalformedImportLine { detail, line }
+            }
+            (_, Some(line)) => Self::InvalidImportLines {
+                errors: vec![detail],
+                line,
+            },
+            (_, None) => Self::validation(detail),
+        }
+    }
+}
+
+/// An import failure the sender can fix keeps its own status; anything else
+/// is a `500` with its cause in the log.
+impl From<crate::imports_api::ImportError> for ApiError {
+    fn from(e: crate::imports_api::ImportError) -> Self {
+        match e {
+            crate::imports_api::ImportError::Rejected { failure, .. } => failure.into(),
+            crate::imports_api::ImportError::Run(err) => err.into(),
+            crate::imports_api::ImportError::Internal(err) => Self::Internal(err),
+        }
+    }
+}
+
 impl From<sqlx::Error> for ApiError {
     fn from(e: sqlx::Error) -> Self {
         Self::Internal(e.into())
@@ -793,8 +895,7 @@ fn build_cors_layer(origins: &[String]) -> CorsLayer {
 fn limited_auth_router() -> (Router<AppState>, utoipa::openapi::OpenApi) {
     let (router, spec) = crate::openapi::public_openapi().split_for_parts();
     (
-        // Auth JSON is tiny; keep a tight limit so Argon2 abuse cannot ship 512 MiB bodies.
-        router.layer(RequestBodyLimitLayer::new(32 * 1024)),
+        router.layer(RequestBodyLimitLayer::new(MAX_AUTH_BODY_BYTES)),
         spec,
     )
 }
@@ -830,6 +931,18 @@ async fn json_body_limit_response(response: Response) -> Response {
     }
     ApiError::PayloadTooLarge("the request body is too large".to_string()).into_response()
 }
+
+/// The body cap of the routes a stranger may call ([`limited_auth_router`]):
+/// 32 KiB, so password hashing cannot be fed a large body.
+pub(crate) const MAX_AUTH_BODY_BYTES: usize = 32 * 1024;
+
+/// The cap on a JSON body, the one `crate::extract::Json` reads: 32 MiB. It
+/// is sized for the largest body the web app sends, the completion of an
+/// Import Run (`POST /v1/imports/{id}/complete`), which carries every issue
+/// of the run; at a few hundred bytes an issue, that is about a hundred
+/// thousand issues. Without it a JSON body is held to Axum's own 2 MiB
+/// default, a figure nobody chose.
+pub(crate) const MAX_JSON_BODY_BYTES: usize = 32 * 1024 * 1024;
 
 /// The body cap of every route but the attachment uploads: 512 MiB, the
 /// attachment size limit a new Message Crate starts with. It is fixed in the
@@ -1035,6 +1148,9 @@ pub(crate) fn http_app(state: AppState) -> Router {
     }
     api.method_not_allowed_fallback(api_method_not_allowed)
         .fallback_service(ServeDir::new(static_dir))
+        // The cap `extract::Json` reads a body against. The routes that read
+        // a body of their own hold it to their own figure instead.
+        .layer(DefaultBodyLimit::max(MAX_JSON_BODY_BYTES))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             limit_request_body,
@@ -1090,7 +1206,7 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
         crate::operation_lock::clear_ready(&cfg.paths.db)?;
         crate::reset_demo::seed_new_database(&cfg).await;
     }
-    let opened = OpenDb::open(cfg).await?;
+    let opened = OpenDb::create_or_open(cfg).await?;
     crate::operation_lock::mark_ready(&opened.cfg.paths.db)?;
     let mode: String = sqlx::query_scalar("PRAGMA journal_mode")
         .fetch_one(&opened.db)

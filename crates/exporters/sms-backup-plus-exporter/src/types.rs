@@ -1,5 +1,6 @@
 //! Shared parsed message types for SMS Backup+ EML conversion.
 
+use message_ir::IrConversationType;
 use phone::Handle;
 
 #[derive(Debug, Clone, Default)]
@@ -12,12 +13,12 @@ pub(crate) struct AttachmentBlob {
     pub data: Vec<u8>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub(crate) struct ParsedMessage {
     /// The peer's handle key, the group key, or empty when the mail records
     /// no address.
     pub chat_key: String,
-    pub conversation_type: String,
+    pub conversation_type: IrConversationType,
     pub group_title: Option<String>,
     pub participants: Vec<Handle>,
     pub timestamp_secs: f64,
@@ -29,6 +30,8 @@ pub(crate) struct ParsedMessage {
     pub sender: Option<Handle>,
     pub text: String,
     pub attachments: Vec<AttachmentBlob>,
+    /// MIME parts dropped because their content could not be decoded.
+    pub unreadable_parts: u64,
     pub name_alias: Option<String>,
     /// `X-smssync-id` when present.
     pub smssync_id: Option<String>,
@@ -36,4 +39,16 @@ pub(crate) struct ParsedMessage {
     pub android_type: String,
     /// Source `.eml` path (relative when under an input root).
     pub eml_path: String,
+    /// A received MMS whose `To` names a group but not the owner by any
+    /// number or email address they gave, so it was filed one-to-one under
+    /// the address in `From`, or under `X-smssync-address` with no sender
+    /// when `From` gives none.
+    pub owner_not_named: bool,
+}
+
+impl ParsedMessage {
+    /// True for a message in a group conversation.
+    pub(crate) fn is_group(&self) -> bool {
+        self.conversation_type == IrConversationType::Group
+    }
 }

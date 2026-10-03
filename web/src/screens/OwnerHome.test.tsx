@@ -30,6 +30,7 @@ const listAccountExports = vi.hoisted(() => vi.fn());
 const getImportContacts = vi.hoisted(() => vi.fn());
 const deleteAccountById = vi.hoisted(() => vi.fn());
 const deleteAccountMessages = vi.hoisted(() => vi.fn());
+const listApiTokens = vi.hoisted(() => vi.fn());
 
 vi.mock("../lib/auth", () => ({
   useAuth: () => ({ logout: vi.fn(), updateToken: vi.fn(), accountId: 1 }),
@@ -56,6 +57,7 @@ vi.mock("../lib/serverApi", async (importOriginal) => ({
   getImportContacts: (...a: unknown[]) => getImportContacts(...a),
   deleteAccountById: (...a: unknown[]) => deleteAccountById(...a),
   deleteAccountMessages: (...a: unknown[]) => deleteAccountMessages(...a),
+  listApiTokens: (...a: unknown[]) => listApiTokens(...a),
 }));
 
 const anAccount = {
@@ -115,6 +117,8 @@ beforeEach(() => {
   getImportContacts.mockReset();
   deleteAccountById.mockReset();
   deleteAccountMessages.mockReset();
+  listApiTokens.mockReset();
+  listApiTokens.mockResolvedValue([]);
   getAccountProfile.mockResolvedValue(theOwner);
   getAccount.mockResolvedValue(anAccount);
   getAccountStorage.mockResolvedValue({
@@ -338,7 +342,7 @@ describe("OwnerHome", () => {
 
     // The owner holds no messages, so nothing that frames messages belongs here.
     expect(screen.queryByRole("combobox", { name: "Search messages" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Tags" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Message Tags" })).not.toBeInTheDocument();
     expect(screen.queryByText("Conversations")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Import" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Export" })).not.toBeInTheDocument();
@@ -430,8 +434,10 @@ describe("OwnerHome", () => {
       "Profile",
       "Storage",
     ]);
-    // API tokens are the account holder's own to see.
-    expect(screen.queryByText(/API tokens/i)).not.toBeInTheDocument();
+    // The owner sees bob's API Tokens, to revoke a leaked one, and makes none.
+    expect(await screen.findByRole("heading", { name: "API Tokens" })).toBeInTheDocument();
+    expect(listApiTokens).toHaveBeenCalledWith(expect.anything(), 101);
+    expect(screen.queryByRole("button", { name: "Add" })).not.toBeInTheDocument();
   });
 
   it("sets an account's display name and identities from its Profile, as its holder does", async () => {
@@ -459,7 +465,7 @@ describe("OwnerHome", () => {
     getAccount.mockResolvedValue({ ...anAccount, phones: [] });
     listAccountIdentities.mockResolvedValue([]);
     // Remove asks first; the identity goes only once the dialog agrees.
-    await user.click(screen.getByRole("button", { name: "Remove +15555550100 (Text message)" }));
+    await user.click(screen.getByRole("button", { name: "Remove +15555550100 (Text Message)" }));
     expect(updateAccount).not.toHaveBeenCalledWith(
       101,
       expect.objectContaining({ remove_identities: expect.anything() }),

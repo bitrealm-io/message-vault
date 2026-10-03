@@ -23,6 +23,8 @@ import {
   MutationCache,
   QueryCache,
   QueryClient,
+  type UseInfiniteQueryOptions,
+  type UseInfiniteQueryResult,
   type UseQueryOptions,
   type UseQueryResult,
   useInfiniteQuery,
@@ -117,6 +119,27 @@ export function useRouteQuery<TData>(
   return useQuery<TData, Error, TData>({
     queryKey: routeQueryKey(account, key),
     queryFn: ({ signal }) => queryFn(signal),
+    ...options,
+  });
+}
+
+/**
+ * `useInfiniteQuery`, with the logged-in account added to the front of the key.
+ *
+ * Like `useRouteQuery`, every option is passed straight through; this adds
+ * only the account prefix. For a list read outward in both directions from a
+ * place in it, which `useRoutePagedList`'s forward-only offsets cannot do.
+ */
+export function useRouteInfiniteQuery<TPage, TPageParam>(
+  key: RouteQueryKey,
+  options: Omit<
+    UseInfiniteQueryOptions<TPage, Error, InfiniteData<TPage, TPageParam>, unknown[], TPageParam>,
+    "queryKey"
+  >,
+): UseInfiniteQueryResult<InfiniteData<TPage, TPageParam>, Error> {
+  const account = useAccountScope();
+  return useInfiniteQuery<TPage, Error, InfiniteData<TPage, TPageParam>, unknown[], TPageParam>({
+    queryKey: routeQueryKey(account, key),
     ...options,
   });
 }

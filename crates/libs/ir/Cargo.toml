@@ -6,11 +6,15 @@ description = "Schema types for the common-message ConversationDocument intermed
 license = "LicenseRef-FCL-1.0-ALv2"
 
 [dependencies]
+anyhow = { workspace = true }
 chrono = { workspace = true }
 hex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
 
 [features]
 testutil = []

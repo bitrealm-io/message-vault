@@ -193,7 +193,7 @@ mod tests {
         };
 
         use super::super::{identities_with, read_identities};
-        use crate::helper::tests::{fake_helper, source_line, spawn_fake};
+        use crate::testutil::{fake_helper, source_line, spawn_fake};
 
         fn request() -> Request {
             Request::Identities(IdentitiesRequest {

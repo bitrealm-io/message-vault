@@ -40,7 +40,7 @@ export const RESERVED_TAG_NAMES = new Set(
 );
 
 export function reservedTagError(name: string): string {
-  return `"${name.trim()}" is a reserved tag`;
+  return `"${name.trim()}" is a reserved Message Tag`;
 }
 
 export const messageTags = createNameCollection({

@@ -2,6 +2,7 @@ import { useSettingsAccount } from "../../lib/useSettingsAccount";
 import { AccountPermissionsSection } from "./AccountPermissionsSection";
 import { ApiTokensSection } from "./ApiTokensSection";
 import { ChangePasswordSection } from "./ChangePasswordSection";
+import { ManagedApiTokensSection } from "./ManagedApiTokensSection";
 import { ProfileDangerZone } from "./ProfileDangerZone";
 import { inputClassName, sectionTitleClass } from "./profileStyles";
 
@@ -10,8 +11,9 @@ import { inputClassName, sectionTitleClass } from "./profileStyles";
  * danger zone.
  *
  * Given `managedAccountId`, the account is one the owner opened from
- * User Accounts. API tokens are the account holder's own to mint and see, so
- * the owner is not shown them. The owner's own account has no tokens and
+ * User Accounts. The owner sees that account's API tokens without their
+ * secrets and revokes them, so a leaked token can be ended; making and
+ * renaming one are the holder's. The owner's own account has no tokens and
  * cannot be deleted, so it has neither section.
  */
 export function AccountSettingsPanel({ managedAccountId }: { managedAccountId?: number }) {
@@ -67,6 +69,9 @@ export function AccountSettingsPanel({ managedAccountId }: { managedAccountId?: 
           accountCanImport={profile.can_import ?? true}
           accountCanExport={profile.can_export ?? true}
         />
+      ) : null}
+      {managedAccountId !== undefined && !isOwner ? (
+        <ManagedApiTokensSection accountId={managedAccountId} />
       ) : null}
 
       {!isOwner ? (

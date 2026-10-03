@@ -14,7 +14,7 @@ use crate::types::ParsedMessage;
 /// the server resolves the name against contacts on import. The file name is
 /// made from this key later, by `ConversationDocument::filename_stem`.
 pub(crate) fn chat_id_for(msg: &ParsedMessage) -> String {
-    if msg.conversation_type == "group" {
+    if msg.is_group() {
         format!("chat-{}", msg.chat_key)
     } else if msg.chat_key.is_empty() {
         match name_only_key(msg) {
@@ -32,7 +32,7 @@ pub(crate) fn chat_id_for(msg: &ParsedMessage) -> String {
 /// The name is kept whole: a file-name stem would give "张伟" and "李娜" one
 /// key, and "José" and "Josè" another.
 pub(crate) fn name_only_key(msg: &ParsedMessage) -> Option<String> {
-    if msg.conversation_type == "group" || !msg.chat_key.is_empty() {
+    if msg.is_group() || !msg.chat_key.is_empty() {
         return None;
     }
     let name = msg.name_alias.as_deref().map_or("", str::trim);
@@ -58,7 +58,7 @@ mod tests {
                 .as_ref()
                 .map(|p| p.key().to_string())
                 .unwrap_or_default(),
-            conversation_type: "individual".into(),
+            conversation_type: message_ir::IrConversationType::Individual,
             group_title: None,
             participants: peer.iter().cloned().collect(),
             timestamp_secs: ts,
@@ -67,10 +67,12 @@ mod tests {
             sender: peer.filter(|_| !is_from_me),
             text: text.into(),
             attachments: vec![],
+            unreadable_parts: 0,
             name_alias: None,
             smssync_id: None,
             android_type: String::new(),
             eml_path: String::new(),
+            owner_not_named: false,
         }
     }
 

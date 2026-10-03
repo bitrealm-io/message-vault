@@ -2,9 +2,9 @@
 
 use anyhow::{Context, Result, bail};
 use message_ir::{HandleService, HandleType};
-use sqlx::{Connection, SqliteConnection};
+use sqlx::SqliteConnection;
 
-use crate::db::engine::BEGIN_IMMEDIATE_SQL;
+use crate::db::begin_write;
 use crate::db::handles::{normalize_handle, upsert_handle_row};
 use crate::db::schema;
 
@@ -246,6 +246,20 @@ pub async fn delete_account(conn: &mut SqliteConnection, account_id: i64) -> Res
 /// Stable id for the seeded demo account (`reset-demo`).
 pub const DEMO_ACCOUNT_ID: i64 = 2;
 
+/// What the Demo Account may do, known from its id and never read from its
+/// row: export, and neither import nor delete for good
+/// (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`).
+/// [`load_account_auth`] answers it for the Demo Account, so the profile and
+/// the owner's account list report what the guards, which refuse the Demo
+/// Account by its id, enforce: a row changed by hand cannot make a screen
+/// offer what the server refuses.
+pub const DEMO_ACCOUNT_PERMISSIONS: crate::db::permissions::Permissions =
+    crate::db::permissions::Permissions {
+        import: false,
+        export: true,
+        delete: false,
+    };
+
 /// The Demo Account's username. It stays reserved while the Demo Account is
 /// absent, so no other account can take it and block the next build.
 pub const DEMO_USERNAME: &str = "demo";
@@ -305,7 +319,11 @@ pub async fn load_account_auth(
         |(disabled, must_set_up, import, export, delete)| AccountAuth {
             disabled: disabled != 0,
             must_set_up_profile: must_set_up != 0,
-            permissions: crate::db::permissions::Permissions::from_ints(import, export, delete),
+            permissions: if is_demo_account(account_id) {
+                DEMO_ACCOUNT_PERMISSIONS
+            } else {
+                crate::db::permissions::Permissions::from_ints(import, export, delete)
+            },
         },
     ))
 }
@@ -338,10 +356,6 @@ pub struct DeletedMessagesStats {
     pub conversations: u64,
     /// Attachment rows deleted (files on disk are removed by the caller).
     pub attachments: u64,
-    /// The account had a running Import Run when the delete committed. The
-    /// run may have uploaded files that no row names yet, so the caller
-    /// leaves the account's files on disk.
-    pub import_running: bool,
 }
 
 /// Permanently delete one account's conversations (cascades to messages,
@@ -353,7 +367,7 @@ pub async fn delete_all_messages_for_account(
     account_id: i64,
 ) -> Result<DeletedMessagesStats> {
     schema::ensure_schema(conn).await?;
-    let mut tx = conn.begin_with(BEGIN_IMMEDIATE_SQL).await?;
+    let mut tx = begin_write(conn).await?;
     let attachment_count: i64 = sqlx::query_scalar(
         r"
         SELECT COUNT(*)
@@ -366,7 +380,6 @@ pub async fn delete_all_messages_for_account(
     .bind(account_id)
     .fetch_one(&mut *tx)
     .await?;
-    let import_running = crate::db::imports::has_running_import(&mut tx, account_id).await?;
     let conversations = sqlx::query("DELETE FROM conversations WHERE account_id = $1")
         .bind(account_id)
         .execute(&mut *tx)
@@ -385,7 +398,6 @@ pub async fn delete_all_messages_for_account(
     Ok(DeletedMessagesStats {
         conversations,
         attachments: u64::try_from(attachment_count).unwrap_or(0),
-        import_running,
     })
 }
 
@@ -484,22 +496,23 @@ pub async fn set_account_flags(
     account_id: i64,
     flags: AccountFlags,
 ) -> Result<()> {
-    // Column names come from this compile-time array, never from the
-    // request, so formatting them into the SQL is safe; values stay bound.
-    let columns = [
-        ("disabled", flags.disabled),
-        ("can_import", flags.can_import),
-        ("can_export", flags.can_export),
-        ("can_delete", flags.can_delete),
-    ];
-    for (column, value) in columns {
-        let Some(value) = value else { continue };
-        sqlx::query(&format!("UPDATE accounts SET {column} = $1 WHERE id = $2"))
-            .bind(i32::from(value))
-            .bind(account_id)
-            .execute(&mut *conn)
-            .await?;
-    }
+    // One statement, so the flags change together or not at all. A flag
+    // left out binds NULL and keeps the stored value.
+    sqlx::query(
+        "UPDATE accounts SET
+             disabled = COALESCE($1, disabled),
+             can_import = COALESCE($2, can_import),
+             can_export = COALESCE($3, can_export),
+             can_delete = COALESCE($4, can_delete)
+         WHERE id = $5",
+    )
+    .bind(flags.disabled.map(i32::from))
+    .bind(flags.can_import.map(i32::from))
+    .bind(flags.can_export.map(i32::from))
+    .bind(flags.can_delete.map(i32::from))
+    .bind(account_id)
+    .execute(&mut *conn)
+    .await?;
     Ok(())
 }
 

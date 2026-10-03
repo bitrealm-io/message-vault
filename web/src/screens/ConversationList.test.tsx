@@ -196,7 +196,7 @@ describe("ConversationList", () => {
       await user.click(box);
       await waitFor(() => expect(box).toBeChecked());
 
-      await user.click(screen.getByRole("button", { name: "Tags" }));
+      await user.click(screen.getByRole("button", { name: "Message Tags" }));
       await user.click(await screen.findByRole("checkbox", { name: "Holiday" }));
 
       await waitFor(() => expect(vi.mocked(updateMessageTagMembers)).toHaveBeenCalled());

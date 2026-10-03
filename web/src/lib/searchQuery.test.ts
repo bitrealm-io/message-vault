@@ -80,11 +80,11 @@ describe("names the server would read as syntax", () => {
 
 describe("forHandle", () => {
   it("trims and builds a bare handle term", () => {
-    expect(forHandle("  ann@example.com  ")).toBe("handle:ann@example.com");
+    expect(forHandle("  ann@example.com  ")).toBe("identity:ann@example.com");
   });
 
   it("quotes a handle with a space", () => {
-    expect(forHandle("Ann Lee")).toBe('handle:"Ann Lee"');
+    expect(forHandle("Ann Lee")).toBe('identity:"Ann Lee"');
   });
 
   it("produces the same text on a messages screen and a contacts screen", () => {
@@ -292,7 +292,7 @@ describe("advancedMessages", () => {
         participants: { comparator: ">", value: "3" },
         sources: [],
       }),
-    ).toBe('ada handle:"Ann Lee" kind:direct participants:>3');
+    ).toBe('ada identity:"Ann Lee" kind:direct participants:>3');
   });
 
   it("drops a participants comparison that is not a whole number", () => {
@@ -369,7 +369,7 @@ describe("advancedContacts", () => {
         noHandle: false,
         services: [],
       }),
-    ).toBe("handle:ann@example.com");
+    ).toBe("identity:ann@example.com");
   });
 });
 

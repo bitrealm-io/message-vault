@@ -94,7 +94,9 @@ export function ProfileDangerZone({
       }
       await deleteAccount({ confirm: true, current_password: currentPassword });
       setDeleteDialogOpen(false);
-      logout();
+      // The account is gone, so there is nothing to go back to: an Upload
+      // still running is paused without asking, and its folder stays.
+      void logout({ ask: false });
     } catch (e) {
       setDangerError(e instanceof Error ? e.message : String(e));
     } finally {

@@ -14,7 +14,7 @@ export const HANDLE_SERVICES = [
  * adding its example on the same line — there is no second place to forget.
  */
 export const HANDLE_SERVICE_OPTIONS = [
-  { value: "phone", label: "Text message", placeholder: "+1 555-123-4567" },
+  { value: "phone", label: "Text Message", placeholder: "+1 555-123-4567" },
   { value: "email", label: "Email", placeholder: "you@example.com" },
   { value: "whatsapp", label: "WhatsApp", placeholder: "+1 555-123-4567" },
 ] as const satisfies ReadonlyArray<{
@@ -113,7 +113,7 @@ export function formatHandleServiceLabel(
     lower === "ios" ||
     lower === "rcs"
   ) {
-    return "Text message";
+    return "Text Message";
   }
   if (lower === "email") return "Email";
   if (lower === "unknown") return "—";

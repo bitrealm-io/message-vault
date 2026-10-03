@@ -49,9 +49,7 @@ async fn the_server_reports_the_demo_account_while_it_exists() {
     let body: ServerInfo = get_json(&state, "/v1/server", "").await;
     assert!(!body.demo_account, "no Demo Account has been seeded");
 
-    let demo = fixture
-        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
-        .await;
+    let demo = fixture.demo_account().await;
     let body: ServerInfo = get_json(&state, "/v1/server", "").await;
     assert_eq!(body.state, ServerState::Unclaimed);
     assert!(body.demo_account);
@@ -191,6 +189,46 @@ async fn a_server_can_only_be_claimed_once() {
         .await
         .unwrap();
     assert_eq!(taken, 0);
+}
+
+/// Two claims at once: the second reads the Message Crate unclaimed while the
+/// first is still writing its owner. Its deferred transaction then failed at
+/// its insert and answered `500`; it must find the owner and answer `409`.
+#[tokio::test]
+async fn a_claim_that_loses_a_race_answers_conflict() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
+
+    let mut other_conn = state.db.acquire().await.unwrap();
+    let mut other = crate::db::begin_write(&mut other_conn).await.unwrap();
+    account_profile::insert_account_at(
+        &mut other,
+        account_profile::OWNER_ACCOUNT_ID,
+        "keeper",
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    let status = crate::db::write_tx::commit_during(
+        other,
+        post_status(
+            &state,
+            "/v1/server/claim",
+            "",
+            serde_json::json!({ "username": "usurper", "password": "hunter2hunter2" }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let owner: String = sqlx::query_scalar("SELECT username FROM accounts WHERE id = $1")
+        .bind(account_profile::OWNER_ACCOUNT_ID)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(owner, "keeper");
 }
 
 #[tokio::test]
@@ -808,9 +846,7 @@ async fn the_demo_username_stays_reserved_after_the_demo_account_is_deleted() {
     let fixture = test_fixture().await;
     let mut state = fixture.state.clone();
     state.demo_bundle_generator = tiny_bundle;
-    let demo = fixture
-        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
-        .await;
+    let demo = fixture.demo_account().await;
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     assert_eq!(
         crate::test_support::delete_status(&state, &format!("/v1/accounts/{demo}"), &owner.token)
@@ -921,9 +957,7 @@ async fn a_demo_build_the_server_stopped_is_removed_and_failed_on_the_next_start
     let fixture = test_fixture().await;
     let mut state = fixture.state.clone();
     state.demo_bundle_generator = tiny_bundle;
-    fixture
-        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
-        .await;
+    fixture.demo_account().await;
     {
         let mut conn = fixture.conn().await;
         crate::db::demo_account_build::begin(&mut conn)
@@ -963,9 +997,7 @@ async fn stopping_the_server_during_a_demo_build_leaves_no_demo_account() {
     let fixture = test_fixture().await;
     let mut state = fixture.state.clone();
     state.demo_bundle_generator = slow_tiny_bundle;
-    fixture
-        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
-        .await;
+    fixture.demo_account().await;
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
 
     let (status, body) = start_demo_build(&state, &owner.token).await;
@@ -1029,9 +1061,7 @@ async fn the_demo_account_cannot_be_entered_while_it_is_built() {
     let fixture = test_fixture().await;
     let mut state = fixture.state.clone();
     state.demo_bundle_generator = slow_tiny_bundle;
-    fixture
-        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
-        .await;
+    fixture.demo_account().await;
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let visitor = crate::test_support::log_in(&state, "demo", "").await;
     let visitor_token = visitor["token"].as_str().unwrap().to_string();

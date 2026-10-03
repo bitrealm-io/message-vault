@@ -127,7 +127,7 @@ describe("OnboardingScreen", () => {
     expect(screen.queryByText(/Already on this account/)).not.toBeInTheDocument();
   });
 
-  it("shows a number on Text message and on WhatsApp as two rows, and does not block Continue", async () => {
+  it("shows a number on Text Message and on WhatsApp as two rows, and does not block Continue", async () => {
     profile = { ...blankProfile, preferred_name: "Bob" };
     identities = [
       { address: "+15555550123", service: "phone" },
@@ -139,7 +139,7 @@ describe("OnboardingScreen", () => {
     expect(
       await screen.findByRole("button", { name: "WhatsApp Account 2 type" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Text message Account 1 type" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Text Message Account 1 type" })).toBeInTheDocument();
     expect(rowValue(1)).toHaveValue("+15555550123");
     expect(rowValue(2)).toHaveValue("+15555550123");
 
@@ -251,7 +251,7 @@ describe("OnboardingScreen", () => {
     const user = setupUser();
     render(<OnboardingScreen />);
 
-    await user.click(screen.getByRole("button", { name: "Text message Account 1 type" }));
+    await user.click(screen.getByRole("button", { name: "Text Message Account 1 type" }));
     await user.click(screen.getByRole("option", { name: "Email" }));
 
     expect(rowValue(1)).toHaveAttribute("placeholder", "you@example.com");
@@ -432,7 +432,7 @@ describe("OnboardingScreen", () => {
 
     await user.type(rowValue(1), "+1 555-123-4567");
     await user.click(screen.getByRole("button", { name: "+ Add account" }));
-    await user.click(screen.getByRole("button", { name: "Text message Account 2 type" }));
+    await user.click(screen.getByRole("button", { name: "Text Message Account 2 type" }));
     await user.click(screen.getByRole("option", { name: "WhatsApp" }));
     await user.type(rowValue(2), "+1 555-123-4567");
     await user.click(screen.getByRole("button", { name: "+ Add account" }));
@@ -487,7 +487,7 @@ describe("OnboardingScreen", () => {
       await screen.findByText("Enter a phone number like +1 555-123-4567."),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Text message Account 1 type" }));
+    await user.click(screen.getByRole("button", { name: "Text Message Account 1 type" }));
     await user.click(screen.getByRole("option", { name: "Email" }));
     await user.click(screen.getByRole("button", { name: "+ Add account" }));
 

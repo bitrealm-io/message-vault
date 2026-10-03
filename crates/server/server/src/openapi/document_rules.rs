@@ -56,11 +56,32 @@ async fn every_operation_keeps_the_rules_the_document_can_show() {
     // wrongly accepts (a delete, a logout) cannot change what the next
     // operation sees.
     let shared = Shared::build().await;
+    let mut refuse_the_demo_account = BTreeSet::new();
     for (n, op) in operations.iter().enumerate() {
         let world = World::build(&shared, n).await;
         let spec = &doc["paths"][&op.path][&op.method];
-        for rule in called_rules(&world, op, spec).await {
+        for rule in called_rules(&doc, &world, op, spec).await {
             broken.push(format!("{}: {rule}", op.label()));
+        }
+        match demo_account_rule(&world, op, spec).await {
+            DemoAnswer::RefusedAsDocumented => {
+                refuse_the_demo_account.insert(op.label());
+            }
+            DemoAnswer::RefusedBreaking(rule) => {
+                refuse_the_demo_account.insert(op.label());
+                broken.push(format!("{}: {rule}", op.label()));
+            }
+            DemoAnswer::Other => {}
+        }
+    }
+    // The check above is only as good as the routes that reach it: an import
+    // start, a delete for good and an address book load must each refuse the
+    // Demo Account by its id.
+    for label in ["POST /v1/imports", "DELETE /v1/trash", "POST /v1/contacts"] {
+        if !refuse_the_demo_account.contains(label) {
+            broken.push(format!(
+                "{label}: the Demo Account was not refused by its id"
+            ));
         }
     }
 
@@ -123,7 +144,7 @@ fn read_rules(doc: &Value, op: &Operation, spec: &Value) -> Vec<String> {
         broken.push("no 404, which an id in the path brings".to_string());
     }
 
-    if let Some(page) = page_schema(doc, spec) {
+    for page in page_schemas(doc, spec) {
         let required: BTreeSet<&str> = page["required"]
             .as_array()
             .into_iter()
@@ -154,7 +175,7 @@ fn read_rules(doc: &Value, op: &Operation, spec: &Value) -> Vec<String> {
 /// problem type the server answers must be ones the document lists for the
 /// operation. Reading the document alone cannot show that, because the
 /// document and any reading of it come from the same code in `shared_parts`.
-async fn called_rules(world: &World<'_>, op: &Operation, spec: &Value) -> Vec<String> {
+async fn called_rules(doc: &Value, world: &World<'_>, op: &Operation, spec: &Value) -> Vec<String> {
     let mut broken = Vec::new();
     if !op.path.starts_with("/v1/") {
         return broken;
@@ -230,7 +251,7 @@ async fn called_rules(world: &World<'_>, op: &Operation, spec: &Value) -> Vec<St
         }
     }
 
-    if op.method == "get" && page_schema_named(spec).is_some() {
+    if op.method == "get" && !page_schemas(doc, spec).is_empty() {
         let mut out_of_range = vec!["limit=0", "limit=501"];
         // A browse list says its offset ceiling in the parameter's own
         // description, and must keep to it.
@@ -243,6 +264,45 @@ async fn called_rules(world: &World<'_>, op: &Operation, spec: &Value) -> Vec<St
         }
     }
     broken
+}
+
+/// What the Demo Account was answered.
+enum DemoAnswer {
+    /// `demo-account-protected`, as the document lists it.
+    RefusedAsDocumented,
+    /// `demo-account-protected`, breaking the rule named.
+    RefusedBreaking(String),
+    /// Anything else.
+    Other,
+}
+
+/// Call the operation as the Demo Account, whose row grants every
+/// permission, so a refusal comes from its id alone (ADR 0016). Wherever the
+/// server answers `demo-account-protected`, the document must list it. A
+/// `HEAD` answer has no body to tell the problem type by, so it is skipped.
+async fn demo_account_rule(world: &World<'_>, op: &Operation, spec: &Value) -> DemoAnswer {
+    if !op.path.starts_with("/v1/") || op.method == "head" || !takes_a_credential_only(op) {
+        return DemoAnswer::Other;
+    }
+    let path = world.path_for(op);
+    let body =
+        credential_matrix::body_for(op, 0).map(|(content_type, body)| (Some(content_type), body));
+    let token = world.demo_session().await;
+    let answer = call(world, op, &path, Some(&token), body).await;
+    let refused = serde_json::from_str::<Problem>(&answer.text)
+        .is_ok_and(|problem| problem.kind == ProblemType::DemoAccountProtected.url());
+    if !refused {
+        return DemoAnswer::Other;
+    }
+    match answer.problem_rule(
+        op,
+        spec,
+        ProblemType::DemoAccountProtected,
+        "the Demo Account",
+    ) {
+        Some(rule) => DemoAnswer::RefusedBreaking(rule),
+        None => DemoAnswer::RefusedAsDocumented,
+    }
 }
 
 /// A response, read whole.
@@ -371,17 +431,37 @@ fn is_kebab(segment: &str) -> bool {
         })
 }
 
-/// The name of the page schema a `200` answers, if it answers a page.
-fn page_schema_named(spec: &Value) -> Option<&str> {
-    spec["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
+/// The schema name a `$ref` points at.
+fn schema_named(reference: &Value) -> Option<&str> {
+    reference["$ref"]
         .as_str()
         .and_then(|r| r.strip_prefix("#/components/schemas/"))
-        .filter(|name| name.starts_with("Page_"))
 }
 
-/// The page schema a `200` answers, if it answers a page.
-fn page_schema<'d>(doc: &'d Value, spec: &Value) -> Option<&'d Value> {
-    page_schema_named(spec).map(|name| &doc["components"]["schemas"][name])
+/// The page schemas a `200` answers: the page it names, or each page of a
+/// choice between pages, as an account's history answers the account in
+/// full and the owner without content. Empty when it answers no page.
+fn page_schemas<'d>(doc: &'d Value, spec: &Value) -> Vec<&'d Value> {
+    let schemas = &doc["components"]["schemas"];
+    let Some(name) =
+        schema_named(&spec["responses"]["200"]["content"]["application/json"]["schema"])
+    else {
+        return Vec::new();
+    };
+    if name.starts_with("Page_") {
+        return vec![&schemas[name]];
+    }
+    let choices: Vec<&str> = schemas[name]["oneOf"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(schema_named)
+        .collect();
+    if !choices.is_empty() && choices.iter().all(|c| c.starts_with("Page_")) {
+        choices.into_iter().map(|c| &schemas[c]).collect()
+    } else {
+        Vec::new()
+    }
 }
 
 /// What the operation says about its `offset`.

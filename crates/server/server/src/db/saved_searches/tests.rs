@@ -1,5 +1,50 @@
 use super::*;
 
+/// Two requests create one name at once, and the second reads the name free
+/// before the first has committed. The same spelling broke the `UNIQUE`
+/// constraint and answered `500`. Another letter case got past it, both were
+/// stored, and the lookup that found the new row's id could find the other
+/// row, so `Location` named the wrong Saved Search.
+#[tokio::test]
+async fn a_name_created_meanwhile_is_taken_in_any_letter_case() {
+    for second in ["Work", "work"] {
+        let fixture = crate::test_support::test_fixture().await;
+        let account = fixture.account_with_id(101, "alice").await;
+        let mut other_conn = fixture.conn().await;
+        let mut other = crate::db::begin_write(&mut other_conn).await.unwrap();
+        let first = create(
+            &mut other,
+            account,
+            "Work",
+            "kind:group",
+            SavedSearchKind::Manual,
+        )
+        .await
+        .unwrap();
+        let mut conn = fixture.conn().await;
+        let err = crate::db::write_tx::commit_during(
+            other,
+            create(
+                &mut conn,
+                account,
+                second,
+                "kind:individual",
+                SavedSearchKind::Manual,
+            ),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(
+            matches!(err, SavedSearchError::Conflict(_)),
+            "{second}: {err:?}"
+        );
+        let rows = list(&mut conn, account).await.unwrap();
+        assert_eq!(rows.len(), 1, "{second}");
+        assert_eq!(rows[0].id, first.id, "{second}");
+    }
+}
+
 #[tokio::test]
 async fn create_trims_and_defaults_to_manual() {
     let fixture = crate::test_support::test_fixture().await;

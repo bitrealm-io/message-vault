@@ -154,6 +154,28 @@ impl TestFixture {
         id
     }
 
+    /// Insert the Demo Account at its fixed id, with the schema's default row:
+    /// every permission on, so whatever refuses it does so by its id
+    /// (ADR 0016). Returns its id.
+    pub async fn demo_account(&self) -> i64 {
+        use crate::db::account_profile::{DEMO_ACCOUNT_ID, DEMO_USERNAME};
+        self.account_with_id(DEMO_ACCOUNT_ID, DEMO_USERNAME).await
+    }
+
+    /// The Demo Account at its fixed id, logged in with its empty password,
+    /// with a row that grants every permission. A test uses it to show that
+    /// the server refuses the Demo Account by its id, whatever the row says
+    /// (ADR 0016). Returns its id and session token.
+    pub async fn demo_account_session(&self) -> (i64, String) {
+        let id = self.demo_account().await;
+        let token =
+            log_in(&self.state, crate::db::account_profile::DEMO_USERNAME, "").await["token"]
+                .as_str()
+                .unwrap()
+                .to_string();
+        (id, token)
+    }
+
     /// Insert an `accounts` row under the id the database hands out, for a
     /// test that only needs an account to exist.
     pub async fn account(&self, username: &str) -> i64 {
@@ -879,6 +901,74 @@ pub async fn seed_one_message(state: &AppState, account_id: i64) {
         },
     )
     .await;
+}
+
+/// Import one JSON Lines text into `account_id` in append mode on `conn`, as
+/// the serve path does once the schema is in place, and answer the run's
+/// counts. The file and its asset folder live in a temporary directory that
+/// is gone when this returns.
+pub async fn import_jsonl_text(
+    conn: &mut sqlx::SqliteConnection,
+    account_id: i64,
+    source: &str,
+    body: &str,
+) -> crate::imports_api::ImportStats {
+    use crate::imports_api::{
+        FixedImportArgs, ImportMode, ImportOptions, ImportSchemaMode, import_jsonl_files_on_conn,
+    };
+    let tmp = TempDir::new().unwrap();
+    let path = tmp.path().join("conversation.jsonl");
+    std::fs::write(&path, body).unwrap();
+    let assets = tmp.path().join("assets");
+    import_jsonl_files_on_conn(
+        conn,
+        &[path],
+        &ImportOptions::fixed(FixedImportArgs {
+            assets_dir: &assets,
+            asset_root: tmp.path(),
+            mode: ImportMode::Append,
+            source,
+            account_id,
+            fill_content_keys: false,
+            import_id: None,
+        }),
+        ImportSchemaMode::AssumeReady,
+    )
+    .await
+    .unwrap()
+}
+
+/// Panic unless the people rule of
+/// `docs/architecture/contacts-identities-and-messages.md` holds: every
+/// participant has an identity, and every identity a participant, a message's
+/// sender or a reaction's sender uses is on a contact. `after` names the act
+/// the check follows, for the message.
+pub async fn assert_every_person_is_on_a_contact(conn: &mut sqlx::SqliteConnection, after: &str) {
+    let without_identity: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM participants WHERE handle_id IS NULL")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(
+        without_identity, 0,
+        "after {after}: {without_identity} participants have no identity"
+    );
+    let on_no_contact: Vec<String> = sqlx::query_scalar(
+        "SELECT h.raw FROM handles h
+         WHERE (EXISTS (SELECT 1 FROM participants p WHERE p.handle_id = h.id)
+                OR EXISTS (SELECT 1 FROM messages m WHERE m.sender_handle_id = h.id)
+                OR EXISTS (SELECT 1 FROM tapbacks t WHERE t.sender_handle_id = h.id))
+           AND NOT EXISTS (SELECT 1 FROM contact_handles ch
+                           WHERE ch.account_id = h.account_id AND ch.handle_id = h.id)
+         ORDER BY h.raw",
+    )
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap();
+    assert!(
+        on_no_contact.is_empty(),
+        "after {after}: identities in conversations on no contact: {on_no_contact:?}"
+    );
 }
 
 #[cfg(test)]

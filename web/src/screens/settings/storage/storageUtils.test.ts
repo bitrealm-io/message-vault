@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  describeExportRun,
   describeExportScope,
   formatBytes,
   formatImportDate,
@@ -138,5 +139,53 @@ describe("describeExportScope", () => {
     expect(describeExportScope({ kind: "selection", conversation_ids: [4] })).toBe(
       "Picked: 1 conversation",
     );
+  });
+});
+
+describe("describeExportRun", () => {
+  const run = {
+    id: 1,
+    tool: null,
+    status: "completed",
+    started_at: "2026-08-11T12:00:00Z",
+    message_count: 3,
+    conversation_count: 1,
+    attachment_count: 0,
+    total_bytes: 0,
+    messages_delivered: 3,
+  } as const;
+
+  it("tells the owner which form the scope took and nothing of what it asked for", () => {
+    expect(describeExportRun({ ...run, scope_kind: "everything" })).toBe("Everything");
+    expect(describeExportRun({ ...run, scope_kind: "query" })).toBe("A search");
+    expect(describeExportRun({ ...run, scope_kind: "selection" })).toBe("Picked by hand");
+  });
+
+  it("tells the account its own search", () => {
+    expect(
+      describeExportRun({ ...run, scope: { kind: "query", list: "messages", q: "pizza" } }),
+    ).toBe("Messages found by: pizza");
+  });
+});
+
+describe("toImportSummaryView for the owner", () => {
+  it("reads the counts the owner is given, and lists no issues", () => {
+    const view = toImportSummaryView({
+      id: 1,
+      source: "imessage-ios",
+      mode: "append",
+      status: "completed_with_issues",
+      started_at: "2026-08-11T12:00:00Z",
+      message_count: 10,
+      attachment_count: 0,
+      bytes_uploaded: 0,
+      counts: { messages_parsed: 12, messages_inserted: 10 },
+      issue_count: 2,
+      contacts_new: 0,
+      contacts_changed: 0,
+    });
+    expect(view.messagesParsed).toBe(12);
+    expect(view.messagesInserted).toBe(10);
+    expect(view.issues).toEqual([]);
   });
 });

@@ -68,30 +68,31 @@ async fn link(conn: &mut sqlx::SqliteConnection, handle_id: i64, preferred_name:
     contact_id
 }
 
-/// Insert an address-less participant on `conversation_id`: `handle_id
-/// IS NULL`, bound to a fresh contact carrying `name_alias`. This is the
-/// row shape `resolve_name_only_participant` produces — the contact link
-/// lives on `participants.contact_id` directly, since there is no handle
-/// for `contact_handles` to key on. Returns the contact id.
+/// Insert a participant the source named with no address on
+/// `conversation_id`, the way an import does: an identity of type `other`
+/// holding the name, on a fresh contact carrying the name. Returns the
+/// contact id.
 async fn seed_address_less(
     conn: &mut sqlx::SqliteConnection,
     conversation_id: i64,
     name_alias: &str,
 ) -> i64 {
-    let contact_id: i64 = sqlx::query_scalar(
-        "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, $2) RETURNING id",
+    let handle_id: i64 = sqlx::query_scalar(
+        "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
+         VALUES ($1, $2, $2, 'other', 'phone') RETURNING id",
     )
     .bind(TEST_ACCOUNT)
     .bind(name_alias)
     .fetch_one(&mut *conn)
     .await
     .unwrap();
+    let contact_id = link(conn, handle_id, name_alias).await;
     sqlx::query(
-        "INSERT INTO participants (conversation_id, handle_id, contact_id, name_alias)
-         VALUES ($1, NULL, $2, $3)",
+        "INSERT INTO participants (conversation_id, handle_id, name_alias)
+         VALUES ($1, $2, $3)",
     )
     .bind(conversation_id)
-    .bind(contact_id)
+    .bind(handle_id)
     .bind(name_alias)
     .execute(&mut *conn)
     .await
@@ -220,45 +221,9 @@ async fn a_group_with_no_participants_rows_has_no_participants() {
     );
 }
 
-/// `participants.contact_id` is not consulted: only the link in
-/// `contact_handles` names someone, so naming a Contact renames them in
-/// every conversation at once.
-#[tokio::test]
-async fn a_participant_contact_id_does_not_name_anyone() {
-    let (pool, _dir) = crate::db::engine::test_pool().await;
-    let mut conn = pool.acquire().await.unwrap();
-    let (conversation_id, handle_id) = seed(&mut conn, "+15555550400", Some("Bobby")).await;
-    let stranger: i64 = sqlx::query_scalar(
-        "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Wrong') RETURNING id",
-    )
-    .bind(TEST_ACCOUNT)
-    .fetch_one(&mut *conn)
-    .await
-    .unwrap();
-    sqlx::query("UPDATE participants SET contact_id = $1 WHERE handle_id = $2")
-        .bind(stranger)
-        .bind(handle_id)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-
-    let loaded = load_for_conversations(&mut conn, &[conversation_id])
-        .await
-        .unwrap();
-    let p = &loaded[&conversation_id][0];
-    assert_eq!(p.name, "Bobby");
-    assert_eq!(p.contact_id, None);
-}
-
-/// `resolve_name_only_participant` binds a name-only participant straight
-/// to a contact with `handle_id IS NULL`; the `INNER JOIN handles` this
-/// module used to have dropped that row from every conversation it
-/// belongs to. This pins that a `LEFT JOIN` brings it back, carrying the
-/// name of the contact found through `p.contact_id`, else `p.name_alias`
-/// (no handle means no `h.raw` fallback and no link in
-/// `contact_handles`), no handle, no service, and the contact bound
-/// directly on the participant row, since that is the only place an
-/// address-less participant's contact link is recorded.
+/// A participant the source named with no address is in their conversation
+/// under the name, with the identity of type `other` that holds it and the
+/// contact that identity is on.
 #[tokio::test]
 async fn an_address_less_participant_appears_in_their_conversation() {
     let (pool, _dir) = crate::db::engine::test_pool().await;
@@ -276,8 +241,8 @@ async fn an_address_less_participant_appears_in_their_conversation() {
         .unwrap();
     let p = &loaded[&conversation_id][0];
     assert_eq!(p.name, "Sarah Vale");
-    assert_eq!(p.handle, None);
-    assert_eq!(p.service, None);
+    assert_eq!(p.handle, Some("Sarah Vale".to_string()));
+    assert_eq!(p.service, Some("phone".to_string()));
     assert_eq!(p.contact_id, Some(contact_id));
 }
 
@@ -300,18 +265,15 @@ async fn addressed_and_address_less_participants_both_return_in_id_order() {
     assert_eq!(participants[0].name, "Bobby");
     assert_eq!(participants[0].handle, Some("+15555550800".to_string()));
     assert_eq!(participants[1].name, "Sarah Vale");
-    assert_eq!(participants[1].handle, None);
-    assert_eq!(participants[1].service, None);
+    assert_eq!(participants[1].handle, Some("Sarah Vale".to_string()));
     assert_eq!(participants[1].contact_id, Some(address_less_contact));
 }
 
 /// The module's founding guarantee — naming a Contact renames them in
-/// every conversation at once — has to hold for a handle-less
-/// participant too, even though nothing ever rewrites
+/// every conversation at once — holds for a participant the source named
+/// with no address too, even though nothing ever rewrites
 /// `participants.name_alias` after import (ADR-0006 keeps it as the
-/// backup's own record). The only way a rename can reach them is if the
-/// `contacts` join keys on `p.contact_id` for this case, exactly as the
-/// `contact_id` column already does.
+/// backup's own record): the rename reaches them through their identity.
 #[tokio::test]
 async fn renaming_the_contact_renames_an_address_less_participant_too() {
     let (pool, _dir) = crate::db::engine::test_pool().await;
@@ -335,8 +297,7 @@ async fn renaming_the_contact_renames_an_address_less_participant_too() {
         .unwrap();
     assert_eq!(
         loaded[&conversation_id][0].name, "Sarah Connor",
-        "the Contact's new name never reaches an address-less participant \
-         unless the contacts join keys on p.contact_id for them"
+        "the Contact's new name reaches an address-less participant"
     );
 }
 
@@ -396,8 +357,8 @@ async fn a_trashed_contact_neither_names_nor_links_its_participant() {
     assert_eq!(p.contact_id, Some(contact_id));
 }
 
-/// The same for a participant with no address, whose contact is reached
-/// through `participants.contact_id`: the backup's name stays, the link goes.
+/// The same for a participant the source named with no address: the
+/// backup's name stays, the link goes.
 #[tokio::test]
 async fn a_trashed_contact_does_not_link_an_address_less_participant() {
     let (pool, _dir) = crate::db::engine::test_pool().await;

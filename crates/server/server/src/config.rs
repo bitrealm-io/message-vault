@@ -117,8 +117,8 @@ pub struct ServerConfig {
     /// Serve Swagger UI at `/docs` and the spec at `/openapi.json`. Default false.
     #[serde(default = "default_openapi_ui")]
     pub openapi_ui: bool,
-    /// Folder holding the built website, served at `/`. Default `static`,
-    /// relative to the directory the server is started in.
+    /// Folder holding the built website, served at `/`. Default `static`.
+    /// A relative path resolves against the folder above the config file's folder.
     #[serde(default = "default_static_dir")]
     pub static_dir: PathBuf,
 }
@@ -231,9 +231,10 @@ impl PathsConfig {
 }
 
 impl Config {
-    /// Read and parse a TOML config file. Relative `paths.db` and
-    /// `paths.data_dir` values resolve against the directory above the config
-    /// file's folder (the repo root for `config/config.toml`).
+    /// Read and parse a TOML config file. A relative path in it (`[paths] db`,
+    /// `[paths] data_dir`, `[server] static_dir`) resolves against
+    /// [`config_root`], the folder above the config file's folder: the
+    /// repository root for `config/config.toml`.
     ///
     /// # Errors
     ///
@@ -245,25 +246,30 @@ impl Config {
         let mut config =
             Self::parse(&text).with_context(|| format!("config {} was refused", path.display()))?;
 
-        let abs_config = if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            std::env::current_dir()
-                .context("failed to get current directory")?
-                .join(path)
-        };
-        let config_dir = abs_config
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-            .unwrap_or_else(|| Path::new("."));
-        let repo = config_dir
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-            .unwrap_or(config_dir);
+        let root = config_root(path)?;
+        config.paths.db = resolve_path(&root, &config.paths.db);
+        config.paths.data_dir = resolve_path(&root, &config.paths.data_dir);
+        if let Some(server) = config.server.as_mut() {
+            server.static_dir = resolve_path(&root, &server.static_dir);
+        }
 
-        config.paths.db = resolve_path(repo, &config.paths.db);
-        config.paths.data_dir = resolve_path(repo, &config.paths.data_dir);
+        Ok(config)
+    }
 
+    /// [`Config::load`] with the command line's `--db` applied over
+    /// `[paths] db`. A relative `--db` resolves against [`config_root`], the
+    /// same folder `[paths] db` resolves against, so the flag and the key
+    /// name the same file whatever directory the command runs in. After this
+    /// the config alone says where the database is.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when [`Config::load`] does.
+    pub(crate) fn load_with_db(path: &Path, db: Option<PathBuf>) -> Result<Self> {
+        let mut config = Self::load(path)?;
+        if let Some(db) = db {
+            config.paths.db = resolve_path(&config_root(path)?, &db);
+        }
         Ok(config)
     }
 
@@ -286,10 +292,13 @@ impl Config {
 
     /// Apply `serve`'s own flags: `--bind` replaces `[server] bind`,
     /// `--static-dir` replaces `[server] static_dir`, and each
-    /// `--cors-origin` is added to `[server] cors_origins`. A config with no
-    /// `[server]` section is left without one, for `require_server` to refuse.
+    /// `--cors-origin` is added to `[server] cors_origins`. A relative
+    /// `--static-dir` resolves against `root`, the folder the config's own
+    /// paths resolve against. A config with no `[server]` section is left
+    /// without one, for `require_server` to refuse.
     pub(crate) fn with_serve_overrides(
         mut self,
+        root: &Path,
         bind: Option<String>,
         static_dir: Option<PathBuf>,
         cors_origins: Vec<String>,
@@ -299,7 +308,7 @@ impl Config {
                 server.bind = bind;
             }
             if let Some(static_dir) = static_dir {
-                server.static_dir = static_dir;
+                server.static_dir = resolve_path(root, &static_dir);
             }
             server.cors_origins.extend(cors_origins);
         }
@@ -339,46 +348,80 @@ fn resolve_path(base: &Path, configured: &Path) -> PathBuf {
     }
 }
 
-impl Config {
-    /// Apply the command line's `--db` flag, which replaces `paths.db`.
-    /// After this the config alone says where the database is.
-    pub(crate) fn with_db_override(mut self, db: Option<PathBuf>) -> Self {
-        if let Some(db) = db {
-            self.paths.db = db;
-        }
-        self
-    }
+/// The folder a relative path resolves against when the config file at
+/// `path` is read: the folder above the config file's folder, or the config
+/// file's own folder when nothing is above it.
+///
+/// # Errors
+///
+/// Returns an error when `path` is relative and the working directory
+/// cannot be read.
+pub(crate) fn config_root(path: &Path) -> Result<PathBuf> {
+    let abs_config = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .context("failed to get current directory")?
+            .join(path)
+    };
+    let config_dir = abs_config
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let root = config_dir
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(config_dir);
+    Ok(root.to_path_buf())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn config_at(db: &str) -> Config {
-        Config {
-            paths: PathsConfig {
-                db: PathBuf::from(db),
-                data_dir: PathBuf::from("/srv/data"),
-                assets_dir: "assets".into(),
-                assets_converted_dir: "assets_converted".into(),
-            },
-            server: None,
-        }
+    /// A config file at `<dir>/config/server.toml` holding `text`.
+    fn config_file(dir: &Path, text: &str) -> PathBuf {
+        let config_dir = dir.join("config");
+        fs::create_dir_all(&config_dir).unwrap();
+        let path = config_dir.join("server.toml");
+        fs::write(&path, text).unwrap();
+        path
     }
 
     #[test]
-    fn without_an_override_the_database_is_the_configured_file() {
-        let cfg = config_at("/srv/messagecrate.db").with_db_override(None);
+    fn without_db_the_database_is_the_configured_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = config_file(dir.path(), "[paths]\ndb = \"/srv/messagecrate.db\"\n");
+
+        let cfg = Config::load_with_db(&path, None).unwrap();
 
         assert_eq!(cfg.paths.db, PathBuf::from("/srv/messagecrate.db"));
     }
 
     #[test]
-    fn db_override_replaces_the_configured_file() {
-        let cfg = config_at("/srv/messagecrate.db")
-            .with_db_override(Some(PathBuf::from("/elsewhere/other.db")));
+    fn db_replaces_the_configured_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = config_file(dir.path(), "[paths]\ndb = \"/srv/messagecrate.db\"\n");
+
+        let cfg = Config::load_with_db(&path, Some(PathBuf::from("/elsewhere/other.db"))).unwrap();
 
         assert_eq!(cfg.paths.db, PathBuf::from("/elsewhere/other.db"));
+    }
+
+    /// S7-12: `--db data/messagecrate.db` names the file `[paths] db =
+    /// "data/messagecrate.db"` names, wherever the command runs, rather than
+    /// a file under the working directory.
+    #[test]
+    fn a_relative_db_resolves_where_the_config_key_does() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = config_file(dir.path(), "[paths]\ndb = \"data/messagecrate.db\"\n");
+
+        let from_key = Config::load(&path).unwrap();
+        let from_flag =
+            Config::load_with_db(&path, Some(PathBuf::from("data/messagecrate.db"))).unwrap();
+
+        assert_eq!(from_flag.paths.db, from_key.paths.db);
+        assert_eq!(from_flag.paths.db, dir.path().join("data/messagecrate.db"));
     }
 
     #[test]
@@ -401,19 +444,20 @@ mod tests {
     #[test]
     fn relative_paths_resolve_against_the_folder_above_the_config_folder() {
         let dir = tempfile::tempdir().unwrap();
-        let config_dir = dir.path().join("config");
-        fs::create_dir_all(&config_dir).unwrap();
-        let path = config_dir.join("server.toml");
-        fs::write(
-            &path,
-            "[paths]\ndb = \"data/messagecrate.db\"\ndata_dir = \"data\"\n",
-        )
-        .unwrap();
+        let path = config_file(
+            dir.path(),
+            "[paths]\ndb = \"data/messagecrate.db\"\ndata_dir = \"data\"\n\n\
+             [server]\nstatic_dir = \"site\"\n",
+        );
 
         let cfg = Config::load(&path).unwrap();
 
         assert_eq!(cfg.paths.db, dir.path().join("data/messagecrate.db"));
         assert_eq!(cfg.paths.data_dir, dir.path().join("data"));
+        assert_eq!(
+            cfg.require_server().unwrap().static_dir,
+            dir.path().join("site")
+        );
     }
 
     /// The defaults `docs/developer/reference/config-and-accounts.md` states.

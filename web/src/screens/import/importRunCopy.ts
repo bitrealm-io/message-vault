@@ -9,11 +9,11 @@ import type { ImportJobFormValues } from "./useImportJob";
 /** Which of the run's two reviews ((CONTEXT.md, "Review")). */
 export type ReviewKind = "staging" | "media";
 
-/** The person's name for the source, e.g. "iMessage · iPhone backup". */
+/** The person's name for the source, e.g. "Apple Messages · iPhone backup". */
 export function sourceDisplayName(source: string): string {
   if (isImessageMethod(source)) {
     const method = IMESSAGE_METHODS.find((m) => m.id === source)?.label;
-    return method ? `iMessage · ${method}` : "iMessage";
+    return method ? `Apple Messages · ${method}` : "Apple Messages";
   }
   if (isWhatsappMethod(source)) {
     const method = WHATSAPP_METHODS.find((m) => m.id === source)?.label;

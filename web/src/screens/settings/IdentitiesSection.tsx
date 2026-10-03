@@ -27,7 +27,7 @@ function profileIncludes(p: AccountProfile, handle: string, service: string): bo
  * Whether `rows` hold `address` on `service`, however the address was typed.
  *
  * A removal is judged here rather than by `profile.phones`, because one number
- * can be a Text message identity and a WhatsApp identity at once, and
+ * can be a Text Message identity and a WhatsApp identity at once, and
  * `profile.phones` lists it for each with no service.
  */
 function listsIdentity(rows: Identity[], address: string, service: string): boolean {

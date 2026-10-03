@@ -102,8 +102,8 @@ brief ends with the same output rule:
 
 > Return a list of findings. Each finding: `path`, `line` (a line number in
 > the file on the new side of the diff, or `none`), `kind` (`rule`, `spec`,
-> `bug`, or `judgement`), and the text: what is wrong, why it matters, and the fix.
-> Return an empty list if you find nothing. Under 400 words.
+> `bug`, or `judgement`), and the text: what is wrong, why it matters, and
+> the fix. Return an empty list if you find nothing. Under 400 words.
 
 - **Standards**: the standards files from step 1, and
   `.claude/skills/pr-review/smells.md`. "Report every place the diff breaks a
@@ -112,12 +112,11 @@ brief ends with the same output rule:
   overrides the baseline. Skip what tooling enforces."
 - **Spec**: the issue text. "Report requirements the spec asked for that are
   missing or partial, behaviour the spec did not ask for, and requirements that
-  look implemented but wrong. Quote the spec line for each." Spec findings are
-  `spec`.
+  look implemented but wrong. Quote the spec line for each (`spec`)."
 - **Correctness**: "Find inputs or states that make this change produce a wrong
   result, crash, or lose data. Each finding names the concrete failing scenario:
   the input or state, and the wrong outcome. A worry with no scenario is not a
-  finding." Correctness findings are `bug`.
+  finding (`bug`)."
 
 Keep the axes separate, and post each axis's findings as its sub-agent
 returned them, so one axis cannot mask another.

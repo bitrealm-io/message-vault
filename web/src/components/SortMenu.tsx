@@ -98,7 +98,7 @@ function SortOption({ id, label }: { id: string; label: string }) {
     <MenuItem
       id={id}
       textValue={label}
-      className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[0.813rem] text-text outline-none data-focused:bg-hover-strong"
+      className="box-border flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[0.813rem] text-text outline-none data-focused:bg-hover-strong"
     >
       {({ isSelected }) => (
         <>

@@ -113,7 +113,7 @@ type Option = {
 };
 
 const optionClass =
-  "flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-[0.875rem] text-text outline-none data-focused:bg-hover";
+  "box-border flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-[0.875rem] text-text outline-none data-focused:bg-hover";
 
 /**
  * The one search bar every list screen uses: magnifying glass, a popdown of
@@ -309,7 +309,7 @@ export default function SearchBar({
           ) : null}
           <ListBox<Option>
             id={`${scope}-search-popdown`}
-            className="max-h-72 overflow-auto outline-none"
+            className="max-h-72 overflow-x-hidden overflow-y-auto outline-none"
           >
             {(option) => (
               <ListBoxItem

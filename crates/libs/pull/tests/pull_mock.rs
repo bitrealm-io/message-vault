@@ -57,7 +57,7 @@ fn photo_attachment() -> Value {
 
 /// One exported message as `GET /v1/exports/{id}/messages` serializes it: an
 /// individual SMS conversation with Sam, `service` on the message rather than
-/// on the conversation.
+/// on the conversation, received at the holder's own `+15555550100`.
 fn message(
     id: i64,
     source: &str,
@@ -75,6 +75,7 @@ fn message(
         "sort_order": id,
         "is_from_me": false,
         "sender": "+15555550101",
+        "owner": "+15555550100",
         "subject": null,
         "text": text,
         "is_announcement": false,
@@ -315,6 +316,16 @@ fn a_pull_records_one_run_and_writes_the_conversation_and_every_asset_once_acros
         ["guid-1", "guid-2", "guid-3"]
     );
     assert_eq!(doc.messages[0].text, "dinner at seven?");
+    // The address the server holds each message at comes out on the message,
+    // and on the header since every message shares it (#1098).
+    assert_eq!(
+        doc.messages
+            .iter()
+            .map(|m| m.owner_handle.as_deref())
+            .collect::<Vec<_>>(),
+        [Some("+15555550100"); 3]
+    );
+    assert_eq!(doc.export.owner_handle.as_deref(), Some("+15555550100"));
     assert_eq!(
         doc.messages[0].attachments[0].digest_sha256.as_deref(),
         Some(MENU_SHA)

@@ -2406,6 +2406,12 @@ export interface components {
              * @description Replies in this thread.
              */
             num_replies: number;
+            /**
+             * @description The account holder's own address on this message: the one it was
+             *     sent from, or the one it was received at. `None` when the backup
+             *     named no owner.
+             */
+            owner?: string | null;
             /** @description Sender handle for incoming messages. */
             sender?: string | null;
             /**
@@ -3010,6 +3016,12 @@ export interface components {
                  * @description Replies in this thread.
                  */
                 num_replies: number;
+                /**
+                 * @description The account holder's own address on this message: the one it was
+                 *     sent from, or the one it was received at. `None` when the backup
+                 *     named no owner.
+                 */
+                owner?: string | null;
                 /** @description Sender handle for incoming messages. */
                 sender?: string | null;
                 /**

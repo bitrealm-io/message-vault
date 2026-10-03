@@ -1185,6 +1185,55 @@ async fn an_export_token_reads_messages_only_through_a_run() {
 /// Insert one message into `conversation` for `account`, tied to an Import
 /// Run when `import_id` is given, and return its id. Stands in for an import
 /// landing while a run is being read.
+/// Each message of a run carries the account holder's own address the server
+/// stores for it (`messages.owner_handle_id`), and none when it stores none.
+/// Without it a pull writes no owner, and an import of that export files no
+/// message under the holder's addresses (#1098).
+#[tokio::test]
+async fn a_run_returns_the_owner_address_of_each_message() {
+    let (fixture, alice, dinner, _menu) = fixture_with_two_conversations().await;
+    let mut conn = fixture.conn().await;
+    let owner: i64 = sqlx::query_scalar(
+        "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
+         VALUES ($1, 'me@example.com', 'me@example.com', 'email', 'phone') RETURNING id",
+    )
+    .bind(alice.account_id)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE messages SET owner_handle_id = $1 WHERE conversation_id = $2")
+        .bind(owner)
+        .bind(dinner)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    drop(conn);
+    let run = create_run(&fixture, &alice.token, json!({ "kind": "everything" })).await;
+    let id = run["id"].as_i64().unwrap();
+
+    let page: Value = get_json(
+        &fixture.state,
+        &format!("/v1/exports/{id}/messages"),
+        &alice.token,
+    )
+    .await;
+
+    let owners: Vec<(&str, Option<&str>)> = page["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| (m["text"].as_str().unwrap(), m["owner"].as_str()))
+        .collect();
+    assert_eq!(
+        owners,
+        [
+            ("pizza tonight", Some("me@example.com")),
+            ("salad tomorrow", Some("me@example.com")),
+            ("the menu", None),
+        ]
+    );
+}
+
 async fn insert_message(
     fixture: &TestFixture,
     account: i64,

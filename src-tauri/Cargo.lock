@@ -2043,6 +2043,7 @@ name = "journal"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "message-ir",
  "serde",
  "serde_json",
 ]
@@ -2374,6 +2375,7 @@ dependencies = [
 name = "message-ir"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "chrono",
  "hex",
  "serde",

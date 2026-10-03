@@ -1624,6 +1624,7 @@ name = "journal"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "message-ir",
  "serde",
  "serde_json",
  "tempfile",
@@ -1950,11 +1951,13 @@ dependencies = [
 name = "message-ir"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "chrono",
  "hex",
  "serde",
  "serde_json",
  "sha2 0.11.0",
+ "tempfile",
 ]
 
 [[package]]

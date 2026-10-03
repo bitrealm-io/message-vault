@@ -91,8 +91,7 @@ fn conversation_paths(
 ) -> Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
     for entry in entries {
-        let path =
-            entry.with_context(|| format!("failed to read an entry of {}", dir.display()))?;
+        let path = entry.with_context(|| format!("read an entry of {}", dir.display()))?;
         if is_conversation_jsonl(&path, exclude) {
             paths.push(path);
         }

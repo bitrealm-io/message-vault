@@ -453,6 +453,34 @@ mod tests {
     }
 
     #[test]
+    fn a_paused_run_resumes_and_is_deleted_after_the_staging_directory_changes() {
+        // Issue #1154, through what a resume runs: the run record is read,
+        // the staged folder is checked for the summary and the Media stage,
+        // and the folder is deleted, all after the setting moved.
+        let made = made();
+        let options = TranscodeOptions {
+            mode: MediaMode::Compress,
+            compress: media::CompressOptions::default(),
+            asset_max_bytes: 1,
+        };
+        message_staging::write_media_settings(&made.run, &options).unwrap();
+        let record = serde_json::json!({ "phase": "staging_review" });
+        save_run_record(&made.run, &record).unwrap();
+        let elsewhere = tempfile::tempdir().unwrap();
+        lock(&made.folders)
+            .set_root(elsewhere.path().to_str().unwrap())
+            .unwrap();
+        let run = made.run.to_str().unwrap();
+
+        let folder = lock(&made.folders).folder(run).unwrap();
+        assert_eq!(read_run_record(&folder).unwrap(), Some(record));
+        let (dir, _) = staged_folder(&made.folders, run).unwrap();
+        assert_eq!(dir, made.run);
+        StagingFolders::delete(&made.folders, run).unwrap();
+        assert!(!made.run.exists());
+    }
+
+    #[test]
     fn a_folder_whose_staging_recorded_no_settings_is_refused() {
         let made = made();
 

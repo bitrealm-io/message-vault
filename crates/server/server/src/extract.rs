@@ -178,26 +178,44 @@ mod tests {
         expect_problem(status, &text, ProblemType::UnsupportedMediaType);
     }
 
-    /// A JSON body over the cap its route holds it to answers the
-    /// `payload-too-large` problem, while a body under the cap that is not
-    /// JSON still answers `malformed-body`: the cap never turns a syntax
-    /// error into a 413, and a 413 is never a 400. The cap here is Axum's
-    /// 2 MiB default, and the body is sent with a `Content-Length` over it;
-    /// the extractor's arm for a body it has to read is tested below without
-    /// HTTP.
+    /// A JSON body is held to [`MAX_JSON_BODY_BYTES`], a figure the server
+    /// sets, and not to Axum's 2 MiB default: a body of exactly that many
+    /// bytes is read (here it parses, and the saved search's name then
+    /// breaks a rule), and one byte more answers the `payload-too-large`
+    /// problem. A body under the cap that is not JSON still answers
+    /// `malformed-body`: the cap never turns a syntax error into a 413, and
+    /// a 413 is never a 400.
+    ///
+    /// [`MAX_JSON_BODY_BYTES`]: crate::server::MAX_JSON_BODY_BYTES
     #[tokio::test]
-    async fn a_json_body_over_the_body_cap_is_a_json_413_and_a_syntax_error_a_400() {
+    async fn a_json_body_is_read_up_to_the_json_body_cap_and_a_byte_more_is_a_json_413() {
+        use crate::server::MAX_JSON_BODY_BYTES;
         let (fixture, user) = fixture_with_account().await;
         let state = fixture.state.clone();
+        let body_of = |bytes: usize| {
+            let frame = r#"{"name":"","query":"hi"}"#;
+            let padding = "a".repeat(bytes - frame.len());
+            let body = format!(r#"{{"name":"{padding}","query":"hi"}}"#);
+            assert_eq!(body.len(), bytes);
+            body
+        };
 
-        let padding = "a".repeat(3 * 1024 * 1024);
-        let body = serde_json::json!({ "name": padding, "query": "hi" }).to_string();
         let (status, text) = post_raw(
             &state,
             "/v1/saved-searches",
             &user.token,
             "application/json",
-            body,
+            body_of(MAX_JSON_BODY_BYTES),
+        )
+        .await;
+        expect_problem(status, &text, ProblemType::ValidationFailed);
+
+        let (status, text) = post_raw(
+            &state,
+            "/v1/saved-searches",
+            &user.token,
+            "application/json",
+            body_of(MAX_JSON_BODY_BYTES + 1),
         )
         .await;
         expect_problem(status, &text, ProblemType::PayloadTooLarge);

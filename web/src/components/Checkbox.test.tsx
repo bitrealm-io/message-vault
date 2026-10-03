@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import Checkbox from "./Checkbox";
 
@@ -19,7 +20,7 @@ describe("Checkbox", () => {
     expect(onChange).toHaveBeenCalledWith(true, expect.anything());
   });
 
-  it("toggles from a click on its visible label, still only once", () => {
+  it("toggles from a click on its visible label, still only once", async () => {
     const onChange = vi.fn();
     render(
       <Checkbox checked={false} onChange={onChange}>
@@ -27,7 +28,7 @@ describe("Checkbox", () => {
       </Checkbox>,
     );
 
-    fireEvent.click(screen.getByText("No name"));
+    await userEvent.click(screen.getByText("No name"));
 
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenCalledWith(true, expect.anything());
@@ -58,5 +59,26 @@ describe("Checkbox", () => {
   it("passes disabled through to the input", () => {
     render(<Checkbox checked={false} disabled onChange={() => {}} aria-label="Select Ada" />);
     expect(screen.getByRole("checkbox", { name: "Select Ada" })).toBeDisabled();
+  });
+
+  it("marks keyboard focus on its label, where the drawn box shows the focus ring", async () => {
+    render(<Checkbox checked={false} onChange={() => {}} aria-label="Select Ada" />);
+    const label = screen.getByRole("checkbox", { name: "Select Ada" }).closest("label");
+    expect(label).not.toHaveAttribute("data-focus-visible");
+
+    await userEvent.tab();
+
+    expect(label).toHaveAttribute("data-focus-visible", "true");
+  });
+
+  it("reports the Shift key held on a click", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<Checkbox checked={false} onChange={onChange} aria-label="Select Ada" />);
+
+    await user.keyboard("{Shift>}");
+    await user.click(screen.getByRole("checkbox", { name: "Select Ada" }));
+
+    expect(onChange).toHaveBeenCalledWith(true, { shiftKey: true });
   });
 });

@@ -167,11 +167,6 @@ function isThemeMode(value: string | null | undefined): value is ThemeMode {
   return value === "light" || value === "dark" || value === "system";
 }
 
-/** True when the value is only light or dark (older storage without "system"). */
-function isResolvedTheme(value: string | null | undefined): value is ResolvedTheme {
-  return value === "light" || value === "dark";
-}
-
 /** Return a lowercase `#rrggbb` color, or null when the text is not a hex color. */
 export function normalizeHex(raw: string): string | null {
   const t = raw.trim();
@@ -244,23 +239,19 @@ function activeSeeds(
     : { header: seeds.lightHeader, accent: seeds.lightAccent };
 }
 
-/** Write the chosen mode and colors onto `<html>` as `data-theme` and CSS variables. */
-export function applyTheme(mode: ThemeMode, seeds: ThemeSeeds): ResolvedTheme {
-  const resolved = resolveMode(mode);
+/** Write the resolved theme and its colors onto `<html>` as `data-theme` and CSS variables. */
+export function applyTheme(resolved: ResolvedTheme, seeds: ThemeSeeds): void {
   const { header, accent } = activeSeeds(seeds, resolved);
   const root = document.documentElement;
   root.setAttribute("data-theme", resolved);
   root.style.setProperty("--header", header);
   root.style.setProperty("--accent", accent);
-  return resolved;
 }
 
 /** Read the saved appearance mode, or the default when nothing is stored or storage is blocked. */
 export function readStoredMode(): ThemeMode {
   const raw = readPref(THEME_MODE_KEY);
   if (isThemeMode(raw)) return raw;
-  // Older builds stored only "light" or "dark". Treat those as a mode, not "system".
-  if (isResolvedTheme(raw)) return raw;
   return DEFAULT_MODE;
 }
 

@@ -11,11 +11,11 @@ import { getBaseUrl } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { createRunCancel, type RunCancel } from "../lib/runCancel";
 import { parseSelectKey } from "../lib/selectKey";
-import { resolveExportStagingDir } from "../lib/system-settings";
 import {
   EXPORT_FORMATS,
   type ExportFormat,
   type ExportQueryList,
+  invokeCreateStagingDir,
   invokeDeleteStaging,
   invokeFormat,
   invokePull,
@@ -133,6 +133,7 @@ export default function ExportScreen() {
     const exportCancel = createRunCancel();
     runCancel.current = exportCancel;
     const request = { savePath, format };
+    const runStartedMs = Date.now();
 
     const pullInto = (outDir: string) =>
       run(
@@ -157,7 +158,7 @@ export default function ExportScreen() {
           await pullInto(savePath);
           return;
         }
-        const stagingDir = await resolveExportStagingDir();
+        const stagingDir = await invokeCreateStagingDir("export");
         try {
           await pullInto(stagingDir);
           await run(
@@ -166,6 +167,7 @@ export default function ExportScreen() {
                 input_dir: stagingDir,
                 output_dir: savePath,
                 output_format: format,
+                run_started_ms: runStartedMs,
               }),
             ),
             request,

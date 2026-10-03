@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
-import { Button, Disclosure, DisclosurePanel } from "react-aria-components";
+import { Disclosure, DisclosurePanel } from "react-aria-components";
 import FormField from "../../components/FormField";
+import PlainButton from "../../components/PlainButton";
 import { textInputClassName } from "../../components/TextField";
 import type { AttachmentMediaMode } from "../../lib/types";
 
@@ -64,9 +65,9 @@ export function CollapsibleSection({
     >
       {({ isExpanded }) => (
         <>
-          <Button
+          <PlainButton
             slot="trigger"
-            className="flex w-full cursor-pointer items-center gap-2 rounded-none border-0 border-b border-border bg-transparent p-0 pb-2 pt-1 text-left text-[0.9375rem] font-semibold text-text outline-none hover:text-accent"
+            className="flex w-full cursor-pointer items-center gap-2 rounded-none border-0 border-b border-border bg-transparent p-0 pb-2 pt-1 text-left text-[0.9375rem] font-semibold text-text outline-none hover:text-accent focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
           >
             <span
               aria-hidden
@@ -75,7 +76,7 @@ export function CollapsibleSection({
               ▶
             </span>
             <span>{title}</span>
-          </Button>
+          </PlainButton>
           <DisclosurePanel className="mt-3 ml-3 outline-none">{children}</DisclosurePanel>
         </>
       )}

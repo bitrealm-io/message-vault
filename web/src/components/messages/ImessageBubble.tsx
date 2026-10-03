@@ -1,9 +1,9 @@
+import { formatClockTime } from "../../lib/formatDate";
 import { useTimeZone } from "../../lib/timeZone";
 import MessageAttachments from "../MessageAttachments";
 import {
   bubbleBody,
   ChatBubbleRow,
-  formatMessageTime,
   isGroupConversation,
   type MessageBubbleProps,
   senderName,
@@ -14,9 +14,10 @@ export default function ImessageBubble({
   message,
   highlight,
   isActive,
+  showSender,
   onAttachmentClick,
 }: MessageBubbleProps) {
-  const time = formatMessageTime(message.timestamp, useTimeZone());
+  const time = formatClockTime(message.timestamp, useTimeZone());
   const mine = message.is_from_me;
   const group = isGroupConversation(message);
   const body = (message.text || "").trim();
@@ -50,7 +51,7 @@ export default function ImessageBubble({
       mine={mine}
       isActive={isActive}
       palette="imessage"
-      showSender={!mine && group}
+      showSender={!mine && (showSender ?? group)}
       senderLabel={senderName(message)}
       timeLabel={time}
       footer={footer}

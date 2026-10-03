@@ -41,12 +41,12 @@ vi.mock("./auth", () => ({
 }));
 
 vi.mock("./serverApi", () => ({
-  listContactGroups: vi.fn().mockResolvedValue({ items: [] }),
+  listContactGroups: vi.fn().mockResolvedValue([]),
   createContactGroup: vi.fn().mockResolvedValue({ id: 3, name: "Work" }),
   updateContactGroup: vi.fn().mockResolvedValue({ id: 12, name: "Fam" }),
   deleteContactGroup: vi.fn().mockResolvedValue(undefined),
   updateContactGroupMembers: vi.fn().mockResolvedValue({ added: 1, removed: 0 }),
-  listMessageTags: vi.fn().mockResolvedValue({ items: [] }),
+  listMessageTags: vi.fn().mockResolvedValue([]),
   createMessageTag: vi.fn().mockResolvedValue({ id: 4, name: "Receipts" }),
   updateMessageTag: vi.fn().mockResolvedValue({ id: 14, name: "Bills" }),
   deleteMessageTag: vi.fn().mockResolvedValue(undefined),

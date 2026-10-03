@@ -14,8 +14,9 @@ import { groupByLetter } from "../lib/contactSort";
 import { formatVisibleRange } from "../lib/listPaging";
 import { isTauri } from "../lib/tauri-check";
 import { listRowDividersThin, resizeHandleGutter } from "../lib/tw";
-import ListRangeHeader from "./ListRangeHeader";
+import ListRangeHeader, { type SelectAllBox } from "./ListRangeHeader";
 import ListRangePill, { RANGE_PILL_OVERLAY_INSET, RANGE_PILL_SCROLL_PAD } from "./ListRangePill";
+import PlainButton from "./PlainButton";
 import VirtualList, { type VisibleRange } from "./VirtualList";
 
 const NEAR_END_THRESHOLD = 10;
@@ -55,10 +56,8 @@ type InfiniteOffsetListProps<T> = {
   errorPrefix?: string;
   /** Control on the right of the “N–M of total” row. */
   headerActions?: ReactNode;
-  selectAllChecked?: boolean;
-  selectAllIndeterminate?: boolean;
-  onSelectAllChange?: (checked: boolean) => void;
-  selectAllLabel?: string;
+  /** The toolbar's Select all box; it waits while the list is empty. */
+  selectAll?: SelectAllBox;
   /** Letter for in-list section headers. Omit while searching. */
   getSectionLetter?: (item: T) => string;
 };
@@ -69,7 +68,7 @@ function rowClass(selected: boolean, hovered = false): string {
     : hovered
       ? "bg-hover"
       : "bg-transparent hover:bg-hover";
-  return `box-border flex w-full cursor-pointer items-center gap-2.5 border-none p-2 px-3 text-left text-text outline-none ${listRowDividersThin} ${fill}`;
+  return `box-border flex w-full cursor-pointer items-center gap-2.5 border-none p-2 px-3 text-left text-text outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent ${listRowDividersThin} ${fill}`;
 }
 
 /**
@@ -82,6 +81,14 @@ function rowClass(selected: boolean, hovered = false): string {
  */
 const ROW_BODY =
   "flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 border-none bg-transparent p-0 text-left text-text outline-none after:absolute after:inset-0 after:content-['']";
+
+/**
+ * The focus ring of a row whose select button sits beside a lead cell. The
+ * button is only as tall as the name inside it, so the row draws the ring while
+ * the button has keyboard focus.
+ */
+const ROW_BODY_FOCUS_RING =
+  "has-[>button:focus-visible]:ring-2 has-[>button:focus-visible]:ring-inset has-[>button:focus-visible]:ring-accent";
 
 /** Lifts the lead cell above the select button's stretched target, so it still takes its own clicks. */
 const ROW_LEAD = "relative z-[1] flex shrink-0 self-center";
@@ -104,17 +111,17 @@ function Row({
 }) {
   if (!lead) {
     return (
-      <button type="button" onClick={onSelect} className={className} style={style} {...rest}>
+      <PlainButton onPress={onSelect} className={className} style={style} {...rest}>
         {children}
-      </button>
+      </PlainButton>
     );
   }
   return (
-    <div className={`relative ${className}`} style={style} {...rest}>
+    <div className={`relative ${className} ${ROW_BODY_FOCUS_RING}`} style={style} {...rest}>
       <div className={ROW_LEAD}>{lead}</div>
-      <button type="button" onClick={onSelect} className={ROW_BODY}>
+      <PlainButton onPress={onSelect} className={ROW_BODY}>
         {children}
-      </button>
+      </PlainButton>
     </div>
   );
 }
@@ -545,10 +552,7 @@ export default function InfiniteOffsetList<T extends object>({
   rangeTotal,
   errorPrefix = "Could not load list",
   headerActions,
-  selectAllChecked = false,
-  selectAllIndeterminate = false,
-  onSelectAllChange,
-  selectAllLabel,
+  selectAll,
   getSectionLetter,
 }: InfiniteOffsetListProps<T>) {
   const [visibleRange, setVisibleRange] = useState<VisibleRange>({
@@ -601,11 +605,9 @@ export default function InfiniteOffsetList<T extends object>({
         refreshing={!showRangePill && refreshing}
         filling={!showRangePill && filling}
         actions={headerActions}
-        selectAllChecked={selectAllChecked}
-        selectAllIndeterminate={selectAllIndeterminate}
-        onSelectAllChange={onSelectAllChange}
-        selectAllLabel={selectAllLabel}
-        selectAllDisabled={items.length === 0}
+        selectAll={
+          selectAll && { ...selectAll, disabled: items.length === 0 || selectAll.disabled }
+        }
       />
       {headerLetter ? (
         <div className="flex shrink-0 items-center border-b border-border bg-panel px-3 py-1">

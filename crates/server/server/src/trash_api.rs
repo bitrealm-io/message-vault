@@ -1,110 +1,18 @@
-//! Empty Trash (`DELETE /v1/trash`), and the on-disk half of permanent
-//! deletion that `DELETE /v1/conversations/{id}` shares with it.
+//! Empty Trash (`DELETE /v1/trash`).
 //!
-//! The database work lives in [`crate::db::trash`]. What is left for the
-//! route layer is removing the attachment files the database reported as
-//! unreferenced once its transaction has committed, which is filesystem work
-//! and belongs here rather than in `db/`.
+//! The database work lives in [`crate::db::trash`], and removing the files
+//! it reported as unreferenced lives in [`crate::asset_store`], which
+//! `DELETE /v1/conversations/{id}` shares.
 
-use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
 use axum::extract::State;
 use axum::http::StatusCode;
 
-use crate::config::Config;
+use crate::asset_store;
 use crate::db::audit_trail::{self, AuditAction, AuditActor, Details};
-use crate::db::trash::{self, OrphanedFile};
+use crate::db::trash;
 use crate::server::{ApiError, AppState, FullDeleteAccess};
-
-/// Remove the files `db::trash` reported as unreferenced: each original, its
-/// MIME sidecar when one exists, and each derivative. A file already gone is
-/// not an error — the database rows are the record, and a missing file only
-/// means there is nothing left to do for it.
-///
-/// Runs on the blocking pool because it is plain filesystem work.
-///
-/// # Errors
-///
-/// `Internal` when a file exists and cannot be removed, or when a stored path
-/// would escape the directory it belongs under. Either is a defect in the
-/// server's own data, not something the caller did, so the rows stay deleted
-/// and the message is logged rather than shown.
-pub(crate) async fn remove_orphaned_files(
-    cfg: Arc<Config>,
-    account_id: i64,
-    files: Vec<OrphanedFile>,
-) -> Result<(), ApiError> {
-    if files.is_empty() {
-        return Ok(());
-    }
-    tokio::task::spawn_blocking(move || {
-        for file in files {
-            for path in paths_to_remove(&cfg, account_id, &file)? {
-                remove_if_present(&path)?;
-            }
-        }
-        Ok(())
-    })
-    .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("asset removal task: {e}")))?
-}
-
-/// The absolute paths one orphaned file occupies on disk.
-fn paths_to_remove(
-    cfg: &Config,
-    account_id: i64,
-    file: &OrphanedFile,
-) -> Result<Vec<PathBuf>, ApiError> {
-    match file {
-        OrphanedFile::Original {
-            source,
-            sha256,
-            assets_path,
-        } => {
-            let dir = cfg.paths.assets_dir_for_account(account_id, source);
-            let original = join_under(&dir, assets_path)?;
-            let sidecar = dir.join(&sha256[..2]).join(format!(".{sha256}.mime"));
-            Ok(vec![original, sidecar])
-        }
-        OrphanedFile::Derived {
-            source,
-            assets_path,
-        } => {
-            let dir = cfg
-                .paths
-                .assets_converted_dir_for_account(account_id, source);
-            Ok(vec![join_under(&dir, assets_path)?])
-        }
-    }
-}
-
-/// `dir/relative`, refusing a stored path that is absolute or climbs out of
-/// `dir`. The server wrote every `assets_path` itself, so this never fires on
-/// its own data; it is the guard that keeps a corrupted row from naming a
-/// file elsewhere on the machine.
-fn join_under(dir: &Path, relative: &str) -> Result<PathBuf, ApiError> {
-    let rel = Path::new(relative);
-    let safe = rel.components().all(|c| matches!(c, Component::Normal(_)));
-    if !safe || relative.is_empty() {
-        return Err(ApiError::Internal(anyhow::anyhow!(
-            "stored asset path {relative:?} is not a plain relative path"
-        )));
-    }
-    Ok(dir.join(rel))
-}
-
-/// Remove `path` when it is a regular file; a missing file is fine.
-fn remove_if_present(path: &Path) -> Result<(), ApiError> {
-    match std::fs::remove_file(path) {
-        Ok(()) => Ok(()),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(ApiError::Internal(anyhow::anyhow!(
-            "remove {}: {e}",
-            path.display()
-        ))),
-    }
-}
 
 /// Empty the trash: every trashed conversation is deleted for good, with
 /// its messages and any attachment file no other message uses, and every
@@ -124,7 +32,7 @@ pub(crate) async fn empty_trash(
     State(state): State<AppState>,
     FullDeleteAccess(auth): FullDeleteAccess,
 ) -> Result<StatusCode, ApiError> {
-    let orphaned = {
+    let unreferenced = {
         let mut conn = state.db.acquire().await?;
         let emptied = trash::empty_trash(&mut conn, auth.account_id).await?;
         let count = |n: usize| Some(i64::try_from(n).unwrap_or(i64::MAX));
@@ -143,7 +51,13 @@ pub(crate) async fn empty_trash(
         .await?;
         emptied.orphaned
     };
-    remove_orphaned_files(Arc::clone(&state.cfg), auth.account_id, orphaned).await?;
+    asset_store::remove_unreferenced(
+        &state.db,
+        Arc::clone(&state.cfg),
+        auth.account_id,
+        unreferenced,
+    )
+    .await;
     Ok(StatusCode::NO_CONTENT)
 }
 

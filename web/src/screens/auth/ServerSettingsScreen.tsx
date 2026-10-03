@@ -1,4 +1,5 @@
 import Button from "../../components/Button";
+import PlainButton from "../../components/PlainButton";
 import TextField from "../../components/TextField";
 import { DEFAULT_TAURI_SERVER_URL } from "../../lib/authGuards";
 import { accentLink, authLabel, authScreenTitle } from "../../lib/uiStyles";
@@ -84,9 +85,9 @@ export default function ServerSettingsScreen({
 
       {onUseOwn ? (
         <div className="mt-4 text-center">
-          <button type="button" className={accentLink} onClick={onUseOwn}>
+          <PlainButton className={accentLink} onPress={onUseOwn}>
             Use the Message Crate on this computer
-          </button>
+          </PlainButton>
         </div>
       ) : null}
     </div>

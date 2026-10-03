@@ -2,7 +2,7 @@ import ScrollingTableCard from "../../../components/ScrollingTableCard";
 import PageControl from "./PageControl";
 import type { ExportRow } from "./storageUtils";
 import {
-  describeExportScope,
+  describeExportRun,
   formatBytes,
   formatImportDate,
   RUN_PAGE_SIZE,
@@ -81,7 +81,7 @@ export default function ExportHistoryTable({
                     <td className={tdStyle}>
                       {formatImportDate(row.finished_at ?? row.started_at)}
                     </td>
-                    <td className={tdStyle}>{describeExportScope(row.scope)}</td>
+                    <td className={tdStyle}>{describeExportRun(row)}</td>
                     <td className={tdStyle}>{statusLabel(row.status)}</td>
                     <td className={`${tdStyle} text-right tabular-nums`}>
                       {row.message_count.toLocaleString()}

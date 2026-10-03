@@ -97,7 +97,10 @@ A program using that token stops working at once.
 A token made on this screen expires 365 days after it is made.
 The **Expires** column shows that date.
 
-The Owner has no **API Tokens** section, because a token reaches one account's messages and the Owner holds none.
+The Owner sees this table in the account's **User Settings**, without the **Token** column, and can revoke a token there so a leaked one can be ended.
+The Owner can't add or rename a token.
+
+The Owner's own Settings have no **API Tokens** section, because a token reaches one account's messages and the Owner holds none.
 
 ### Danger zone
 
@@ -140,6 +143,9 @@ With nothing typed, the list opens with **This browser**, the zone the browser r
 
 Picking a row saves it.
 There is no **Save** button, and every date on screen changes to the new zone.
+
+On the Demo Account the display name and the time zone cannot be changed, by the account or by the Owner.
+Every visitor shares that account, so a change one visitor made would be what the next one finds.
 
 ### My Identities
 
@@ -189,5 +195,9 @@ Any other number without `+` is read as a US number when it has ten digits, and 
 After the load, the section lists each number without `+` that it read with its `+` back, and each one that became a new identity.
 
 Contacts the file does not mention stay as they are.
+
+The Demo Account has no **Address book** section, and the server refuses a load into it.
+An **Edit** load would delete its contacts for good.
+An **Append** load would store real people's names and numbers in an account anyone can enter.
 
 Contacts themselves are covered in [Contacts](/docs/user/features/contacts/contacts/).

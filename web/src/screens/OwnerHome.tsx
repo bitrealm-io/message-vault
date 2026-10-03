@@ -9,6 +9,7 @@ import {
   LEFT_PANEL_STORAGE_KEY,
 } from "../components/leftPanelWidth";
 import { NAV_LEADING_ROW_CLASS } from "../components/navSectionLayout";
+import PlainButton from "../components/PlainButton";
 import { useAuth } from "../lib/auth";
 import { parseSelectKey } from "../lib/selectKey";
 import { OwnerAccountsPanel } from "./owner/OwnerAccountsPanel";
@@ -119,15 +120,14 @@ export default function OwnerHome() {
           style={{ width: navWidth }}
         >
           {SECTIONS.map((id) => (
-            <button
+            <PlainButton
               key={id}
-              type="button"
               aria-current={id === section ? "page" : undefined}
               className={sectionLinkClass(id === section)}
-              onClick={() => navigate(`/owner/${id}`)}
+              onPress={() => navigate(`/owner/${id}`)}
             >
               {SECTION_LABELS[id]}
-            </button>
+            </PlainButton>
           ))}
         </nav>
 

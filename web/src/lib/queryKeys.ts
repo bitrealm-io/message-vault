@@ -33,10 +33,9 @@ export const keys = {
      * The trashed contacts the Trash screen lists.
      *
      * A builder of its own rather than `list("trashed:yes …")` because the
-     * contact list screen holds that entry as TanStack Query's paged
-     * `InfiniteData` and the Trash screen holds a single page, and two shapes
-     * must not share a key. It still sits under the `lists` prefix, with
-     * everything else that lists contacts.
+     * Trash screen pages its list in pages of its own size, and two lists
+     * paged differently must not share an entry. It still sits under the
+     * `lists` prefix, with everything else that lists contacts.
      */
     trashed: (q: string) => ["contacts", "list", "trashed", q] as const,
     /**
@@ -46,6 +45,13 @@ export const keys = {
      * that marks every contact stale refreshes these figures too.
      */
     summaries: (ids: readonly string[]) => ["contacts", "summaries", ids.join(",")] as const,
+    /**
+     * How many of these identifiers the account has no contact for, as the
+     * Import screen's review counts them. Under `all`, so a write that changes
+     * contacts changes the count.
+     */
+    unmatchedCount: (identifiers: readonly string[]) =>
+      ["contacts", "unmatched-count", identifiers] as const,
   },
   conversations: {
     all: ["conversations"] as const,
@@ -53,11 +59,16 @@ export const keys = {
     list: ({ q, sort, order }: ConversationListKey) =>
       ["conversations", "list", q, sort, order] as const,
     detail: (id: number) => ["conversations", "detail", String(id)] as const,
-    messages: (id: number, p: { offset: number; limit: number }) =>
-      ["conversations", "messages", String(id), p.offset, p.limit] as const,
-    /** One conversation narrowed to a year or a find term: `GET /v1/messages?q=in:#id …`. */
-    find: (id: number, q: string, offset: number, limit: number) =>
-      ["conversations", "find", String(id), q, offset, limit] as const,
+    /**
+     * The messages the conversation panel has read outward from where it
+     * opened or last jumped to: `newest`, or `around:{message id}`. One entry
+     * per place, holding the pages read before and after it.
+     */
+    messages: (id: number, start: string) =>
+      ["conversations", "messages", String(id), start] as const,
+    /** A page of one conversation's messages matching a search: `GET /v1/messages?q=in:#id …`. */
+    find: (id: number, q: string, sort: string, offset: number, limit: number) =>
+      ["conversations", "find", String(id), q, sort, offset, limit] as const,
     sources: (id: number | null) => ["conversations", "sources", String(id)] as const,
   },
   contactGroups: { all: ["contact-groups"] as const },
@@ -80,6 +91,8 @@ export const keys = {
     member: (accountId: number) => ["owner-accounts", accountId] as const,
     storage: (accountId: number) => ["owner-accounts", accountId, "storage"] as const,
     identities: (accountId: number) => ["owner-accounts", accountId, "identities"] as const,
+    /** The account's API tokens, as the owner sees them: no masked secret. */
+    apiTokens: (accountId: number) => ["owner-accounts", accountId, "api-tokens"] as const,
     /** One page of the account's Import Runs. Under `storage`, like the run it opens. */
     imports: (accountId: number, page: number) =>
       ["owner-accounts", accountId, "storage", "imports", page] as const,
@@ -97,6 +110,8 @@ export const keys = {
      * cannot disagree about whether a run is waiting.
      */
     running: ["imports", "running"] as const,
+    /** The contacts one Import Run created or changed, as a paged list. */
+    contacts: (id: number) => ["imports", String(id), "contacts"] as const,
   },
   /**
    * Pages of an Audit Trail: every account's (`"all"`, the owner's), the

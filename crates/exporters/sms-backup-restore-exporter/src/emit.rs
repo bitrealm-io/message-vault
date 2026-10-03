@@ -40,8 +40,8 @@ fn to_core_report(report: ReadReport) -> ExportReport {
         report.skipped_empty_participants,
     );
     out.extra.insert(
-        "skipped_bad_attachment".into(),
-        report.skipped_bad_attachment,
+        "skipped_unreadable_part".into(),
+        report.skipped_unreadable_part,
     );
     out.extra.insert(
         "dropped_character_references".into(),

@@ -28,3 +28,6 @@ pub mod sqlite_functions;
 pub mod staging;
 pub mod storage;
 pub mod trash;
+pub mod write_tx;
+
+pub use write_tx::{WriteTx, begin_write};

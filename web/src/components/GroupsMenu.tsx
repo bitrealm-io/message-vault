@@ -6,6 +6,7 @@ import { useDismissable } from "../lib/useDismissable";
 import { Z_POPOVER } from "../lib/zLayers";
 import Checkbox from "./Checkbox";
 import { ChevronDownIcon, PeopleGroupIcon } from "./icons";
+import PlainButton from "./PlainButton";
 
 export type GroupCheckState = MembershipCheckState;
 
@@ -22,12 +23,12 @@ export default function GroupsMenu({
   disabled = false,
   ariaLabel = "Contact Groups",
   title = "Contact Groups",
-  searchPlaceholder = "Search groups…",
-  emptyText = "No groups",
-  noMatchText = "No matching groups",
-  createButtonLabel = "Create group",
-  createTitle = "Create contact group",
-  createPlaceholder = "Group name",
+  searchPlaceholder = "Search Contact Groups…",
+  emptyText = "No Contact Groups",
+  noMatchText = "No matching Contact Groups",
+  createButtonLabel = "Create Contact Group",
+  createTitle = "Create Contact Group",
+  createPlaceholder = "Contact Group name",
   isReserved = isReservedGroupName,
   reservedError = reservedGroupError,
   icon,
@@ -124,13 +125,12 @@ export default function GroupsMenu({
 
   return (
     <div ref={rootRef} className="relative">
-      <button
-        type="button"
+      <PlainButton
         aria-label={ariaLabel}
         aria-expanded={open}
-        disabled={disabled}
+        isDisabled={disabled}
         title={title}
-        onClick={() => {
+        onPress={() => {
           if (disabled) return;
           setOpen(!open);
           setMode("list");
@@ -149,7 +149,7 @@ export default function GroupsMenu({
             className={`shrink-0 transition-transform duration-150${open ? " rotate-180" : ""}`}
           />
         ) : null}
-      </button>
+      </PlainButton>
       {open && mode === "list" ? (
         <div data-mc-overlay="" className={popoverClass}>
           <div className="border-b border-border p-2">
@@ -188,24 +188,22 @@ export default function GroupsMenu({
             )}
           </div>
           <div className="border-t border-border py-1">
-            <button
-              type="button"
-              disabled={boxesDisabled}
-              onClick={() => setMode("create")}
+            <PlainButton
+              isDisabled={boxesDisabled}
+              onPress={() => setMode("create")}
               className="flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-1.5 text-left text-[0.813rem] text-text hover:bg-hover disabled:opacity-50"
             >
               <span className="text-muted">+</span>
               {createButtonLabel}
-            </button>
+            </PlainButton>
             {onClearAll ? (
-              <button
-                type="button"
-                disabled={boxesDisabled || !hasAnyMembership}
-                onClick={() => onClearAll()}
+              <PlainButton
+                isDisabled={boxesDisabled || !hasAnyMembership}
+                onPress={() => onClearAll()}
                 className="flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-1.5 text-left text-[0.813rem] text-text hover:bg-hover disabled:opacity-50"
               >
                 Clear all
-              </button>
+              </PlainButton>
             ) : null}
           </div>
         </div>
@@ -230,21 +228,19 @@ export default function GroupsMenu({
           />
           {createError ? <p className="mt-1 text-[0.75rem] text-danger">{createError}</p> : null}
           <div className="mt-3 flex items-center gap-2">
-            <button
-              type="button"
-              disabled={disabled || !newName.trim()}
-              onClick={saveNew}
+            <PlainButton
+              isDisabled={disabled || !newName.trim()}
+              onPress={saveNew}
               className="cursor-pointer rounded-md bg-accent px-3 py-1 text-[0.813rem] font-medium text-sent-text disabled:opacity-40"
             >
               Create
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("list")}
+            </PlainButton>
+            <PlainButton
+              onPress={() => setMode("list")}
               className="cursor-pointer rounded-md bg-elevated px-3 py-1 text-[0.813rem] text-text hover:bg-hover"
             >
               Cancel
-            </button>
+            </PlainButton>
           </div>
         </div>
       ) : null}

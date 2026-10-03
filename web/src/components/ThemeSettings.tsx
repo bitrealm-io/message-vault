@@ -3,6 +3,7 @@ import { Checkbox, Radio, RadioGroup, ToggleButton } from "react-aria-components
 import { parseSelectKey } from "../lib/selectKey";
 import { useTheme } from "../lib/ThemeProvider";
 import type { ThemeSeeds } from "../lib/theme";
+import PlainButton from "./PlainButton";
 import { ColorRow, formatCompare } from "./theme/ThemeColorRow";
 
 const SEED_FIELDS: {
@@ -189,13 +190,12 @@ export default function ThemeSettings() {
               if (!ok) setShareDraft(shareString);
             }}
             aria-invalid={shareError}
-            className={`min-w-0 flex-1 rounded-md border bg-bg px-2.5 py-1.5 font-mono text-[0.75rem] text-text outline-none ${
+            className={`min-w-0 flex-1 rounded-md border bg-bg px-2.5 py-1.5 font-mono text-[0.75rem] text-text outline-none focus:border-accent ${
               shareError ? "border-danger" : "border-border"
             }`}
           />
-          <button
-            type="button"
-            onClick={async () => {
+          <PlainButton
+            onPress={async () => {
               try {
                 await navigator.clipboard.writeText(shareString);
                 setCopied(true);
@@ -208,7 +208,7 @@ export default function ThemeSettings() {
             className="shrink-0 cursor-pointer rounded-md border border-border bg-panel px-3 py-1.5 text-[0.813rem] text-text"
           >
             {copied ? "Copied" : "Copy"}
-          </button>
+          </PlainButton>
         </div>
         {shareError ? (
           <p className="mt-1 text-[0.75rem] text-danger" role="alert">

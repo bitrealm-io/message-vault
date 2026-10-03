@@ -60,7 +60,7 @@ beforeEach(() => {
 
 describe("useSavedSearches", () => {
   it("reads the list from the server, not from browser storage", async () => {
-    list.mockResolvedValue({ items: [search(1, "Family")], total: 1, limit: 40, offset: 0 });
+    list.mockResolvedValue([search(1, "Family")]);
     const { result } = renderHook(() => useSavedSearches(), { wrapper });
     await waitFor(() => expect(result.current.savedSearches).toEqual([search(1, "Family")]));
     expect(list).toHaveBeenCalled();
@@ -89,12 +89,7 @@ describe("useSavedSearches", () => {
       },
     });
 
-    list.mockResolvedValue({
-      items: [search(1, "Alice's Family")],
-      total: 1,
-      limit: 40,
-      offset: 0,
-    });
+    list.mockResolvedValue([search(1, "Alice's Family")]);
     const first = renderHook(() => useSavedSearches(), { wrapper });
     await waitFor(() =>
       expect(first.result.current.savedSearches).toEqual([search(1, "Alice's Family")]),
@@ -102,7 +97,7 @@ describe("useSavedSearches", () => {
     first.unmount();
 
     account.current = 8;
-    list.mockResolvedValue({ items: [search(2, "Bob's Work")], total: 1, limit: 40, offset: 0 });
+    list.mockResolvedValue([search(2, "Bob's Work")]);
     const second = renderHook(() => useSavedSearches(), { wrapper });
 
     await waitFor(() =>
@@ -112,12 +107,7 @@ describe("useSavedSearches", () => {
   });
 
   it("keeps the kind the server reports, so import rows stay identifiable", async () => {
-    list.mockResolvedValue({
-      items: [search(2, "Backup 1", "import")],
-      total: 1,
-      limit: 40,
-      offset: 0,
-    });
+    list.mockResolvedValue([search(2, "Backup 1", "import")]);
     const { result } = renderHook(() => useSavedSearches(), { wrapper });
     await waitFor(() => expect(result.current.savedSearches[0]?.kind).toBe("import"));
   });
@@ -139,9 +129,7 @@ describe("useSavedSearchActions", () => {
   });
 
   it("re-reads the list after a create", async () => {
-    list
-      .mockResolvedValueOnce({ items: [], total: 0, limit: 40, offset: 0 })
-      .mockResolvedValueOnce({ items: [search(3, "Work")], total: 1, limit: 40, offset: 0 });
+    list.mockResolvedValueOnce([]).mockResolvedValueOnce([search(3, "Work")]);
     create.mockResolvedValue(search(3, "Work"));
     const { result } = renderHook(
       () => ({ list: useSavedSearches(), actions: useSavedSearchActions() }),
@@ -154,9 +142,7 @@ describe("useSavedSearchActions", () => {
   });
 
   it("re-reads the list after an update", async () => {
-    list
-      .mockResolvedValueOnce({ items: [search(3, "Work")], total: 1, limit: 40, offset: 0 })
-      .mockResolvedValueOnce({ items: [search(3, "Renamed")], total: 1, limit: 40, offset: 0 });
+    list.mockResolvedValueOnce([search(3, "Work")]).mockResolvedValueOnce([search(3, "Renamed")]);
     update.mockResolvedValue(search(3, "Renamed"));
     const { result } = renderHook(
       () => ({ list: useSavedSearches(), actions: useSavedSearchActions() }),
@@ -169,9 +155,7 @@ describe("useSavedSearchActions", () => {
   });
 
   it("re-reads the list after a delete", async () => {
-    list
-      .mockResolvedValueOnce({ items: [search(3, "Work")], total: 1, limit: 40, offset: 0 })
-      .mockResolvedValueOnce({ items: [], total: 0, limit: 40, offset: 0 });
+    list.mockResolvedValueOnce([search(3, "Work")]).mockResolvedValueOnce([]);
     remove.mockResolvedValue(undefined);
     const { result } = renderHook(
       () => ({ list: useSavedSearches(), actions: useSavedSearchActions() }),

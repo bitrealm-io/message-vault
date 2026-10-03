@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ComponentProps, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -73,8 +73,9 @@ describe("SearchBar", () => {
 
     await user.keyboard("{ArrowDown}");
     const [first] = screen.getAllByRole("option");
+    // `aria-activedescendant` tells a screen reader which row is active. The
+    // row is not selected, because every row is an action and none is the value.
     expect(input.getAttribute("aria-activedescendant")).toBe(first.id);
-    expect(first.getAttribute("aria-selected")).toBe("true");
 
     await user.keyboard("{ArrowDown}");
     const second = screen.getAllByRole("option")[1];
@@ -120,6 +121,36 @@ describe("SearchBar", () => {
     expect(onSubmit).toHaveBeenLastCalledWith("grace");
   });
 
+  it("runs a search typed after a row was clicked on the first Enter", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    function Controlled() {
+      const [value, setValue] = useState("");
+      return (
+        <SearchBar
+          value={value}
+          onChange={setValue}
+          onSubmit={onSubmit}
+          scope="contact"
+          list="contacts"
+          placeholder="Search contacts"
+          advancedMode="contacts"
+        />
+      );
+    }
+    render(<Controlled />);
+    const input = screen.getByRole("combobox", { name: "Search contacts" });
+
+    await user.click(input);
+    await user.click(screen.getByRole("option", { name: "ada" }));
+    expect(onSubmit).toHaveBeenLastCalledWith("ada");
+    await user.clear(input);
+    await user.type(input, "bob");
+    await user.keyboard("{Escape}{Enter}");
+
+    expect(onSubmit).toHaveBeenLastCalledWith("bob");
+  });
+
   it("submits the typed text when no row is highlighted", async () => {
     const user = userEvent.setup();
     const { input, onSubmit } = renderSearch({ value: "typed" });
@@ -141,6 +172,21 @@ describe("SearchBar", () => {
     expect(await screen.findByTestId("advanced-form")).toBeTruthy();
   });
 
+  it("keeps the advanced panel open, with no popdown over it, when the box is focused again", async () => {
+    const user = userEvent.setup();
+    const { input } = renderSearch();
+
+    await user.click(input);
+    await user.keyboard("{ArrowUp}{Enter}");
+    expect(await screen.findByTestId("advanced-form")).toBeTruthy();
+
+    act(() => input.blur());
+    await user.click(input);
+
+    expect(screen.getByTestId("advanced-form")).toBeTruthy();
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
+  });
+
   it("wraps from the last row back to the first", async () => {
     const user = userEvent.setup();
     const { input } = renderSearch();
@@ -151,6 +197,20 @@ describe("SearchBar", () => {
     // Three rows: two recents plus advanced. A fourth press wraps.
     await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}");
     expect(input.getAttribute("aria-activedescendant")).toBe(optionIds()[0]);
+  });
+
+  it("opens on the last row with the up arrow", async () => {
+    const user = userEvent.setup();
+    const { input } = renderSearch();
+
+    await user.click(input);
+    await user.keyboard("{Escape}");
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
+
+    await user.keyboard("{ArrowUp}");
+    const options = screen.getAllByRole("option");
+    expect(input.getAttribute("aria-activedescendant")).toBe(options[options.length - 1]?.id);
+    expect(options[options.length - 1]).toHaveTextContent("Advanced search");
   });
 
   it("closes the popdown on Escape", async () => {
@@ -180,10 +240,10 @@ describe("SearchBar", () => {
   });
 
   it("shows word autocomplete instead of recents while a token is being typed", async () => {
-    suggestionsMock.current = [{ id: "handle:", label: "handle:", insert: "handle: " }];
+    suggestionsMock.current = [{ id: "identity:", label: "identity:", insert: "identity: " }];
     const user = userEvent.setup();
     const { input } = renderSearch({
-      value: "han",
+      value: "ide",
       scope: "message",
       placeholder: "Search messages",
       advancedMode: "messages",
@@ -191,14 +251,14 @@ describe("SearchBar", () => {
 
     await user.click(input);
     const labels = screen.getAllByRole("option").map((el) => el.textContent);
-    expect(labels).toEqual(["handle:"]);
+    expect(labels).toEqual(["identity:"]);
   });
 
   it("inserts a suggestion into the query without running the search", async () => {
-    suggestionsMock.current = [{ id: "handle:", label: "handle:", insert: "handle: " }];
+    suggestionsMock.current = [{ id: "identity:", label: "identity:", insert: "identity: " }];
     const user = userEvent.setup();
     const { input, onChange, onSubmit } = renderSearch({
-      value: "han",
+      value: "ide",
       scope: "message",
       placeholder: "Search messages",
       advancedMode: "messages",
@@ -207,7 +267,7 @@ describe("SearchBar", () => {
     await user.click(input);
     await user.keyboard("{ArrowDown}{Enter}");
 
-    expect(onChange).toHaveBeenCalledWith("handle: ");
+    expect(onChange).toHaveBeenCalledWith("identity: ");
     expect(onSubmit).not.toHaveBeenCalled();
   });
 });

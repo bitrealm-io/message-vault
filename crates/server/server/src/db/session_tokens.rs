@@ -103,10 +103,9 @@ pub async fn lookup_session(conn: &mut SqliteConnection, token: &str) -> Result<
     let Some((account_id, expires_at, app_kind, app_build)) = found else {
         return Ok(None);
     };
-    let expires = expires_at.parse::<u64>().unwrap_or(0);
     let now = now_unix_secs();
-    // An `expires_at` of 0, or one that does not parse, counts as expired.
-    if expires == 0 || expires <= now {
+    // An `expires_at` that does not parse counts as expired.
+    if !expires_at.parse::<u64>().is_ok_and(|expires| expires > now) {
         let _ = sqlx::query("DELETE FROM account_session_tokens WHERE token_hash = $1")
             .bind(token_hash.as_str())
             .execute(&mut *conn)
@@ -168,6 +167,10 @@ pub async fn connecting_app_for_account(
 /// Replace the account's session token with a new one and return the
 /// plaintext once. The Session carries on: a password change renews it, and
 /// its `logged_in` entry in the Audit Trail moves its expiry with it.
+///
+/// One upsert, never a lookup and then an insert: two logins at once both
+/// find no row, and the second insert would break the `account_id` primary
+/// key. The later login's token replaces the earlier one's.
 ///
 /// # Errors
 ///

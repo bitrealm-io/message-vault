@@ -136,7 +136,7 @@ async fn list_conversations_filters_by_handle() {
     let hit = list_conversations(
         &mut conn,
         account,
-        "handle:+15555550200",
+        "identity:+15555550200",
         DEFAULT_LIST_LIMIT,
         0,
     )
@@ -147,7 +147,7 @@ async fn list_conversations_filters_by_handle() {
     let miss = list_conversations(
         &mut conn,
         account,
-        "handle:+19999999999",
+        "identity:+19999999999",
         DEFAULT_LIST_LIMIT,
         0,
     )
@@ -199,7 +199,7 @@ async fn list_conversations_finds_a_handle_across_platforms() {
     .await
     .unwrap();
 
-    // `handle:` matches the raw value on any platform; it does not
+    // `identity:` matches the raw value on any platform; it does not
     // distinguish which platform a handle belongs to (there is no search
     // word for that in the current language — `service:` filters by a
     // message's own transport, imessage/sms/mms/rcs/whatsapp, which is a
@@ -207,7 +207,7 @@ async fn list_conversations_finds_a_handle_across_platforms() {
     let any_platform = list_conversations(
         &mut conn,
         account,
-        "handle:+15555550200",
+        "identity:+15555550200",
         DEFAULT_LIST_LIMIT,
         0,
     )
@@ -2235,6 +2235,205 @@ async fn an_offset_past_u32_reads_an_empty_page_not_the_first() {
     .await;
     assert_eq!(page["items"], serde_json::json!([]), "{page}");
     assert_eq!(page["total"], 3);
+}
+
+/// The id of the message whose body is `body`, in a conversation seeded by
+/// [`insert_many_messages`].
+async fn message_id(fixture: &TestFixture, body: &str) -> i64 {
+    let mut conn = fixture.conn().await;
+    sqlx::query_scalar("SELECT id FROM messages WHERE body = $1")
+        .bind(body)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap()
+}
+
+/// The bodies of a page's messages, in the page's order.
+fn page_texts(page: &serde_json::Value) -> Vec<String> {
+    page["items"]
+        .as_array()
+        .unwrap_or_else(|| panic!("a page: {page}"))
+        .iter()
+        .map(|m| m["text"].as_str().unwrap().to_string())
+        .collect()
+}
+
+/// `msg{n}` for each `n`, as [`insert_many_messages`] names them.
+fn bodies(range: impl IntoIterator<Item = i64>) -> Vec<String> {
+    range.into_iter().map(|i| format!("msg{i}")).collect()
+}
+
+/// One page of a conversation's messages, read with `query`.
+async fn read_messages(
+    fixture: &TestFixture,
+    user: &RegisteredAccount,
+    conversation_id: i64,
+    query: String,
+) -> serde_json::Value {
+    crate::test_support::get_json(
+        &fixture.state,
+        &format!("/v1/conversations/{conversation_id}/messages?{query}"),
+        &user.token,
+    )
+    .await
+}
+
+/// A search result opens its conversation at the message (#313, #1391):
+/// `around` answers the page with that message in the middle, and `offset`
+/// says where the page sits, which the caller has no other way to learn.
+#[tokio::test]
+async fn around_a_message_answers_the_page_with_it_in_the_middle() {
+    let (fixture, user, conversation_id) = conversation_messages_fixture().await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
+    insert_many_messages(&mut conn, conversation_id, user.account_id, 100).await;
+    drop(conn);
+    let id = message_id(&fixture, "msg60").await;
+
+    let page = read_messages(
+        &fixture,
+        &user,
+        conversation_id,
+        format!("around={id}&limit=5"),
+    )
+    .await;
+    assert_eq!(page_texts(&page), bodies(58..=62), "{page}");
+    assert_eq!(page["offset"], 58);
+    assert_eq!(page["total"], 100);
+    assert_eq!(page["limit"], 5);
+}
+
+/// Near either end of the conversation the page still holds `limit`
+/// messages: the ones the end leaves out on one side are taken from the
+/// other, so a jump to the first or last message fills the screen.
+#[tokio::test]
+async fn around_a_message_near_an_end_fills_the_page_from_the_other_side() {
+    let (fixture, user, conversation_id) = conversation_messages_fixture().await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
+    insert_many_messages(&mut conn, conversation_id, user.account_id, 20).await;
+    drop(conn);
+
+    for (body, expected, offset) in [("msg1", bodies(0..=4), 0), ("msg19", bodies(15..=19), 15)] {
+        let id = message_id(&fixture, body).await;
+        let page = read_messages(
+            &fixture,
+            &user,
+            conversation_id,
+            format!("around={id}&limit=5"),
+        )
+        .await;
+        assert_eq!(page_texts(&page), expected, "{body}: {page}");
+        assert_eq!(page["offset"], offset, "{body}: {page}");
+    }
+}
+
+/// Scrolling from a jump keeps loading in both directions: `before` is the
+/// page just before a message and `after` the page just after it, in the
+/// page's own order, neither holding the message itself.
+#[tokio::test]
+async fn before_and_after_a_message_answer_the_neighbouring_pages() {
+    let (fixture, user, conversation_id) = conversation_messages_fixture().await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
+    insert_many_messages(&mut conn, conversation_id, user.account_id, 20).await;
+    drop(conn);
+    let id = message_id(&fixture, "msg10").await;
+    let read = |query: String| read_messages(&fixture, &user, conversation_id, query);
+
+    let page = read(format!("before={id}&limit=3")).await;
+    assert_eq!(page_texts(&page), bodies(7..=9), "{page}");
+    assert_eq!(page["offset"], 7);
+
+    let page = read(format!("after={id}&limit=3")).await;
+    assert_eq!(page_texts(&page), bodies(11..=13), "{page}");
+    assert_eq!(page["offset"], 11);
+
+    // Newest first, "before" is the newer side, and `offset` counts from
+    // the newest message.
+    let page = read(format!("before={id}&limit=3&sort=-date")).await;
+    assert_eq!(page_texts(&page), bodies([13, 12, 11]), "{page}");
+    assert_eq!(page["offset"], 6);
+
+    let page = read(format!("after={id}&limit=3&sort=-date")).await;
+    assert_eq!(page_texts(&page), bodies([9, 8, 7]), "{page}");
+    assert_eq!(page["offset"], 10);
+
+    // At an end there is nothing more on that side: an empty page whose
+    // offset is where it would have started.
+    let first = message_id(&fixture, "msg0").await;
+    let page = read(format!("before={first}&limit=3")).await;
+    assert_eq!(page["items"], serde_json::json!([]), "{page}");
+    assert_eq!(page["offset"], 0);
+    let last = message_id(&fixture, "msg19").await;
+    let page = read(format!("after={last}&limit=3")).await;
+    assert_eq!(page["items"], serde_json::json!([]), "{page}");
+    assert_eq!(page["offset"], 20);
+}
+
+/// `around`, `before`, `after` and `offset` each say where the page starts,
+/// so a request sends at most one of them; and the message named must be one
+/// this conversation shows. Both are refused with the parameter named, never
+/// answered with a page from somewhere else.
+#[tokio::test]
+async fn a_page_starts_at_one_place_beside_a_message_of_this_conversation() {
+    use crate::test_support::{SeedConversation, SeedMessage, seed_conversation};
+    let (fixture, user, conversation_id) = conversation_messages_fixture().await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
+    insert_many_messages(&mut conn, conversation_id, user.account_id, 3).await;
+    drop(conn);
+    let id = message_id(&fixture, "msg1").await;
+    seed_conversation(
+        &fixture.state,
+        &SeedConversation {
+            account_id: user.account_id,
+            handle: "+15555550142",
+            conversation_type: "individual",
+            group_title: None,
+            source_file: "seed.jsonl",
+            messages: &[SeedMessage {
+                source: "imessage",
+                timestamp: "2020-01-01T00:00:00Z",
+                is_from_me: true,
+                body: "elsewhere",
+            }],
+        },
+    )
+    .await;
+    let elsewhere = message_id(&fixture, "elsewhere").await;
+    // A duplicate is never shown in the conversation, so no page sits beside it.
+    let duplicate = message_id(&fixture, "msg2").await;
+    let mut conn = fixture.conn().await;
+    sqlx::query("UPDATE messages SET duplicate_of = $1 WHERE id = $2")
+        .bind(id)
+        .bind(duplicate)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    drop(conn);
+
+    for (query, named) in [
+        (format!("around={id}&offset=0"), "offset"),
+        (format!("before={id}&after={id}"), "after"),
+        (format!("around={elsewhere}"), "around"),
+        (format!("after={duplicate}"), "after"),
+        ("before=999999".to_string(), "before"),
+    ] {
+        let (status, text) = crate::test_support::get_raw(
+            &fixture.state,
+            &format!("/v1/conversations/{conversation_id}/messages?{query}"),
+            &user.token,
+        )
+        .await;
+        let problem = crate::test_support::expect_problem(
+            status,
+            &text,
+            crate::problem::ProblemType::ValidationFailed,
+        );
+        let errors = problem.errors.unwrap_or_default().join(" ");
+        assert!(errors.contains(named), "{query} names {named}: {text}");
+        assert!(
+            !errors.contains("unknown query parameter"),
+            "the route takes {named}: {text}"
+        );
+    }
 }
 
 /// Opening a conversation takes no filter; narrowing one to a year is the

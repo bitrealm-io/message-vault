@@ -10,6 +10,12 @@ export type MessageBubbleProps = {
   message: Message;
   highlight?: string;
   isActive?: boolean;
+  /**
+   * Whether a received message carries its sender's name. The conversation
+   * panel names the sender only at the start of a run in a group (#1391);
+   * left out, every received message in a group is named.
+   */
+  showSender?: boolean;
   onAttachmentClick?: (attachment: MessageAttachment, source: string) => void;
 };
 

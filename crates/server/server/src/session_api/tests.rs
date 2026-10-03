@@ -10,6 +10,30 @@ use crate::test_support::{
 
 const TEST_ACCOUNT: i64 = 7;
 
+/// Every Session the server answers names its account, so the reference
+/// marks `account_id` required, and a client generated from it never has to
+/// handle a Session without one.
+#[tokio::test]
+async fn the_reference_marks_a_sessions_account_id_required() {
+    let (fixture, account) = fixture_with_account().await;
+    let body: serde_json::Value = get_json(&fixture.state, "/v1/session", &account.token).await;
+    assert_eq!(body["account_id"], account.account_id, "{body}");
+
+    let doc: serde_json::Value =
+        serde_json::from_str(&crate::openapi::dump_openapi_json()).unwrap();
+    let session = &doc["components"]["schemas"]["Session"];
+    assert!(
+        session["required"]
+            .as_array()
+            .is_some_and(|r| r.iter().any(|f| f == "account_id")),
+        "{session}"
+    );
+    assert_eq!(
+        session["properties"]["account_id"]["type"], "integer",
+        "{session}"
+    );
+}
+
 /// The Session is a singleton: logging in answers `201 Created` with a
 /// `Location` naming `/v1/session` itself, `GET` reads it back without an
 /// `ok` flag, and `DELETE` ends it with `204 No Content`.
@@ -444,6 +468,35 @@ async fn an_owner_password_reset_leaves_the_session_browsing() {
         StatusCode::OK,
         "bob's session carries on after the owner's reset"
     );
+}
+
+/// Two logins at once after a logout, a double click or two devices: both
+/// read no session row, and the second insert broke the `account_id` primary
+/// key and answered `500`. The token is written as an upsert, so the later
+/// login replaces the earlier one's row.
+#[tokio::test]
+async fn a_login_whose_session_row_appears_meanwhile_still_signs_in() {
+    let fixture = test_fixture().await;
+    let account = fixture.account("alice").await;
+
+    let mut other_conn = fixture.conn().await;
+    let mut other = crate::db::begin_write(&mut other_conn).await.unwrap();
+    crate::db::session_tokens::rotate_account_session_token(&mut other, account)
+        .await
+        .unwrap();
+    let mut conn = fixture.conn().await;
+    let created = crate::db::write_tx::commit_during(
+        other,
+        CreateSessionResponse::for_existing_account(&mut conn, account, None),
+    )
+    .await
+    .expect("the second login signs in");
+
+    let auth = crate::server::resolve_auth_on_conn(&mut conn, &created.token, None)
+        .await
+        .unwrap();
+    assert_eq!(auth.account_id, account);
+    assert_eq!(session_rows(&mut conn, account).await, 1);
 }
 
 /// How many session rows `account` holds.

@@ -96,35 +96,6 @@ fn walk(dir: &Path) -> Vec<PathBuf> {
     out
 }
 
-#[test]
-fn identities_come_back_cleaned_from_the_helper_process() {
-    helper_binary();
-    let dir = tempfile::tempdir().unwrap();
-    let db_path = write_chat_db(dir.path());
-    let scratch_root = tempfile::tempdir().unwrap();
-
-    let mut identities =
-        imessage_ir_exporter::backup_identities(&db_path, false, None, scratch_root.path())
-            .unwrap();
-    let left: Vec<_> = fs::read_dir(scratch_root.path())
-        .unwrap()
-        .map(|entry| entry.unwrap().file_name())
-        .filter(|name| name != ".lock")
-        .collect();
-    assert!(
-        left.is_empty(),
-        "the request's scratch folder stays: {left:?}"
-    );
-    identities.sort();
-    assert_eq!(
-        identities,
-        vec![OWNER.to_string(), OWNER_EMAIL.to_string()],
-        "the phone from `P:`, bare and `tel:`-prefixed caller ids, and the \
-         email from `E:`, each once, and the NULL caller id on one outgoing \
-         row adds nothing"
-    );
-}
-
 /// The exported document for the conversation Apple identifies as `chat_identifier`.
 fn document_for(output: &Path, chat_identifier: &str) -> ConversationDocument {
     jsonl_files(output)

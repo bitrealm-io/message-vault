@@ -4,16 +4,17 @@ use anyhow::{Context, Result, bail};
 use media::{CompressOptions, MediaMode};
 pub use message_crate_core::RunResult;
 use message_crate_core::{
-    ExportReport, ExportTransforms, ExporterConfig, MediaConfig, OutputFormat, document_messages,
-    prepare_outputs, stage_conversation_attachments,
+    ATTACHMENTS_MISSING, ExportReport, ExportTransforms, ExporterConfig, MediaConfig, OutputFormat,
+    SourceConfig, document_messages, prepare_outputs, stage_conversation_attachments,
 };
-use message_ir::ConversationDocument;
+use message_ir::{ConversationDocument, IrMessage};
 use message_ir_format::{
-    CSV_HEADERS, FormatSink, clean_previous_ir_output, read_conversation_csv,
+    CSV_HEADERS, FormatSink, MergedArchive, clean_previous_ir_output, read_conversation_csv,
     read_conversation_eml_dir, read_conversation_json, read_conversation_jsonl,
     read_conversation_mbox,
 };
 use message_staging::AttachmentSpool;
+use sms_backup_plus_exporter::SmsBackupPlusArchive;
 use sms_backup_restore_exporter::{ReadOptions, SbrArchive, read_backup};
 use std::collections::HashSet;
 use std::fs::{self, File};
@@ -43,23 +44,34 @@ struct DetectedExport {
 #[derive(Debug, Default)]
 struct ReexportReport {
     detected_format: String,
+    /// The name of the format written when it holds only SMS and MMS, for
+    /// the line that says how many messages were left out of it.
+    sms_only_format: Option<&'static str>,
     /// Conversations written, attachments a convert or compress pass
     /// staged, the media pass, and obfuscation.
     report: ExportReport,
 }
 
 impl ReexportReport {
-    /// Lines for the run's log.
+    /// Lines for the run's log. The desktop app shows the last line again as
+    /// the run's summary, so the left-out line comes before `Conversations:`
+    /// and never closes the log.
     fn log_lines(&self) -> Vec<String> {
-        let mut lines = vec![
-            format!("Detected input format: {}", self.detected_format),
-            format!("Conversations: {}", self.report.conversations),
-        ];
+        let mut lines = vec![format!("Detected input format: {}", self.detected_format)];
+        lines.extend(
+            self.sms_only_format
+                .and_then(|format| self.report.not_sms_or_mms_line(format)),
+        );
+        lines.push(format!("Conversations: {}", self.report.conversations));
         if self.report.attachments_saved > 0 {
             lines.push(format!(
                 "  saved {} attachments",
                 self.report.attachments_saved
             ));
+        }
+        let missing = self.report.extra(ATTACHMENTS_MISSING);
+        if missing > 0 {
+            lines.push(format!("  {missing} attachments missing"));
         }
         lines.extend(self.report.media_lines());
         lines
@@ -68,6 +80,13 @@ impl ReexportReport {
 
 /// Detect the input format, copy attachments if needed, and write the new export.
 fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportReport> {
+    // SMS Backup+ mail records when its backup was made: the start of the
+    // Export Run this conversion is part of, or of this run when it is one.
+    let started = match &config.source {
+        SourceConfig::Format(format) => format.run_started,
+        _ => None,
+    }
+    .unwrap_or_else(chrono::Utc::now);
     // The output is cleaned below, so one that is or holds the input is
     // refused before anything is written.
     prepare_outputs(&[input_dir.to_path_buf()], &config.output)?;
@@ -100,14 +119,27 @@ fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportR
         bail!("no conversations loaded from {}", input_dir.display());
     }
     let mut report = ExportReport::default();
-    if matches!(transforms.media, MediaMode::Convert | MediaMode::Compress) {
-        report.attachments_saved += apply_reexport_convert(&mut documents, config, &transforms)?;
+    // A mail export's reader holds the attachments in memory, and the
+    // export has no `attachments/` folder to copy, so its attachments are
+    // staged even when the media is only cloned.
+    if matches!(transforms.media, MediaMode::Convert | MediaMode::Compress)
+        || (copy_attachments && detected.format.is_mail_archive())
+    {
+        apply_reexport_convert(&mut documents, config, &transforms, &mut report)?;
     }
 
-    report.conversations = documents.len() as u64;
     let mut sink = FormatSink::open(&config.output, config.output_format, transforms)?;
-    if config.output_format == OutputFormat::Xml {
-        sink = sink.with_archive(Box::new(SbrArchive));
+    report.conversations = documents.len() as u64;
+    let sms_only = sms_only_archive(config.output_format, started);
+    let sms_only_format = sms_only.as_ref().map(|archive| archive.format_name());
+    if let Some(archive) = sms_only {
+        sink = sink.with_archive(archive);
+        // The archive writes nothing for a conversation with no SMS or MMS,
+        // so only the others are counted.
+        report.conversations = documents
+            .iter()
+            .filter(|doc| doc.messages.iter().any(IrMessage::is_sms_or_mms))
+            .count() as u64;
     }
     for document in documents {
         sink.write_document(document)?;
@@ -116,47 +148,107 @@ fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportR
 
     Ok(ReexportReport {
         detected_format: detected.format.as_str().to_string(),
+        sms_only_format,
         report,
     })
 }
 
-/// Stage the copied attachments again through the shared step, so a
-/// convert or compress pass rewrites each document's paths, hashes and MIME
-/// types. Returns how many distinct attachment files were written.
+/// The archive that writes `format`, for a format that holds only SMS and
+/// MMS and so leaves every other message out. `None` for every other format,
+/// which the sink writes itself.
+fn sms_only_archive(
+    format: OutputFormat,
+    started: chrono::DateTime<chrono::Utc>,
+) -> Option<Box<dyn MergedArchive>> {
+    match format {
+        OutputFormat::Xml => Some(Box::new(SbrArchive)),
+        OutputFormat::SmsBackupPlus => Some(Box::new(SmsBackupPlusArchive::new(started))),
+        _ => None,
+    }
+}
+
+/// Where one attachment's bytes come from when it is staged again.
+enum Source {
+    /// Held in memory, as a mail export's reader hands them over.
+    Bytes(Vec<u8>),
+    /// A file copied into the output from the input's `attachments/`.
+    File(PathBuf),
+    /// Nothing to stage.
+    None,
+}
+
+/// Stage the attachments again through the shared step: the files copied
+/// from the input, and the bytes a mail export held in memory. A convert or
+/// compress pass then rewrites each document's paths, hashes and MIME
+/// types. Adds the distinct files written to `report.attachments_saved`
+/// and the attachments left without a file to `attachments_missing`.
+///
+/// An attachment the input already gave a `missing_reason` keeps that
+/// reason when there is still nothing to stage, rather than becoming
+/// `file_missing`.
 fn apply_reexport_convert(
     documents: &mut [ConversationDocument],
     config: &ExporterConfig,
     transforms: &ExportTransforms,
-) -> Result<u64> {
+    report: &mut ExportReport,
+) -> Result<()> {
     let output_dir = &config.output;
-    let sources: Vec<Option<PathBuf>> = documents
-        .iter()
-        .flat_map(|doc| doc.messages.iter())
-        .flat_map(|msg| msg.attachments.iter())
-        .map(|att| {
-            att.path
-                .as_deref()
-                .map(|rel| output_dir.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR)))
-        })
-        .collect();
-    stage_conversation_attachments(
+    let mut sources: Vec<Source> = Vec::new();
+    let mut reasons: Vec<Option<String>> = Vec::new();
+    for att in documents
+        .iter_mut()
+        .flat_map(|doc| doc.messages.iter_mut())
+        .flat_map(|msg| msg.attachments.iter_mut())
+    {
+        reasons.push(att.missing_reason.clone());
+        sources.push(match (att.bytes.take(), att.path.as_deref()) {
+            (Some(bytes), _) => Source::Bytes(bytes),
+            (None, Some(rel)) => {
+                Source::File(output_dir.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR)))
+            }
+            (None, None) => Source::None,
+        });
+    }
+    let saved = stage_conversation_attachments(
         document_messages(documents),
         &output_dir.join("attachments"),
         &MediaConfig {
             mode: transforms.media,
             compress: transforms.compress.clone(),
         },
-        |i| {
-            let Some(path) = sources.get(i).and_then(|p| p.as_ref()) else {
-                return Ok(None);
-            };
-            fs::read(path).map(Some).or(Ok(None))
+        |i| match sources
+            .get_mut(i)
+            .map(|s| std::mem::replace(s, Source::None))
+        {
+            Some(Source::Bytes(bytes)) => Ok(Some(bytes)),
+            Some(Source::File(path)) => Ok(fs::read(path).ok()),
+            Some(Source::None) | None => Ok(None),
         },
         config.log.as_ref(),
         config.progress.as_ref(),
         config.cancel.as_ref(),
     )
-    .map_err(anyhow::Error::msg)
+    .map_err(anyhow::Error::msg)?;
+    report.attachments_saved += saved;
+
+    let mut missing = 0;
+    for (att, reason) in documents
+        .iter_mut()
+        .flat_map(|doc| doc.messages.iter_mut())
+        .flat_map(|msg| msg.attachments.iter_mut())
+        .zip(reasons)
+    {
+        if att.missing_reason.as_deref() == Some("file_missing") {
+            missing += 1;
+            if reason.is_some() {
+                att.missing_reason = reason;
+            }
+        }
+    }
+    if missing > 0 {
+        report.bump(ATTACHMENTS_MISSING, missing);
+    }
+    Ok(())
 }
 
 /// Read every conversation in an SMS Backup & Restore export, staging its
@@ -220,6 +312,7 @@ fn read_artifact(path: &Path, format: OutputFormat) -> Result<ConversationDocume
         OutputFormat::Mbox => read_conversation_mbox(path),
         OutputFormat::Eml => read_conversation_eml_dir(path),
         OutputFormat::Xml => unreachable!("XML handled above"),
+        OutputFormat::SmsBackupPlus => unreachable!("never detected as an input"),
     }
 }
 
@@ -249,7 +342,7 @@ fn detect_ir_export(input_dir: &Path) -> Result<DetectedExport> {
                     Some(OutputFormat::Xml)
                 }
                 "json" if looks_like_ir_json(&path)? => Some(OutputFormat::Json),
-                "jsonl" | "ndjson" if looks_like_ir_jsonl(&path)? => Some(OutputFormat::Jsonl),
+                "jsonl" if looks_like_ir_jsonl(&path)? => Some(OutputFormat::Jsonl),
                 "csv" if looks_like_ir_csv(&path)? => Some(OutputFormat::Csv),
                 "mbox" => Some(OutputFormat::Mbox),
                 _ => None,
@@ -277,6 +370,7 @@ fn detect_ir_export(input_dir: &Path) -> Result<DetectedExport> {
         OutputFormat::Csv => 3,
         OutputFormat::Mbox => 4,
         OutputFormat::Eml => 5,
+        OutputFormat::SmsBackupPlus => 6,
     });
 
     match present.as_slice() {
@@ -324,7 +418,7 @@ fn list_artifacts(input_dir: &Path, format: OutputFormat) -> Result<Vec<PathBuf>
                     && path
                         .extension()
                         .and_then(|extension| extension.to_str())
-                        .is_some_and(|extension| extension == "jsonl" || extension == "ndjson")
+                        .is_some_and(|extension| extension == "jsonl")
                     && looks_like_ir_jsonl(&path)?
             }
             OutputFormat::Csv => {
@@ -337,6 +431,8 @@ fn list_artifacts(input_dir: &Path, format: OutputFormat) -> Result<Vec<PathBuf>
                     && path.extension().and_then(|extension| extension.to_str()) == Some("mbox")
             }
             OutputFormat::Eml => path.is_dir() && dir_has_eml(&path)?,
+            // Never detected as an input: its folders are found as `Eml`.
+            OutputFormat::SmsBackupPlus => false,
         };
         if matches {
             paths.push(path);

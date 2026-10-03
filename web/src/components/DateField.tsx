@@ -91,7 +91,7 @@ export default function DateField({
           </DateInput>
           <Button
             aria-label={`Pick ${pickLabel}`}
-            className="ml-1 flex shrink-0 items-center justify-center rounded border-0 bg-transparent p-0.5 text-muted outline-none hover:text-accent"
+            className="ml-1 flex shrink-0 items-center justify-center rounded border-0 bg-transparent p-0.5 text-muted outline-none hover:text-accent focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
           >
             <CalendarIcon />
           </Button>
@@ -105,14 +105,14 @@ export default function DateField({
               <div className="flex items-center justify-between pb-2">
                 <Button
                   slot="previous"
-                  className="flex h-6 w-6 items-center justify-center rounded border-0 bg-transparent text-muted outline-none hover:text-accent"
+                  className="flex h-6 w-6 items-center justify-center rounded border-0 bg-transparent text-muted outline-none hover:text-accent focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
                 >
                   ‹
                 </Button>
                 <CalendarHeading className="text-[0.875rem] font-medium text-text" />
                 <Button
                   slot="next"
-                  className="flex h-6 w-6 items-center justify-center rounded border-0 bg-transparent text-muted outline-none hover:text-accent"
+                  className="flex h-6 w-6 items-center justify-center rounded border-0 bg-transparent text-muted outline-none hover:text-accent focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
                 >
                   ›
                 </Button>

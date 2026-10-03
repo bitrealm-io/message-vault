@@ -53,9 +53,7 @@ const token: ApiTokenItem = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  list.mockResolvedValue({ items: [token] } as unknown as Awaited<
-    ReturnType<typeof listApiTokens>
-  >);
+  list.mockResolvedValue([{ ...token, disabled: false }]);
   client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: 0 } },
   });

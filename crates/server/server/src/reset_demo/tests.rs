@@ -125,7 +125,7 @@ async fn close_test_db(pool: sqlx::SqlitePool, conn: sqlx::pool::PoolConnection<
 }
 
 #[tokio::test]
-async fn the_demo_account_may_export_and_not_import_or_delete() {
+async fn the_demo_account_row_says_the_grant_its_id_gives() {
     let temp = tempfile::tempdir().expect("create test directory");
     let db = temp.path().join("messagecrate.db");
     let (pool, mut conn) = test_db(&db).await;
@@ -153,7 +153,7 @@ async fn the_demo_account_may_export_and_not_import_or_delete() {
     assert_eq!(
         (import, export, delete),
         (0, 1, 0),
-        "anyone can enter the Demo Account, so it may export and may not import or delete for good"
+        "the seeded row says the grant the server takes from the Demo Account's id (DEMO_ACCOUNT_PERMISSIONS)"
     );
 
     close_test_db(pool, conn).await;
@@ -1825,6 +1825,29 @@ async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
         hidden, 1,
         "the overlap copy is hidden as a duplicate of the iMessage message"
     );
+    // Issue #1107: each of the build's runs has its Contact Group and its
+    // Saved Search, as a run a person imports does.
+    let runs: Vec<(String, i64, i64)> = sqlx::query_as(
+        "SELECT i.source,
+                (SELECT COUNT(*) FROM contact_groups g
+                 WHERE g.account_id = i.account_id AND g.kind = 'import'
+                   AND g.name = i.source || ' import ' || substr(i.finished_at, 1, 10)),
+                (SELECT COUNT(*) FROM saved_searches s
+                 WHERE s.account_id = i.account_id AND s.query = 'import:#' || i.id)
+         FROM imports i WHERE i.account_id = $1 ORDER BY i.id",
+    )
+    .bind(DEMO_ACCOUNT_ID)
+    .fetch_all(&mut *conn)
+    .await
+    .expect("read the demo's runs");
+    let expected: Vec<(String, i64, i64)> = DEMO_IMPORT_SOURCES
+        .iter()
+        .map(|source| (source.source.to_string(), 1, 1))
+        .collect();
+    assert_eq!(
+        runs, expected,
+        "one Contact Group and one Saved Search per run"
+    );
     close_test_db(pool, conn).await;
 
     let pool = engine::open_pool_for_path(&db)
@@ -1936,13 +1959,47 @@ async fn a_database_created_empty_is_not_new() {
     let cfg = crate::open_db::fresh_config(temp.path());
     assert!(database_is_new(&cfg).await.expect("read before creating"));
 
-    OpenDb::open(cfg.clone())
+    OpenDb::create_or_open(cfg.clone())
         .await
         .expect("create the empty database")
         .close()
         .await;
 
     assert!(!database_is_new(&cfg).await.expect("read after creating"));
+}
+
+/// S7-3: another program's SQLite file at the configured path is not a new
+/// database, so `serve` never seeds a database and moves it over the file,
+/// and `reset-demo` refuses it by name. The file is left as it was.
+#[tokio::test]
+async fn another_programs_sqlite_file_is_not_new_and_reset_demo_refuses_it() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let mut cfg = crate::open_db::fresh_config(temp.path());
+    cfg.paths.db = temp.path().join("chat.db");
+    let pool = engine::open_pool_for_path(&cfg.paths.db)
+        .await
+        .expect("create another program's database");
+    sqlx::query("CREATE TABLE message (ROWID INTEGER PRIMARY KEY, text TEXT)")
+        .execute(&pool)
+        .await
+        .expect("create its table");
+    pool.close().await;
+    checkpoint_and_clean_sidecars(&cfg.paths.db, "in the test")
+        .await
+        .expect("fold the log into the file");
+    let before = fs::read(&cfg.paths.db).expect("read the file");
+
+    assert!(!database_is_new(&cfg).await.expect("read the file"));
+    let bundle = temp.path().join("bundle");
+    write_tiny_reset_bundle(&bundle);
+    let Err(err) = reset_prepared_bundle(&cfg, &bundle, DEMO_ACCOUNT_ID).await else {
+        panic!("reset-demo refuses another program's file");
+    };
+    let err = err.to_string();
+
+    assert!(err.contains("chat.db"), "{err}");
+    assert!(err.contains("not a Message Crate database"), "{err}");
+    assert_eq!(fs::read(&cfg.paths.db).expect("read the file"), before);
 }
 
 /// Seeding that fails partway leaves no half-built Demo Account: the first
@@ -1967,7 +2024,7 @@ async fn a_first_start_seed_that_fails_partway_leaves_no_demo_account() {
     assert_eq!(seeded, None);
     assert!(!seeding_path(&cfg.paths.db).exists());
     // `serve` then creates the database empty.
-    OpenDb::open(cfg.clone())
+    OpenDb::create_or_open(cfg.clone())
         .await
         .expect("create the empty database")
         .close()
@@ -2040,7 +2097,9 @@ async fn a_first_start_stopped_after_the_account_row_is_seeded_whole_by_the_next
 async fn the_next_start_removes_a_demo_account_whose_build_did_not_finish() {
     let temp = tempfile::tempdir().expect("create test directory");
     let cfg = crate::open_db::fresh_config(temp.path());
-    let opened = OpenDb::open(cfg.clone()).await.expect("open the database");
+    let opened = OpenDb::create_or_open(cfg.clone())
+        .await
+        .expect("open the database");
     build_demo_account_with(&cfg, &opened.db, |bundle| {
         write_tiny_reset_bundle(bundle);
         Ok(())
@@ -2128,7 +2187,9 @@ async fn another_account_writes_between_the_demo_builds_import_batches() {
     )
     .expect("write a second imessage conversation");
     let cfg = crate::open_db::fresh_config(temp.path());
-    let build = OpenDb::open(cfg.clone()).await.expect("open the database");
+    let build = OpenDb::create_or_open(cfg.clone())
+        .await
+        .expect("open the database");
     let other = {
         let mut conn = build.conn().await.expect("acquire");
         account_profile::insert_account(&mut conn, "someone", None, None)

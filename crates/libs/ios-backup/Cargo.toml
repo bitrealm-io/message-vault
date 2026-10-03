@@ -1,0 +1,38 @@
+[package]
+name = "ios-backup"
+version = "0.1.0"
+edition = "2024"
+license = "LicenseRef-FCL-1.0-ALv2"
+description = "Read an iPhone backup before an import: whether it is encrypted, which addresses the phone sent from, and one domain's files decrypted, through the imessage-reader helper process"
+repository = "https://github.com/messagecrate/message-crate"
+
+[lib]
+name = "ios_backup"
+path = "src/lib.rs"
+
+[features]
+# Fake `imessage-reader` programs for tests (Unix only), and a build of the
+# real one (every platform); the exporter's tests use them too.
+testutil = []
+
+# No GPL code here. Opening a backup's databases and decrypting its files is
+# the job of the `imessage-reader` program (crates/helpers/imessage-reader,
+# GPL-3.0-or-later), which this crate starts as a separate process. The two
+# share only the wire types in `imessage-reader-protocol` (MIT OR Apache-2.0).
+# Why: docs/adr/0014-gpl-code-only-behind-a-process-boundary.md.
+[dependencies]
+anyhow = { workspace = true }
+imessage-reader-protocol = { path = "../../helpers/imessage-reader-protocol" }
+message-crate-core = { path = "../../core/message-crate-core" }
+plist = "1.9.0"
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+
+[dev-dependencies]
+chat-db-fixture = { path = "../../helpers/chat-db-fixture" }
+# This crate's own integration tests build the real program through
+# `reader_build`, which the feature opens.
+ios-backup = { path = ".", features = ["testutil"] }
+
+[lints]
+workspace = true

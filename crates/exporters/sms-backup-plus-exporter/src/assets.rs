@@ -1,4 +1,4 @@
-//! Extract MIME attachment blobs from SMS Backup+ EML messages.
+//! Read the text and attachment blobs of SMS Backup+ EML messages.
 
 use crate::types::AttachmentBlob;
 use mailparse::{MailHeaderMap, ParsedMail};
@@ -75,68 +75,160 @@ fn walk_parts<'a>(mail: &'a ParsedMail<'a>, out: &mut Vec<&'a ParsedMail<'a>>) {
     }
 }
 
-/// Decode non-text MIME parts into attachment blobs.
-pub(crate) fn extract_attachments(
+/// The message text and attachments a mail's parts make.
+#[derive(Debug, Default)]
+pub(crate) struct MailBody {
+    /// The `text/plain` parts joined with a newline.
+    pub text: String,
+    /// Every other part with content.
+    pub attachments: Vec<AttachmentBlob>,
+    /// Parts dropped because their content could not be decoded.
+    pub unreadable_parts: u64,
+}
+
+/// What one leaf part holds, decoded once.
+enum Payload {
+    None,
+    Text(String),
+    Bytes(Vec<u8>),
+    Unreadable,
+}
+
+/// One leaf part's content: the decoded text of a `text/plain` part, with
+/// newlines normalized to `\n`, and the bytes of any other part.
+fn payload(part: &ParsedMail<'_>) -> Payload {
+    if mms_parts::is_text(&part.ctype.mimetype) {
+        return match part.get_body() {
+            Ok(body) => Payload::Text(body.replace("\r\n", "\n").replace('\r', "\n")),
+            Err(_) => Payload::Unreadable,
+        };
+    }
+    match part.get_body_raw() {
+        Ok(bytes) if bytes.is_empty() => Payload::None,
+        Ok(bytes) => Payload::Bytes(bytes),
+        Err(_) => Payload::Unreadable,
+    }
+}
+
+/// Every key a SMIL part may name a leaf part by: its file name, its name,
+/// its Content-ID and its Content-Location.
+fn part_keys(part: &ParsedMail<'_>) -> Vec<String> {
+    let disposition = part.get_content_disposition();
+    [
+        disposition.params.get("filename").cloned(),
+        disposition.params.get("name").cloned(),
+        part.ctype.params.get("name").cloned(),
+        part.headers.get_first_value("Content-ID"),
+        part.headers.get_first_value("Content-Location"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
+}
+
+/// The text and attachments of a mail, by the rules of [`mms_parts`]: every
+/// `text/plain` part is text, and every other part with content, a contact
+/// card included, is an attachment.
+///
+/// SMS Backup+ writes each part of an MMS as one MIME part, and the message
+/// body as `text/plain` on every mail: zero of 20,000 sampled carry a
+/// `text/html` part.
+pub(crate) fn extract_body(
     mail: &ParsedMail<'_>,
     timestamp_ms: f64,
     file_key: Option<&str>,
-) -> Vec<AttachmentBlob> {
+) -> MailBody {
+    let mut leaves = Vec::new();
+    walk_parts(mail, &mut leaves);
+    leaves.retain(|part| {
+        !part
+            .ctype
+            .mimetype
+            .to_ascii_lowercase()
+            .starts_with("multipart/")
+    });
+    let payloads: Vec<Payload> = leaves.iter().map(|part| payload(part)).collect();
+    let keys: Vec<Vec<String>> = leaves.iter().map(|part| part_keys(part)).collect();
+    let shaped: Vec<mms_parts::Part<'_>> = leaves
+        .iter()
+        .zip(&payloads)
+        .zip(&keys)
+        .map(|((part, payload), keys)| mms_parts::Part {
+            content_type: &part.ctype.mimetype,
+            keys: keys.iter().map(String::as_str).collect(),
+            content: match payload {
+                Payload::None => mms_parts::Content::None,
+                Payload::Text(text) => mms_parts::Content::Text(text.clone()),
+                Payload::Bytes(bytes) => mms_parts::Content::Bytes(bytes),
+                Payload::Unreadable => mms_parts::Content::Unreadable,
+            },
+        })
+        .collect();
+    let body = mms_parts::body_of(&shaped);
+
     // UTC, so the name is the same on every machine that exports this mail.
     let date_prefix = attachment_date_prefix((timestamp_ms / 1000.0) as i64);
     let name_prefix = file_key.map(|k| format!("{k}_")).unwrap_or_default();
+    let prefix = format!("{name_prefix}{date_prefix}");
+    let attachments = body
+        .attachments
+        .iter()
+        .zip(1u32..)
+        .filter_map(|(&index, seq)| {
+            let data = match &payloads[index] {
+                Payload::Bytes(bytes) => bytes.clone(),
+                Payload::Text(text) => text.clone().into_bytes(),
+                Payload::None | Payload::Unreadable => return None,
+            };
+            Some(attachment_blob(leaves[index], data, &prefix, seq))
+        })
+        .collect();
+    MailBody {
+        text: body.text,
+        attachments,
+        unreadable_parts: body.unreadable.len() as u64,
+    }
+}
 
-    let mut parts = Vec::new();
-    walk_parts(mail, &mut parts);
-
-    let mut out = Vec::new();
-    let mut seq = 0u32;
-    for part in parts {
-        let ctype = part.ctype.mimetype.to_ascii_lowercase();
-        if ctype.starts_with("multipart/") || ctype.starts_with("text/") {
-            continue;
-        }
-        let payload = match part.get_body_raw() {
-            Ok(p) if !p.is_empty() => p,
-            _ => continue,
-        };
-        seq += 1;
-        let filename = part
-            .get_content_disposition()
-            .params
-            .get("filename")
-            .cloned()
-            .or_else(|| part.headers.get_first_value("Content-Type").and(None));
-        // Prefer Content-Disposition filename
-        let original = filename.as_deref().and_then(valid_filename).or_else(|| {
-            part.get_content_disposition()
+/// One attachment blob. `prefix` is the file key and the date, and `seq` the
+/// attachment's position, which names a part that has no file name.
+fn attachment_blob(part: &ParsedMail<'_>, data: Vec<u8>, prefix: &str, seq: u32) -> AttachmentBlob {
+    let ctype = part.ctype.mimetype.to_ascii_lowercase();
+    let disposition = part.get_content_disposition();
+    let original = disposition
+        .params
+        .get("filename")
+        .and_then(|n| valid_filename(n))
+        .or_else(|| {
+            disposition
+                .params
+                .get("name")
+                .and_then(|n| valid_filename(n))
+        })
+        .or_else(|| {
+            part.ctype
                 .params
                 .get("name")
                 .and_then(|n| valid_filename(n))
         });
-        let ext = extension_for(&ctype, original.as_deref());
-        // Content-addressed prefix: re-exports with different bytes get a new path
-        // instead of leaving stale attachment files under the old name.
-        let digest_hex = hex::encode(Sha256::digest(&payload));
-        let digest_prefix = digest_prefix(&digest_hex);
-        let out_name = if let Some(ref orig) = original {
-            format!(
-                "{name_prefix}{date_prefix}_{digest_prefix}_{}",
-                safe_basename(orig)
-            )
-        } else {
-            format!("{name_prefix}{date_prefix}_{digest_prefix}_{seq}{ext}")
-        };
-        out.push(AttachmentBlob {
-            filename: out_name,
-            original_name: original,
-            mime_type: media::mime_for_ext(&ext)
-                .map(|s| s.to_string())
-                .or(if ctype.is_empty() { None } else { Some(ctype) }),
-            digest_hex,
-            data: payload,
-        });
+    let ext = extension_for(&ctype, original.as_deref());
+    // Content-addressed prefix: re-exports with different bytes get a new path
+    // instead of leaving stale attachment files under the old name.
+    let digest_hex = hex::encode(Sha256::digest(&data));
+    let digest_prefix = digest_prefix(&digest_hex);
+    let filename = match &original {
+        Some(orig) => format!("{prefix}_{digest_prefix}_{}", safe_basename(orig)),
+        None => format!("{prefix}_{digest_prefix}_{seq}{ext}"),
+    };
+    AttachmentBlob {
+        filename,
+        original_name: original,
+        mime_type: media::mime_for_ext(&ext)
+            .map(|s| s.to_string())
+            .or(if ctype.is_empty() { None } else { Some(ctype) }),
+        digest_hex,
+        data,
     }
-    out
 }
 
 #[cfg(test)]
@@ -187,7 +279,7 @@ mod tests {
             "--b--\r\n",
         );
         let mail = mailparse::parse_mail(raw.as_bytes()).expect("parse");
-        let blobs = extract_attachments(&mail, 1_710_547_199_000.0, Some("abc"));
+        let blobs = extract_body(&mail, 1_710_547_199_000.0, Some("abc")).attachments;
         assert_eq!(blobs.len(), 1);
         assert!(
             blobs[0].filename.starts_with("abc_20240315_235959_"),

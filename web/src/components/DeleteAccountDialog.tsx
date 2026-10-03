@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Button from "./Button";
 import ModalShell, { DialogError } from "./ModalShell";
+import PlainButton from "./PlainButton";
 
 /**
  * Confirms an account deleting itself. `hasPassword` is the account's
@@ -73,21 +74,20 @@ function DeleteAccountForm({
 
   return (
     <>
-      <button
-        type="button"
+      <PlainButton
         aria-label="Close"
-        disabled={deleting}
-        onClick={onClose}
+        isDisabled={deleting}
+        onPress={onClose}
         className="absolute top-3 right-3 cursor-pointer border-none bg-transparent text-[1.25rem] leading-none text-muted disabled:cursor-not-allowed"
       >
         ×
-      </button>
+      </PlainButton>
 
       <h2 className="mb-2 pr-6 text-[1rem] font-semibold text-text">Delete your account?</h2>
 
       <p className="mt-3 text-[0.875rem] leading-relaxed text-muted">
-        This cannot be undone. Your messages, contacts, group chats, profile, and attachments will
-        be permanently deleted.
+        This cannot be undone. Your messages, contacts, group conversations, profile, and
+        attachments will be permanently deleted.
       </p>
 
       <label className="mt-5 block">

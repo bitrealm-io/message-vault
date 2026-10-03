@@ -1,6 +1,7 @@
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
-import { Button, Tag, TagGroup, TagList } from "react-aria-components";
+import { Tag, TagGroup, TagList } from "react-aria-components";
 import { commitPhoneTokens, removePhoneToken } from "../lib/phoneTokens";
+import PlainButton from "./PlainButton";
 import { textInputClassName } from "./TextField";
 
 export type PhoneTokenFieldHandle = {
@@ -78,16 +79,16 @@ const PhoneTokenField = forwardRef<PhoneTokenFieldHandle, PhoneTokenFieldProps>(
                 key={phone}
                 id={phone}
                 textValue={phone}
-                className="inline-flex items-center gap-1 rounded-lg border border-border bg-panel px-2 py-0.5 text-[0.8125rem] text-text outline-none data-[selected]:border-accent"
+                className="inline-flex items-center gap-1 rounded-lg border border-border bg-panel px-2 py-0.5 text-[0.8125rem] text-text outline-none focus-visible:ring-2 focus-visible:ring-accent data-[selected]:border-accent"
               >
                 {phone}
-                <Button
+                <PlainButton
                   slot="remove"
                   className="cursor-pointer border-0 bg-transparent p-0 text-muted hover:text-text"
                   aria-label={`Remove ${phone}`}
                 >
                   ×
-                </Button>
+                </PlainButton>
               </Tag>
             ))}
           </TagList>

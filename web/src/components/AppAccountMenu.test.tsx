@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -95,5 +95,18 @@ describe("AppAccountMenu", () => {
     await user.click(screen.getByRole("menuitem", { name: "Log out" }));
     expect(authState.logout).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("opens from the keyboard and moves to an item by its first letter", async () => {
+    const user = userEvent.setup();
+    profileState.profile = { username: "ada" };
+    renderMenu();
+
+    act(() => screen.getByRole("button", { name: "Account menu" }).focus());
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("menuitem", { name: "Settings" })).toHaveFocus();
+
+    await user.keyboard("l");
+    expect(screen.getByRole("menuitem", { name: "Log out" })).toHaveFocus();
   });
 });

@@ -134,7 +134,8 @@ Messages: decrypt every file of one backup domain into a folder the app
 names (#941). The WhatsApp importer uses it for an encrypted iPhone backup,
 because wtsexporter asks for the backup password on a terminal and takes it
 no other way. The decrypting stays on the GPL side of the boundary; the
-WhatsApp importer only starts the program and reads the files it wrote.
+WhatsApp importer only starts the program, through `ios-backup` (below), and
+reads the files it wrote.
 
 `crates/helpers/imessage-reader-protocol` is the interface: the serde types
 for the request the app writes and the events the reader answers with, one
@@ -149,19 +150,29 @@ nothing else, so it carries no GPL code into the exporter's test binary, and
 it is `MIT OR Apache-2.0` for the same reason the protocol crate is. It is a
 dev-dependency only; no shipped binary links it.
 
+`crates/libs/ios-backup` is FCL and is the one crate that starts the reader.
+Its `Helper` finds the program, writes the request, relays progress lines,
+and kills the program when dropped; its `ScratchDir` is the folder one
+request decrypts into. It also holds what is asked of an iPhone backup
+itself, which several sources read: whether it is encrypted, the addresses
+its device sent from, and one domain's files decrypted for the WhatsApp
+importer. `cargo tree -p ios-backup` shows no GPL crate.
+
 `crates/exporters/imessage-ir-exporter` stays FCL. It validates the options,
-starts the reader, relays its progress lines and cancel, and turns the
-records it streams into the shared conversation structure the writers
+starts the reader through `ios_backup::Helper`, relays its cancel, and turns
+the records it streams into the shared conversation structure the writers
 consume. `cargo tree -p imessage-ir-exporter` shows no GPL crate.
 
 The desktop app ships the reader as a Tauri `externalBin`.
 `src-tauri/build.rs` builds it from the workspace into `target/sidecar/` and
 copies it to `src-tauri/binaries/imessage-reader-<target triple>`, where
 `tauri-build` picks it up: beside the app binary for `cargo tauri dev`, and
-inside every installer for `cargo tauri build`. The app finds it beside its
-own executable at run time (`imessage_ir_exporter::helper::locate`), then in
-`MESSAGE_CRATE_BIN`, then on `PATH`; `MESSAGE_CRATE_IMESSAGE_READER` names
-one file outright. The Docker image is unaffected, because the server never
+inside every installer for `cargo tauri build`. The app finds it in two
+places only (`ios-backup/src/helper.rs`, `locate`): the file
+`MESSAGE_CRATE_IMESSAGE_READER` names, else beside its own executable.
+`MESSAGE_CRATE_BIN` and `PATH` are not searched, because the reader is built
+from this repository and shipped in the installer, not installed as a tool.
+The Docker image is unaffected, because the server never
 links an exporter.
 
 ### What we ship and what we owe

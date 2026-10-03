@@ -61,11 +61,11 @@ describe("recentSearches", () => {
 
   it("keeps each bar's history separate", () => {
     pushRecentSearch("contact", "alice");
-    pushRecentSearch("message", "handle:+15555550100");
+    pushRecentSearch("message", "identity:+15555550100");
     pushRecentSearch("trash", "birthday");
 
     expect(loadRecentSearches("contact")).toEqual(["alice"]);
-    expect(loadRecentSearches("message")).toEqual(["handle:+15555550100"]);
+    expect(loadRecentSearches("message")).toEqual(["identity:+15555550100"]);
     expect(loadRecentSearches("trash")).toEqual(["birthday"]);
 
     clearRecentSearches("message");

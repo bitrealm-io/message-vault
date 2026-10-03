@@ -1,11 +1,11 @@
 //! Find, start, and talk to the `imessage-reader` program.
 //!
-//! The program is found the way `ffmpeg` is in `crates/libs/media`: an
-//! explicit environment variable first, then beside this executable, then
-//! `MESSAGE_CRATE_BIN`, then `PATH`. The desktop bundle puts it beside the
-//! app (`externalBin` in `src-tauri/tauri.conf.json`), so a person never sets
-//! anything. `MESSAGE_CRATE_IMESSAGE_READER` names one file outright, for a
-//! build that keeps the program somewhere else.
+//! The program is found in two places only: the file
+//! `MESSAGE_CRATE_IMESSAGE_READER` names, else beside this executable. The
+//! desktop bundle puts it beside the app (`externalBin` in
+//! `src-tauri/tauri.conf.json`), so a person never sets anything. The
+//! variable is for a build that keeps the program somewhere else, such as
+//! the integration tests, which run from `target/<profile>/deps/`.
 //!
 //! One [`Helper`] is one process and one request. It relays the program's
 //! log lines to the run's [`LogSink`] and its counts to the run's
@@ -14,7 +14,6 @@
 
 use std::{
     env,
-    ffi::OsString,
     io::{BufRead, BufReader, Lines, Write},
     path::{Path, PathBuf},
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
@@ -39,21 +38,17 @@ fn executable_name() -> String {
     }
 }
 
-/// Locate `imessage-reader`: `MESSAGE_CRATE_IMESSAGE_READER`, then beside
-/// this executable, then the folder above it (an integration test runs from
-/// `target/<profile>/deps/` while the program sits in `target/<profile>/`),
-/// then `MESSAGE_CRATE_BIN`, then `PATH`.
+/// Locate `imessage-reader`: `MESSAGE_CRATE_IMESSAGE_READER`, else beside
+/// this executable.
 ///
 /// # Errors
 ///
-/// Returns an error naming every path tried when no file is found.
+/// Returns an error naming the path tried when no file is found.
 pub(crate) fn locate() -> Result<PathBuf> {
     let current = env::current_exe().ok();
     locate_in(&Places {
         explicit: env::var_os(HELPER_PATH_ENV).map(PathBuf::from),
         exe_dir: current.as_deref().and_then(Path::parent),
-        io_bin: env::var_os("MESSAGE_CRATE_BIN").map(PathBuf::from),
-        path: env::var_os("PATH"),
     })
 }
 
@@ -64,10 +59,6 @@ struct Places<'a> {
     explicit: Option<PathBuf>,
     /// The folder of the running executable.
     exe_dir: Option<&'a Path>,
-    /// `MESSAGE_CRATE_BIN`.
-    io_bin: Option<PathBuf>,
-    /// `PATH`.
-    path: Option<OsString>,
 }
 
 /// The search [`locate`] runs, over the places given.
@@ -83,50 +74,27 @@ fn locate_in(places: &Places<'_>) -> Result<PathBuf> {
     }
 
     let executable = executable_name();
-    let mut tried = Vec::new();
-
-    if let Some(dir) = places.exe_dir {
-        let beside = dir.join(&executable);
-        let above = dir.parent().map(|p| p.join(&executable));
-        for candidate in std::iter::once(beside).chain(above) {
-            if candidate.is_file() {
-                return Ok(candidate);
-            }
-            tried.push(candidate);
-        }
+    let Some(dir) = places.exe_dir else {
+        bail!(
+            "Could not find {executable}, the program that reads Apple Messages: \
+             the folder of this program is unknown, and {HELPER_PATH_ENV} is not set."
+        );
+    };
+    let beside = dir.join(&executable);
+    if beside.is_file() {
+        return Ok(beside);
     }
-
-    if let Some(extra) = &places.io_bin {
-        let candidate = extra.join(&executable);
-        if candidate.is_file() {
-            return Ok(candidate);
-        }
-        tried.push(candidate);
-    }
-
-    if let Some(paths) = &places.path {
-        for directory in env::split_paths(paths) {
-            let candidate = directory.join(&executable);
-            if candidate.is_file() {
-                return Ok(candidate);
-            }
-        }
-    }
-
     bail!(
         "Could not find {executable}, the program that reads Apple Messages. \
          The desktop installer places it beside the app; a source build gets it from \
-         `cargo build -p imessage-reader`. Tried: {}",
-        tried
-            .iter()
-            .map(|p| p.display().to_string())
-            .collect::<Vec<_>>()
-            .join(", ")
+         `cargo build -p imessage-reader`, and {HELPER_PATH_ENV} names it anywhere else. \
+         Tried: {}",
+        beside.display()
     )
 }
 
 /// A running `imessage-reader` serving one request.
-pub(crate) struct Helper {
+pub struct Helper {
     child: Child,
     stdin: Option<ChildStdin>,
     stdout: Lines<BufReader<ChildStdout>>,
@@ -351,4 +319,4 @@ fn tail(stderr: &str) -> String {
 }
 
 #[cfg(test)]
-pub(crate) mod tests;
+mod tests;

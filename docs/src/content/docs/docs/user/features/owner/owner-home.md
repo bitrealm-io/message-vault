@@ -155,7 +155,10 @@ The Owner doesn't see the old password and isn't asked for it.
 Each button asks for confirmation first, and the confirmation states how many messages will be deleted.
 Neither deletion can be undone.
 
-The Owner doesn't see an account's API tokens. Only the account's holder does.
+**API Tokens** lists the account's API Tokens, with each token's name, permissions, and when it was created, last used, and expires.
+The token itself isn't shown, not even in part.
+The trash button on a row revokes that token after a confirmation, and programs using it stop working at once.
+The Owner can't add or rename a token, because a token is the account's own credential.
 
 #### Profile
 

@@ -1,3 +1,5 @@
+/** The column header row above the scrolled rows. */
+export const HEADER_ROW_HEIGHT = 36;
 /** Collapsed row: file + step + two lines of error text. */
 export const COLLAPSED_ROW_HEIGHT = 56;
 export const MAX_VISIBLE_ROWS = 14;

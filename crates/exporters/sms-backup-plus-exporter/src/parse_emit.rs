@@ -2,11 +2,10 @@
 //! [`ParsedMessage`]s in parallel chunks.
 
 use crate::emit::is_eml_file;
-use crate::flat_eml::{MailHeaders, is_flat_sms_eml, parse_flat_eml_mail};
+use crate::flat_eml::{MailHeaders, Owner, is_flat_sms_eml, parse_flat_eml_mail};
 use crate::types::ParsedMessage;
 use anyhow::{Result, bail};
 use message_crate_core::CancelFlag;
-use phone::OwnerHandleSet;
 use std::path::{Path, PathBuf};
 
 /// Collect `.eml` paths from files and directories, skipping `duplicate` /
@@ -20,10 +19,6 @@ pub(super) fn collect_eml_paths<P: AsRef<Path>>(
     inputs: &[P],
     cancel: Option<&CancelFlag>,
 ) -> Result<Vec<PathBuf>> {
-    if inputs.is_empty() {
-        bail!("at least one --input path is required");
-    }
-
     let mut paths = Vec::new();
     for input in inputs {
         message_crate_core::check_cancel(cancel)?;
@@ -92,12 +87,7 @@ pub(super) enum ParsedEmlKind {
 }
 
 /// Read one EML: a single SMS Backup+ message, or something to skip.
-pub(super) fn parse_one_eml(
-    eml_path: &Path,
-    rel_path: String,
-    owners: &OwnerHandleSet,
-    owner_emails_lc: &[String],
-) -> ParsedEmlKind {
+pub(super) fn parse_one_eml(eml_path: &Path, rel_path: String, owner: &Owner) -> ParsedEmlKind {
     let bytes = match std::fs::read(eml_path) {
         Ok(b) => b,
         Err(err) => {
@@ -115,7 +105,7 @@ pub(super) fn parse_one_eml(
     if headers.is_call_log() {
         ParsedEmlKind::CallLog
     } else if is_flat_sms_eml(&headers) {
-        match parse_flat_eml_mail(eml_path, &mail, &headers, owners, owner_emails_lc) {
+        match parse_flat_eml_mail(eml_path, &mail, &headers, owner) {
             Some(mut msg) => {
                 msg.eml_path = rel_path;
                 ParsedEmlKind::Flat { msg: Box::new(msg) }

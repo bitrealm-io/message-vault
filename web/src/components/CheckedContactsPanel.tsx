@@ -266,7 +266,10 @@ export default function CheckedContactsPanel({
             className="[&_tr]:border-b [&_tr]:border-border"
           >
             {(row) => (
-              <Row id={row.id} className="outline-none">
+              <Row
+                id={row.id}
+                className="outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+              >
                 <Cell className={`${tdClass} !text-left`}>
                   <span className="min-w-0 truncate font-medium">
                     <ContactLabel name={row.name} addresses={row.addresses} />

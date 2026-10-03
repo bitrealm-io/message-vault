@@ -108,8 +108,11 @@ pub struct Contact {
 /// Body for `POST /v1/contacts/summaries`.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct SummarizeContactsRequest {
-    /// Contact ids to summarize; an empty list covers every contact.
-    #[serde(default)]
+    /// Contact ids to summarize: at least one, and at most 500. Every
+    /// contact is listed by `GET /v1/contacts`.
+    // `max_items` takes only a literal; a test holds it to
+    // `MAX_CONTACT_SUMMARY_IDS`.
+    #[schema(min_items = 1, max_items = 500)]
     pub ids: Vec<i64>,
 }
 
@@ -263,6 +266,9 @@ pub(crate) async fn summarize_contacts(
     FullAccess(auth): FullAccess,
     Json(body): Json<SummarizeContactsRequest>,
 ) -> Result<Json<Page<ContactSelectionSummary>>, ApiError> {
+    if body.ids.is_empty() {
+        return Err(ApiError::validation("ids must name at least one contact"));
+    }
     if body.ids.len() > MAX_CONTACT_SUMMARY_IDS {
         return Err(ApiError::validation(format!(
             "at most {MAX_CONTACT_SUMMARY_IDS} contact ids"
@@ -316,14 +322,17 @@ pub(crate) async fn update_contact(
     Json(body): Json<UpdateContactRequest>,
 ) -> Result<Json<Contact>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    match mutate_contact(&mut conn, auth.account_id, contact_id, &body).await {
-        Ok(false) => Err(ApiError::NotFound("contact not found".into())),
-        Err(e) => Err(e.into()),
-        Ok(true) => get_contact_detail(&mut conn, auth.account_id, contact_id)
-            .await?
-            .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("contact missing after mutate")))
-            .map(Json),
+    // One write transaction for the edit and the contact it answers with, so
+    // a contact deleted meanwhile is `404`, never a half-applied edit.
+    let mut tx = crate::db::begin_write(&mut conn).await?;
+    if !mutate_contact(&mut tx, auth.account_id, contact_id, &body).await? {
+        return Err(ApiError::NotFound("contact not found".into()));
     }
+    let contact = get_contact_detail(&mut tx, auth.account_id, contact_id)
+        .await?
+        .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("contact missing after mutate")))?;
+    tx.commit().await?;
+    Ok(Json(contact))
 }
 
 /// Put a contact in the trash. Idempotent: trashing an already-trashed

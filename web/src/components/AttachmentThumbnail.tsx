@@ -2,6 +2,7 @@ import { useAssetObjectUrl } from "../hooks/useAssetObjectUrl";
 import { hasPreview, shownMimeType } from "../lib/attachmentPreview";
 import { missingAttachmentChipLabel } from "../lib/missingAttachmentLabel";
 import type { MessageAttachment } from "../lib/types";
+import PlainButton from "./PlainButton";
 
 export default function AttachmentThumbnail({
   attachment,
@@ -52,24 +53,23 @@ export default function AttachmentThumbnail({
 
   if (loading || !url) {
     return (
-      <div className="mt-1.5 flex h-[120px] max-w-[300px] items-center justify-center rounded-md bg-elevated text-[0.75rem] text-muted">
+      <div className="mt-1.5 flex h-[120px] max-w-[280px] items-center justify-center rounded-md bg-elevated text-[0.75rem] text-muted">
         Loading…
       </div>
     );
   }
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="mt-1.5 max-w-[300px] cursor-pointer overflow-hidden rounded-md border border-border bg-transparent p-0 text-left"
+    <PlainButton
+      onPress={onClick}
+      className="mt-1.5 block max-w-[280px] cursor-pointer overflow-hidden rounded-md border border-border bg-transparent p-0 text-left"
     >
       <img
         src={url}
         alt={attachment.original_name || "attachment"}
         loading="lazy"
-        className="block h-auto w-full"
+        className="block h-auto max-h-[280px] w-auto max-w-[280px]"
       />
-    </button>
+    </PlainButton>
   );
 }

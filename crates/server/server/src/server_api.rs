@@ -127,6 +127,7 @@ pub async fn get_server(State(state): State<AppState>) -> Result<Json<ServerInfo
             headers(("Location" = String, description = "`/v1/session`, the Session the claim made"))
         ),
         crate::problem::openapi::StateConflict,
+        crate::problem::openapi::UsernameTaken,
         crate::problem::openapi::RateLimited
     )
 )]
@@ -140,9 +141,10 @@ pub async fn claim_server(
     let password_hash = crate::credentials::hash_owner_password(&req.password)?;
 
     let mut conn = state.db.acquire().await?;
-    // The claim check and the insert share a transaction: two requests racing
-    // for an unclaimed Message Crate must not both believe they won it.
-    let mut tx = sqlx::Connection::begin(&mut *conn).await?;
+    // The claim check and the insert share a write transaction: two requests
+    // racing for an unclaimed Message Crate must not both believe they won
+    // it, and the second waits for the first and then finds the owner.
+    let mut tx = crate::db::begin_write(&mut conn).await?;
     if account_profile::is_claimed(&mut tx).await? {
         return Err(ApiError::StateConflict(
             "this Message Crate already has an owner".into(),

@@ -281,7 +281,6 @@ pub fn run(cfg: &PushConfig, progress: Option<&mut ProgressFn<'_>>) -> Result<Pu
         messages_inserted: accounting.inserted,
         messages_deduped: accounting.deduped,
         messages_failed: accounting.failed,
-        messages: counted.messages,
         assets_uploaded: assets.uploaded,
         assets_skipped: assets.skipped,
         assets_bytes: assets.bytes,

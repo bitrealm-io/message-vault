@@ -7,7 +7,7 @@
 use axum::extract::State;
 use axum::http::HeaderMap;
 use serde::{Deserialize, Serialize};
-use sqlx::{Connection, SqliteConnection, SqlitePool};
+use sqlx::{SqliteConnection, SqlitePool};
 
 use crate::credentials::{
     MAX_PASSWORD_BYTES, check_auth_rate_limit, dummy_password_hash, normalize_username,
@@ -52,7 +52,7 @@ impl CreateSessionResponse {
         let username = account_profile::username_for_account(conn, account_id)
             .await?
             .unwrap_or_else(|| account_id.to_string());
-        let mut tx = conn.begin().await?;
+        let mut tx = crate::db::begin_write(conn).await?;
         let token = session_tokens::open_session(&mut tx, account_id, &username, app).await?;
         account_profile::record_login(&mut tx, account_id).await?;
         tx.commit().await?;
@@ -68,8 +68,7 @@ impl CreateSessionResponse {
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct Session {
     sources: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    account_id: Option<i64>,
+    account_id: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     username: Option<String>,
 }
@@ -95,7 +94,7 @@ pub(crate) async fn get_session(
     let sources = list_account_sources(&state.db, account_id).await?;
     Ok(Json(Session {
         sources,
-        account_id: Some(account_id),
+        account_id,
         username,
     }))
 }

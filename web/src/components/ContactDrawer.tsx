@@ -14,6 +14,7 @@ import {
   previewHandleStubRows,
 } from "./contactDrawer/contactDrawerTypes";
 import { PencilIcon } from "./icons";
+import PlainButton from "./PlainButton";
 
 /**
  * Overlay mode only: dock to the right edge of the list column.
@@ -276,6 +277,8 @@ function OneContactDrawer({
       style={panelStyle}
     >
       <ContactDrawerHandles
+        // A new contact starts with its dialogs closed and no error left from the last one.
+        key={contactId}
         contactId={contactId}
         handleRows={handleRows}
         conversations={
@@ -349,7 +352,7 @@ function OneContactDrawer({
             )}
             <div className="mb-1.5">
               <span className="text-[0.75rem] font-semibold uppercase tracking-[0.04em] text-muted">
-                Contact groups
+                Contact Groups
               </span>
             </div>
             <div className="flex min-h-6 flex-wrap items-center gap-1.5">
@@ -367,7 +370,9 @@ function OneContactDrawer({
                   </span>
                 ))
               ) : (
-                <span className="py-0.5 text-[0.75rem] leading-4 text-muted">No groups</span>
+                <span className="py-0.5 text-[0.75rem] leading-4 text-muted">
+                  No Contact Groups
+                </span>
               )}
             </div>
           </div>
@@ -382,14 +387,13 @@ function OneContactDrawer({
             >
               {trashContact.isPending ? "Moving to trash…" : "Move to trash"}
             </Button>
-            <button
-              type="button"
+            <PlainButton
               aria-label="Close"
-              onClick={onClose}
-              className="cursor-pointer border-none bg-transparent p-0 text-[1.25rem] leading-none text-muted outline-none hover:text-text"
+              onPress={onClose}
+              className="cursor-pointer border-none bg-transparent p-0 text-[1.25rem] leading-none text-muted outline-none hover:text-text focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
             >
               ×
-            </button>
+            </PlainButton>
           </div>
         }
       />
@@ -420,14 +424,13 @@ function ContactLoadFailed({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
         <h2 className="m-0 min-w-0 truncate text-[1.125rem] font-semibold">{name}</h2>
-        <button
-          type="button"
+        <PlainButton
           aria-label="Close"
-          onClick={onClose}
-          className="cursor-pointer border-none bg-transparent p-0 text-[1.25rem] leading-none text-muted outline-none hover:text-text"
+          onPress={onClose}
+          className="cursor-pointer border-none bg-transparent p-0 text-[1.25rem] leading-none text-muted outline-none hover:text-text focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
         >
           ×
-        </button>
+        </PlainButton>
       </div>
       <div
         role="alert"

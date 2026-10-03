@@ -175,8 +175,9 @@ pub struct StagingMessage<'a> {
     pub account_id: i64,
     /// Backup family that produced the row.
     pub source: &'a str,
-    /// Source-native message id, when the export had one.
-    pub guid: Option<&'a str>,
+    /// The message's id from the export; the import refuses a message
+    /// without one.
+    pub guid: &'a str,
     /// RFC 3339 UTC instant the message was sent.
     pub timestamp: &'a str,
     /// 1 when the account holder sent it.
@@ -670,9 +671,6 @@ const STAGED_MESSAGE_IDS: &str = r"
 ";
 
 const IN_ID_RANGE: &str = " AND sm.id > $2 AND sm.id <= $3 ORDER BY sm.id";
-const WITH_GUID_IN_ID_RANGE: &str =
-    " AND sm.guid IS NOT NULL AND sm.guid != '' AND sm.id > $2 AND sm.id <= $3 ORDER BY sm.id";
-const WITHOUT_GUID: &str = " AND (sm.guid IS NULL OR sm.guid = '') ORDER BY sm.id";
 
 /// Insert every staged message with an id in `lo + 1..=hi` (replace mode:
 /// each is new). Returns how many were inserted.
@@ -696,9 +694,10 @@ pub async fn promote_messages_in_range(
         .rows_affected())
 }
 
-/// Insert the staged messages with a guid and an id in `lo + 1..=hi`,
-/// skipping any production already holds through the partial unique index
-/// `ix_messages_account_source_guid` with `ON CONFLICT DO NOTHING`.
+/// Insert the staged messages with an id in `lo + 1..=hi` (append mode),
+/// skipping any whose guid production already holds through the unique index
+/// `ix_messages_account_source_guid` with `ON CONFLICT DO NOTHING`. Every
+/// staged message has a guid, because the import refuses one without.
 /// (Correlated NOT EXISTS / JOIN anti-joins mis-plan onto
 /// `ix_messages_source` and scan the whole source, 10s+ at 50k rows.)
 /// Returns how many were inserted.
@@ -712,30 +711,11 @@ pub async fn promote_guid_messages_in_range(
     lo: i64,
     hi: i64,
 ) -> Result<u64> {
-    let sql =
-        format!("{INSERT_MESSAGES_FROM_STAGING}{WITH_GUID_IN_ID_RANGE} ON CONFLICT DO NOTHING");
+    let sql = format!("{INSERT_MESSAGES_FROM_STAGING}{IN_ID_RANGE} ON CONFLICT DO NOTHING");
     Ok(sqlx::query(&sql)
         .bind(account_id)
         .bind(lo)
         .bind(hi)
-        .execute(&mut *conn)
-        .await?
-        .rows_affected())
-}
-
-/// Insert the staged messages without a guid, which are outside the guid
-/// index and always new. Returns how many were inserted.
-///
-/// # Errors
-///
-/// Returns an error when the insert fails.
-pub async fn promote_messages_without_guid(
-    conn: &mut SqliteConnection,
-    account_id: i64,
-) -> Result<u64> {
-    let sql = format!("{INSERT_MESSAGES_FROM_STAGING}{WITHOUT_GUID}");
-    Ok(sqlx::query(&sql)
-        .bind(account_id)
         .execute(&mut *conn)
         .await?
         .rows_affected())
@@ -762,23 +742,6 @@ pub async fn staged_message_ids_in_range(
         .await?)
 }
 
-/// The staged message ids without a guid, in id order: the rows
-/// [`promote_messages_without_guid`] inserted, in the order it inserted them.
-///
-/// # Errors
-///
-/// Returns an error when the query fails.
-pub async fn staged_message_ids_without_guid(
-    conn: &mut SqliteConnection,
-    account_id: i64,
-) -> Result<Vec<i64>> {
-    let sql = format!("{STAGED_MESSAGE_IDS}{WITHOUT_GUID}");
-    Ok(sqlx::query_scalar(&sql)
-        .bind(account_id)
-        .fetch_all(&mut *conn)
-        .await?)
-}
-
 /// The account's production message ids above `max_before`, in id order:
 /// the rows a promotion insert just added.
 ///
@@ -800,9 +763,9 @@ pub async fn message_ids_above(
 }
 
 /// Write `_promote_msg_map`, the staging-to-production message id map the
-/// child-row statements join through: `pairs` first, then every guid row by
-/// joining production on `(account, source, guid)`, which also maps the
-/// append-mode rows that were skipped as duplicates.
+/// child-row statements join through: `pairs` first, then every row by
+/// joining production on `(account, source, guid)`, which maps the
+/// append-mode rows, the new ones and those skipped as duplicates alike.
 ///
 /// # Errors
 ///
@@ -836,8 +799,6 @@ pub async fn write_message_map(
          AND m.guid = sm.guid
         JOIN _promote_conv_map cm ON cm.staging_id = sm.conversation_id
         WHERE sm.account_id = $1
-          AND sm.guid IS NOT NULL
-          AND sm.guid != ''
         ON CONFLICT(staging_id) DO UPDATE SET prod_id = excluded.prod_id
         ",
     )

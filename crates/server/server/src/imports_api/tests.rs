@@ -167,10 +167,9 @@ async fn append_skips_existing_guids_and_keeps_id_map() {
     let second = write_jsonl(
         tmp.path(),
         "b.jsonl",
-        r#"{"schema_version":4,"export":{"source":"sms-backup-restore","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+14075551234","conversation_type":"individual","group_title":null,"participants":[{"handle":"+14075551234","display_name":null}],"stats":{"message_count":3,"attachment_count":0,"first_timestamp_unix_ms":1426183522000,"last_timestamp_unix_ms":1426183642000}}}
+        r#"{"schema_version":4,"export":{"source":"sms-backup-restore","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+14075551234","conversation_type":"individual","group_title":null,"participants":[{"handle":"+14075551234","display_name":null}],"stats":{"message_count":2,"attachment_count":0,"first_timestamp_unix_ms":1426183522000,"last_timestamp_unix_ms":1426183582000}}}
 {"guid":"g-dup","timestamp_unix_ms":1426183522000,"direction":"outgoing","service":"sms","message_kind":"sms","sender_handle":null,"sender_display_name":null,"subject":null,"text":"two again","attachments":[],"imessage":null,"source":null}
 {"guid":"g-new","timestamp_unix_ms":1426183582000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+14075551234","sender_display_name":null,"subject":null,"text":"three","attachments":[],"imessage":null,"source":null}
-{"guid":"","timestamp_unix_ms":1426183642000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+14075551234","sender_display_name":null,"subject":null,"text":"empty guid always inserts","attachments":[],"imessage":null,"source":null}
 "#,
     );
     let second_stats = import_jsonl_files(
@@ -188,11 +187,11 @@ async fn append_skips_existing_guids_and_keeps_id_map() {
     )
     .await
     .unwrap();
-    assert_eq!(second_stats.messages_appended, 2);
+    assert_eq!(second_stats.messages_appended, 1);
     assert_eq!(second_stats.messages_deduped, 1);
     assert_eq!(
-        second_stats.messages, 2,
-        "an append reports the messages it added, not the three it read"
+        second_stats.messages, 1,
+        "an append reports the messages it added, not the two it read"
     );
 
     let (_pool, mut conn) = open_verify(&db).await;
@@ -200,7 +199,7 @@ async fn append_skips_existing_guids_and_keeps_id_map() {
         .fetch_one(&mut *conn)
         .await
         .unwrap();
-    assert_eq!(n, 4);
+    assert_eq!(n, 3);
     let dup_body: String = sqlx::query_scalar("SELECT body FROM messages WHERE guid = 'g-dup'")
         .fetch_one(&mut *conn)
         .await
@@ -1849,9 +1848,8 @@ fn replace_run_batch(chat: &str, guids: &[&str]) -> String {
 /// nothing. This guards both against a change to how a batch picks wipe
 /// or append (today: whether the run has stamped a message yet).
 ///
-/// Every message carries a guid, as every exporter writes one. A message
-/// with an empty guid would be inserted again by the retry, in a replace
-/// run or an append run alike, because append skips by guid only.
+/// The retry adds nothing because append skips a guid the source already
+/// holds, and the import refuses a message without one.
 #[tokio::test]
 async fn a_retried_batch_in_a_replace_run_keeps_every_message_once() {
     let (state, _fixture, token) = importer().await;
@@ -1880,6 +1878,100 @@ async fn a_retried_batch_in_a_replace_run_keeps_every_message_once() {
             .await
             .unwrap();
     assert_eq!(guids, ["g-1a", "g-1b", "g-2a", "g-2b"]);
+}
+
+/// A message without a guid is outside the guid index, so a retried batch
+/// would store it a second time (#1162). The batch is refused with `422`,
+/// naming the line, and nothing in it is stored.
+#[tokio::test]
+async fn a_batch_with_a_message_without_a_guid_is_refused_and_stores_nothing() {
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+    let body = replace_run_batch("+15550000002", &["g-1", "", "g-2"]);
+
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &token, "application/jsonl", body).await;
+
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    assert_eq!(
+        problem.errors.as_deref(),
+        Some(
+            &["The message on line 3 of the batch has no guid; every message needs one.".to_string()]
+                [..]
+        )
+    );
+    assert_eq!(problem.line, Some(3), "Upload maps the line back to its file");
+    let mut conn = state.db.acquire().await.unwrap();
+    let stored: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(stored, 0);
+}
+
+/// The steps in #1162: a proxy in front of the server times out while the
+/// server commits a batch, answers `504 Gateway Timeout`, and Upload posts
+/// the batch again. The second post finds every message already stored by
+/// its guid, so each message is stored once.
+#[tokio::test]
+async fn a_batch_posted_again_after_a_gateway_timeout_stores_each_message_once() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+
+    // Stands in for the proxy: the first batch reaches the server and is
+    // committed, and the client is told 504 instead of the server's answer.
+    let timed_out = Arc::new(AtomicBool::new(false));
+    let app = crate::server::http_app(state.clone()).layer(axum::middleware::from_fn(
+        move |request: axum::extract::Request, next: axum::middleware::Next| {
+            let timed_out = Arc::clone(&timed_out);
+            async move {
+                let is_batch = request.uri().path().ends_with("/batches");
+                let response = next.run(request).await;
+                if is_batch
+                    && response.status().is_success()
+                    && !timed_out.swap(true, Ordering::SeqCst)
+                {
+                    return axum::response::IntoResponse::into_response(
+                        axum::http::StatusCode::GATEWAY_TIMEOUT,
+                    );
+                }
+                response
+            }
+        },
+    ));
+    let server = crate::test_support::serve_router(app).await;
+    let body = replace_run_batch("+15550000002", &["g-a", "g-b", "g-c"]);
+    let post = || {
+        reqwest::Client::new()
+            .post(format!("{}{path}", server.base()))
+            .bearer_auth(&token)
+            .header(reqwest::header::CONTENT_TYPE, "application/jsonl")
+            .body(body.clone())
+            .send()
+    };
+
+    let first = post().await.unwrap();
+    assert_eq!(first.status(), reqwest::StatusCode::GATEWAY_TIMEOUT);
+    let second = post().await.unwrap();
+    assert_eq!(second.status(), reqwest::StatusCode::OK);
+    let answer: serde_json::Value = second.json().await.unwrap();
+    assert_eq!(answer["messages_appended"], 0, "{answer}");
+    assert_eq!(answer["messages_deduped"], 3, "{answer}");
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let guids: Vec<String> =
+        sqlx::query_scalar("SELECT guid FROM messages WHERE source = 'whatsapp' ORDER BY guid")
+            .fetch_all(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(guids, ["g-a", "g-b", "g-c"]);
 }
 
 /// One `source` conversation with `+15550000002`, one message per guid. The

@@ -791,7 +791,7 @@ async fn insert_message_rows(
             conversation_id,
             account_id: stmts.account_id,
             source,
-            guid: row.msg.guid.as_deref(),
+            guid: &row.msg.guid,
             timestamp: &row.msg.timestamp,
             is_from_me: row.msg.is_from_me as i64,
             sender_handle_id: row.sender_handle_id,

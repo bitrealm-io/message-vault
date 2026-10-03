@@ -53,8 +53,10 @@ pub struct ParticipantRecord {
 /// One message of an imported conversation.
 #[derive(Debug, Clone)]
 pub struct MessageRecord {
-    /// Export GUID for replies and grouping.
-    pub guid: Option<String>,
+    /// The message's id from the export, never empty: Apple's own for Apple
+    /// Messages, otherwise the exporter's `MessageGuid`. Production skips a
+    /// guid it already holds, which is what lets a batch be sent again.
+    pub guid: String,
     /// The instant the message was sent: RFC 3339 in UTC with a `Z` suffix.
     pub timestamp: String,
     /// True for messages sent by the account owner.
@@ -141,13 +143,17 @@ pub fn clean_body(text: Option<&str>) -> Option<String> {
 pub fn parse_ir_lines(
     lines: impl IntoIterator<Item = impl AsRef<str>>,
 ) -> Result<Vec<ExportRecord>> {
-    use crate::imports_api::ImportFailure;
+    use crate::imports_api::{ImportFailure, MISSING_GUID_LINES_NAMED};
 
     let mut out = Vec::new();
     let mut saw_header = false;
     // The owner the current conversation's header names, for messages that
     // do not name their own.
     let mut header_owner: Option<String> = None;
+    // Messages without a guid, counted and named up to a limit, so one
+    // refusal names every line to fix rather than the first.
+    let mut missing_guid_lines = Vec::new();
+    let mut missing_guid_total = 0usize;
     for (i, line) in lines.into_iter().enumerate() {
         let line = line.as_ref().trim();
         if line.is_empty() {
@@ -200,6 +206,13 @@ pub fn parse_ir_lines(
             ) {
                 continue;
             }
+            if msg.guid.trim().is_empty() {
+                missing_guid_total += 1;
+                if missing_guid_lines.len() < MISSING_GUID_LINES_NAMED {
+                    missing_guid_lines.push(line_no);
+                }
+                continue;
+            }
             let record = message_from_ir(&msg, header_owner.as_deref()).map_err(|e| {
                 ImportFailure::Parse {
                     line: line_no,
@@ -208,6 +221,13 @@ pub fn parse_ir_lines(
             })?;
             out.push(ExportRecord::Message(record));
         }
+    }
+    if missing_guid_total > 0 {
+        return Err(ImportFailure::MissingGuid {
+            lines: missing_guid_lines,
+            total: missing_guid_total,
+        }
+        .into());
     }
     if out.is_empty() {
         return Err(ImportFailure::Parse {
@@ -287,11 +307,7 @@ fn message_from_ir(msg: &IrMessage, header_owner: Option<&str>) -> Result<Messag
     let tapbacks = tapbacks_from_im(im);
 
     Ok(MessageRecord {
-        guid: if msg.guid.trim().is_empty() {
-            None
-        } else {
-            Some(msg.guid.clone())
-        },
+        guid: msg.guid.clone(),
         timestamp,
         is_from_me,
         sender: if is_from_me {
@@ -419,7 +435,7 @@ mod tests {
         assert_eq!(records.len(), 2);
         match &records[1] {
             ExportRecord::Message(m) => {
-                assert_eq!(m.guid.as_deref(), Some("g1"));
+                assert_eq!(m.guid, "g1");
                 assert!(!m.is_from_me);
                 assert_eq!(m.text.as_deref(), Some("hello"));
                 assert_eq!(m.service.as_deref(), Some("sms"));
@@ -523,7 +539,7 @@ mod tests {
             })
             .collect();
         assert_eq!(messages.len(), 1, "{messages:?}");
-        assert_eq!(messages[0].guid.as_deref(), Some("g-hi"));
+        assert_eq!(messages[0].guid, "g-hi");
         assert!(messages[0].tapbacks.is_empty());
     }
 
@@ -622,5 +638,27 @@ mod tests {
             crate::imports_api::ImportFailure::Parse { line, .. } => assert_eq!(*line, 2),
             other => panic!("expected Parse, got {other:?}"),
         }
+    }
+    /// A message the guid index cannot see would be stored again by every
+    /// retried batch (#1162), so the whole file is refused, naming every
+    /// line that has no guid, before anything is staged.
+    #[test]
+    fn parse_ir_lines_refuses_messages_without_a_guid_naming_every_line() {
+        let header = r#"{"schema_version":4,"export":{"source":"sms-backup-restore","tool":"t","tool_version":"1","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550101","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550101","display_name":"Sam"}],"stats":{"message_count":3,"attachment_count":0,"first_timestamp_unix_ms":1400773261000,"last_timestamp_unix_ms":1400773261000}}}"#;
+        let msg = |guid: &str| {
+            format!(
+                r#"{{"guid":"{guid}","timestamp_unix_ms":1400773261000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+15555550101","sender_display_name":"Sam","subject":null,"text":"hello","attachments":[],"imessage":null,"source":null}}"#
+            )
+        };
+        let lines = [header.to_string(), msg("g1"), msg(""), msg("   ")];
+        let err = parse_ir_lines(lines).unwrap_err();
+        let failure = crate::imports_api::ImportFailure::in_error(&err).expect("typed failure");
+        assert_eq!(
+            *failure,
+            crate::imports_api::ImportFailure::MissingGuid {
+                lines: vec![3, 4],
+                total: 2
+            }
+        );
     }
 }

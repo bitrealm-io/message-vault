@@ -74,7 +74,8 @@ brief ends with the same output rule:
   the input or state, and the wrong outcome. A worry with no scenario is not a
   finding." Correctness findings are `hard`.
 
-Keep the axes separate. Do not merge, rerank, or drop findings across them.
+Keep the axes separate, and post each axis's findings as its sub-agent
+returned them, so one axis cannot mask another.
 
 ### 3. Post
 
@@ -118,9 +119,8 @@ Post one top-level comment, starting with the marker:
 - Commits made for CI failures.
 - Any Spec skip, and any user thread still open.
 
-Queue the PR when "Merging" says it is ready. If it is not ready (a draft, a
-user thread open, a check still red), say in the summary and to the user what
-it waits on.
+Queue the PR when "Merging" says it is ready. Otherwise, say in the summary
+and to the user what it waits on, such as an open user thread.
 
 Remove the worktree. Report to the user: the PR, the counts, and whether it is
 queued.

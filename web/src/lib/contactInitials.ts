@@ -98,5 +98,7 @@ export function contactAvatarClass(input: {
     normalizeName([input.firstName, input.lastName].filter(Boolean).join(" "));
   const handle = normalizeHandle(input.preferredHandle);
   const seed = `${name}\0${handle}`;
-  return AVATAR_COLOR_CLASSES[hashString(seed) % AVATAR_COLOR_CLASSES.length] ?? "bg-avatar-1";
+  return (
+    AVATAR_COLOR_CLASSES[hashString(seed) % AVATAR_COLOR_CLASSES.length] ?? AVATAR_COLOR_CLASSES[0]
+  );
 }

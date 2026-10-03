@@ -18,8 +18,8 @@ import { Z_LIFT } from "../lib/zLayers";
 import ListRangeHeader from "./ListRangeHeader";
 import ListRangePill, {
   RANGE_PILL_OVERLAY_INSET,
-  RANGE_PILL_SCROLL_PAD,
   RANGE_PILL_SCROLL_PAD_CLASS,
+  RangePillSpacer,
 } from "./ListRangePill";
 import VirtualList, { type VisibleRange } from "./VirtualList";
 
@@ -344,7 +344,7 @@ function TanStackVirtualList<T>({
         if (hasMore) requestMore();
       }}
       empty={empty}
-      footer={<div aria-hidden className="shrink-0" style={{ height: RANGE_PILL_SCROLL_PAD }} />}
+      footer={<RangePillSpacer />}
       visibleBottomInset={RANGE_PILL_OVERLAY_INSET}
       renderItem={(index) => {
         const item = items[index];
@@ -522,7 +522,7 @@ function SectionedLetterList<T>({
           })}
         </section>
       ))}
-      <div aria-hidden className="shrink-0" style={{ height: RANGE_PILL_SCROLL_PAD }} />
+      <RangePillSpacer />
     </div>
   );
 }

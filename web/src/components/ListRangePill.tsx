@@ -1,10 +1,18 @@
 import { listActivitySuffix } from "../lib/listPaging";
 import { Z_RANGE_PILL } from "../lib/zLayers";
 
-/** Room under the last row so the floating range pill does not cover a row. */
-export const RANGE_PILL_SCROLL_PAD = 56;
-/** `RANGE_PILL_SCROLL_PAD` as bottom padding (3.5rem is 56px). */
+/*
+  Room under the last row so the floating range pill does not cover a row:
+  3.5rem (56px), as a list box's bottom padding or as a spacer after the rows.
+  Change both together.
+*/
 export const RANGE_PILL_SCROLL_PAD_CLASS = "pb-14";
+
+/** The spacer after a list's rows, `RANGE_PILL_SCROLL_PAD_CLASS` high. */
+export function RangePillSpacer() {
+  return <div aria-hidden className="h-14 shrink-0" />;
+}
+
 /** Viewport pixels the pill covers (`bottom-3` + pill). Range math ignores this band. */
 export const RANGE_PILL_OVERLAY_INSET = 40;
 

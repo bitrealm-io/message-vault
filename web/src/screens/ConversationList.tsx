@@ -4,7 +4,7 @@ import ConversationSortMenu from "../components/ConversationSortMenu";
 import ListRangeHeader from "../components/ListRangeHeader";
 import ListRangePill, {
   RANGE_PILL_OVERLAY_INSET,
-  RANGE_PILL_SCROLL_PAD,
+  RangePillSpacer,
 } from "../components/ListRangePill";
 import TagsMenu from "../components/TagsMenu";
 import { useSetRightToolbar } from "../components/useRightToolbar";
@@ -221,7 +221,7 @@ export default function ConversationList({
         dynamicSize
         onVisibleRangeChange={setVisibleRange}
         visibleBottomInset={RANGE_PILL_OVERLAY_INSET}
-        footer={<div aria-hidden className="shrink-0" style={{ height: RANGE_PILL_SCROLL_PAD }} />}
+        footer={<RangePillSpacer />}
         onNearEnd={() => {
           if (hasMore) loadMore();
         }}

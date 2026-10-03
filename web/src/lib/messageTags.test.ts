@@ -11,7 +11,7 @@ describe("reserved tags", () => {
   it("blocks Threads and Tags", () => {
     expect(isReservedTagName("Threads")).toBe(true);
     expect(isReservedTagName("tag")).toBe(true);
-    expect(reservedTagError("Trash")).toBe('"Trash" is a reserved tag');
+    expect(reservedTagError("Trash")).toBe('"Trash" is a reserved Message Tag');
     expect(isReservedTagName("Holiday")).toBe(false);
   });
 });

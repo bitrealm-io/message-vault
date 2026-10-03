@@ -116,8 +116,8 @@ MMS from `I_<unix>_*.pdu` (received) and `S_<unix>_*.pdu` (sent) files use the s
 | `sender_handle` | The From header's address on a received message, classified like an XML `<address>`. A sent message carries the Insert-address-token instead of a number, so the export owner is the sender. |
 | `chat_identifier` / `conversation_type` / `group_title` | From the From, To, Cc and Bcc addresses that are not the owner's: one is a 1:1 chat, two or more a group with a `chat-group-…` id. |
 | `timestamp*` / `timestamp_unix_ms` | The MMS `Date` header; the file name's seconds when the header is absent. |
-| `text` | Every `text/plain` part, in wire order, joined with a newline, with GO SMS Pro emoji codes decoded. When there is no text part, the Subject. |
-| `attachments_json` | Every part that is not `text/plain` and not `application/smil`, with its content type and the name its part headers give it, under `attachments/` |
+| `text` | Every `text/plain` part joined with a newline, with GO SMS Pro emoji codes decoded: the parts the SMIL names in its order, then the rest in wire order. When there is no text part, the Subject. |
+| `attachments_json` | Every part that is not `text/plain` and not `application/smil`, a contact card (`text/x-vcard`) included, in the same order as the text, with its content type and the name its part headers give it, under `attachments/` |
 | `android_type` | Empty |
 | `source_fields_json` | `source_kind=pdu` plus `pdu_filename` / `pdu_fields` as above |
 

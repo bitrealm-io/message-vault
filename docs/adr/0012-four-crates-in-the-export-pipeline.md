@@ -110,9 +110,10 @@ producer means one caller could own the special case.
 
 It was rejected because the single producer is a fact about what has been built,
 not about what the product is for. SMS Backup & Restore will gain an import
-screen, and when it does, a person exports their messages as `smses.xml` and loads
-it back onto the phone — which means an export path, not only Convert, has to be
-able to ask for XML. A trait seam in `ir-format`, implemented by the SBR crate
+screen, and when it does, a person exports their messages as `smses.xml` to have
+them back in the format they came in (ADR 0021; Message Crate does not put them
+back on a phone) — which means an export path, not only Convert, has to be able
+to ask for XML. A trait seam in `ir-format`, implemented by the SBR crate
 and supplied by whichever caller wants XML, keeps that reachable. Lifting the
 case into Convert would have to be undone.
 

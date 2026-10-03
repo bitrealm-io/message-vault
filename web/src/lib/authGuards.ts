@@ -1,9 +1,3 @@
-/** What every login route returns: a session token and the account it belongs to. */
-export interface SessionResponse {
-  token: string;
-  account_id: number;
-}
-
 /** Desktop login default. IPv4 loopback, because `localhost` often resolves to IPv6 and Docker Compose publishes 8080 on IPv4 only. */
 export const DEFAULT_TAURI_SERVER_URL = "http://127.0.0.1:8080";
 

@@ -42,6 +42,7 @@ struct RawRow {
     sort_order: i64,
     is_from_me: bool,
     sender: Option<String>,
+    owner: Option<String>,
     subject: Option<String>,
     body: Option<String>,
     is_announcement: bool,
@@ -56,7 +57,7 @@ struct RawRow {
 
 /// FROM clause for message queries. The compiled filter mentions only `m`;
 /// these joins are here for the SELECT list, which reports the conversation
-/// and the two handles' raw text.
+/// and the three handles' raw text.
 ///
 /// Export's count statements carry the same joins, because a search filter can
 /// name a conversation column and would not compile against `messages` alone.
@@ -64,19 +65,22 @@ struct RawRow {
 /// filter is a conversation id, an account id, and `duplicate_of`, all on
 /// `m`. The two still count the same rows, because
 /// `conversations.chat_handle_id` is `NOT NULL` with a foreign key to
-/// `handles`, so the one inner join here never drops a row (`hs` is a
-/// `LEFT JOIN` and cannot drop one either).
+/// `handles`, so the one inner join here never drops a row (`hs` and `ho` are
+/// `LEFT JOIN`s and cannot drop one either).
 pub(crate) fn messages_from_sql() -> String {
     format!("FROM messages m\n{}", conversation_join_sql())
 }
 
 /// Handles joins for a query already anchored on `messages m`.
 /// `hc` supplies `c.chat_handle_id` raw text; `hs` supplies `m.sender_handle_id`
-/// raw text (LEFT, since outgoing messages carry no sender handle).
+/// raw text (LEFT, since outgoing messages carry no sender handle); `ho`
+/// supplies `m.owner_handle_id` raw text (LEFT, since a backup that names no
+/// owner leaves it empty).
 pub(crate) fn conversation_join_sql() -> String {
     "JOIN conversations c ON c.id = m.conversation_id
      JOIN handles hc ON hc.id = c.chat_handle_id
-     LEFT JOIN handles hs ON hs.id = m.sender_handle_id"
+     LEFT JOIN handles hs ON hs.id = m.sender_handle_id
+     LEFT JOIN handles ho ON ho.id = m.owner_handle_id"
         .into()
 }
 
@@ -137,7 +141,7 @@ pub async fn load_messages(
 /// [`load_messages`] with the caller's own `FROM` clause and `ORDER BY`.
 ///
 /// `from_sql` must bind `messages m` and carry [`conversation_join_sql`],
-/// because the `SELECT` list reads `c`, `hc` and `hs`. An Export Run uses it
+/// because the `SELECT` list reads `c`, `hc`, `hs` and `ho`. An Export Run uses it
 /// to page the message ids it stored at creation, in the order it stored them.
 ///
 /// # Errors
@@ -157,7 +161,8 @@ pub(crate) async fn load_messages_from(
                 m.sort_order, m.is_from_me, hs.raw AS sender, m.subject, m.body,
                 m.is_announcement, m.is_reply, m.thread_originator_guid,
                 m.thread_originator_part, m.num_replies,
-                hc.raw AS chat_identifier, c.conversation_type, c.group_title
+                hc.raw AS chat_identifier, c.conversation_type, c.group_title,
+                ho.raw AS owner
          {from_sql}
          WHERE {where_sql}
          ORDER BY {order_by} LIMIT ? OFFSET ?"
@@ -192,6 +197,7 @@ pub(crate) async fn load_messages_from(
                 chat_identifier: row.try_get(16)?,
                 conversation_type: row.try_get(17)?,
                 group_title: row.try_get(18)?,
+                owner: row.try_get(19)?,
             })
         })
         .collect::<Result<Vec<RawRow>, ApiError>>()?;
@@ -218,6 +224,7 @@ pub(crate) async fn load_messages_from(
                 sort_order: r.sort_order,
                 is_from_me: r.is_from_me,
                 sender: r.sender,
+                owner: r.owner,
                 subject: r.subject,
                 text: r.body,
                 is_announcement: r.is_announcement,

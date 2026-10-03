@@ -142,7 +142,7 @@ export default function OnboardingScreen() {
   // service, as many as the card has room for; any beyond that are left as they
   // are, for Settings. They come from the account's identity list rather than
   // the profile's `phones`, which holds a number once per service and names no
-  // service, so a number on Text message and WhatsApp would read as one repeated.
+  // service, so a number on Text Message and WhatsApp would read as one repeated.
   const identities = useRouteQuery(keys.accountProfile.identities, (signal) =>
     listAccountIdentities({ signal }),
   );

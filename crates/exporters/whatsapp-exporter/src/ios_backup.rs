@@ -8,7 +8,7 @@
 //! it reads a backup someone extracted by hand.
 
 use anyhow::{Result, bail};
-use imessage_ir_exporter::{DecryptedDomain, decrypt_ios_backup_domain, ios_backup_encrypted_flag};
+use ios_backup::{DecryptedDomain, decrypt_ios_backup_domain, ios_backup_encrypted_flag};
 use message_crate_core::{ExporterConfig, WhatsappConfig};
 use std::path::{Path, PathBuf};
 
@@ -107,7 +107,7 @@ fn decrypt_with(
 #[cfg(test)]
 mod tests {
     use super::{BUSINESS_DOMAIN, DOMAIN, DecryptedWhatsapp, decrypt_with};
-    use imessage_ir_exporter::DecryptedDomain;
+    use ios_backup::DecryptedDomain;
     use message_crate_core::WhatsappConfig;
     use std::fs;
     use std::path::Path;

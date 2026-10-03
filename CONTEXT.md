@@ -194,7 +194,7 @@ _Avoid_: Member, Recipient
 When a contact last sent a message: the newest message any of the contact's
 identities was the sender of, shown on the contact list and one of the two ways
 the list can be ordered. It is not the contact's last activity. A message the
-account owner sent to the contact, or one another member of a group chat
+account owner sent to the contact, or one another member of a group conversation
 sent, does not move it, because neither is hearing from the contact. A
 message in a conversation in the Trash does not move it either: the column
 is not asked for the Trash, so it leaves the Trash out, and `last-message:`
@@ -311,7 +311,7 @@ both. A program holding one can bring messages in, or take them out
 through an Export Run it starts, but it can never browse: reading messages
 outside a run needs a Session. The secret is shown once when the token is
 made; afterwards the account sees only its name, a masked hint, and when it
-was last used.
+was last used. The owner sees the same without the hint, and may revoke it.
 _Avoid_: App password, Key, Credential, Session
 
 **User**:

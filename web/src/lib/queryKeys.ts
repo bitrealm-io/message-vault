@@ -46,6 +46,13 @@ export const keys = {
      * that marks every contact stale refreshes these figures too.
      */
     summaries: (ids: readonly string[]) => ["contacts", "summaries", ids.join(",")] as const,
+    /**
+     * How many of these identifiers the account has no contact for, as the
+     * Import screen's review counts them. Under `all`, so a write that changes
+     * contacts changes the count.
+     */
+    unmatchedCount: (identifiers: readonly string[]) =>
+      ["contacts", "unmatched-count", identifiers] as const,
   },
   conversations: {
     all: ["conversations"] as const,
@@ -85,6 +92,8 @@ export const keys = {
     member: (accountId: number) => ["owner-accounts", accountId] as const,
     storage: (accountId: number) => ["owner-accounts", accountId, "storage"] as const,
     identities: (accountId: number) => ["owner-accounts", accountId, "identities"] as const,
+    /** The account's API tokens, as the owner sees them: no masked secret. */
+    apiTokens: (accountId: number) => ["owner-accounts", accountId, "api-tokens"] as const,
     /** One page of the account's Import Runs. Under `storage`, like the run it opens. */
     imports: (accountId: number, page: number) =>
       ["owner-accounts", accountId, "storage", "imports", page] as const,
@@ -102,6 +111,8 @@ export const keys = {
      * cannot disagree about whether a run is waiting.
      */
     running: ["imports", "running"] as const,
+    /** The contacts one Import Run created or changed, as a paged list. */
+    contacts: (id: number) => ["imports", String(id), "contacts"] as const,
   },
   serverSettings: { all: ["server-settings"] as const },
   /** Where the Demo Account stands, from `GET /v1/server/demo-account`. */

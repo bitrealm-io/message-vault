@@ -15,12 +15,13 @@ import { formatVisibleRange } from "../lib/listPaging";
 import { isTauri } from "../lib/tauri-check";
 import { listRowDividersThin, resizeHandleGutter } from "../lib/tw";
 import { Z_LIFT } from "../lib/zLayers";
-import ListRangeHeader from "./ListRangeHeader";
+import ListRangeHeader, { type SelectAllBox } from "./ListRangeHeader";
 import ListRangePill, {
   RANGE_PILL_OVERLAY_INSET,
   RANGE_PILL_SCROLL_PAD_CLASS,
   RangePillSpacer,
 } from "./ListRangePill";
+import PlainButton from "./PlainButton";
 import VirtualList, { type VisibleRange } from "./VirtualList";
 
 const NEAR_END_THRESHOLD = 10;
@@ -60,10 +61,8 @@ type InfiniteOffsetListProps<T> = {
   errorPrefix?: string;
   /** Control on the right of the “N–M of total” row. */
   headerActions?: ReactNode;
-  selectAllChecked?: boolean;
-  selectAllIndeterminate?: boolean;
-  onSelectAllChange?: (checked: boolean) => void;
-  selectAllLabel?: string;
+  /** The toolbar's Select all box; it waits while the list is empty. */
+  selectAll?: SelectAllBox;
   /** Letter for in-list section headers. Omit while searching. */
   getSectionLetter?: (item: T) => string;
 };
@@ -117,17 +116,17 @@ function Row({
 }) {
   if (!lead) {
     return (
-      <button type="button" onClick={onSelect} className={className} style={style} {...rest}>
+      <PlainButton onPress={onSelect} className={className} style={style} {...rest}>
         {children}
-      </button>
+      </PlainButton>
     );
   }
   return (
     <div className={`relative ${className} ${ROW_BODY_FOCUS_RING}`} style={style} {...rest}>
       <div className={ROW_LEAD}>{lead}</div>
-      <button type="button" onClick={onSelect} className={ROW_BODY}>
+      <PlainButton onPress={onSelect} className={ROW_BODY}>
         {children}
-      </button>
+      </PlainButton>
     </div>
   );
 }
@@ -551,10 +550,7 @@ export default function InfiniteOffsetList<T extends object>({
   rangeTotal,
   errorPrefix = "Could not load list",
   headerActions,
-  selectAllChecked = false,
-  selectAllIndeterminate = false,
-  onSelectAllChange,
-  selectAllLabel,
+  selectAll,
   getSectionLetter,
 }: InfiniteOffsetListProps<T>) {
   const [visibleRange, setVisibleRange] = useState<VisibleRange>({
@@ -607,11 +603,9 @@ export default function InfiniteOffsetList<T extends object>({
         refreshing={!showRangePill && refreshing}
         filling={!showRangePill && filling}
         actions={headerActions}
-        selectAllChecked={selectAllChecked}
-        selectAllIndeterminate={selectAllIndeterminate}
-        onSelectAllChange={onSelectAllChange}
-        selectAllLabel={selectAllLabel}
-        selectAllDisabled={items.length === 0}
+        selectAll={
+          selectAll && { ...selectAll, disabled: items.length === 0 || selectAll.disabled }
+        }
       />
       {headerLetter ? (
         <div className="flex shrink-0 items-center border-b border-border bg-panel px-3 py-1">

@@ -22,6 +22,8 @@ mod backup;
 mod backup_domain;
 mod helper;
 mod identity;
+#[cfg(any(test, feature = "testutil"))]
+pub mod reader_build;
 mod scratch;
 #[cfg(all(unix, any(test, feature = "testutil")))]
 pub mod testutil;

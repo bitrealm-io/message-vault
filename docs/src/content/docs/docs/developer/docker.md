@@ -163,6 +163,14 @@ On a `v*` tag, the **Docker image** job in `.github/workflows/ci.yml` runs after
 - `bitrealm/message-crate:latest`
 - `bitrealm/message-crate:sha-<commit>`
 
+The same job can push an image without a release. Start the CI workflow by hand on any branch with **push_docker_image** ticked:
+
+```bash
+gh workflow run ci.yml --ref <branch> -f push_docker_image=true
+```
+
+The run goes through every CI job first, and then pushes `bitrealm/message-crate:sha-<commit>` alone. It does not move `latest` or a version tag, so the image people pull stays the released one. The server in that image reports its Build, the Product Version with the commit, for example `0.9.0+343fe0d8`.
+
 That job is the Hub image. `docker/compose.release.yml` is the way to compile the same Dockerfile on a local machine. Pulling `bitrealm/message-crate:latest` is not a test of uncommitted Dockerfile changes.
 
 ## Run the published image

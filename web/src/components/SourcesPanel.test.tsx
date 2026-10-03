@@ -22,13 +22,10 @@ describe("SourcesPanel", () => {
   it("puts each share of unique messages beside the unique count it was computed from", async () => {
     // Two sources with 2 messages each; one message is in both, so the first
     // source holds 2 of the 3 unique messages and the second holds 1.
-    getSources.mockResolvedValue({
-      items: [
-        { backup_name: "phone-a", message_count: 2, unique_count: 2, percentage: 66.7 },
-        { backup_name: "phone-b", message_count: 2, unique_count: 1, percentage: 33.3 },
-      ],
-      total: 2,
-    });
+    getSources.mockResolvedValue([
+      { backup_name: "phone-a", message_count: 2, unique_count: 2, percentage: 66.7 },
+      { backup_name: "phone-b", message_count: 2, unique_count: 1, percentage: 33.3 },
+    ]);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
     render(

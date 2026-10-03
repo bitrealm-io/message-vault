@@ -49,9 +49,7 @@ async fn the_server_reports_the_demo_account_while_it_exists() {
     let body: ServerInfo = get_json(&state, "/v1/server", "").await;
     assert!(!body.demo_account, "no Demo Account has been seeded");
 
-    let demo = fixture
-        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
-        .await;
+    let demo = fixture.demo_account().await;
     let body: ServerInfo = get_json(&state, "/v1/server", "").await;
     assert_eq!(body.state, ServerState::Unclaimed);
     assert!(body.demo_account);
@@ -191,6 +189,37 @@ async fn a_server_can_only_be_claimed_once() {
         .await
         .unwrap();
     assert_eq!(taken, 0);
+}
+
+/// A new Message Crate already holds the Demo Account, so a claim under its
+/// username answers `409 Conflict` as `username-taken`, and the reference
+/// lists that type for the claim beside `state-conflict`.
+#[tokio::test]
+async fn a_claim_under_a_taken_username_answers_username_taken_as_the_reference_says() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
+    fixture.account("demo").await;
+
+    let (status, text) = crate::test_support::post_logged_out(
+        &state,
+        "/v1/server/claim",
+        serde_json::json!({ "username": "demo", "password": "hunter2hunter2" }),
+    )
+    .await;
+    crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::UsernameTaken);
+
+    let doc: serde_json::Value =
+        serde_json::from_str(&crate::openapi::dump_openapi_json()).unwrap();
+    let listed = &doc["paths"]["/v1/server/claim"]["post"]["responses"]["409"]
+        [crate::openapi::shared_parts::PROBLEM_TYPES];
+    assert!(
+        listed
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|t| *t == crate::problem::ProblemType::UsernameTaken.url()),
+        "the claim's 409 lists {listed}"
+    );
 }
 
 /// Two claims at once: the second reads the Message Crate unclaimed while the
@@ -848,9 +877,7 @@ async fn the_demo_username_stays_reserved_after_the_demo_account_is_deleted() {
     let fixture = test_fixture().await;
     let mut state = fixture.state.clone();
     state.demo_bundle_generator = tiny_bundle;
-    let demo = fixture
-        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
-        .await;
+    let demo = fixture.demo_account().await;
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     assert_eq!(
         crate::test_support::delete_status(&state, &format!("/v1/accounts/{demo}"), &owner.token)
@@ -961,9 +988,7 @@ async fn a_demo_build_the_server_stopped_is_removed_and_failed_on_the_next_start
     let fixture = test_fixture().await;
     let mut state = fixture.state.clone();
     state.demo_bundle_generator = tiny_bundle;
-    fixture
-        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
-        .await;
+    fixture.demo_account().await;
     {
         let mut conn = fixture.conn().await;
         crate::db::demo_account_build::begin(&mut conn)
@@ -1003,9 +1028,7 @@ async fn stopping_the_server_during_a_demo_build_leaves_no_demo_account() {
     let fixture = test_fixture().await;
     let mut state = fixture.state.clone();
     state.demo_bundle_generator = slow_tiny_bundle;
-    fixture
-        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
-        .await;
+    fixture.demo_account().await;
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
 
     let (status, body) = start_demo_build(&state, &owner.token).await;
@@ -1069,9 +1092,7 @@ async fn the_demo_account_cannot_be_entered_while_it_is_built() {
     let fixture = test_fixture().await;
     let mut state = fixture.state.clone();
     state.demo_bundle_generator = slow_tiny_bundle;
-    fixture
-        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
-        .await;
+    fixture.demo_account().await;
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let visitor = crate::test_support::log_in(&state, "demo", "").await;
     let visitor_token = visitor["token"].as_str().unwrap().to_string();

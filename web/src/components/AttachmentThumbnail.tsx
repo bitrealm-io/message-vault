@@ -2,6 +2,7 @@ import { useAssetObjectUrl } from "../hooks/useAssetObjectUrl";
 import { hasPreview, shownMimeType } from "../lib/attachmentPreview";
 import { missingAttachmentChipLabel } from "../lib/missingAttachmentLabel";
 import type { MessageAttachment } from "../lib/types";
+import PlainButton from "./PlainButton";
 
 export default function AttachmentThumbnail({
   attachment,
@@ -59,9 +60,8 @@ export default function AttachmentThumbnail({
   }
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <PlainButton
+      onPress={onClick}
       className="mt-1.5 block max-w-[280px] cursor-pointer overflow-hidden rounded-md border border-border bg-transparent p-0 text-left"
     >
       <img
@@ -70,6 +70,6 @@ export default function AttachmentThumbnail({
         loading="lazy"
         className="block h-auto max-h-[280px] w-auto max-w-[280px]"
       />
-    </button>
+    </PlainButton>
   );
 }

@@ -18,8 +18,7 @@ export type ManagedAccountChanges = Partial<
   Pick<ManagedAccount, "disabled" | "can_import" | "can_export" | "can_delete">
 >;
 
-const fetchAccounts = (signal: AbortSignal) =>
-  listAccounts({ signal }).then((res) => res.items ?? []);
+const fetchAccounts = (signal: AbortSignal) => listAccounts({ signal });
 
 /** A deletion from one account changes the account list, the Dashboard and the Demo Account. */
 function useOwnerWrite<V>(

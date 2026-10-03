@@ -13,10 +13,14 @@
  * anything.
  */
 
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import RightPane from "../components/RightPane";
 import { RightToolbarProvider } from "../components/RightToolbarContext";
+import { listConversations, updateMessageTagMembers } from "../lib/serverApi";
+import type { Conversation } from "../lib/types";
 import { mockedAuth, Providers } from "../test/providers";
 import ConversationList from "./ConversationList";
 
@@ -25,17 +29,15 @@ vi.mock("../lib/auth", () => ({ useAuth: () => mockedAuth }));
 vi.mock("../lib/serverApi", () => ({
   // messageTags.ts pulls slug helpers from contactGroups.ts, whose module-level
   // `createNameCollection` call needs these even though this test never uses them.
-  listContactGroups: vi.fn().mockResolvedValue({ items: [] }),
+  listContactGroups: vi.fn().mockResolvedValue([]),
   createContactGroup: vi.fn(),
   updateContactGroup: vi.fn(),
   deleteContactGroup: vi.fn(),
   updateContactGroupMembers: vi.fn(),
-  listMessageTags: vi.fn().mockResolvedValue({
-    items: [
-      { id: 1, name: "Holiday" },
-      { id: 2, name: "Receipts" },
-    ],
-  }),
+  listMessageTags: vi.fn().mockResolvedValue([
+    { id: 1, name: "Holiday" },
+    { id: 2, name: "Receipts" },
+  ]),
   createMessageTag: vi.fn(),
   updateMessageTag: vi.fn(),
   deleteMessageTag: vi.fn(),
@@ -100,5 +102,153 @@ describe("ConversationList", () => {
     const logged = loggedErrors();
     expect(logged).not.toMatch(/Maximum update depth/);
     expect(logged).not.toMatch(/Should have a queue/);
+  });
+
+  describe("Select all", () => {
+    // jsdom lays nothing out, so the virtual list would draw no rows. A
+    // 400-pixel viewport is all TanStack Virtual reads to place them.
+    let restoreLayout: (() => void)[] = [];
+    beforeEach(() => {
+      const viewport = 400;
+      restoreLayout = [
+        vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(viewport),
+        vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(300),
+        vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(viewport),
+        vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+          top: 0,
+          bottom: viewport,
+          left: 0,
+          right: 300,
+          width: 300,
+          height: viewport,
+        } as DOMRect),
+      ].map((spy) => () => spy.mockRestore());
+    });
+    afterEach(() => {
+      for (const restore of restoreLayout) restore();
+    });
+
+    function chat(id: number): Conversation {
+      return {
+        id,
+        participants: [],
+        message_count: 1,
+        last_message_at: "",
+        date_range_start: null,
+        date_range_end: null,
+        service: "sms",
+        is_group: false,
+        label: `Chat ${id}`,
+        tags: [],
+      };
+    }
+
+    /** The server's paging over `count` conversations. */
+    function serveConversations(count: number) {
+      const all = Array.from({ length: count }, (_, i) => chat(i + 1));
+      vi.mocked(listConversations).mockImplementation(async ({ limit = 40, offset = 0 }) => ({
+        items: all.slice(offset, offset + limit),
+        total: all.length,
+        limit,
+        offset,
+      }));
+    }
+
+    function renderList() {
+      return render(
+        <Providers>
+          <MemoryRouter>
+            <RightToolbarProvider>
+              <RightPane>
+                <ConversationList selectedId={null} onSelect={() => {}} query="" />
+              </RightPane>
+            </RightToolbarProvider>
+          </MemoryRouter>
+        </Providers>,
+      );
+    }
+
+    it("does not read as all when more conversations are on the server", async () => {
+      vi.mocked(listConversations).mockResolvedValue({
+        items: [chat(1), chat(2)],
+        total: 3000,
+        limit: 40,
+        offset: 0,
+      });
+      renderList();
+      const user = userEvent.setup({ delay: null });
+      await user.click(await screen.findByRole("checkbox", { name: "Select Chat 1" }));
+      await user.click(screen.getByRole("checkbox", { name: "Select Chat 2" }));
+
+      // Two of 3,000 are ticked.
+      const box = screen.getByRole("checkbox", { name: "Select all conversations" });
+      expect(box).not.toBeChecked();
+    });
+
+    it("tags every conversation the list holds, not only the loaded page", async () => {
+      serveConversations(120);
+      vi.mocked(updateMessageTagMembers).mockResolvedValue({ added: 120, removed: 0 });
+      renderList();
+      const user = userEvent.setup({ delay: null });
+      await screen.findByRole("checkbox", { name: "Select Chat 1" });
+
+      const box = screen.getByRole("checkbox", { name: "Select all conversations" });
+      await user.click(box);
+      await waitFor(() => expect(box).toBeChecked());
+
+      await user.click(screen.getByRole("button", { name: "Message Tags" }));
+      await user.click(await screen.findByRole("checkbox", { name: "Holiday" }));
+
+      await waitFor(() => expect(vi.mocked(updateMessageTagMembers)).toHaveBeenCalled());
+      const [id, body] = vi.mocked(updateMessageTagMembers).mock.calls[0] ?? [];
+      expect(id).toBe(1);
+      expect([...(body?.add ?? [])].sort((a, b) => a - b)).toEqual(
+        Array.from({ length: 120 }, (_, i) => i + 1),
+      );
+    });
+
+    it("clears the ticks when the sort changes, so no action reaches part of them", async () => {
+      serveConversations(1200);
+      renderList();
+      const user = userEvent.setup({ delay: null });
+      await screen.findByRole("checkbox", { name: "Select Chat 1" });
+      const box = screen.getByRole("checkbox", { name: "Select all conversations" });
+      await user.click(box);
+      await waitFor(() => expect(box).toBeChecked());
+
+      await user.click(screen.getByRole("button", { name: /^Sort conversations by/ }));
+      await user.click(screen.getByRole("menuitemradio", { name: "Messages" }));
+
+      await waitFor(() => expect(box).not.toBeChecked());
+      expect(box).not.toBePartiallyChecked();
+      expect(screen.getByRole("checkbox", { name: "Select Chat 1" })).not.toBeChecked();
+    });
+
+    it("keeps every conversation selected when the list reloads after an action", async () => {
+      serveConversations(1200);
+      vi.mocked(updateMessageTagMembers).mockResolvedValue({ added: 1200, removed: 0 });
+      renderList();
+      const user = userEvent.setup({ delay: null });
+      await screen.findByRole("checkbox", { name: "Select Chat 1" });
+
+      const box = screen.getByRole("checkbox", { name: "Select all conversations" });
+      await user.click(box);
+      await waitFor(() => expect(box).toBeChecked());
+
+      await user.click(screen.getByRole("button", { name: "Message Tags" }));
+      await user.click(await screen.findByRole("checkbox", { name: "Holiday" }));
+      await waitFor(() => expect(vi.mocked(updateMessageTagMembers)).toHaveBeenCalledTimes(1));
+      // Setting a Message Tag reloads the list, every page of it.
+      const lastPageReads = () =>
+        vi.mocked(listConversations).mock.calls.filter(([params]) => params.offset === 1040).length;
+      await waitFor(() => expect(lastPageReads()).toBe(2));
+      await waitFor(() => expect(box).toBeChecked());
+
+      await user.click(await screen.findByRole("checkbox", { name: "Receipts" }));
+      await waitFor(() => expect(vi.mocked(updateMessageTagMembers)).toHaveBeenCalledTimes(2));
+      const [id, body] = vi.mocked(updateMessageTagMembers).mock.calls[1] ?? [];
+      expect(id).toBe(2);
+      expect(body?.add).toHaveLength(1200);
+    });
   });
 });

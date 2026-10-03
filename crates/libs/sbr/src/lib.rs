@@ -80,7 +80,7 @@ impl SbrBackupWriter {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
         }
-        let body_path = path.with_extension("xml.sbrbody");
+        let body_path = body_path_for(path);
         if body_path.exists() {
             fs::remove_file(&body_path)
                 .with_context(|| format!("remove stale {}", body_path.display()))?;
@@ -145,8 +145,7 @@ impl SbrBackupWriter {
         let mut body = File::open(&self.body_path)
             .with_context(|| format!("open {}", self.body_path.display()))?;
 
-        let mut tmp = self.path.clone();
-        tmp.set_extension("xml.tmp");
+        let tmp = tmp_path_for(&self.path);
         {
             let mut out = BufWriter::new(
                 File::create(&tmp).with_context(|| format!("create {}", tmp.display()))?,
@@ -263,6 +262,26 @@ const DEFAULT_BACKUP_FILENAME: &str = "smses.xml";
 /// Join `smses.xml` onto an output directory (the default full-backup filename).
 pub fn default_backup_path(output_dir: &Path) -> PathBuf {
     output_dir.join(DEFAULT_BACKUP_FILENAME)
+}
+
+/// The names of the default backup and of the two partial files a writer
+/// that stopped before it finished leaves beside it.
+pub fn backup_file_names() -> Vec<String> {
+    let path = Path::new(DEFAULT_BACKUP_FILENAME);
+    [path.to_path_buf(), tmp_path_for(path), body_path_for(path)]
+        .iter()
+        .map(|name| name.to_string_lossy().into_owned())
+        .collect()
+}
+
+/// The file [`SbrBackupWriter`] buffers message bodies in beside `path`.
+fn body_path_for(path: &Path) -> PathBuf {
+    path.with_extension("xml.sbrbody")
+}
+
+/// The file [`SbrBackupWriter::finish`] writes before it renames it to `path`.
+fn tmp_path_for(path: &Path) -> PathBuf {
+    path.with_extension("xml.tmp")
 }
 
 /// Insert `key` only when it is not already present.

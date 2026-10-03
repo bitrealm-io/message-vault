@@ -45,10 +45,7 @@ export const Z_INLINE_PANEL = "z-[70]";
 /** The little rotated square that points from an inline panel at its trigger. */
 export const Z_INLINE_PANEL_TAIL = "z-[71]";
 
-/** Row action menus in the sidebar; above an inline panel, below select popovers. */
-export const Z_ROW_MENU = "z-[80]";
-
-/** Select and ComboBox popovers. */
+/** Select and ComboBox popovers, and menus. */
 export const Z_POPOVER = "z-[100]";
 
 /** Modal dialogs and the attachment lightbox. */

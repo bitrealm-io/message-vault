@@ -156,8 +156,7 @@ function listElement(items: Item[], extra?: Parameters<typeof renderList>[1]) {
         estimateSize={49}
         getId={(c) => c.id}
         onSelect={extra?.onSelect ?? (() => {})}
-        onSelectAllChange={() => {}}
-        selectAllLabel="Select all contacts"
+        selectAll={{ onChange: () => {}, label: "Select all contacts" }}
         renderRow={(c) => <span>{c.name}</span>}
         renderRowLead={
           extra?.lead ? (c) => <input type="checkbox" aria-label={`Select ${c.name}`} /> : undefined

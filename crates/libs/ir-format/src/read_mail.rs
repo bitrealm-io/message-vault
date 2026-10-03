@@ -40,10 +40,9 @@ pub fn read_conversation_eml_dir(dir: &Path) -> Result<ConversationDocument> {
     }
     mail_messages.sort_by(cmp_mail_messages);
 
-    let packaging = crate::util::packaging_suffix_from_stem(
-        dir.file_name().and_then(|n| n.to_str()).unwrap_or_default(),
-    );
-    document_from_mail_messages(&mail_messages, packaging)
+    let mut doc = document_from_mail_messages(&mail_messages)?;
+    crate::util::recover_stem_suffix(&mut doc, dir.file_name());
+    Ok(doc)
 }
 
 /// Read a conversation `.mbox` (mboxrd) into a conversation document.
@@ -57,12 +56,9 @@ pub fn read_conversation_mbox(path: &Path) -> Result<ConversationDocument> {
         bail!("mbox has no messages: {}", path.display());
     }
     mail_messages.sort_by(cmp_mail_messages);
-    let packaging = crate::util::packaging_suffix_from_stem(
-        path.file_stem()
-            .and_then(|n| n.to_str())
-            .unwrap_or_default(),
-    );
-    document_from_mail_messages(&mail_messages, packaging)
+    let mut doc = document_from_mail_messages(&mail_messages)?;
+    crate::util::recover_stem_suffix(&mut doc, path.file_stem());
+    Ok(doc)
 }
 
 /// Order mail messages by timestamp, then GUID, so both readers agree.
@@ -79,10 +75,7 @@ fn cmp_mail_messages(a: &MailMessage, b: &MailMessage) -> std::cmp::Ordering {
 /// # Errors
 ///
 /// Returns an error when `messages` is empty.
-fn document_from_mail_messages(
-    messages: &[MailMessage],
-    packaging_stem_suffix: Option<String>,
-) -> Result<ConversationDocument> {
+fn document_from_mail_messages(messages: &[MailMessage]) -> Result<ConversationDocument> {
     if messages.is_empty() {
         bail!("document_from_mail_messages requires at least one message");
     }
@@ -114,7 +107,7 @@ fn document_from_mail_messages(
             stats: ConversationStats::default(),
         },
         messages: ir_messages,
-        packaging_stem_suffix,
+        packaging_stem_suffix: None,
     };
     doc.finalize_stats();
     Ok(doc)

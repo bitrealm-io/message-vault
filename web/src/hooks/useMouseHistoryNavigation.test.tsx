@@ -13,7 +13,6 @@ const isTauriMock = vi.mocked(isTauri);
 const BACK_BUTTON = 3;
 const FORWARD_BUTTON = 4;
 
-// biome-ignore lint/style/useComponentExportOnlyModules: local test harness only
 function Probe() {
   useMouseHistoryNavigation();
   return <output>{useLocation().pathname}</output>;

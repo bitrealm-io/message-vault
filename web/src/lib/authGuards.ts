@@ -1,18 +1,9 @@
 /** Desktop login default. IPv4 loopback, because `localhost` often resolves to IPv6 and Docker Compose publishes 8080 on IPv4 only. */
 export const DEFAULT_TAURI_SERVER_URL = "http://127.0.0.1:8080";
 
-/**
- * First value for the login server URL field.
- * Replaces the old `http://localhost:8080` default so a saved session still reaches a local Docker server.
- */
+/** First value for the login server URL field: the saved URL, else the default for this app. */
 export function initialLoginServerUrl(savedUrl: string | undefined, inTauri: boolean): string {
-  if (typeof savedUrl === "string" && savedUrl.length > 0) {
-    const normalized = savedUrl.trim().replace(/\/+$/, "");
-    if (normalized === "http://localhost:8080") {
-      return DEFAULT_TAURI_SERVER_URL;
-    }
-    return savedUrl;
-  }
+  if (savedUrl) return savedUrl;
   return inTauri ? DEFAULT_TAURI_SERVER_URL : "";
 }
 

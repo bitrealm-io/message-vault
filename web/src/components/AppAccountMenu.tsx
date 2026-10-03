@@ -1,10 +1,9 @@
-import { useCallback, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { useAccountProfile } from "../lib/useAccountProfile";
 import { useIsOwner } from "../lib/useIsOwner";
-import { Z_POPOVER } from "../lib/zLayers";
 import { GearIcon, LogOutIcon, PersonIcon } from "./icons";
+import PlainButton from "./PlainButton";
 import PopupMenu from "./PopupMenu";
 
 const itemRow = "flex items-center gap-2";
@@ -17,8 +16,6 @@ const itemRow = "flex items-center gap-2";
  * opens Settings or logs out.
  */
 export default function AppAccountMenu() {
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const { logout, accountId } = useAuth();
@@ -27,8 +24,6 @@ export default function AppAccountMenu() {
   const { isOwner } = useIsOwner();
   const settingsPath = isOwner ? `/owner/accounts/${accountId}` : "/settings";
   const settingsActive = location.pathname.startsWith(settingsPath);
-
-  const close = useCallback(() => setOpen(false), []);
 
   const username = profile?.username ?? "";
   const preferredName = profile?.preferred_name?.trim() ?? "";
@@ -45,26 +40,18 @@ export default function AppAccountMenu() {
           {username}
         </span>
       ) : null}
-      <button
-        type="button"
-        ref={triggerRef}
-        aria-expanded={open}
-        aria-haspopup="menu"
-        aria-label="Account menu"
-        title={username || undefined}
-        onClick={() => setOpen((v) => !v)}
-        className={`flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-border bg-transparent p-0 text-text hover:bg-hover ${
-          open ? "bg-hover" : ""
-        }`}
-      >
-        <PersonIcon size={18} />
-      </button>
       <PopupMenu
-        open={open}
-        onClose={close}
-        triggerRef={triggerRef}
+        trigger={
+          <PlainButton
+            aria-label="Account menu"
+            title={username || undefined}
+            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-border bg-transparent p-0 text-text outline-none hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent aria-expanded:bg-hover"
+          >
+            <PersonIcon size={18} />
+          </PlainButton>
+        }
         label="Account menu"
-        className={`absolute top-full right-0 mt-1 min-w-[12rem] rounded-xl ${Z_POPOVER}`}
+        className="min-w-[12rem] rounded-xl"
         header={
           username ? (
             <div className="flex flex-col gap-0.5">

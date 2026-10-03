@@ -115,6 +115,17 @@ pub(crate) fn split_first_sentence(text: &str) -> (&str, &str) {
     (text, "")
 }
 
+/// Every scope one security requirement names, across all its schemes.
+fn requirement_scopes(requirement: &Value) -> impl Iterator<Item = &str> {
+    requirement
+        .as_object()
+        .into_iter()
+        .flat_map(|schemes| schemes.values())
+        .filter_map(Value::as_array)
+        .flatten()
+        .filter_map(Value::as_str)
+}
+
 /// Replace the operation's failures with the ones its shape and its handler
 /// give it, one problem response per status.
 fn failures(path: &str, op: &mut Operation) {
@@ -165,6 +176,17 @@ fn failures(path: &str, op: &mut Operation) {
                 .is_some_and(|s| s.iter().any(|s| s == "owner"))
         }) {
             kinds.push(ProblemType::NotTheOwner);
+        }
+        // The import and delete guards refuse the Demo Account by its id
+        // (`server::require_import_access`, `server::require_delete_access`),
+        // so a route every credential of which needs one of them can answer it.
+        let every_needs = |scope: &str| {
+            requirements
+                .iter()
+                .all(|requirement| requirement_scopes(requirement).any(|named| named == scope))
+        };
+        if every_needs("import") || every_needs("delete") {
+            kinds.push(ProblemType::DemoAccountProtected);
         }
     }
     if op.request_body.is_some() {

@@ -386,6 +386,12 @@ What each reaches:
   session: the account's own with the `delete` permission, or, for an
   account's messages and for the account itself, the owner's. A token is
   refused whatever its scopes.
+- The Demo Account is refused with `403 Forbidden` and
+  `demo-account-protected` by its id, whatever its permission row says, on
+  every route that needs the `import` scope or the `delete` permission and on
+  `POST /v1/contacts`. Its profile reports `export` and neither `import` nor
+  `delete`, from the same id. Why: it has no password, so its limits must not
+  rest on a row (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`).
 - An account may do everything with its own messages, deleting them and
   itself included, unless the owner limits it. Deleting an account deletes
   every message it owns, so an account whose `delete` permission is off

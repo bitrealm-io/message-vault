@@ -5,11 +5,11 @@ use crate::db::api_tokens;
 use crate::db::permissions::Permissions;
 use crate::problem::ProblemType;
 use crate::test_support::{
-    SeedConversation, SeedMessage, claim_as_owner, delete_json, delete_json_with_body,
+    SeedConversation, SeedMessage, claim_as_owner, delete_json, delete_json_with_body, delete_raw,
     delete_status, delete_status_with_body, expect_problem, fixture_with_account, get_json,
-    get_raw, get_status, log_in, login_status, patch_failure, patch_json, patch_status,
-    post_created_json, post_logged_out, post_status, post_status_logged_out, put_json, put_raw,
-    put_status, register_via_api, seed_conversation, seed_one_message, test_fixture,
+    get_raw, get_status, log_in, login_status, patch_failure, patch_json, patch_raw, patch_status,
+    post_created_json, post_logged_out, post_raw, post_status, post_status_logged_out, put_json,
+    put_raw, put_status, register_via_api, seed_conversation, seed_one_message, test_fixture,
 };
 
 fn member(id: i64) -> String {
@@ -1561,9 +1561,7 @@ async fn the_owner_deletes_any_account_outright() {
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let victim = register_via_api(&state, "bob", "hunter2hunter2").await;
     seed_one_message(&state, victim.account_id).await;
-    let demo = fixture
-        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
-        .await;
+    let demo = fixture.demo_account().await;
 
     assert_eq!(
         delete_status(&state, &member(victim.account_id), &owner.token).await,
@@ -1657,13 +1655,7 @@ async fn an_account_deletes_itself_with_its_password_and_the_demo_account_refuse
         "the other account is untouched"
     );
 
-    let demo = fixture
-        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
-        .await;
-    let demo_token = log_in(&state, "demo", "").await["token"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    let (demo, demo_token) = fixture.demo_account_session().await;
     let (status, text) = crate::test_support::delete_raw_with_body(
         &state,
         &member(demo),
@@ -1736,20 +1728,14 @@ async fn an_account_without_the_delete_permission_cannot_delete_itself() {
 
 /// The Demo Account has no password, so its limits are fixed for everyone:
 /// neither the account nor the owner sets its password, its status, its
-/// permissions or its identities, or deletes its messages for good. Its
-/// display name is an ordinary change and goes through.
+/// permissions, its identities, its display name or its time zone, or
+/// deletes its messages for good.
 #[tokio::test]
 async fn the_demo_account_refuses_what_would_shut_or_empty_it_from_anyone() {
     let fixture = test_fixture().await;
     let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
-    let demo = fixture
-        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
-        .await;
-    let demo_token = log_in(&state, "demo", "").await["token"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    let (demo, demo_token) = fixture.demo_account_session().await;
     let path = member(demo);
 
     for (who, token) in [("the owner", &owner.token), ("the account", &demo_token)] {
@@ -1786,6 +1772,27 @@ async fn the_demo_account_refuses_what_would_shut_or_empty_it_from_anyone() {
             StatusCode::FORBIDDEN,
             "{who} must not delete its messages for good"
         );
+        // Every visitor shares the account, so a name or zone one visitor
+        // sets would greet the next; the seed's "Demo User" and UTC stay.
+        for (field, body) in [
+            (
+                "display name",
+                serde_json::json!({ "preferred_name": "Visitor" }),
+            ),
+            (
+                "time zone",
+                serde_json::json!({ "time_zone": "America/New_York" }),
+            ),
+        ] {
+            let (status, text) = patch_raw(&state, &path, token, body).await;
+            let problem = expect_problem(status, &text, ProblemType::DemoAccountProtected);
+            assert!(
+                problem
+                    .sentence()
+                    .contains("display name and time zone are fixed"),
+                "{who} must not change its {field}: {text}"
+            );
+        }
     }
     for flags in [
         serde_json::json!({ "disabled": true }),
@@ -1801,23 +1808,55 @@ async fn the_demo_account_refuses_what_would_shut_or_empty_it_from_anyone() {
         );
     }
 
-    assert_eq!(
-        patch_status(
-            &state,
-            &path,
-            &demo_token,
-            serde_json::json!({ "preferred_name": "Visitor" }),
-        )
-        .await,
-        StatusCode::OK,
-        "a display name is an ordinary change"
-    );
     // Last, because a new login replaces the session used above.
     assert_eq!(
         login_status(&state, "demo", "").await,
         StatusCode::CREATED,
         "the Demo Account still opens with no password"
     );
+}
+
+/// The Demo Account's grant is known from its id, not read from its
+/// permission row: with `can_import` and `can_delete` switched on in the row,
+/// starting an import, sending a batch and each delete for good are still
+/// refused as `demo-account-protected` (ADR 0016).
+#[tokio::test]
+async fn the_demo_account_refuses_imports_and_deletes_whatever_its_permission_row_says() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
+    let (demo, token) = fixture.demo_account_session().await;
+
+    // The profile reads the grant from the id too, so no screen offers what
+    // the server refuses.
+    let profile: Account = get_json(&state, &format!("/v1/accounts/{demo}"), &token).await;
+    assert!(
+        !profile.can_import && profile.can_export && !profile.can_delete,
+        "the Demo Account's profile must report export only, whatever its row says"
+    );
+
+    let (status, text) = post_raw(
+        &state,
+        "/v1/imports",
+        &token,
+        "application/json",
+        serde_json::json!({ "source": "imessage" }).to_string(),
+    )
+    .await;
+    expect_problem(status, &text, ProblemType::DemoAccountProtected);
+    let (status, text) = post_raw(
+        &state,
+        "/v1/imports/1/batches",
+        &token,
+        "application/x-ndjson",
+        "",
+    )
+    .await;
+    expect_problem(status, &text, ProblemType::DemoAccountProtected);
+    for path in ["/v1/trash", "/v1/conversations/1", "/v1/contacts/1"] {
+        let (status, text) = delete_raw(&state, path, &token).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "DELETE {path}: {text}");
+        expect_problem(status, &text, ProblemType::DemoAccountProtected);
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -325,6 +325,8 @@ impl Shared {
             .await
             .unwrap();
         drop(conn);
+        // The Demo Account, whose row grants everything, for `document_rules`.
+        fixture.demo_account().await;
         let server = crate::test_support::serve(&fixture.state).await;
         Self {
             fixture,
@@ -530,6 +532,21 @@ impl<'a> World<'a> {
             .unwrap()
             .to_string();
         world
+    }
+
+    /// A new Session for the Demo Account. An account holds one Session at a
+    /// time, and a call may end it, so each call asks for its own.
+    pub(super) async fn demo_session(&self) -> String {
+        let mut conn = self.shared.fixture.conn().await;
+        crate::db::session_tokens::revoke_account_sessions(
+            &mut conn,
+            account_profile::DEMO_ACCOUNT_ID,
+        )
+        .await
+        .unwrap();
+        insert_account_session_token(&mut conn, account_profile::DEMO_ACCOUNT_ID)
+            .await
+            .unwrap()
     }
 
     pub(super) fn url(&self, path: &str) -> String {

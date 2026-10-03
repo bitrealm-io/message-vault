@@ -1162,7 +1162,9 @@ async fn deleting_an_upload_answers_204_and_removes_its_files() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let status = response.status();
+    let text = response.text().await.unwrap();
+    crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
 }
 
 /// A zero-byte attachment is a file like any other. A PUT of no bytes
@@ -1611,6 +1613,64 @@ async fn a_preview_is_read_under_the_same_rule_as_the_original() {
         crate::test_support::get_status(&state, &path, &user.token).await,
         StatusCode::OK
     );
+}
+
+/// C1-1: a server that cannot write its assets folder has a storage fault,
+/// not a body that broke a rule. It answers 500, not 422.
+#[tokio::test]
+async fn c1_1_a_put_the_server_cannot_store_is_not_a_422() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let bytes: Vec<u8> = b"an attachment".to_vec();
+    let sha = sha256_hex(&bytes);
+    let assets_dir = fixture
+        .state
+        .cfg
+        .paths
+        .assets_dir_for_account(user.account_id, "imessage");
+    std::fs::create_dir_all(&assets_dir).unwrap();
+    // A file where the shard folder must go: create_dir_all in install_blob fails.
+    std::fs::write(assets_dir.join(&sha[..2]), b"not a folder").unwrap();
+    let (status, text) = crate::test_support::put_raw(
+        &fixture.state,
+        &format!("/v1/assets/{sha}?source=imessage"),
+        &user.token,
+        "application/octet-stream",
+        bytes,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "a storage failure answered {status}: {text}"
+    );
+}
+
+/// An upload id that names no upload names nothing, so a part or a
+/// completion sent to it answers 404, not 422.
+#[tokio::test]
+async fn a_part_or_completion_for_an_unknown_upload_is_not_found() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let sha = sha256_hex(b"never started");
+
+    let (status, text) = crate::test_support::put_raw(
+        &fixture.state,
+        &format!("/v1/assets/{sha}/uploads/abcdef01/parts/1?source=imessage"),
+        &user.token,
+        "application/octet-stream",
+        b"part".to_vec(),
+    )
+    .await;
+    crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
+
+    let (status, text) = crate::test_support::post_raw(
+        &fixture.state,
+        &format!("/v1/assets/{sha}/uploads/abcdef01/complete?source=imessage"),
+        &user.token,
+        "application/json",
+        "{}",
+    )
+    .await;
+    crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
 }
 
 /// S2-1: the fingerprint segment must not name a path outside the account's

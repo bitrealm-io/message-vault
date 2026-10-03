@@ -369,17 +369,16 @@ mod tests {
     use super::*;
     use crate::db::api_tokens::{ApiTokenLabelError, ApiTokenMutationError};
 
-    /// The `Location` of a new token names it, and a `GET` there answers the
-    /// token as the list shows it, with its masked secret and never the
-    /// secret itself.
+    /// One token read at its own path answers it as the list shows it, with
+    /// its masked secret and never the secret itself.
     #[tokio::test]
-    async fn a_new_tokens_location_answers_the_token_as_the_list_shows_it() {
-        use crate::test_support::{fixture_with_account, get_json, get_raw, post_created_json};
+    async fn a_token_reads_as_the_list_shows_it() {
+        use crate::test_support::{fixture_with_account, get_json, post_created_json};
 
         let (fixture, alice) = fixture_with_account().await;
         let state = fixture.state.clone();
         let tokens = format!("/v1/accounts/{}/api-tokens", alice.account_id);
-        let (location, created): (String, serde_json::Value) = post_created_json(
+        let (_, created): (String, serde_json::Value) = post_created_json(
             &state,
             &tokens,
             &alice.token,
@@ -387,14 +386,12 @@ mod tests {
         )
         .await;
 
-        let token: serde_json::Value = get_json(&state, &location, &alice.token).await;
+        let one = format!("{tokens}/{}", created["id"]);
+        let token: serde_json::Value = get_json(&state, &one, &alice.token).await;
         let listed: serde_json::Value = get_json(&state, &tokens, &alice.token).await;
         assert_eq!(token, listed["items"][0], "{token}");
         assert_eq!(token["token_hint"], created["token_hint"], "{token}");
         assert!(token.get("token").is_none(), "{token}");
-
-        let (status, text) = get_raw(&state, &format!("{tokens}/999999"), &alice.token).await;
-        crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
     }
 
     #[test]

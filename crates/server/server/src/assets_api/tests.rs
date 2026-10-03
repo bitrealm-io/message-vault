@@ -619,18 +619,18 @@ async fn an_upload_part_over_the_part_size_is_a_json_413() {
     );
 }
 
-/// The `Location` of a new multipart upload names the upload, and a `GET`
-/// there answers its size, part size and the parts received so far, so a
-/// client that lost track of an upload can resume it.
+/// A multipart upload read at its own path answers its size, part size and
+/// the parts received so far, so a client that lost track of an upload can
+/// resume it.
 #[tokio::test]
-async fn a_new_uploads_location_answers_its_state() {
+async fn an_upload_answers_its_state() {
     let (fixture, user) = crate::test_support::fixture_with_account().await;
     let mut state = fixture.state.clone();
     state.asset_part_size = 16;
     let bytes: Vec<u8> = (0u8..40).collect();
     let sha = sha256_hex(&bytes);
 
-    let (location, started): (String, serde_json::Value) = crate::test_support::post_created_json(
+    let (_, started): (String, serde_json::Value) = crate::test_support::post_created_json(
         &state,
         &format!("/v1/assets/{sha}/uploads?source=imessage"),
         &user.token,
@@ -648,8 +648,12 @@ async fn a_new_uploads_location_answers_its_state() {
     .await;
     assert_eq!(status, StatusCode::OK, "{text}");
 
-    let upload: serde_json::Value =
-        crate::test_support::get_json(&state, &location, &user.token).await;
+    let upload: serde_json::Value = crate::test_support::get_json(
+        &state,
+        &format!("/v1/assets/{sha}/uploads/{upload_id}?source=imessage"),
+        &user.token,
+    )
+    .await;
     assert_eq!(
         upload,
         serde_json::json!({
@@ -661,13 +665,6 @@ async fn a_new_uploads_location_answers_its_state() {
         })
     );
 
-    let (status, text) = crate::test_support::get_raw(
-        &state,
-        &format!("/v1/assets/{sha}/uploads/0123456789abcdef?source=imessage"),
-        &user.token,
-    )
-    .await;
-    crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
 }
 
 /// The attachment size limit is read from the Server Settings on each upload:

@@ -153,12 +153,12 @@ pub fn require_logged_in(auth: &AuthIdentity) -> Result<(), ApiError> {
 ///
 /// # Errors
 ///
-/// Returns `demo-account-protected` when `target` is the Demo Account; `what`
-/// finishes the sentence "the demo account's ...".
+/// Returns `demo-account-protected` when `target` is the Demo Account. `what`
+/// finishes the sentence "The Demo Account's ...".
 pub fn refuse_for_demo_account(target: i64, what: &str) -> Result<(), ApiError> {
     if account_profile::is_demo_account(target) {
         return Err(ApiError::DemoAccountProtected(format!(
-            "the demo account's {what}; the owner can delete the account, and reset-demo restores it"
+            "The Demo Account's {what}. The owner can delete the account, and reset-demo restores it."
         )));
     }
     Ok(())
@@ -260,8 +260,8 @@ pub fn require_delete_access(auth: &AuthIdentity) -> Result<(), ApiError> {
 ///
 /// # Errors
 ///
-/// Returns forbidden when the credential is an API token, the account is the
-/// Demo Account, or the account may not delete.
+/// Returns `demo-account-protected` for the Demo Account, and forbidden when
+/// the credential is an API token or the account may not delete.
 pub fn require_full_delete_access(auth: &AuthIdentity) -> Result<(), ApiError> {
     require_full_access(auth)?;
     require_delete_access(auth)

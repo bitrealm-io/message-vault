@@ -3068,35 +3068,10 @@ async fn an_address_book_load_on_the_demo_account_is_refused() {
     let fixture = crate::test_support::test_fixture().await;
     let state = fixture.state.clone();
     let (demo, token) = fixture.demo_account_session().await;
-    let contact_id: i64 = {
+    let contact_id = {
         let mut conn = state.db.acquire().await.unwrap();
-        // An Unknown the demo imports made: no name, one identity.
-        let handle: i64 = sqlx::query_scalar(
-            "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
-             VALUES ($1, '+15555550123', '+15555550123', 'phone', 'phone') RETURNING id",
-        )
-        .bind(demo)
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
-        let contact: i64 = sqlx::query_scalar(
-            "INSERT INTO contacts (account_id, preferred_name, origin)
-             VALUES ($1, '', 'import') RETURNING id",
-        )
-        .bind(demo)
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
-        sqlx::query(
-            "INSERT INTO contact_handles (account_id, handle_id, contact_id) VALUES ($1, $2, $3)",
-        )
-        .bind(demo)
-        .bind(handle)
-        .bind(contact)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-        contact
+        // An Unknown: no name, one identity.
+        insert_contact_with_handle(&mut conn, demo, "", "+15555550123").await
     };
     let visitor = RegisteredAccount {
         account_id: demo,
@@ -3143,11 +3118,16 @@ async fn an_address_book_load_needs_no_import_export_or_delete_permission() {
     let (fixture, account) = fixture_with_account().await;
     {
         let mut conn = fixture.conn().await;
-        sqlx::query(
-            "UPDATE accounts SET can_import = 0, can_export = 0, can_delete = 0 WHERE id = $1",
+        account_profile::set_account_flags(
+            &mut conn,
+            account.account_id,
+            account_profile::AccountFlags {
+                can_import: Some(false),
+                can_export: Some(false),
+                can_delete: Some(false),
+                ..Default::default()
+            },
         )
-        .bind(account.account_id)
-        .execute(&mut *conn)
         .await
         .unwrap();
     }

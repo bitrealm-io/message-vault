@@ -16,7 +16,6 @@ use std::time::Instant;
 use anyhow::{Context, Result, bail};
 pub use message_crate_api_types::ImportMode;
 use serde::{Deserialize, Serialize};
-use sqlx::Connection;
 use sqlx::SqliteConnection;
 use tempfile::TempDir;
 
@@ -28,7 +27,6 @@ use crate::assets_api::AssetStats;
 use crate::config::{PathsConfig, validate_source_id};
 #[cfg(test)]
 use crate::db::engine;
-use crate::db::engine::BEGIN_IMMEDIATE_SQL;
 use crate::db::imports::{self, CompleteImportArgs};
 use crate::db::maintenance;
 use crate::db::schema;
@@ -325,8 +323,12 @@ pub async fn import_jsonl_files_on_conn(
     // by ADR-0013, discards trashed ones; none of that may outlive a promote
     // that fails. The write lock is taken up front (IMMEDIATE) so two
     // imports for different accounts cannot race into SQLITE_BUSY at the
-    // first INSERT.
-    let mut tx = conn.begin_with(BEGIN_IMMEDIATE_SQL).await?;
+    // first INSERT. The run is checked again under that lock: a run discarded
+    // or completed while the batch uploaded takes no messages.
+    let mut tx = crate::db::begin_write(conn).await?;
+    if let Some(import_id) = opts.import_id {
+        crate::db::imports::require_running_import(&mut tx, opts.account_id, import_id).await?;
+    }
     let asset_stats = stage_all_files(&mut tx, paths, opts, &mut stats, started).await?;
 
     say(&format!(
@@ -1369,6 +1371,12 @@ fn import_semaphore() -> &'static tokio::sync::Semaphore {
 /// Everything else (a disk or database error, a bug) is a 500: the message
 /// goes to stderr and the client sees "internal server error".
 fn classify_import_error(err: anyhow::Error) -> ApiError {
+    // The run ended while the batch uploaded: refused as the check before
+    // the body refuses it.
+    let err = match err.downcast::<crate::db::imports::ImportLookupError>() {
+        Ok(lookup) => return ApiError::from(lookup),
+        Err(err) => err,
+    };
     match ImportFailure::in_error(&err) {
         Some(failure @ ImportFailure::MissingGuid { .. }) => ApiError::InvalidImportLines {
             errors: vec![failure.batch_sentence()],

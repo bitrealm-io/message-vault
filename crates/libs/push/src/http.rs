@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow};
 use message_crate_http::{
-    HttpError, error_sentence, looks_like_html, ok_json, read_body, trim_base_url,
+    HttpError, SESSION_REFUSED, error_sentence, looks_like_html, ok_json, read_body, trim_base_url,
 };
 use reqwest::Method;
 use serde::Deserialize;
@@ -133,8 +133,8 @@ impl Session {
     ///
     /// # Errors
     ///
-    /// Returns an error when the server does not accept the credential
-    /// (`401 Unauthorized`: unknown or expired), refuses the account
+    /// Returns an error when the server does not accept the session
+    /// (`401 Unauthorized`: expired or ended), refuses the account
     /// (`403 Forbidden`: disabled, or neither import nor export), or the
     /// request fails in any other way.
     pub(crate) fn head_asset(&self, sha256: &str) -> Result<bool> {
@@ -149,12 +149,7 @@ impl Session {
         match status.as_u16() {
             404 => return Ok(false),
             401 => {
-                return Err(HttpError::new(
-                    401,
-                    "The server did not accept this credential (401 Unauthorized): \
-                     it is unknown or has expired.",
-                )
-                .into());
+                return Err(HttpError::new(401, SESSION_REFUSED).into());
             }
             403 => {
                 return Err(HttpError::new(
@@ -540,9 +535,10 @@ mod tests {
     }
 
     #[test]
-    fn head_asset_401_does_not_name_an_api_key() {
+    fn head_asset_401_says_to_log_in_again_and_names_no_api_key() {
         let message = head_asset_error(401);
         assert!(message.contains("401 Unauthorized"), "got {message}");
+        assert!(message.contains("Log in again"), "got {message}");
         assert!(!message.contains("API key"), "got {message}");
     }
 

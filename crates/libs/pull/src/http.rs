@@ -15,7 +15,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use message_crate_http::{HttpError, error_sentence, ok_json, trim_base_url};
+use message_crate_http::{HttpError, SESSION_REFUSED, error_sentence, ok_json, trim_base_url};
 use reqwest::Method;
 use sha2::{Digest, Sha256};
 
@@ -159,6 +159,11 @@ pub fn download_asset(
     if status.as_u16() == 404 {
         return Err(HttpError::new(404, format!("asset not found: {sha256}")).into());
     }
+    if status.as_u16() == 401 {
+        return Err(
+            HttpError::new(401, format!("asset download failed. {SESSION_REFUSED}")).into(),
+        );
+    }
     if !status.is_success() {
         let body = response.text().unwrap_or_default();
         return Err(HttpError::new(
@@ -262,6 +267,26 @@ mod tests {
             );
         }
         assert_eq!(any_request.calls(), 0);
+        assert!(!dest.exists());
+    }
+
+    /// A session that expires mid-run answers 401 to a download, and the
+    /// message says to log in again.
+    #[test]
+    fn a_401_download_says_to_log_in_again() {
+        let server = httpmock::MockServer::start();
+        let digest = "a".repeat(64);
+        server.mock(|when, then| {
+            when.method("GET").path(format!("/v1/assets/{digest}"));
+            then.status(401);
+        });
+        let http = HttpSession::new().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("asset.bin");
+
+        let err = download_asset(&http, &server.base_url(), "mc_test", &digest, &dest)
+            .expect_err("a 401 is an error");
+        assert!(err.to_string().contains("Log in again"), "{err}");
         assert!(!dest.exists());
     }
 

@@ -51,7 +51,7 @@ export default function MessageSearchRow({
     <PlainButton
       onPress={onClick}
       aria-current={isSelected ? "true" : undefined}
-      className={`box-border flex w-full cursor-pointer flex-col gap-[0.3rem] border-none px-[0.85rem] py-[0.7rem] text-left ${listRowDivider} ${
+      className={`box-border flex w-full cursor-pointer flex-col gap-[0.3rem] border-none px-[0.85rem] py-[0.7rem] text-left outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 ${listRowDivider} ${
         isSelected ? "bg-hover" : "bg-transparent"
       }`}
     >

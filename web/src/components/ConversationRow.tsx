@@ -131,7 +131,10 @@ export default function ConversationRow({
 
   if (!onCheckChange) {
     return (
-      <PlainButton onPress={onClick} className={`cursor-pointer ${rowClass}`}>
+      <PlainButton
+        onPress={onClick}
+        className={`cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 ${rowClass}`}
+      >
         {body}
       </PlainButton>
     );
@@ -156,7 +159,7 @@ export default function ConversationRow({
       />
       <PlainButton
         onPress={onClick}
-        className="flex min-w-0 flex-1 cursor-pointer items-start border-none bg-transparent p-0 text-left"
+        className="flex min-w-0 flex-1 cursor-pointer items-start border-none bg-transparent p-0 text-left outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
       >
         {body}
       </PlainButton>

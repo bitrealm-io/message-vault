@@ -138,11 +138,13 @@ pub async fn load_messages(
     .await
 }
 
-/// The keys the Messages list, `GET /v1/messages`, accepts in `sort=`. It
-/// has one more than a conversation's messages: a search can rank its
-/// matches, and a conversation read in order cannot.
+/// The keys the Messages list, `GET /v1/messages`, accepts in `sort=`:
+/// [`MessageSort`]'s one key, `date`, and `relevance`. A conversation's own
+/// messages sort by [`MessageSort`] alone: a search can rank its matches, and
+/// a conversation read in order cannot. The two are separate types so that
+/// `relevance` is refused where nothing ranks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SearchSort {
+pub enum MessageListSort {
     /// The message's timestamp, as [`MessageSort::Date`].
     Date,
     /// How well the message matches the query's free-text words, best first:
@@ -151,14 +153,15 @@ pub enum SearchSort {
 }
 
 /// The Messages list's keys, as `sort=` spells them.
-pub const SEARCH_SORT_KEYS: [(&str, SearchSort); 2] = [
-    ("date", SearchSort::Date),
-    ("relevance", SearchSort::Relevance),
+pub const MESSAGE_LIST_SORT_KEYS: [(&str, MessageListSort); 2] = [
+    ("date", MessageListSort::Date),
+    ("relevance", MessageListSort::Relevance),
 ];
 
-/// Oldest first, as every message list reads when `sort` is absent.
-pub const DEFAULT_SEARCH_SORT: [SortKey<SearchSort>; 1] = [SortKey {
-    key: SearchSort::Date,
+/// Oldest first, as [`DEFAULT_MESSAGE_SORT`] reads a conversation when `sort`
+/// is absent.
+pub const DEFAULT_MESSAGE_LIST_SORT: [SortKey<MessageListSort>; 1] = [SortKey {
+    key: MessageListSort::Date,
     direction: Direction::Asc,
 }];
 
@@ -194,7 +197,7 @@ const RANK_JOIN_SQL: &str = "
 pub async fn load_search_page(
     conn: &mut SqliteConnection,
     filter: &crate::search::Filter,
-    order: &[SortKey<SearchSort>],
+    order: &[SortKey<MessageListSort>],
     limit: usize,
     offset: usize,
 ) -> Result<Vec<Message>, ApiError> {
@@ -209,20 +212,20 @@ pub async fn load_search_page(
 /// As [`load_search_page`], for a sort it refuses.
 pub(crate) fn search_page_sql(
     filter: &crate::search::Filter,
-    order: &[SortKey<SearchSort>],
+    order: &[SortKey<MessageListSort>],
     limit: usize,
     offset: usize,
 ) -> Result<(String, Vec<SqlParam>), ApiError> {
     if order
         .iter()
-        .any(|k| k.key == SearchSort::Relevance && k.direction == Direction::Desc)
+        .any(|k| k.key == MessageListSort::Relevance && k.direction == Direction::Desc)
     {
         return Err(ApiError::validation(
             "sort: relevance has one direction, best match first; write `relevance`, not `-relevance`",
         ));
     }
 
-    let ranked = order.iter().any(|k| k.key == SearchSort::Relevance);
+    let ranked = order.iter().any(|k| k.key == MessageListSort::Relevance);
     let mut from_sql = messages_from_sql();
     let mut params = Vec::new();
     if ranked {
@@ -242,8 +245,8 @@ pub(crate) fn search_page_sql(
         match key.key {
             // `bm25()` is lower for a better match, so best first is
             // ascending, and an unranked message (NULL) comes last.
-            SearchSort::Relevance => terms.push("r.rank IS NULL ASC, r.rank ASC".to_string()),
-            SearchSort::Date => {
+            MessageListSort::Relevance => terms.push("r.rank IS NULL ASC, r.rank ASC".to_string()),
+            MessageListSort::Date => {
                 let d = key.direction.sql();
                 terms.push(format!("m.timestamp {d}, m.sort_order {d}"));
                 date_direction = Some(key.direction);

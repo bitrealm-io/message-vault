@@ -11,8 +11,8 @@ use crate::extract::{Json, Path, Query};
 use axum::extract::State;
 
 use crate::db::conversation_messages::{
-    DEFAULT_MESSAGE_SORT, DEFAULT_SEARCH_SORT, Message, SEARCH_SORT_KEYS, count_matching_messages,
-    load_messages, load_search_page,
+    DEFAULT_MESSAGE_LIST_SORT, DEFAULT_MESSAGE_SORT, MESSAGE_LIST_SORT_KEYS, Message,
+    count_matching_messages, load_messages, load_search_page,
 };
 use crate::db::sql::SqlParam;
 use crate::paging::{ListRequest, Page, PageQuery};
@@ -75,8 +75,8 @@ pub(crate) async fn list_messages(
         &mut conn,
         auth.account_id,
         query,
-        &SEARCH_SORT_KEYS,
-        &DEFAULT_SEARCH_SORT,
+        &MESSAGE_LIST_SORT_KEYS,
+        &DEFAULT_MESSAGE_LIST_SORT,
     )
     .await?;
     let filter = message_filter(auth.account_id, &list.q, list.clock)?;

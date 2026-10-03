@@ -765,7 +765,7 @@ async fn descending_relevance_is_validation_failed() {
 /// route runs must materialize the rank.
 #[tokio::test]
 async fn a_relevance_search_reads_the_index_once() {
-    use crate::db::conversation_messages::{SearchSort, search_page_sql};
+    use crate::db::conversation_messages::{MessageListSort, search_page_sql};
     use crate::paging::{Direction, SortKey};
 
     let (fixture, alice) = fixture_with_account().await;
@@ -777,7 +777,7 @@ async fn a_relevance_search_reads_the_index_once() {
     for q in ["the", "from:me the -office", "the or dentist"] {
         let filter = crate::messages_api::message_filter(alice.account_id, q, clock).unwrap();
         let order = [SortKey {
-            key: SearchSort::Relevance,
+            key: MessageListSort::Relevance,
             direction: Direction::Asc,
         }];
         let (sql, params) = search_page_sql(&filter, &order, 40, 0).unwrap();

@@ -75,7 +75,7 @@ A message imported or trashed while the run is being read does not change what t
 | **CSV (.csv)** | One `.csv` file per conversation, attachments in an `attachments/` folder. Columns: [CSV columns](/docs/developer/reference/csv-columns/) |
 | **EML (one file per message)** | One folder per conversation, one `.eml` file per message, attachments embedded |
 | **MBOX (.mbox)** | One `.mbox` file per conversation, attachments embedded |
-| **Android XML (smses.xml)** | A single `smses.xml`, attachments embedded |
+| **Android XML (smses.xml)** | A single `smses.xml` holding only SMS and MMS, attachments embedded. The log says how many other messages were left out |
 
 Export always fetches the messages as JSON Lines first.
 Any other format is written by converting that JSON Lines copy, as part of the same run.

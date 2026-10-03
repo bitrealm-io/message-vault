@@ -416,6 +416,10 @@ released versions carry their date on the heading.
 
 #### Exporting and converting
 
+- 2026-10-03 **Android XML holds only SMS and MMS.** Export and Convert
+  wrote every message as a text message, so an iMessage or a WhatsApp
+  message came back from a re-import as an SMS. They now leave every other
+  message out, and the log says how many were left out and why.
 - 2026-10-01 **An export from the Conversations list holds those
   conversations.** Export opened from a filtered Conversations list wrote
   only the matching messages, or refused a search such as `messages:>100`.

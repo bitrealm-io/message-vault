@@ -22,7 +22,7 @@ export function useSelectAll<T>(
   currentScope.current = scopeKey;
   const run = useRef(0);
   const [selectingFor, setSelectingFor] = useState<string | null>(null);
-  const [failure, setFailure] = useState<{ scope: string; message: string } | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
 
   const selecting = selectingFor === scopeKey;
   // A failure is for the list as it was: leaving it clears the message, so
@@ -41,10 +41,9 @@ export function useSelectAll<T>(
       if (stillWanted()) onRows(rows);
     } catch (error) {
       if (stillWanted()) {
-        setFailure({
-          scope: forScope,
-          message: `Select all could not read every row: ${apiErrorMessage(error, "the list did not load")}`,
-        });
+        setFailure(
+          `Select all could not read every row: ${apiErrorMessage(error, "the list did not load")}`,
+        );
       }
     } finally {
       if (thisRun === run.current) setSelectingFor(null);
@@ -64,6 +63,6 @@ export function useSelectAll<T>(
     /** Pages are loading for Select all; the box waits. */
     selecting,
     /** Why the last Select all ticked nothing, for this scope. */
-    error: failure?.scope === scopeKey ? failure.message : null,
+    error: failure,
   };
 }

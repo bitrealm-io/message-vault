@@ -73,8 +73,8 @@ describe("SearchBar", () => {
 
     await user.keyboard("{ArrowDown}");
     const [first] = screen.getAllByRole("option");
-    // The active row is told to a screen reader by `aria-activedescendant`; it
-    // is not selected, because every row is an action and none is the value.
+    // `aria-activedescendant` tells a screen reader which row is active. The
+    // row is not selected, because every row is an action and none is the value.
     expect(input.getAttribute("aria-activedescendant")).toBe(first.id);
 
     await user.keyboard("{ArrowDown}");

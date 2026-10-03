@@ -375,6 +375,10 @@ jobs:
     needs: [changes, fmt, clippy, test, check-tauri, web, docs, license, docker-context, version]
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      # How much of the commit the sha-<commit> tag and the image's Build
+      # both use, so the two agree. 8 is build-version's --short=8.
+      SHORT_SHA_LENGTH: 8
     steps:
       - uses: actions/checkout@v7
 
@@ -387,13 +391,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      # sha-<commit> uses the 8 characters the Build does (build-version's
-      # --short=8), so the image tag and the version it reports agree.
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v6
         env:
-          DOCKER_METADATA_SHORT_SHA_LENGTH: 8
+          DOCKER_METADATA_SHORT_SHA_LENGTH: ${{ env.SHORT_SHA_LENGTH }}
         with:
           images: bitrealm/message-crate
           flavor: latest=false
@@ -403,8 +405,9 @@ jobs:
             type=raw,value=latest,enable=${{ needs.changes.outputs.release == 'true' }}
             type=sha,prefix=sha-,format=short
 
-      # Empty on a tag on purpose: a release reports the Product Version
-      # alone. A manual run reports the commit, as any other build does.
+      # Empty on a release (a pushed v* tag) on purpose: a release reports
+      # the Product Version alone. A manual run reports the commit, whatever
+      # ref it names, as any other build does.
       # The image cannot ask git because .git is not in its context.
       - name: Choose the build metadata
         id: build
@@ -415,7 +418,7 @@ jobs:
           if [[ "$RELEASE" == true ]]; then
             echo "metadata=" >> "$GITHUB_OUTPUT"
           else
-            echo "metadata=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+            echo "metadata=${GITHUB_SHA:0:SHORT_SHA_LENGTH}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build and push

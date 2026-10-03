@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
-use sqlx::{Connection, SqliteConnection};
+use sqlx::SqliteConnection;
 
 use crate::db::{account_profile, api_tokens, session_tokens};
 use crate::server::ApiError;
@@ -303,7 +303,7 @@ pub(crate) async fn change_password_on_conn(
     account_id: i64,
     new_hash: Option<&str>,
 ) -> Result<String> {
-    let mut tx = conn.begin().await?;
+    let mut tx = crate::db::begin_write(conn).await?;
     account_profile::update_password_hash(&mut tx, account_id, new_hash).await?;
     api_tokens::delete_all_api_tokens(&mut tx, account_id).await?;
     let token = session_tokens::rotate_account_session_token(&mut tx, account_id).await?;

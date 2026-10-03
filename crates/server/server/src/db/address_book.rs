@@ -17,10 +17,11 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use anyhow::{Context, Result};
 use message_ir::{HandleService, HandleType};
 use serde::{Deserialize, Serialize};
-use sqlx::{Connection, SqliteConnection};
+use sqlx::SqliteConnection;
 
 use crate::db::contacts::{self, Origin};
 use crate::db::named_membership;
+use crate::db::{WriteTx, begin_write};
 
 /// The columns of the file, in the order Export writes them.
 pub const COLUMNS: [&str; 6] = [
@@ -757,7 +758,10 @@ pub async fn load(
     mode: LoadMode,
 ) -> Result<LoadCounts, LoadError> {
     let rows = read_rows(csv_text).map_err(LoadError::Refused)?;
-    let mut tx = conn.begin().await?;
+    // A write transaction from the first read: the plan is checked against
+    // the contacts the writes then change, and an import that commits
+    // meanwhile waits instead of failing the load.
+    let mut tx = begin_write(conn).await?;
     let snapshot = Snapshot::read(&mut tx, account_id).await?;
     let file = plan(&rows, &snapshot).map_err(LoadError::Refused)?;
     let counts = apply(&mut tx, account_id, &snapshot, &file, mode).await?;
@@ -767,12 +771,13 @@ pub async fn load(
 
 /// Write a checked file. Nothing here refuses: [`plan`] already has.
 async fn apply(
-    conn: &mut SqliteConnection,
+    tx: &mut WriteTx<'_>,
     account_id: i64,
     snapshot: &Snapshot,
     file: &[FileContact],
     mode: LoadMode,
 ) -> Result<LoadCounts> {
+    let conn: &mut SqliteConnection = tx;
     let mut counts = LoadCounts::default();
     let mut groups = snapshot.groups.clone();
     // Who holds each identity as the load goes: it changes as rows move them.

@@ -10,6 +10,7 @@ use super::{
     AddContactIdentityRequest, RemoveContactIdentityRequest, UpdateContactIdentityRequest,
     UpdateContactRequest,
 };
+use crate::db::WriteTx;
 use crate::db::contacts::{self, contact_id_for_handle};
 use crate::db::handles::{self, infer_handle_type_from_shape};
 use crate::server::ApiError;
@@ -120,17 +121,21 @@ impl UpdateContactRequest {
 
 /// Apply a contact mutation. Returns false when the contact is missing.
 ///
+/// The existence check, the claim check and the write all run in `tx`, the
+/// caller's write transaction, so an address book load or a delete cannot
+/// change the contact or its identities between them.
+///
 /// # Errors
 ///
 /// Returns an error when the mutation is invalid or a database write fails.
 pub async fn mutate_contact(
-    conn: &mut SqliteConnection,
+    tx: &mut WriteTx<'_>,
     account_id: i64,
     contact_id: i64,
     body: &UpdateContactRequest,
 ) -> Result<bool, ContactEditError> {
     let mut editor = ContactEditor {
-        conn,
+        conn: tx,
         account_id,
         contact_id,
     };

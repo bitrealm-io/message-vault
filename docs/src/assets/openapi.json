@@ -690,13 +690,13 @@
           "Accounts"
         ],
         "summary": "List the account's named API tokens with their permissions and masked secrets.",
-        "description": "Each token's permissions are capped by the account's as they are now.",
+        "description": "Each token's permissions are capped by the account's as they are now. The owner lists any account's tokens, without their masked secrets.",
         "operationId": "list_api_tokens",
         "parameters": [
           {
             "name": "id",
             "in": "path",
-            "description": "Account id; must be the caller's own",
+            "description": "Account id; the caller's own, or any for the owner",
             "required": true,
             "schema": {
               "type": "integer",
@@ -749,7 +749,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -758,6 +758,7 @@
               }
             },
             "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/not-the-owner",
               "https://messagecrate.app/docs/developer/reference/errors/insufficient-scope",
               "https://messagecrate.app/docs/developer/reference/errors/account-disabled"
             ]
@@ -949,13 +950,13 @@
           "Accounts"
         ],
         "summary": "Delete one named API token.",
-        "description": "Requests using it start failing on the next call.",
+        "description": "Requests using it start failing on the next call. The owner revokes any account's token, so a leaked one can be ended without the account's help.",
         "operationId": "delete_api_token",
         "parameters": [
           {
             "name": "id",
             "in": "path",
-            "description": "Account id; must be the caller's own",
+            "description": "Account id; the caller's own, or any for the owner",
             "required": true,
             "schema": {
               "type": "integer",
@@ -991,7 +992,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1000,6 +1001,7 @@
               }
             },
             "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/not-the-owner",
               "https://messagecrate.app/docs/developer/reference/errors/insufficient-scope",
               "https://messagecrate.app/docs/developer/reference/errors/account-disabled"
             ]
@@ -6852,6 +6854,7 @@
           "Import"
         ],
         "summary": "Import one message-ir JSONL body.",
+        "description": "Every message needs a non-empty `guid`. A batch with a message without\none is refused with `422`, naming its lines, and nothing in it is stored.\nA message whose `guid` the source already holds is skipped, so a batch\nsent again after its answer was lost stores nothing twice.",
         "operationId": "create_import_batch",
         "parameters": [
           {
@@ -10118,7 +10121,6 @@
           "label",
           "can_import",
           "can_export",
-          "token_hint",
           "created_at",
           "disabled"
         ],
@@ -10163,8 +10165,11 @@
             "description": "Unix-seconds string of last use; absent when never used."
           },
           "token_hint": {
-            "type": "string",
-            "description": "Masked secret for Settings (e.g. `mc-api-Sd..mE`)."
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Masked secret for Settings (e.g. `mc-api-Sd..mE`). Absent when the\nowner lists another account's tokens: the hint is part of the secret."
           }
         }
       },
@@ -10661,8 +10666,11 @@
             "description": "Group label from the export, when present."
           },
           "last_message_at": {
-            "type": "string",
-            "description": "Timestamp of the last message."
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Timestamp of the last message; `null` when every message in the\nconversation is a duplicate, so none is left to date it."
           },
           "message_count": {
             "type": "integer",
@@ -12037,6 +12045,13 @@
             "format": "int64",
             "description": "Replies in this thread."
           },
+          "owner": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The account holder's own address on this message: the one it was\nsent from, or the one it was received at. `None` when the backup\nnamed no owner."
+          },
           "sender": {
             "type": [
               "string",
@@ -12346,7 +12361,6 @@
                 "label",
                 "can_import",
                 "can_export",
-                "token_hint",
                 "created_at",
                 "disabled"
               ],
@@ -12391,8 +12405,11 @@
                   "description": "Unix-seconds string of last use; absent when never used."
                 },
                 "token_hint": {
-                  "type": "string",
-                  "description": "Masked secret for Settings (e.g. `mc-api-Sd..mE`)."
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Masked secret for Settings (e.g. `mc-api-Sd..mE`). Absent when the\nowner lists another account's tokens: the hint is part of the secret."
                 }
               }
             },
@@ -12719,8 +12736,11 @@
                   "description": "Group label from the export, when present."
                 },
                 "last_message_at": {
-                  "type": "string",
-                  "description": "Timestamp of the last message."
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Timestamp of the last message; `null` when every message in the\nconversation is a duplicate, so none is left to date it."
                 },
                 "message_count": {
                   "type": "integer",
@@ -13299,6 +13319,13 @@
                   "format": "int64",
                   "description": "Replies in this thread."
                 },
+                "owner": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "The account holder's own address on this message: the one it was\nsent from, or the one it was received at. `None` when the backup\nnamed no owner."
+                },
                 "sender": {
                   "type": [
                     "string",
@@ -13602,7 +13629,7 @@
       },
       "Problem": {
         "type": "object",
-        "description": "An RFC 7807 problem document: the body of every failure the server answers,\nserved as `application/problem+json` (`docs/architecture/http-api.md`).\n\n`type` is the URL of the page describing this kind of failure, one page per\ntype, or `about:blank` for an internal error. A validation failure carries\n`errors`, every field that failed, in place of `detail`. Every problem\nrepeats the response's `x-request-id` as `request_id`, so the person\nreading the failure and the operator reading the log are looking at the\nsame request.\n\nThe extension members belong to one type each: `word` and `did_you_mean`\nto `search-query-invalid`, `retry_after` to `rate-limited`.",
+        "description": "An RFC 7807 problem document: the body of every failure the server answers,\nserved as `application/problem+json` (`docs/architecture/http-api.md`).\n\n`type` is the URL of the page describing this kind of failure, one page per\ntype, or `about:blank` for an internal error. A validation failure carries\n`errors`, every field that failed, in place of `detail`. Every problem\nrepeats the response's `x-request-id` as `request_id`, so the person\nreading the failure and the operator reading the log are looking at the\nsame request.\n\nThe extension members belong to one type each: `word` and `did_you_mean`\nto `search-query-invalid`, `retry_after` to `rate-limited`, `line` to\n`malformed-body`.",
         "required": [
           "type",
           "title",
@@ -13632,6 +13659,15 @@
               "type": "string"
             },
             "description": "Every rule the request broke, one sentence each. Only on\n`validation-failed`."
+          },
+          "line": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "`malformed-body` from an import batch: the line of the request body\nthe server could not read; `validation-failed` from an import batch:\nthe first line that broke a rule, such as a message without a guid.\nCounted from 1 with blank lines included. The body is a batch the\nclient packed, so only the client can say which file and line of its\nown that line came from.",
+            "minimum": 0
           },
           "request_id": {
             "type": [

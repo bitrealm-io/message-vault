@@ -40,8 +40,9 @@ CREATE TABLE IF NOT EXISTS staging_messages (
     account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Backup/source family that produced this row.
     source TEXT NOT NULL,
-    -- Source-native message id when available.
-    guid TEXT,
+    -- The message's id from the export: Apple's own for Apple Messages, otherwise
+    -- the exporter's MessageGuid. Never empty; the import refuses a message without one.
+    guid TEXT NOT NULL CHECK (guid != ''),
     -- The instant the message was sent, RFC 3339 in UTC with a Z suffix. Shown, searched
     -- and filed by day and year in the account's time zone (accounts.time_zone).
     timestamp TEXT NOT NULL,
@@ -78,8 +79,7 @@ CREATE INDEX IF NOT EXISTS ix_staging_messages_conversation_timestamp
     ON staging_messages (conversation_id, timestamp);
 CREATE INDEX IF NOT EXISTS ix_staging_messages_account_id ON staging_messages (account_id);
 CREATE UNIQUE INDEX IF NOT EXISTS ix_staging_messages_account_source_guid
-    ON staging_messages (account_id, source, guid)
-    WHERE guid IS NOT NULL AND guid != '';
+    ON staging_messages (account_id, source, guid);
 
 -- Import scratch copy of attachments.
 CREATE TABLE IF NOT EXISTS staging_attachments (

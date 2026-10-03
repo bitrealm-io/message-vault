@@ -12,3 +12,5 @@ editUrl: false
 | Type | `https://messagecrate.app/docs/developer/reference/errors/malformed-body` |
 
 The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. Nothing was parsed, so nothing is reported field by field; `detail` says where reading stopped.
+
+For an import batch, `line` carries the line of the request body that could not be read, counted from 1 with blank lines included. It is a line of the batch, not of any file: a client that packed the batch from several files turns it into the file and line it came from.

@@ -130,7 +130,7 @@ plus the keywords its registry entry lists.
 |---|---|---|
 | Text | text, `pre*`, and `none`/`any` where listed | The column contains the text, case-insensitively. `pre*` matches the start of the column or of any word in it (after a space). `none` is empty or only spaces; `any` is its complement. |
 | Name | a name, `pre*`, `#id`, and the word's keywords | `#id` is that row by id, unquoted. `group:` and `tag:` match a name equal to the text, case-insensitively. Their `pre*` matches the start of the name or of any word in it, so `group:Club*` finds "Book Club". An account has few Contact Groups and Message Tags, so a match on the start of any word is what a person wants. `in:` matches a title or identity that contains the text, and its `pre*` matches the start of either or of any word in it. `import:` takes only `#id` and `last`. |
-| Person | a name, a handle, `pre*`, `#id`, `me` where listed | `#id` is a contact: one of their identities, or a participant linked to them. Text is contained in an identity's raw or normalized form, in the name of the contact linked to it, or in a participant's name; `pre*` matches the start of any of those instead. |
+| Person | a name, an identity, `pre*`, `#id`, `me` where listed | `#id` is a contact: one of their identities, or a participant linked to them. Text is contained in an identity's raw or normalized form, in the name of the contact linked to it, or in a participant's name; `pre*` matches the start of any of those instead. |
 | Choice | one of the word's fixed values | That value, compared case-insensitively. |
 | Flag | `yes`, `no`, `any` | `trashed:` only. |
 | Date | a span, with `>`, `>=`, `<`, `<=`, or `a..b` | See below. |
@@ -284,7 +284,7 @@ Text, `none`, `any`.
 - **Conversations**: the conversation's title. `none` is a conversation with no title.
 - **Messages**: the title of the message's conversation.
 
-### `handle:`
+### `identity:`
 
 Text, `none`, `any`. The raw or the normalized form of an identity.
 
@@ -338,7 +338,7 @@ Name, `none`.
 Choice: `direct`, `group`.
 
 - **Contacts**: one of the contact's conversations is of this kind.
-- **Conversations**: the conversation is one-to-one (`direct`) or a group.
+- **Conversations**: `direct` is a one-to-one conversation, one with a single other person; `group` is a group conversation, one the source app keeps as a group.
 - **Messages**: the message's conversation is.
 
 ### `service:`

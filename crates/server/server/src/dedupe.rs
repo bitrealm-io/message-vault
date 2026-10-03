@@ -7,8 +7,9 @@ use std::time::Instant;
 
 use anyhow::{Context, Result};
 use rayon::prelude::*;
-use sqlx::Connection;
 use sqlx::SqliteConnection;
+
+use crate::db::{WriteTx, begin_write};
 
 use crate::db::schema;
 use crate::db::sql::SQLITE_IN_CHUNK;
@@ -187,11 +188,17 @@ pub async fn dedupe_cross_source(
     source_priority: Option<&[String]>,
     near_window_secs: i64,
 ) -> Result<DedupeStats> {
+    // One write transaction for the whole run: the flags are cleared and set
+    // again, so a pass that fails after the clearing would otherwise leave
+    // every duplicate in the account shown until the next successful run. It
+    // holds the write lock from the first read, so an import that commits
+    // while the keys are hashed waits instead of failing the pass.
+    let mut tx = begin_write(conn).await?;
     let owned_priority;
     let priority = if let Some(p) = source_priority {
         p
     } else {
-        owned_priority = source_priority_from_db(conn, account_id).await?;
+        owned_priority = source_priority_from_db(&mut tx, account_id).await?;
         owned_priority.as_slice()
     };
     let mut stats = DedupeStats::default();
@@ -202,10 +209,6 @@ pub async fn dedupe_cross_source(
         .collect();
     let started = Instant::now();
 
-    // One transaction for the whole run: the flags are cleared and set again,
-    // so a pass that fails after the clearing would otherwise leave every
-    // duplicate in the account shown until the next successful run.
-    let mut tx = conn.begin().await?;
     {
         println!("  dedupe:   refreshing content keys…");
         let _ = io::stdout().flush();
@@ -506,10 +509,11 @@ struct Cand {
 /// keeping as many as one source holds (see [`exact_group_flags`]). Returns
 /// (groups, hidden).
 async fn flag_exact_content_key_dupes(
-    conn: &mut SqliteConnection,
+    tx: &mut WriteTx<'_>,
     account_id: i64,
     prio: &HashMap<&str, usize>,
 ) -> Result<(u64, u64)> {
+    let conn: &mut SqliteConnection = tx;
     // One scan of messages + one aggregated attachment pass, then group in Rust.
     // Avoids N round-trips (one SELECT + several UPDATEs per duplicate key).
     let rows: Vec<(i64, String, String, i64)> = sqlx::query_as(
@@ -676,11 +680,12 @@ impl NearRow {
 /// Flag messages that match one from another source within `window_secs` on chat,
 /// direction, sender, and body or attachments. Returns how many were flagged.
 async fn flag_near_time_dupes(
-    conn: &mut SqliteConnection,
+    tx: &mut WriteTx<'_>,
     account_id: i64,
     prio: &HashMap<&str, usize>,
     window_secs: i64,
 ) -> Result<u64> {
+    let conn: &mut SqliteConnection = tx;
     let by_conversation = load_near_rows(conn, account_id).await?;
     let flags = cluster_near_dupes(by_conversation, prio, window_secs);
     if flags.is_empty() {

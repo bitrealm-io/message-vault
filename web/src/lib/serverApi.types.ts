@@ -92,7 +92,7 @@ export interface paths {
         };
         /**
          * List the account's named API tokens with their permissions and masked secrets.
-         * @description Each token's permissions are capped by the account's as they are now.
+         * @description Each token's permissions are capped by the account's as they are now. The owner lists any account's tokens, without their masked secrets.
          */
         get: operations["list_api_tokens"];
         put?: never;
@@ -119,7 +119,7 @@ export interface paths {
         post?: never;
         /**
          * Delete one named API token.
-         * @description Requests using it start failing on the next call.
+         * @description Requests using it start failing on the next call. The owner revokes any account's token, so a leaked one can be ended without the account's help.
          */
         delete: operations["delete_api_token"];
         options?: never;
@@ -903,7 +903,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Import one message-ir JSONL body. */
+        /**
+         * Import one message-ir JSONL body.
+         * @description Every message needs a non-empty `guid`. A batch with a message without
+         *     one is refused with `422`, naming its lines, and nothing in it is stored.
+         *     A message whose `guid` the source already holds is skipped, so a batch
+         *     sent again after its answer was lost stores nothing twice.
+         */
         post: operations["create_import_batch"];
         delete?: never;
         options?: never;
@@ -1468,8 +1474,11 @@ export interface components {
             label: string;
             /** @description Unix-seconds string of last use; absent when never used. */
             last_accessed_at?: string | null;
-            /** @description Masked secret for Settings (e.g. `mc-api-Sd..mE`). */
-            token_hint: string;
+            /**
+             * @description Masked secret for Settings (e.g. `mc-api-Sd..mE`). Absent when the
+             *     owner lists another account's tokens: the hint is part of the secret.
+             */
+            token_hint?: string | null;
         };
         /**
          * @description Which app a session's requests come from. The server records it beside the
@@ -1719,8 +1728,11 @@ export interface components {
             is_group: boolean;
             /** @description Group label from the export, when present. */
             label?: string | null;
-            /** @description Timestamp of the last message. */
-            last_message_at: string;
+            /**
+             * @description Timestamp of the last message; `null` when every message in the
+             *     conversation is a duplicate, so none is left to date it.
+             */
+            last_message_at: string | null;
             /**
              * Format: int64
              * @description Messages in the conversation (excluding hidden duplicates).
@@ -2414,6 +2426,12 @@ export interface components {
              * @description Replies in this thread.
              */
             num_replies: number;
+            /**
+             * @description The account holder's own address on this message: the one it was
+             *     sent from, or the one it was received at. `None` when the backup
+             *     named no owner.
+             */
+            owner?: string | null;
             /** @description Sender handle for incoming messages. */
             sender?: string | null;
             /**
@@ -2577,8 +2595,11 @@ export interface components {
                 label: string;
                 /** @description Unix-seconds string of last use; absent when never used. */
                 last_accessed_at?: string | null;
-                /** @description Masked secret for Settings (e.g. `mc-api-Sd..mE`). */
-                token_hint: string;
+                /**
+                 * @description Masked secret for Settings (e.g. `mc-api-Sd..mE`). Absent when the
+                 *     owner lists another account's tokens: the hint is part of the secret.
+                 */
+                token_hint?: string | null;
             }[];
             /** @description Page size used. */
             limit: number;
@@ -2735,8 +2756,11 @@ export interface components {
                 is_group: boolean;
                 /** @description Group label from the export, when present. */
                 label?: string | null;
-                /** @description Timestamp of the last message. */
-                last_message_at: string;
+                /**
+                 * @description Timestamp of the last message; `null` when every message in the
+                 *     conversation is a duplicate, so none is left to date it.
+                 */
+                last_message_at: string | null;
                 /**
                  * Format: int64
                  * @description Messages in the conversation (excluding hidden duplicates).
@@ -3018,6 +3042,12 @@ export interface components {
                  * @description Replies in this thread.
                  */
                 num_replies: number;
+                /**
+                 * @description The account holder's own address on this message: the one it was
+                 *     sent from, or the one it was received at. `None` when the backup
+                 *     named no owner.
+                 */
+                owner?: string | null;
                 /** @description Sender handle for incoming messages. */
                 sender?: string | null;
                 /**
@@ -3179,7 +3209,8 @@ export interface components {
          *     same request.
          *
          *     The extension members belong to one type each: `word` and `did_you_mean`
-         *     to `search-query-invalid`, `retry_after` to `rate-limited`.
+         *     to `search-query-invalid`, `retry_after` to `rate-limited`, `line` to
+         *     `malformed-body`.
          */
         Problem: {
             /**
@@ -3197,6 +3228,16 @@ export interface components {
              *     `validation-failed`.
              */
             errors?: string[] | null;
+            /**
+             * Format: int64
+             * @description `malformed-body` from an import batch: the line of the request body
+             *     the server could not read; `validation-failed` from an import batch:
+             *     the first line that broke a rule, such as a message without a guid.
+             *     Counted from 1 with blank lines included. The body is a batch the
+             *     client packed, so only the client can say which file and line of its
+             *     own that line came from.
+             */
+            line?: number | null;
             /** @description The `x-request-id` of the response this came in. */
             request_id?: string | null;
             /**
@@ -4037,7 +4078,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                /** @description Account id; must be the caller's own */
+                /** @description Account id; the caller's own, or any for the owner */
                 id: number;
             };
             cookie?: never;
@@ -4063,7 +4104,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -4196,7 +4239,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Account id; must be the caller's own */
+                /** @description Account id; the caller's own, or any for the owner */
                 id: number;
                 /** @description API token id */
                 token_id: number;
@@ -4222,7 +4265,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */

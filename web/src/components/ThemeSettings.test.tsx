@@ -63,3 +63,17 @@ describe("ThemeSettings share theme", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
+
+describe("ThemeSettings focus", () => {
+  // Each text field sets outline-none, which also removes the app's own
+  // :focus-visible outline, so each one shows focus with its border instead.
+  it("shows focus on every text field with the accent border", () => {
+    render(<ThemeSettings />);
+    const fields = screen.getAllByRole("textbox");
+    // The four color codes and the share field.
+    expect(fields).toHaveLength(5);
+    for (const field of fields) {
+      expect(field.className).toContain("focus:border-accent");
+    }
+  });
+});

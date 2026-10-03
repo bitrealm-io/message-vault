@@ -32,9 +32,11 @@ fn server_config(dir: &Path) -> PathBuf {
     path
 }
 
-/// The database the config names, opened the way the commands open it.
+/// The database the config names, made when it is not there yet.
 async fn open(config: &Path) -> OpenDb {
-    OpenDb::open(Config::load(config).unwrap()).await.unwrap()
+    OpenDb::create_or_open(Config::load(config).unwrap())
+        .await
+        .unwrap()
 }
 
 /// An ordinary account named alice, so `--account alice` resolves.
@@ -71,6 +73,7 @@ fn import_args(config: &Path, input: &Path) -> ImportArgs {
 async fn create_owner_claims_the_server_once_and_reset_password_needs_the_claim() {
     let dir = tempfile::tempdir().unwrap();
     let config = server_config(dir.path());
+    open(&config).await.close().await;
 
     let unclaimed = run(Cli {
         command: Commands::ResetOwnerPassword(ResetOwnerPasswordArgs {
@@ -230,6 +233,38 @@ async fn process_assets_fails_when_a_conversion_failed_and_names_the_count() {
         err.to_string(),
         "1 conversion(s) failed; those originals stay without a browser preview"
     );
+}
+
+/// S7-12: `process-assets --db` with a path where no database is exits with
+/// an error naming it and creates no file, instead of processing an empty
+/// new database and exiting 0.
+#[tokio::test]
+async fn process_assets_with_a_mistyped_db_fails_and_creates_no_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = server_config(dir.path());
+    with_alice(&config).await;
+
+    let err = run(Cli {
+        command: Commands::ProcessAssets(ProcessAssetsArgs {
+            config: config.clone(),
+            force: false,
+            dry_run: false,
+            skip_image: false,
+            skip_video: false,
+            skip_audio: false,
+            db: Some(PathBuf::from("data/messagecrate.db")),
+            source: None,
+        }),
+    })
+    .await
+    .unwrap_err();
+
+    let mistyped = dir.path().join("data/messagecrate.db");
+    assert!(
+        err.to_string().contains(&mistyped.display().to_string()),
+        "{err}"
+    );
+    assert!(!mistyped.exists());
 }
 
 fn imports_discard_args(config: &Path) -> Cli {
@@ -416,6 +451,7 @@ async fn import_refuses_an_unknown_media_mode() {
 async fn import_refuses_an_unknown_account() {
     let dir = tempfile::tempdir().unwrap();
     let config = server_config(dir.path());
+    open(&config).await.close().await;
     let input = dir.path().join("export");
     fs::create_dir_all(&input).unwrap();
     fs::write(input.join("chat.jsonl"), CONVERSATION_JSONL).unwrap();
@@ -569,7 +605,8 @@ fn serve_with_a_data_dir_needs_no_config_file() {
     );
 }
 
-/// The same two flags apply over a config file, and a relative data folder
+/// The same two flags apply over a config file, a relative `--static-dir`
+/// resolves where the config file's own `static_dir` does, and a relative data folder
 /// is made absolute so the server does not depend on where it was started.
 #[tokio::test]
 async fn serve_flags_override_the_config_file_and_a_relative_data_dir_is_made_absolute() {
@@ -587,7 +624,7 @@ async fn serve_flags_override_the_config_file_and_a_relative_data_dir_is_made_ab
     let from_file = serve_config(serve_args(&["--config", config.to_str().unwrap()])).unwrap();
     assert_eq!(
         from_file.require_server().unwrap().static_dir,
-        PathBuf::from("site")
+        temp.path().join("site")
     );
     let overridden = serve_config(serve_args(&[
         "--config",
@@ -600,7 +637,7 @@ async fn serve_flags_override_the_config_file_and_a_relative_data_dir_is_made_ab
     .unwrap();
     let server = overridden.require_server().unwrap();
     assert_eq!(server.bind, "127.0.0.1:9100");
-    assert_eq!(server.static_dir, PathBuf::from("elsewhere"));
+    assert_eq!(server.static_dir, temp.path().join("elsewhere"));
 
     let relative = serve_config(serve_args(&["--data-dir", "some/crate"])).unwrap();
     assert!(relative.paths.data_dir.is_absolute());

@@ -94,7 +94,10 @@ fn store_claimed_or_path(
         .map(|rel| message_ir::safe_attachment_path(export_dir, rel))
         .transpose()?;
     if let Some(sha) = att.sha256.as_deref().and_then(trimmed) {
-        if let Some(found) = assets_api::lookup_by_sha256(assets_dir, sha) {
+        let claimed = assets_api::Sha256::parse(sha);
+        if let Ok(claimed) = &claimed
+            && let Some(found) = assets_api::lookup_by_sha256(assets_dir, claimed)
+        {
             asset_stats.deduped += 1;
             return Ok(Some(StoredAsset {
                 mime_type: att.mime_type.clone().or(found.mime_type),
@@ -102,14 +105,16 @@ fn store_claimed_or_path(
             }));
         }
         if let Some(source) = checked {
-            return match assets_api::store_verified(
-                &source,
-                sha,
-                assets_dir,
-                att.mime_type.as_deref(),
-                false,
-                false,
-            ) {
+            return match claimed.and_then(|claimed| {
+                assets_api::store_verified(
+                    &source,
+                    &claimed,
+                    assets_dir,
+                    att.mime_type.as_deref(),
+                    false,
+                    false,
+                )
+            }) {
                 Ok((stored, already)) => {
                     if already {
                         asset_stats.deduped += 1;
@@ -755,7 +760,7 @@ async fn insert_message_rows(
             conversation_id,
             account_id: stmts.account_id,
             source,
-            guid: row.msg.guid.as_deref(),
+            guid: &row.msg.guid,
             timestamp: &row.msg.timestamp,
             is_from_me: row.msg.is_from_me as i64,
             sender_handle_id: row.sender_handle_id,

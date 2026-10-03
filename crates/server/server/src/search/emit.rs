@@ -288,7 +288,7 @@ fn emit_field(ctx: &ListCtx, out: &mut Sql, term: &FieldTerm) -> Result<(), Quer
 /// One value of one word, written against the innermost alias it needs.
 fn emit_one(ctx: &ListCtx, out: &mut Sql, term: &FieldTerm, v: &Value) -> Result<(), QueryError> {
     match term.spec.word {
-        "body" | "subject" | "name" | "title" | "handle" | "filename" => {
+        "body" | "subject" | "name" | "title" | "identity" | "filename" => {
             emit_text_word(ctx, out, term, v)
         }
         "with" | "from" | "to" | "in" | "group" | "tag" | "import" => {
@@ -350,7 +350,7 @@ fn text_match(out: &mut Sql, column: &str, term: &FieldTerm, v: &Value) -> Resul
     }
 }
 
-/// The six text words. On Contacts, `name:` and `handle:` look at the
+/// The six text words. On Contacts, `name:` and `identity:` look at the
 /// contact itself; everywhere else they look at the conversation's
 /// participants. `body:`, `subject:`, and `filename:` always look at
 /// messages (and their attachments); `title:` always looks at the
@@ -386,7 +386,7 @@ fn emit_text_word(
         // `none` and `any` ask about addresses. An identity of type `other`
         // holds a name the backup gave with no address, so it is not one,
         // the way it does not keep a contact out of Unknown.
-        ("handle", ListKind::Contacts) => match v {
+        ("identity", ListKind::Contacts) => match v {
             Value::Keyword("none") => out.push(
                 "NOT EXISTS (SELECT 1 FROM contact_handles ch JOIN handles h ON h.id = ch.handle_id WHERE ch.account_id = ct.account_id AND ch.contact_id = ct.id AND h.handle_type <> 'other')",
             ),
@@ -408,7 +408,7 @@ fn emit_text_word(
                 result = Err(bad_value(term, "needs text, a prefix, or none/any."));
             }
         },
-        ("handle", _) => ctx.conversation(out, |o| match v {
+        ("identity", _) => ctx.conversation(out, |o| match v {
             Value::Keyword("none") => o.push(
                 "NOT EXISTS (SELECT 1 FROM participants p JOIN handles h ON h.id = p.handle_id WHERE p.conversation_id = c.id AND h.handle_type <> 'other')",
             ),
@@ -489,7 +489,7 @@ fn person_matches(
             out.push("))");
             Ok(())
         }
-        _ => Err(bad_value(term, "needs a name, a handle, or #id.")),
+        _ => Err(bad_value(term, "needs a name, an identity, or #id.")),
     }
 }
 
@@ -509,7 +509,7 @@ fn participant_matches(out: &mut Sql, term: &FieldTerm, v: &Value) -> Result<(),
             like_contains(out, PARTICIPANT_NAME, t, prefix);
             Ok(())
         }
-        _ => Err(bad_value(term, "needs a name, a handle, or #id.")),
+        _ => Err(bad_value(term, "needs a name, an identity, or #id.")),
     }
 }
 

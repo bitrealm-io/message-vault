@@ -149,6 +149,11 @@ pub struct ImportStats {
     pub mode: ImportMode,
     /// Flagged phone handles (ambiguous; review note set) inserted by this import.
     pub phones_needing_review: u64,
+    /// Identities of type `other` this import met for people: a name the
+    /// backup gave with no address, or a sender such as `AMAZON`. Each one is
+    /// a person the exporter could not tie to an address, so a count above
+    /// zero says the import is incomplete.
+    pub other_identities: u64,
 }
 
 impl ImportStats {
@@ -161,6 +166,7 @@ impl ImportStats {
         self.tapbacks += other.tapbacks;
         self.messages_deduped += other.messages_deduped;
         self.phones_needing_review += other.phones_needing_review;
+        self.other_identities += other.other_identities;
     }
 
     /// Add a whole import run's counts onto a running total, files and assets

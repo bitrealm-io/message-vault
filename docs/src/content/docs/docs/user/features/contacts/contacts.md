@@ -88,11 +88,13 @@ An Address Book load replaces it only when the file gives the contact a differen
 - An email address must have the form `name@example.com`.
 - The same number on **Text message** and on **WhatsApp** is two identities, so both can be added.
 - An identity the contact already has is refused with **This identity is already in the list.**
-- An identity that belongs to another contact is refused, because an identity belongs to at most one contact. It must be removed from the other contact first.
+- An identity that belongs to another contact with a name is refused, because an identity belongs to at most one contact. It must be removed from the other contact first. An identity on a contact with no name moves to this one, and a contact with no name left with no identity goes.
 
 The trash icon at the end of an identity's row removes it, after the **Remove identity from contact?** dialog is confirmed with **Remove identity**.
-Removing an identity unlinks it from the contact and deletes no messages.
-A contact left with no identity is [Unknown](/docs/user/features/contacts/unknown/).
+Removing an identity takes it off the contact and deletes no messages.
+An identity that is in a conversation goes to a new contact with no name, which is [Unknown](/docs/user/features/contacts/unknown/), so the person can still be found and named.
+An identity in no conversation is deleted.
+A contact left with no identity is Unknown too.
 
 Message Crate has no command that merges two contacts.
 Two contacts that are one person are joined by removing the identities from one and adding them to the other.

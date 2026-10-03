@@ -475,6 +475,13 @@ fn format_import_stats(import: &crate::imports_api::ImportStats) -> String {
             import.phones_needing_review
         );
     }
+    if import.other_identities > 0 {
+        let _ = writeln!(
+            out,
+            "  identities with no address: {} (a name the backup gave in place of an address; the export is incomplete)",
+            import.other_identities
+        );
+    }
     out
 }
 

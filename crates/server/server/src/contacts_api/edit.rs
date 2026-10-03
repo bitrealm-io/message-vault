@@ -149,6 +149,14 @@ struct ContactEditor<'a> {
     contact_id: i64,
 }
 
+/// Whether a handle may come to the contact an edit is for.
+enum Claim {
+    /// It is on this contact already.
+    Here,
+    /// It may come here: from no contact, or from this nameless contact.
+    Free(Option<i64>),
+}
+
 impl ContactEditor<'_> {
     /// True when the contact belongs to this account and is not in the trash.
     async fn exists(&mut self) -> AnyResult<bool> {
@@ -199,21 +207,14 @@ impl ContactEditor<'_> {
         let handle_id = self
             .handle_row(raw, add.service.as_deref(), HandleService::Phone)
             .await?;
-        if self.claim(handle_id).await? {
+        match self.claim(handle_id).await? {
             // Already linked: no address-book change.
-            return Ok(true);
+            Claim::Here => Ok(true),
+            Claim::Free(holder) => {
+                self.put_here(handle_id, holder).await?;
+                self.touched().await
+            }
         }
-        // The person attached this identity themselves, so a later address
-        // book load leaves it alone.
-        contacts::link_handle_to_contact(
-            &mut *self.conn,
-            self.account_id,
-            handle_id,
-            self.contact_id,
-            contacts::Origin::User,
-        )
-        .await?;
-        self.touched().await
     }
 
     /// Replace one linked identity with another.
@@ -239,24 +240,18 @@ impl ContactEditor<'_> {
             // names the handle the contact already has: nothing changes.
             return Ok(true);
         }
-        if self.claim(new_id).await? {
-            // The new handle is already on this contact, so the edit amounts
-            // to dropping the previous one.
-            self.unlink(old_id).await?;
-        } else {
-            contacts::relink_handle(
-                &mut *self.conn,
-                self.account_id,
-                self.contact_id,
-                old_id,
-                new_id,
-            )
-            .await?;
+        // When the new identity is already on this contact, the edit amounts
+        // to taking the previous one off.
+        if let Claim::Free(holder) = self.claim(new_id).await? {
+            self.put_here(new_id, holder).await?;
         }
+        self.take_off(old_id).await?;
         self.touched().await
     }
 
-    /// Unlink an identity. The handle row itself stays: messages still cite it.
+    /// Take an identity off the contact. One in a conversation goes to a new
+    /// contact with no name, so the person is Unknown again; one nothing uses
+    /// is deleted (`contacts::move_identity`).
     async fn remove_identity(
         &mut self,
         rem: &RemoveContactIdentityRequest,
@@ -268,7 +263,7 @@ impl ContactEditor<'_> {
         let Some((handle_id, _)) = self.linked_handle(raw, rem.service.as_deref()).await? else {
             refuse!("identity not found on contact");
         };
-        self.unlink(handle_id).await?;
+        self.take_off(handle_id).await?;
         self.touched().await
     }
 
@@ -314,20 +309,42 @@ impl ContactEditor<'_> {
         Ok(id)
     }
 
-    /// True when the handle is already linked to this contact. A handle
-    /// belongs to one contact per account (the primary key on
-    /// `contact_handles`), so one linked elsewhere is refused.
-    async fn claim(&mut self, handle_id: i64) -> Result<bool, ContactEditError> {
+    /// Whether the handle may come to this contact. A handle belongs to one
+    /// contact per account (the primary key on `contact_handles`). One on a
+    /// contact with no name is an Unknown an import made, or one a removed
+    /// identity went to, so it comes freely, the way an address book load
+    /// takes it (`docs/architecture/contacts-identities-and-messages.md`). One
+    /// on a named contact is refused: it must be removed there first.
+    async fn claim(&mut self, handle_id: i64) -> Result<Claim, ContactEditError> {
         match contact_id_for_handle(&mut *self.conn, self.account_id, handle_id).await? {
-            Some(owner) if owner == self.contact_id => Ok(true),
+            Some(owner) if owner == self.contact_id => Ok(Claim::Here),
+            Some(owner)
+                if contacts::is_nameless(&mut *self.conn, self.account_id, owner).await? =>
+            {
+                Ok(Claim::Free(Some(owner)))
+            }
             Some(_) => refuse!("identity already linked to another contact"),
-            None => Ok(false),
+            None => Ok(Claim::Free(None)),
         }
     }
 
-    /// Drop the link between the contact and the handle.
-    async fn unlink(&mut self, handle_id: i64) -> AnyResult<()> {
-        contacts::unlink_handle(&mut *self.conn, self.account_id, self.contact_id, handle_id).await
+    /// Put the handle on this contact, marked as the person's, so a later
+    /// address book load leaves it alone. A nameless contact it came from
+    /// that now holds nothing reaches nothing, so it goes.
+    async fn put_here(&mut self, handle_id: i64, from: Option<i64>) -> AnyResult<()> {
+        let goes = contacts::IdentityGoes::To(self.contact_id, contacts::Origin::User);
+        contacts::move_identity(&mut *self.conn, self.account_id, handle_id, goes).await?;
+        if let Some(from) = from {
+            contacts::delete_if_empty(&mut *self.conn, self.account_id, from).await?;
+        }
+        Ok(())
+    }
+
+    /// Take the handle off this contact, the one way a handle leaves a
+    /// contact.
+    async fn take_off(&mut self, handle_id: i64) -> AnyResult<()> {
+        contacts::take_identities_off(&mut *self.conn, self.account_id, &[handle_id]).await?;
+        Ok(())
     }
 
     /// Bump the contact's updated-at and report success, for edits that

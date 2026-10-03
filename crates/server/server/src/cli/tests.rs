@@ -486,6 +486,18 @@ fn import_stats_print_one_line_for_each_count() {
         ),
         "{text}"
     );
+
+    let incomplete = crate::imports_api::ImportStats {
+        other_identities: 2,
+        ..Default::default()
+    };
+    let text = format_import_stats(&incomplete);
+    assert!(
+        text.ends_with(
+            "  identities with no address: 2 (a name the backup gave in place of an address; the export is incomplete)\n"
+        ),
+        "{text}"
+    );
 }
 
 #[test]

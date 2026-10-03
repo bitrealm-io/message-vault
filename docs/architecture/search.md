@@ -197,10 +197,9 @@ The three lists reach one another in the same few ways, and the word entries
 below use these phrases for them:
 
 - **The contact's conversations** are the conversations one of the contact's
-  identities is in, as the conversation's own identity or a participant's, and
-  the conversations with a participant the import linked to the contact
-  (`participants.contact_id`), which is how a participant with no identity is
-  reached.
+  identities is in, as the conversation's own identity or a participant's.
+  Every participant has an identity, so this reaches all of them, through the
+  contact the identity is on now.
 - **The conversation's contacts** are the contacts of the conversation's
   participants, found the same way.
 - **The conversation's messages** are its messages that are not duplicates.
@@ -289,15 +288,15 @@ Text, `none`, `any`.
 
 Text, `none`, `any`. The raw or the normalized form of an identity.
 
-- **Contacts**: one of the contact's identities. `none` is a contact with no identity.
-- **Conversations**: the conversation's own identity or a participant's. `none` is a conversation where no participant has an identity; `any` is one where some participant does.
+- **Contacts**: one of the contact's identities. `none` is a contact with no address: no identity, or only identities of type `other`, which hold a name the backup gave with no address.
+- **Conversations**: the conversation's own identity or a participant's. `none` is a conversation where no participant has an address (every participant's identity is of type `other`); `any` is one where some participant does.
 - **Messages**: the same, for the message's conversation.
 
 ### `with:`
 
 Person.
 
-- **Conversations**: this person is in the conversation: the conversation's own identity or a participant's identity is theirs, or a participant's name contains the text, or a participant is linked to the contact `#id`. The last two reach a participant the source named and gave no identity.
+- **Conversations**: this person is in the conversation: the conversation's own identity or a participant's identity is theirs, or a participant's name contains the text. A contact `#id` reaches a participant only through the identity the participant takes part as, on the contact it is on now.
 - **Messages**: the same, for the message's conversation.
 
 ### `from:`
@@ -446,7 +445,7 @@ Count.
 
 Count.
 
-- **Conversations**: how many participants the conversation has, a participant with no identity included and the account holder never.
+- **Conversations**: how many participants the conversation has, a participant the source named with no address included and the account holder never.
 - **Messages**: the same, for the message's conversation.
 
 ### `attachments:`

@@ -33,7 +33,6 @@ erDiagram
     contact_groups ||--o{ contact_group_members : "has"
     conversations ||--o{ message_tag_members : "tagged"
     message_tags ||--o{ message_tag_members : "has"
-    participants }o--o| contacts : "contact_id"
 ```
 
 ## Chats and texts
@@ -48,8 +47,10 @@ values.
 
 ### `participants`
 
-One row = one handle in one chat (`handle_id` → `handles`, optional
-`contact_id` → `contacts`, optional `name_alias`).
+One row = one handle in one chat (`handle_id` → `handles`, required, and an
+optional `name_alias`). A person the backup names with no address has a handle
+of type `other` holding the name. The participant's contact is the one its
+handle is on in `contact_handles`.
 
 ### `messages`
 
@@ -153,8 +154,6 @@ There is no `contact_id` on conversations. The link is the `handles` table:
 - 1:1 `conversations.chat_handle_id` and `participants.handle_id` on the chat
   side
 - `contact_handles.handle_id` on the contact side
-- `participants.contact_id`, set when import resolves a participant's handle
-  to a contact
 
 Chat-side and contact-side reference the same per-account handle rows, so when
 a chat handle and a contact handle are the same identity, the UI treats that

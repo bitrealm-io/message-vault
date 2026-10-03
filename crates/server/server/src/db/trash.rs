@@ -38,14 +38,17 @@
 //! [`delete_trashed`].
 //!
 //! An import is the other way out of the trash. When it meets a handle that
-//! belongs to a trashed contact, [`discard_contact_if_trashed`] deletes that
-//! contact outright — row, handle links, Contact Group memberships and
-//! marker — and the import makes a fresh contact from the backup, as a first
-//! import would (ADR-0013). A backup that still holds the person is the
-//! person saying they still talk to them.
+//! belongs to a trashed contact, it makes a fresh contact from the backup, as
+//! a first import would, moves that handle to it, and
+//! [`discard_trashed_contact`] deletes the trashed contact outright — row,
+//! Contact Group memberships and marker — after taking off each handle it
+//! still held, so one in a conversation goes to a new contact with no name
+//! (ADR-0013). A backup that still holds
+//! the person is the person saying they still talk to them.
 
 use sqlx::{Connection, SqliteConnection};
 
+use crate::db::contacts;
 use crate::db::ownership::{owns_contact, owns_conversation};
 use crate::db::sql::{SQLITE_IN_CHUNK, in_placeholders};
 
@@ -156,30 +159,53 @@ pub async fn restore(
     Ok(true)
 }
 
-/// Delete `contact_id` for good when it is `account_id`'s trashed contact,
-/// and do nothing when it is not trashed. Returns true when the contact was
-/// trashed and is now gone.
-///
-/// Unlike [`delete_trashed`], which forgets a contact and keeps its row, this
-/// deletes the row: the schema's cascades take its handle links and Contact
-/// Group memberships with it, so every handle it had belongs to no contact
-/// afterwards, and a participant the source named without an address loses
-/// its contact. The marker goes with the row. This is what an import does
-/// when the backup still holds someone the person set aside (ADR-0013); the
-/// import then makes a fresh contact, which is why nothing here creates one.
+/// True when `contact_id` carries `account_id`'s trash marker.
 ///
 /// # Errors
 ///
-/// Returns a database error when a statement fails.
-pub async fn discard_contact_if_trashed(
+/// Returns a database error when the query fails.
+pub async fn is_contact_trashed(
     conn: &mut SqliteConnection,
     account_id: i64,
     contact_id: i64,
 ) -> Result<bool, sqlx::Error> {
-    let target = Trashable::Contact(contact_id);
-    if !target.is_trashed(conn, account_id).await? {
-        return Ok(false);
-    }
+    Trashable::Contact(contact_id)
+        .is_trashed(conn, account_id)
+        .await
+}
+
+/// Delete `contact_id`, which the caller has established is `account_id`'s
+/// trashed contact, for good, and answer the new contacts its identities
+/// went to.
+///
+/// Unlike [`delete_trashed`], which forgets a contact and keeps its row, this
+/// deletes the row. This is what an import does when the backup still holds
+/// someone the person set aside (ADR-0013): the import first moves the
+/// identity it met, with its siblings, to a fresh contact. Every identity the
+/// contact still holds then leaves it through
+/// [`contacts::take_identities_off`], so one in a conversation goes to a new
+/// contact with no name and none is left on no contact. The Contact Group
+/// memberships and the marker go with the row.
+///
+/// # Errors
+///
+/// Returns an error when a statement fails.
+pub async fn discard_trashed_contact(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    contact_id: i64,
+) -> anyhow::Result<Vec<i64>> {
+    let held = contacts::identities_of_contact(conn, account_id, contact_id).await?;
+    let new_contacts = contacts::take_identities_off(conn, account_id, &held)
+        .await?
+        .into_iter()
+        .filter_map(|moved| match moved {
+            contacts::IdentityMoved::NewContact(id) => Some(id),
+            _ => None,
+        })
+        .collect::<std::collections::BTreeSet<i64>>()
+        .into_iter()
+        .collect();
     sqlx::query("DELETE FROM contacts WHERE account_id = $1 AND id = $2")
         .bind(account_id)
         .bind(contact_id)
@@ -190,7 +216,7 @@ pub async fn discard_contact_if_trashed(
         .bind(contact_id)
         .execute(&mut *conn)
         .await?;
-    Ok(true)
+    Ok(new_contacts)
 }
 
 /// Remove every trash marker `account_id` holds. Called when an account's

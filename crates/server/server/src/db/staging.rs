@@ -132,9 +132,9 @@ pub async fn first_sort_order(
 }
 
 /// Insert one staged participant, and say whether a row was added.
-/// `handle_id` is `None` for a person the source named and recorded no
-/// address for; `name_alias` is what this backup called them in this
-/// conversation.
+/// `handle_id` is the person's identity, an identity of type `other` holding
+/// the name for a person the source named with no address; `name_alias` is
+/// what this backup called them in this conversation.
 ///
 /// A participant the conversation already holds adds nothing, the way
 /// promote skips one on the same key. Two conversations that merge on one
@@ -146,20 +146,18 @@ pub async fn first_sort_order(
 pub async fn insert_participant(
     conn: &mut SqliteConnection,
     conversation_id: i64,
-    handle_id: Option<i64>,
-    contact_id: Option<i64>,
+    handle_id: i64,
     name_alias: Option<&str>,
 ) -> Result<bool> {
     let done = sqlx::query(
         r"
-        INSERT INTO staging_participants (conversation_id, handle_id, contact_id, name_alias)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT(conversation_id, handle_id, contact_id) DO NOTHING
+        INSERT INTO staging_participants (conversation_id, handle_id, name_alias)
+        VALUES ($1, $2, $3)
+        ON CONFLICT(conversation_id, handle_id) DO NOTHING
         ",
     )
     .bind(conversation_id)
     .bind(handle_id)
-    .bind(contact_id)
     .bind(name_alias)
     .execute(&mut *conn)
     .await?;
@@ -547,8 +545,8 @@ pub async fn count_staged_participants(
 pub async fn promote_participants(conn: &mut SqliteConnection) -> Result<u64> {
     Ok(sqlx::query(
         r"
-        INSERT INTO participants (conversation_id, handle_id, contact_id, name_alias)
-        SELECT cm.prod_id, sp.handle_id, sp.contact_id, sp.name_alias
+        INSERT INTO participants (conversation_id, handle_id, name_alias)
+        SELECT cm.prod_id, sp.handle_id, sp.name_alias
         FROM staging_participants sp
         JOIN _promote_conv_map cm ON cm.staging_id = sp.conversation_id
         ON CONFLICT DO NOTHING

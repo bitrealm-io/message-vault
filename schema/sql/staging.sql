@@ -23,14 +23,11 @@ CREATE TABLE IF NOT EXISTS staging_participants (
     id INTEGER PRIMARY KEY,
     -- Parent staging conversation (`staging_conversations.id`).
     conversation_id INTEGER NOT NULL REFERENCES staging_conversations(id) ON DELETE CASCADE,
-    -- Participant identity handle id (resolved during staging). NULL when the
-    -- source named the person and recorded no address for them.
-    handle_id INTEGER,
-    -- Optional contact id when already resolved during staging.
-    contact_id INTEGER,
+    -- Participant identity handle id (resolved during staging).
+    handle_id INTEGER NOT NULL,
     -- Display name residue from the source for this participant.
     name_alias TEXT,
-    UNIQUE(conversation_id, handle_id, contact_id)
+    UNIQUE(conversation_id, handle_id)
 );
 
 -- Import scratch copy of messages (no content_key / duplicate_of until promote).

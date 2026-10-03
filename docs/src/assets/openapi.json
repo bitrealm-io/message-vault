@@ -11677,7 +11677,8 @@
           "messages_deduped",
           "messages_appended",
           "mode",
-          "phones_needing_review"
+          "phones_needing_review",
+          "other_identities"
         ],
         "properties": {
           "assets_copied": {
@@ -11743,6 +11744,12 @@
           "mode": {
             "$ref": "#/components/schemas/ImportMode",
             "description": "Import mode."
+          },
+          "other_identities": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Identities of type `other` this import met for people: a name the\nbackup gave with no address, or a sender such as `AMAZON`. Each one is\na person the exporter could not tie to an address, so a count above\nzero says the import is incomplete.",
+            "minimum": 0
           },
           "participants": {
             "type": "integer",

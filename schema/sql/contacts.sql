@@ -37,8 +37,8 @@ CREATE TABLE IF NOT EXISTS handles (
     -- Platform identity: 'phone' | 'whatsapp' (not per-message SMS/iMessage/RCS).
     service TEXT NOT NULL,
     -- What made this row: 'address_book' (an address book load), 'import',
-    -- or 'user'. One a load made is deleted once no contact holds it and
-    -- nothing else refers to it.
+    -- or 'user'. Whatever made it, an identity taken off its contact is
+    -- deleted when nothing else refers to it.
     origin TEXT NOT NULL DEFAULT 'import',
     -- When the identity was first recorded. Queryable; not displayed.
     created_at TEXT NOT NULL DEFAULT (datetime('now')),

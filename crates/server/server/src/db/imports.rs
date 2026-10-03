@@ -858,6 +858,7 @@ pub const DEFAULT_IMPORT_SORT: [SortKey<ImportSort>; 1] = [SortKey {
 
 /// One page of an account's Import Runs, in the order `order` asks for,
 /// narrowed to one `status` when given, with the total the page is cut from.
+/// The rows are whole; each route shapes them for whoever reads them.
 pub async fn list_imports_page(
     conn: &mut SqliteConnection,
     account_id: i64,
@@ -865,7 +866,7 @@ pub async fn list_imports_page(
     order: &[SortKey<ImportSort>],
     limit: i64,
     offset: i64,
-) -> Result<(Vec<ImportSummary>, u64)> {
+) -> Result<(Vec<ImportRow>, u64)> {
     let status_sql = if status.is_some() {
         " AND status = $2"
     } else {
@@ -903,9 +904,18 @@ pub async fn list_imports_page(
     let items = rows
         .iter()
         .map(import_from_row)
-        .map(|r| r.map(Into::into))
         .collect::<Result<Vec<_>, _>>()?;
     Ok((items, total))
+}
+
+/// How many issues the run recorded. The caller has already established
+/// that `import_id` is the account's.
+pub async fn issue_count(conn: &mut SqliteConnection, import_id: i64) -> Result<u64> {
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM import_issues WHERE import_id = $1")
+        .bind(import_id)
+        .fetch_one(&mut *conn)
+        .await?;
+    Ok(count.max(0) as u64)
 }
 
 /// Whether the run has stamped any message yet: the first batch of a

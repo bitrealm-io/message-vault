@@ -387,6 +387,16 @@ What each reaches:
   them. Each pair answers from one function, so the two lists cannot differ.
   Which contacts a run created is content, so `/v1/imports/{id}/contacts` has
   no twin under the account.
+- The account reads its own runs in full. The owner reads each run as an
+  `OwnerImportRun` or `OwnerExportRun`: the source, mode, tool, times,
+  outcome and counts, with the counts an import's summary reported and how
+  many issues it recorded, and for an export only which form its scope took.
+  Why: a staging summary lists the addresses of everyone in the backup, an
+  issue names its conversation's file, and an export's query is a search over
+  the account's messages, all content under
+  `docs/adr/0008-the-owner-holds-no-messages.md`. The owner's view is a type
+  of its own rather than the account's with fields removed, so a field added
+  to a run reaches the owner only when someone adds it to that type.
 - `GET /v1/server` and `POST /v1/server/claim` take no credential.
   `/v1/server/settings` and `GET /v1/server/storage` are the owner's: the
   storage totals sum every account, and no account holds more than its own.

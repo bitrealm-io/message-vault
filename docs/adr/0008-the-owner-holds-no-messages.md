@@ -123,7 +123,12 @@ largest attachments by name and size. The owner reads them at
 on that screen say who the account talks to, and the owner gets neither: an
 import's detail gives the owner how many contacts it created and changed and
 not who they are, and a large attachment comes to the owner as a name, a type
-and a size, without the conversation it is in. The installation-wide totals are
+and a size, without the conversation it is in. A run in the history comes to
+the owner as a type of its own, `OwnerImportRun` or `OwnerExportRun`, holding
+the source, mode, tool, times, outcome and counts: an import's summary lists
+the addresses in the backup, its issues name conversations, and an export's
+query is a search over the account's messages, so none of them reach the
+owner. The installation-wide totals are
 `GET /v1/server/storage`, the owner's alone, and Owner Home's Dashboard shows
 them. The per-account and installation-wide numbers come from the same queries
 (`crates/server/server/src/db/storage.rs`), with and without an account

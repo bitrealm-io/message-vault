@@ -2453,10 +2453,11 @@ async fn the_account_list_shows_the_app_each_account_connects_with() {
 // ---------------------------------------------------------------------------
 
 /// An account's import and export history is metadata about it (ADR 0008), so
-/// the owner reads what the account reads. The pipelines' own routes still
-/// refuse the owner, who holds no import or export permission.
+/// the owner reads the same runs the account reads, each without what the
+/// run held. The pipelines' own routes still refuse the owner, who holds no
+/// import or export permission.
 #[tokio::test]
-async fn the_owner_and_the_account_read_the_same_import_and_export_history() {
+async fn the_owner_and_the_account_read_the_same_import_and_export_runs() {
     let fixture = test_fixture().await;
     let owner = claim_as_owner(&fixture.state, "keeper", "hunter2hunter2").await;
     let alice = register_via_api(&fixture.state, "alice", "hunter2hunter2").await;
@@ -2484,8 +2485,23 @@ async fn the_owner_and_the_account_read_the_same_import_and_export_history() {
     ] {
         let by_account: serde_json::Value = get_json(&fixture.state, &path, &alice.token).await;
         let by_owner: serde_json::Value = get_json(&fixture.state, &path, &owner.token).await;
-        assert_eq!(by_owner, by_account, "{path}");
+        let run = |answer: &serde_json::Value| {
+            answer
+                .get("items")
+                .map_or(answer.clone(), |items| items[0].clone())
+        };
+        for field in ["id", "status", "started_at", "message_count"] {
+            assert_eq!(
+                run(&by_owner)[field],
+                run(&by_account)[field],
+                "{path} {field}"
+            );
+        }
     }
+    // The account reads its own runs in full, which the owner does not.
+    let own: serde_json::Value =
+        get_json(&fixture.state, &format!("{base}/exports"), &alice.token).await;
+    assert_eq!(own["items"][0]["scope"]["kind"], "everything");
 
     let imports: serde_json::Value =
         get_json(&fixture.state, &format!("{base}/imports"), &owner.token).await;
@@ -2495,6 +2511,7 @@ async fn the_owner_and_the_account_read_the_same_import_and_export_history() {
         get_json(&fixture.state, &format!("{base}/exports"), &owner.token).await;
     assert_eq!(exports["total"], 1);
     assert_eq!(exports["items"][0]["id"], export["id"]);
+    assert_eq!(exports["items"][0]["scope_kind"], "everything");
     let detail: serde_json::Value = get_json(
         &fixture.state,
         &format!("{base}/imports/{}", import["id"]),
@@ -2564,6 +2581,76 @@ async fn an_import_run_is_a_404_under_another_account() {
         .await,
         StatusCode::NOT_FOUND,
         "an account that does not exist has no history"
+    );
+}
+
+/// C2-1: what the account's backup talked to, and what it searched for, is
+/// content (ADR 0008). The owner's history routes must not carry it.
+#[tokio::test]
+async fn c2_1_the_owner_reads_no_address_or_search_text_in_the_history() {
+    let fixture = test_fixture().await;
+    let owner = claim_as_owner(&fixture.state, "keeper", "hunter2hunter2").await;
+    let alice = register_via_api(&fixture.state, "alice", "hunter2hunter2").await;
+    let base = member(alice.account_id);
+
+    let (_, import): (String, serde_json::Value) = post_created_json(
+        &fixture.state,
+        "/v1/imports",
+        &alice.token,
+        serde_json::json!({ "source": "imessage" }),
+    )
+    .await;
+    // What the desktop app sends at the first review: its staging summary.
+    let _: serde_json::Value = crate::test_support::patch_json(
+        &fixture.state,
+        &format!("/v1/imports/{}", import["id"]),
+        &alice.token,
+        serde_json::json!({
+            "stage": "awaiting_gate_1",
+            "summary": { "conversations": 1, "messages": 3,
+                         "contactIdentifiers": ["+15557654321"] }
+        }),
+    )
+    .await;
+    let _: (String, serde_json::Value) = post_created_json(
+        &fixture.state,
+        "/v1/exports",
+        &alice.token,
+        serde_json::json!({
+            "scope": { "kind": "query", "list": "messages", "q": "divorce lawyer" },
+            "tool": "tests"
+        }),
+    )
+    .await;
+
+    let mut leaks = Vec::new();
+    for path in [
+        format!("{base}/imports"),
+        format!("{base}/imports/{}", import["id"]),
+        format!("{base}/exports"),
+    ] {
+        let by_owner: serde_json::Value = get_json(&fixture.state, &path, &owner.token).await;
+        let text = by_owner.to_string();
+        if text.contains("+15557654321") || text.contains("divorce lawyer") {
+            leaks.push(format!("{path}: {text}"));
+        }
+    }
+    assert!(
+        leaks.is_empty(),
+        "the owner read content:\n{}",
+        leaks.join("\n")
+    );
+
+    // The counts the summary reported are the owner's to read.
+    let detail: serde_json::Value = get_json(
+        &fixture.state,
+        &format!("{base}/imports/{}", import["id"]),
+        &owner.token,
+    )
+    .await;
+    assert_eq!(
+        detail["counts"],
+        serde_json::json!({ "conversations": 1, "messages": 3 })
     );
 }
 

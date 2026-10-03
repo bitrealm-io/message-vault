@@ -267,34 +267,46 @@ export function listAccountIdentities(
 /** Which page of an account's run history to read. Absent values are left off the URL. */
 export type AccountRunListParams = { limit?: number; offset?: number };
 
-/** An account's Import Runs, newest first: the logged-in one, or as the owner the one named. */
+/**
+ * An account's Import Runs, newest first: the logged-in one in full, or as the
+ * owner the one named, each without what the run held.
+ */
 export function listAccountImports(
   params: AccountRunListParams,
   opts?: RequestOptions,
   accountId?: number,
-): Promise<Schema["Page_ImportSummary"]> {
-  return apiClient.get<Schema["Page_ImportSummary"]>(
+): Promise<Schema["AccountImportRuns"]> {
+  return apiClient.get<Schema["AccountImportRuns"]>(
     withQuery(`${accountBase(accountId)}/imports`, query(params)),
     opts,
   );
 }
 
-/** One of an account's Import Runs, with its counts, timings and issues. */
+/**
+ * One of an account's Import Runs, with its counts and timings, and for the
+ * logged-in account its summary and issues.
+ */
 export function getAccountImport(
   importId: number,
   opts?: RequestOptions,
   accountId?: number,
-): Promise<Schema["ImportRun"]> {
-  return apiClient.get<Schema["ImportRun"]>(`${accountBase(accountId)}/imports/${importId}`, opts);
+): Promise<Schema["AccountImportRun"]> {
+  return apiClient.get<Schema["AccountImportRun"]>(
+    `${accountBase(accountId)}/imports/${importId}`,
+    opts,
+  );
 }
 
-/** An account's Export Runs, newest first: the logged-in one, or as the owner the one named. */
+/**
+ * An account's Export Runs, newest first: the logged-in one in full, or as
+ * the owner the one named, each without what the run asked for.
+ */
 export function listAccountExports(
   params: AccountRunListParams,
   opts?: RequestOptions,
   accountId?: number,
-): Promise<Schema["Page_ExportRun"]> {
-  return apiClient.get<Schema["Page_ExportRun"]>(
+): Promise<Schema["AccountExportRuns"]> {
+  return apiClient.get<Schema["AccountExportRuns"]>(
     withQuery(`${accountBase(accountId)}/exports`, query(params)),
     opts,
   );

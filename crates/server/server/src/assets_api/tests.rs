@@ -1162,7 +1162,9 @@ async fn deleting_an_upload_answers_204_and_removes_its_files() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let status = response.status();
+    let text = response.text().await.unwrap();
+    crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
 }
 
 /// A zero-byte attachment is a file like any other. A PUT of no bytes

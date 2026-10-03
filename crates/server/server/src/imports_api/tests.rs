@@ -1915,6 +1915,8 @@ async fn a_batch_with_an_unsafe_attachment_path_is_a_422_naming_the_path() {
         &text,
         crate::problem::ProblemType::ValidationFailed,
     );
+    // Line 1 is the header; the message with the attachment is line 2.
+    assert_eq!(problem.line, Some(2), "{text}");
     assert!(
         problem.errors.unwrap()[0].contains("../secret.txt"),
         "{text}"
@@ -1944,6 +1946,7 @@ async fn a_batch_whose_file_does_not_match_its_sha256_is_a_422_naming_the_file()
         &text,
         crate::problem::ProblemType::ValidationFailed,
     );
+    assert_eq!(problem.line, Some(2), "{text}");
     assert!(problem.errors.unwrap()[0].contains("photo.bin"), "{text}");
 }
 

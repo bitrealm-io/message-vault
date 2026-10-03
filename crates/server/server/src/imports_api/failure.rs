@@ -6,6 +6,7 @@
 //! the file. The HTTP interface maps each kind to a status once, in
 //! `server.rs`, and no handler picks a status from an `anyhow` error.
 
+use crate::assets_api::Sha256;
 use message_ir::{UnsafeAttachmentPath, UnsupportedSchemaVersion};
 use std::fmt;
 
@@ -27,11 +28,27 @@ pub enum ImportFailure {
     Invalid { line: usize, detail: String },
     /// The batch has no bytes.
     Empty,
-    /// An attachment path could leave the folder it is read from.
-    UnsafeAttachmentPath(UnsafeAttachmentPath),
-    /// An attachment's bytes do not hash to the SHA-256 the batch states for
-    /// it, or the stated SHA-256 is not one.
-    AttachmentMismatch { path: String, detail: String },
+    /// An attachment path on the message at `line` could leave the folder it
+    /// is read from.
+    UnsafeAttachmentPath {
+        refusal: UnsafeAttachmentPath,
+        line: usize,
+    },
+    /// The message at `line` states a SHA-256 for an attachment that is not
+    /// 64 hex digits.
+    AttachmentSha256Invalid {
+        path: String,
+        stated: String,
+        line: usize,
+    },
+    /// An attachment's bytes do not hash to the SHA-256 the message at `line`
+    /// states for it.
+    AttachmentMismatch {
+        path: String,
+        stated: Sha256,
+        actual: Sha256,
+        line: usize,
+    },
     /// Messages whose `guid` is empty. The guid index is what makes a
     /// retried batch store nothing twice, and every exporter writes a guid,
     /// so a message without one is refused rather than stored outside it.
@@ -52,12 +69,6 @@ impl fmt::Display for ImportFailure {
 
 impl std::error::Error for ImportFailure {}
 
-impl From<UnsafeAttachmentPath> for ImportFailure {
-    fn from(refusal: UnsafeAttachmentPath) -> Self {
-        Self::UnsafeAttachmentPath(refusal)
-    }
-}
-
 impl ImportFailure {
     /// The line the failure is on, counted from 1 with blank lines included,
     /// when it is about a line. For messages without a guid, the first of
@@ -67,9 +78,12 @@ impl ImportFailure {
         match self {
             Self::NotJson { line, .. }
             | Self::SchemaVersion { line, .. }
-            | Self::Invalid { line, .. } => Some(*line),
+            | Self::Invalid { line, .. }
+            | Self::UnsafeAttachmentPath { line, .. }
+            | Self::AttachmentSha256Invalid { line, .. }
+            | Self::AttachmentMismatch { line, .. } => Some(*line),
             Self::MissingGuid { lines, .. } => lines.first().copied(),
-            Self::Empty | Self::UnsafeAttachmentPath(_) | Self::AttachmentMismatch { .. } => None,
+            Self::Empty => None,
         }
     }
 
@@ -98,9 +112,19 @@ impl ImportFailure {
                 "The batch is empty: send at least one conversation header and its messages."
                     .to_string()
             }
-            Self::UnsafeAttachmentPath(refusal) => refusal.to_string(),
-            Self::AttachmentMismatch { path, detail } => format!(
-                "The attachment {path} does not match the SHA-256 the batch states: {detail}."
+            Self::UnsafeAttachmentPath { refusal, line } => {
+                format!("Line {line} of {whole}: {refusal}.")
+            }
+            Self::AttachmentSha256Invalid { path, stated, line } => format!(
+                "Line {line} of {whole}: the attachment {path} states the SHA-256 {stated}, which is not 64 hex digits."
+            ),
+            Self::AttachmentMismatch {
+                path,
+                stated,
+                actual,
+                line,
+            } => format!(
+                "Line {line} of {whole}: the bytes of the attachment {path} hash to {actual}, not to the SHA-256 {stated} the line states."
             ),
             Self::MissingGuid { lines, total } => {
                 let named: Vec<String> = lines.iter().map(ToString::to_string).collect();

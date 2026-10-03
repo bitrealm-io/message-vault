@@ -62,9 +62,9 @@ pub enum AssetError {
     #[error("sha256 mismatch: claimed {claimed}, got {actual}")]
     Mismatch {
         /// The fingerprint the caller stated.
-        claimed: String,
+        claimed: Sha256,
         /// The fingerprint of the bytes that arrived.
-        actual: String,
+        actual: Sha256,
     },
     /// The request broke a rule of the upload: a fingerprint or upload id
     /// that is not one, a part out of range or of the wrong length, a size
@@ -74,14 +74,16 @@ pub enum AssetError {
     /// The upload id names no upload in progress.
     #[error("upload session not found")]
     UploadNotFound,
-    /// Another request to the same upload holds its lock.
+    /// Another request to the same upload holds its lock: the upload is
+    /// busy, not wrong, so the request is sent again once that one finishes.
     #[error(
         "another request to this upload holds its lock; send this request again when that one finishes"
     )]
     Locked,
-    /// The server could not read or write its own files.
+    /// The server could not store the file: its own I/O, or a state of its
+    /// store it refuses to write over. Nothing the caller can change.
     #[error(transparent)]
-    Io(#[from] anyhow::Error),
+    Internal(#[from] anyhow::Error),
 }
 
 /// A SHA-256 fingerprint that has been checked: exactly 64 hex digits, held
@@ -361,8 +363,8 @@ fn verify_source_digest(source: &Path, claimed_sha256: &Sha256) -> Result<(), As
     let actual = hash_file(source).with_context(|| format!("read source {}", source.display()))?;
     if actual != claimed_sha256.as_str() {
         return Err(AssetError::Mismatch {
-            claimed: claimed_sha256.to_string(),
-            actual,
+            claimed: claimed_sha256.clone(),
+            actual: Sha256(actual),
         });
     }
     Ok(())
@@ -403,8 +405,8 @@ fn copy_to_verified_temp(
     let actual = hex_encode(&hasher.finalize());
     if actual != claimed_sha256.as_str() {
         return Err(AssetError::Mismatch {
-            claimed: claimed_sha256.to_string(),
-            actual,
+            claimed: claimed_sha256.clone(),
+            actual: Sha256(actual),
         });
     }
     Ok(temporary)
@@ -1083,7 +1085,8 @@ pub(crate) async fn create_asset_upload(
     request_body(content_type = "application/octet-stream", description = "Raw part bytes"),
     responses(
         (status = 200, body = ReplaceAssetUploadPartResponse),
-        crate::problem::openapi::AssetUploadInvalid
+        crate::problem::openapi::AssetUploadInvalid,
+        crate::problem::openapi::StateConflict
     )
 )]
 pub(crate) async fn replace_asset_upload_part(
@@ -1156,7 +1159,8 @@ pub(crate) async fn replace_asset_upload_part(
             headers(("Location" = String, description = "Path of the stored asset"))
         ),
         (status = 200, body = Asset, description = "The server already held the asset"),
-        crate::problem::openapi::AssetUploadInvalid
+        crate::problem::openapi::AssetUploadInvalid,
+        crate::problem::openapi::StateConflict
     )
 )]
 pub(crate) async fn complete_asset_upload(

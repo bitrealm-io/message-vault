@@ -50,6 +50,7 @@ fn try_store_converted(
     asset_stats: &mut AssetStats,
     media: MediaMode,
     media_work: &Path,
+    line: usize,
 ) -> Result<Option<StoredAsset>> {
     if !matches!(media, MediaMode::Convert | MediaMode::Compress) {
         return Ok(None);
@@ -57,7 +58,8 @@ fn try_store_converted(
     let Some(rel) = att.path.as_deref().and_then(trimmed) else {
         return Ok(None);
     };
-    let source = message_ir::safe_attachment_path(export_dir, rel).map_err(ImportFailure::from)?;
+    let source = message_ir::safe_attachment_path(export_dir, rel)
+        .map_err(|refusal| ImportFailure::UnsafeAttachmentPath { refusal, line })?;
     if !source.is_file() {
         return Ok(None);
     }
@@ -84,6 +86,7 @@ fn store_claimed_or_path(
     export_dir: &Path,
     assets_dir: &Path,
     asset_stats: &mut AssetStats,
+    line: usize,
 ) -> Result<Option<StoredAsset>> {
     // Checked before the stored-fingerprint lookup, which never reads the
     // file: `attachments.path` keeps the path as sent, and an Export writes
@@ -94,7 +97,7 @@ fn store_claimed_or_path(
         .and_then(trimmed)
         .map(|rel| message_ir::safe_attachment_path(export_dir, rel))
         .transpose()
-        .map_err(ImportFailure::from)?;
+        .map_err(|refusal| ImportFailure::UnsafeAttachmentPath { refusal, line })?;
     if let Some(sha) = att.sha256.as_deref().and_then(trimmed) {
         let claimed = assets_api::Sha256::parse(sha);
         if let Ok(claimed) = &claimed
@@ -129,15 +132,24 @@ fn store_claimed_or_path(
                     asset_stats.missing += 1;
                     Ok(None)
                 }
-                // The export states a fingerprint its file does not have:
-                // the sender's to fix, naming the path as sent.
-                Err(err @ (AssetError::Mismatch { .. } | AssetError::Invalid(_))) => {
+                // The export states a fingerprint its file does not have,
+                // or one that is not a fingerprint: the sender's to fix,
+                // naming the line and the path as sent.
+                Err(AssetError::Mismatch { claimed, actual }) => {
                     Err(ImportFailure::AttachmentMismatch {
                         path: att.path.clone().unwrap_or_default(),
-                        detail: err.to_string(),
+                        stated: claimed,
+                        actual,
+                        line,
                     }
                     .into())
                 }
+                Err(AssetError::Invalid(_)) => Err(ImportFailure::AttachmentSha256Invalid {
+                    path: att.path.clone().unwrap_or_default(),
+                    stated: sha.to_string(),
+                    line,
+                }
+                .into()),
                 Err(err) => Err(err.into()),
             };
         }
@@ -146,8 +158,8 @@ fn store_claimed_or_path(
     }
 
     if let Some(rel) = att.path.as_deref() {
-        let source =
-            message_ir::safe_attachment_path(export_dir, rel).map_err(ImportFailure::from)?;
+        let source = message_ir::safe_attachment_path(export_dir, rel)
+            .map_err(|refusal| ImportFailure::UnsafeAttachmentPath { refusal, line })?;
         return assets_api::hash_and_store(
             &source,
             assets_dir,
@@ -167,6 +179,7 @@ fn prepare_attachments(
     asset_stats: &mut AssetStats,
     media: MediaMode,
     media_work: &Path,
+    line: usize,
 ) -> Result<Vec<PreparedAttachment>> {
     if media == MediaMode::Disabled {
         return Ok(Vec::new());
@@ -181,9 +194,10 @@ fn prepare_attachments(
             asset_stats,
             media,
             media_work,
+            line,
         )? {
             Some(stored) => Some(stored),
-            None => store_claimed_or_path(&att, export_dir, assets_dir, asset_stats)?,
+            None => store_claimed_or_path(&att, export_dir, assets_dir, asset_stats, line)?,
         };
         prepared.push(PreparedAttachment {
             record: att,
@@ -554,6 +568,7 @@ fn prepare_message_attachments(
             asset_stats,
             opts.media,
             media_work,
+            msg.line,
         )?;
         prepared.push((msg, attachments));
     }

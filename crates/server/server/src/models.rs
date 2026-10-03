@@ -57,6 +57,9 @@ pub struct MessageRecord {
     /// Messages, otherwise the exporter's `MessageGuid`. Production skips a
     /// guid it already holds, which is what lets a batch be sent again.
     pub guid: String,
+    /// The line the message is on in its file or batch, counted from 1 with
+    /// blank lines included, so a refusal of one of its attachments names it.
+    pub line: usize,
     /// The instant the message was sent: RFC 3339 in UTC with a `Z` suffix.
     pub timestamp: String,
     /// True for messages sent by the account owner.
@@ -213,7 +216,7 @@ pub fn parse_ir_lines(
                 }
                 continue;
             }
-            let record = message_from_ir(&msg, header_owner.as_deref()).map_err(|e| {
+            let record = message_from_ir(&msg, header_owner.as_deref(), line_no).map_err(|e| {
                 ImportFailure::Invalid {
                     line: line_no,
                     detail: format!("{e:#}"),
@@ -286,7 +289,11 @@ fn conversation_from_ir(header: &ConversationHeader) -> ConversationRecord {
 
 /// Map one IR message onto the server's message record. `header_owner` is the
 /// owner the conversation header names, used when the message names none.
-fn message_from_ir(msg: &IrMessage, header_owner: Option<&str>) -> Result<MessageRecord> {
+fn message_from_ir(
+    msg: &IrMessage,
+    header_owner: Option<&str>,
+    line: usize,
+) -> Result<MessageRecord> {
     let secs = msg.timestamp_unix_ms.div_euclid(1000);
     let timestamp = format_utc_timestamp(secs).with_context(|| {
         format!(
@@ -308,6 +315,7 @@ fn message_from_ir(msg: &IrMessage, header_owner: Option<&str>) -> Result<Messag
 
     Ok(MessageRecord {
         guid: msg.guid.clone(),
+        line,
         timestamp,
         is_from_me,
         sender: if is_from_me {

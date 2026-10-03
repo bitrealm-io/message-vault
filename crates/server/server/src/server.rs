@@ -739,11 +739,13 @@ impl From<crate::assets_api::AssetError> for ApiError {
     fn from(e: crate::assets_api::AssetError) -> Self {
         use crate::assets_api::AssetError;
         match e {
-            err @ (AssetError::Mismatch { .. } | AssetError::Invalid(_) | AssetError::Locked) => {
+            err @ (AssetError::Mismatch { .. } | AssetError::Invalid(_)) => {
                 Self::AssetUploadInvalid(err.to_string())
             }
+            // The upload is busy, not wrong: a resource in the wrong state.
+            err @ AssetError::Locked => Self::StateConflict(err.to_string()),
             err @ AssetError::UploadNotFound => Self::NotFound(err.to_string()),
-            AssetError::Io(err) => Self::Internal(err),
+            AssetError::Internal(err) => Self::Internal(err),
         }
     }
 }

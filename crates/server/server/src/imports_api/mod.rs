@@ -157,6 +157,7 @@ impl ImportStats {
         self.messages += other.messages;
         self.attachments += other.attachments;
         self.tapbacks += other.tapbacks;
+        self.contacts_created += other.contacts_created;
         self.messages_deduped += other.messages_deduped;
         self.phones_needing_review += other.phones_needing_review;
     }

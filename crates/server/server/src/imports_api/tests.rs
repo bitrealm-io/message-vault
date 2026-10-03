@@ -3329,3 +3329,34 @@ async fn a_participant_listed_twice_under_one_identity_is_listed_once() {
         "the one number is listed once"
     );
 }
+
+/// #1163: the batch answer counts the contacts the batch made. Staging makes
+/// one for a person the account has no contact for, and that count reaches
+/// the answer beside the participant row promote added.
+#[tokio::test]
+async fn the_batch_answer_counts_the_contacts_it_created() {
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "imessage").await;
+    let (status, text) = crate::test_support::post_raw(
+        &state,
+        &path,
+        &token,
+        "application/jsonl",
+        format!(
+            "{S1_HEADER_1}\n{}\n",
+            s1_message("g1", "+15551234567", 1426183462000, "hi")
+        ),
+    )
+    .await;
+    assert_eq!(status, axum::http::StatusCode::OK, "{text}");
+    let mut conn = state.db.acquire().await.unwrap();
+    let bobs: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM contacts WHERE preferred_name = 'Bob'")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(bobs, 1, "the batch made Bob's contact");
+    let answer: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(answer["contacts_created"], 1, "{text}");
+    assert_eq!(answer["participants"], 1, "{text}");
+}

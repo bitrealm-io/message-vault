@@ -143,6 +143,60 @@ fn convert_json_to_xml() {
     assert!(destination.path().join("smses.xml").is_file());
 }
 
+/// An Export Run whose scope holds an iMessage, a WhatsApp and an SMS
+/// conversation, written as SMS Backup & Restore: only the SMS
+/// conversation's message goes into `smses.xml`, and the log tells the
+/// person how many messages were left out and why (ADR 0021).
+#[test]
+fn xml_writes_only_sms_and_mms_and_the_log_names_what_was_left_out() {
+    let source = tempfile::tempdir().unwrap();
+    clean_previous_ir_output(source.path()).unwrap();
+    let mut imessage = message_ir::testutil::sample_imessage_document();
+    imessage.conversation.chat_identifier = "+15555550103".into();
+    imessage.conversation.participants[0].handle = Some("+15555550103".into());
+    let mut sink =
+        FormatSink::open(source.path(), OutputFormat::Jsonl, ExportTransforms::none()).unwrap();
+    for doc in [
+        message_ir::testutil::sample_document("hello sms"),
+        imessage,
+        message_ir::testutil::sample_whatsapp_document("hello whatsapp"),
+    ] {
+        sink.write_document(doc).unwrap();
+    }
+    sink.finish(&mut ExportReport::default()).unwrap();
+
+    let destination = tempfile::tempdir().unwrap();
+    let result = run(&config(
+        source.path(),
+        destination.path(),
+        OutputFormat::Xml,
+    ))
+    .unwrap();
+
+    let text = fs::read_to_string(destination.path().join("smses.xml")).unwrap();
+    assert!(text.contains(r#"count="1""#), "{text}");
+    assert!(text.contains("hello sms"), "{text}");
+    assert!(!text.contains("hello imessage"), "{text}");
+    assert!(!text.contains("hello whatsapp"), "{text}");
+    // The desktop app repeats the last line as the run's summary, so the
+    // conversation count closes the log, not the left-out line.
+    assert_eq!(
+        result.messages.last().map(String::as_str),
+        Some("Conversations: 1"),
+        "{:?}",
+        result.messages
+    );
+    assert!(
+        result.messages.contains(
+            &"Left out 3 message(s) that are not SMS or MMS, because SMS Backup & Restore \
+              holds only SMS and MMS"
+                .to_string()
+        ),
+        "{:?}",
+        result.messages
+    );
+}
+
 #[test]
 fn convert_xml_with_ir_reader() {
     let source = tempfile::tempdir().unwrap();

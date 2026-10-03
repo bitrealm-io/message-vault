@@ -76,6 +76,7 @@ A message imported or trashed while the run is being read does not change what t
 | **EML (one file per message)** | One folder per conversation, one `.eml` file per message, attachments embedded |
 | **MBOX (.mbox)** | One `.mbox` file per conversation, attachments embedded |
 | **Android XML (smses.xml)** | A single `smses.xml` holding only SMS and MMS, attachments embedded. The log says how many other messages were left out |
+| **EML (SMS Backup+)** | One folder per conversation, one `.eml` file per SMS or MMS in the mail SMS Backup+ writes, attachments embedded. Other messages are left out, and the run's log says how many |
 
 Export always fetches the messages as JSON Lines first.
 Any other format is written by converting that JSON Lines copy, as part of the same run.

@@ -6,6 +6,7 @@
 /export/
 *.eml
 !tests/fixtures/**/*.eml
+!tests/round_trip_fixture/*.eml
 
 # IDE / editor
 .cursor/

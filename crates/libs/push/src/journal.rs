@@ -36,13 +36,6 @@ pub enum JournalEvent {
         source: String,
         sha256: String,
     },
-    MessageOk {
-        url: String,
-        username: String,
-        source: String,
-        file: String,
-        guid: String,
-    },
     MessageBatchOk {
         url: String,
         username: String,
@@ -74,7 +67,6 @@ impl JournalEvent {
     fn target(&self) -> (&str, &str) {
         match self {
             Self::AssetOk { url, username, .. }
-            | Self::MessageOk { url, username, .. }
             | Self::MessageBatchOk { url, username, .. }
             | Self::FileOk { url, username, .. }
             | Self::Fail { url, username, .. } => (url.as_str(), username.as_str()),
@@ -131,17 +123,6 @@ pub fn load(path: &Path, url: &str, username: &str) -> Result<JournalState> {
                 ..
             } if u == url && a == username => {
                 state.assets.insert(sha256);
-            }
-            JournalEvent::MessageOk {
-                url: u,
-                username: a,
-                file,
-                guid,
-                ..
-            } if u == url && a == username => {
-                state
-                    .messages
-                    .insert(JournalState::message_key(&file, &guid));
             }
             JournalEvent::MessageBatchOk {
                 url: u,
@@ -391,16 +372,15 @@ mod tests {
     use std::thread;
 
     #[test]
-    fn loads_legacy_and_batch_message_success_events() {
+    fn loads_batch_message_success_events() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join(JOURNAL_NAME);
         fs::write(
             &path,
             concat!(
-                "{\"event\":\"message_ok\",\"url\":\"http://server\",\"username\":\"alice\",",
-                "\"source\":\"sms\",\"file\":\"first.jsonl\",\"guid\":\"guid-1\"}\n",
                 "{\"event\":\"message_batch_ok\",\"url\":\"http://server\",\"username\":\"alice\",",
-                "\"source\":\"sms\",\"messages\":[{\"file\":\"second.jsonl\",\"guid\":\"guid-2\"}]}\n"
+                "\"source\":\"sms\",\"messages\":[{\"file\":\"first.jsonl\",\"guid\":\"guid-1\"},",
+                "{\"file\":\"second.jsonl\",\"guid\":\"guid-2\"}]}\n"
             ),
         )
         .unwrap();
@@ -427,13 +407,6 @@ mod tests {
                 username: username.into(),
                 source: "sms".into(),
                 sha256: format!("sha-{tag}"),
-            },
-            JournalEvent::MessageOk {
-                url: url.into(),
-                username: username.into(),
-                source: "sms".into(),
-                file: "chat.jsonl".into(),
-                guid: format!("single-{tag}"),
             },
             JournalEvent::MessageBatchOk {
                 url: url.into(),
@@ -470,11 +443,8 @@ mod tests {
 
         let expected_assets: HashSet<String> = ["sha-mine".to_string()].into();
         assert_eq!(state.assets, expected_assets);
-        let expected_messages: HashSet<String> = [
-            JournalState::message_key("chat.jsonl", "single-mine"),
-            JournalState::message_key("chat.jsonl", "batch-mine"),
-        ]
-        .into();
+        let expected_messages: HashSet<String> =
+            [JournalState::message_key("chat.jsonl", "batch-mine")].into();
         assert_eq!(state.messages, expected_messages);
         let expected_files: HashSet<String> = ["file-mine.jsonl".to_string()].into();
         assert_eq!(state.files, expected_files);

@@ -1,7 +1,6 @@
-import { useCallback, useRef, useState } from "react";
-import { popupShadow } from "../lib/uiStyles";
-import { useMenuKeyboard } from "../lib/useMenuKeyboard";
-import { Z_POPOVER } from "../lib/zLayers";
+import { Header, Menu, MenuItem, MenuSection, MenuTrigger, Popover } from "react-aria-components";
+import { menuItemClass, menuPopoverClass } from "../lib/uiStyles";
+import PlainButton from "./PlainButton";
 
 export type SortOrder = "asc" | "desc";
 
@@ -10,12 +9,17 @@ export type SortField<Id extends string> = {
   label: string;
 };
 
+const sectionHeaderClass = "px-3 pb-1.5 text-[0.75rem] font-semibold text-text";
+
 /**
  * The sort control that sits at the right of a list header.
  *
  * The fields differ per list — contacts sort by name, conversations by date or
  * message count — but the button, its position, and the menu are the same, so
  * the lists cannot drift apart visually.
+ *
+ * The menu is React Aria's, with two single-selection sections, so each choice
+ * is a `menuitemradio` and picking one closes the menu.
  */
 export default function SortMenu<Id extends string>({
   fields,
@@ -25,6 +29,7 @@ export default function SortMenu<Id extends string>({
   itemNoun,
   ascLabel = "Ascending",
   descLabel = "Descending",
+  unordered = [],
 }: {
   fields: ReadonlyArray<SortField<Id>>;
   sort: Id;
@@ -34,95 +39,79 @@ export default function SortMenu<Id extends string>({
   itemNoun: string;
   ascLabel?: string;
   descLabel?: string;
+  /** Fields that have one order of their own, such as Relevance: no Order choice is shown for them. */
+  unordered?: ReadonlyArray<Id>;
 }) {
-  const [open, setOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const close = useCallback(() => setOpen(false), []);
-  const { onKeyDown } = useMenuKeyboard(open, menuRef, close, triggerRef);
-
   const sortLabel = fields.find((f) => f.id === sort)?.label ?? fields[0]?.label ?? "";
+  const ordered = !unordered.includes(sort);
   const orderLabel = order === "asc" ? ascLabel : descLabel;
+  const sortedBy = ordered ? `${sortLabel}, ${orderLabel}` : sortLabel;
 
   return (
-    <div className="relative">
-      <button
-        type="button"
-        ref={triggerRef}
-        aria-label={`Sort ${itemNoun} by ${sortLabel}, ${orderLabel}`}
-        aria-expanded={open}
-        aria-haspopup="menu"
-        title={`Sorted by ${sortLabel}, ${orderLabel}`}
-        onClick={() => setOpen((v) => !v)}
-        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-border bg-elevated text-muted hover:text-text"
+    <MenuTrigger>
+      <PlainButton
+        aria-label={`Sort ${itemNoun} by ${sortedBy}`}
+        title={`Sorted by ${sortedBy}`}
+        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-border bg-elevated text-muted outline-none hover:text-text focus-visible:ring-2 focus-visible:ring-accent aria-expanded:text-text"
       >
         <SortIcon />
-      </button>
-      {open ? (
-        <div
-          ref={menuRef}
-          role="menu"
-          aria-label={`Sort ${itemNoun}`}
-          data-mc-overlay=""
-          onKeyDown={onKeyDown}
-          className={`absolute top-full right-0 mt-1 min-w-[10.5rem] rounded-xl border border-border bg-popover py-2 ${Z_POPOVER} ${popupShadow}`}
-        >
-          <div className="px-3 pb-1.5 text-[0.75rem] font-semibold text-text">Sort By</div>
-          {fields.map((field) => (
-            <SortOption
-              key={field.id}
-              label={field.label}
-              selected={sort === field.id}
-              onSelect={() => {
-                onChange({ sort: field.id, order });
-                setOpen(false);
+      </PlainButton>
+      <Popover
+        placement="bottom end"
+        offset={4}
+        data-mc-overlay=""
+        className={`${menuPopoverClass} min-w-[10.5rem] rounded-xl py-2`}
+      >
+        <Menu aria-label={`Sort ${itemNoun}`} shouldFocusWrap className="outline-none">
+          <MenuSection
+            selectionMode="single"
+            disallowEmptySelection
+            selectedKeys={[sort]}
+            onSelectionChange={(keys) => {
+              const next = fields.find((f) => keys !== "all" && keys.has(f.id));
+              if (next) onChange({ sort: next.id, order });
+            }}
+          >
+            <Header className={sectionHeaderClass}>Sort By</Header>
+            {fields.map((field) => (
+              <SortOption key={field.id} id={field.id} label={field.label} />
+            ))}
+          </MenuSection>
+          {ordered ? (
+            <MenuSection
+              selectionMode="single"
+              disallowEmptySelection
+              selectedKeys={[order]}
+              onSelectionChange={(keys) => {
+                if (keys === "all") return;
+                if (keys.has("asc")) onChange({ sort, order: "asc" });
+                else if (keys.has("desc")) onChange({ sort, order: "desc" });
               }}
-            />
-          ))}
-          <div className="my-1.5 border-t border-border" />
-          <div className="px-3 pb-1.5 text-[0.75rem] font-semibold text-text">Order</div>
-          <SortOption
-            label={ascLabel}
-            selected={order === "asc"}
-            onSelect={() => {
-              onChange({ sort, order: "asc" });
-              setOpen(false);
-            }}
-          />
-          <SortOption
-            label={descLabel}
-            selected={order === "desc"}
-            onSelect={() => {
-              onChange({ sort, order: "desc" });
-              setOpen(false);
-            }}
-          />
-        </div>
-      ) : null}
-    </div>
+              className="mt-1.5 block border-t border-border pt-1.5"
+            >
+              <Header className={sectionHeaderClass}>Order</Header>
+              <SortOption id="asc" label={ascLabel} />
+              <SortOption id="desc" label={descLabel} />
+            </MenuSection>
+          ) : null}
+        </Menu>
+      </Popover>
+    </MenuTrigger>
   );
 }
 
-function SortOption({
-  label,
-  selected,
-  onSelect,
-}: {
-  label: string;
-  selected: boolean;
-  onSelect: () => void;
-}) {
+function SortOption({ id, label }: { id: string; label: string }) {
   return (
-    <button
-      type="button"
-      role="menuitemradio"
-      aria-checked={selected}
-      onClick={onSelect}
-      className="flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-1.5 text-left text-[0.813rem] text-text outline-none hover:bg-hover-strong focus-visible:bg-hover-strong"
-    >
-      <span className="flex w-4 justify-center text-accent">{selected ? <CheckIcon /> : null}</span>
-      {label}
-    </button>
+    <MenuItem id={id} textValue={label} className={`${menuItemClass} text-text`}>
+      {({ isSelected }) => (
+        <>
+          <span className="flex w-4 justify-center text-accent">
+            {isSelected ? <CheckIcon /> : null}
+          </span>
+          {label}
+        </>
+      )}
+    </MenuItem>
   );
 }
 

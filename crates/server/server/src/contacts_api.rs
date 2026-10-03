@@ -107,9 +107,12 @@ pub struct Contact {
 
 /// Body for `POST /v1/contacts/summaries`.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub struct SummarizeContactsRequest {
-    /// Contact ids to summarize; an empty list covers every contact.
-    #[serde(default)]
+pub struct ListContactSummariesRequest {
+    /// Contact ids to summarize: at least one, and at most 500. Every
+    /// contact is listed by `GET /v1/contacts`.
+    // `max_items` takes only a literal; a test holds it to
+    // `MAX_CONTACT_SUMMARY_IDS`.
+    #[schema(min_items = 1, max_items = 500)]
     pub ids: Vec<i64>,
 }
 
@@ -171,7 +174,7 @@ pub(crate) const MAX_MATCH_IDENTIFIERS: usize = 500;
 
 /// Body for `POST /v1/contacts/unmatched-identities`.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub(crate) struct FindUnmatchedIdentitiesRequest {
+pub(crate) struct ListUnmatchedIdentitiesRequest {
     /// Raw identifiers — phone numbers, emails — as they appear in an export.
     identifiers: Vec<String>,
 }
@@ -182,15 +185,15 @@ pub(crate) struct FindUnmatchedIdentitiesRequest {
     path = "/v1/contacts/unmatched-identities",
     tag = "Contacts",
     security(("session" = [])),
-    request_body = FindUnmatchedIdentitiesRequest,
+    request_body = ListUnmatchedIdentitiesRequest,
     responses(
         (status = 200, body = crate::paging::Page<String>),
     )
 )]
-pub(crate) async fn find_unmatched_identities(
+pub(crate) async fn list_unmatched_identities(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
-    Json(body): Json<FindUnmatchedIdentitiesRequest>,
+    Json(body): Json<ListUnmatchedIdentitiesRequest>,
 ) -> Result<Json<Page<String>>, ApiError> {
     if body.identifiers.len() > MAX_MATCH_IDENTIFIERS {
         return Err(ApiError::validation(format!(
@@ -253,16 +256,19 @@ pub(crate) async fn list_contacts(
     path = "/v1/contacts/summaries",
     tag = "Contacts",
     security(("session" = [])),
-    request_body = SummarizeContactsRequest,
+    request_body = ListContactSummariesRequest,
     responses(
         (status = 200, body = crate::paging::Page<ContactSelectionSummary>),
     )
 )]
-pub(crate) async fn summarize_contacts(
+pub(crate) async fn list_contact_summaries(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
-    Json(body): Json<SummarizeContactsRequest>,
+    Json(body): Json<ListContactSummariesRequest>,
 ) -> Result<Json<Page<ContactSelectionSummary>>, ApiError> {
+    if body.ids.is_empty() {
+        return Err(ApiError::validation("ids must name at least one contact"));
+    }
     if body.ids.len() > MAX_CONTACT_SUMMARY_IDS {
         return Err(ApiError::validation(format!(
             "at most {MAX_CONTACT_SUMMARY_IDS} contact ids"
@@ -401,7 +407,14 @@ pub(crate) async fn delete_contact(
     AxumPath(contact_id): AxumPath<i64>,
 ) -> Result<StatusCode, ApiError> {
     let mut conn = state.db.acquire().await?;
-    match delete_trashed(&mut conn, auth.account_id, Trashable::Contact(contact_id)).await? {
+    match delete_trashed(
+        &mut conn,
+        auth.account_id,
+        Trashable::Contact(contact_id),
+        crate::db::audit_trail::AuditActor::Holder,
+    )
+    .await?
+    {
         // A contact owns no files, so there is nothing to remove from disk.
         DeleteOutcome::Deleted(_) => Ok(StatusCode::NO_CONTENT),
         DeleteOutcome::NotOwned => Err(ApiError::NotFound("contact not found".into())),

@@ -17,11 +17,12 @@ const ADDRESS_BOOK_HEADER: &str = "contact_id,display_name,groups,service,identi
 ///
 /// The demo is built the way a person builds theirs. The three backups are
 /// imported first and carry no names for these people, so each arrives as an
-/// Unknown. The server's Demo Account build then loads this file, which names
-/// them: every contact here is a new one under a key of the file's own
-/// (`demo-1`, `demo-2`, ...), and its identities move to it from the Unknown
-/// the import made. A contact on WhatsApp lists its number once for each service, so the
-/// Unknown is left holding nothing and goes.
+/// Unknown. Every contact here has a key of the file's own (`demo-1`,
+/// `demo-2`, ...). The server's Demo Account build replaces each key with the
+/// id of the Unknown the imports made for that contact, as a person who
+/// exported the address book would find it, and loads the file, which names
+/// those Unknowns in place. A contact on WhatsApp lists its number once for
+/// each service, so the named contact holds every identity its Unknown held.
 ///
 /// # Errors
 ///

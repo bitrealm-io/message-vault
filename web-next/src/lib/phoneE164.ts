@@ -163,7 +163,7 @@ export function toPhoneE164(input: string): string | null {
 
 /**
  * Format a stored handle for display. Emails and unparseable values pass through.
- * Phones use international spacing from libphonenumber (`+1 941 266 0605`).
+ * Phones use international spacing from libphonenumber (`+1 941 555 0100`).
  * Storage/matching stays E.164 — call this only at UI boundaries.
  */
 export function formatPhoneDisplay(handle: string | null | undefined): string {
@@ -184,6 +184,6 @@ export function parsePhoneE164(input: string): string {
   if (e164) return e164;
 
   throw new Error(
-    "Enter a valid phone number with a country code, such as +1 555 789 1234.",
+    "Enter a valid phone number with a country code, such as +1 555 555 0100.",
   );
 }

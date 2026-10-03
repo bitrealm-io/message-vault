@@ -30,11 +30,12 @@ import {
   problemFromBody,
 } from "./api";
 import { buildAssetPath, buildAssetPreviewPath } from "./assetUrl";
+import { PAGE_SIZE_MAX } from "./listPaging";
 import type { components, paths } from "./serverApi.types";
 
 type Schema = components["schemas"];
 /** What `GET /v1/server` answers, named by its route so a renamed schema changes nothing here. */
-type ServerInfo = paths["/v1/server"]["get"]["responses"][200]["content"]["application/json"];
+type Server = paths["/v1/server"]["get"]["responses"][200]["content"]["application/json"];
 
 /** Options every read accepts, so a caller can cancel an in-flight request. */
 export type RequestOptions = ApiRequestOptions;
@@ -53,6 +54,31 @@ function query(params: Record<string, string | number | boolean | undefined | nu
     search.set(key, String(value));
   }
   return search.toString();
+}
+
+/**
+ * Every row of a paged list, read in pages of the server's maximum.
+ *
+ * Every `/v1` list answers one page, and 40 rows when no `limit` is sent, so
+ * a caller that takes one answer as the whole list loses every row past the
+ * page (issue #1145). This asks for the next page until the rows read reach
+ * the `total` the last page reported. An empty page ends the reading too,
+ * because a list that shrank between two requests reports a total it no
+ * longer has.
+ */
+async function readEveryPage<Page extends { items: unknown[]; total: number }>(
+  path: string,
+  opts?: RequestOptions,
+): Promise<Page["items"]> {
+  const rows: Page["items"] = [];
+  for (;;) {
+    const page = await apiClient.get<Page>(
+      withQuery(path, query({ limit: PAGE_SIZE_MAX, offset: rows.length })),
+      opts,
+    );
+    rows.push(...page.items);
+    if (page.items.length === 0 || rows.length >= page.total) return rows;
+  }
 }
 
 /** Append a query string only when it has something in it. */
@@ -107,13 +133,13 @@ export function logout(opts?: RequestOptions): Promise<void> {
  * joining "does an owner exist" to "is registration open" is stated once, on
  * the server. See `docs/adr/0008-the-owner-holds-no-messages.md`.
  */
-export function getServerState(opts?: RequestOptions): Promise<ServerInfo> {
-  return apiClient.get<ServerInfo>("/v1/server", opts);
+export function getServerState(opts?: RequestOptions): Promise<Server> {
+  return apiClient.get<Server>("/v1/server", opts);
 }
 
 /** Claim an unclaimed Message Crate by creating its owner. Returns their session. */
 export function claimServer(
-  body: Schema["ClaimRequest"],
+  body: Schema["ClaimServerRequest"],
 ): Promise<Schema["CreateSessionResponse"]> {
   return apiClient.post<Schema["CreateSessionResponse"]>("/v1/server/claim", body);
 }
@@ -125,9 +151,9 @@ export function claimServer(
 // the account id; the ones Settings calls address the logged-in
 // account through `ownAccountPath`.
 
-/** The accounts of this Message Crate, for the owner: the owner's own first, then the rest by username. */
-export function listAccounts(opts?: RequestOptions): Promise<Schema["Page_Account"]> {
-  return apiClient.get<Schema["Page_Account"]>("/v1/accounts", opts);
+/** Every account of this Message Crate, for the owner: the owner's own first, then the rest by username. */
+export function listAccounts(opts?: RequestOptions): Promise<Schema["Account"][]> {
+  return readEveryPage<Schema["Page_Account"]>("/v1/accounts", opts);
 }
 
 /**
@@ -256,12 +282,13 @@ function accountBase(accountId?: number): string {
   return accountId === undefined ? ownAccountPath() : accountPath(accountId);
 }
 
-/** An account's identities with the messages held at each: the logged-in one, or as the owner the one named. */
+/** Every identity of an account with the messages held at each: the logged-in one, or as the owner the one named. */
 export function listAccountIdentities(
   opts?: RequestOptions,
   accountId?: number,
-): Promise<Schema["Page_Identity"]> {
-  return apiClient.get<Schema["Page_Identity"]>(`${accountBase(accountId)}/identities`, opts);
+): Promise<Schema["Identity"][]> {
+  const path = `${accountBase(accountId)}/identities`;
+  return readEveryPage<Schema["Page_Identity"]>(path, opts);
 }
 
 /** Which page of an account's run history to read. Absent values are left off the URL. */
@@ -312,6 +339,32 @@ export function listAccountExports(
   );
 }
 
+/** Which page of an Audit Trail to read. Absent values are left off the URL. */
+export type AuditTrailParams = { limit?: number; offset?: number };
+
+/** Every account's Audit Trail, newest first. The owner's alone. */
+export function listAuditTrail(
+  params: AuditTrailParams,
+  opts?: RequestOptions,
+): Promise<Schema["Page_AuditEntry"]> {
+  return apiClient.get<Schema["Page_AuditEntry"]>(
+    withQuery("/v1/audit-trail", query(params)),
+    opts,
+  );
+}
+
+/** One account's Audit Trail, newest first: the logged-in one, or as the owner the one named. */
+export function listAccountAuditTrail(
+  params: AuditTrailParams,
+  opts?: RequestOptions,
+  accountId?: number,
+): Promise<Schema["Page_AuditEntry"]> {
+  return apiClient.get<Schema["Page_AuditEntry"]>(
+    withQuery(`${accountBase(accountId)}/audit-trail`, query(params)),
+    opts,
+  );
+}
+
 /** Destroy the logged-in account's messages and attachments. Contacts and the login survive. */
 export function deleteAllMessages(
   body: Schema["DeleteMessagesRequest"],
@@ -325,12 +378,13 @@ export function deleteAllMessages(
 // lists and revokes them; the owner lists and revokes them too, so it can end
 // a leaked one, and its list carries no `token_hint`.
 
-/** An account's API tokens: the logged-in one's, or as the owner the one named. */
+/** An account's API tokens, every page: the logged-in one's, or as the owner the one named. */
 export function listApiTokens(
   opts?: RequestOptions,
   accountId?: number,
-): Promise<Schema["Page_ApiToken"]> {
-  return apiClient.get<Schema["Page_ApiToken"]>(`${accountBase(accountId)}/api-tokens`, opts);
+): Promise<Schema["ApiToken"][]> {
+  const path = `${accountBase(accountId)}/api-tokens`;
+  return readEveryPage<Schema["Page_ApiToken"]>(path, opts);
 }
 
 export function createApiToken(
@@ -342,11 +396,8 @@ export function createApiToken(
 export function renameApiToken(
   id: number,
   body: Schema["UpdateApiTokenRequest"],
-): Promise<Schema["UpdateApiTokenResponse"]> {
-  return apiClient.patch<Schema["UpdateApiTokenResponse"]>(
-    `${ownAccountPath()}/api-tokens/${id}`,
-    body,
-  );
+): Promise<Schema["ApiToken"]> {
+  return apiClient.patch<Schema["ApiToken"]>(`${ownAccountPath()}/api-tokens/${id}`, body);
 }
 
 /** Revoke one API token: the logged-in account's, or as the owner one of the account named. */
@@ -446,13 +497,17 @@ export type MessagesListParams = {
   q?: string;
   offset?: number;
   limit?: number;
-  /** `date` (oldest first, the default) or `-date`. */
-  sort?: "date" | "-date";
+  /**
+   * `date` (oldest first, the default), `-date`, or `relevance`: best match
+   * first, which needs a free-text word in `q` (`hasFreeText`).
+   */
+  sort?: "date" | "-date" | "relevance";
 };
 
 /**
  * One row per message matching `q`, across every conversation the account
- * has. A read route, not Export: the thread's find box uses it with `in:#id`.
+ * has. A read route, not Export: the Messages list on the Messages screen
+ * reads it, and the thread's find box uses it with `in:#id`.
  */
 export function listMessages(
   params: MessagesListParams,
@@ -461,14 +516,13 @@ export function listMessages(
   return apiClient.get<Schema["Page_Message"]>(withQuery("/v1/messages", query(params)), opts);
 }
 
+/** Every source a conversation's messages came from. */
 export function getConversationSources(
   conversationId: number,
   opts?: RequestOptions,
-): Promise<Schema["Page_ConversationSource"]> {
-  return apiClient.get<Schema["Page_ConversationSource"]>(
-    `/v1/conversations/${conversationId}/sources`,
-    opts,
-  );
+): Promise<Schema["ConversationSource"][]> {
+  const path = `/v1/conversations/${conversationId}/sources`;
+  return readEveryPage<Schema["Page_ConversationSource"]>(path, opts);
 }
 
 /** Put a conversation in the trash. Idempotent: trashing an already-trashed one still answers. */
@@ -540,7 +594,7 @@ export function updateContact(
 }
 
 export function getContactSummaries(
-  body: Schema["SummarizeContactsRequest"],
+  body: Schema["ListContactSummariesRequest"],
   opts?: RequestOptions,
 ): Promise<Schema["Page_ContactSelectionSummary"]> {
   return apiClient.post<Schema["Page_ContactSelectionSummary"]>(
@@ -552,7 +606,7 @@ export function getContactSummaries(
 
 /** Which of these identifiers the account has no contact for. */
 export function unmatchedIdentities(
-  body: Schema["FindUnmatchedIdentitiesRequest"],
+  body: Schema["ListUnmatchedIdentitiesRequest"],
   opts?: RequestOptions,
 ): Promise<Schema["Page_String"]> {
   return apiClient.post<Schema["Page_String"]>("/v1/contacts/unmatched-identities", body, opts);
@@ -569,8 +623,8 @@ export type AddressBookLoadMode = Schema["LoadMode"];
 export function loadAddressBook(
   content: string,
   mode: AddressBookLoadMode,
-): Promise<Schema["LoadCounts"]> {
-  return apiClient.postRaw<Schema["LoadCounts"]>(
+): Promise<Schema["CreateContactsResponse"]> {
+  return apiClient.postRaw<Schema["CreateContactsResponse"]>(
     withQuery("/v1/contacts", query({ mode })),
     content,
     "text/csv",
@@ -581,7 +635,7 @@ export function loadAddressBook(
  * The address book as CSV text, for the contacts a search matches, the
  * checked ones, or every contact when the body names neither.
  */
-export function exportAddressBook(body: Schema["ExportAddressBookRequest"]): Promise<string> {
+export function exportAddressBook(body: Schema["GetAddressBookRequest"]): Promise<string> {
   return apiClient.postText("/v1/contacts/address-book", body);
 }
 
@@ -610,12 +664,13 @@ export function deleteContact(contactId: string | number): Promise<void> {
 // A Contact Group is addressed by its id. Screens hold names; the lookup from
 // a name to an id lives in `nameCollection.ts`, not here.
 
-export function listContactGroups(opts?: RequestOptions): Promise<Schema["Page_NamedSet"]> {
-  return apiClient.get<Schema["Page_NamedSet"]>("/v1/contact-groups", opts);
+/** Every Contact Group of the logged-in account. */
+export function listContactGroups(opts?: RequestOptions): Promise<Schema["NamedSet"][]> {
+  return readEveryPage<Schema["Page_NamedSet"]>("/v1/contact-groups", opts);
 }
 
 export function createContactGroup(
-  body: Schema["NamedSetRequest"],
+  body: Schema["CreateNamedSetRequest"],
   opts?: RequestOptions,
 ): Promise<Schema["NamedSet"]> {
   return apiClient.post<Schema["NamedSet"]>("/v1/contact-groups", body, opts);
@@ -623,7 +678,7 @@ export function createContactGroup(
 
 export function updateContactGroup(
   id: number,
-  body: Schema["NamedSetRequest"],
+  body: Schema["UpdateNamedSetRequest"],
   opts?: RequestOptions,
 ): Promise<Schema["NamedSet"]> {
   return apiClient.patch<Schema["NamedSet"]>(`/v1/contact-groups/${id}`, body, opts);
@@ -654,12 +709,13 @@ export function updateContactGroupMembers(
 
 // ── Message Tags ────────────────────────────────────────────────────────────
 
-export function listMessageTags(opts?: RequestOptions): Promise<Schema["Page_NamedSet"]> {
-  return apiClient.get<Schema["Page_NamedSet"]>("/v1/message-tags", opts);
+/** Every Message Tag of the logged-in account. */
+export function listMessageTags(opts?: RequestOptions): Promise<Schema["NamedSet"][]> {
+  return readEveryPage<Schema["Page_NamedSet"]>("/v1/message-tags", opts);
 }
 
 export function createMessageTag(
-  body: Schema["NamedSetRequest"],
+  body: Schema["CreateNamedSetRequest"],
   opts?: RequestOptions,
 ): Promise<Schema["NamedSet"]> {
   return apiClient.post<Schema["NamedSet"]>("/v1/message-tags", body, opts);
@@ -667,7 +723,7 @@ export function createMessageTag(
 
 export function updateMessageTag(
   id: number,
-  body: Schema["NamedSetRequest"],
+  body: Schema["UpdateNamedSetRequest"],
   opts?: RequestOptions,
 ): Promise<Schema["NamedSet"]> {
   return apiClient.patch<Schema["NamedSet"]>(`/v1/message-tags/${id}`, body, opts);
@@ -698,19 +754,20 @@ export function updateMessageTagMembers(
 
 // ── Saved Searches ──────────────────────────────────────────────────────────
 
-export function listSavedSearches(opts?: RequestOptions): Promise<Schema["Page_SavedSearch"]> {
-  return apiClient.get<Schema["Page_SavedSearch"]>("/v1/saved-searches", opts);
+/** Every Saved Search of the logged-in account. */
+export function listSavedSearches(opts?: RequestOptions): Promise<Schema["SavedSearch"][]> {
+  return readEveryPage<Schema["Page_SavedSearch"]>("/v1/saved-searches", opts);
 }
 
 export function createSavedSearch(
-  body: Schema["SavedSearchRequest"],
+  body: Schema["CreateSavedSearchRequest"],
 ): Promise<Schema["SavedSearch"]> {
   return apiClient.post<Schema["SavedSearch"]>("/v1/saved-searches", body);
 }
 
 export function updateSavedSearch(
   id: number,
-  body: Schema["SavedSearchRequest"],
+  body: Schema["UpdateSavedSearchRequest"],
 ): Promise<Schema["SavedSearch"]> {
   return apiClient.patch<Schema["SavedSearch"]>(`/v1/saved-searches/${id}`, body);
 }
@@ -722,14 +779,15 @@ export function deleteSavedSearch(id: number): Promise<void> {
 // ── Search ──────────────────────────────────────────────────────────────────
 
 /** The lists whose search words the server describes, one path each. */
-export type SearchFieldList = "contacts" | "conversations";
+export type SearchFieldList = "contacts" | "conversations" | "messages";
 
-/** The words the search language accepts on one list. */
+/** Every word the search language accepts on one list. */
 export function listSearchFields(
   list: SearchFieldList,
   opts?: RequestOptions,
-): Promise<Schema["Page_FieldDoc"]> {
-  return apiClient.get<Schema["Page_FieldDoc"]>(`/v1/search-fields/${list}`, opts);
+): Promise<Schema["FieldDoc"][]> {
+  const path = `/v1/search-fields/${list}`;
+  return readEveryPage<Schema["Page_FieldDoc"]>(path, opts);
 }
 
 // ── Import Runs ─────────────────────────────────────────────────────────────
@@ -744,8 +802,8 @@ export type ImportListParams = {
 export function listImports(
   params: ImportListParams = {},
   opts?: RequestOptions,
-): Promise<Schema["Page_ImportSummary"]> {
-  return apiClient.get<Schema["Page_ImportSummary"]>(withQuery("/v1/imports", query(params)), opts);
+): Promise<Schema["Page_ImportRun"]> {
+  return apiClient.get<Schema["Page_ImportRun"]>(withQuery("/v1/imports", query(params)), opts);
 }
 
 export function getImport(id: number, opts?: RequestOptions): Promise<Schema["ImportRun"]> {
@@ -769,12 +827,12 @@ export function setImportStage(
 export function completeImport(
   id: number,
   body: Schema["CompleteImportRequest"],
-): Promise<Schema["CompleteImportResponse"]> {
-  return apiClient.post<Schema["CompleteImportResponse"]>(`/v1/imports/${id}/complete`, body);
+): Promise<Schema["ImportRun"]> {
+  return apiClient.post<Schema["ImportRun"]>(`/v1/imports/${id}/complete`, body);
 }
 
-export function discardImport(id: number): Promise<Schema["DiscardImportResponse"]> {
-  return apiClient.post<Schema["DiscardImportResponse"]>(`/v1/imports/${id}/discard`, {});
+export function discardImport(id: number): Promise<Schema["ImportRun"]> {
+  return apiClient.post<Schema["ImportRun"]>(`/v1/imports/${id}/discard`, {});
 }
 
 /** Which page of an Import Run's contacts to read. Absent values are left off the URL. */

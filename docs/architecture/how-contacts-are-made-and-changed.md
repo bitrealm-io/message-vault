@@ -117,7 +117,7 @@ carriage return as a formula, and runs it.
 A name can come from a backup, and on WhatsApp the other person chooses their
 own, so Export writes a `'` before every such cell, in every column.
 A contact named `=HYPERLINK(…)` is written `'=HYPERLINK(…)`, and a phone
-number `+6591234567` is written `'+6591234567`.
+number `+6595550100` is written `'+6595550100`.
 CSV quoting does not prevent this, because a spreadsheet removes the quotes
 and then reads the cell as typed.
 The code is `written_cell` and `read_cell` in the same file.
@@ -201,15 +201,15 @@ it stands, so an exported file always loads back.
 
 A phone number written without `+` that matches no key as written may be one
 whose `+` a spreadsheet dropped.
-Export writes `'+6591234567`, and a spreadsheet that drops the `'` can save
-that cell as the number `6591234567`.
+Export writes `'+6595550100`, and a spreadsheet that drops the `'` can save
+that cell as the number `6595550100`.
 So the load first asks whether the contact the row names already holds `+`
 followed by the value's digits.
 If it does, the row names that identity.
 Only the row's own contact is looked at, so a dropped `+` never attaches
 another person's number to this contact.
-A contact that holds both readings, such as `+6591234567` and
-`+16591234567`, refuses the load, naming both keys, because the row cannot
+A contact that holds both readings, such as `+6595550100` and
+`+16595550100`, refuses the load, naming both keys, because the row cannot
 say which it means.
 Otherwise the value is keyed by the phone rule: ten digits as a US number,
 eleven starting with `1` likewise, and any other count as bare digits.

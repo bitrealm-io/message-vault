@@ -218,7 +218,7 @@ LibreOffice Calc shows the `'` in the cell, and it can stay there: the load read
 ### Edit the file
 
 Any spreadsheet opens the file.
-The `identity` column should be kept as text, because a spreadsheet that reads `+6591234567` as a number drops the `+`, and the number is then read as a US one.
+The `identity` column should be kept as text, because a spreadsheet that reads `+6595550100` as a number drops the `+`, and the number is then read as a US one.
 
 - **Name a contact.** Fill in `display_name` on its rows.
 - **Put a contact in a Contact Group.** Add the group's name to `groups`. A name that matches no Contact Group creates one.

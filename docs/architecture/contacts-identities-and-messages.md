@@ -134,13 +134,13 @@ rows differ only by service, and splitting them would show one person twice.
 gives a number its key, and the same key is used by the `handles` row, by the
 entry the contacts book files it under, and by the owner's own numbers
 (`OwnerHandleSet`). A number with a `+` before its first digit keeps its
-country: `+65 9123 4567` is `+6591234567`, and `(+44) 7700 900123` and
+country: `+65 9555 0100` is `+6595550100`, and `(+44) 7700 900123` and
 `tel:+447700900123` are `+447700900123`. A number without `+` is read as a US
 number when it has ten digits, or eleven starting with `1`. Anything else keeps
 its digits as written, so `020 7946 0000` is `02079460000` and never the
 invented `+02079460000`. Why: a book or owner key that differs from the handle
 key names nobody, or names the wrong person. Stripping the `+` first once filed
-`+65 9123 4567` under the US number `+16591234567`.
+`+65 9555 0100` under the US number `+16595550100`.
 
 **An address is classified once, from the value the backup wrote.**
 `phone::Handle::parse` decides what an address is before anything else
@@ -211,11 +211,11 @@ the person unsure which rows went in, and a load is cheap to repeat.
 When a phone value written without `+` matches no key as written, and `+`
 followed by its digits is the key of an identity the row's contact already
 holds, the row names that identity. A contact that holds both readings
-(`+6591234567` and `+16591234567`) refuses the load, naming both keys.
+(`+6595550100` and `+16595550100`) refuses the load, naming both keys.
 Otherwise the value is keyed by the phone rule above. The load's `notes` name
 each row read with its `+` back, and each value without `+` that became a new
 identity. Why: a spreadsheet that opens an exported file can save
-`+6591234567` as the number `6591234567` without showing it, and keying that
+`+6595550100` as the number `6595550100` without showing it, and keying that
 value as written made a new identity, which Edit then put on the contact in
 place of the real one (#1196). Only the row's own contact is looked at, so a
 dropped `+` never attaches another person's number to this contact. The notes
@@ -381,7 +381,7 @@ flowchart LR
     end
     i1["Identity: +1 555 555 0123"]
     i2["Identity: ada@example.com"]
-    i3["Identity: +1 555 555 0999"]
+    i3["Identity: +1 555 555 0167"]
     c1(["Contact: Ada"])
     c2(["Contact: (no name yet)"])
     g1{{"Contact Group: Unknown"}}

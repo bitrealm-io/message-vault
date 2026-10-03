@@ -44,7 +44,7 @@ Never write self-contradictory filler, invented terms, or unexplained jargon in 
 
 Write each HTTP handler's doc comment as plain prose. The summary says what the route does; the description says when and why. Never echo the route path: it adds nothing over the OpenAPI path itself.
 
-- `crates/server/server/src/api_tokens_api.rs`, `fn list_api_tokens` — "List the account's named API tokens with their permissions and masked secrets." — Good: the summary says what comes back, and the path appears only once, in the OpenAPI path.
+- `crates/server/server/src/accounts_api/api_tokens.rs`, `fn list_api_tokens` — "List the account's named API tokens with their permissions and masked secrets." — Good: the summary says what comes back, and the path appears only once, in the OpenAPI path.
 - `crates/server/server/src/accounts_api.rs`, `fn update_account` — "Change an account. Its display name, time zone and identities are set by the account itself or by the owner; only the owner sets an account's disabled flag and its import, export and delete permissions." — Good: the summary names the operation, and the description says who may change what.
 
 ## No `# Errors` sections in OpenAPI descriptions
@@ -52,7 +52,7 @@ Write each HTTP handler's doc comment as plain prose. The summary says what the 
 Keep `# Errors` rustdoc sections out of handler docs that become OpenAPI descriptions. Fold failure cases into the description prose.
 
 - `crates/server/server/src/conversations_api.rs`, `fn delete_conversation` — "Trash is the only door to deletion, so a conversation that is not in the trash answers 409 rather than being deleted from wherever it was." — Good: the failure case and its reason are description prose, so the reference reads correctly.
-- `crates/server/server/src/trash_api.rs`, `fn remove_orphaned_files` — "# Errors … `Internal` when a file exists and cannot be removed, or when a stored path would escape the directory it belongs under." — Good: a `# Errors` section belongs on a function that is not a handler, because rustdoc is the only place it appears.
+- `crates/server/server/src/asset_store.rs`, `fn sweep_unreferenced` — "# Errors … Returns a database error, or an error when the file walk stops. A file that cannot be removed is logged and the walk goes on." — Good: a `# Errors` section belongs on a function that is not a handler, because rustdoc is the only place it appears.
 
 ## Cover every public item
 

@@ -1,6 +1,6 @@
 //! Per-account Import Run records (one row per Import Run).
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqliteRow;
@@ -278,15 +278,6 @@ pub struct ImportIssueRow {
     pub reason: String,
     /// UTC time the issue was recorded.
     pub created_at: String,
-}
-
-/// An Import Run row plus its recorded issues.
-#[derive(Debug, Clone, Serialize)]
-pub struct ImportDetail {
-    /// The run.
-    pub row: ImportRow,
-    /// Issues recorded for it.
-    pub issues: Vec<ImportIssueRow>,
 }
 
 /// Failure looking up or reusing an Import Run.
@@ -776,13 +767,16 @@ fn validate_issue_kind(kind: &str) -> Result<()> {
     }
 }
 
-/// Load one import row and its issue list.
-pub async fn get_import_detail(
+/// The issues recorded for one import, oldest first. The caller has already
+/// established that `import_id` is the account's.
+///
+/// # Errors
+///
+/// Returns an error when the statement fails.
+pub async fn list_import_issues(
     conn: &mut SqliteConnection,
-    account_id: i64,
     import_id: i64,
-) -> std::result::Result<ImportDetail, ImportLookupError> {
-    let row = get_owned_import(conn, account_id, import_id).await?;
+) -> Result<Vec<ImportIssueRow>> {
     let issue_rows: Vec<(i64, i64, String, String, String, String, String)> = sqlx::query_as(
         r"
         SELECT id, import_id, kind, stage, item, reason, created_at
@@ -794,7 +788,7 @@ pub async fn get_import_detail(
     .bind(import_id)
     .fetch_all(&mut *conn)
     .await?;
-    let issues = issue_rows
+    Ok(issue_rows
         .into_iter()
         .map(|(id, import_id, kind, stage, item, reason, created_at)| {
             let stage = ImportIssueStage::parse(&stage).ok_or_else(|| {
@@ -812,53 +806,7 @@ pub async fn get_import_detail(
                 created_at,
             })
         })
-        .collect::<std::result::Result<Vec<_>, sqlx::Error>>()?;
-    Ok(ImportDetail { row, issues })
-}
-
-/// One Import Run as `GET /v1/imports` lists it: the counts Settings shows,
-/// and everything the desktop app needs to resume a running one.
-#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
-pub struct ImportSummary {
-    /// Import Run id.
-    pub id: i64,
-    /// Source id the run imports.
-    pub source: String,
-    /// Importing tool, e.g. `message-crate-push`.
-    pub tool: Option<String>,
-    /// Import mode (`replace` or `append`).
-    pub mode: String,
-    /// Whether cross-source dedupe runs after each batch.
-    pub dedupe: bool,
-    /// Lifecycle status.
-    pub status: ImportStatus,
-    /// UTC time the run started.
-    pub started_at: String,
-    /// UTC time the run finished, when it has.
-    pub finished_at: Option<String>,
-    /// Messages counted for the run.
-    pub message_count: i64,
-    /// Attachments counted for the run.
-    pub attachment_count: i64,
-    /// Bytes uploaded so far.
-    pub bytes_uploaded: i64,
-    /// Total wall-clock duration, when finished.
-    pub duration_ms: Option<i64>,
-    /// Where a running run is; null once it is over.
-    pub stage: Option<String>,
-    /// Absolute path to the staging folder on the client that owns the run.
-    pub staging_dir: Option<String>,
-    /// Which install created the run.
-    pub device_id: Option<String>,
-    /// Import form snapshot, or null.
-    pub form: serde_json::Value,
-    /// Source path, size, mtime, and message count, or null.
-    pub source_fingerprint: serde_json::Value,
-    /// Addresses the backup's device sent from (JSON array), or null.
-    pub source_identities: serde_json::Value,
-    /// What the user approved at the last Review they passed, or null. The
-    /// column `PATCH /v1/imports/{id}` writes with its `summary`.
-    pub summary: serde_json::Value,
+        .collect::<std::result::Result<Vec<_>, sqlx::Error>>()?)
 }
 
 /// A JSON text column as a value: the parsed JSON, the raw text when it is
@@ -868,32 +816,6 @@ pub fn json_column(raw: Option<String>) -> serde_json::Value {
     match raw {
         Some(raw) => serde_json::from_str(&raw).unwrap_or(serde_json::Value::String(raw)),
         None => serde_json::Value::Null,
-    }
-}
-
-impl From<ImportRow> for ImportSummary {
-    fn from(r: ImportRow) -> Self {
-        ImportSummary {
-            id: r.id,
-            source: r.source,
-            tool: r.tool,
-            mode: r.mode,
-            dedupe: r.dedupe,
-            status: r.status,
-            started_at: r.started_at,
-            finished_at: r.finished_at,
-            message_count: r.message_count,
-            attachment_count: r.attachment_count,
-            bytes_uploaded: r.bytes_uploaded,
-            duration_ms: r.duration_ms,
-            stage: r.stage,
-            staging_dir: r.staging_dir,
-            device_id: r.device_id,
-            form: json_column(r.form_json),
-            source_fingerprint: json_column(r.source_fingerprint),
-            source_identities: json_column(r.source_identities),
-            summary: json_column(r.summary_json),
-        }
     }
 }
 
@@ -989,7 +911,10 @@ pub async fn has_messages(conn: &mut SqliteConnection, import_id: i64) -> Result
 
 /// Whether the account has a running Import Run. Such a run may have
 /// uploaded files that no row names yet, for a batch it has not sent.
-pub async fn has_running_import(conn: &mut SqliteConnection, account_id: i64) -> Result<bool> {
+pub async fn has_running_import(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+) -> Result<bool, sqlx::Error> {
     let row = sqlx::query("SELECT 1 FROM imports WHERE account_id = $1 AND status = 'running'")
         .bind(account_id)
         .fetch_optional(&mut *conn)
@@ -1093,6 +1018,77 @@ pub async fn top_attachments_by_size(
             },
         )
         .collect())
+}
+
+/// Record what started the Import Run on its row: a Session and the app it
+/// named, or an API token's label and hint as they are now.
+///
+/// # Errors
+///
+/// Returns an error when the update fails.
+pub async fn record_credential(
+    conn: &mut SqliteConnection,
+    import_id: i64,
+    credential: &crate::db::audit_trail::CredentialUsed,
+) -> Result<()> {
+    let columns = credential.run_columns();
+    sqlx::query(
+        "UPDATE imports SET credential = $1, app_kind = $2, app_build = $3,
+                api_token_label = $4, api_token_hint = $5
+         WHERE id = $6",
+    )
+    .bind(columns.credential)
+    .bind(columns.app_kind)
+    .bind(columns.app_build)
+    .bind(columns.api_token_label)
+    .bind(columns.api_token_hint)
+    .bind(import_id)
+    .execute(&mut *conn)
+    .await
+    .with_context(|| format!("record what started import {import_id}"))?;
+    Ok(())
+}
+
+/// Ready the account's Import Runs to outlive it, just before the account is
+/// deleted: each keeps `username` and its counts, a run still open is closed
+/// as `cancelled` at `now`, and what describes the person's messages goes:
+/// its issues, form, staging folder, source details and the addresses the
+/// backup sent from (ADR 0020).
+///
+/// # Errors
+///
+/// Returns an error when a statement fails.
+pub async fn detach_from_account(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    username: &str,
+    now: &str,
+) -> Result<()> {
+    sqlx::query(
+        "UPDATE imports SET status = 'cancelled', finished_at = $2, stage = NULL
+         WHERE account_id = $1 AND status = 'running'",
+    )
+    .bind(account_id)
+    .bind(now)
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query(
+        "DELETE FROM import_issues
+         WHERE import_id IN (SELECT id FROM imports WHERE account_id = $1)",
+    )
+    .bind(account_id)
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query(
+        "UPDATE imports SET username = $2, form_json = NULL, staging_dir = NULL,
+                source_fingerprint = NULL, source_identities = NULL, summary_json = NULL
+         WHERE account_id = $1",
+    )
+    .bind(account_id)
+    .bind(username)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
 }
 
 #[cfg(test)]

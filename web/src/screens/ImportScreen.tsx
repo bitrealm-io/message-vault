@@ -29,12 +29,7 @@ import {
   setImporterExtraPath,
   setImporterPath,
 } from "../lib/system-settings";
-import {
-  invokeDeleteStaging,
-  invokeHomeDir,
-  invokeIosBackupEncrypted,
-  invokePathStat,
-} from "../lib/tauri";
+import { invokeHomeDir, invokeIosBackupEncrypted, invokePathStat } from "../lib/tauri";
 import { isTauri } from "../lib/tauri-check";
 import { useTimeZone } from "../lib/timeZone";
 import type { AttachmentMediaMode } from "../lib/types";
@@ -65,6 +60,7 @@ import {
   resumeDecisionFor,
   resumeReadsBackup,
 } from "./import/resumeDecision";
+import StagingDeleteFailureNotice from "./import/StagingDeleteFailureNotice";
 import { parseStoredStagingSummary, useImportJob } from "./import/useImportJob";
 
 const DEFAULT_SOURCE = IMESSAGE_DEFAULT_METHOD;
@@ -142,6 +138,9 @@ export default function ImportScreen() {
     returnToForm,
     continueAfterIdentityStop,
     cancelIdentityStop,
+    stagingDeleteFailure,
+    discardStagingFolder,
+    dismissStagingDeleteFailure,
   } = useImportJob();
   /** Which review the run is waiting at, or null while it is not waiting. */
   const reviewWaiting = isReviewPhase(phase)
@@ -350,7 +349,9 @@ export default function ImportScreen() {
       // cancelled (decision 16); a panel discard is the same operation reached through a
       // different button, so it must not orphan a multi-GB folder. Both
       // halves run regardless of the other's outcome, the same
-      // `Promise.allSettled` shape `cancelRun` uses. Never touch disk for
+      // `Promise.allSettled` shape `cancelRun` uses. A folder that could not
+      // be deleted is shown above the form (`discardStagingFolder`), never
+      // dropped without a word. Never touch disk for
       // another device's session -- its files are staged there, not here --
       // the same `device_id` check `resumeDecisionFor` uses to route to
       // `other_device` in the first place. A session with no recorded
@@ -359,7 +360,7 @@ export default function ImportScreen() {
       await Promise.allSettled([
         discardImportSession(session.id),
         thisDevice && session.staging_dir
-          ? invokeDeleteStaging({ staging_dir: session.staging_dir })
+          ? discardStagingFolder(session.staging_dir)
           : Promise.resolve(),
       ]);
     } catch {
@@ -450,13 +451,14 @@ export default function ImportScreen() {
       // one before starting the new run. setResume stays put until right
       // before startImport, so the panel (not a blank form) covers the
       // discard round trip. The old folder goes with the session: nothing
-      // will ever reach it again, and it can be multiple gigabytes.
+      // will ever reach it again, and it can be multiple gigabytes. A failed
+      // delete stays on screen through the new run.
       const thisDevice = !session.device_id || session.device_id === getDeviceId();
       try {
         await Promise.allSettled([
           discardImportSession(session.id),
           thisDevice && session.staging_dir
-            ? invokeDeleteStaging({ staging_dir: session.staging_dir })
+            ? discardStagingFolder(session.staging_dir)
             : Promise.resolve(),
         ]);
       } catch {
@@ -732,6 +734,12 @@ export default function ImportScreen() {
 
   return (
     <div className={`min-w-0 p-6 ${phase === "form" ? "max-w-[640px]" : "max-w-5xl"}`}>
+      {stagingDeleteFailure && (
+        <StagingDeleteFailureNotice
+          failure={stagingDeleteFailure}
+          onDismiss={dismissStagingDeleteFailure}
+        />
+      )}
       {phase === "form" && resumeChecked && resume.kind === "none" && (
         <ImportFormFields
           source={source}

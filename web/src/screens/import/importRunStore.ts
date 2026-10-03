@@ -5,6 +5,9 @@ import type { StagingSummary } from "../../lib/tauri";
 import { type ImportPhase, type ImportStep, stepsFor } from "./importProgressState";
 import type { ImportJobFormValues } from "./useImportJob";
 
+/** A staging folder Message Crate could not delete, and the reason it gave. */
+export type StagingDeleteFailure = { path: string; reason: string };
+
 /**
  * Everything the Import screen shows about the account's one Import Run.
  *
@@ -72,6 +75,13 @@ export type ImportRunState = {
    */
   computingSummary: boolean;
   sourceIdentities: string[] | null;
+  /**
+   * A staging folder Message Crate could not delete, and why: from a
+   * discarded or cancelled run, or the cleanup after a finished one. Shown
+   * until the person dismisses it or a later delete of the folder succeeds,
+   * so a folder of several gigabytes is never left behind unsaid.
+   */
+  stagingDeleteFailure: StagingDeleteFailure | null;
 };
 
 export function initialImportRunState(steps: ImportStep[]): ImportRunState {
@@ -93,6 +103,7 @@ export function initialImportRunState(steps: ImportStep[]): ImportRunState {
     reviewError: null,
     computingSummary: false,
     sourceIdentities: null,
+    stagingDeleteFailure: null,
   };
 }
 

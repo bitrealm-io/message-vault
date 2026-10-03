@@ -16,28 +16,28 @@ describe("handleService", () => {
   });
 
   it("infers email and phone from handle when service empty", () => {
-    expect(inferService("a@b.com", null)).toBe("email");
-    expect(inferService("+1 (555) 123-4567", "")).toBe("phone");
+    expect(inferService("a@example.com", null)).toBe("email");
+    expect(inferService("+1 (555) 555-0119", "")).toBe("phone");
     expect(inferService("alice", null)).toBe("unknown");
   });
 
   it("prefers an explicit service over inference", () => {
-    expect(inferService("a@b.com", "WhatsApp")).toBe("whatsapp");
+    expect(inferService("a@example.com", "WhatsApp")).toBe("whatsapp");
   });
 
   it("formats user-facing labels for the handles table", () => {
     expect(formatHandleServiceLabel("x", "imessage")).toBe("Text Message");
     expect(formatHandleServiceLabel("x", "whatsapp")).toBe("WhatsApp");
-    expect(formatHandleServiceLabel("a@b.com", null)).toBe("Email");
+    expect(formatHandleServiceLabel("a@example.com", null)).toBe("Email");
     expect(formatHandleServiceLabel("x", null)).toBe("—");
   });
 });
 
 describe("handlePlaceholder", () => {
   it("gives each service its own example", () => {
-    expect(handlePlaceholder("phone")).toBe("+1 555-123-4567");
+    expect(handlePlaceholder("phone")).toBe("+1 555-555-0119");
     expect(handlePlaceholder("email")).toBe("you@example.com");
-    expect(handlePlaceholder("whatsapp")).toBe("+1 555-123-4567");
+    expect(handlePlaceholder("whatsapp")).toBe("+1 555-555-0119");
   });
 
   it("gives every option in the picker an example", () => {
@@ -58,8 +58,8 @@ describe("handleValidationError", () => {
   });
 
   it("accepts the separators people actually type in a number", () => {
-    expect(handleValidationError("phone", "+1 555-123-4567")).toBeNull();
-    expect(handleValidationError("phone", "(555) 123.4567")).toBeNull();
+    expect(handleValidationError("phone", "+1 555-555-0119")).toBeNull();
+    expect(handleValidationError("phone", "(555) 555.0119")).toBeNull();
     expect(handleValidationError("whatsapp", "+44 20 7946 0958")).toBeNull();
   });
 
@@ -76,7 +76,7 @@ describe("handleValidationError", () => {
   it("accepts an address and rejects what is not one", () => {
     expect(handleValidationError("email", "you@example.com")).toBeNull();
     expect(handleValidationError("email", "you@example")).toMatch(/email address/);
-    expect(handleValidationError("email", "+1 555-123-4567")).toMatch(/email address/);
+    expect(handleValidationError("email", "+1 555-555-0119")).toMatch(/email address/);
   });
 });
 
@@ -87,8 +87,8 @@ describe("handleDuplicateKey", () => {
   });
 
   it("matches the same number however it was typed", () => {
-    expect(handleDuplicateKey("phone", "+1 (555) 123-4567")).toBe(
-      handleDuplicateKey("phone", "+15551234567"),
+    expect(handleDuplicateKey("phone", "+1 (555) 555-0119")).toBe(
+      handleDuplicateKey("phone", "+15555550119"),
     );
   });
 
@@ -99,16 +99,16 @@ describe("handleDuplicateKey", () => {
   });
 
   it("keeps the same number on two services apart, because that is two accounts", () => {
-    expect(handleDuplicateKey("phone", "+15551234567")).not.toBe(
-      handleDuplicateKey("whatsapp", "+15551234567"),
+    expect(handleDuplicateKey("phone", "+15555550119")).not.toBe(
+      handleDuplicateKey("whatsapp", "+15555550119"),
     );
   });
 
   it("does not fold a number written with and without its country code", () => {
     // Deliberate: guessing at country codes would let this refuse two numbers
     // that really are different.
-    expect(handleDuplicateKey("phone", "+1 555-123-4567")).not.toBe(
-      handleDuplicateKey("phone", "555-123-4567"),
+    expect(handleDuplicateKey("phone", "+1 555-555-0119")).not.toBe(
+      handleDuplicateKey("phone", "555-555-0119"),
     );
   });
 

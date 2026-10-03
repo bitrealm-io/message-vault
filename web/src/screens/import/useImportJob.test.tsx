@@ -31,7 +31,7 @@ const getServerStateMock = vi.fn();
 const completeImportMock = vi.fn();
 const runMock = vi.fn<(fn: () => Promise<unknown>) => Promise<TauriJobResult>>();
 const cancelMock = vi.fn();
-const resolveImportStagingDirMock = vi.fn();
+const createStagingDirMock = vi.fn();
 const invokePathStatMock = vi.fn();
 const invokePushMock = vi.fn();
 const invokeExtractMock = vi.fn();
@@ -72,6 +72,7 @@ vi.mock("../../lib/tauri", () => ({
   invokeSummarizeStaging: (...args: unknown[]) => invokeSummarizeStagingMock(...args),
   invokeTranscodeStaging: (...args: unknown[]) => invokeTranscodeStagingMock(...args),
   invokeDeleteStaging: (...args: unknown[]) => invokeDeleteStagingMock(...args),
+  invokeCreateStagingDir: (...args: unknown[]) => createStagingDirMock(...args),
   invokeReadImportRunRecord: (...args: unknown[]) => readRunRecordMock(...args),
   invokeSaveImportRunRecord: (...args: unknown[]) => saveRunRecordMock(...args),
   probeFfmpegTools: (...args: [string | null]) => probeFfmpegToolsMock(...args),
@@ -109,10 +110,6 @@ let auth: { token: string | null; accountId: number | null } = {
 };
 vi.mock("../../lib/auth", () => ({
   useAuth: () => auth,
-}));
-
-vi.mock("../../lib/system-settings", () => ({
-  resolveImportStagingDir: (...args: unknown[]) => resolveImportStagingDirMock(...args),
 }));
 
 vi.mock("../../lib/tauri-check", () => ({
@@ -167,7 +164,6 @@ function failedReport(): PushFinishedReport {
   return {
     ok: false,
     cancelled: false,
-    messages: 8_000,
     messages_attempted: 8_000,
     messages_inserted: 0,
     messages_deduped: 0,
@@ -187,7 +183,6 @@ function okReport(overrides: Partial<PushFinishedReport> = {}): PushFinishedRepo
   return {
     ok: true,
     cancelled: false,
-    messages: 10,
     messages_attempted: 10,
     messages_inserted: 10,
     messages_deduped: 0,
@@ -279,8 +274,8 @@ describe("useImportJob wiring", () => {
     createImportMock.mockResolvedValue({ id: 1 });
     completeImportMock.mockReset();
     completeImportMock.mockResolvedValue({});
-    resolveImportStagingDirMock.mockReset();
-    resolveImportStagingDirMock.mockResolvedValue("/home/sam/message-crate/staging-iphone");
+    createStagingDirMock.mockReset();
+    createStagingDirMock.mockResolvedValue("/home/sam/message-crate/staging-iphone");
     invokePathStatMock.mockReset();
     invokePathStatMock.mockResolvedValue(null);
     invokeExtractMock.mockReset();
@@ -761,7 +756,7 @@ describe("useImportJob wiring", () => {
   });
 
   it("declining closes the session and deletes the folder", async () => {
-    resolveImportStagingDirMock.mockResolvedValue("/staging/run-1");
+    createStagingDirMock.mockResolvedValue("/staging/run-1");
     const { result } = renderHook(() => useImportJob());
     await act(() => result.current.startImport(form({ attachmentMedia: "convert" })));
     await act(() => result.current.cancelRun());
@@ -793,10 +788,15 @@ describe("useImportJob wiring", () => {
     await act(() => result.current.cancelRun());
     expect(discardImportSessionMock).toHaveBeenCalledWith(1);
     expect(result.current.phase).toBe("form");
+    // The folder is still on disk, and the screen says so (#1154).
+    expect(result.current.stagingDeleteFailure).toEqual({
+      path: "/home/sam/message-crate/staging-iphone",
+      reason: "disk full",
+    });
   });
 
   it("declines from Gate 2 the same way — closes the session and deletes the folder", async () => {
-    resolveImportStagingDirMock.mockResolvedValue("/staging/run-2");
+    createStagingDirMock.mockResolvedValue("/staging/run-2");
     runMock.mockImplementationOnce(
       runResult({ summary: "Transcode finished.", transcode: undefined }),
     );
@@ -813,7 +813,7 @@ describe("useImportJob wiring", () => {
   });
 
   it("a successful import deletes its staging directory once the server has recorded it", async () => {
-    resolveImportStagingDirMock.mockResolvedValue("/staging/run-3");
+    createStagingDirMock.mockResolvedValue("/staging/run-3");
     runMock.mockImplementationOnce(runResult({ summary: "Push finished.", report: okReport() }));
     const { result } = renderHook(() => useImportJob());
     await act(() => result.current.startImport(form({ attachmentMedia: "copy" })));
@@ -835,7 +835,7 @@ describe("useImportJob wiring", () => {
   // the run stays at `upload` and the next visit to Import offers Resume
   // or Discard; the staged folder is what Resume sends from.
   it("pauses a failed Upload: no /complete, the run stays at pushing, and its folder stays", async () => {
-    resolveImportStagingDirMock.mockResolvedValue("/staging/run-4");
+    createStagingDirMock.mockResolvedValue("/staging/run-4");
     runMock.mockImplementationOnce(
       runResult({ summary: "Push finished.", report: failedReport() }),
     );
@@ -983,7 +983,7 @@ describe("useImportJob wiring", () => {
   });
 
   it("completes a failed Staging as failed and deletes its folder, since nothing complete exists to upload", async () => {
-    resolveImportStagingDirMock.mockResolvedValue("/staging/run-6");
+    createStagingDirMock.mockResolvedValue("/staging/run-6");
     runMock.mockReset();
     runMock.mockImplementationOnce(async (fn: () => Promise<unknown>) => {
       await fn();
@@ -1005,7 +1005,7 @@ describe("useImportJob wiring", () => {
   });
 
   it("completes a failed Media stage as failed and deletes its folder", async () => {
-    resolveImportStagingDirMock.mockResolvedValue("/staging/run-7");
+    createStagingDirMock.mockResolvedValue("/staging/run-7");
     runMock.mockImplementationOnce(async (fn: () => Promise<unknown>) => {
       await fn();
       throw new Error("ffmpeg exited with status 1");
@@ -1036,7 +1036,7 @@ describe("useImportJob wiring", () => {
   });
 
   it("a successful import still finishes when deleting the staging directory fails", async () => {
-    resolveImportStagingDirMock.mockResolvedValue("/staging/run-5");
+    createStagingDirMock.mockResolvedValue("/staging/run-5");
     runMock.mockImplementationOnce(runResult({ summary: "Push finished.", report: okReport() }));
     invokeDeleteStagingMock.mockRejectedValueOnce(new Error("permission denied"));
     const { result } = renderHook(() => useImportJob());
@@ -1045,8 +1045,19 @@ describe("useImportJob wiring", () => {
 
     expect(result.current.phase).toBe("done");
     expect(result.current.summaryView?.status).toBe("completed");
-    // The folder is still there, so the screen keeps pointing at it.
+    // The folder is still there, so the screen keeps pointing at it and
+    // says why it is.
     expect(result.current.stagingDir).toBe("/staging/run-5");
+    expect(result.current.stagingDeleteFailure).toEqual({
+      path: "/staging/run-5",
+      reason: "permission denied",
+    });
+
+    // A later delete of the same folder that succeeds clears the notice.
+    await act(async () => {
+      await result.current.discardStagingFolder("/staging/run-5");
+    });
+    expect(result.current.stagingDeleteFailure).toBeNull();
   });
 
   it("approving at Gate 2 writes pushing carrying the recomputed summary, not Gate 1's", async () => {
@@ -1527,7 +1538,7 @@ describe("useImportJob wiring", () => {
   });
 
   it("records the staging folder and device on the session it creates", async () => {
-    resolveImportStagingDirMock.mockResolvedValue("/home/u/message-crate/staging-260830");
+    createStagingDirMock.mockResolvedValue("/home/u/message-crate/staging-260830");
     invokePathStatMock.mockResolvedValue({
       exists: true,
       isFile: false,
@@ -1549,7 +1560,7 @@ describe("useImportJob wiring", () => {
   });
 
   it("keeps the backup password out of the stored form snapshot", async () => {
-    resolveImportStagingDirMock.mockResolvedValue("/tmp/staging");
+    createStagingDirMock.mockResolvedValue("/tmp/staging");
     const { result } = renderHook(() => useImportJob());
     await act(() => result.current.startImport({ ...baseForm, backupPassword: "hunter2" }));
 
@@ -1563,7 +1574,7 @@ describe("useImportJob wiring", () => {
   // A WhatsApp import from an encrypted iPhone backup reads the backup with
   // the same password, so its resume has to ask for it again too (#941).
   it("records that a WhatsApp iPhone import was given the backup password", async () => {
-    resolveImportStagingDirMock.mockResolvedValue("/tmp/staging");
+    createStagingDirMock.mockResolvedValue("/tmp/staging");
     const { result } = renderHook(() => useImportJob());
     await act(() =>
       result.current.startImport({
@@ -1579,14 +1590,14 @@ describe("useImportJob wiring", () => {
   });
 
   it("keeps the WhatsApp key out of the stored form snapshot", async () => {
-    resolveImportStagingDirMock.mockResolvedValue("/tmp/staging");
+    createStagingDirMock.mockResolvedValue("/tmp/staging");
     const { result } = renderHook(() => useImportJob());
     await act(() =>
       result.current.startImport({
         ...baseForm,
         source: "whatsapp-android",
         whatsappKey: "0123abcd4567",
-        whatsappOwnerPhone: "+15551234567",
+        whatsappOwnerPhone: "+15555550119",
       }),
     );
 
@@ -1597,7 +1608,7 @@ describe("useImportJob wiring", () => {
   });
 
   it("records that no password or key was given when the form had none", async () => {
-    resolveImportStagingDirMock.mockResolvedValue("/tmp/staging");
+    createStagingDirMock.mockResolvedValue("/tmp/staging");
     const { result } = renderHook(() => useImportJob());
     await act(() => result.current.startImport(baseForm));
 
@@ -1606,7 +1617,7 @@ describe("useImportJob wiring", () => {
   });
 
   it("moves the session to pushing before the upload starts", async () => {
-    resolveImportStagingDirMock.mockResolvedValue("/tmp/staging");
+    createStagingDirMock.mockResolvedValue("/tmp/staging");
     runMock.mockImplementationOnce(
       runResult({ summary: "Push finished.", report: failedReport() }),
     );
@@ -1624,7 +1635,7 @@ describe("useImportJob wiring", () => {
     // Pins the mode-dependent assembly stepsFor/stepIndexFor exist for: this
     // hook does not run the media pass until Gate 1 is approved, so the row
     // must sit pending, not silently vanish or get marked done.
-    resolveImportStagingDirMock.mockResolvedValue("/tmp/staging");
+    createStagingDirMock.mockResolvedValue("/tmp/staging");
 
     const { result } = renderHook(() => useImportJob());
     await act(() => result.current.startImport({ ...baseForm, attachmentMedia: "convert" }));
@@ -1639,7 +1650,7 @@ describe("useImportJob wiring", () => {
     // Task 7 pinned the media row sitting pending after extract; this
     // continues the same run through review: active while the pass runs,
     // done once it finishes.
-    resolveImportStagingDirMock.mockResolvedValue("/tmp/staging");
+    createStagingDirMock.mockResolvedValue("/tmp/staging");
     runMock.mockImplementationOnce(
       runResult({ summary: "Transcode finished.", transcode: undefined }),
     );
@@ -1657,7 +1668,7 @@ describe("useImportJob wiring", () => {
     // (ruling 3) — the staging row must say what extract actually did, not
     // what the user ultimately asked for. The media row (index 1) still
     // tells the convert/compress story once the pass itself runs.
-    resolveImportStagingDirMock.mockResolvedValue("/tmp/staging");
+    createStagingDirMock.mockResolvedValue("/tmp/staging");
     const { result } = renderHook(() => useImportJob());
     await act(() => result.current.startImport({ ...baseForm, attachmentMedia: "convert" }));
 
@@ -1694,22 +1705,22 @@ describe("useImportJob wiring", () => {
     }
 
     it("stops at identity_stop when nothing the backup sent from is on the profile", async () => {
-      invokeImessageBackupIdentitiesMock.mockResolvedValue(["+15550001111"]);
-      loadAccountProfileMock.mockResolvedValue({ phones: ["+15559999999"], emails: [] });
+      invokeImessageBackupIdentitiesMock.mockResolvedValue(["+15555550110"]);
+      loadAccountProfileMock.mockResolvedValue({ phones: ["+15555550180"], emails: [] });
       const { result } = renderHook(() => useImportJob());
       await act(async () => {
         await result.current.startImport(imessageForm());
       });
       expect(result.current.phase).toBe("identity_stop");
-      expect(result.current.sourceIdentities).toEqual(["+15550001111"]);
+      expect(result.current.sourceIdentities).toEqual(["+15555550110"]);
       // Nothing was created: no session POST, no extract.
       expect(createImportMock).not.toHaveBeenCalled();
       expect(invokeExtractMock).not.toHaveBeenCalled();
     });
 
     it("continueAfterIdentityStop proceeds and sends the identities on the session", async () => {
-      invokeImessageBackupIdentitiesMock.mockResolvedValue(["+15550001111"]);
-      loadAccountProfileMock.mockResolvedValue({ phones: ["+15559999999"], emails: [] });
+      invokeImessageBackupIdentitiesMock.mockResolvedValue(["+15555550110"]);
+      loadAccountProfileMock.mockResolvedValue({ phones: ["+15555550180"], emails: [] });
       const { result } = renderHook(() => useImportJob());
       await act(async () => {
         await result.current.startImport(imessageForm());
@@ -1718,12 +1729,12 @@ describe("useImportJob wiring", () => {
         await result.current.continueAfterIdentityStop();
       });
       expect(createImportMock).toHaveBeenCalledWith(
-        expect.objectContaining({ source_identities: ["+15550001111"] }),
+        expect.objectContaining({ source_identities: ["+15555550110"] }),
       );
     });
 
     it("cancelIdentityStop returns to the form with nothing created", async () => {
-      invokeImessageBackupIdentitiesMock.mockResolvedValue(["+15550001111"]);
+      invokeImessageBackupIdentitiesMock.mockResolvedValue(["+15555550110"]);
       loadAccountProfileMock.mockResolvedValue({ phones: [], emails: [] });
       const { result } = renderHook(() => useImportJob());
       await act(async () => {
@@ -1737,15 +1748,15 @@ describe("useImportJob wiring", () => {
     });
 
     it("proceeds without a stop when an identity matches, sending the list", async () => {
-      invokeImessageBackupIdentitiesMock.mockResolvedValue(["+15550001111"]);
-      loadAccountProfileMock.mockResolvedValue({ phones: ["+1 555 000 1111"], emails: [] });
+      invokeImessageBackupIdentitiesMock.mockResolvedValue(["+15555550110"]);
+      loadAccountProfileMock.mockResolvedValue({ phones: ["+1 555 555 0110"], emails: [] });
       const { result } = renderHook(() => useImportJob());
       await act(async () => {
         await result.current.startImport(imessageForm());
       });
       expect(result.current.phase).not.toBe("identity_stop");
       expect(createImportMock).toHaveBeenCalledWith(
-        expect.objectContaining({ source_identities: ["+15550001111"] }),
+        expect.objectContaining({ source_identities: ["+15555550110"] }),
       );
     });
 
@@ -1773,12 +1784,12 @@ describe("useImportJob wiring", () => {
         await result.current.startImport(imessageForm(), undefined, {
           sessionId: 42,
           stagingDir: "/home/u/message-crate/staging-260830",
-          identities: ["+15550001111"],
+          identities: ["+15555550110"],
         });
       });
       expect(invokeImessageBackupIdentitiesMock).not.toHaveBeenCalled();
       expect(result.current.phase).toBe("staging_review");
-      expect(result.current.sourceIdentities).toEqual(["+15550001111"]);
+      expect(result.current.sourceIdentities).toEqual(["+15555550110"]);
     });
 
     it("resume_write reads the backup with the password the form carries", async () => {
@@ -1827,7 +1838,7 @@ describe("useImportJob resume path", () => {
     createImportMock.mockResolvedValue({ id: 1 });
     completeImportMock.mockReset();
     completeImportMock.mockResolvedValue({});
-    resolveImportStagingDirMock.mockReset();
+    createStagingDirMock.mockReset();
     invokePathStatMock.mockReset();
     invokePathStatMock.mockResolvedValue(null);
     invokePushMock.mockReset();
@@ -1868,7 +1879,7 @@ describe("useImportJob resume path", () => {
       });
     });
 
-    expect(resolveImportStagingDirMock).not.toHaveBeenCalled();
+    expect(createStagingDirMock).not.toHaveBeenCalled();
     expect(invokePathStatMock).not.toHaveBeenCalled();
     expect(createImportMock.mock.calls.length > 0).toBe(false);
     expect(runMock).toHaveBeenCalledTimes(1); // push only, no extract
@@ -2088,7 +2099,7 @@ const validSnapshot = {
   maxResolution: "720p",
   maxFps: "30",
   minSizeMb: "20",
-  ownerPhones: ["+15551234567"],
+  ownerPhones: ["+15555550119"],
   ownerEmails: [],
   obfuscate: false,
   isAndroidSms: false,
@@ -2134,7 +2145,7 @@ describe("restoreFormFromSnapshot", () => {
     ["an empty object", {}],
     ["a snapshot missing most fields", { source: "imessage-ios" }],
     ["an invalid attachmentMedia", { ...validSnapshot, attachmentMedia: "not-a-real-mode" }],
-    ["a non-array ownerPhones", { ...validSnapshot, ownerPhones: "+15551234567" }],
+    ["a non-array ownerPhones", { ...validSnapshot, ownerPhones: "+15555550119" }],
     ["a non-boolean obfuscate", { ...validSnapshot, obfuscate: "yes" }],
     ["a non-boolean backupPasswordGiven", { ...validSnapshot, backupPasswordGiven: "yes" }],
     ["a snapshot with no whatsappKeyGiven", { ...validSnapshot, whatsappKeyGiven: undefined }],
@@ -2173,7 +2184,7 @@ describe("useImportJob resumeAtReview", () => {
     createImportMock.mockResolvedValue({ id: 1 });
     completeImportMock.mockReset();
     completeImportMock.mockResolvedValue({});
-    resolveImportStagingDirMock.mockReset();
+    createStagingDirMock.mockReset();
     invokePathStatMock.mockReset();
     invokeExtractMock.mockReset();
     invokePushMock.mockReset();
@@ -2525,8 +2536,8 @@ describe("one desktop app, two accounts (#1085)", () => {
     createImportMock.mockResolvedValue({ id: 1 });
     completeImportMock.mockReset();
     completeImportMock.mockResolvedValue({});
-    resolveImportStagingDirMock.mockReset();
-    resolveImportStagingDirMock.mockResolvedValue("/home/sam/message-crate/staging-iphone");
+    createStagingDirMock.mockReset();
+    createStagingDirMock.mockResolvedValue("/home/sam/message-crate/staging-iphone");
     invokePathStatMock.mockResolvedValue(null);
     invokeSummarizeStagingMock.mockResolvedValue(stagingSummary());
     invokeDeleteStagingMock.mockReset();
@@ -2547,8 +2558,8 @@ describe("one desktop app, two accounts (#1085)", () => {
   });
 
   it("does not offer account A's parked form to account B", async () => {
-    invokeImessageBackupIdentitiesMock.mockResolvedValue(["+15550001111"]);
-    loadAccountProfileMock.mockResolvedValue({ phones: ["+15550109999"], emails: [] });
+    invokeImessageBackupIdentitiesMock.mockResolvedValue(["+15555550110"]);
+    loadAccountProfileMock.mockResolvedValue({ phones: ["+15555550116"], emails: [] });
     const a = renderHook(() => useImportJob());
     await act(() => a.result.current.startImport({ ...form(), backupPassword: "secret-of-A" }));
     expect(a.result.current.phase).toBe("identity_stop");
@@ -2620,7 +2631,7 @@ describe("one desktop app, two accounts (#1085)", () => {
   });
 
   it("stops account A's Staging before account B's run starts, and keeps A's end out of it", async () => {
-    resolveImportStagingDirMock
+    createStagingDirMock
       .mockResolvedValueOnce("/home/sam/message-crate/staging-of-A")
       .mockResolvedValueOnce("/home/sam/message-crate/staging-of-B");
     createImportMock.mockResolvedValueOnce({ id: 11 }).mockResolvedValueOnce({ id: 22 });

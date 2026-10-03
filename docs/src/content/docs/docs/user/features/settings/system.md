@@ -31,6 +31,11 @@ Two kinds of path are not saved, and the default stays in force:
 
 Emptying the field returns to the default.
 
+A change applies to the jobs started after it.
+An import already staged keeps the folder it was staged in, so it can still be resumed, discarded or cleaned up after the setting moves.
+
+When Message Crate can't delete the folder of a finished, cancelled or discarded import, the Import screen names the folder and the reason, so the folder can be deleted by hand.
+
 ### Remember importer paths
 
 **Remember importer paths** is a checkbox, off by default.

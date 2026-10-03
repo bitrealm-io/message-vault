@@ -2,28 +2,27 @@
 
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ImportIssue } from "./ImportSummaryPanel";
 import { estimateExpandedHeight, tableViewportHeight } from "./importIssuesTableLayout";
 import VirtualizedImportIssuesTable from "./VirtualizedImportIssuesTable";
 
-vi.mock("@tanstack/react-virtual", () => ({
-  useVirtualizer: ({ count }: { count: number }) => ({
-    getVirtualItems: () =>
-      Array.from({ length: count }, (_, index) => ({
-        index,
-        key: index,
-        start: index * 56,
-        size: 56,
-        end: (index + 1) * 56,
-      })),
-    getTotalSize: () => count * 56,
-    measure: () => {},
-    measureElement: () => {},
-  }),
-}));
+/**
+ * jsdom lays out nothing, so React Aria's Virtualizer would draw no rows. Every
+ * element reports a 600px box, enough for the rows these tests draw.
+ */
+let restoreLayout: () => void = () => {};
+beforeEach(() => {
+  const heights = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
+  const widths = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(600);
+  restoreLayout = () => {
+    heights.mockRestore();
+    widths.mockRestore();
+  };
+});
 
 afterEach(() => {
+  restoreLayout();
   cleanup();
 });
 
@@ -58,7 +57,7 @@ describe("VirtualizedImportIssuesTable", () => {
         issues={[issue({ item: "chat.jsonl", reason: "HTTP 500 from server" })]}
       />,
     );
-    expect(screen.getByRole("table", { name: "Import errors" })).toHaveAttribute(
+    expect(screen.getByRole("grid", { name: "Import errors" })).toHaveAttribute(
       "aria-rowcount",
       "2",
     );
@@ -77,16 +76,19 @@ describe("VirtualizedImportIssuesTable", () => {
         ]}
       />,
     );
-    expect(screen.getByRole("table", { name: "Import errors" })).toHaveAttribute(
+    expect(screen.getByRole("grid", { name: "Import errors" })).toHaveAttribute(
       "aria-rowcount",
       "2",
     );
     expect(screen.getByText("3 files")).toBeInTheDocument();
     expect(screen.queryByText("a.jsonl")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("row", { name: /Expand error for 3 files/ }));
+    await user.click(screen.getByRole("row", { name: "3 files" }));
 
-    expect(screen.getByRole("row", { name: /Collapse error for 3 files/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Collapse error for 3 files" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
     expect(screen.getByText("a.jsonl")).toBeInTheDocument();
     expect(screen.getByText("b.jsonl")).toBeInTheDocument();
     expect(screen.getByText("c.jsonl")).toBeInTheDocument();
@@ -101,7 +103,7 @@ describe("VirtualizedImportIssuesTable", () => {
       />,
     );
 
-    await user.click(screen.getByRole("row", { name: /Expand error for chat.jsonl/ }));
+    await user.click(screen.getByRole("button", { name: "Expand error for chat.jsonl" }));
 
     expect(screen.getByText("HTTP 500 from server")).toBeInTheDocument();
     expect(screen.getAllByText("chat.jsonl")).toHaveLength(1);
@@ -119,11 +121,42 @@ describe("VirtualizedImportIssuesTable", () => {
       />,
     );
 
-    await user.click(screen.getByRole("row", { name: /Expand error for 2 files/ }));
+    await user.click(screen.getByRole("row", { name: "2 files" }));
     await user.click(screen.getByText("a.jsonl"));
 
-    expect(screen.getByRole("row", { name: /Collapse error for 2 files/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Collapse error for 2 files" })).toBeInTheDocument();
     expect(screen.getByText("b.jsonl")).toBeInTheDocument();
+  });
+});
+
+describe("VirtualizedImportIssuesTable keyboard", () => {
+  it("moves between rows with the arrow keys and expands the focused row with Enter", async () => {
+    const user = userEvent.setup();
+    render(
+      <VirtualizedImportIssuesTable
+        issues={[
+          issue({ item: "a.jsonl", reason: "could not read" }),
+          issue({ item: "b.jsonl", reason: "HTTP 500 from server" }),
+        ]}
+      />,
+    );
+
+    // The table is one stop for Tab, on its first row.
+    await user.tab();
+    expect(screen.getByRole("row", { name: "a.jsonl" })).toHaveFocus();
+
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("row", { name: "b.jsonl" })).toHaveFocus();
+
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("button", { name: "Collapse error for b.jsonl" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Expand error for a.jsonl" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
   });
 });
 

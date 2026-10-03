@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { Z_LIFT } from "../lib/zLayers";
 import InfiniteOffsetList from "./InfiniteOffsetList";
 
 const tauriMock = vi.hoisted(() => ({ current: false }));
@@ -155,8 +156,7 @@ function listElement(items: Item[], extra?: Parameters<typeof renderList>[1]) {
         estimateSize={49}
         getId={(c) => c.id}
         onSelect={extra?.onSelect ?? (() => {})}
-        onSelectAllChange={() => {}}
-        selectAllLabel="Select all contacts"
+        selectAll={{ onChange: () => {}, label: "Select all contacts" }}
         renderRow={(c) => <span>{c.name}</span>}
         renderRowLead={
           extra?.lead ? (c) => <input type="checkbox" aria-label={`Select ${c.name}`} /> : undefined
@@ -410,7 +410,7 @@ describe("InfiniteOffsetList choosing a row", () => {
     const lead = screen.getByRole("checkbox", { name: "Select Alice" })
       .parentElement as HTMLElement;
     expect(lead.className).toContain("relative");
-    expect(lead.className).toContain("z-[1]");
+    expect(lead.className).toContain(Z_LIFT);
   });
 
   // A row sets outline-none, which also removes the app's own :focus-visible

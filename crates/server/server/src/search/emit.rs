@@ -110,9 +110,14 @@ pub(crate) fn compile(
         emit_expr(&ctx, &mut out, expr)?;
     }
     out.push(")");
+    let rank_query = match (list, expr) {
+        (ListKind::Messages, Some(expr)) => fts::rank_query(&expr.positive_text_terms()),
+        _ => None,
+    };
     Ok(Filter {
         where_sql: out.text,
         params: out.params,
+        rank_query,
     })
 }
 

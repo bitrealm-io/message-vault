@@ -1346,9 +1346,9 @@ mod tests {
 
     #[test]
     fn a_number_with_its_country_keeps_it() {
-        let xml = br#"<smses><sms protocol="0" address="+6591234567" date="1" type="1" body="hi"/></smses>"#;
+        let xml = br#"<smses><sms protocol="0" address="+6595550100" date="1" type="1" body="hi"/></smses>"#;
         let (records, _) = parse_reader(xml.as_slice(), None).unwrap();
-        assert_eq!(records[0].chat_key, "+6591234567");
+        assert_eq!(records[0].chat_key, "+6595550100");
     }
 
     #[test]

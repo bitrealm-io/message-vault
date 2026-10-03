@@ -97,7 +97,7 @@ fn read_document(path: &Path) -> ConversationDocument {
                 .unwrap_or_else(|error| panic!("parse message in {}: {error}", path.display()))
         })
         .collect();
-    header.into_document(messages, None)
+    header.into_document(messages)
 }
 
 /// Every conversation file under `out/staging/<source>`, with its source folder name.

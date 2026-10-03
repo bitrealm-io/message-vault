@@ -37,9 +37,9 @@ entry about an account is about the person who holds it, whoever acted.
 ## Consequences
 
 When an account is deleted, an entry keeps what was asked for and how much
-matched, and loses what describes the person's messages: an export's search
-text and its hand-picked conversation and message ids. Refused logins for a
-username that matches no account belong to no one and are deleted after 90
-days, so that anyone who can reach the server cannot grow the record without
-limit. The Demo Account is recorded like any other (ADR 0016), so
-`reset-demo` leaves the old Demo Account's entries in place.
+matched, and loses what describes the person's messages.
+An Export Run loses its search text, its hand-picked conversation and message ids, and its list of messages.
+An Import Run loses its issues, its form, its staging folder, its source details and the addresses the backup sent from.
+A run still open is closed as cancelled, and the account's live session ends as revoked by whoever deleted it.
+Refused logins for a username that matches no account belong to no one and are deleted after 90 days, so that anyone who can reach the server cannot grow the record without limit.
+The Demo Account is recorded like any other (ADR 0016), so `reset-demo` leaves the old Demo Account's entries in place.

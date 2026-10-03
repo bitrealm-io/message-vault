@@ -57,6 +57,27 @@ impl Expr {
         }
     }
 
+    /// The free-text terms a match must or may have: every text term not
+    /// under a negation, in the order they were typed. A term behind `-` or
+    /// `not` only excludes, so it says nothing about how well a row matches.
+    pub(crate) fn positive_text_terms(&self) -> Vec<&TextTerm> {
+        let mut out = Vec::new();
+        self.collect_positive_text(&mut out);
+        out
+    }
+
+    fn collect_positive_text<'a>(&'a self, out: &mut Vec<&'a TextTerm>) {
+        match self {
+            Self::And(v) | Self::Or(v) => {
+                for e in v {
+                    e.collect_positive_text(out);
+                }
+            }
+            Self::Text(t) => out.push(t),
+            Self::Not(_) | Self::Field(_) => {}
+        }
+    }
+
     /// Total nodes in the tree, for the complexity limit. Each comma value of
     /// a field counts as one node, because each becomes one more `OR` in the
     /// SQL and SQLite refuses an expression tree deeper than 1,000.

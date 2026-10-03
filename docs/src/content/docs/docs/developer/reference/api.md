@@ -80,7 +80,7 @@ Every export route takes the `export` scope on a session or an API token. A prog
 
 ## Search operators (`q`)
 
-`q` is the same search language the website uses. [Search](/docs/user/features/messages/search/) has the full grammar: quoting, `none`/`any`, date and size ranges, `-` to exclude, `or` and parentheses, `avoc*` prefixes. An Export Run's `query` scope compiles `q` against the list it names, Messages or Conversations, with the same compiler Contacts and Conversations search use elsewhere, full-text index included for free text. `GET /v1/search-fields/contacts` and `GET /v1/search-fields/conversations` list the words those lists accept. These are the words the Messages list has:
+`q` is the same search language the website uses. [Search](/docs/user/features/messages/search/) has the full grammar: quoting, `none`/`any`, date and size ranges, `-` to exclude, `or` and parentheses, `avoc*` prefixes. An Export Run's `query` scope compiles `q` against the list it names, Messages or Conversations, with the same compiler Contacts and Conversations search use elsewhere, full-text index included for free text. `GET /v1/search-fields/contacts`, `GET /v1/search-fields/conversations` and `GET /v1/search-fields/messages` list the words those lists accept. These are the words the Messages list has:
 
 - Free text and `"quoted phrases"` match the message body, the subject, and any attachment file name.
 - `body:`, `subject:` — text, `none`, `any`, restricted to that one field.

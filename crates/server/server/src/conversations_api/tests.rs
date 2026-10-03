@@ -76,7 +76,7 @@ async fn conversations_setup() -> (sqlx::SqlitePool, TestFixture, i64) {
     let account = fixture.account_with_id(101, "alice").await;
     let mut conn = fixture.conn().await;
     let peer =
-        account_profile::link_account_handle(&mut conn, account, "+15555550200", HandleType::Phone)
+        account_profile::link_account_handle(&mut conn, account, "+15555550135", HandleType::Phone)
             .await
             .unwrap();
     sqlx::query(
@@ -125,7 +125,7 @@ async fn list_conversations_returns_summary() {
     assert_eq!(page.items[0].participants.len(), 1);
     assert_eq!(
         page.items[0].participants[0].identity,
-        Some("+15555550200".to_string())
+        Some("+15555550135".to_string())
     );
 }
 
@@ -136,7 +136,7 @@ async fn list_conversations_filters_by_handle() {
     let hit = list_conversations(
         &mut conn,
         account,
-        "identity:+15555550200",
+        "identity:+15555550135",
         DEFAULT_LIST_LIMIT,
         0,
     )
@@ -147,7 +147,7 @@ async fn list_conversations_filters_by_handle() {
     let miss = list_conversations(
         &mut conn,
         account,
-        "identity:+19999999999",
+        "identity:+19995550101",
         DEFAULT_LIST_LIMIT,
         0,
     )
@@ -161,11 +161,11 @@ async fn list_conversations_filters_by_handle() {
 async fn list_conversations_finds_a_handle_across_platforms() {
     let (pool, _fixture, account) = conversations_setup().await;
     let mut conn = pool.acquire().await.unwrap();
-    // conversations_setup() already has phone:+15555550200 as conversation 1.
+    // conversations_setup() already has phone:+15555550135 as conversation 1.
     let wa = account_profile::link_account_handle_with_service(
         &mut conn,
         account,
-        "+15555550200",
+        "+15555550135",
         HandleType::Phone,
         Some("whatsapp"),
     )
@@ -207,7 +207,7 @@ async fn list_conversations_finds_a_handle_across_platforms() {
     let any_platform = list_conversations(
         &mut conn,
         account,
-        "identity:+15555550200",
+        "identity:+15555550135",
         DEFAULT_LIST_LIMIT,
         0,
     )
@@ -238,7 +238,7 @@ async fn list_conversations_sorts_by_date_or_message_count() {
     .unwrap();
 
     let peer2 =
-        account_profile::link_account_handle(&mut conn, account, "+15555550300", HandleType::Phone)
+        account_profile::link_account_handle(&mut conn, account, "+15555550143", HandleType::Phone)
             .await
             .unwrap();
     sqlx::query(
@@ -338,7 +338,7 @@ async fn list_conversations_paginates() {
     let mut conn = pool.acquire().await.unwrap();
     // Second conversation + message.
     let peer2 =
-        account_profile::link_account_handle(&mut conn, account, "+15555550300", HandleType::Phone)
+        account_profile::link_account_handle(&mut conn, account, "+15555550143", HandleType::Phone)
             .await
             .unwrap();
     sqlx::query(
@@ -378,7 +378,7 @@ async fn list_conversations_paginates() {
     assert_eq!(page1.items.len(), 1);
     assert_eq!(page1.items[0].id, 1);
 
-    let by_text = list_conversations(&mut conn, account, "5555550300", 10, 0)
+    let by_text = list_conversations(&mut conn, account, "5555550143", 10, 0)
         .await
         .unwrap();
     assert_eq!(by_text.total, 1);
@@ -464,7 +464,7 @@ async fn list_conversations_filters_by_contact_and_type() {
     let peer_handle_id: i64 =
         sqlx::query_scalar("SELECT id FROM handles WHERE account_id = $1 AND raw = $2")
             .bind(account)
-            .bind("+15555550200")
+            .bind("+15555550135")
             .fetch_one(&mut *conn)
             .await
             .unwrap();
@@ -481,7 +481,7 @@ async fn list_conversations_filters_by_contact_and_type() {
 
     // Unrelated group conversation (no link to Sam).
     let other =
-        account_profile::link_account_handle(&mut conn, account, "+15555550999", HandleType::Phone)
+        account_profile::link_account_handle(&mut conn, account, "+15555550167", HandleType::Phone)
             .await
             .unwrap();
     sqlx::query(
@@ -613,7 +613,7 @@ async fn list_conversations_shows_the_contact_name() {
     .await
     .unwrap();
     let handle_id: i64 =
-        sqlx::query_scalar("SELECT id FROM handles WHERE account_id = $1 AND raw = '+15555550200'")
+        sqlx::query_scalar("SELECT id FROM handles WHERE account_id = $1 AND raw = '+15555550135'")
             .bind(account)
             .fetch_one(&mut *conn)
             .await
@@ -630,7 +630,7 @@ async fn list_conversations_shows_the_contact_name() {
     .unwrap();
 
     let page = list_conversations_page(&mut conn, account).await;
-    let p = find_participant(&page, "+15555550200");
+    let p = find_participant(&page, "+15555550135");
     assert_eq!(p.name, "Sam Preferred");
     assert_eq!(p.contact_id, Some(contact_id));
 }
@@ -639,10 +639,10 @@ async fn list_conversations_shows_the_contact_name() {
 async fn list_conversations_falls_back_to_the_backup_name() {
     let (pool, _fixture, account) = conversations_setup().await;
     let mut conn = pool.acquire().await.unwrap();
-    // conversations_setup() records the backup name 'Sam' on +15555550200 and links no
+    // conversations_setup() records the backup name 'Sam' on +15555550135 and links no
     // contact, so the backup's name is what there is to show.
     let page = list_conversations_page(&mut conn, account).await;
-    let p = find_participant(&page, "+15555550200");
+    let p = find_participant(&page, "+15555550135");
     assert_eq!(p.name, "Sam");
     assert_eq!(p.contact_id, None);
 }
@@ -656,8 +656,8 @@ async fn list_conversations_falls_back_to_the_handle() {
         .await
         .unwrap();
     let page = list_conversations_page(&mut conn, account).await;
-    let p = find_participant(&page, "+15555550200");
-    assert_eq!(p.name, "+15555550200");
+    let p = find_participant(&page, "+15555550135");
+    assert_eq!(p.name, "+15555550135");
 }
 
 #[tokio::test]
@@ -667,11 +667,11 @@ async fn list_conversations_filters_by_participant_count() {
     // conversations_setup() has conversation 1 with 1 participant.
 
     let p2 =
-        account_profile::link_account_handle(&mut conn, account, "+15555550301", HandleType::Phone)
+        account_profile::link_account_handle(&mut conn, account, "+15555550145", HandleType::Phone)
             .await
             .unwrap();
     let p3 =
-        account_profile::link_account_handle(&mut conn, account, "+15555550302", HandleType::Phone)
+        account_profile::link_account_handle(&mut conn, account, "+15555550146", HandleType::Phone)
             .await
             .unwrap();
     let group_chat =
@@ -739,15 +739,15 @@ async fn list_conversations_participants_eq_three_on_built_fixture() {
     // `=3` filter below must exclude.
 
     let p2 =
-        account_profile::link_account_handle(&mut conn, account, "+15555550401", HandleType::Phone)
+        account_profile::link_account_handle(&mut conn, account, "+15555550148", HandleType::Phone)
             .await
             .unwrap();
     let p3 =
-        account_profile::link_account_handle(&mut conn, account, "+15555550402", HandleType::Phone)
+        account_profile::link_account_handle(&mut conn, account, "+15555550149", HandleType::Phone)
             .await
             .unwrap();
     let p4 =
-        account_profile::link_account_handle(&mut conn, account, "+15555550403", HandleType::Phone)
+        account_profile::link_account_handle(&mut conn, account, "+15555550150", HandleType::Phone)
             .await
             .unwrap();
     let group_chat =
@@ -832,11 +832,11 @@ async fn list_conversations_filters_by_import_id() {
     .unwrap();
 
     let peer1 =
-        account_profile::link_account_handle(&mut conn, account, "+15555550200", HandleType::Phone)
+        account_profile::link_account_handle(&mut conn, account, "+15555550135", HandleType::Phone)
             .await
             .unwrap();
     let peer2 =
-        account_profile::link_account_handle(&mut conn, account, "+15555550300", HandleType::Phone)
+        account_profile::link_account_handle(&mut conn, account, "+15555550143", HandleType::Phone)
             .await
             .unwrap();
 
@@ -994,7 +994,7 @@ async fn duplicate_only_threads_have_no_last_message_date_and_sort_last() {
     .await
     .unwrap();
 
-    for (id, raw) in [(3, "+15555550400"), (4, "+15555550401")] {
+    for (id, raw) in [(3, "+15555550147"), (4, "+15555550148")] {
         let peer = account_profile::link_account_handle(&mut conn, account, raw, HandleType::Phone)
             .await
             .unwrap();
@@ -1134,7 +1134,7 @@ async fn list_conversations_import_id_includes_duplicate_only_thread() {
     .unwrap();
 
     let peer =
-        account_profile::link_account_handle(&mut conn, account, "+15555550400", HandleType::Phone)
+        account_profile::link_account_handle(&mut conn, account, "+15555550147", HandleType::Phone)
             .await
             .unwrap();
     sqlx::query(
@@ -1158,7 +1158,7 @@ async fn list_conversations_import_id_includes_duplicate_only_thread() {
 
     // Canonical message in another conversation (winner for dedupe).
     let peer_other =
-        account_profile::link_account_handle(&mut conn, account, "+15555550401", HandleType::Phone)
+        account_profile::link_account_handle(&mut conn, account, "+15555550148", HandleType::Phone)
             .await
             .unwrap();
     sqlx::query(

@@ -208,7 +208,7 @@ async fn import_under_session(
         media: opts.media,
         wipe_sources: Some(vec![source.to_string()]),
     };
-    let result = imports_api::import_jsonl_files_on_conn(
+    let result = imports_api::import_on_conn(
         conn,
         paths,
         &import_opts,
@@ -295,13 +295,14 @@ fn files_by_source(paths: &[PathBuf]) -> Result<BTreeMap<String, Vec<PathBuf>>> 
 mod tests {
     use super::*;
     use crate::db::account_profile;
+    use crate::imports_api::IMPORT_CONTACT_GROUP_NAME_SQL;
     use crate::open_db::fresh_config;
     use tempfile::TempDir;
 
     const ALICE: i64 = 7;
 
     /// The number the conversation is with.
-    const PHONE: &str = "+14075551234";
+    const PHONE: &str = "+14075550107";
 
     /// One incoming text from `phone`.
     fn conversation_with(phone: &str) -> String {
@@ -409,19 +410,19 @@ mod tests {
     /// Search's query. A run missing either shortcut is left out.
     async fn runs_with_their_shortcuts(opened: &OpenDb) -> Vec<(String, String, i64, String)> {
         let mut conn = opened.conn().await.unwrap();
-        sqlx::query_as(
+        sqlx::query_as(&format!(
             "SELECT i.source, g.name,
                     (SELECT COUNT(*) FROM contact_group_members m WHERE m.group_id = g.id),
                     s.query
              FROM imports i
              JOIN contact_groups g
                ON g.account_id = i.account_id AND g.kind = 'import'
-              AND g.name = i.source || ' import ' || substr(i.finished_at, 1, 10)
+              AND g.name = {IMPORT_CONTACT_GROUP_NAME_SQL}
              JOIN saved_searches s
                ON s.account_id = i.account_id AND s.query = 'import:#' || i.id
              WHERE i.account_id = $1
-             ORDER BY i.id",
-        )
+             ORDER BY i.id"
+        ))
         .bind(ALICE)
         .fetch_all(&mut *conn)
         .await

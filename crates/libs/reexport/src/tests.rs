@@ -27,23 +27,41 @@ fn config(input: &Path, output: &Path, output_format: OutputFormat) -> ExporterC
         progress: None,
         output_format,
         resume: false,
-        source: SourceConfig::Format(FormatConfig {}),
+        source: SourceConfig::Format(FormatConfig::default()),
     }
 }
 
-/// The first file in `dir` with `extension`, skipping `.meta.json` sidecars.
-fn find_file(dir: &Path, extension: &str) -> PathBuf {
-    fs::read_dir(dir)
+/// The files in `dir` with `extension`, sorted, skipping `.meta.json`
+/// sidecars.
+fn files_with_extension(dir: &Path, extension: &str) -> Vec<PathBuf> {
+    let mut paths: Vec<PathBuf> = fs::read_dir(dir)
         .unwrap()
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .find(|path| {
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
             path.extension().and_then(|found| found.to_str()) == Some(extension)
                 && !path
                     .file_name()
                     .and_then(|name| name.to_str())
                     .is_some_and(|name| name.ends_with(".meta.json"))
         })
+        .collect();
+    paths.sort();
+    paths
+}
+
+/// The names of the conversation JSON files in `dir`, sorted.
+fn json_names(dir: &Path) -> Vec<String> {
+    files_with_extension(dir, "json")
+        .into_iter()
+        .map(|path| path.file_name().unwrap().to_string_lossy().into_owned())
+        .collect()
+}
+
+/// The first file in `dir` with `extension`, skipping `.meta.json` sidecars.
+fn find_file(dir: &Path, extension: &str) -> PathBuf {
+    files_with_extension(dir, extension)
+        .into_iter()
+        .next()
         .unwrap_or_else(|| panic!("no .{extension} file in {}", dir.display()))
 }
 
@@ -311,6 +329,7 @@ fn run_refuses_an_empty_output_directory() {
 fn log_lines_name_the_detected_format_and_the_conversation_count() {
     let report = ReexportReport {
         detected_format: "mbox".to_string(),
+        sms_only_format: None,
         report: ExportReport {
             conversations: 3,
             ..ExportReport::default()
@@ -330,6 +349,7 @@ fn log_lines_name_the_detected_format_and_the_conversation_count() {
 fn log_lines_append_the_media_lines_after_the_count() {
     let report = ReexportReport {
         detected_format: "json".to_string(),
+        sms_only_format: None,
         report: ExportReport {
             conversations: 1,
             attachments_saved: 4,
@@ -653,7 +673,6 @@ fn a_jsonl_whose_first_line_is_not_a_conversation_is_refused() {
         "{\"level\":\"info\",\"msg\":\"started\"}\n         {\"schema_version\":4,\"export\":{},\"conversation\":{},\"messages\":[]}\n",
     )
     .unwrap();
-    std::fs::write(dir.path().join("empty.ndjson"), "").unwrap();
 
     let err = detect_ir_export(dir.path()).unwrap_err();
     assert!(
@@ -976,6 +995,60 @@ fn a_version_3_file_among_version_4_files_stops_the_run_and_writes_nothing() {
     );
 }
 
+/// Convert into a folder an earlier XML conversion wrote removes that
+/// backup and its temporary files, whatever format it writes now.
+#[test]
+fn convert_removes_the_backup_an_earlier_conversion_wrote() {
+    let source = tempfile::tempdir().unwrap();
+    write_fixture(source.path(), OutputFormat::Json);
+    let destination = tempfile::tempdir().unwrap();
+    convert_export(
+        source.path(),
+        &config(source.path(), destination.path(), OutputFormat::Xml),
+    )
+    .unwrap();
+    // What a conversion stopped before it finished leaves behind.
+    sms_backup_restore_exporter::testutil::leave_partial_backup(destination.path());
+
+    convert_export(
+        source.path(),
+        &config(source.path(), destination.path(), OutputFormat::Json),
+    )
+    .unwrap();
+
+    sms_backup_restore_exporter::testutil::assert_no_backup_left(destination.path());
+}
+
+/// Two groups with one title are written with a digest suffix each, so
+/// neither replaces the other. Convert reads the suffix back from each name
+/// and writes both files under the names they had.
+#[test]
+fn convert_keeps_the_names_two_groups_with_one_title_were_given() {
+    let source = tempfile::tempdir().unwrap();
+    clean_previous_ir_output(source.path()).unwrap();
+    let mut sink =
+        FormatSink::open(source.path(), OutputFormat::Json, ExportTransforms::none()).unwrap();
+    for chat in ["chat-one", "chat-two"] {
+        let mut doc = message_ir::testutil::sample_document("hello group");
+        doc.conversation.conversation_type = message_ir::IrConversationType::Group;
+        doc.conversation.group_title = Some("Family".into());
+        doc.conversation.chat_identifier = chat.into();
+        sink.write_document(doc).unwrap();
+    }
+    sink.finish(&mut ExportReport::default()).unwrap();
+    let written = json_names(source.path());
+    assert_eq!(written.len(), 2, "{written:?}");
+
+    let destination = tempfile::tempdir().unwrap();
+    convert_export(
+        source.path(),
+        &config(source.path(), destination.path(), OutputFormat::Json),
+    )
+    .unwrap();
+
+    assert_eq!(json_names(destination.path()), written);
+}
+
 /// Write one conversation whose first message carries `note.txt` (and, when
 /// `with_unsent` is set, a second attachment the source never held) as a
 /// mail export of `format` into `dir`. The mail export embeds the bytes,
@@ -1127,4 +1200,132 @@ fn converting_a_mail_export_to_mail_keeps_its_attachments_embedded() {
         out.messages[0].attachments[0].bytes.as_deref(),
         Some(&b"hello attachment"[..])
     );
+}
+
+/// Export writes every format but JSON Lines through Convert. An export
+/// whose scope holds an iMessage and a WhatsApp conversation beside an SMS
+/// one, written as `EML (SMS Backup+)`, holds only the SMS conversation,
+/// and the run's log says how many messages were left out and why (#543).
+#[test]
+fn sms_backup_plus_writes_only_sms_and_mms_and_says_what_it_left_out() {
+    let source = tempfile::tempdir().unwrap();
+    let mut sink =
+        FormatSink::open(source.path(), OutputFormat::Jsonl, ExportTransforms::none()).unwrap();
+    sink.write_document(message_ir::testutil::sample_document("an sms"))
+        .unwrap();
+    let mut imessage = message_ir::testutil::sample_imessage_document();
+    imessage.conversation.chat_identifier = "+15555550102".into();
+    imessage.conversation.participants[0].handle = Some("+15555550102".into());
+    sink.write_document(imessage).unwrap();
+    let mut whatsapp = message_ir::testutil::sample_document("a whatsapp message");
+    whatsapp.conversation.chat_identifier = "+15555550103".into();
+    whatsapp.conversation.participants[0].handle = Some("+15555550103".into());
+    whatsapp.messages[0].service = message_ir::IrService::Whatsapp;
+    sink.write_document(whatsapp).unwrap();
+    sink.finish(&mut ExportReport::default()).unwrap();
+    let destination = tempfile::tempdir().unwrap();
+
+    let report = convert_export(
+        source.path(),
+        &config(
+            source.path(),
+            destination.path(),
+            OutputFormat::SmsBackupPlus,
+        ),
+    )
+    .unwrap();
+
+    let written: Vec<String> = fs::read_dir(destination.path())
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().is_dir())
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(written, ["+15555550101"]);
+    let mail = fs::read_dir(destination.path().join("+15555550101"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let mail = fs::read_to_string(mail).unwrap();
+    assert!(mail.contains("X-smssync-type: 1"), "{mail}");
+    assert!(
+        report.log_lines().contains(
+            &"Left out 3 message(s) that are not SMS or MMS, because SMS Backup+ holds \
+              only SMS and MMS"
+                .to_string()
+        ),
+        "{:?}",
+        report.log_lines()
+    );
+    assert!(
+        !report
+            .log_lines()
+            .iter()
+            .any(|line| line.contains("SMS Backup & Restore")),
+        "only this format's line is logged: {:?}",
+        report.log_lines()
+    );
+    assert!(
+        report.log_lines().contains(&"Conversations: 1".to_string()),
+        "only the conversation written is counted: {:?}",
+        report.log_lines()
+    );
+}
+
+/// SMS Backup+ mail records the start of the Export Run it is part of as
+/// its backup time, not the later start of the conversion (#543, decision 4).
+#[test]
+fn sms_backup_plus_mail_records_the_export_runs_start() {
+    let source = tempfile::tempdir().unwrap();
+    let mut sink =
+        FormatSink::open(source.path(), OutputFormat::Jsonl, ExportTransforms::none()).unwrap();
+    sink.write_document(message_ir::testutil::sample_document("an sms"))
+        .unwrap();
+    sink.finish(&mut ExportReport::default()).unwrap();
+    let destination = tempfile::tempdir().unwrap();
+    let mut config = config(
+        source.path(),
+        destination.path(),
+        OutputFormat::SmsBackupPlus,
+    );
+    config.source = SourceConfig::Format(FormatConfig {
+        run_started: chrono::DateTime::from_timestamp_millis(1_791_000_000_000),
+    });
+
+    convert_export(source.path(), &config).unwrap();
+
+    let mail = fs::read_dir(destination.path().join("+15555550101"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let mail = fs::read_to_string(mail).unwrap();
+    assert!(
+        mail.contains("X-smssync-backup-time: 1791000000000"),
+        "{mail}"
+    );
+}
+
+/// An attachment the staging step already found missing is counted once,
+/// not again by the SMS Backup+ writer that then has no bytes for it.
+#[test]
+fn a_missing_attachment_converted_to_sms_backup_plus_is_counted_once() {
+    let source = tempfile::tempdir().unwrap();
+    write_mail_fixture(source.path(), OutputFormat::Mbox, true);
+    let destination = tempfile::tempdir().unwrap();
+
+    let report = convert_export(
+        source.path(),
+        &config(
+            source.path(),
+            destination.path(),
+            OutputFormat::SmsBackupPlus,
+        ),
+    )
+    .unwrap();
+
+    assert_eq!(report.report.extra(ATTACHMENTS_MISSING), 1);
 }

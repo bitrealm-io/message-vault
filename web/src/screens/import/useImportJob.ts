@@ -24,10 +24,10 @@ import { CANCELLED_MESSAGE, createRunCancel, type RunCancel } from "../../lib/ru
 import { registerRunningUpload } from "../../lib/runningUpload";
 import { sbrExtractFields } from "../../lib/sbrExtractFields";
 import { completeImport, createImport, getServerState } from "../../lib/serverApi";
-import { resolveImportStagingDir } from "../../lib/system-settings";
 import {
   type AttachmentForecast,
   awaitTauriJob,
+  invokeCreateStagingDir,
   invokeDeleteStaging,
   invokeExtract,
   invokeImessageBackupIdentities,
@@ -896,7 +896,11 @@ async function finishImport(args: {
   const runEnded = sessionId == null || (posts && completeRefused == null);
   let stagingDir = store.get().stagingDir;
   if (runEnded) {
-    stagingDir = await deleteStagingFolder();
+    // An ended run's folder goes: the staged messages, the push log, journal
+    // and report, and the run record. When the delete fails, the folder link
+    // stays and the failure is shown, so the person can find what was left
+    // and remove it by hand.
+    if (stagingDir != null && (await discardStagingFolder(stagingDir))) stagingDir = null;
   } else {
     await saveCarriedRecord(pushReport, uploadMs);
   }
@@ -906,22 +910,31 @@ async function finishImport(args: {
 }
 
 /**
- * Delete an ended run's staging directory: the staged messages, the push
- * log, journal and report, and the run record. Returns the directory the
- * screen should still show: `null` once the folder is gone, or the path
- * when deleting failed, so the person can still find what was left behind.
+ * Delete a staging folder of a run that has ended or been discarded. Never
+ * throws: a refusal or failed delete is kept on `stagingDeleteFailure` for
+ * the screen to show. Returns whether the folder is gone.
  */
-async function deleteStagingFolder(): Promise<string | null> {
-  const { stagingDir } = store.get();
-  if (stagingDir == null) return null;
+async function discardStagingFolder(stagingDir: string): Promise<boolean> {
   try {
     await invokeDeleteStaging({ staging_dir: stagingDir });
-    return null;
-  } catch {
-    // The run has ended either way; the folder link stays so the person can
-    // remove what is left by hand.
-    return stagingDir;
+    store.set((state) =>
+      state.stagingDeleteFailure?.path === stagingDir ? { stagingDeleteFailure: null } : {},
+    );
+    return true;
+  } catch (e: unknown) {
+    store.set({
+      stagingDeleteFailure: {
+        path: stagingDir,
+        reason: e instanceof Error ? e.message : String(e),
+      },
+    });
+    return false;
   }
+}
+
+/** The person has read that a staging folder was left behind. */
+function dismissStagingDeleteFailure(): void {
+  store.set({ stagingDeleteFailure: null });
 }
 
 /**
@@ -1275,7 +1288,7 @@ async function runImport(
       setRowByLabel(STAGING_LABEL, { detail: "Extracting…" });
       await moveStage(sessionId, "write");
     } else {
-      outputDir = await resolveImportStagingDir(form.backupPath, form.source);
+      outputDir = await invokeCreateStagingDir(form.source);
       store.set({ stagingDir: outputDir });
 
       const backupStat = await invokePathStat(form.backupPath).catch(() => null);
@@ -1396,7 +1409,7 @@ async function cancelRun(): Promise<void> {
     const { importSessionId: sessionId, stagingDir: outputDir } = store.get();
     await Promise.allSettled([
       sessionId != null ? discardImportSession(sessionId) : Promise.resolve(),
-      outputDir != null ? invokeDeleteStaging({ staging_dir: outputDir }) : Promise.resolve(),
+      outputDir != null ? discardStagingFolder(outputDir) : Promise.resolve(),
     ]);
   } finally {
     scratch.reviewAction = false;
@@ -1709,6 +1722,9 @@ export function useImportJob() {
     completionText:
       state.phase === "done" ? completionTextFor(state.summaryView?.status) : undefined,
     sourceIdentities: state.sourceIdentities,
+    stagingDeleteFailure: state.stagingDeleteFailure,
+    discardStagingFolder,
+    dismissStagingDeleteFailure,
     startImport,
     continueAfterIdentityStop,
     cancelIdentityStop,

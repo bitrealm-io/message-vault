@@ -34,14 +34,14 @@ _Avoid_: Thread Tag, Conversation Tag, Label
 
 **Conversation**:
 One exchange with one person or group, holding its messages and
-participants. It is the unit the product acts on: tagging, trashing, and
-searching all resolve to whole conversations even where the interface
-speaks of messages. A Conversation the source app keeps as a group is a
-**group conversation**; one with a single other person is a **one-to-one
-conversation**. The search words for the two are `kind:group` and
-`kind:direct`, short because they are typed; everything a person reads says
-"group conversation" and "one-to-one conversation", never "group chat",
-because "group" alone could also mean a Contact Group.
+participants. It is the unit the product acts on: tagging and trashing
+resolve to whole conversations, and searching resolves to whole
+conversations unless the person asks for messages. A Conversation the source
+app keeps as a group is a **group conversation**; one with a single other
+person is a **one-to-one conversation**. The search words for the two are
+`kind:group` and `kind:direct`, short because they are typed; everything a
+person reads says "group conversation" and "one-to-one conversation", never
+"group chat", because "group" alone could also mean a Contact Group.
 _Avoid_: Thread, Chat, Group chat, Direct conversation
 
 **Message**:
@@ -126,10 +126,11 @@ _Avoid_: Test data, Sample data, Demo mode
 The account that holds Demo Data, with the username `demo`. It has no
 password and can never be given one, so anyone who reaches the Message Crate
 can enter it. It may export, and move things to the trash and restore them; it
-may not import or delete for good, so a person's own messages never land in it
-and one visitor cannot empty it for the next. Its status, its permissions and
-its own identities are fixed; the names, groups, tags and searches a visitor
-makes in it stay until it is reset. The owner can delete it, or reset it to
+may not import, delete for good, or load an address book, so a person's own
+messages and contacts never land in it and one visitor cannot empty it for the
+next. Its status, its permissions, its own identities, its display name and its
+time zone are fixed; the names, groups, tags and searches a visitor makes in it
+stay until it is reset. The owner can delete it, or reset it to
 how it started, and change nothing else about it.
 _Avoid_: Demo user, Guest, Sample account
 
@@ -271,7 +272,7 @@ other account lands in Messages. It has the frame every account sees: the
 product name, a search bar, the username and the account button across the top, over a
 side panel and a content pane. The side panel lists Dashboard, Server Settings,
 User Accounts, Audit Trail and Logs; Dashboard shows what the whole Message Crate
-holds, and Audit Trail and Logs are named and hold nothing yet. The search bar narrows User Accounts by username or
+holds, Audit Trail what each user did and when, and Logs is named and holds nothing yet. The search bar narrows User Accounts by username or
 preferred name. User Accounts lists every account, the owner's own first,
 each by username with its preferred name, its status and its last login. There the owner adds
 accounts. An account's name opens that account's Settings, the screen its
@@ -281,11 +282,12 @@ messages or the account. The account holder reads the same status and
 permissions under Settings, Account, and changes none. The owner sets the
 account's display name, time zone and identities on Profile as the holder does,
 which is not the holder's own profile setup, and reads there its last login and
-the app it connects with. The owner reads the Storage tab as the holder sees
-it, without seeing inside it. The owner's own row opens the owner's own Settings,
-which is also where the account button's Settings goes. An owner's password
-reset sets the password and nothing more: it does not end the person's
-session and does not make them choose a new one.
+the app it connects with. On the Demo Account its display name, time zone and
+identities are fixed, for the owner as for the holder. The owner reads the
+Storage tab as the holder sees it, without seeing inside it. The owner's own
+row opens the owner's own Settings, which is also where the account button's
+Settings goes. An owner's password reset sets the password and nothing more:
+it does not end the person's session and does not make them choose a new one.
 _Avoid_: Console, Dashboard, Admin, Admin panel
 
 **Audit Trail**:
@@ -294,7 +296,8 @@ logging in, sessions ending, logins refused, Import Runs, Export Runs, and the
 owner's changes to accounts. It records that something happened and how much,
 never what the messages said. Nobody edits or deletes it, the owner included,
 and deleting an account does not remove its entries. The owner reads it for
-every account on Owner Home. It is not the server's log output, which is Logs.
+every account on Owner Home, and each account holder reads the entries about
+their own account under Settings. It is not the server's log output, which is Logs.
 Why it outlives the account: `docs/adr/0020`.
 _Avoid_: Activity, Audit log, Event log, History
 

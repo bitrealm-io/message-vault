@@ -112,7 +112,7 @@ export function SettingsAccountForm() {
     const invalidPhone = phonesToSave.find((phone) => !toPhoneE164(phone));
     if (invalidPhone) {
       setError(
-        `Invalid phone number “${invalidPhone}”. Include the country code, such as +1 555 789 1234.`,
+        `Invalid phone number “${invalidPhone}”. Include the country code, such as +1 555 555 0100.`,
       );
       return;
     }

@@ -490,7 +490,7 @@ fn the_archive_restores_source_fields_as_attrs() {
         attrs.insert("date".into(), json!("1400773261000"));
         attrs.insert("type".into(), json!("1"));
         attrs.insert("body".into(), json!("hello ir"));
-        attrs.insert("service_center".into(), json!("+15550009999"));
+        attrs.insert("service_center".into(), json!("+15555550114"));
         attrs.insert("contact_name".into(), json!("Sam"));
         source.fields = {
             let mut m = Map::new();
@@ -508,7 +508,7 @@ fn the_archive_restores_source_fields_as_attrs() {
         )
         .unwrap();
     let text = fs::read_to_string(&path).unwrap();
-    assert!(text.contains(r#"service_center="+15550009999""#));
+    assert!(text.contains(r#"service_center="+15555550114""#));
     assert!(text.contains("hello ir"));
 }
 

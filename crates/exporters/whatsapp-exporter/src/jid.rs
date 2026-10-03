@@ -1,7 +1,7 @@
 //! WhatsApp JID helpers.
 //!
 //! A JID is WhatsApp's address for a user or group (for example
-//! `15551234567@s.whatsapp.net` or `120363042@g.us`).
+//! `15555550119@s.whatsapp.net` or `120363042@g.us`).
 
 /// True for `@g.us` group JIDs (WhatsApp's group address suffix).
 pub(crate) fn is_group_jid(jid: &str) -> bool {
@@ -32,9 +32,9 @@ const PHONE_PUNCTUATION: [char; 5] = ['+', '-', '(', ')', ' '];
 /// A user JID's local part is the full international number, country code
 /// included, so the result is `+` and its digits:
 ///
-/// - `15551234567@s.whatsapp.net` → `+15551234567`
-/// - `6591234567@s.whatsapp.net` → `+6591234567` (Singapore, not `+1 659…`)
-/// - `+15551234567` → `+15551234567`
+/// - `15555550119@s.whatsapp.net` → `+15555550119`
+/// - `6595550100@s.whatsapp.net` → `+6595550100` (Singapore, not `+1 659…`)
+/// - `+15555550119` → `+15555550119`
 ///
 /// No regional rule applies, because the country code is already there. The
 /// `phone` crate's sanitizers are not used for the same reason: they strip a
@@ -84,14 +84,14 @@ mod tests {
     fn jid_to_e164_cases() {
         let cases: &[(&str, Option<&str>)] = &[
             // Singapore, Norway, Denmark: 10 digits that US rules misread.
-            ("6591234567@s.whatsapp.net", Some("+6591234567")),
+            ("6595550100@s.whatsapp.net", Some("+6595550100")),
             ("4791234567@s.whatsapp.net", Some("+4791234567")),
             ("4512345678@s.whatsapp.net", Some("+4512345678")),
             ("447911123456@s.whatsapp.net", Some("+447911123456")),
             ("15555550122@s.whatsapp.net", Some("+15555550122")),
             ("+15555550122", Some("+15555550122")),
             ("  15555550122@s.whatsapp.net  ", Some("+15555550122")),
-            ("+65 9123-4567", Some("+6591234567")),
+            ("+65 9555-0100", Some("+6595550100")),
             ("+1 (555) 555-0122", Some("+15555550122")),
             // Not a person's phone number.
             ("status@broadcast", None),
@@ -144,7 +144,7 @@ mod tests {
             chat_id_from_jid("15555550122@s.whatsapp.net"),
             "+15555550122"
         );
-        assert_eq!(chat_id_from_jid("6591234567@s.whatsapp.net"), "+6591234567");
+        assert_eq!(chat_id_from_jid("6595550100@s.whatsapp.net"), "+6595550100");
         assert_eq!(chat_id_from_jid("status@broadcast"), "status@broadcast");
     }
 }

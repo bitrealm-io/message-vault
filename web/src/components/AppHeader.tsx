@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { SearchScope } from "../lib/recentSearches";
 import type { SearchList } from "../lib/searchFields";
+import { Z_APP_HEADER } from "../lib/zLayers";
 import type { AdvancedSearchMode } from "./AdvancedSearchForm";
 import AppAccountMenu from "./AppAccountMenu";
 import { loadWidth } from "./columnResize";
@@ -15,7 +16,7 @@ import SearchBar from "./SearchBar";
 import VersionNotice from "./VersionNotice";
 
 /** Which list the header search runs against. */
-export type HeaderSearchTarget = "accounts" | "contacts" | "messages" | "trash";
+export type HeaderSearchTarget = "accounts" | "contacts" | "conversations" | "messages" | "trash";
 
 /**
  * Every target uses the same bar; only the wording, the recents bucket, the
@@ -46,9 +47,18 @@ const SEARCH_TARGETS: Record<
     placeholder: "Search contacts",
     advancedMode: "contacts",
   },
-  messages: {
+  // The Messages screen's two result lists (#313): one search box, whose
+  // words and wording follow the list the switch shows. Both keep one set
+  // of recent searches, because one box serves both.
+  conversations: {
     scope: "message",
     list: "conversations",
+    placeholder: "Search conversations",
+    advancedMode: "messages",
+  },
+  messages: {
+    scope: "message",
+    list: "messages",
     placeholder: "Search messages",
     advancedMode: "messages",
   },
@@ -87,7 +97,9 @@ export default function AppHeader({
 
   return (
     <>
-      <header className="relative z-20 flex shrink-0 items-center border-b border-border bg-panel">
+      <header
+        className={`relative flex shrink-0 items-center border-b border-border bg-panel ${Z_APP_HEADER}`}
+      >
         <div
           className="box-border flex h-12 shrink-0 items-center px-3"
           style={{ width: `var(${LEFT_PANEL_WIDTH_VAR}, ${brandWidth}px)` }}

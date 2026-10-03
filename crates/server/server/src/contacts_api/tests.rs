@@ -90,7 +90,7 @@ async fn contact_match_collapses_duplicates_by_normalized_form() {
     // person, not two — otherwise Gate 1's "N new" count
     // double-counts a single human written two ways.
     let (fixture, account) = contacts_fixture_with_handles(&[]).await;
-    let body = serde_json::json!({ "identifiers": ["+1 (555) 010-0100", "+15550100100"] });
+    let body = serde_json::json!({ "identifiers": ["+1 (555) 555-0115", "+15555550115"] });
     let response = post_json::<serde_json::Value>(
         &fixture.state,
         "/v1/contacts/unmatched-identities",
@@ -100,7 +100,7 @@ async fn contact_match_collapses_duplicates_by_normalized_form() {
     .await;
     assert_eq!(
         response["items"],
-        serde_json::json!(["+1 (555) 010-0100"]),
+        serde_json::json!(["+1 (555) 555-0115"]),
         "both spellings normalize to the same value, so only the \
          first-seen spelling should come back once"
     );
@@ -187,7 +187,7 @@ async fn a_refused_contact_edit_answers_422_with_the_persons_sentence() {
     let mut conn = fixture.state.db.acquire().await.unwrap();
     let first =
         insert_contact_with_handle(&mut conn, account.account_id, "Ada", "+15555550100").await;
-    insert_contact_with_handle(&mut conn, account.account_id, "Grace", "+15555550200").await;
+    insert_contact_with_handle(&mut conn, account.account_id, "Grace", "+15555550135").await;
     drop(conn);
 
     // Taking an identity that is already another contact’s.
@@ -195,7 +195,7 @@ async fn a_refused_contact_edit_answers_422_with_the_persons_sentence() {
         &fixture.state,
         &format!("/v1/contacts/{first}"),
         &account.token,
-        serde_json::json!({ "add_identity": { "address": "+15555550200" } }),
+        serde_json::json!({ "add_identity": { "address": "+15555550135" } }),
     )
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
@@ -352,8 +352,8 @@ async fn list_contacts_filters_and_paginates() {
     let mut conn = fixture.conn().await;
     for (name, phone) in [
         ("Pat", "+15555550100"),
-        ("Sam", "+15555550200"),
-        ("Alex", "+15555550300"),
+        ("Sam", "+15555550135"),
+        ("Alex", "+15555550143"),
     ] {
         let contact_id: i64 = sqlx::query_scalar(
             "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, $2) RETURNING id",
@@ -396,7 +396,7 @@ async fn list_contacts_filters_and_paginates() {
     let by_handle = list_contacts_sorted(
         &mut conn,
         account,
-        "identity:5555550200",
+        "identity:5555550135",
         &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
         0,
@@ -451,7 +451,7 @@ async fn get_contact_detail_counts_direct_group_and_messages() {
     .await
     .unwrap();
     let peer =
-        account_profile::link_account_handle(&mut conn, account, "+15555550200", HandleType::Phone)
+        account_profile::link_account_handle(&mut conn, account, "+15555550135", HandleType::Phone)
             .await
             .unwrap();
     sqlx::query(
@@ -554,7 +554,7 @@ async fn get_contact_detail_counts_direct_group_and_messages() {
 
     // Unrelated conversation should not be counted.
     let other =
-        account_profile::link_account_handle(&mut conn, account, "+15555550999", HandleType::Phone)
+        account_profile::link_account_handle(&mut conn, account, "+15555550167", HandleType::Phone)
             .await
             .unwrap();
     sqlx::query(
@@ -587,8 +587,8 @@ async fn get_contact_detail_counts_direct_group_and_messages() {
     assert_eq!(detail.total_messages, 3);
     assert_eq!(detail.identities.len(), 1);
     assert!(
-        detail.identities[0].address.contains("5555550200")
-            || detail.identities[0].address.contains("+15555550200"),
+        detail.identities[0].address.contains("5555550135")
+            || detail.identities[0].address.contains("+15555550135"),
         "handle={:?}",
         detail.identities[0].address
     );
@@ -621,7 +621,7 @@ async fn get_contact_summaries_counts_two_contacts_in_one_query() {
     .await
     .unwrap();
     let sam_handle =
-        account_profile::link_account_handle(&mut conn, account, "+15555550200", HandleType::Phone)
+        account_profile::link_account_handle(&mut conn, account, "+15555550135", HandleType::Phone)
             .await
             .unwrap();
     sqlx::query(
@@ -812,7 +812,7 @@ async fn a_conversation_with_two_of_a_contacts_identities_counts_once() {
     .unwrap();
     let mut handles = Vec::new();
     for (raw, handle_type) in [
-        ("+15555550200", HandleType::Phone),
+        ("+15555550135", HandleType::Phone),
         ("sam@example.com", HandleType::Email),
     ] {
         let (handle, _) =
@@ -970,7 +970,7 @@ async fn a_contacts_identity_and_summary_count_the_messages_it_sent() {
     let mut conn = fixture.conn().await;
 
     let mine =
-        account_profile::link_account_handle(&mut conn, account, "+15555550001", HandleType::Phone)
+        account_profile::link_account_handle(&mut conn, account, "+15555550128", HandleType::Phone)
             .await
             .unwrap();
     let jane = insert_contact_with_handle(&mut conn, account, "Jane", "+15555550100").await;
@@ -1000,7 +1000,7 @@ async fn a_contacts_identity_and_summary_count_the_messages_it_sent() {
     .execute(&mut *conn)
     .await
     .unwrap();
-    let bob = insert_contact_with_handle(&mut conn, account, "Bob", "+15555550200").await;
+    let bob = insert_contact_with_handle(&mut conn, account, "Bob", "+15555550135").await;
     let bob_phone: i64 =
         sqlx::query_scalar("SELECT handle_id FROM contact_handles WHERE contact_id = $1")
             .bind(bob)
@@ -1127,7 +1127,7 @@ async fn a_contacts_identity_and_summary_count_the_messages_it_sent() {
         .unwrap();
     let held = own
         .iter()
-        .find(|identity| identity.address == "+15555550001")
+        .find(|identity| identity.address == "+15555550128")
         .expect("the holder's identity");
     assert_eq!(held.conversations, 2);
     assert_eq!(held.direct_messages, 100);
@@ -1157,7 +1157,7 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
             &UpdateContactRequest {
                 name: None,
                 add_identity: Some(AddContactIdentityRequest {
-                    address: "+15555550200".into(),
+                    address: "+15555550135".into(),
                     service: Some("phone".into()),
                 }),
                 update_identity: None,
@@ -1173,7 +1173,7 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
         .unwrap()
         .unwrap();
     assert_eq!(detail.identities.len(), 1);
-    assert!(detail.identities[0].address.contains("5555550200"));
+    assert!(detail.identities[0].address.contains("5555550135"));
 
     assert!(
         mutate_committed(
@@ -1300,11 +1300,11 @@ async fn a_handle_takes_its_type_from_the_service_it_is_added_under() {
     let contact_id = insert_contact_with_handle(&mut conn, account, "Sam", "+15555550100").await;
 
     for (raw, service, expected) in [
-        ("+15555550201", Some("sms"), "phone"),
-        ("+15555550202", Some("imessage"), "phone"),
-        ("+15555550203", Some("whatsapp"), "phone"),
-        ("+15555550204", Some("phone"), "phone"),
-        ("+15555550205", None, "phone"),
+        ("+15555550136", Some("sms"), "phone"),
+        ("+15555550137", Some("imessage"), "phone"),
+        ("+15555550138", Some("whatsapp"), "phone"),
+        ("+15555550139", Some("phone"), "phone"),
+        ("+15555550140", None, "phone"),
         ("sam@example.com", Some("email"), "email"),
         ("sam", None, "other"),
         ("sam#1234", Some("discord"), "other"),
@@ -1330,7 +1330,7 @@ async fn naming_a_handle_again_under_another_transport_keeps_one_row() {
     let account = fixture.account_with_id(101, "alice").await;
     let mut conn = fixture.conn().await;
     let contact_id = insert_contact_with_handle(&mut conn, account, "Sam", "+15555550100").await;
-    add_identity(&mut conn, account, contact_id, "+15555550300", Some("sms")).await;
+    add_identity(&mut conn, account, contact_id, "+15555550143", Some("sms")).await;
 
     assert!(
         mutate_committed(
@@ -1341,8 +1341,8 @@ async fn naming_a_handle_again_under_another_transport_keeps_one_row() {
                 name: None,
                 add_identity: None,
                 update_identity: Some(UpdateContactIdentityRequest {
-                    previous_address: "+15555550300".into(),
-                    address: "+15555550300".into(),
+                    previous_address: "+15555550143".into(),
+                    address: "+15555550143".into(),
                     service: Some("iMessage".into()),
                 }),
                 remove_identity: None,
@@ -1351,13 +1351,13 @@ async fn naming_a_handle_again_under_another_transport_keeps_one_row() {
         .await
         .unwrap()
     );
-    add_identity(&mut conn, account, contact_id, "+15555550300", Some("sms")).await;
+    add_identity(&mut conn, account, contact_id, "+15555550143", Some("sms")).await;
 
     let rows: Vec<(String, Option<String>)> = sqlx::query_as(
         "SELECT handle_type, service FROM handles WHERE account_id = $1 AND raw = $2",
     )
     .bind(account)
-    .bind("+15555550300")
+    .bind("+15555550143")
     .fetch_all(&mut *conn)
     .await
     .unwrap();
@@ -1598,7 +1598,7 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
             &UpdateContactRequest {
                 name: None,
                 add_identity: Some(AddContactIdentityRequest {
-                    address: "+15555550200".into(),
+                    address: "+15555550135".into(),
                     service: Some("phone".into()),
                 }),
                 update_identity: None,
@@ -1621,7 +1621,7 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
             &UpdateContactRequest {
                 name: None,
                 add_identity: Some(AddContactIdentityRequest {
-                    address: "+15555550200".into(),
+                    address: "+15555550135".into(),
                     service: Some("phone".into()),
                 }),
                 update_identity: None,
@@ -1647,7 +1647,7 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
                 add_identity: None,
                 update_identity: None,
                 remove_identity: Some(RemoveContactIdentityRequest {
-                    address: "+15555550200".into(),
+                    address: "+15555550135".into(),
                     service: Some("phone".into()),
                 }),
             },
@@ -1760,7 +1760,7 @@ async fn list_contacts_filters_has_messages_and_never_messaged() {
     let account = fixture.account_with_id(101, "alice").await;
     let mut conn = fixture.conn().await;
     insert_contact_with_handle(&mut conn, account, "Messaged", "+15555550100").await;
-    insert_contact_with_handle(&mut conn, account, "Silent", "+15555550200").await;
+    insert_contact_with_handle(&mut conn, account, "Silent", "+15555550135").await;
     insert_direct_conversation(
         &mut conn,
         account,
@@ -1844,15 +1844,15 @@ async fn list_contacts_sorts_by_last_heard_with_silent_contacts_last() {
     let account = fixture.account_with_id(101, "alice").await;
     let mut conn = fixture.conn().await;
     insert_contact_with_handle(&mut conn, account, "Recent", "+15555550100").await;
-    insert_contact_with_handle(&mut conn, account, "Older", "+15555550200").await;
-    insert_contact_with_handle(&mut conn, account, "Silent", "+15555550300").await;
+    insert_contact_with_handle(&mut conn, account, "Older", "+15555550135").await;
+    insert_contact_with_handle(&mut conn, account, "Silent", "+15555550143").await;
     // A thread per contact; the owner's messages ride on the owner's handle.
-    account_profile::link_account_handle(&mut conn, account, "+15555550001", HandleType::Phone)
+    account_profile::link_account_handle(&mut conn, account, "+15555550128", HandleType::Phone)
         .await
         .unwrap();
     insert_direct_conversation(&mut conn, account, 1, "+15555550100", "imessage", &[]).await;
-    insert_direct_conversation(&mut conn, account, 2, "+15555550200", "imessage", &[]).await;
-    insert_direct_conversation(&mut conn, account, 3, "+15555550300", "imessage", &[]).await;
+    insert_direct_conversation(&mut conn, account, 2, "+15555550135", "imessage", &[]).await;
+    insert_direct_conversation(&mut conn, account, 3, "+15555550143", "imessage", &[]).await;
     insert_message_from(
         &mut conn,
         account,
@@ -1875,7 +1875,7 @@ async fn list_contacts_sorts_by_last_heard_with_silent_contacts_last() {
         &mut conn,
         account,
         2,
-        "+15555550200",
+        "+15555550135",
         "2024-03-01T00:00:00Z",
         false,
     )
@@ -1886,7 +1886,7 @@ async fn list_contacts_sorts_by_last_heard_with_silent_contacts_last() {
         &mut conn,
         account,
         3,
-        "+15555550001",
+        "+15555550128",
         "2023-12-01T00:00:00Z",
         true,
     )
@@ -1895,7 +1895,7 @@ async fn list_contacts_sorts_by_last_heard_with_silent_contacts_last() {
         &mut conn,
         account,
         2,
-        "+15555550001",
+        "+15555550128",
         "2025-01-01T00:00:00Z",
         true,
     )
@@ -1920,7 +1920,7 @@ async fn list_contacts_sorts_by_last_heard_with_silent_contacts_last() {
         &mut conn,
         account,
         4,
-        "+15555550200",
+        "+15555550135",
         "2025-02-01T00:00:00Z",
         false,
     )
@@ -2036,8 +2036,8 @@ async fn list_contacts_filters_service_or() {
     let account = fixture.account_with_id(101, "alice").await;
     let mut conn = fixture.conn().await;
     insert_contact_with_handle(&mut conn, account, "IMsg", "+15555550100").await;
-    insert_contact_with_handle(&mut conn, account, "Sms", "+15555550200").await;
-    insert_contact_with_handle(&mut conn, account, "Wa", "+15555550300").await;
+    insert_contact_with_handle(&mut conn, account, "Sms", "+15555550135").await;
+    insert_contact_with_handle(&mut conn, account, "Wa", "+15555550143").await;
     insert_direct_conversation(
         &mut conn,
         account,
@@ -2051,7 +2051,7 @@ async fn list_contacts_filters_service_or() {
         &mut conn,
         account,
         2,
-        "+15555550200",
+        "+15555550135",
         "sms",
         &["2024-06-01T12:00:00Z"],
     )
@@ -2060,7 +2060,7 @@ async fn list_contacts_filters_service_or() {
         &mut conn,
         account,
         3,
-        "+15555550300",
+        "+15555550143",
         "whatsapp",
         &["2024-06-01T12:00:00Z"],
     )
@@ -2105,7 +2105,7 @@ async fn load_address_book(
 
 /// `POST /v1/contacts/address-book`: the status, the two headers that make
 /// the answer a file, and the body.
-async fn export_address_book(
+async fn get_address_book(
     fixture: &TestFixture,
     account: &RegisteredAccount,
     body: serde_json::Value,
@@ -2309,7 +2309,7 @@ async fn the_address_book_export_answers_a_csv_attachment() {
     let (fixture, account) = contacts_fixture_with_handles(&["+15555550100", "+15555550101"]).await;
     for accept in [None, Some("text/csv"), Some("application/json")] {
         let (status, content_type, disposition, text) =
-            export_address_book(&fixture, &account, serde_json::json!({}), accept).await;
+            get_address_book(&fixture, &account, serde_json::json!({}), accept).await;
         assert_eq!(status, StatusCode::OK, "{accept:?}: {text}");
         assert_eq!(content_type, "text/csv; charset=utf-8", "{accept:?}");
         assert_eq!(
@@ -2356,7 +2356,7 @@ async fn the_address_book_export_holds_the_contacts_the_search_and_the_checked_r
             .collect()
     };
 
-    let (_, _, _, text) = export_address_book(
+    let (_, _, _, text) = get_address_book(
         &fixture,
         &account,
         serde_json::json!({ "q": "+15555550101" }),
@@ -2365,7 +2365,7 @@ async fn the_address_book_export_holds_the_contacts_the_search_and_the_checked_r
     .await;
     assert_eq!(names(&text), ["Contact 1"]);
 
-    let (_, _, _, text) = export_address_book(
+    let (_, _, _, text) = get_address_book(
         &fixture,
         &account,
         serde_json::json!({ "ids": [id_of("Contact 0"), id_of("Contact 2")] }),
@@ -2374,7 +2374,7 @@ async fn the_address_book_export_holds_the_contacts_the_search_and_the_checked_r
     .await;
     assert_eq!(names(&text), ["Contact 0", "Contact 2"]);
 
-    let (_, _, _, text) = export_address_book(
+    let (_, _, _, text) = get_address_book(
         &fixture,
         &account,
         serde_json::json!({
@@ -2386,7 +2386,7 @@ async fn the_address_book_export_holds_the_contacts_the_search_and_the_checked_r
     .await;
     assert_eq!(names(&text), ["Contact 1"]);
 
-    let (status, _, _, text) = export_address_book(
+    let (status, _, _, text) = get_address_book(
         &fixture,
         &account,
         serde_json::json!({ "q": "nosuchword:1" }),
@@ -2408,7 +2408,7 @@ async fn the_address_book_export_never_holds_another_accounts_contact() {
     let other = account_with_handle(&fixture, "+15555550199").await;
     let theirs: serde_json::Value =
         crate::test_support::get_json(&fixture.state, "/v1/contacts", &other.token).await;
-    let (status, _, _, text) = export_address_book(
+    let (status, _, _, text) = get_address_book(
         &fixture,
         &account,
         serde_json::json!({ "ids": [theirs["items"][0]["id"]] }),
@@ -2424,8 +2424,7 @@ async fn the_address_book_export_never_holds_another_accounts_contact() {
 #[tokio::test]
 async fn the_exported_file_loads_back_through_the_route_and_changes_nothing() {
     let (fixture, account) = contacts_fixture_with_handles(&["+15555550100", "+15555550101"]).await;
-    let (_, _, _, file) =
-        export_address_book(&fixture, &account, serde_json::json!({}), None).await;
+    let (_, _, _, file) = get_address_book(&fixture, &account, serde_json::json!({}), None).await;
     for query in ["?mode=append", "?mode=edit"] {
         let (status, text) = load_address_book(&fixture, &account, query, file.clone()).await;
         assert_eq!(status, StatusCode::OK, "{text}");
@@ -2436,7 +2435,7 @@ async fn the_exported_file_loads_back_through_the_route_and_changes_nothing() {
             assert_eq!(value, 0, "{query}: {count}");
         }
         let (_, _, _, again) =
-            export_address_book(&fixture, &account, serde_json::json!({}), None).await;
+            get_address_book(&fixture, &account, serde_json::json!({}), None).await;
         assert_eq!(again, file, "{query}");
     }
 }
@@ -2450,7 +2449,7 @@ async fn unknown_group_collects_contacts_missing_a_name_or_an_identity() {
     // Knows who and how to reach them: not Unknown.
     insert_contact_with_handle(&mut conn, account, "Ada", "+15555550100").await;
     // Has an identity, no preferred name: Unknown by the second clause.
-    insert_contact_with_handle(&mut conn, account, "", "+15555550200").await;
+    insert_contact_with_handle(&mut conn, account, "", "+15555550135").await;
     // Has a name, no identity at all: Unknown by the first clause.
     crate::db::contacts::create_contact(
         &mut conn,
@@ -2510,7 +2509,7 @@ async fn list_contacts_filters_by_group_and_no_group() {
     let account = fixture.account_with_id(101, "alice").await;
     let mut conn = fixture.conn().await;
     let family = insert_contact_with_handle(&mut conn, account, "Ada", "+15555550100").await;
-    insert_contact_with_handle(&mut conn, account, "Ben", "+15555550200").await;
+    insert_contact_with_handle(&mut conn, account, "Ben", "+15555550135").await;
     crate::db::named_membership::set_membership(
         crate::db::named_membership::group_spec(),
         &mut conn,
@@ -2655,11 +2654,61 @@ async fn the_contact_list_is_a_page_and_summaries_are_items() {
         &state,
         "/v1/contacts/summaries",
         &user.token,
-        serde_json::json!({ "ids": [] }),
+        serde_json::json!({ "ids": [1] }),
     )
     .await;
     assert!(summaries["items"].is_array());
     assert!(summaries.get("contacts").is_none());
+}
+
+/// Summaries are for the contacts a body names, at most
+/// `MAX_CONTACT_SUMMARY_IDS` of them, so an empty list names none and is
+/// refused rather than answered with an empty page as though it had been
+/// read. Every contact is listed by `GET /v1/contacts`.
+#[tokio::test]
+async fn summaries_of_no_contacts_are_refused() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let (status, text) = crate::test_support::post_raw(
+        &fixture.state,
+        "/v1/contacts/summaries",
+        &user.token,
+        "application/json",
+        r#"{"ids":[]}"#,
+    )
+    .await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    let (status, text) = crate::test_support::post_raw(
+        &fixture.state,
+        "/v1/contacts/summaries",
+        &user.token,
+        "application/json",
+        "{}",
+    )
+    .await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+}
+
+/// The reference states the bounds the handler keeps on a summary's `ids`,
+/// so a client built from it knows an empty list is refused.
+#[test]
+fn the_reference_states_the_summary_id_bounds() {
+    let doc: serde_json::Value =
+        serde_json::from_str(&crate::openapi::dump_openapi_json()).unwrap();
+    let ids = &doc["components"]["schemas"]["ListContactSummariesRequest"]["properties"]["ids"];
+    assert_eq!(ids["minItems"], 1, "{ids}");
+    assert_eq!(
+        ids["maxItems"],
+        crate::paging::MAX_CONTACT_SUMMARY_IDS,
+        "{ids}"
+    );
 }
 
 async fn trashed_contact_row_count(conn: &mut SqliteConnection, account_id: i64, id: i64) -> i64 {
@@ -3058,6 +3107,82 @@ async fn a_long_comma_list_is_refused_as_too_many_parts() {
     assert_eq!(response.status(), reqwest::StatusCode::UNPROCESSABLE_ENTITY);
     let body: serde_json::Value = response.json().await.unwrap();
     assert_eq!(body["detail"], "The search has too many parts.", "{body}");
+}
+
+/// The Demo Account holds Demo Data every visitor shares (ADR 0016). A load
+/// would delete its contacts for good in Edit and store real people's names
+/// and numbers in Append, so both are refused by its id and nothing changes.
+#[tokio::test]
+async fn an_address_book_load_on_the_demo_account_is_refused() {
+    let fixture = crate::test_support::test_fixture().await;
+    let state = fixture.state.clone();
+    let (demo, token) = fixture.demo_account_session().await;
+    let contact_id = {
+        let mut conn = state.db.acquire().await.unwrap();
+        // An Unknown: no name, one identity.
+        insert_contact_with_handle(&mut conn, demo, "", "+15555550123").await
+    };
+    let visitor = RegisteredAccount {
+        account_id: demo,
+        username: "demo".into(),
+        token,
+    };
+
+    // Edit with the identity cells blank would delete the Unknown for good.
+    let edit = format!("{ADDRESS_BOOK_HEADER}\n{contact_id},,,,,\n");
+    let (status, text) = load_address_book(&fixture, &visitor, "?mode=edit", edit).await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::DemoAccountProtected,
+    );
+    // Append would store a new person, by name and number.
+    let append = format!("{ADDRESS_BOOK_HEADER}\na,Real Person,,phone,phone,+15555550199\n");
+    let (status, text) = load_address_book(&fixture, &visitor, "", append).await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::DemoAccountProtected,
+    );
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let names: Vec<String> =
+        sqlx::query_scalar("SELECT preferred_name FROM contacts WHERE account_id = $1")
+            .bind(demo)
+            .fetch_all(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(
+        names,
+        vec![String::new()],
+        "the Unknown stays and nobody is added"
+    );
+}
+
+/// The import, export and delete permissions were made for messages and
+/// imports, not for the address book: an account with none of them still
+/// loads one.
+#[tokio::test]
+async fn an_address_book_load_needs_no_import_export_or_delete_permission() {
+    let (fixture, account) = fixture_with_account().await;
+    {
+        let mut conn = fixture.conn().await;
+        account_profile::set_account_flags(
+            &mut conn,
+            account.account_id,
+            account_profile::AccountFlags {
+                can_import: Some(false),
+                can_export: Some(false),
+                can_delete: Some(false),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    }
+    let append = format!("{ADDRESS_BOOK_HEADER}\na,Ada Lovelace,,phone,phone,+15555550142\n");
+    let (status, text) = load_address_book(&fixture, &account, "", append).await;
+    assert_eq!(status, StatusCode::OK, "{text}");
 }
 
 // --- #1105: an identity in a conversation never leaves its contact for no

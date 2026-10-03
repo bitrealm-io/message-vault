@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { Label, Radio, RadioGroup } from "react-aria-components";
 import Button from "../../components/Button";
 import { ApiError } from "../../lib/api";
 import { useRouteCache } from "../../lib/routeQuery";
@@ -9,7 +10,7 @@ import { sectionTitleClass } from "./profileStyles";
 /** Largest file the server accepts, mirrored here so the refusal is immediate. */
 const MAX_BYTES = 8 * 1024 * 1024;
 
-type LoadCounts = components["schemas"]["LoadCounts"];
+type CreateContactsResponse = components["schemas"]["CreateContactsResponse"];
 
 const MODES: ReadonlyArray<{ value: AddressBookLoadMode; label: string; detail: string }> = [
   {
@@ -27,7 +28,10 @@ const MODES: ReadonlyArray<{ value: AddressBookLoadMode; label: string; detail: 
 ];
 
 /** The seven counts a load answers, in the order the result lists them. */
-const COUNTS: ReadonlyArray<{ field: Exclude<keyof LoadCounts, "notes">; label: string }> = [
+const COUNTS: ReadonlyArray<{
+  field: Exclude<keyof CreateContactsResponse, "notes">;
+  label: string;
+}> = [
   { field: "contacts_created", label: "Contacts created" },
   { field: "contacts_updated", label: "Contacts updated" },
   { field: "contacts_deleted", label: "Contacts deleted" },
@@ -60,7 +64,7 @@ export function AddressBookSection() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<AddressBookLoadMode>("append");
   const [busy, setBusy] = useState(false);
-  const [counts, setCounts] = useState<LoadCounts | null>(null);
+  const [counts, setCounts] = useState<CreateContactsResponse | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
 
   const load = async (file: File) => {
@@ -95,26 +99,42 @@ export function AddressBookSection() {
         Export on the Contacts screen writes your contacts as a CSV file. Edit it in a spreadsheet,
         then load it here. Contacts the file does not mention stay as they are.
       </p>
-      <fieldset className="mb-3 flex flex-col gap-2 border-0 p-0">
-        <legend className="mb-1 p-0 text-[0.813rem] font-medium">How to load it</legend>
+      <RadioGroup
+        value={mode}
+        onChange={(value) => {
+          const next = MODES.find((option) => option.value === value);
+          if (next) setMode(next.value);
+        }}
+        isDisabled={busy}
+        className="mb-3 flex flex-col gap-2"
+      >
+        <Label className="mb-1 text-[0.813rem] font-medium">How to load it</Label>
         {MODES.map((option) => (
-          <label key={option.value} className="flex cursor-pointer items-start gap-2">
-            <input
-              type="radio"
-              name="address-book-mode"
-              className="mt-1"
-              value={option.value}
-              checked={mode === option.value}
-              disabled={busy}
-              onChange={() => setMode(option.value)}
-            />
-            <span className="text-[0.813rem]">
-              <span className="font-medium">{option.label}</span>
-              <span className="block text-muted">{option.detail}</span>
-            </span>
-          </label>
+          <Radio
+            key={option.value}
+            value={option.value}
+            className="flex cursor-pointer items-start gap-2 data-disabled:cursor-not-allowed data-disabled:opacity-60"
+          >
+            {({ isSelected, isFocusVisible }) => (
+              <>
+                {/* React Aria hides the input, so this circle is the radio, focus ring included. */}
+                <span
+                  aria-hidden
+                  className={`mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-full border ${
+                    isSelected ? "border-accent" : "border-border"
+                  } ${isFocusVisible ? "outline-2 outline-offset-1 outline-accent outline-solid" : ""}`}
+                >
+                  {isSelected ? <span className="size-2 rounded-full bg-accent" /> : null}
+                </span>
+                <span className="text-[0.813rem]">
+                  <span className="font-medium">{option.label}</span>
+                  <span className="block text-muted">{option.detail}</span>
+                </span>
+              </>
+            )}
+          </Radio>
         ))}
-      </fieldset>
+      </RadioGroup>
       <input
         ref={fileRef}
         type="file"

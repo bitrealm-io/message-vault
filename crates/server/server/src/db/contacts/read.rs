@@ -167,14 +167,7 @@ pub async fn list_contacts_sorted(
     offset: usize,
     clock: (chrono_tz::Tz, chrono::NaiveDate),
 ) -> Result<Page<ContactSummary>, ApiError> {
-    let (zone, today) = clock;
-    let filter = crate::search::compile(crate::search::CompileRequest {
-        list: crate::search::ListKind::Contacts,
-        query: q,
-        account_id,
-        today,
-        zone,
-    })?;
+    let filter = compile_contacts_query(account_id, q, clock)?;
     let where_sql = filter.where_sql();
 
     let count_sql = format!("SELECT COUNT(*) FROM contacts ct WHERE {where_sql}");
@@ -279,6 +272,44 @@ pub async fn list_contacts_sorted(
         limit,
         offset,
     })
+}
+
+/// The ids of every contact `q` matches, a query in the search language,
+/// filtered as [`list_contacts_sorted`] filters, so the address book holds
+/// the rows the Contacts list showed.
+///
+/// # Errors
+///
+/// `BadRequest` for a query the language refuses; `Internal` when the
+/// statement fails.
+pub async fn contact_ids_matching(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    q: &str,
+    clock: (chrono_tz::Tz, chrono::NaiveDate),
+) -> Result<HashSet<i64>, ApiError> {
+    let filter = compile_contacts_query(account_id, q, clock)?;
+    let sql = format!("SELECT ct.id FROM contacts ct WHERE {}", filter.where_sql());
+    let ids: Vec<i64> = sqlx::query_scalar_with(&sql, bind_args(filter.params()))
+        .fetch_all(&mut *conn)
+        .await?;
+    Ok(ids.into_iter().collect())
+}
+
+/// `q` compiled for the Contacts list on the account's clock. The one
+/// filter both [`list_contacts_sorted`] and [`contact_ids_matching`] use.
+fn compile_contacts_query(
+    account_id: i64,
+    q: &str,
+    (zone, today): (chrono_tz::Tz, chrono::NaiveDate),
+) -> Result<crate::search::Filter, ApiError> {
+    Ok(crate::search::compile(crate::search::CompileRequest {
+        list: crate::search::ListKind::Contacts,
+        query: q,
+        account_id,
+        today,
+        zone,
+    })?)
 }
 
 type ContactRow = (

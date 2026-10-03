@@ -2,7 +2,7 @@
 //! (JSON, JSON Lines, CSV, EML, MBOX), or one merged archive supplied by
 //! the crate that owns that archive's format.
 
-use crate::clean::clean_previous_ir_output;
+use crate::clean::{clean_previous_ir_output, record_archive_files};
 use crate::export_transforms::apply_transforms;
 use crate::write::write_format;
 use anyhow::{Context, Result};
@@ -11,13 +11,14 @@ use message_ir::ConversationDocument;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// A format that folds every conversation into one file with the attachment
-/// bytes inside it. The crate that owns such a format implements this and
-/// the caller that wants it hands it to [`FormatSink::with_archive`]; this
-/// crate knows no archive format by name.
+/// A vendor format that writes every conversation in one pass with the
+/// attachment bytes inside it: one `smses.xml`, or a folder of SMS Backup+
+/// mail per conversation. The crate that owns such a format implements this
+/// and the caller that wants it hands it to [`FormatSink::with_archive`];
+/// this crate knows no archive format by name.
 pub trait MergedArchive: std::fmt::Debug + Send {
-    /// Write `documents` under `output_dir` as one file and return its path.
-    /// Anything the format could not carry is counted in `report`.
+    /// Write `documents` under `output_dir` and return the path of what was
+    /// written. Anything the format could not carry is counted in `report`.
     ///
     /// # Errors
     ///
@@ -29,6 +30,17 @@ pub trait MergedArchive: std::fmt::Debug + Send {
         documents: &[ConversationDocument],
         report: &mut ExportReport,
     ) -> Result<PathBuf>;
+
+    /// The names of the files [`write`](Self::write) creates in the output
+    /// folder, partial files included. The sink records them before it
+    /// writes, so the next fresh export into the folder removes them
+    /// whatever format it writes.
+    fn file_names(&self) -> Vec<String>;
+
+    /// The format's name as a person knows it, such as the app it belongs
+    /// to, for the run's log. The crate that owns the archive names it, so
+    /// this crate names no vendor format.
+    fn format_name(&self) -> &'static str;
 }
 
 /// Writes conversations in the requested [`OutputFormat`], or through a
@@ -181,6 +193,7 @@ impl FormatSink {
         report.obfuscated_docs += outcome.obfuscated_docs as u64;
 
         if let Some(archive) = &self.archive {
+            record_archive_files(&self.output_dir, &archive.file_names())?;
             archive.write(&self.output_dir, &self.docs, report)?;
         } else {
             let mut docs: Vec<&mut ConversationDocument> = self.docs.iter_mut().collect();
@@ -337,6 +350,14 @@ mod tests {
                 .collect();
             fs::write(&path, body.join("\n"))?;
             Ok(path)
+        }
+
+        fn file_names(&self) -> Vec<String> {
+            vec!["all.txt".into()]
+        }
+
+        fn format_name(&self) -> &'static str {
+            "one line per conversation"
         }
     }
 

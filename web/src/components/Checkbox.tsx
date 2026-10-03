@@ -1,10 +1,14 @@
-import { type ChangeEvent, type ReactNode, useId } from "react";
+import { type ReactNode, useRef } from "react";
+import { Checkbox as RACCheckbox } from "react-aria-components";
 
 /**
- * The app's checkbox. Wraps the one raw `<input type="checkbox">` the codebase
- * should have, so callers stop hand-rolling the `indeterminate` ref assignment
- * (it has no HTML attribute and can only be set on the DOM node) and stop
- * picking a different set of utility classes at each call site.
+ * The app's checkbox: React Aria's `Checkbox`, drawn as the compact list box
+ * (`.mc-list-check` in `theme.css`).
+ *
+ * React Aria renders a `<label>` holding a visually hidden `<input>`, so the
+ * box itself never takes focus. It marks the label instead, and the box draws
+ * from those marks: `data-selected`, `data-indeterminate`, `data-disabled`
+ * and, for the focus ring, `data-focus-visible`.
  *
  * Pass `children` for a visible label; otherwise `aria-label` is required, since
  * a checkbox with neither announces as an unnamed control.
@@ -13,17 +17,12 @@ export type CheckboxProps = {
   checked: boolean;
   /** Mixed state — some but not all of the things this box covers are checked. */
   indeterminate?: boolean;
-  /** The event is there for a caller that reads a modifier key, such as Shift for a range. */
-  onChange: (checked: boolean, event: ChangeEvent<HTMLInputElement>) => void;
+  /** `shiftKey` is there for a caller that checks a range on Shift + click. */
+  onChange: (checked: boolean, modifiers: { shiftKey: boolean }) => void;
   disabled?: boolean;
-  /**
-   * Set when an outer element needs to point a `htmlFor` at this input — a row
-   * whose whole avatar area should toggle it, for instance.
-   */
-  id?: string;
-  /** Extra classes for the input itself. */
+  /** Extra classes for the drawn box. */
   className?: string;
-  /** Extra classes for the wrapping label, when `children` is given. */
+  /** Extra classes for the label around the box (and `children`, when given). */
   labelClassName?: string;
   children?: ReactNode;
 } & ({ children: ReactNode } | { "aria-label": string });
@@ -33,51 +32,35 @@ export default function Checkbox({
   indeterminate = false,
   onChange,
   disabled,
-  id,
   className = "",
   labelClassName = "",
   children,
   ...rest
 }: CheckboxProps) {
-  const generatedId = useId();
-  const inputId = id ?? generatedId;
-
-  if (children === undefined) {
-    return (
-      <input
-        type="checkbox"
-        id={inputId}
-        checked={checked}
-        disabled={disabled}
-        ref={(el) => {
-          // `indeterminate` is DOM-only: React will not set it from a prop.
-          if (el) el.indeterminate = indeterminate && !checked;
-        }}
-        onChange={(e) => onChange(e.target.checked, e)}
-        className={`mc-list-check disabled:opacity-40 ${className}`}
-        {...rest}
-      />
-    );
-  }
+  // React Aria's onChange carries no event, so the Shift key is read when the press starts.
+  const shiftRef = useRef(false);
+  const labelClass =
+    children === undefined
+      ? "inline-flex cursor-pointer data-disabled:cursor-not-allowed"
+      : "inline-flex cursor-pointer items-center gap-2 text-[0.813rem] text-text data-disabled:cursor-not-allowed";
 
   return (
-    <label
-      htmlFor={inputId}
-      className={`inline-flex cursor-pointer items-center gap-2 text-[0.813rem] text-text ${labelClassName}`}
+    <RACCheckbox
+      {...rest}
+      isSelected={checked}
+      isIndeterminate={indeterminate && !checked}
+      isDisabled={disabled}
+      onPressStart={(e) => {
+        shiftRef.current = e.shiftKey;
+      }}
+      onChange={(next) => {
+        onChange(next, { shiftKey: shiftRef.current });
+        shiftRef.current = false;
+      }}
+      className={`mc-check ${labelClass} ${labelClassName}`}
     >
-      <input
-        type="checkbox"
-        id={inputId}
-        checked={checked}
-        disabled={disabled}
-        ref={(el) => {
-          if (el) el.indeterminate = indeterminate && !checked;
-        }}
-        onChange={(e) => onChange(e.target.checked, e)}
-        className={`mc-list-check disabled:opacity-40 ${className}`}
-        {...rest}
-      />
+      <span aria-hidden className={`mc-list-check shrink-0 ${className}`} />
       {children}
-    </label>
+    </RACCheckbox>
   );
 }

@@ -4,6 +4,8 @@ use serde::Serialize;
 use std::path::{Component, Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
+use crate::staging_folders::StagingFolders;
+
 /// The folder under the app's cache folder that `imessage-reader` decrypts
 /// an encrypted backup into while the Import form reads its identities.
 const IMESSAGE_READER_SCRATCH: &str = "imessage-reader";
@@ -142,17 +144,16 @@ pub fn home_dir() -> Result<HomeDirInfo, String> {
 
 /// Open a file or folder with the operating system's default handler.
 ///
-/// Only paths under `staging_root` are allowed. That is the Staging
-/// Directory from Settings (default `{home}/message-crate`), where staging
-/// folders live, each with its `message-crate-push.log` while the run lasts.
+/// Only a staging folder this app made, or a path inside one such as its
+/// `message-crate-push.log`, is opened ([`StagingFolders::openable`]).
 ///
 /// # Errors
 ///
-/// Returns an error when the path is empty, the staging root is empty, the path
-/// is outside the allowed folder, missing on disk, or the OS cannot open it.
+/// Returns an error when the path is empty or relative, is in no staging
+/// folder this app made, is missing on disk, or the OS cannot open it.
 #[tauri::command]
-pub fn open_path(path: String, staging_root: String) -> Result<(), String> {
-    let resolved = resolve_openable_path(&path, &staging_root)?;
+pub fn open_path(folders: tauri::State<'_, StagingFolders>, path: String) -> Result<(), String> {
+    let resolved = folders.openable(&path)?;
     missing_path_error(&resolved)?;
     open::that_detached(&resolved).map_err(|error| format!("Could not open path: {error}"))
 }
@@ -292,10 +293,9 @@ fn resolve_on_disk(path: &Path) -> std::io::Result<PathBuf> {
 /// [`resolve_on_disk`] (so a root not made yet still resolves), and never the
 /// filesystem root.
 ///
-/// Shared by [`resolve_openable_path`] and `staging::resolve_staging_child`,
-/// so every command that checks "is this path under the staging root"
-/// resolves the root the identical way — the same fix applies everywhere at
-/// once instead of drifting between callers.
+/// Shared by [`resolve_openable_path`] and `StagingFolders`, which checks
+/// the Staging Directory from Settings with it, so a root and a path under
+/// it are resolved the identical way.
 ///
 /// # Errors
 ///
@@ -304,11 +304,13 @@ fn resolve_on_disk(path: &Path) -> std::io::Result<PathBuf> {
 pub(crate) fn resolve_staging_root(staging_root: &str) -> Result<PathBuf, String> {
     let root = resolve_absolute(
         staging_root,
-        "Staging directory is empty",
-        "Staging directory must be absolute",
+        "Name a folder for the staging directory.",
+        "The staging directory must be a full path, such as /Users/sam/message-crate, \
+         so its files never land wherever the app happens to be running.",
     )?;
-    let root = resolve_on_disk(&root)
-        .map_err(|error| format!("Could not resolve staging root: {error}"))?;
+    let root = resolve_on_disk(&root).map_err(|error| {
+        format!("Could not find where the staging directory is on disk: {error}")
+    })?;
     reject_filesystem_root(&root)?;
     Ok(root)
 }
@@ -345,7 +347,11 @@ pub(crate) fn resolve_openable_path(raw: &str, staging_root: &str) -> Result<Pat
 /// `/` (and a Windows drive root) would make `starts_with` true for every absolute path.
 fn reject_filesystem_root(root: &Path) -> Result<(), String> {
     if root.parent().is_none() {
-        return Err("Staging directory cannot be the filesystem root".to_string());
+        return Err(
+            "The staging directory cannot be the root of a drive, because Import \
+             and Export make and delete folders in it."
+                .to_string(),
+        );
     }
     Ok(())
 }
@@ -445,7 +451,7 @@ mod tests {
     #[test]
     fn rejects_empty_staging_root() {
         let err = resolve_openable_path("/home/sam/message-crate/staging", "  ").unwrap_err();
-        assert!(err.contains("Staging directory is empty"));
+        assert!(err.contains("Name a folder for the staging directory"));
     }
 
     #[test]
@@ -458,13 +464,13 @@ mod tests {
     #[test]
     fn rejects_relative_staging_root() {
         let err = resolve_openable_path("/tmp/staging", "message-crate").unwrap_err();
-        assert!(err.contains("must be absolute"));
+        assert!(err.contains("must be a full path"));
     }
 
     #[test]
     fn rejects_filesystem_root_staging_root() {
         let err = resolve_openable_path("/etc/passwd", "/").unwrap_err();
-        assert!(err.contains("filesystem root"));
+        assert!(err.contains("root of a drive"));
     }
 
     #[test]

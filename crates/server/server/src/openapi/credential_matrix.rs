@@ -325,6 +325,8 @@ impl Shared {
             .await
             .unwrap();
         drop(conn);
+        // The Demo Account, whose row grants everything, for `document_rules`.
+        fixture.demo_account().await;
         let server = crate::test_support::serve(&fixture.state).await;
         Self {
             fixture,
@@ -511,7 +513,9 @@ impl<'a> World<'a> {
         let response = reqwest::Client::new()
             .put(asset)
             .bearer_auth(&world.tokens.alice)
-            .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+            // Stored as an image, so its download answers in a media type of its
+            // own and not the fallback.
+            .header(reqwest::header::CONTENT_TYPE, "image/png")
             .body(ASSET_BYTES)
             .send()
             .await
@@ -530,6 +534,24 @@ impl<'a> World<'a> {
             .unwrap()
             .to_string();
         world
+    }
+
+    /// A new Session for the Demo Account. An account holds one Session at a
+    /// time, and a call may end it, so each call asks for its own.
+    pub(super) async fn demo_session(&self) -> String {
+        let mut conn = self.shared.fixture.conn().await;
+        let mut tx = crate::db::begin_write(&mut conn).await.unwrap();
+        crate::db::session_tokens::revoke_account_sessions(
+            &mut tx,
+            account_profile::DEMO_ACCOUNT_ID,
+            crate::db::audit_trail::AuditActor::CommandLine,
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        insert_account_session_token(&mut conn, account_profile::DEMO_ACCOUNT_ID)
+            .await
+            .unwrap()
     }
 
     pub(super) fn url(&self, path: &str) -> String {
@@ -669,7 +691,7 @@ pub(super) fn body_for(op: &Operation, n: usize) -> Option<(&'static str, Vec<u8
                 .to_vec(),
         )),
         ("post", "/v1/contacts/address-book") => json(json!({})),
-        ("post", "/v1/contacts/summaries") => json(json!({ "ids": [] })),
+        ("post", "/v1/contacts/summaries") => json(json!({ "ids": [1] })),
         ("post", "/v1/contacts/unmatched-identities") => json(json!({ "identifiers": [] })),
         ("patch", "/v1/contacts/{id}") => json(json!({ "name": "Samantha" })),
         ("post", "/v1/exports") => json(json!({ "scope": { "kind": "everything" } })),

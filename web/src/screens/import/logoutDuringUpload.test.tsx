@@ -110,7 +110,6 @@ function pausedReport(): PushFinishedReport {
   return {
     ok: false,
     cancelled: true,
-    messages: 4_000,
     messages_attempted: 4_000,
     messages_inserted: 4_000,
     messages_deduped: 0,

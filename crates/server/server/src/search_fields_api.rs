@@ -1,8 +1,9 @@
-//! `GET /v1/search-fields/contacts` and `GET /v1/search-fields/conversations`:
-//! the words the search language accepts on each list, so the web's
-//! suggestions and the docs read the server's own table.
+//! `GET /v1/search-fields/contacts`, `GET /v1/search-fields/conversations`
+//! and `GET /v1/search-fields/messages`: the words the search language
+//! accepts on each list, so the web's suggestions and the docs read the
+//! server's own table.
 //!
-//! Two fixed lists, so two paths: choosing which list to read is choosing a
+//! Three fixed lists, so three paths: choosing which list to read is choosing a
 //! resource, and a parameter only narrows one (`docs/architecture/http-api.md`,
 //! "Naming a route").
 
@@ -74,6 +75,24 @@ pub(crate) async fn list_conversation_search_fields(
     Ok(Json(search_fields(ListKind::Conversations, &query)?))
 }
 
+/// The search words the Messages list accepts.
+#[utoipa::path(
+    get,
+    path = "/v1/search-fields/messages",
+    tag = "Search",
+    security(("session" = [])),
+    params(ListSearchFieldsQuery),
+    responses(
+        (status = 200, body = crate::paging::Page<FieldDoc>),
+    )
+)]
+pub(crate) async fn list_message_search_fields(
+    FullAccess(_auth): FullAccess,
+    Query(query): Query<ListSearchFieldsQuery>,
+) -> Result<Json<Page<FieldDoc>>, ApiError> {
+    Ok(Json(search_fields(ListKind::Messages, &query)?))
+}
+
 #[cfg(test)]
 mod tests {
     use axum::http::StatusCode;
@@ -114,6 +133,17 @@ mod tests {
         let conversation_words = words(&conversations);
         assert!(conversation_words.iter().any(|w| w == "with"));
         assert!(!conversation_words.iter().any(|w| w == "groups"));
+        assert!(!conversation_words.iter().any(|w| w == "from"));
+
+        let messages: serde_json::Value = get_json(
+            &fixture.state,
+            "/v1/search-fields/messages?limit=500",
+            &account.token,
+        )
+        .await;
+        let message_words = words(&messages);
+        assert!(message_words.iter().any(|w| w == "from"));
+        assert!(!message_words.iter().any(|w| w == "messages"));
 
         // The list is the path now; the old parameter is refused, not obeyed.
         assert_eq!(

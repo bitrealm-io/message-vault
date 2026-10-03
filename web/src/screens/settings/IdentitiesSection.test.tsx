@@ -60,12 +60,7 @@ const identities: Identity[] = [
 beforeEach(() => {
   mutateAsync.mockReset();
   listAccountIdentities.mockReset();
-  listAccountIdentities.mockResolvedValue({
-    items: identities,
-    total: identities.length,
-    limit: 40,
-    offset: 0,
-  });
+  listAccountIdentities.mockResolvedValue(identities);
 });
 afterEach(cleanup);
 
@@ -125,7 +120,7 @@ describe("IdentitiesSection", () => {
   });
 
   it("says so when there are no identities, and still offers to add one", () => {
-    listAccountIdentities.mockResolvedValue({ items: [], total: 0, limit: 40, offset: 0 });
+    listAccountIdentities.mockResolvedValue([]);
     render(<IdentitiesSection profile={{ ...profile, phones: [], emails: [] }} />);
 
     expect(screen.queryByRole("grid")).not.toBeInTheDocument();
@@ -201,7 +196,7 @@ describe("IdentitiesSection", () => {
   // twice with no service, so only the identities say which one went.
   const both = { ...profile, phones: ["+15555550100", "+15555550100"] } as AccountProfile;
   const whatsapp: Identity = { ...identities[0], service: "whatsapp" };
-  const listed = (items: Identity[]) => ({ items, total: items.length, limit: 40, offset: 0 });
+  const listed = (items: Identity[]) => items;
 
   it("closes the dialog when the WhatsApp identity of a number also on Text Message is gone", async () => {
     const user = userEvent.setup({ delay: null });

@@ -37,7 +37,7 @@ describe("AddIdentityDialog", () => {
     await user.type(screen.getByRole("textbox", { name: "Identity" }), "12");
     await user.click(screen.getByRole("button", { name: "Add" }));
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Enter a phone number like +1 555-123-4567.",
+      "Enter a phone number like +1 555-555-0119.",
     );
     expect(onConfirm).not.toHaveBeenCalled();
 

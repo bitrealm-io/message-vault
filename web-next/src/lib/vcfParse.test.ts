@@ -10,22 +10,22 @@ const DUPLICATE_PHONE_VCF = `BEGIN:VCARD
 VERSION:3.0
 FN:Ada Augusta Lovelace
 N:Lovelace;Ada;Augusta;;
-TEL:+15551234567
+TEL:+15555550119
 CATEGORIES:Family
 END:VCARD
 BEGIN:VCARD
 VERSION:3.0
 FN:Ada Duplicate
 N:Duplicate;Ada;;;
-TEL:+15551234567
-TEL:+15559876543
+TEL:+15555550119
+TEL:+15555550178
 CATEGORIES:Work
 END:VCARD
 BEGIN:VCARD
 VERSION:3.0
 FN:Mononym
 N:;Mononym;;;
-TEL:+15557654321
+TEL:+15555550176
 CATEGORIES:Friends
 END:VCARD
 `;
@@ -51,7 +51,7 @@ describe("parseVcfText CATEGORIES", () => {
 VERSION:3.0
 FN:Ada Lovelace
 N:Lovelace;Ada;;;
-TEL:+15551234567
+TEL:+15555550119
 CATEGORIES:Family,Friends
 CATEGORIES:Work
 CATEGORIES:family
@@ -66,7 +66,7 @@ END:VCARD
 VERSION:3.0
 FN:Mom [Kin]
 N:;;;;
-TEL:+15557654321
+TEL:+15555550176
 CATEGORIES:Family,People
 END:VCARD
 `);
@@ -80,7 +80,7 @@ END:VCARD
 VERSION:3.0
 FN:Ada Augusta Lovelace
 N:Lovelace;Ada;Augusta;;
-TEL:+15551234567
+TEL:+15555550119
 END:VCARD
 `);
     const draft = cardToDraft(cards[0]!);
@@ -96,10 +96,10 @@ END:VCARD
       firstName: "Ada",
       middleName: "Augusta",
       lastName: "Lovelace",
-      phones: ["+15551234567"],
+      phones: ["+15555550119"],
       labels: ["Family"],
     });
-    assert.deepEqual(drafts[1]!.phones, ["+15551234567", "+15559876543"]);
+    assert.deepEqual(drafts[1]!.phones, ["+15555550119", "+15555550178"]);
     assert.deepEqual(
       [drafts[2]!.firstName, drafts[2]!.middleName, drafts[2]!.lastName],
       ["Mononym", "", ""],

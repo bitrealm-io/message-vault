@@ -25,8 +25,7 @@ export default function AuthErrorFooter({
 }) {
   return (
     <div
-      className={`mb-2 flex flex-col overflow-y-auto pr-2 text-[0.813rem] leading-[1.35] ${className ?? "h-9"}`}
-      style={{ color: error ? "var(--danger)" : "transparent" }}
+      className={`mb-2 flex flex-col overflow-y-auto pr-2 text-[0.813rem] leading-[1.35] ${error ? "text-danger" : "text-transparent"} ${className ?? "h-9"}`}
       aria-live="polite"
     >
       {/* `mt-auto` rather than `justify-end`: it settles the message on the

@@ -37,7 +37,7 @@ pub enum ServerState {
 
 /// The state of this Message Crate, for the screen a logged-out person sees.
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct ServerInfo {
+pub struct Server {
     /// `unclaimed` shows Create Owner alone; `closed` shows Login alone;
     /// `open` shows Login and Create Account.
     pub state: ServerState,
@@ -62,7 +62,7 @@ pub struct ServerInfo {
 
 /// Body for claiming a Message Crate.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub struct ClaimRequest {
+pub struct ClaimServerRequest {
     /// Login username for the owner.
     pub username: String,
     /// Password for the owner. Must satisfy the server's password policy.
@@ -90,11 +90,11 @@ async fn state_on_conn(conn: &mut sqlx::SqliteConnection) -> Result<ServerState,
     get,
     path = "/v1/server",
     tag = "Server",
-    responses((status = 200, body = ServerInfo))
+    responses((status = 200, body = Server))
 )]
-pub async fn get_server(State(state): State<AppState>) -> Result<Json<ServerInfo>, ApiError> {
+pub async fn get_server(State(state): State<AppState>) -> Result<Json<Server>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    Ok(Json(ServerInfo {
+    Ok(Json(Server {
         state: state_on_conn(&mut conn).await?,
         demo_account: !state.demo_build.is_building()
             && account_profile::username_for_account(&mut conn, account_profile::DEMO_ACCOUNT_ID)
@@ -118,7 +118,7 @@ pub async fn get_server(State(state): State<AppState>) -> Result<Json<ServerInfo
     post,
     path = "/v1/server/claim",
     tag = "Server",
-    request_body = ClaimRequest,
+    request_body = ClaimServerRequest,
     responses(
         (
             status = 201,
@@ -127,12 +127,14 @@ pub async fn get_server(State(state): State<AppState>) -> Result<Json<ServerInfo
             headers(("Location" = String, description = "`/v1/session`, the Session the claim made"))
         ),
         crate::problem::openapi::StateConflict,
+        crate::problem::openapi::UsernameTaken,
         crate::problem::openapi::RateLimited
     )
 )]
 pub async fn claim_server(
     State(state): State<AppState>,
-    Json(req): Json<ClaimRequest>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<ClaimServerRequest>,
 ) -> Result<Created<crate::session_api::CreateSessionResponse>, ApiError> {
     let username = crate::credentials::require_valid_username(&req.username)?;
     crate::credentials::check_auth_rate_limit(&state.auth_rate_limits, "claim")?;
@@ -158,9 +160,20 @@ pub async fn claim_server(
     )
     .await
     .map_err(ApiError::Internal)?;
-    let token = crate::db::session_tokens::insert_account_session_token(
+    crate::db::audit_trail::record(
+        &mut tx,
+        &crate::db::audit_trail::NewEntry::about(
+            crate::db::audit_trail::AuditAction::AccountCreated,
+            crate::db::audit_trail::AuditActor::Owner,
+            (account_profile::OWNER_ACCOUNT_ID, &username),
+        ),
+    )
+    .await?;
+    let token = crate::db::session_tokens::open_session(
         &mut tx,
         account_profile::OWNER_ACCOUNT_ID,
+        &username,
+        crate::server::connecting_app(&headers).as_ref(),
     )
     .await
     .map_err(ApiError::Internal)?;
@@ -268,7 +281,18 @@ pub async fn update_server_settings(
     }
     let mut conn = state.db.acquire().await?;
     if let Some(enabled) = req.public_registration {
+        let was = server_settings::load(&mut conn).await?.public_registration;
         server_settings::set_public_registration(&mut conn, enabled).await?;
+        if enabled != was {
+            use crate::db::audit_trail::{AuditAction, AuditActor, NewEntry};
+            let action = if enabled {
+                AuditAction::RegistrationOpened
+            } else {
+                AuditAction::RegistrationClosed
+            };
+            let entry = NewEntry::about_no_account(action, AuditActor::Owner);
+            crate::db::audit_trail::record(&mut conn, &entry).await?;
+        }
     }
     if let Some(bytes) = req.asset_max_bytes {
         server_settings::set_asset_max_bytes(&mut conn, bytes).await?;
@@ -702,9 +726,16 @@ pub async fn replace_demo_account(
 /// is removed and built again.
 async fn end_demo_sessions(state: &AppState) -> Result<(), ApiError> {
     let mut conn = state.db.acquire().await?;
-    crate::db::session_tokens::revoke_account_sessions(&mut conn, account_profile::DEMO_ACCOUNT_ID)
-        .await
-        .map_err(ApiError::Internal)
+    let mut tx = crate::db::begin_write(&mut conn).await?;
+    crate::db::session_tokens::revoke_account_sessions(
+        &mut tx,
+        account_profile::DEMO_ACCOUNT_ID,
+        crate::db::audit_trail::AuditActor::Owner,
+    )
+    .await
+    .map_err(ApiError::Internal)?;
+    tx.commit().await?;
+    Ok(())
 }
 
 #[cfg(test)]

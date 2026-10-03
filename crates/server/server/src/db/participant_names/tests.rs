@@ -121,7 +121,7 @@ async fn contact_name_wins_over_the_backup_name() {
 async fn backup_name_shows_when_the_contact_has_none() {
     let (pool, _dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    let (conversation_id, handle_id) = seed(&mut conn, "+15555550200", Some("Bobby")).await;
+    let (conversation_id, handle_id) = seed(&mut conn, "+15555550135", Some("Bobby")).await;
     link(&mut conn, handle_id, "   ").await;
 
     let loaded = load_for_conversations(&mut conn, &[conversation_id])
@@ -134,13 +134,13 @@ async fn backup_name_shows_when_the_contact_has_none() {
 async fn the_handle_shows_when_nothing_names_the_person() {
     let (pool, _dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    let (conversation_id, _handle_id) = seed(&mut conn, "+15555550300", None).await;
+    let (conversation_id, _handle_id) = seed(&mut conn, "+15555550143", None).await;
 
     let loaded = load_for_conversations(&mut conn, &[conversation_id])
         .await
         .unwrap();
     let p = &loaded[&conversation_id][0];
-    assert_eq!(p.name, "+15555550300");
+    assert_eq!(p.name, "+15555550143");
     assert_eq!(p.contact_id, None);
 }
 
@@ -151,7 +151,7 @@ async fn the_handle_shows_when_nothing_names_the_person() {
 async fn the_chat_handle_takes_the_contact_name_and_id() {
     let (pool, _dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    let (conversation_id, handle_id) = seed(&mut conn, "+15555550500", None).await;
+    let (conversation_id, handle_id) = seed(&mut conn, "+15555550151", None).await;
     sqlx::query("DELETE FROM participants WHERE conversation_id = $1")
         .bind(conversation_id)
         .execute(&mut *conn)
@@ -165,7 +165,7 @@ async fn the_chat_handle_takes_the_contact_name_and_id() {
     let loaded = loaded.get(&conversation_id).expect("chat-handle fallback");
     assert_eq!(loaded.len(), 1);
     assert_eq!(loaded[0].name, "Robert Smith");
-    assert_eq!(loaded[0].identity, Some("+15555550500".to_string()));
+    assert_eq!(loaded[0].identity, Some("+15555550151".to_string()));
     assert_eq!(loaded[0].service, Some("imessage".to_string()));
     assert_eq!(loaded[0].contact_id, Some(contact_id));
 }
@@ -176,7 +176,7 @@ async fn the_chat_handle_takes_the_contact_name_and_id() {
 async fn the_chat_handle_falls_back_to_itself() {
     let (pool, _dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    let (conversation_id, _handle_id) = seed(&mut conn, "+15555550600", None).await;
+    let (conversation_id, _handle_id) = seed(&mut conn, "+15555550152", None).await;
     sqlx::query("DELETE FROM participants WHERE conversation_id = $1")
         .bind(conversation_id)
         .execute(&mut *conn)
@@ -188,7 +188,7 @@ async fn the_chat_handle_falls_back_to_itself() {
         .unwrap();
     let loaded = loaded.get(&conversation_id).expect("chat-handle fallback");
     assert_eq!(loaded.len(), 1);
-    assert_eq!(loaded[0].name, "+15555550600");
+    assert_eq!(loaded[0].name, "+15555550152");
     assert_eq!(loaded[0].contact_id, None);
 }
 
@@ -228,7 +228,7 @@ async fn a_group_with_no_participants_rows_has_no_participants() {
 async fn an_address_less_participant_appears_in_their_conversation() {
     let (pool, _dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    let (conversation_id, _handle_id) = seed(&mut conn, "+15555550700", None).await;
+    let (conversation_id, _handle_id) = seed(&mut conn, "+15555550153", None).await;
     sqlx::query("DELETE FROM participants WHERE conversation_id = $1")
         .bind(conversation_id)
         .execute(&mut *conn)
@@ -254,7 +254,7 @@ async fn an_address_less_participant_appears_in_their_conversation() {
 async fn addressed_and_address_less_participants_both_return_in_id_order() {
     let (pool, _dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    let (conversation_id, _handle_id) = seed(&mut conn, "+15555550800", Some("Bobby")).await;
+    let (conversation_id, _handle_id) = seed(&mut conn, "+15555550160", Some("Bobby")).await;
     let address_less_contact = seed_address_less(&mut conn, conversation_id, "Sarah Vale").await;
 
     let loaded = load_for_conversations(&mut conn, &[conversation_id])
@@ -263,7 +263,7 @@ async fn addressed_and_address_less_participants_both_return_in_id_order() {
     let participants = &loaded[&conversation_id];
     assert_eq!(participants.len(), 2);
     assert_eq!(participants[0].name, "Bobby");
-    assert_eq!(participants[0].identity, Some("+15555550800".to_string()));
+    assert_eq!(participants[0].identity, Some("+15555550160".to_string()));
     assert_eq!(participants[1].name, "Sarah Vale");
     assert_eq!(participants[1].identity, Some("Sarah Vale".to_string()));
     assert_eq!(participants[1].contact_id, Some(address_less_contact));
@@ -278,7 +278,7 @@ async fn addressed_and_address_less_participants_both_return_in_id_order() {
 async fn renaming_the_contact_renames_an_address_less_participant_too() {
     let (pool, _dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    let (conversation_id, _handle_id) = seed(&mut conn, "+15555550900", None).await;
+    let (conversation_id, _handle_id) = seed(&mut conn, "+15555550162", None).await;
     sqlx::query("DELETE FROM participants WHERE conversation_id = $1")
         .bind(conversation_id)
         .execute(&mut *conn)

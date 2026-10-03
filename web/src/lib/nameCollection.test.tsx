@@ -39,7 +39,7 @@ function wrapper({ children }: { children: ReactNode }) {
 
 function fakeRoutes(): { [K in keyof NameCollectionRoutes]: Mock<NameCollectionRoutes[K]> } {
   return {
-    list: vi.fn().mockResolvedValue({ items: [] }),
+    list: vi.fn().mockResolvedValue([]),
     create: vi.fn(),
     update: vi.fn(),
     remove: vi.fn().mockResolvedValue(undefined),
@@ -121,12 +121,10 @@ beforeEach(() => {
 describe("useNameCollection", () => {
   it("answers the names in the server's order", async () => {
     const routes = fakeRoutes();
-    routes.list.mockResolvedValue({
-      items: [
-        { id: 2, name: "Family" },
-        { id: 1, name: "Work" },
-      ],
-    });
+    routes.list.mockResolvedValue([
+      { id: 2, name: "Family" },
+      { id: 1, name: "Work" },
+    ]);
     const { result } = renderHook(() => useNameCollection(groupsOver(routes)), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.names).toEqual(["Family", "Work"]);
@@ -158,7 +156,7 @@ describe("useNameCollectionActions", () => {
 
   it("asks the server once when the cache does not hold the name", async () => {
     const routes = fakeRoutes();
-    routes.list.mockResolvedValue({ items: [{ id: 7, name: "Holiday" }] });
+    routes.list.mockResolvedValue([{ id: 7, name: "Holiday" }]);
     routes.updateMembers.mockResolvedValue({ added: 2, removed: 0 });
     const { result } = renderHook(() => useNameCollectionActions(groupsOver(routes)), { wrapper });
 

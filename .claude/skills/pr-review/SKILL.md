@@ -168,11 +168,11 @@ Watch the CI run that marking the PR ready started, stopping at its first
 failed job (AGENTS.md step 6). A job that fails because of the PR is a
 finding: fix it, run the local checks, push, and watch the new run.
 
-A check that fails for a reason outside the PR (a red `main`, a runner fault,
-a network fetch) gets one rerun of its failed jobs. If it fails again, stop
-and report it without changing the code for it.
-
-A failed check is sorted, and the run rerun, as AGENTS.md step 6 says.
+A check that fails for a reason outside the PR (a runner fault, a network
+fetch) gets one rerun of its failed jobs. If it fails again, or `main` fails
+the same job, stop and report it without changing the code for it. AGENTS.md
+step 6 says how a failed check is sorted, how a red `main` is found, and when
+the run is rerun.
 
 Done when the CI run on the commit you pushed ended in `success`, and it is
 still the PR head (_Another session's commits_).

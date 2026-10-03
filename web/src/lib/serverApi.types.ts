@@ -2020,7 +2020,7 @@ export interface components {
             sha256?: string | null;
             upload_id?: string | null;
         };
-        /** @description What a load changed. */
+        /** @description What an address book load changed. */
         CreateContactsResponse: {
             /**
              * Format: int64

@@ -169,7 +169,7 @@ async fn refused(conn: &mut SqliteConnection, text: &str, mode: LoadMode) -> Vec
     }
 }
 
-async fn loaded(conn: &mut SqliteConnection, text: &str, mode: LoadMode) -> CreateContactsResponse {
+async fn loaded(conn: &mut SqliteConnection, text: &str, mode: LoadMode) -> LoadCounts {
     load(conn, ACCOUNT, text, mode)
         .await
         .unwrap_or_else(|e| panic!("load failed: {e}"))
@@ -392,11 +392,11 @@ async fn identities_move_from_an_unknown_holding_one_number_on_two_services() {
     let counts = loaded(&mut conn, &text, LoadMode::Edit).await;
     assert_eq!(
         counts,
-        CreateContactsResponse {
+        LoadCounts {
             contacts_created: 1,
             contacts_deleted: 1,
             identities_moved: 2,
-            ..CreateContactsResponse::default()
+            ..LoadCounts::default()
         }
     );
     assert_eq!(
@@ -489,19 +489,15 @@ async fn an_identity_moves_between_two_contacts_that_are_both_in_the_file() {
         if mode == LoadMode::Append {
             assert_eq!(
                 counts,
-                CreateContactsResponse {
+                LoadCounts {
                     contacts_updated: 2,
                     identities_moved: 1,
-                    ..CreateContactsResponse::default()
+                    ..LoadCounts::default()
                 },
                 "one move, whichever contact the file lists first"
             );
         } else {
-            assert_eq!(
-                counts,
-                CreateContactsResponse::default(),
-                "already as the file says"
-            );
+            assert_eq!(counts, LoadCounts::default(), "already as the file says");
         }
     }
 }
@@ -646,9 +642,9 @@ async fn a_known_id_renames_the_contact() {
     let counts = loaded(&mut conn, &text, LoadMode::Append).await;
     assert_eq!(
         counts,
-        CreateContactsResponse {
+        LoadCounts {
             contacts_updated: 2,
-            ..CreateContactsResponse::default()
+            ..LoadCounts::default()
         }
     );
     assert_eq!(
@@ -702,11 +698,11 @@ async fn append_adds_identities_and_memberships_and_removes_nothing() {
     let counts = loaded(&mut conn, &text, LoadMode::Append).await;
     assert_eq!(
         counts,
-        CreateContactsResponse {
+        LoadCounts {
             contacts_updated: 1,
             identities_added: 1,
             groups_created: 1,
-            ..CreateContactsResponse::default()
+            ..LoadCounts::default()
         }
     );
     assert_eq!(
@@ -741,12 +737,12 @@ async fn edit_removes_the_identities_and_memberships_the_rows_do_not_list() {
     let counts = loaded(&mut conn, &text, LoadMode::Edit).await;
     assert_eq!(
         counts,
-        CreateContactsResponse {
+        LoadCounts {
             contacts_updated: 1,
             identities_added: 1,
             identities_removed: 1,
             groups_created: 1,
-            ..CreateContactsResponse::default()
+            ..LoadCounts::default()
         }
     );
     assert_eq!(
@@ -852,16 +848,16 @@ async fn a_nameless_contact_edit_leaves_with_no_identity_is_deleted() {
 
     // Append removes nothing, so nothing is deleted.
     let counts = loaded(&mut conn, &text, LoadMode::Append).await;
-    assert_eq!(counts, CreateContactsResponse::default());
+    assert_eq!(counts, LoadCounts::default());
 
     let counts = loaded(&mut conn, &text, LoadMode::Edit).await;
     assert_eq!(
         counts,
-        CreateContactsResponse {
+        LoadCounts {
             contacts_updated: 1,
             contacts_deleted: 1,
             identities_removed: 2,
-            ..CreateContactsResponse::default()
+            ..LoadCounts::default()
         }
     );
     assert_eq!(name_of(&mut conn, unknown).await, None);
@@ -1164,7 +1160,7 @@ async fn an_export_loaded_straight_back_changes_nothing() {
     let text = export_csv(&mut conn, ACCOUNT, None).await.unwrap().csv;
     for mode in [LoadMode::Append, LoadMode::Edit] {
         let counts = loaded(&mut conn, &text, mode).await;
-        assert_eq!(counts, CreateContactsResponse::default(), "{mode:?}");
+        assert_eq!(counts, LoadCounts::default(), "{mode:?}");
         assert_eq!(picture(&mut conn).await, before, "{mode:?}");
         let touched: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM contacts WHERE last_modified <> $1")
@@ -1241,12 +1237,12 @@ async fn a_number_read_with_its_plus_back_is_named_in_the_result() {
     .await;
     assert_eq!(
         counts,
-        CreateContactsResponse {
+        LoadCounts {
             notes: vec![format!(
                 "row 2: 6595550100 has no +, so it was read as +6595550100, \
                  which \"Ada\" (contact {ada}) holds"
             )],
-            ..CreateContactsResponse::default()
+            ..LoadCounts::default()
         }
     );
 }
@@ -1339,7 +1335,7 @@ async fn a_us_number_without_plus_still_loads_as_its_plus_one_identity() {
         LoadMode::Edit,
     )
     .await;
-    assert_eq!(counts, CreateContactsResponse::default());
+    assert_eq!(counts, LoadCounts::default());
     assert_eq!(
         identities_of(&mut conn, ada).await,
         ["phone/phone/+15555550100"]
@@ -1405,7 +1401,7 @@ async fn a_quoted_cell_loaded_straight_back_changes_nothing() {
     let text = export_csv(&mut conn, ACCOUNT, None).await.unwrap().csv;
     for mode in [LoadMode::Append, LoadMode::Edit] {
         let counts = loaded(&mut conn, &text, mode).await;
-        assert_eq!(counts, CreateContactsResponse::default(), "{mode:?}");
+        assert_eq!(counts, LoadCounts::default(), "{mode:?}");
         assert_eq!(picture(&mut conn).await, before, "{mode:?}");
         assert_eq!(
             export_csv(&mut conn, ACCOUNT, None).await.unwrap().csv,
@@ -1506,7 +1502,7 @@ async fn an_export_libreoffice_saved_again_changes_nothing() {
 
     for mode in [LoadMode::Append, LoadMode::Edit] {
         let counts = loaded(&mut conn, &saved, mode).await;
-        assert_eq!(counts, CreateContactsResponse::default(), "{mode:?}");
+        assert_eq!(counts, LoadCounts::default(), "{mode:?}");
         assert_eq!(picture(&mut conn).await, before, "{mode:?}");
     }
 }

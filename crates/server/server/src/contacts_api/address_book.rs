@@ -8,15 +8,57 @@ use std::collections::HashSet;
 use axum::extract::{Request, State};
 use axum::http::header;
 use axum::response::{IntoResponse, Response};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-use crate::db::address_book::{self, CreateContactsResponse, LoadError, LoadMode};
+use crate::db::address_book::{self, LoadCounts, LoadError, LoadMode};
 use crate::db::audit_trail::{self, AuditAction, AuditActor, Details};
 use crate::db::contacts::read::contact_ids_matching;
 use crate::extract::{Json, Query};
 use crate::server::{
     ApiError, AppState, FullAccess, content_type_base, read_body_limited, refuse_for_demo_account,
 };
+
+/// What an address book load changed.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct CreateContactsResponse {
+    /// Contacts the load created.
+    pub contacts_created: u64,
+    /// Contacts the load renamed, or whose identities or Contact Group
+    /// memberships it changed.
+    pub contacts_updated: u64,
+    /// Contacts the load deleted: the ones it left with neither a name nor
+    /// an identity.
+    pub contacts_deleted: u64,
+    /// Identities linked to a contact that no contact held before.
+    pub identities_added: u64,
+    /// Identities taken from one contact and given to another.
+    pub identities_moved: u64,
+    /// Identities taken off a contact, which only Edit does.
+    pub identities_removed: u64,
+    /// Contact Groups the load created.
+    pub groups_created: u64,
+    /// One sentence for each phone number the file wrote without `+` that
+    /// the load matched to the `+` key its contact holds, or that became a
+    /// new identity. Each starts with its row number. A spreadsheet can drop
+    /// the `+` from a number without showing it, so the load says how it
+    /// read the number.
+    pub notes: Vec<String>,
+}
+
+impl From<LoadCounts> for CreateContactsResponse {
+    fn from(counts: LoadCounts) -> Self {
+        Self {
+            contacts_created: counts.contacts_created,
+            contacts_updated: counts.contacts_updated,
+            contacts_deleted: counts.contacts_deleted,
+            identities_added: counts.identities_added,
+            identities_moved: counts.identities_moved,
+            identities_removed: counts.identities_removed,
+            groups_created: counts.groups_created,
+            notes: counts.notes,
+        }
+    }
+}
 
 /// Largest address book the load route accepts, in bytes.
 ///
@@ -135,7 +177,7 @@ pub(crate) async fn create_contacts(
         details,
     )
     .await?;
-    Ok(Json(counts))
+    Ok(Json(counts.into()))
 }
 
 /// Which contacts `POST /v1/contacts/address-book` writes: the Contacts

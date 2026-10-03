@@ -12843,7 +12843,7 @@
       },
       "CreateContactsResponse": {
         "type": "object",
-        "description": "What a load changed.",
+        "description": "What an address book load changed.",
         "required": [
           "contacts_created",
           "contacts_updated",

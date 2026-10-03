@@ -19,7 +19,7 @@ use sqlx::{Row, SqlitePool};
 
 use crate::config::Config;
 use crate::db::account_profile;
-use crate::db::address_book::{self, CreateContactsResponse, LoadMode};
+use crate::db::address_book::{self, LoadCounts, LoadMode};
 use crate::db::audit_trail::AuditActor;
 use crate::db::demo_account_build;
 use crate::db::engine;
@@ -45,7 +45,7 @@ pub struct ResetDemoStats {
     /// Stats from importing the regenerated bundle.
     pub import: imports_api::ImportStats,
     /// What loading the bundle's address book changed, after the imports.
-    pub address_book: CreateContactsResponse,
+    pub address_book: LoadCounts,
     /// Dedupe content keys filled during the reset (one per message; not a duplicate count).
     pub dedupe_keys_filled: u64,
     /// Stats from the post-import media processing pass.
@@ -195,7 +195,7 @@ fn conversion_warning(errors: u64) -> Option<String> {
 
 struct ResetPreparedStats {
     import: imports_api::ImportStats,
-    address_book: CreateContactsResponse,
+    address_book: LoadCounts,
     dedupe_keys_filled: u64,
     process_assets: process_assets::ProcessAssetsStats,
 }
@@ -822,7 +822,7 @@ async fn load_demo_address_book(
     db: &SqlitePool,
     prepared: &PreparedBundle,
     account_id: i64,
-) -> Result<CreateContactsResponse> {
+) -> Result<LoadCounts> {
     let text = fs::read_to_string(&prepared.contacts_csv)
         .with_context(|| format!("read {}", prepared.contacts_csv.display()))?;
     let mut conn = db.acquire().await?;

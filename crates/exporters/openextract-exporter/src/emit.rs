@@ -8,13 +8,14 @@ use message_crate_core::{
     CancelFlag, ExportReport, ExportTransforms, OutputFormat, prepare_outputs, project_conversation,
 };
 use message_ir::{
-    ExportMeta, HandleType, IrParticipant, IrService, IrSource, PendingConversation,
-    PendingMessage, ProjectionHooks, ensure_conversation,
+    ConversationKey, ExportMeta, HandleType, IrParticipant, IrService, IrSource,
+    PendingConversation, PendingMessage, ProjectionHooks,
 };
 use message_staging::{AttachmentSource, ExportWriter};
-use phone::sanitize_number;
+use phone::Handle;
 use serde_json::{Map, json};
-use std::collections::{BTreeMap, HashMap};
+use sha2::{Digest, Sha256};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 
 const EXPORT_SOURCE: &str = "openextract";
@@ -64,21 +65,22 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
     let Ingest {
         conversations,
         mut report,
-        ..
     } = ingest;
 
-    let hooks = OpenExtractProjection {
-        export: message_crate_core::export_meta(
-            EXPORT_SOURCE,
-            EXPORT_TOOL,
-            EXPORT_TOOL_VERSION,
-            None,
-            None,
-        ),
-    };
+    let export = message_crate_core::export_meta(
+        EXPORT_SOURCE,
+        EXPORT_TOOL,
+        EXPORT_TOOL_VERSION,
+        None,
+        None,
+    );
     let mut documents = Vec::new();
-    for (chat_id, mut convo) in conversations {
-        if let Some(doc) = project_conversation(&chat_id, &mut convo, &hooks, &mut report) {
+    for (chat_id, mut pending) in conversations {
+        let hooks = OpenExtractProjection {
+            export: &export,
+            key: pending.key.as_ref(),
+        };
+        if let Some(doc) = project_conversation(&chat_id, &mut pending.convo, &hooks, &mut report) {
             documents.push(doc);
         }
     }
@@ -97,13 +99,55 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
 /// Parse-time state shared across every CSV file in one export.
 #[derive(Default)]
 struct Ingest {
-    conversations: BTreeMap<String, PendingConversation>,
+    conversations: BTreeMap<String, Pending>,
     report: ExportReport,
+}
+
+/// One conversation and its key, awaiting projection.
+struct Pending {
+    /// `None` for the `unknown` conversation, of sent rows that name nobody.
+    key: Option<ConversationKey>,
+    convo: PendingConversation,
+}
+
+/// The conversation a set of rows belongs to.
+struct Conversation {
+    /// `None` for the `unknown` conversation.
+    key: Option<ConversationKey>,
+    /// The other person's name, for a one-to-one conversation the source
+    /// names; empty otherwise.
+    contact_name: String,
+    /// The `Conversation` value of a group in the all-conversations CSV.
+    group_name: Option<String>,
+}
+
+impl Conversation {
+    fn chat_id(&self) -> String {
+        self.key
+            .as_ref()
+            .map_or_else(|| "unknown".to_string(), ConversationKey::chat_id)
+    }
+
+    fn is_group(&self) -> bool {
+        self.key.as_ref().is_some_and(ConversationKey::is_group)
+    }
+
+    fn group(vendor_id: String, members: Vec<IrParticipant>, group_name: Option<String>) -> Self {
+        Self {
+            key: Some(ConversationKey::Group { vendor_id, members }),
+            contact_name: String::new(),
+            group_name,
+        }
+    }
 }
 
 impl Ingest {
     /// Parse one CSV and add its rows. A file that fails to parse is recorded
     /// in the report and skipped so one bad export does not stop the rest.
+    ///
+    /// A per-chat file is one conversation, whoever sent each row. In the
+    /// all-conversations CSV a row's conversation is its `Conversation`
+    /// value; a row with none belongs to its incoming sender.
     fn ingest_file(&mut self, path: &Path) {
         let rows = match parse_csv_file(path) {
             Ok(rows) => rows,
@@ -117,56 +161,97 @@ impl Ingest {
         let Some(first) = rows.first() else {
             return;
         };
-        // For per-chat files, infer the peer once from all rows in that file.
-        let per_chat_peer =
-            (first.source_kind == SourceKind::PerChat).then(|| infer_peer_label(&rows));
-        let phone_by_label = phones_by_peer_label(&rows, per_chat_peer.as_deref());
+        if first.source_kind == SourceKind::PerChat {
+            self.ingest_per_chat_file(path, rows);
+            return;
+        }
+        let mut by_label: BTreeMap<&str, Vec<&RawRow>> = BTreeMap::new();
+        for row in &rows {
+            if let Some(label) = conversation_label(row) {
+                by_label.entry(label).or_default().push(row);
+            }
+        }
+        let labelled: HashMap<String, Conversation> = by_label
+            .into_iter()
+            .map(|(label, rows)| (label.to_string(), labelled_conversation(&rows, label)))
+            .collect();
         for row in rows {
-            self.ingest_row(row, per_chat_peer.as_deref(), &phone_by_label);
+            match conversation_label(&row).and_then(|label| labelled.get(label)) {
+                Some(conversation) => self.ingest_row(row, conversation),
+                None => {
+                    let sender = (!resolve_is_from_me(&row)).then_some(row.sender.as_str());
+                    let conversation = one_to_one(sender, None);
+                    self.ingest_row(row, &conversation);
+                }
+            }
+        }
+    }
+
+    /// A per-chat file in which one person other than the account holder
+    /// wrote is one-to-one with them. Any other is a group, keyed by
+    /// [`group_vendor_id`].
+    ///
+    /// A file in which nobody else wrote is a group of nobody known, so that
+    /// two such files never share a conversation. It is most likely a
+    /// one-to-one conversation whose recipient the source does not record;
+    /// the group stands in until such conversations get a kind of their own
+    /// (#1095).
+    fn ingest_per_chat_file(&mut self, path: &Path, rows: Vec<RawRow>) {
+        let all: Vec<&RawRow> = rows.iter().collect();
+        let conversation = match other_parties(&all).as_slice() {
+            [one] => one_to_one(Some(one), None),
+            others => Conversation::group(
+                group_vendor_id(path, &rows),
+                others.iter().map(|party| member(party)).collect(),
+                None,
+            ),
+        };
+        for row in rows {
+            self.ingest_row(row, &conversation);
         }
     }
 
     /// Add one row to its conversation, or count why it was dropped.
-    fn ingest_row(
-        &mut self,
-        row: RawRow,
-        per_chat_peer: Option<&str>,
-        phone_by_label: &HashMap<String, String>,
-    ) {
-        let peer_label = peer_label_for(&row, per_chat_peer);
-        let (chat_id, contact_name, name_only) = match resolve_chat(&peer_label) {
-            (key, name, true) => match phone_by_label.get(&peer_label) {
-                Some(phone) => (phone::normalize_lenient(phone), name, false),
-                None => (key, name, true),
-            },
-            resolved => resolved,
-        };
+    fn ingest_row(&mut self, row: RawRow, conversation: &Conversation) {
         let Some(secs) = parse_timestamp(&row.date) else {
             self.report.skipped_invalid_date += 1;
             return;
         };
+        let chat_id = conversation.chat_id();
         let is_from_me = resolve_is_from_me(&row);
-        let (sender_handle, sender_display_name) =
-            resolve_sender(&row, is_from_me, &chat_id, &contact_name);
+        let (sender_handle, sender_display_name) = resolve_sender(&row, is_from_me, conversation);
 
-        let convo = ensure_conversation(&mut self.conversations, &chat_id, false, None, Vec::new());
-        if name_only
-            && convo
-                .extra
-                .insert(message_ir::CHAT_ID_IS_NAME.to_string(), "1".to_string())
-                .is_none()
-        {
-            // Counted once per conversation, not once per row.
-            self.report.bump("name_only_chat", 1);
-        }
+        let report = &mut self.report;
+        let pending = self
+            .conversations
+            .entry(chat_id.clone())
+            .or_insert_with(|| {
+                if conversation
+                    .key
+                    .as_ref()
+                    .is_some_and(ConversationKey::is_name_only)
+                {
+                    // Counted once per conversation, not once per row.
+                    report.bump("name_only_chat", 1);
+                }
+                Pending {
+                    key: conversation.key.clone(),
+                    convo: PendingConversation::new(
+                        chat_id,
+                        conversation.is_group(),
+                        conversation.group_name.clone(),
+                        Vec::new(),
+                    ),
+                }
+            });
         let mut extra = BTreeMap::new();
-        extra.insert("contact_name".into(), contact_name);
+        extra.insert("contact_name".into(), conversation.contact_name.clone());
         extra.insert(
             "has_attachments".into(),
             if row.has_attachments { "true" } else { "false" }.into(),
         );
         extra.insert("source_kind".into(), row.source_kind.as_str().to_string());
-        convo.messages.push(PendingMessage {
+        pending.convo.messages.push(PendingMessage {
             sort_key: secs,
             is_from_me,
             sender_handle,
@@ -178,85 +263,173 @@ impl Ingest {
     }
 }
 
-/// The phone number each peer label was seen with, when the source recorded one.
-///
-/// A chat can be labelled with a person's name while its rows still carry
-/// that person's number. Prefer the address the source actually recorded;
-/// only fall back to a name-only participant when the source recorded no
-/// address anywhere in the chat.
-fn phones_by_peer_label(rows: &[RawRow], per_chat_peer: Option<&str>) -> HashMap<String, String> {
-    let mut phone_by_label: HashMap<String, String> = HashMap::new();
-    for row in rows {
-        if row.is_from_me || is_me(&row.sender) || sanitize_number(&row.sender).is_none() {
-            continue;
-        }
-        phone_by_label
-            .entry(peer_label_for(row, per_chat_peer))
-            .or_insert_with(|| row.sender.clone());
-    }
-    phone_by_label
-}
-
-/// The other party's label for one row: the conversation column when it names
-/// someone, else the incoming sender, else the per-file peer.
-fn peer_label_for(row: &RawRow, per_chat_peer: Option<&str>) -> String {
+/// The `Conversation` value of a row of the all-conversations CSV, when it
+/// names someone other than the account holder.
+fn conversation_label(row: &RawRow) -> Option<&str> {
     row.conversation
         .as_deref()
+        .map(str::trim)
         .filter(|s| !s.is_empty() && !is_me(s))
-        .map(|s| s.to_string())
-        .or_else(|| {
-            if !row.is_from_me && !is_me(&row.sender) {
-                Some(row.sender.clone())
-            } else {
-                per_chat_peer.map(str::to_string)
-            }
-        })
-        .unwrap_or_else(|| "unknown".to_string())
 }
 
-/// True for the literal `Me` OpenExtract writes for the owner.
+/// The conversation of every row of the all-conversations CSV with one
+/// `Conversation` value, `label`.
+///
+/// Two or more people other than the account holder wrote in a group, keyed
+/// `group:` and the label, so it never equals a person's address. Where one
+/// person did, it is one-to-one with them, and where nobody did, with the
+/// person the label names: as for iMazing, only a second person makes a
+/// group.
+fn labelled_conversation(rows: &[&RawRow], label: &str) -> Conversation {
+    match other_parties(rows).as_slice() {
+        [] => one_to_one(None, Some(label)),
+        [one] => one_to_one(Some(one), Some(label)),
+        others => Conversation::group(
+            label.to_string(),
+            others.iter().map(|party| member(party)).collect(),
+            Some(label.to_string()),
+        ),
+    }
+}
+
+/// Everyone other than the account holder who sent one of `rows`, once
+/// each, in the order they first wrote. A number and the same number written
+/// another way are one person.
+///
+/// A number and an email address are two people, even where they may be one
+/// person's phone and Apple ID: the export does not say, and taking them for
+/// one would put a second person's messages in the first one's one-to-one
+/// conversation.
+fn other_parties<'a>(rows: &[&'a RawRow]) -> Vec<&'a str> {
+    let mut seen = HashSet::new();
+    let mut parties = Vec::new();
+    for row in rows {
+        let sender = row.sender.trim();
+        if resolve_is_from_me(row) || sender.is_empty() {
+            continue;
+        }
+        let identity = address(sender).map_or_else(|| sender.to_string(), Handle::into_key);
+        if seen.insert(identity) {
+            parties.push(sender);
+        }
+    }
+    parties
+}
+
+/// A sender's address, classified by [`Handle::parse`]: a phone number or an
+/// email address. `None` for a name.
+fn address(sender: &str) -> Option<Handle> {
+    Handle::parse(sender).filter(|handle| handle.kind() != HandleType::Other)
+}
+
+/// A group member: their address, or the name the source gives in its place.
+fn member(party: &str) -> IrParticipant {
+    match address(party) {
+        Some(address) => IrParticipant {
+            handle_type: Some(address.kind()),
+            handle: Some(address.into_key()),
+            display_name: None,
+        },
+        None => IrParticipant {
+            handle: None,
+            display_name: Some(party.to_string()),
+            handle_type: None,
+        },
+    }
+}
+
+/// A one-to-one conversation with the person who wrote (`sender`), or with
+/// the person the `Conversation` value names (`label`).
+///
+/// It is keyed by an address when either gives one, the sender's first. A
+/// chat labelled with a person's name whose rows carry that person's number
+/// is keyed by the number the source recorded. Only when neither is an
+/// address is it keyed by the name, the label's first: the exporter records
+/// the name and no address, and the server resolves it against contacts on
+/// import. With neither, the row goes to the `unknown` conversation.
+fn one_to_one(sender: Option<&str>, label: Option<&str>) -> Conversation {
+    let given = |s: &&str| !s.trim().is_empty();
+    let address = [sender, label]
+        .into_iter()
+        .flatten()
+        .filter(given)
+        .find_map(address)
+        .map(Handle::into_key);
+    let name = [label, sender]
+        .into_iter()
+        .flatten()
+        .filter(given)
+        .find(|s| self::address(s).is_none())
+        .map(|s| s.trim().to_string());
+    let key = match (address, &name) {
+        (Some(address), _) => Some(ConversationKey::OneToOne(address)),
+        (None, Some(name)) => Some(ConversationKey::NameOnly(name.clone())),
+        (None, None) => None,
+    };
+    Conversation {
+        key,
+        contact_name: name.unwrap_or_default(),
+        group_name: None,
+    }
+}
+
+/// A per-chat group's vendor id, in lowercase hex: a digest of the file's
+/// earliest row and the file's name, from that file alone.
+///
+/// The earliest row stays the same across exports while new messages
+/// arrive and when someone new writes. OpenExtract names its files by number
+/// (`conversation_7.csv`), so the number alone would merge two exports'
+/// unrelated groups; with the earliest row it tells apart the files of one
+/// export whose rows are the same, such as one message sent to several
+/// people who never answered. The folder is left out, so the id does not
+/// depend on where the export is put. The id changes when the oldest
+/// messages are gone from the phone or OpenExtract numbers its files anew:
+/// the group then comes in as a second conversation, never merged with
+/// another.
+fn group_vendor_id(path: &Path, rows: &[RawRow]) -> String {
+    let earliest = rows
+        .iter()
+        .map(|row| {
+            (
+                parse_timestamp(&row.date).unwrap_or(i64::MAX),
+                row_digest(row),
+            )
+        })
+        .min()
+        .map(|(_, digest)| digest)
+        .unwrap_or_default();
+    let file_name = path.file_name().unwrap_or_default().to_string_lossy();
+    let mut hasher = Sha256::new();
+    hasher.update(earliest);
+    hasher.update([0x1f]);
+    hasher.update(file_name.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+/// SHA-256 of a row's date, sender, text and direction, joined by the ASCII
+/// unit separator, which no CSV cell holds.
+fn row_digest(row: &RawRow) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    let direction = if resolve_is_from_me(row) { "1" } else { "0" };
+    for (index, field) in [row.date.trim(), row.sender.trim(), &row.text, direction]
+        .into_iter()
+        .enumerate()
+    {
+        if index > 0 {
+            hasher.update([0x1f]);
+        }
+        hasher.update(field.as_bytes());
+    }
+    hasher.finalize().into()
+}
+
+/// True for the literal `Me` OpenExtract writes for the account holder.
 fn is_me(s: &str) -> bool {
     s.trim().eq_ignore_ascii_case("me")
 }
 
-/// The other party for a per-chat file: the first phone number seen, else the first name.
-fn infer_peer_label(rows: &[RawRow]) -> String {
-    let mut phone_peer = None;
-    let mut name_peer = None;
-    for row in rows {
-        if row.is_from_me || is_me(&row.sender) {
-            continue;
-        }
-        if sanitize_number(&row.sender).is_some() {
-            phone_peer.get_or_insert_with(|| row.sender.clone());
-        } else if name_peer.is_none() {
-            name_peer = Some(row.sender.clone());
-        }
-    }
-    phone_peer
-        .or(name_peer)
-        .unwrap_or_else(|| "unknown".to_string())
-}
-
-/// Returns `(chat_key, contact_name, name_only)`.
-///
-/// OpenExtract CSVs identify the other party by phone number or by name. When
-/// it is a name, the chat is keyed by a stem of that name and `name_only` is
-/// set: the exporter records the name and no address, and the server resolves
-/// it against contacts on import. No address is invented here.
-fn resolve_chat(peer: &str) -> (String, String, bool) {
-    let peer = peer.trim();
-    if peer.is_empty() || peer.eq_ignore_ascii_case("unknown") {
-        return ("unknown".to_string(), String::new(), false);
-    }
-    if sanitize_number(peer).is_some() {
-        // Format as E.164 when unambiguous. Otherwise keep digits as-is. Never invent `+0…`.
-        return (phone::normalize_lenient(peer), String::new(), false);
-    }
-    (message_ir::name_stem(peer), peer.to_string(), true)
-}
-
-/// Whether the row is outgoing, from its direction column or its sender.
+/// Whether the row is outgoing, from its direction column, else its
+/// "Is From Me" column, else a sender of `Me`.
 fn resolve_is_from_me(row: &RawRow) -> bool {
     if let Some(dir) = row.direction.as_deref() {
         let d = dir.trim().to_ascii_lowercase();
@@ -267,42 +440,34 @@ fn resolve_is_from_me(row: &RawRow) -> bool {
             return false;
         }
     }
-    row.is_from_me
+    row.is_from_me || is_me(&row.sender)
 }
 
-/// The sender handle and display name for a row: empty for outgoing, else the peer.
-fn resolve_sender(
-    row: &RawRow,
-    is_from_me: bool,
-    chat_id: &str,
-    contact_name: &str,
-) -> (String, String) {
+/// The sender handle and display name for a row: empty for outgoing, else the
+/// row's own sender. A sender the source names without an address takes the
+/// address of the one-to-one conversation it is in.
+fn resolve_sender(row: &RawRow, is_from_me: bool, conversation: &Conversation) -> (String, String) {
     if is_from_me {
         return (String::new(), String::new());
     }
-    // Prefer phone on chat_id when it looks like E.164.
-    let handle = if chat_id.starts_with('+') || sanitize_number(chat_id).is_some() {
-        if chat_id.starts_with('+') {
-            // Only unambiguous +-prefixed values pass through. A fabricated
-            // `+0…` stays digits-as-is so the server can flag it.
-            phone::normalize_lenient(chat_id)
-        } else {
-            phone::normalize_digits_us(chat_id).unwrap_or_default()
-        }
-    } else {
-        phone::normalize_digits_us(&row.sender).unwrap_or_default()
-    };
-
-    let display = if !contact_name.is_empty() {
-        contact_name.to_string()
-    } else if sanitize_number(&row.sender).is_some() {
+    let sender = row.sender.trim();
+    let contact_name = if conversation.is_group() {
         String::new()
-    } else if !is_me(&row.sender) {
-        row.sender.clone()
     } else {
-        String::new()
+        conversation.contact_name.clone()
     };
-
+    if let Some(address) = address(sender) {
+        return (address.into_key(), contact_name);
+    }
+    let handle = match &conversation.key {
+        Some(ConversationKey::OneToOne(handle)) => handle.clone(),
+        _ => String::new(),
+    };
+    let display = if sender.is_empty() {
+        contact_name
+    } else {
+        sender.to_string()
+    };
     (handle, display)
 }
 
@@ -325,11 +490,13 @@ fn parse_timestamp(raw: &str) -> Option<i64> {
 }
 
 /// OpenExtract deltas of the shared [`message_ir::pending_to_document`] projection.
-struct OpenExtractProjection {
-    export: ExportMeta,
+struct OpenExtractProjection<'a> {
+    export: &'a ExportMeta,
+    /// The key of the conversation being projected; `None` for `unknown`.
+    key: Option<&'a ConversationKey>,
 }
 
-impl ProjectionHooks for OpenExtractProjection {
+impl ProjectionHooks for OpenExtractProjection<'_> {
     fn export(&self) -> ExportMeta {
         self.export.clone()
     }
@@ -338,38 +505,43 @@ impl ProjectionHooks for OpenExtractProjection {
         IrService::Sms
     }
 
-    fn source(&self, _convo: &PendingConversation, msg: &PendingMessage) -> IrSource {
+    fn source(&self, convo: &PendingConversation, msg: &PendingMessage) -> IrSource {
         let mut fields = Map::new();
         fields.insert("source_kind".into(), json!(msg.extra_str("source_kind")));
         fields.insert(
             "has_attachments".into(),
             json!(msg.extra_flag("has_attachments")),
         );
+        // A group's `Conversation` value is kept as data, not as its title:
+        // the export does not say whether it is a name or a list of people.
+        if let Some(name) = &convo.display_name {
+            fields.insert("conversation".into(), json!(name));
+        }
         IrSource {
             android_type: None,
             fields,
         }
     }
 
-    /// The roster is the single peer named by the chat id; an unresolved
-    /// `unknown` chat has no roster at all.
-    fn participants(&self, chat_id: &str, convo: &PendingConversation) -> Vec<IrParticipant> {
-        if chat_id.is_empty() || chat_id.eq_ignore_ascii_case("unknown") {
-            return Vec::new();
-        }
-        if convo.extra.contains_key(message_ir::CHAT_ID_IS_NAME) {
-            // The source named this person and recorded no address for them.
-            return vec![IrParticipant {
+    /// A group's members come from its key. A one-to-one conversation's one
+    /// participant is the person it is with: their address, or for a
+    /// conversation keyed by a name, the name and no address. The `unknown`
+    /// conversation has no roster at all.
+    fn participants(&self, _chat_id: &str, convo: &PendingConversation) -> Vec<IrParticipant> {
+        match self.key {
+            None => Vec::new(),
+            Some(ConversationKey::Group { members, .. }) => members.clone(),
+            Some(ConversationKey::OneToOne(handle)) => vec![IrParticipant {
+                handle: Some(handle.clone()),
+                display_name: convo.first_contact_name(),
+                handle_type: Handle::parse(handle).map(|handle| handle.kind()),
+            }],
+            Some(ConversationKey::NameOnly(_)) => vec![IrParticipant {
                 handle: None,
                 display_name: convo.first_contact_name(),
                 handle_type: None,
-            }];
+            }],
         }
-        vec![IrParticipant {
-            handle: Some(chat_id.to_string()),
-            display_name: convo.first_contact_name(),
-            handle_type: Some(HandleType::Phone),
-        }]
     }
 }
 

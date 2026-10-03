@@ -1,25 +1,37 @@
-//! The reasons an import stops that the person who sent the file can act on.
+//! What can stop an import, by kind.
 //!
-//! Everything else an import returns is an internal failure: the person
-//! cannot fix it by changing the file, so the HTTP interface reports it as a
-//! 500 and keeps the cause on stderr.
+//! [`ImportFailure`] is a reason the person who sent the file can act on.
+//! [`ImportError`] is what the import pipeline returns: one of those, or an
+//! internal failure (I/O or the database) the sender cannot fix by changing
+//! the file. The HTTP interface maps each kind to a status once, in
+//! `server.rs`, and no handler picks a status from an `anyhow` error.
 
-use message_ir::UnsupportedSchemaVersion;
+use message_ir::{UnsafeAttachmentPath, UnsupportedSchemaVersion};
 use std::fmt;
 
 /// A reason an import stopped that the sender can fix by changing the file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ImportFailure {
+    /// A line is not JSON at all. Only this kind is a request that cannot be
+    /// read.
+    NotJson { line: usize, detail: String },
     /// The conversation header's `schema_version` is not the one this server
     /// reads. Nothing is upgraded: the sender re-exports with current tools.
     SchemaVersion {
         refusal: UnsupportedSchemaVersion,
         line: usize,
     },
-    /// A line is not the message-ir JSON the server expects: not JSON at all,
-    /// a header or message with the wrong fields, or a message before any
+    /// A line is JSON and breaks a rule of message-ir: a header or message
+    /// with the wrong fields, a message before any header, or a file with no
     /// header.
-    Parse { line: usize, detail: String },
+    Invalid { line: usize, detail: String },
+    /// The batch has no bytes.
+    Empty,
+    /// An attachment path could leave the folder it is read from.
+    UnsafeAttachmentPath(UnsafeAttachmentPath),
+    /// An attachment's bytes do not hash to the SHA-256 the batch states for
+    /// it, or the stated SHA-256 is not one.
+    AttachmentMismatch { path: String, detail: String },
     /// Messages whose `guid` is empty. The guid index is what makes a
     /// retried batch store nothing twice, and every exporter writes a guid,
     /// so a message without one is refused rather than stored outside it.
@@ -40,14 +52,24 @@ impl fmt::Display for ImportFailure {
 
 impl std::error::Error for ImportFailure {}
 
+impl From<UnsafeAttachmentPath> for ImportFailure {
+    fn from(refusal: UnsafeAttachmentPath) -> Self {
+        Self::UnsafeAttachmentPath(refusal)
+    }
+}
+
 impl ImportFailure {
-    /// The line the failure is on, counted from 1 with blank lines included.
-    /// For messages without a guid, the first of them.
+    /// The line the failure is on, counted from 1 with blank lines included,
+    /// when it is about a line. For messages without a guid, the first of
+    /// them.
     #[must_use]
-    pub fn line(&self) -> usize {
+    pub fn line(&self) -> Option<usize> {
         match self {
-            Self::SchemaVersion { line, .. } | Self::Parse { line, .. } => *line,
-            Self::MissingGuid { lines, .. } => lines.first().copied().unwrap_or_default(),
+            Self::NotJson { line, .. }
+            | Self::SchemaVersion { line, .. }
+            | Self::Invalid { line, .. } => Some(*line),
+            Self::MissingGuid { lines, .. } => lines.first().copied(),
+            Self::Empty | Self::UnsafeAttachmentPath(_) | Self::AttachmentMismatch { .. } => None,
         }
     }
 
@@ -65,12 +87,21 @@ impl ImportFailure {
     /// The sentence, naming the line as a line of `whole`.
     fn sentence(&self, whole: &str) -> String {
         match self {
+            Self::NotJson { line, detail } => {
+                format!("Could not read line {line} of {whole}: {detail}.")
+            }
             Self::SchemaVersion { refusal, line } => {
                 format!("{refusal} (line {line} of {whole}).")
             }
-            Self::Parse { line, detail } => {
-                format!("Could not read line {line} of {whole}: {detail}.")
+            Self::Invalid { line, detail } => format!("Line {line} of {whole}: {detail}."),
+            Self::Empty => {
+                "The batch is empty: send at least one conversation header and its messages."
+                    .to_string()
             }
+            Self::UnsafeAttachmentPath(refusal) => refusal.to_string(),
+            Self::AttachmentMismatch { path, detail } => format!(
+                "The attachment {path} does not match the SHA-256 the batch states: {detail}."
+            ),
             Self::MissingGuid { lines, total } => {
                 let named: Vec<String> = lines.iter().map(ToString::to_string).collect();
                 let rest = total.saturating_sub(lines.len());
@@ -94,16 +125,43 @@ impl ImportFailure {
     ///
     /// The import pipeline wraps errors in `anyhow` context on the way up;
     /// `downcast_ref` looks through every layer of context, so the parser can
-    /// raise this type and the HTTP handler can find it without the layers in
-    /// between knowing about it.
+    /// raise this type and the pipeline's entry point can find it without the
+    /// layers in between knowing about it.
     pub fn in_error(err: &anyhow::Error) -> Option<&ImportFailure> {
         err.downcast_ref::<ImportFailure>()
     }
 }
 
+/// What the import pipeline returns when it stops.
+#[derive(Debug, thiserror::Error)]
+pub enum ImportError {
+    /// The sender can fix it by changing the file. `failure` is what the
+    /// sender is told; `cause` keeps the whole chain, with the file the
+    /// failure was in, for a command line or a log.
+    #[error("{cause:#}")]
+    Rejected {
+        failure: ImportFailure,
+        cause: anyhow::Error,
+    },
+    /// I/O, the database, or a bug: nothing the sender can change.
+    #[error(transparent)]
+    Internal(anyhow::Error),
+}
+
+/// The stages of the pipeline return `anyhow` and raise an [`ImportFailure`]
+/// inside it; the pipeline's entry point sorts the two apart here, once.
+impl From<anyhow::Error> for ImportError {
+    fn from(cause: anyhow::Error) -> Self {
+        match ImportFailure::in_error(&cause).cloned() {
+            Some(failure) => Self::Rejected { failure, cause },
+            None => Self::Internal(cause),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{ImportFailure, UnsupportedSchemaVersion};
+    use super::{ImportError, ImportFailure, UnsupportedSchemaVersion};
 
     #[test]
     fn schema_version_names_both_versions_and_the_line() {
@@ -118,12 +176,12 @@ mod tests {
     }
 
     #[test]
-    fn a_batch_names_the_line_as_a_line_of_the_batch() {
-        let f = ImportFailure::Parse {
+    fn a_batch_failure_names_the_line_of_the_batch() {
+        let f = ImportFailure::NotJson {
             line: 3,
             detail: "boom".into(),
         };
-        assert_eq!(f.line(), 3);
+        assert_eq!(f.line(), Some(3));
         assert_eq!(
             f.batch_sentence(),
             "Could not read line 3 of the batch: boom."
@@ -131,8 +189,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_names_the_line_and_the_detail() {
-        let f = ImportFailure::Parse {
+    fn not_json_names_the_line_and_the_detail() {
+        let f = ImportFailure::NotJson {
             line: 12,
             detail: "expected value at line 1 column 1".into(),
         };
@@ -148,7 +206,7 @@ mod tests {
             lines: vec![3],
             total: 1,
         };
-        assert_eq!(f.line(), 3);
+        assert_eq!(f.line(), Some(3));
         assert_eq!(
             f.to_string(),
             "The message on line 3 of the file has no guid; every message needs one."
@@ -161,7 +219,7 @@ mod tests {
             lines: vec![2, 5, 9],
             total: 3,
         };
-        assert_eq!(f.line(), 2);
+        assert_eq!(f.line(), Some(2));
         assert_eq!(
             f.batch_sentence(),
             "The messages on lines 2, 5 and 9 of the batch have no guid; every message needs one."
@@ -182,7 +240,7 @@ mod tests {
 
     #[test]
     fn in_error_finds_the_failure_under_anyhow_context() {
-        let root: anyhow::Error = ImportFailure::Parse {
+        let root: anyhow::Error = ImportFailure::Invalid {
             line: 2,
             detail: "boom".into(),
         }
@@ -193,7 +251,7 @@ mod tests {
         let found = ImportFailure::in_error(&wrapped).expect("failure survives context");
         assert_eq!(
             *found,
-            ImportFailure::Parse {
+            ImportFailure::Invalid {
                 line: 2,
                 detail: "boom".into()
             }
@@ -201,8 +259,9 @@ mod tests {
     }
 
     #[test]
-    fn in_error_is_none_for_other_errors() {
+    fn an_error_without_a_failure_is_internal() {
         let err = anyhow::anyhow!("disk full");
         assert!(ImportFailure::in_error(&err).is_none());
+        assert!(matches!(ImportError::from(err), ImportError::Internal(_)));
     }
 }

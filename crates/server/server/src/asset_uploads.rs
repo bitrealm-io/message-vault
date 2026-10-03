@@ -8,11 +8,11 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 
-use crate::assets_api::{self, StoredAsset};
+use crate::assets_api::{self, AssetError, StoredAsset};
 
 /// Default part size advertised to clients (under Cloudflare ~100 MiB).
 pub const DEFAULT_PART_SIZE: usize = 64 * 1024 * 1024;
@@ -96,14 +96,11 @@ fn new_upload_id() -> String {
 ///
 /// # Errors
 ///
-/// Returns an error when the id is empty, too long, or not hex.
-pub fn require_upload_id(upload_id: &str) -> Result<String> {
+/// Returns [`AssetError::Invalid`] when the id is empty, too long, or not hex.
+pub fn require_upload_id(upload_id: &str) -> Result<String, AssetError> {
     let id = upload_id.trim();
-    if id.is_empty() || id.len() > 64 {
-        bail!("invalid upload_id");
-    }
-    if !id.chars().all(|c| c.is_ascii_hexdigit()) {
-        bail!("invalid upload_id");
+    if id.is_empty() || id.len() > 64 || !id.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(AssetError::Invalid("invalid upload_id".into()));
     }
     Ok(id.to_ascii_lowercase())
 }
@@ -164,7 +161,7 @@ struct ManifestLock {
 }
 
 /// Take the session's file lock so two part uploads cannot rewrite the manifest at once.
-fn lock_session(session: &Path) -> Result<ManifestLock> {
+fn lock_session(session: &Path) -> Result<ManifestLock, AssetError> {
     let path = session.join("manifest.lock");
     let file = OpenOptions::new()
         .create(true)
@@ -173,8 +170,7 @@ fn lock_session(session: &Path) -> Result<ManifestLock> {
         .write(true)
         .open(&path)
         .with_context(|| format!("open {}", path.display()))?;
-    file.try_lock_exclusive()
-        .map_err(|_| anyhow::anyhow!("failed to lock {}", path.display()))?;
+    file.try_lock_exclusive().map_err(|_| AssetError::Locked)?;
     Ok(ManifestLock { _file: file })
 }
 
@@ -191,14 +187,14 @@ pub fn start_upload(
     bytes: u64,
     mime: Option<&str>,
     limits: UploadLimits,
-) -> Result<(Option<StoredAsset>, Option<StartUpload>)> {
+) -> Result<(Option<StoredAsset>, Option<StartUpload>), AssetError> {
     let sha = assets_api::require_sha256(sha256)?;
     if bytes > limits.max_bytes {
-        bail!(
+        return Err(AssetError::Invalid(format!(
             "object exceeds {} byte server limit ({} MiB)",
             limits.max_bytes,
             limits.max_bytes / message_ir::MIB
-        );
+        )));
     }
     // Best-effort: drop abandoned multipart staging so disk does not grow forever.
     let _ = assets_api::gc_stale_incoming(assets_root, STALE_INCOMING_SECS);
@@ -235,16 +231,31 @@ pub fn start_upload(
 ///
 /// # Errors
 ///
-/// Returns an error when the fingerprint or upload id is invalid, or the
-/// upload session or its manifest is missing or unreadable.
-pub fn session_part_size(assets_root: &Path, sha256: &str, upload_id: &str) -> Result<usize> {
+/// Returns [`AssetError::Invalid`] when the fingerprint or upload id is
+/// invalid, [`AssetError::UploadNotFound`] when no such upload is in
+/// progress, and [`AssetError::Io`] when its manifest is unreadable.
+pub fn session_part_size(
+    assets_root: &Path,
+    sha256: &str,
+    upload_id: &str,
+) -> Result<usize, AssetError> {
+    let (_sha, session) = existing_session(assets_root, sha256, upload_id)?;
+    Ok(read_manifest(&session)?.part_size)
+}
+
+/// The checked fingerprint and the folder of an upload in progress.
+fn existing_session(
+    assets_root: &Path,
+    sha256: &str,
+    upload_id: &str,
+) -> Result<(String, PathBuf), AssetError> {
     let sha = assets_api::require_sha256(sha256)?;
     let upload_id = require_upload_id(upload_id)?;
     let session = session_dir(assets_root, &sha, &upload_id);
     if !session.is_dir() {
-        bail!("upload session not found");
+        return Err(AssetError::UploadNotFound);
     }
-    Ok(read_manifest(&session)?.part_size)
+    Ok((sha, session))
 }
 
 /// Write (or overwrite) one part. `body` is the full part payload.
@@ -254,38 +265,35 @@ pub fn put_part(
     upload_id: &str,
     part: u32,
     body: &[u8],
-) -> Result<u64> {
-    let sha = assets_api::require_sha256(sha256)?;
-    let upload_id = require_upload_id(upload_id)?;
+) -> Result<u64, AssetError> {
     if part == 0 {
-        bail!("part number must be >= 1");
+        return Err(AssetError::Invalid("part number must be >= 1".into()));
     }
-    let session = session_dir(assets_root, &sha, &upload_id);
-    if !session.is_dir() {
-        bail!("upload session not found");
-    }
+    let (sha, session) = existing_session(assets_root, sha256, upload_id)?;
     let _lock = lock_session(&session)?;
     let mut manifest = read_manifest(&session)?;
     if manifest.sha256 != sha {
-        bail!("upload session sha256 mismatch");
+        return Err(AssetError::Invalid("upload session sha256 mismatch".into()));
     }
     if body.len() > manifest.part_size {
-        bail!(
+        return Err(AssetError::Invalid(format!(
             "part body {} bytes exceeds session part_size {}",
             body.len(),
             manifest.part_size
-        );
+        )));
     }
     let count = expected_part_count(manifest.bytes, manifest.part_size);
     if part > count {
-        bail!("part {part} out of range (expected 1..={count})");
+        return Err(AssetError::Invalid(format!(
+            "part {part} out of range (expected 1..={count})"
+        )));
     }
     let expect = expected_part_len(manifest.bytes, manifest.part_size, part);
     if body.len() as u64 != expect {
-        bail!(
+        return Err(AssetError::Invalid(format!(
             "part {part} length {} does not match expected {expect}",
             body.len()
-        );
+        )));
     }
 
     let path = part_path(&session, part);
@@ -302,34 +310,27 @@ pub fn put_part(
 ///
 /// # Errors
 ///
-/// Returns an error when the upload session is missing, a part is missing, the
-/// fingerprint does not match, or the file cannot be stored.
+/// Returns [`AssetError::UploadNotFound`] when the upload session is missing,
+/// [`AssetError::Invalid`] when a part is missing,
+/// [`AssetError::Mismatch`] when the fingerprint does not match, and
+/// [`AssetError::Io`] when the file cannot be stored.
 pub fn complete_upload(
     assets_root: &Path,
     sha256: &str,
     upload_id: &str,
-) -> Result<(StoredAsset, bool)> {
-    let sha = assets_api::require_sha256(sha256)?;
-    let upload_id = require_upload_id(upload_id)?;
-    let session = session_dir(assets_root, &sha, &upload_id);
-    if !session.is_dir() {
-        bail!("upload session not found");
-    }
+) -> Result<(StoredAsset, bool), AssetError> {
+    let (sha, session) = existing_session(assets_root, sha256, upload_id)?;
     let _lock = lock_session(&session)?;
     let manifest = read_manifest(&session)?;
     if manifest.sha256 != sha {
-        bail!("upload session sha256 mismatch");
+        return Err(AssetError::Invalid("upload session sha256 mismatch".into()));
     }
     // The empty file has no parts: it completes with none and is checked
     // against its fingerprint like any other file.
     let count = expected_part_count(manifest.bytes, manifest.part_size);
     for n in 1..=count {
-        if !manifest.received.contains(&n) {
-            bail!("missing part {n} of {count}");
-        }
-        let path = part_path(&session, n);
-        if !path.is_file() {
-            bail!("missing part file {n}");
+        if !manifest.received.contains(&n) || !part_path(&session, n).is_file() {
+            return Err(AssetError::Invalid(format!("missing part {n} of {count}")));
         }
     }
 
@@ -344,21 +345,25 @@ pub fn complete_upload(
             let path = part_path(&session, n);
             let mut file = File::open(&path).with_context(|| format!("open {}", path.display()))?;
             loop {
-                let nread = file.read(&mut buf)?;
+                let nread = file
+                    .read(&mut buf)
+                    .with_context(|| format!("read {}", path.display()))?;
                 if nread == 0 {
                     break;
                 }
-                out.write_all(&buf[..nread])?;
+                out.write_all(&buf[..nread])
+                    .with_context(|| format!("write {}", assembled.display()))?;
                 total += nread as u64;
             }
         }
-        out.flush()?;
+        out.flush()
+            .with_context(|| format!("write {}", assembled.display()))?;
         if total != manifest.bytes {
             let _ = fs::remove_file(&assembled);
-            bail!(
+            return Err(AssetError::Invalid(format!(
                 "assembled size {total} does not match declared {}",
                 manifest.bytes
-            );
+            )));
         }
     }
     let result = assets_api::store_verified(
@@ -376,7 +381,7 @@ pub fn complete_upload(
 }
 
 /// Abort and delete staging for an upload session.
-pub fn abort_upload(assets_root: &Path, sha256: &str, upload_id: &str) -> Result<()> {
+pub fn abort_upload(assets_root: &Path, sha256: &str, upload_id: &str) -> Result<(), AssetError> {
     let sha = assets_api::require_sha256(sha256)?;
     let upload_id = require_upload_id(upload_id)?;
     let session = session_dir(assets_root, &sha, &upload_id);
@@ -618,7 +623,7 @@ mod tests {
         let _held = lock_session(&session).unwrap();
         let err = lock_session(&session).unwrap_err();
         assert!(
-            err.to_string().contains("failed to lock"),
+            matches!(err, AssetError::Locked),
             "expected lock failure, got: {err}"
         );
     }

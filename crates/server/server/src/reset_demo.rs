@@ -773,7 +773,7 @@ async fn import_demo_sources_with(
             match imported {
                 Ok(stats) => run.add_run(&stats),
                 Err(error) => {
-                    result = Err(error);
+                    result = Err(error.into());
                     break;
                 }
             }

@@ -45,7 +45,7 @@ async fn import_one(
         fill_content_keys: false,
         import_id: None,
     });
-    import_jsonl_files_on_conn(conn, &[path], &opts, ImportSchemaMode::Ensure).await
+    Ok(import_jsonl_files_on_conn(conn, &[path], &opts, ImportSchemaMode::Ensure).await?)
 }
 
 /// The reason an import was refused: its error text after the file's temp
@@ -255,7 +255,7 @@ async fn a_file_with_messages_and_no_header_is_refused() {
         let result = import_one(&mut conn, name, &incoming("g1", "+15555550100")).await;
         assert_eq!(
             refusal(result),
-            "Could not read line 1 of the file: a message appears before the conversation header.",
+            "Line 1 of the file: a message appears before the conversation header.",
             "{name}"
         );
     }
@@ -268,7 +268,7 @@ async fn a_file_with_neither_header_nor_messages_is_refused() {
     let result = import_one(&mut conn, "+15555550100.jsonl", "\n").await;
     assert_eq!(
         refusal(result),
-        "Could not read line 1 of the file: the file has no conversation header."
+        "Line 1 of the file: the file has no conversation header."
     );
 }
 

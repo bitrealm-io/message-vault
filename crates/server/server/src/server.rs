@@ -732,6 +732,53 @@ impl From<crate::db::imports::StartImportError> for ApiError {
     }
 }
 
+/// The one place an asset store failure gets its status
+/// (`docs/architecture/http-api.md`, "Status codes").
+impl From<crate::assets_api::AssetError> for ApiError {
+    fn from(e: crate::assets_api::AssetError) -> Self {
+        use crate::assets_api::AssetError;
+        match e {
+            err @ (AssetError::Mismatch { .. } | AssetError::Invalid(_) | AssetError::Locked) => {
+                Self::AssetUploadInvalid(err.to_string())
+            }
+            err @ AssetError::UploadNotFound => Self::NotFound(err.to_string()),
+            AssetError::Io(err) => Self::Internal(err),
+        }
+    }
+}
+
+/// The one place a sender's import failure gets its status: only a line that
+/// is not JSON cannot be read (`400`); everything else was read and broke a
+/// rule (`422`). A failure on one line carries it as `line`, a line of the
+/// batch, so a client can map it back to a file of its own.
+impl From<crate::imports_api::ImportFailure> for ApiError {
+    fn from(e: crate::imports_api::ImportFailure) -> Self {
+        use crate::imports_api::ImportFailure;
+        let detail = e.batch_sentence();
+        match (&e, e.line()) {
+            (ImportFailure::NotJson { .. }, Some(line)) => {
+                Self::MalformedImportLine { detail, line }
+            }
+            (_, Some(line)) => Self::InvalidImportLines {
+                errors: vec![detail],
+                line,
+            },
+            (_, None) => Self::validation(detail),
+        }
+    }
+}
+
+/// An import failure the sender can fix keeps its own status; anything else
+/// is a `500` with its cause in the log.
+impl From<crate::imports_api::ImportError> for ApiError {
+    fn from(e: crate::imports_api::ImportError) -> Self {
+        match e {
+            crate::imports_api::ImportError::Rejected { failure, .. } => failure.into(),
+            crate::imports_api::ImportError::Internal(err) => Self::Internal(err),
+        }
+    }
+}
+
 impl From<sqlx::Error> for ApiError {
     fn from(e: sqlx::Error) -> Self {
         Self::Internal(e.into())

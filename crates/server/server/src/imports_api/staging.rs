@@ -8,7 +8,7 @@ use anyhow::{Context, Result, bail};
 use message_ir::{HandleService, HandleType, nonempty, trimmed};
 use sqlx::SqliteConnection;
 
-use crate::assets_api::{self, AssetStats, StoredAsset};
+use crate::assets_api::{self, AssetError, AssetStats, StoredAsset};
 use crate::config::validate_source_id;
 use crate::db::handles::{
     HandleIdCache, infer_handle_type_from_shape as infer_handle_type, upsert_handle_row,
@@ -28,7 +28,7 @@ use super::contact_name::{
     IncomingSender, ensure_contact_for_handle, resolve_incoming_sender_handle,
     resolve_name_only_participant,
 };
-use super::{ImportOptions, ImportStats};
+use super::{ImportFailure, ImportOptions, ImportStats};
 
 struct PreparedAttachment {
     record: AttachmentRecord,
@@ -57,7 +57,7 @@ fn try_store_converted(
     let Some(rel) = att.path.as_deref().and_then(trimmed) else {
         return Ok(None);
     };
-    let source = message_ir::safe_attachment_path(export_dir, rel)?;
+    let source = message_ir::safe_attachment_path(export_dir, rel).map_err(ImportFailure::from)?;
     if !source.is_file() {
         return Ok(None);
     }
@@ -93,7 +93,8 @@ fn store_claimed_or_path(
         .as_deref()
         .and_then(trimmed)
         .map(|rel| message_ir::safe_attachment_path(export_dir, rel))
-        .transpose()?;
+        .transpose()
+        .map_err(ImportFailure::from)?;
     if let Some(sha) = att.sha256.as_deref().and_then(trimmed) {
         if let Some(found) = assets_api::lookup_by_sha256(assets_dir, sha) {
             asset_stats.deduped += 1;
@@ -123,7 +124,16 @@ fn store_claimed_or_path(
                     asset_stats.missing += 1;
                     Ok(None)
                 }
-                Err(e) => Err(e),
+                // The export states a fingerprint its file does not have:
+                // the sender's to fix, naming the path as sent.
+                Err(err @ (AssetError::Mismatch { .. } | AssetError::Invalid(_))) => {
+                    Err(ImportFailure::AttachmentMismatch {
+                        path: att.path.clone().unwrap_or_default(),
+                        detail: err.to_string(),
+                    }
+                    .into())
+                }
+                Err(err) => Err(err.into()),
             };
         }
         asset_stats.missing += 1;
@@ -131,7 +141,8 @@ fn store_claimed_or_path(
     }
 
     if let Some(rel) = att.path.as_deref() {
-        let source = message_ir::safe_attachment_path(export_dir, rel)?;
+        let source =
+            message_ir::safe_attachment_path(export_dir, rel).map_err(ImportFailure::from)?;
         return assets_api::hash_and_store(
             &source,
             assets_dir,

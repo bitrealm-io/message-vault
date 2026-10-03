@@ -197,7 +197,8 @@ async fn import_under_session(
         &import_opts,
         imports_api::ImportSchemaMode::AssumeReady,
     )
-    .await;
+    .await
+    .map_err(anyhow::Error::from);
     session.finish(conn, &result).await;
     result
 }

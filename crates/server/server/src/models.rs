@@ -160,7 +160,7 @@ pub fn parse_ir_lines(
             continue;
         }
         let line_no = i + 1;
-        let value: Value = serde_json::from_str(line).map_err(|e| ImportFailure::Parse {
+        let value: Value = serde_json::from_str(line).map_err(|e| ImportFailure::NotJson {
             line: line_no,
             detail: e.to_string(),
         })?;
@@ -173,7 +173,7 @@ pub fn parse_ir_lines(
                 line: line_no,
             })?;
             let header: ConversationHeader =
-                serde_json::from_value(value).map_err(|e| ImportFailure::Parse {
+                serde_json::from_value(value).map_err(|e| ImportFailure::Invalid {
                     line: line_no,
                     detail: format!("the conversation header is not valid: {e}"),
                 })?;
@@ -186,14 +186,14 @@ pub fn parse_ir_lines(
             saw_header = true;
         } else {
             if !saw_header {
-                return Err(ImportFailure::Parse {
+                return Err(ImportFailure::Invalid {
                     line: line_no,
                     detail: "a message appears before the conversation header".into(),
                 }
                 .into());
             }
             let msg: IrMessage =
-                serde_json::from_value(value).map_err(|e| ImportFailure::Parse {
+                serde_json::from_value(value).map_err(|e| ImportFailure::Invalid {
                     line: line_no,
                     detail: format!("the message is not valid: {e}"),
                 })?;
@@ -214,7 +214,7 @@ pub fn parse_ir_lines(
                 continue;
             }
             let record = message_from_ir(&msg, header_owner.as_deref()).map_err(|e| {
-                ImportFailure::Parse {
+                ImportFailure::Invalid {
                     line: line_no,
                     detail: format!("{e:#}"),
                 }
@@ -230,7 +230,7 @@ pub fn parse_ir_lines(
         .into());
     }
     if out.is_empty() {
-        return Err(ImportFailure::Parse {
+        return Err(ImportFailure::Invalid {
             line: 1,
             detail: "the file has no conversation header".into(),
         }
@@ -607,8 +607,8 @@ mod tests {
         let err = parse_ir_lines(["this is not json"]).unwrap_err();
         let failure = crate::imports_api::ImportFailure::in_error(&err).expect("typed failure");
         match failure {
-            crate::imports_api::ImportFailure::Parse { line, .. } => assert_eq!(*line, 1),
-            other => panic!("expected Parse, got {other:?}"),
+            crate::imports_api::ImportFailure::NotJson { line, .. } => assert_eq!(*line, 1),
+            other => panic!("expected NotJson, got {other:?}"),
         }
     }
 
@@ -617,14 +617,14 @@ mod tests {
         let err = parse_ir_lines([r#"{"guid":"m1"}"#]).unwrap_err();
         let failure = crate::imports_api::ImportFailure::in_error(&err).expect("typed failure");
         match failure {
-            crate::imports_api::ImportFailure::Parse { line, detail } => {
+            crate::imports_api::ImportFailure::Invalid { line, detail } => {
                 assert_eq!(*line, 1);
                 assert!(
                     detail.contains("before the conversation header"),
                     "{detail}"
                 );
             }
-            other => panic!("expected Parse, got {other:?}"),
+            other => panic!("expected Invalid, got {other:?}"),
         }
     }
 
@@ -635,8 +635,8 @@ mod tests {
         let err = parse_ir_lines([header, msg]).unwrap_err();
         let failure = crate::imports_api::ImportFailure::in_error(&err).expect("typed failure");
         match failure {
-            crate::imports_api::ImportFailure::Parse { line, .. } => assert_eq!(*line, 2),
-            other => panic!("expected Parse, got {other:?}"),
+            crate::imports_api::ImportFailure::Invalid { line, .. } => assert_eq!(*line, 2),
+            other => panic!("expected Invalid, got {other:?}"),
         }
     }
     /// A message the guid index cannot see would be stored again by every

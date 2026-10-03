@@ -163,7 +163,6 @@ fn generate_into(cfg: &SeedConfig, out: &Path) -> Result<GenStats> {
 
     let roster = personas::build_roster(cfg, &names, &mut rng)?;
     contacts::write_address_book(&config_dir, &roster)?;
-    contacts::write_config_toml(&config_dir)?;
     contacts::write_seed_toml(&config_dir)?;
 
     let staging = conversations::StagingDirs {
@@ -218,7 +217,6 @@ fn validate_generated_bundle(root: &Path) -> Result<()> {
         }
     }
     for relative in [
-        Path::new("config/config.toml"),
         Path::new("config/seed.toml"),
         Path::new("config/contacts.csv"),
         Path::new("README.md"),

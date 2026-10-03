@@ -158,7 +158,6 @@ fn generate_writes_three_backups_the_config_files_and_a_readme() {
         assert!(out.join(relative).is_dir(), "{relative} is a directory");
     }
     for relative in [
-        "config/config.toml",
         "config/seed.toml",
         "config/contacts.csv",
         "README.md",
@@ -168,6 +167,12 @@ fn generate_writes_three_backups_the_config_files_and_a_readme() {
     ] {
         assert!(out.join(relative).is_file(), "{relative} is a file");
     }
+    // `reset-demo` reads the operator's config and never writes one, so the
+    // bundle carries no config for the server (#1216).
+    assert!(
+        !out.join("config/config.toml").exists(),
+        "the bundle carries no server config"
+    );
     let book = fs::read_to_string(out.join("config/contacts.csv")).expect("read contacts.csv");
     let mut lines = book.lines();
     assert_eq!(
@@ -721,12 +726,7 @@ fn the_validator_refuses_a_bundle_with_a_config_file_missing() {
     let out = PathBuf::from(&cfg.out);
     generate(&cfg).expect("generate the small bundle");
 
-    for relative in [
-        "config/config.toml",
-        "config/seed.toml",
-        "config/contacts.csv",
-        "README.md",
-    ] {
+    for relative in ["config/seed.toml", "config/contacts.csv", "README.md"] {
         let path = out.join(relative);
         let kept = fs::read(&path).expect("read before removing");
         fs::remove_file(&path).expect("remove the file");

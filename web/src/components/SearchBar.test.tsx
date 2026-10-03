@@ -2,7 +2,8 @@
 
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { type ComponentProps, useState } from "react";
+import { type ComponentProps, useRef, useState } from "react";
+import { MemoryRouter, useLocation, useSearchParams } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SearchBar from "./SearchBar";
 
@@ -51,6 +52,75 @@ function renderSearch(props: Partial<ComponentProps<typeof SearchBar>> = {}) {
     />,
   );
   return { onSubmit, onChange, input: screen.getByRole("combobox", { name: placeholder }) };
+}
+
+/**
+ * The bar with a parent that takes its time: each change reaches `value` on a
+ * later task, as the address does in the browser, where React Router applies
+ * the change as a transition after the box has drawn its old value again.
+ * With `merge`, changes that arrive together are applied as the last one.
+ */
+function LaggingSearch({ onSubmit, merge }: { onSubmit: (q: string) => void; merge: boolean }) {
+  const [value, setValue] = useState("");
+  const latest = useRef<string | null>(null);
+  return (
+    <>
+      <SearchBar
+        value={value}
+        onChange={(q) => {
+          if (!merge) {
+            setTimeout(() => setValue(q), 0);
+            return;
+          }
+          if (latest.current === null) {
+            setTimeout(() => {
+              setValue(latest.current ?? "");
+              latest.current = null;
+            }, 0);
+          }
+          latest.current = q;
+        }}
+        onSubmit={onSubmit}
+        scope="message"
+        list={null}
+        placeholder="Search messages"
+        advancedMode={null}
+      />
+      <output data-testid="value">{value}</output>
+      <button type="button" onClick={() => setValue("kind:group")}>
+        Open a Saved Search
+      </button>
+      <button type="button" onClick={() => setValue("a")}>
+        Open a Saved Search for a
+      </button>
+    </>
+  );
+}
+
+function renderLaggingSearch({ merge = false }: { merge?: boolean } = {}) {
+  const onSubmit = vi.fn();
+  render(<LaggingSearch onSubmit={onSubmit} merge={merge} />);
+  return { onSubmit, input: screen.getByRole("combobox", { name: "Search messages" }) };
+}
+
+/** The bar as `AppLayout` wires the Messages box: its value is the address's `q`, written with `replace`. */
+function AddressSearch({ onSubmit }: { onSubmit: (q: string) => void }) {
+  const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  return (
+    <>
+      <SearchBar
+        value={params.get("q") ?? ""}
+        onChange={(q) => setParams(q ? { q } : {}, { replace: true })}
+        onSubmit={onSubmit}
+        scope="message"
+        list={null}
+        placeholder="Search messages"
+        advancedMode={null}
+      />
+      <output data-testid="location">{location.search}</output>
+    </>
+  );
 }
 
 describe("SearchBar", () => {
@@ -270,88 +340,81 @@ describe("SearchBar", () => {
     expect(onChange).toHaveBeenCalledWith("identity: ");
     expect(onSubmit).not.toHaveBeenCalled();
   });
-});
 
-/**
- * The bar with a parent that takes its time: each change reaches `value` on a
- * later task, as the address does in the browser, where React Router applies
- * the change as a transition after the box has drawn its old value again.
- */
-function LaggingSearch({ onSubmit }: { onSubmit: (q: string) => void }) {
-  const [value, setValue] = useState("");
-  return (
-    <>
-      <SearchBar
-        value={value}
-        onChange={(q) => {
-          setTimeout(() => setValue(q), 0);
-        }}
-        onSubmit={onSubmit}
-        scope="message"
-        list={null}
-        placeholder="Search messages"
-        advancedMode={null}
-      />
-      <output data-testid="value">{value}</output>
-      <button type="button" onClick={() => setValue("kind:group")}>
-        Open a Saved Search
-      </button>
-    </>
-  );
-}
-
-function renderLaggingSearch() {
-  const onSubmit = vi.fn();
-  render(<LaggingSearch onSubmit={onSubmit} />);
-  return { onSubmit, input: screen.getByRole("combobox", { name: "Search messages" }) };
-}
-
-describe("SearchBar with a value that arrives late (#1000)", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    suggestionsMock.current = [];
-    recentsMock.current = [];
-  });
-
-  afterEach(() => {
-    cleanup();
-  });
-
-  it("searches for a paste followed at once by Enter", async () => {
-    const user = userEvent.setup({ delay: null });
-    const { onSubmit, input } = renderLaggingSearch();
-
-    await user.click(input);
-    // A paste is one input event, and Enter can follow it before the parent's
-    // value has caught up.
-    act(() => {
-      fireEvent.change(input, { target: { value: "attachment:any" } });
-      fireEvent.keyDown(input, { key: "Enter" });
+  describe("with a value that arrives late (#1000)", () => {
+    beforeEach(() => {
+      recentsMock.current = [];
     });
 
-    expect(onSubmit).toHaveBeenLastCalledWith("attachment:any");
+    it("searches for a paste followed at once by Enter", async () => {
+      const user = userEvent.setup({ delay: null });
+      const { onSubmit, input } = renderLaggingSearch();
+
+      await user.click(input);
+      // A paste is one input event, and Enter can follow it before the
+      // parent's value has caught up.
+      act(() => {
+        fireEvent.change(input, { target: { value: "attachment:any" } });
+        fireEvent.keyDown(input, { key: "Enter" });
+      });
+
+      expect(onSubmit).toHaveBeenLastCalledWith("attachment:any");
+    });
+
+    it("keeps every key of text typed with no delay", async () => {
+      const user = userEvent.setup({ delay: null });
+      const { input } = renderLaggingSearch();
+
+      await user.type(input, "attachment:any");
+
+      expect(input).toHaveValue("attachment:any");
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+      expect(screen.getByTestId("value").textContent).toBe("attachment:any");
+      expect(input).toHaveValue("attachment:any");
+    });
+
+    it("shows a search set from outside the box, such as a Saved Search", async () => {
+      const user = userEvent.setup();
+      const { input } = renderLaggingSearch();
+
+      await user.type(input, "ada");
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+      await user.click(screen.getByRole("button", { name: "Open a Saved Search" }));
+
+      expect(input).toHaveValue("kind:group");
+    });
+
+    it("shows a search set from outside after changes the parent merged into none", async () => {
+      // The router can apply several changes as one: `a` then Backspace
+      // leaves the address at "" and nothing is echoed. A Saved Search for
+      // `a` afterwards is the person's choice, not an echo of the `a` typed.
+      const user = userEvent.setup({ delay: null });
+      const { input } = renderLaggingSearch({ merge: true });
+
+      await user.type(input, "a{Backspace}");
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+      await user.click(screen.getByRole("button", { name: "Open a Saved Search for a" }));
+
+      expect(input).toHaveValue("a");
+    });
   });
 
-  it("keeps every key of text typed with no delay", async () => {
-    const user = userEvent.setup({ delay: null });
-    const { input } = renderLaggingSearch();
-
-    await user.type(input, "attachment:any");
-
-    expect(input).toHaveValue("attachment:any");
-    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
-    expect(screen.getByTestId("value").textContent).toBe("attachment:any");
-    expect(input).toHaveValue("attachment:any");
-  });
-
-  it("shows a search set from outside the box, such as a Saved Search", async () => {
+  it("writes a paste run at once into the address the box reads from", async () => {
     const user = userEvent.setup();
-    const { input } = renderLaggingSearch();
+    const onSubmit = vi.fn();
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AddressSearch onSubmit={onSubmit} />
+      </MemoryRouter>,
+    );
+    const input = screen.getByRole("combobox", { name: "Search messages" });
 
-    await user.type(input, "ada");
-    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
-    await user.click(screen.getByRole("button", { name: "Open a Saved Search" }));
+    await user.click(input);
+    await user.paste("attachment:any");
+    await user.keyboard("{Enter}");
 
-    expect(input).toHaveValue("kind:group");
+    expect(onSubmit).toHaveBeenLastCalledWith("attachment:any");
+    expect(screen.getByTestId("location").textContent).toBe("?q=attachment%3Aany");
+    expect(input).toHaveValue("attachment:any");
   });
 });

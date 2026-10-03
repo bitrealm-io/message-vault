@@ -138,6 +138,12 @@ export default function SearchBar({
   advancedMode,
   onOpenChange,
 }: {
+  /**
+   * The search as the parent holds it. The box keeps its own text: a `value`
+   * equal to one the box sent through `onChange` is taken as its echo, and any
+   * other `value` replaces the text. A parent that rewrites what it is sent
+   * (trimmed, lowercased) would overwrite the text as it is typed.
+   */
   value: string;
   onChange: (v: string) => void;
   /** Runs the search. */
@@ -159,21 +165,29 @@ export default function SearchBar({
   // ran Enter on the old text (#1000).
   const [text, setText] = useState(value);
   /** What the box sent to `onChange` and `value` has not echoed back yet. */
-  const sentRef = useRef<string[]>([]);
-  // `value` replaces the text only when it is not an echo of what the box
-  // sent: a Saved Search, Clear, or a route change.
-  useEffect(() => {
-    const echoed = sentRef.current.indexOf(value);
+  const [pending, setPending] = useState<readonly string[]>([]);
+  const [seenValue, setSeenValue] = useState(value);
+  // Adjusted while rendering, so an outside value never paints a frame of
+  // the old text. A `value` that echoes what the box sent is dropped; any
+  // other replaces the text: a Saved Search, Clear, or a route change.
+  if (value !== seenValue) {
+    setSeenValue(value);
+    const echoed = pending.indexOf(value);
     if (echoed >= 0) {
-      sentRef.current.splice(0, echoed + 1);
-      return;
+      setPending(pending.slice(echoed + 1));
+    } else {
+      setPending([]);
+      setText(value);
     }
-    sentRef.current = [];
-    setText(value);
-  }, [value]);
+  } else if (value === text && pending.length > 0) {
+    // The parent has caught up, even when it merged changes into none, so
+    // nothing still pending can be mistaken for an echo later.
+    setPending([]);
+  }
 
-  const change = (q: string) => {
-    sentRef.current.push(q);
+  /** Puts `q` in the box and sends it to `onChange`. */
+  const editText = (q: string) => {
+    setPending((sent) => [...sent, q]);
     setText(q);
     onChange(q);
   };
@@ -202,7 +216,7 @@ export default function SearchBar({
   useDismissable(showAdvanced, rootRef, closeAdvanced);
 
   const applyQuery = (q: string, { save }: { save: boolean }) => {
-    change(q);
+    editText(q);
     onSubmit(q);
     if (save && q.trim()) {
       pushRecentSearch(scope, q);
@@ -213,7 +227,7 @@ export default function SearchBar({
 
   /** Autocomplete edits the query in place; it never runs the search. */
   const applySuggestion = (s: Suggestion) => {
-    change(applySuggestionToQuery(text, s));
+    editText(applySuggestionToQuery(text, s));
     inputRef.current?.focus();
   };
 
@@ -258,7 +272,7 @@ export default function SearchBar({
         aria-label={placeholder}
         items={options}
         inputValue={text}
-        onInputChange={change}
+        onInputChange={editText}
         allowsCustomValue
         menuTrigger="focus"
         shouldFocusWrap
@@ -303,7 +317,7 @@ export default function SearchBar({
               // Not React Aria's combobox button: that one would open the popdown.
               slot={null}
               onPress={() => {
-                change("");
+                editText("");
                 onSubmit("");
                 inputRef.current?.focus();
               }}

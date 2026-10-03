@@ -181,7 +181,8 @@ still the PR head (_Another session's commits_).
 
 Check the PR against its base once more (AGENTS.md step 5). On `CONFLICTING`,
 merge the base (with the merge review), push, and return to step 6. A PR that
-is only behind is merged as it is.
+is only behind is merged as it is: GitHub merges it, and a break that shows
+only on the new base is fixed forward on `main` (ADR 0007).
 
 Post one top-level comment, starting with the marker:
 

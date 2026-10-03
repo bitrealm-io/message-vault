@@ -971,7 +971,7 @@ async fn sort_is_parsed_against_the_lists_keys() {
 }
 
 #[tokio::test]
-async fn duplicate_only_threads_sort_last_in_either_date_direction() {
+async fn duplicate_only_threads_have_no_last_message_date_and_sort_last() {
     // `last_message_at` is NULL for a thread whose every message is a
     // duplicate. Those threads are only listed under an `import:` filter,
     // which is the one path where NULL ordering is observable — and SQLite
@@ -1081,6 +1081,35 @@ async fn duplicate_only_threads_sort_last_in_either_date_direction() {
         [4, 3],
         "and stays last when the direction flips"
     );
+
+    // With no surviving message there is no last-message date to report: the
+    // list and the single-conversation read both send `null`, not the epoch.
+    let mut conn = pool.acquire().await.unwrap();
+    let listed = list_conversations_sorted(
+        &mut conn,
+        account,
+        &q,
+        &[],
+        DEFAULT_LIST_LIMIT,
+        0,
+        crate::search::tests::clock(),
+    )
+    .await
+    .unwrap()
+    .items
+    .into_iter()
+    .find(|c| c.id == 3)
+    .expect("conversation 3 is listed under its import");
+    let read = crate::db::conversations::get_conversation_summary(&mut conn, account, 3)
+        .await
+        .unwrap()
+        .expect("conversation 3 exists");
+    for summary in [listed, read] {
+        let json = serde_json::to_value(&summary).unwrap();
+        assert_eq!(json["last_message_at"], serde_json::Value::Null, "{json}");
+        assert!(json.get("date_range_start").is_none(), "{json}");
+        assert!(json.get("date_range_end").is_none(), "{json}");
+    }
 }
 
 #[tokio::test]

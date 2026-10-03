@@ -1719,8 +1719,11 @@ export interface components {
             is_group: boolean;
             /** @description Group label from the export, when present. */
             label?: string | null;
-            /** @description Timestamp of the last message. */
-            last_message_at: string;
+            /**
+             * @description Timestamp of the last message; `null` when every message in the
+             *     conversation is a duplicate, so none is left to date it.
+             */
+            last_message_at: string | null;
             /**
              * Format: int64
              * @description Messages in the conversation (excluding hidden duplicates).
@@ -2727,8 +2730,11 @@ export interface components {
                 is_group: boolean;
                 /** @description Group label from the export, when present. */
                 label?: string | null;
-                /** @description Timestamp of the last message. */
-                last_message_at: string;
+                /**
+                 * @description Timestamp of the last message; `null` when every message in the
+                 *     conversation is a duplicate, so none is left to date it.
+                 */
+                last_message_at: string | null;
                 /**
                  * Format: int64
                  * @description Messages in the conversation (excluding hidden duplicates).

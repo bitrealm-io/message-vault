@@ -2,7 +2,11 @@
 //!
 //! Each variant has a stable `kind()` string for tests, and its `Display`
 //! text is the message the desktop app shows. The push and the pull send a
-//! session token, never an API key, so no text names an API key.
+//! session token, so no text names an API token.
+
+/// What the desktop app shows when the server answers 401 to the session
+/// token: at login, or mid-run once the session has expired.
+pub const SESSION_REFUSED: &str = "The server did not accept this session (401 Unauthorized) because it expired or was ended. Log in again.";
 
 /// Failure from `GET /v1/session`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -45,7 +49,7 @@ pub enum AuthError {
     },
     /// The endpoint returned HTML instead of the Message Crate API.
     #[error(
-        "GET /v1/session returned HTML from {url} (HTTP {status}). The server address must point at the Message Crate server (TLS site or port 8080), not the Next.js browse UI alone (port 3000)"
+        "GET /v1/session returned HTML from {url} (HTTP {status}). The server address must point at the Message Crate server: the TLS site or port 8080."
     )]
     WrongHostHtml {
         /// The endpoint that returned HTML.
@@ -55,16 +59,14 @@ pub enum AuthError {
     },
     /// Requested `http://…` but the server redirected to `https://…` (auth header dropped).
     #[error(
-        "server address {url} redirected from http to https; use https:// so the session token is sent (http redirects drop Authorization)"
+        "Server address {url} redirected from http to https. Use https:// so the session token is sent, because an http redirect drops Authorization."
     )]
     HttpsRequired {
         /// The `http://` URL that the server redirected to `https://`.
         url: String,
     },
-    /// The server refused the session: it is unknown, or it has expired.
-    #[error(
-        "The server did not accept this session (401 Unauthorized): it is unknown or has expired. Log in again."
-    )]
+    /// The server refused the session because it expired or was ended.
+    #[error("{}", SESSION_REFUSED)]
     Unauthorized,
     /// The session does not have permission for this Message Crate.
     #[error("session check failed (HTTP {status}): {body}")]

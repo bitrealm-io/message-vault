@@ -237,10 +237,6 @@ released versions carry their date on the heading.
 
 #### Importing
 
-- 2026-10-03 **An expired login says to log in again.** When your login had
-  expired, or was ended from another window, an Upload or an Export said
-  "invalid API key", though the app sends no API key. It now says the
-  server did not accept the session, and to log in again.
 - 2026-10-03 **A message sent twice a moment apart is shown twice.** When
   one source held a message sent twice a second or two apart, and another
   source held one copy, matching the sources hid all but one of the three.
@@ -622,6 +618,10 @@ released versions carry their date on the heading.
 
 #### Accounts, Settings and screens
 
+- 2026-10-03 **An expired session says to log in again.** When your
+  session had expired, or was ended from another window, an Upload or an
+  Export said "invalid API key", though the app sends no API key. It now
+  says the server did not accept the session, and to log in again.
 - 2026-10-03 **Two accounts can each have the same email address.** When a
   second account added an email address that another account already had,
   the address was linked as its identity but left off its profile. Each

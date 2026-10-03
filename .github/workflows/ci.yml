@@ -19,6 +19,11 @@ on:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
+    inputs:
+      push_docker_image:
+        description: Push the Docker image to Docker Hub as sha-<commit> only
+        type: boolean
+        default: false
 
 # A new push to a pull request cancels its previous run, so queued Rust
 # jobs do not sit until the 6-hour default timeout on a branch nobody is
@@ -46,6 +51,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
+      # A release is a push of a v* tag, and only that. A manual run names a
+      # ref, which can be a tag, so the ref alone does not make a release:
+      # every job that ships one reads this, never the ref.
+      release: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
       rust: ${{ steps.classify.outputs.rust }}
       web: ${{ steps.classify.outputs.web }}
       docs: ${{ steps.classify.outputs.docs }}
@@ -314,9 +323,9 @@ jobs:
   # The image used to be built for the first time on the release tag, so a
   # pull request that broke docker/Dockerfile merged green and the tag
   # failed. This job builds it without pushing whenever the Dockerfile, a
-  # Cargo manifest or the lockfile changes. Pull requests only: the tag job
-  # below builds and pushes the same image, and nightly.yml builds it from
-  # main.
+  # Cargo manifest or the lockfile changes. Pull requests only: the docker
+  # job below builds and pushes the same image on a tag or a manual run with
+  # push_docker_image, and nightly.yml builds it from main.
   docker-build:
     name: Docker image builds
     needs: changes
@@ -351,18 +360,25 @@ jobs:
 
       - name: Check the product version agrees everywhere
         env:
-          TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+          TAG: ${{ needs.changes.outputs.release == 'true' && github.ref_name || '' }}
         run: ./scripts/check-version-lockstep.sh ${TAG:+"$TAG"}
 
-  # ── Tag only: Docker image → DockerHub ────────────────────────────────
-  # On a tag the changes job reports everything true, so every job in `needs`
-  # below actually runs; nothing ships unless all of them are green.
+  # ── Tag, or a manual run that asks for it: Docker image → DockerHub ───
+  # On a tag or a manual run the changes job reports everything true, so
+  # every job above actually runs; nothing ships unless all of them are
+  # green. A manual run with push_docker_image ticked pushes sha-<commit>
+  # and nothing else: the version tags and latest belong to a release, so
+  # an image built from a branch can never replace the one people pull.
   docker:
     name: Docker image
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: needs.changes.outputs.release == 'true' || (github.event_name == 'workflow_dispatch' && inputs.push_docker_image)
     needs: [changes, fmt, clippy, test, check-tauri, web, docs, license, docker-context, version]
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      # How much of the commit the sha-<commit> tag and the image's Build
+      # both use, so the two agree. 8 is build-version's --short=8.
+      SHORT_SHA_LENGTH: 8
     steps:
       - uses: actions/checkout@v7
 
@@ -378,13 +394,32 @@ jobs:
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v6
+        env:
+          DOCKER_METADATA_SHORT_SHA_LENGTH: ${{ env.SHORT_SHA_LENGTH }}
         with:
           images: bitrealm/message-crate
+          flavor: latest=false
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
-            type=sha,prefix=sha-
+            type=semver,pattern={{version}},enable=${{ needs.changes.outputs.release == 'true' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ needs.changes.outputs.release == 'true' }}
+            type=raw,value=latest,enable=${{ needs.changes.outputs.release == 'true' }}
+            type=sha,prefix=sha-,format=short
+
+      # Empty on a release (a pushed v* tag) on purpose: a release reports
+      # the Product Version alone. A manual run reports the commit, whatever
+      # ref it names, as any other build does.
+      # The image cannot ask git because .git is not in its context.
+      - name: Choose the build metadata
+        id: build
+        env:
+          RELEASE: ${{ needs.changes.outputs.release }}
+        run: |
+          set -euo pipefail
+          if [[ "$RELEASE" == true ]]; then
+            echo "metadata=" >> "$GITHUB_OUTPUT"
+          else
+            echo "metadata=${GITHUB_SHA:0:SHORT_SHA_LENGTH}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build and push
         uses: docker/build-push-action@v7
@@ -394,17 +429,15 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Empty on purpose: a release reports the Product Version alone,
-          # and the image cannot ask git because .git is not in its context.
           build-args: |
-            BUILD_METADATA=
+            BUILD_METADATA=${{ steps.build.outputs.metadata }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
   # ── Tag only: Tauri desktop app → GitHub Release ──────────────────────
   release:
     name: Desktop App (${{ matrix.label }})
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: needs.changes.outputs.release == 'true'
     needs: [changes, fmt, clippy, test, check-tauri, web, docs, license, docker-context, version]
     timeout-minutes: 90
     strategy:
@@ -524,8 +557,8 @@ jobs:
   # no release; fix, delete the tag, and tag again.
   github-release:
     name: GitHub Release
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [release, docker]
+    if: needs.changes.outputs.release == 'true'
+    needs: [changes, release, docker]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

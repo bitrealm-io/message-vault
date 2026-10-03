@@ -86,6 +86,8 @@ On a `v*` tag the `docker` and `release` jobs depend on every job in `ci.yml`,
 and `github-release` depends on both of them, because its notes promise the
 Docker image as well as the installers. Nothing ships unless everything is
 green.
+A CI run started by hand can push the image as `sha-<commit>` after the same
+jobs, and never a release, whatever ref it names.
 
 The `release` matrix installs `tauri-cli` with `cargo binstall`, not
 `cargo install`. `tauri-cli` publishes cargo-binstall metadata pointing at

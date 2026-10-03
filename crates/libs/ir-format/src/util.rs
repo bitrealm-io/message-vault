@@ -3,7 +3,7 @@
 use anyhow::{Context, Result};
 use message_ir::{HandleType, IrAttachment};
 use std::fs::{self, File};
-use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
 /// Guess the handle type of a raw handle string when no type is known.
@@ -102,46 +102,6 @@ pub fn is_complete_file(path: &Path) -> bool {
     file.seek(SeekFrom::End(-1)).is_ok() && file.read_exact(&mut last).is_ok() && last[0] == b'\n'
 }
 
-/// Write a file atomically: create the parent directory, write everything to
-/// a `.tmp` sibling (`<file name>.tmp`), sync it to disk, and rename it over
-/// `path`, so a reader never sees a half-written file.
-///
-/// The sync comes before the rename because a rename can reach the disk
-/// ahead of the data it points at; without it a power loss can leave an
-/// empty or cut-off file under the final name.
-///
-/// # Errors
-///
-/// Returns an error when the parent cannot be created, the temp file cannot
-/// be created, written, or synced, or the rename fails.
-pub(crate) fn write_atomic(
-    path: &Path,
-    write: impl FnOnce(&mut dyn Write) -> Result<()>,
-) -> Result<()> {
-    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-        fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
-    }
-    let mut tmp_name = path
-        .file_name()
-        .map(|n| n.to_os_string())
-        .with_context(|| format!("{} has no file name", path.display()))?;
-    tmp_name.push(".tmp");
-    let tmp = path.with_file_name(tmp_name);
-    {
-        let file = File::create(&tmp).with_context(|| format!("create {}", tmp.display()))?;
-        let mut out = BufWriter::new(file);
-        write(&mut out)?;
-        out.flush()
-            .with_context(|| format!("flush {}", tmp.display()))?;
-        out.get_ref()
-            .sync_all()
-            .with_context(|| format!("sync {}", tmp.display()))?;
-    }
-    fs::rename(&tmp, path)
-        .with_context(|| format!("rename {} → {}", tmp.display(), path.display()))?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -185,19 +145,6 @@ mod tests {
         let cut_off = dir.path().join("cut.jsonl");
         fs::write(&cut_off, b"{}\n{\"half").unwrap();
         assert!(!is_complete_file(&cut_off));
-    }
-
-    #[test]
-    fn write_atomic_leaves_a_complete_file_and_no_temp_sibling() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("out.jsonl");
-        write_atomic(&path, |out| {
-            out.write_all(b"{}\n")?;
-            Ok(())
-        })
-        .unwrap();
-        assert!(is_complete_file(&path));
-        assert!(!path.with_file_name("out.jsonl.tmp").exists());
     }
 
     #[test]

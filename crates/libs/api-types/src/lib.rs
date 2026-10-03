@@ -4,14 +4,15 @@
 //! Two crates sit on either side of these shapes: `message-crate-server`
 //! serializes them, and `message-crate-pull` deserializes them on its way to
 //! `message-ir`. While each kept its own struct, the two could disagree
-//! silently and did, three times: `message-crate-pull` declared a participant's address a `String`
-//! after the server started sending `null` for a participant a backup named
-//! without an address, kept `#[serde(default)]` on a field the server had
-//! removed, and read a `service` off the conversation the server has never
-//! sent there. Each of those was a pull that failed at runtime, or quietly
-//! produced worse data, with nothing in either crate's tests to catch it —
-//! `message-crate-pull`'s "real export page" was a JSON literal it wrote itself, so it
-//! agreed with whatever the mirror said.
+//! silently and did, three times: `message-crate-pull` declared a
+//! participant's address a `String` after the server started sending `null`
+//! for a participant a backup named without an address, kept
+//! `#[serde(default)]` on a field the server had removed, and read a
+//! `service` off the conversation the server has never sent there. Each of
+//! those was a pull that failed at runtime, or quietly produced worse data,
+//! with nothing in either crate's tests to catch it — `message-crate-pull`'s
+//! "real export page" was a JSON literal it wrote itself, so it agreed with
+//! whatever the mirror said.
 //!
 //! One definition makes the compiler the check. A field the server renames
 //! stops compiling in the client, which is the whole point of putting the
@@ -333,8 +334,8 @@ api_shape! {
         /// someone a backup named without recording any address.
         pub name: String,
         /// The identity as the source wrote it: a phone number, email address
-        /// or username. `None` when the source
-        /// named this person without recording any address for them.
+        /// or username. `None` when the source named this person without
+        /// recording any address for them.
         pub identity: Option<String>,
         /// Platform service, e.g. `imessage`. `None` for the same reason as
         /// `identity`: with no address there is nothing to carry a service on.

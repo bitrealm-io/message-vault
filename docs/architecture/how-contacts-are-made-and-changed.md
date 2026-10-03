@@ -107,7 +107,7 @@ The code is `plan` and `apply` in
 `crates/server/server/src/db/address_book.rs`.
 
 The file has one row per identity and six columns: `contact_id`,
-`display_name`, `groups`, `service`, `handle_type`, `identity`. A load runs
+`display_name`, `groups`, `service`, `identity_type`, `identity`. A load runs
 in Append mode, the default, or in Edit mode.
 
 ### A cell a spreadsheet would run
@@ -193,7 +193,7 @@ flowchart TD
 
 ### 4. Each identity: is the row valid?
 
-A row that leaves `service`, `handle_type` and `identity` all blank lists no
+A row that leaves `service`, `identity_type` and `identity` all blank lists no
 identity. That is how a contact with no identity is written.
 
 An identity written exactly as Message Crate already keys it is accepted as
@@ -223,16 +223,16 @@ Its `notes` name each row it read with the `+` back, and each value without
 
 ```mermaid
 flowchart TD
-  A{"service, handle_type and identity all blank?"} -- yes --> A1["Row lists no identity"]
+  A{"service, identity_type and identity all blank?"} -- yes --> A1["Row lists no identity"]
   A -- no --> B{"service is phone or whatsapp?"}
   B -- no --> R1{{"Refused: unknown service"}}
-  B -- yes --> C{"handle_type is phone, email, username or other?"}
-  C -- no --> R2{{"Refused: unknown handle_type"}}
+  B -- yes --> C{"identity_type is phone, email, username or other?"}
+  C -- no --> R2{{"Refused: unknown identity_type"}}
   C -- yes --> D{"identity blank?"}
   D -- yes --> R3{{"Refused: identity is blank"}}
   D -- no --> E{"Written exactly as an identity Message Crate already holds?"}
   E -- yes --> K["Key is the text as written"]
-  E -- no --> F{"handle_type"}
+  E -- no --> F{"identity_type"}
   F -- phone --> G{"4 to 15 digits, and only digits, spaces and + - ( ) . ?"}
   G -- no --> R4{{"Refused: not a phone number"}}
   G -- yes --> P{"Written with + ?"}

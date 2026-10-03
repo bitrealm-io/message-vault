@@ -10,3 +10,9 @@ Bob Example,2020-01-01 12:06:00,iMessage,Incoming,+15555550101,Bob Example,Read,
 Bob Example,2020-01-01 12:07:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,picture 3 at 12:07,,IMG_0003.jpg,Image
 Bob Example,2020-01-01 12:08:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,picture 3 at 12:08,,IMG_0003.jpg,Image
 Bob Example,2020-01-01 12:09:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,two files,,photo.jpg,Image
+Bob Example,2020-01-01 12:10:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,short of two names,,photo.jpg,Image
+Bob Example,2020-01-01 12:10:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,long of two names,,Holiday - photo.jpg,Image
+Bob Example,2020-01-01 12:11:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,first long name,,Minutes of the neighbourhood garden committee meeting 1.pdf,
+Bob Example,2020-01-01 12:11:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,second long name,,Minutes of the neighbourhood garden committee meeting 2.pdf,
+Bob Example,2020-01-01 12:12:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,location,,Current Location.vcf,
+Bob Example,2020-01-01 12:13,iMessage,Incoming,+15555550101,Bob Example,Read,,,date without seconds,,IMG_0004.jpg,Image

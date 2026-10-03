@@ -6,7 +6,7 @@
 //! compared. The name is the row's `Attachment` cell as iMazing changed it
 //! when it wrote the file ([`names_on_disk`]).
 
-use crate::unnamed_files::file_name_second;
+use chrono::NaiveDateTime;
 use message_csv::AttachmentCell;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -22,6 +22,20 @@ const CONVERTED_EXTENSIONS: [(&str, &str); 4] = [
 
 /// The longest stem iMazing writes into a file name, in characters.
 const MAX_STEM_CHARS: usize = 40;
+
+/// The `Message Date` of a row as iMazing writes it at the start of a file
+/// name: `YYYY-MM-DD HH MM SS`.
+///
+/// A date the CSV writes without seconds gets ` 00`, because iMazing always
+/// writes the seconds into a file name. A date that does not parse has each
+/// `:` replaced by a space.
+pub(crate) fn file_name_second(message_date: &str) -> String {
+    let raw = message_date.trim();
+    NaiveDateTime::parse_from_str(raw, "%Y-%m-%d %H:%M:%S")
+        .or_else(|_| NaiveDateTime::parse_from_str(raw, "%Y-%m-%d %H:%M"))
+        .map(|date| date.format("%Y-%m-%d %H %M %S").to_string())
+        .unwrap_or_else(|_| raw.replace(':', " "))
+}
 
 /// The regular files directly in one chat folder.
 pub(crate) struct FolderFiles {
@@ -57,16 +71,30 @@ impl FolderFiles {
     /// second and ` - `, and ends with ` - ` and the first of
     /// [`names_on_disk`] that any file ends with.
     ///
-    /// `None` when no file has that shape, or when two or more do, because
-    /// then nothing tells which file is the row's.
+    /// A file whose name ends with a longer name that another row of the
+    /// same second gives is that row's, so it is left out: `photo.jpg` does
+    /// not take `Holiday - photo.jpg`. `None` when no file has that shape, or
+    /// when two or more do, because then nothing tells which file is the
+    /// row's.
     pub(crate) fn find(&self, row: &RowAttachment<'_>) -> Option<PathBuf> {
         let start = format!("{} - ", file_name_second(row.message_date));
+        let others: Vec<String> = row
+            .same_second
+            .iter()
+            .filter(|&&(name, ordinal)| (name, ordinal) != (row.csv_name, row.ordinal))
+            .flat_map(|&(name, ordinal)| names_on_disk(name, ordinal))
+            .map(|name| format!(" - {name}"))
+            .collect();
+        let fits = |file: &str, end: &str| {
+            file.len() >= start.len() + end.len() && file.starts_with(&start) && file.ends_with(end)
+        };
         for name in names_on_disk(row.csv_name, row.ordinal) {
             let end = format!(" - {name}");
             let mut matches = self.files.iter().filter(|(file, _)| {
-                file.len() >= start.len() + end.len()
-                    && file.starts_with(&start)
-                    && file.ends_with(&end)
+                fits(file, &end)
+                    && !others
+                        .iter()
+                        .any(|other| other.len() > end.len() && fits(file, other))
             });
             if let Some((_, path)) = matches.next() {
                 return matches.next().is_none().then(|| path.clone());
@@ -83,54 +111,85 @@ pub(crate) struct RowAttachment<'a> {
     /// The row's `Message Date` as the CSV writes it.
     pub message_date: &'a str,
     /// Which of the rows of its CSV that share its `Message Date` and
-    /// `Attachment` this row is, counting from 1 in CSV order.
+    /// [`written_name`] this row is, counting from 1 in CSV order.
     pub ordinal: usize,
+    /// The `Attachment` cell and ordinal of every row of the CSV at this
+    /// row's `Message Date`, this row's among them.
+    pub same_second: &'a [(&'a str, usize)],
+}
+
+/// The name iMazing writes for a file whose `Attachment` cell is `csv_name`:
+/// the stem with every non-ASCII character removed and cut to 40
+/// characters, and the extension converted ([`CONVERTED_EXTENSIONS`]).
+///
+/// Rows of one second whose cells give one written name are numbered
+/// together (` 2`, ` 3`), because one folder can't hold two files of one
+/// name.
+pub(crate) fn written_name(csv_name: &str) -> String {
+    let (stem, extension) = split_name(csv_name);
+    let extension = extension.map(|extension| converted_extension(extension).unwrap_or(extension));
+    with_ordinal(&short_stem(stem), extension, 1)
 }
 
 /// The names iMazing may have given the file of a row whose `Attachment`
 /// cell is `csv_name`, most likely first:
 ///
 /// 1. the name as written;
-/// 2. the name with the extension converted (heic to jpg, caf and opus to
-///    mp3, webp to png);
+/// 2. the name with the extension converted ([`CONVERTED_EXTENSIONS`]);
 /// 3. either of these with every non-ASCII character removed from the stem
 ///    and the stem cut to its first 40 characters.
 ///
-/// When rows of one CSV share a second and a name, iMazing writes `X.ext`
-/// for the first and `X 2.ext`, `X 3.ext`, … for the rest, so the `ordinal`-th
-/// row's stem ends with ` {ordinal}` from the second on.
+/// When rows of one CSV share a second and a [`written_name`], iMazing writes
+/// `X.ext` for the first and `X 2.ext`, `X 3.ext`, … for the rest, so the
+/// `ordinal`-th row's stem ends with ` {ordinal}` from the second on.
 fn names_on_disk(csv_name: &str, ordinal: usize) -> Vec<String> {
-    let (stem, extension) = match csv_name.rsplit_once('.') {
-        Some((stem, extension)) if !stem.is_empty() => (stem, Some(extension)),
-        _ => (csv_name, None),
+    let (stem, extension) = split_name(csv_name);
+    let extensions = match extension {
+        None => vec![None],
+        Some(extension) => [Some(extension), converted_extension(extension)]
+            .into_iter()
+            .filter(Option::is_some)
+            .collect(),
     };
-    let converted = extension.and_then(|extension| {
-        CONVERTED_EXTENSIONS
-            .iter()
-            .find(|(from, _)| extension.eq_ignore_ascii_case(from))
-            .map(|(_, to)| *to)
-    });
-    let short: String = stem
-        .chars()
-        .filter(char::is_ascii)
-        .take(MAX_STEM_CHARS)
-        .collect();
+    let short = short_stem(stem);
     let mut names: Vec<String> = Vec::new();
     for stem in [stem, short.as_str()] {
-        for extension in [extension, converted].into_iter().flatten() {
-            let name = with_ordinal(stem, Some(extension), ordinal);
-            if !names.contains(&name) {
-                names.push(name);
-            }
-        }
-        if extension.is_none() {
-            let name = with_ordinal(stem, None, ordinal);
+        for &extension in &extensions {
+            let name = with_ordinal(stem, extension, ordinal);
             if !names.contains(&name) {
                 names.push(name);
             }
         }
     }
     names
+}
+
+/// The stem and extension of a file name. A name with no `.` after its first
+/// character has no extension.
+fn split_name(name: &str) -> (&str, Option<&str>) {
+    match name.rsplit_once('.') {
+        Some((stem, extension)) if !stem.is_empty() => (stem, Some(extension)),
+        _ => (name, None),
+    }
+}
+
+/// The extension iMazing writes in place of `extension`. It is compared
+/// exactly, as #1082 settles: nothing measured shows what iMazing writes
+/// for an upper-case one.
+fn converted_extension(extension: &str) -> Option<&'static str> {
+    CONVERTED_EXTENSIONS
+        .iter()
+        .find(|(from, _)| extension == *from)
+        .map(|(_, to)| *to)
+}
+
+/// `stem` with every non-ASCII character removed, cut to its first 40
+/// characters.
+fn short_stem(stem: &str) -> String {
+    stem.chars()
+        .filter(char::is_ascii)
+        .take(MAX_STEM_CHARS)
+        .collect()
 }
 
 /// `stem` with ` {ordinal}` after it from the second row on, then the extension.
@@ -261,6 +320,7 @@ mod tests {
             csv_name,
             message_date: "2020-01-01 12:00:00",
             ordinal: 1,
+            same_second: &[],
         }
     }
 
@@ -350,9 +410,10 @@ mod tests {
     fn the_names_on_disk_are_tried_as_written_first() {
         assert_eq!(names_on_disk("IMG_0001.jpg", 1), vec!["IMG_0001.jpg"]);
         assert_eq!(
-            names_on_disk("IMG_0001.HEIC", 1),
-            vec!["IMG_0001.HEIC", "IMG_0001.jpg"]
+            names_on_disk("IMG_0001.heic", 1),
+            vec!["IMG_0001.heic", "IMG_0001.jpg"]
         );
+        assert_eq!(names_on_disk("IMG_0001.HEIC", 1), vec!["IMG_0001.HEIC"]);
         assert_eq!(
             names_on_disk("Caf\u{e9} \u{2019}menu\u{2019}.webp", 2),
             vec![
@@ -363,5 +424,33 @@ mod tests {
             ]
         );
         assert_eq!(names_on_disk("sticker_0001", 3), vec!["sticker_0001 3"]);
+    }
+
+    /// Two cells that iMazing writes as one name are numbered together.
+    #[test]
+    fn the_written_name_is_the_name_after_every_change() {
+        assert_eq!(written_name("IMG_0001.heic"), "IMG_0001.jpg");
+        assert_eq!(written_name("IMG_0001.jpg"), "IMG_0001.jpg");
+        assert_eq!(written_name("Caf\u{e9}.pdf"), "Caf.pdf");
+        assert_eq!(written_name("sticker_0001"), "sticker_0001");
+        assert_eq!(
+            written_name("Minutes of the neighbourhood garden committee meeting.pdf"),
+            "Minutes of the neighbourhood garden comm.pdf"
+        );
+    }
+
+    /// iMazing writes the seconds into every file name, also for a row whose
+    /// `Message Date` has none.
+    #[test]
+    fn the_file_name_second_always_has_seconds() {
+        assert_eq!(
+            file_name_second("2020-01-01 12:01:00"),
+            "2020-01-01 12 01 00"
+        );
+        assert_eq!(
+            file_name_second(" 2020-01-01 12:01 "),
+            "2020-01-01 12 01 00"
+        );
+        assert_eq!(file_name_second("not a date"), "not a date");
     }
 }

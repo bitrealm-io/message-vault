@@ -39,7 +39,7 @@ pub(crate) struct FolderRows<'a> {
     /// Every picture an Image row was matched to, with those rows.
     pub pictures: &'a HashMap<PathBuf, Vec<usize>>,
     /// The texts of this folder's rows, keyed by the row's `Message Date`
-    /// as iMazing writes it into a file name ([`file_name_second`]).
+    /// as iMazing writes it into a file name ([`crate::attachments::file_name_second`]).
     pub texts_at: &'a HashMap<String, Vec<String>>,
 }
 
@@ -130,11 +130,6 @@ fn message_second(name: &str) -> Option<&str> {
     name[19..].starts_with(" - ").then_some(second)
 }
 
-/// The `Message Date` of a row as iMazing writes it into a file name.
-pub(crate) fn file_name_second(message_date: &str) -> String {
-    message_date.replace(':', " ")
-}
-
 fn has_extension(path: &Path, extensions: &[&str]) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
@@ -156,10 +151,6 @@ mod tests {
         // A name shorter than a second, or with a character longer than one
         // byte where the second ends, gives none rather than a panic.
         assert_eq!(message_second("2020-01-01 12 01 0é - x"), None);
-        assert_eq!(
-            file_name_second("2020-01-01 12:01:00"),
-            "2020-01-01 12 01 00"
-        );
     }
 
     #[test]

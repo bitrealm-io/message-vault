@@ -868,8 +868,8 @@ fn a_live_photo_video_of_a_picture_two_rows_name_goes_to_the_first_row() {
 /// `{Message Date} - {label} - {name}`, where the name is the row's
 /// `Attachment` with the extension converted, non-ASCII characters removed
 /// and the stem cut to 40 characters, and ` 2`, ` 3` added when rows of one
-/// second share a name. Each row gets the file of its own second, or none
-/// when its folder holds no such file or two of them.
+/// second share the name iMazing writes. Each row gets the file of its own
+/// second, or none when its folder holds no such file or two of them.
 #[test]
 fn each_row_gets_the_file_imazing_wrote_for_it_in_its_own_folder() {
     let input = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/attachment_match");
@@ -914,6 +914,17 @@ fn each_row_gets_the_file_imazing_wrote_for_it_in_its_own_folder() {
         ("file in another chat", "file_missing"),
         // Two files of this second end with the row's name.
         ("two files", "file_missing"),
+        // Two rows of one second, one name the end of the other: the
+        // shorter one leaves the longer one's file to it.
+        ("short of two names", "short of two names"),
+        ("long of two names", "long of two names"),
+        // Two names that cut to one 40-character stem are numbered together.
+        ("first long name", "first long name"),
+        ("second long name", "second long name"),
+        // A Location row names a `.vcf`; its file is a `.url` of another stem.
+        ("location", "file_missing"),
+        // A `Message Date` without seconds still finds its file.
+        ("date without seconds", "date without seconds"),
     ] {
         assert_eq!(file_of(text), file, "{text}");
     }

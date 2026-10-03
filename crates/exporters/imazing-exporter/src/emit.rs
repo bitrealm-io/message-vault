@@ -2,14 +2,15 @@
 //! structure, then write the chosen output format via [`ExportWriter`].
 
 use crate::attachments::{
-    FolderFiles, ResolveAttachmentArgs, RowAttachment, mime_hint, resolve_attachment_cell,
+    FolderFiles, ResolveAttachmentArgs, RowAttachment, file_name_second, mime_hint,
+    resolve_attachment_cell, written_name,
 };
 use crate::attachments_emit::{attachment_digests, pending_attachment_to_ir};
 use crate::parse::{DiscoveredCsv, RawRow, SourceKind, discover_csv_files, parse_csv_file};
 use crate::parse_emit::{
     PeerInfo, collect_peer_info, is_notification, is_outgoing, parse_message_date, resolve_sender,
 };
-use crate::unnamed_files::{FolderRows, UnnamedFile, file_name_second, unnamed_files};
+use crate::unnamed_files::{FolderRows, UnnamedFile, unnamed_files};
 use anyhow::Result;
 use message_crate_core::{
     CancelFlag, ExportReport, ExportTransforms, OutputFormat, prepare_outputs, project_conversation,
@@ -204,6 +205,7 @@ impl Ingest {
         // Only a run that copies attachments looks for a row's file.
         let files = self.copy_attachments.then(|| FolderFiles::read(&folder));
         let ordinals = attachment_ordinals(&rows);
+        let same_second = attachments_by_second(&rows, &ordinals);
         let texts = self.folder_texts.entry(folder).or_default();
         let mut by_session: BTreeMap<String, Vec<(usize, &RawRow)>> = BTreeMap::new();
         for (row_index, row) in rows.iter().enumerate() {
@@ -220,12 +222,13 @@ impl Ingest {
                 .or_default()
                 .push((row_index, row));
         }
+        let csv = CsvContext {
+            index: csv_index,
+            files: files.as_ref(),
+            ordinals: &ordinals,
+            same_second: &same_second,
+        };
         for (session, session_rows) in by_session {
-            let csv = CsvFiles {
-                index: csv_index,
-                files: files.as_ref(),
-                ordinals: &ordinals,
-            };
             self.ingest_session(&csv, discovered, &session, &session_rows);
         }
     }
@@ -233,7 +236,7 @@ impl Ingest {
     /// Work out who one chat session is with, then add each of its rows.
     fn ingest_session(
         &mut self,
-        csv: &CsvFiles<'_>,
+        csv: &CsvContext<'_>,
         discovered: &DiscoveredCsv,
         session: &str,
         rows: &[(usize, &RawRow)],
@@ -269,8 +272,8 @@ impl Ingest {
                 convo
             });
         for &(row_index, row) in rows {
-            let row_file = csv.files.map(|files| (files, csv.ordinals[row_index]));
-            let Some(message) = self.message_from_row(discovered, row, &peer, row_file) else {
+            let Some(message) = self.message_from_row(discovered, row, &peer, csv, row_index)
+            else {
                 continue;
             };
             let messages = &mut self
@@ -300,7 +303,8 @@ impl Ingest {
         discovered: &DiscoveredCsv,
         row: &RawRow,
         peer: &PeerInfo,
-        row_file: Option<(&FolderFiles, usize)>,
+        csv: &CsvContext<'_>,
+        row_index: usize,
     ) -> Option<PendingMessage> {
         let Some(secs) = parse_message_date(&row.message_date, self.tz) else {
             self.report.skipped_invalid_date += 1;
@@ -315,7 +319,7 @@ impl Ingest {
             &peer.chat_id,
             &peer.contact_name,
         );
-        let (attachments, attachment_extra) = attachment_for_row(row, row_file);
+        let (attachments, attachment_extra) = attachment_for_row(row, csv, row_index);
         let service = if row.service.trim().is_empty() {
             match discovered.kind {
                 SourceKind::WhatsApp => "WhatsApp".to_string(),
@@ -451,12 +455,11 @@ fn csv_folder(discovered: &DiscoveredCsv) -> &Path {
 /// The attachment a row names (iMazing rows carry at most one), plus the
 /// sticker and transcription metadata that rides on the message.
 ///
-/// `row_file` is the row's chat folder and its place among the rows of its
-/// CSV that share its `Message Date` and `Attachment`. It is `None` when the
-/// run does not copy attachments.
+/// `row_index` is the row's place in the CSV that `csv` describes.
 fn attachment_for_row(
     row: &RawRow,
-    row_file: Option<(&FolderFiles, usize)>,
+    csv: &CsvContext<'_>,
+    row_index: usize,
 ) -> (Vec<PendingAttachment>, BTreeMap<String, String>) {
     if row.attachment.is_empty() {
         return (Vec::new(), BTreeMap::new());
@@ -465,10 +468,14 @@ fn attachment_for_row(
         row: RowAttachment {
             csv_name: &row.attachment,
             message_date: &row.message_date,
-            ordinal: row_file.map_or(1, |(_, ordinal)| ordinal),
+            ordinal: csv.ordinals[row_index],
+            same_second: csv
+                .same_second
+                .get(&file_name_second(&row.message_date))
+                .map_or(&[], Vec::as_slice),
         },
         attachment_type: &row.attachment_type,
-        files: row_file.map(|(files, _)| files),
+        files: csv.files,
     });
     let attachment = PendingAttachment {
         rel_path: row.attachment.clone(),
@@ -495,31 +502,57 @@ fn attachment_for_row(
     (vec![attachment], extra)
 }
 
-/// One CSV's files and place in the export, for the rows read from it.
-struct CsvFiles<'a> {
+/// What the rows read from one CSV share: its place in the export, its
+/// chat folder's files, and how its rows' attachments are numbered.
+struct CsvContext<'a> {
     /// The CSV's place in discovery order.
     index: usize,
     /// The files of the CSV's chat folder, when the run copies attachments.
     files: Option<&'a FolderFiles>,
-    /// Each row's place among the rows of the CSV that share its `Message
-    /// Date` and `Attachment` ([`attachment_ordinals`]).
+    /// Each row's ordinal ([`attachment_ordinals`]).
     ordinals: &'a [usize],
+    /// The rows that name a file, by their second ([`attachments_by_second`]).
+    same_second: &'a HashMap<String, Vec<(&'a str, usize)>>,
 }
 
 /// Each row's place among the rows of its CSV that share its `Message Date`
-/// and `Attachment`, counting from 1 in CSV order. iMazing names the files of
-/// such rows `X.ext`, `X 2.ext`, and on, in that order.
+/// and [`written_name`], counting from 1 in CSV order. iMazing names the
+/// files of such rows `X.ext`, `X 2.ext`, and on, in that order. Two cells
+/// that iMazing writes as one name, such as two long names that cut to the
+/// same 40 characters, are numbered together.
 fn attachment_ordinals(rows: &[RawRow]) -> Vec<usize> {
-    let mut seen: HashMap<(&str, &str), usize> = HashMap::new();
+    let mut seen: HashMap<(String, String), usize> = HashMap::new();
     rows.iter()
         .map(|row| {
             let count = seen
-                .entry((row.message_date.as_str(), row.attachment.as_str()))
+                .entry((
+                    file_name_second(&row.message_date),
+                    written_name(&row.attachment),
+                ))
                 .or_default();
             *count += 1;
             *count
         })
         .collect()
+}
+
+/// The `Attachment` cell and ordinal of every row of a CSV that names a
+/// file, keyed by the row's [`file_name_second`], so a row can leave out a
+/// file that another row of its second names by a longer name.
+fn attachments_by_second<'a>(
+    rows: &'a [RawRow],
+    ordinals: &[usize],
+) -> HashMap<String, Vec<(&'a str, usize)>> {
+    let mut by_second: HashMap<String, Vec<(&str, usize)>> = HashMap::new();
+    for (row, &ordinal) in rows.iter().zip(ordinals) {
+        if !row.attachment.is_empty() {
+            by_second
+                .entry(file_name_second(&row.message_date))
+                .or_default()
+                .push((row.attachment.as_str(), ordinal));
+        }
+    }
+    by_second
 }
 
 fn collect_attachment_sources(convo: &PendingConversation, out: &mut Vec<Option<PathBuf>>) {

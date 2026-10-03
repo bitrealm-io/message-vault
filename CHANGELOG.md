@@ -557,7 +557,9 @@ released versions carry their date on the heading.
 - 2026-10-03 **Adding a WhatsApp identity checks that it was added.** When
   a number was already a Text Message identity, adding it on WhatsApp
   closed the dialog even if the server added nothing. The dialog now stays
-  open and says "The server did not add that identity."
+  open and says "The server did not add that identity." When the list of
+  identities cannot be loaded again to check an add or a removal, the
+  dialog says so and asks you to try again.
 - 2026-09-22 **International phone numbers keep their country.** A number
   written with a country code, such as `+65 9555 0100` in an address book or
   `+44 7700 900123` as your own number, is now matched as that number. Before,

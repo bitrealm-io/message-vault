@@ -96,13 +96,15 @@ export function IdentitiesSection({
    * judged by the list, not by the profile the server answered, because the
    * profile names no service for a number.
    *
-   * A list that cannot be read after the server took the change says so,
-   * rather than showing the list's error as though the change had failed.
+   * A list that cannot be read again leaves the change unchecked, so the
+   * error says only that, and the dialog stays open. Sending the change
+   * again is harmless: an identity already linked, or already gone, stays
+   * as it is, and the list is read again.
    */
   const changeAndCheck = async (
     body: Parameters<typeof updateProfile.mutateAsync>[0],
     { address, service }: { address: string; service: string },
-    { listed, refused, unread }: { listed: boolean; refused: string; unread: string },
+    { listed, notChanged }: { listed: boolean; notChanged: string },
   ) => {
     await updateProfile.mutateAsync(body);
     let rows: Identity[];
@@ -110,10 +112,12 @@ export function IdentitiesSection({
       rows = (await identities.refetch({ throwOnError: true })).data ?? [];
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
-      throw new Error(`${unread} ${reason}`);
+      throw new Error(
+        `The server answered, but Identities could not be loaded again to check the change: ${reason}. Try again.`,
+      );
     }
     if (listsIdentity(rows, address, service) !== listed) {
-      throw new Error(refused);
+      throw new Error(notChanged);
     }
   };
 
@@ -122,8 +126,7 @@ export function IdentitiesSection({
     try {
       await changeAndCheck({ identities: [identity] }, identity, {
         listed: true,
-        refused: "The server did not add that identity.",
-        unread: "The identity was added, but the list could not be loaded again.",
+        notChanged: "The server did not add that identity.",
       });
       setAdding(false);
     } catch (e) {
@@ -138,8 +141,7 @@ export function IdentitiesSection({
     try {
       await changeAndCheck({ remove_identities: [{ address, service }] }, removeTarget, {
         listed: false,
-        refused: "The server did not remove that identity.",
-        unread: "The identity was removed, but the list could not be loaded again.",
+        notChanged: "The server did not remove that identity.",
       });
       setRemoveTarget(null);
     } catch (e) {

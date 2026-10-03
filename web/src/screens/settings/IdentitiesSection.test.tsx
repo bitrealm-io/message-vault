@@ -202,7 +202,7 @@ describe("IdentitiesSection", () => {
   const whatsapp: Identity = { ...identities[0], service: "whatsapp" };
   const listed = (items: Identity[]) => items;
 
-  it("says the identity was added when only reading the list again failed", async () => {
+  it("says the add could not be checked when reading the list again failed", async () => {
     const user = userEvent.setup({ delay: null });
     listAccountIdentities
       .mockResolvedValueOnce(identities)
@@ -217,9 +217,7 @@ describe("IdentitiesSection", () => {
 
     expect(
       await within(dialog).findByText(
-        "The identity was added, but the list could not be loaded again. Service Unavailable",
-        {},
-        { timeout: 5000 },
+        "The server answered, but Identities could not be loaded again to check the change: Service Unavailable. Try again.",
       ),
     ).toBeInTheDocument();
   });

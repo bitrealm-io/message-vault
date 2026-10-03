@@ -261,9 +261,10 @@ fn reuses_supplied_import_session_without_starting_or_completing_one() {
 }
 
 /// A push that started its own Import Run completes it once, with the
-/// message count, attachment count and bytes the push sent.
+/// bytes the push sent. The server counts the run's messages and
+/// attachments itself.
 #[test]
-fn a_push_completes_its_import_run_with_the_counts_it_sent() {
+fn a_push_completes_its_import_run_with_the_bytes_it_sent() {
     const PHOTO: &[u8] = b"photo bytes";
     let server = MockServer::start();
     let _auth = mock_session(&server);
@@ -291,8 +292,6 @@ fn a_push_completes_its_import_run_with_the_counts_it_sent() {
             .path("/v1/imports/42/complete")
             .json_body(json!({
                 "status": "completed",
-                "message_count": 1,
-                "attachment_count": 1,
                 "bytes_uploaded": PHOTO.len(),
             }));
         then.status(200).json_body(json!({ "id": 42 }));
@@ -504,6 +503,70 @@ fn failed_combined_request_only_fails_its_files() {
             .count(),
         2
     );
+}
+
+/// The server counts lines of the batch, which Upload packs from several
+/// staged files. A refusal of the batch's fourth line is reported as the
+/// line of the staged file that line came from: the second file's first
+/// message, on its line 3 because of the blank line above it.
+#[test]
+fn a_refused_line_of_a_batch_is_reported_as_the_line_of_its_staged_file() {
+    let server = MockServer::start();
+    let _auth = mock_session(&server);
+    let _run = mock_import_run(&server, 7);
+    let refused = server.mock(|when, then| {
+        when.method(POST).path("/v1/imports/7/batches");
+        then.status(400)
+            .header("Content-Type", "application/problem+json")
+            .json_body(json!({
+                "type": "https://messagecrate.app/docs/developer/reference/errors/malformed-body",
+                "title": "Malformed body",
+                "status": 400,
+                "detail": "Could not read line 4 of the batch: the message is not valid: boom.",
+                "request_id": "3f2b1c0e-8d4a-4b6e-9f21-5c7d8e9a0b1c",
+                "line": 4
+            }));
+    });
+
+    let dir = tempdir().unwrap();
+    // Batch lines 1 and 2: the first file's header and its one message.
+    write_jsonl(dir.path(), &sample_doc());
+    // Batch lines 3 to 5: the second file's header and its two messages,
+    // which are lines 3 and 4 of the file because line 2 is blank.
+    let mut second = sample_doc_for("+15555550102", "guid-2");
+    let mut later = second.messages[0].clone();
+    later.guid = "guid-3".into();
+    second.messages.push(later);
+    let second_name = format!("{}.jsonl", second.filename_stem());
+    let header = json!({
+        "schema_version": second.schema_version,
+        "export": second.export,
+        "conversation": second.conversation,
+    });
+    let mut text = format!("{header}\n\n");
+    for message in &second.messages {
+        text.push_str(&serde_json::to_string(message).unwrap());
+        text.push('\n');
+    }
+    fs::write(dir.path().join(&second_name), text).unwrap();
+
+    let report = run(&text_only_config(dir.path(), server.base_url()), None).unwrap();
+
+    assert!(!report.ok);
+    assert_eq!(refused.calls(), 1);
+    assert_eq!(report.conversations_failed, 2);
+    for result in &report.results {
+        let error = result.error.as_deref().unwrap();
+        assert!(
+            error.starts_with(&format!("line 3 of {second_name}: ")),
+            "{}: {error}",
+            result.file
+        );
+        assert!(
+            error.contains("Could not read line 4 of the batch"),
+            "the server's own sentence stays: {error}"
+        );
+    }
 }
 
 /// Three conversations, the middle one unreadable, in name order.

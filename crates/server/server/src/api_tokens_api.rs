@@ -133,6 +133,7 @@ pub struct UpdateApiTokenResponse {
 }
 
 /// List the account's named API tokens with their permissions and masked secrets.
+/// Each token's permissions are capped by the account's as they are now.
 #[utoipa::path(
     get,
     path = "/v1/accounts/{id}/api-tokens",
@@ -159,13 +160,25 @@ pub async fn list_api_tokens(
 
     schema::ensure_accounts_schema(&mut conn).await?;
     let rows = api_tokens::list_api_tokens(&mut conn, account_id).await?;
-    let items: Vec<ApiToken> = rows.into_iter().map(ApiToken::from).collect();
+    // Each token shows what it may do now: its stored scopes capped by the
+    // account's permissions as they are on this request, so a permission
+    // the owner turned off after the token was made shows as off.
+    let account_permissions = auth.permissions();
+    let items: Vec<ApiToken> = rows
+        .into_iter()
+        .map(|row| api_tokens::ApiTokenRow {
+            permissions: row.permissions.intersect(account_permissions),
+            ..row
+        })
+        .map(ApiToken::from)
+        .collect();
 
     Ok(Json(page_of(items, params)))
 }
 
 /// Create a named API token. Returns the plaintext secret once, at creation;
-/// it is never returned again.
+/// it is never returned again. The token's permissions are those the request
+/// asks for and the account holds.
 #[utoipa::path(
     post,
     path = "/v1/accounts/{id}/api-tokens",
@@ -190,7 +203,10 @@ pub async fn create_api_token(
     let mut conn = state.db.acquire().await?;
     require_account_reach(&mut conn, &auth, account_id, HOLDER_ONLY).await?;
     let label = req.label;
-    let permissions = Permissions::token(req.can_import, req.can_export);
+    // A token can narrow its account's permissions, never widen them, so
+    // what it stores is what the request asked and the account holds.
+    let permissions =
+        Permissions::token(req.can_import, req.can_export).intersect(auth.permissions());
     let expires_in_days = req.expires_in_days;
 
     schema::ensure_accounts_schema(&mut conn).await?;
@@ -497,5 +513,84 @@ mod tests {
             get_status(&state, "/v1/exports", token).await,
             StatusCode::OK
         );
+    }
+
+    /// Turn `flags` on `account_id` as the owner would.
+    async fn set_flags(
+        fixture: &crate::test_support::TestFixture,
+        account_id: i64,
+        flags: crate::db::account_profile::AccountFlags,
+    ) {
+        let mut conn = fixture.conn().await;
+        crate::db::account_profile::set_account_flags(&mut conn, account_id, flags)
+            .await
+            .unwrap();
+    }
+
+    /// A token made by an account that may not import does not report
+    /// `can_import`, in the answer or the list, whatever the request asked.
+    #[tokio::test]
+    async fn a_new_token_is_capped_by_its_accounts_permissions() {
+        use crate::db::account_profile::AccountFlags;
+        use crate::test_support::{fixture_with_account, get_json, post_created_json};
+
+        let (fixture, alice) = fixture_with_account().await;
+        set_flags(
+            &fixture,
+            alice.account_id,
+            AccountFlags {
+                can_import: Some(false),
+                ..Default::default()
+            },
+        )
+        .await;
+        let collection = format!("/v1/accounts/{}/api-tokens", alice.account_id);
+
+        let (_, created): (String, serde_json::Value) = post_created_json(
+            &fixture.state,
+            &collection,
+            &alice.token,
+            serde_json::json!({ "label": "x", "can_import": true }),
+        )
+        .await;
+        assert_eq!(created["can_import"], false, "{created}");
+        assert_eq!(created["can_export"], true, "{created}");
+
+        let listed: serde_json::Value = get_json(&fixture.state, &collection, &alice.token).await;
+        assert_eq!(listed["items"][0]["can_import"], false, "{listed}");
+        assert_eq!(listed["items"][0]["can_export"], true, "{listed}");
+    }
+
+    /// A permission the owner turns off after a token is made shows as off
+    /// in the list.
+    #[tokio::test]
+    async fn the_token_list_follows_the_accounts_permissions_as_they_are_now() {
+        use crate::db::account_profile::AccountFlags;
+        use crate::test_support::{fixture_with_account, get_json, post_created_json};
+
+        let (fixture, alice) = fixture_with_account().await;
+        let collection = format!("/v1/accounts/{}/api-tokens", alice.account_id);
+        let (_, created): (String, serde_json::Value) = post_created_json(
+            &fixture.state,
+            &collection,
+            &alice.token,
+            serde_json::json!({ "label": "pull" }),
+        )
+        .await;
+        assert_eq!(created["can_export"], true, "{created}");
+
+        set_flags(
+            &fixture,
+            alice.account_id,
+            AccountFlags {
+                can_export: Some(false),
+                ..Default::default()
+            },
+        )
+        .await;
+
+        let listed: serde_json::Value = get_json(&fixture.state, &collection, &alice.token).await;
+        assert_eq!(listed["items"][0]["can_export"], false, "{listed}");
+        assert_eq!(listed["items"][0]["can_import"], true, "{listed}");
     }
 }

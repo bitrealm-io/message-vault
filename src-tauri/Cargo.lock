@@ -2406,6 +2406,7 @@ dependencies = [
  "message-crate-core",
  "message-ir",
  "message-ir-format",
+ "message-staging",
  "serde_json",
  "sms-backup-restore-exporter",
 ]
@@ -2416,11 +2417,14 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "fs2",
+ "hex",
  "media",
  "message-crate-core",
  "message-ir",
  "message-ir-format",
  "serde",
+ "serde_json",
+ "sha2 0.11.0",
 ]
 
 [[package]]

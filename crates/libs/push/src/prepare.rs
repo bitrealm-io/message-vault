@@ -19,7 +19,7 @@ use std::time::Instant;
 use anyhow::{Context, Result, bail};
 use message_crate_core::{check_cancel, parallel_for_each};
 use message_ir::{ConversationDocument, ConversationHeader, IrAttachment, IrMessage};
-use message_ir_format::read_conversation_jsonl;
+use message_ir_format::read_conversation_jsonl_with_lines;
 
 use crate::folder::{attachment_label, resolve_attachment};
 use crate::http::{Asset, AssetUpload};
@@ -134,6 +134,9 @@ impl<'a> PrepareContext<'a> {
 pub(crate) struct ImportChunk {
     pub body: Vec<u8>,
     pub messages: Vec<JournalMessage>,
+    /// For each line of `body`, in order, the line of the staged file it was
+    /// encoded from: 1 for the header, then each message's own line.
+    pub file_lines: Vec<usize>,
 }
 
 /// Output of preparing one conversation: uploaded media + message chunks ready to import.
@@ -174,7 +177,7 @@ pub(crate) fn prepare_file(
 ) -> Result<PreparedFile> {
     let total_started = Instant::now();
     let read_started = Instant::now();
-    let doc = read_conversation_jsonl(path)?;
+    let (doc, message_lines) = read_conversation_jsonl_with_lines(path)?;
     let mut profile = UploadProfile {
         read_ms: elapsed_ms(read_started),
         ..UploadProfile::default()
@@ -209,7 +212,7 @@ pub(crate) fn prepare_file(
         log_lines.extend(uploaded.log_lines);
     }
 
-    let chunks = build_import_chunks(ctx, name, &doc, &scan.projections)?;
+    let chunks = build_import_chunks(ctx, name, &doc, &message_lines, &scan.projections)?;
     Ok(PreparedFile {
         source,
         chunks,
@@ -371,6 +374,7 @@ fn scan_one_attachment(
 /// line + many message lines" as NDJSON bytes, sized under the request limits.
 ///
 /// Messages the journal already saw are left out unless `force` is set.
+/// `message_lines` holds the line of the staged file each message is on.
 ///
 /// # Errors
 ///
@@ -380,6 +384,7 @@ fn build_import_chunks(
     ctx: &PrepareContext<'_>,
     name: &str,
     doc: &ConversationDocument,
+    message_lines: &[usize],
     projections: &[Vec<AttachmentProjection>],
 ) -> Result<Vec<ImportChunk>> {
     let mut builder = ChunkBuilder::new(
@@ -414,6 +419,7 @@ fn build_import_chunks(
                 file: name.to_string(),
                 guid,
             },
+            message_lines[i],
         );
     }
     Ok(builder.finish())
@@ -428,7 +434,11 @@ struct ChunkBuilder {
     chunks: Vec<ImportChunk>,
     body: Vec<u8>,
     messages: Vec<JournalMessage>,
+    file_lines: Vec<usize>,
 }
+
+/// The line of the staged file a conversation header is on.
+const HEADER_FILE_LINE: usize = 1;
 
 impl ChunkBuilder {
     /// Start with an empty chunk that already holds the conversation header.
@@ -440,11 +450,13 @@ impl ChunkBuilder {
             max_body_bytes,
             chunks: Vec::new(),
             messages: Vec::new(),
+            file_lines: vec![HEADER_FILE_LINE],
         }
     }
 
-    /// Add one encoded message, starting a new chunk first when this one is full.
-    fn push(&mut self, line: &[u8], message: JournalMessage) {
+    /// Add one encoded message, from line `file_line` of the staged file,
+    /// starting a new chunk first when this one is full.
+    fn push(&mut self, line: &[u8], message: JournalMessage, file_line: usize) {
         let full = !self.messages.is_empty()
             && (self.messages.len() >= self.max_messages
                 || self.body.len() + line.len() > self.max_body_bytes);
@@ -453,6 +465,7 @@ impl ChunkBuilder {
         }
         self.body.extend_from_slice(line);
         self.messages.push(message);
+        self.file_lines.push(file_line);
     }
 
     /// Move the current chunk onto the finished list and start a fresh one.
@@ -460,6 +473,7 @@ impl ChunkBuilder {
         self.chunks.push(ImportChunk {
             body: std::mem::replace(&mut self.body, self.header_line.clone()),
             messages: std::mem::take(&mut self.messages),
+            file_lines: std::mem::replace(&mut self.file_lines, vec![HEADER_FILE_LINE]),
         });
     }
 
@@ -1031,12 +1045,16 @@ mod tests {
                     file: "c.jsonl".into(),
                     guid: format!("g{i}"),
                 },
+                i + 2,
             );
         }
         let chunks = builder.finish();
         assert_eq!(chunks.len(), 3);
         assert!(chunks.iter().all(|c| c.body.starts_with(&header)));
         assert_eq!(chunks[2].messages.len(), 1);
+        // Every chunk repeats the header, so each starts again at line 1.
+        let lines: Vec<&[usize]> = chunks.iter().map(|c| c.file_lines.as_slice()).collect();
+        assert_eq!(lines, [&[1, 2, 3][..], &[1, 4, 5], &[1, 6]]);
     }
 
     /// A conversation too big for one request is cut into chunks that each
@@ -1058,6 +1076,7 @@ mod tests {
                     file: "c.jsonl".into(),
                     guid: format!("g{i}"),
                 },
+                i + 2,
             );
         }
         let chunks = builder.finish();

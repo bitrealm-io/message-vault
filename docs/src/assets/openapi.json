@@ -690,6 +690,7 @@
           "Accounts"
         ],
         "summary": "List the account's named API tokens with their permissions and masked secrets.",
+        "description": "Each token's permissions are capped by the account's as they are now.",
         "operationId": "list_api_tokens",
         "parameters": [
           {
@@ -799,7 +800,7 @@
           "Accounts"
         ],
         "summary": "Create a named API token.",
-        "description": "Returns the plaintext secret once, at creation; it is never returned again.",
+        "description": "Returns the plaintext secret once, at creation; it is never returned again. The token's permissions are those the request asks for and the account holds.",
         "operationId": "create_api_token",
         "parameters": [
           {
@@ -1670,7 +1671,7 @@
           "Accounts"
         ],
         "summary": "Destroy one account's conversations, messages, and attachments.",
-        "description": "The account itself, its contacts, and its login survive.\n\nThe owner may, on any account. The account itself may with a\nsession that carries the `delete` permission, and confirms in the body.\nAn API token is refused whatever its scopes: permanent deletion is a\nperson's act (`docs/architecture/http-api.md`, \"Credentials and reach\").",
+        "description": "The account itself, its contacts, and its login survive.\n\nThe rows go in one transaction, between two batches of a running Import\nRun and never inside one. The attachment files go after it, unless the\naccount has a running Import Run: that run may have uploaded files for a\nbatch it has not sent yet, so every file stays on disk.\n\nThe owner may, on any account. The account itself may with a\nsession that carries the `delete` permission, and confirms in the body.\nAn API token is refused whatever its scopes: permanent deletion is a\nperson's act (`docs/architecture/http-api.md`, \"Credentials and reach\").",
         "operationId": "delete_account_messages",
         "parameters": [
           {
@@ -3954,7 +3955,7 @@
           "Contacts"
         ],
         "summary": "Load an address book into this account.",
-        "description": "The body is the file itself: Message Crate's own CSV, one row per identity, with the columns `contact_id`, `display_name`, `groups`, `service`, `handle_type` and `identity`, as `POST /v1/contacts/address-book` writes it.\n\nRows that share a `contact_id` are one contact. An id the account holds\nnames that contact, a blank id makes a new contact for that row, and any\nother text groups its rows into one new contact. `append` creates and\nrenames contacts and adds the identities and Contact Group memberships\nthe rows list. `edit` does the same and then takes off each contact in\nthe file every identity and membership its rows do not list. A contact\nthe file does not mention is left alone in both modes.\n\nA phone number written without `+`, which a spreadsheet can save in place\nof `+6591234567`, names the identity `+` and its digits when the row's\ncontact holds that key. Otherwise it is keyed as written: ten digits as a\nUS number, any other count as bare digits. `notes` names each row read\nwith its `+` back, and each such number that became a new identity.\n\nThe load is one transaction. A file that breaks a rule is refused whole\nwith `422 Unprocessable Entity`, and `errors` holds one sentence for each\nbad row, starting with its row number.",
+        "description": "The body is the file itself: Message Crate's own CSV, one row per identity, with the columns `contact_id`, `display_name`, `groups`, `service`, `handle_type` and `identity`, as `POST /v1/contacts/address-book` writes it.\n\nRows that share a `contact_id` are one contact. An id the account holds\nnames that contact, a blank id makes a new contact for that row, and any\nother text groups its rows into one new contact. `append` creates and\nrenames contacts and adds the identities and Contact Group memberships\nthe rows list. `edit` does the same and then takes off each contact in\nthe file every identity and membership its rows do not list. A contact\nthe file does not mention is left alone in both modes.\n\nA phone number written without `+`, which a spreadsheet can save in place\nof `+6591234567`, names the identity `+` and its digits when the row's\ncontact holds that key. Otherwise it is keyed as written: ten digits as a\nUS number, any other count as bare digits. `notes` names each row read\nwith its `+` back, and each such number that became a new identity.\n\nOne `'` before a cell that starts with `=`, `+`, `-`, `@`, a tab or a\ncarriage return is taken off, in any column, which undoes the `'` the\nexport writes there.\n\nThe load is one transaction. A file that breaks a rule is refused whole\nwith `422 Unprocessable Entity`, and `errors` holds one sentence for each\nbad row, starting with its row number.",
         "operationId": "create_contacts",
         "parameters": [
           {
@@ -4082,7 +4083,7 @@
           "Contacts"
         ],
         "summary": "Write the address book for the contacts a search matches, the checked ones among them, or every contact when the body names neither.",
-        "description": "The answer is `text/csv`, not JSON: one row per identity, with the\ncolumns `contact_id`, `display_name`, `groups`, `service`, `handle_type`\nand `identity`. A contact's name and its Contact Group names, separated\nby `;`, repeat on each of its rows. A contact with no name has a blank\n`display_name`, and a contact with no identity is one row with the last\nthree columns blank. Contacts in the trash are left out.\n`POST /v1/contacts` loads the file back.",
+        "description": "The answer is `text/csv`, not JSON: one row per identity, with the\ncolumns `contact_id`, `display_name`, `groups`, `service`, `handle_type`\nand `identity`. A contact's name and its Contact Group names, separated\nby `;`, repeat on each of its rows. A contact with no name has a blank\n`display_name`, and a contact with no identity is one row with the last\nthree columns blank. Contacts in the trash are left out.\n\nA cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return\nis written with a `'` in front, in every column, because a spreadsheet\nruns such a cell as a formula and drops the `+` of a phone number.\n`POST /v1/contacts` loads the file back and takes that `'` off.",
         "operationId": "export_address_book",
         "requestBody": {
           "content": {
@@ -10298,18 +10299,11 @@
       },
       "CompleteImportRequest": {
         "type": "object",
-        "description": "Final stats and issues for a running Import Run. The outcome is stated\nonce, as `status`.",
+        "description": "Final stats and issues for a running Import Run. The outcome is stated\nonce, as `status`. The run's message and attachment counts are not part\nof it: the server counts what the run holds, since a resumed Upload's\nclient knows only what the resume sent.",
         "required": [
           "status"
         ],
         "properties": {
-          "attachment_count": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64"
-          },
           "attachments_ms": {
             "type": [
               "integer",
@@ -10336,13 +10330,6 @@
             "items": {
               "$ref": "#/components/schemas/CompleteImportIssueRequest"
             }
-          },
-          "message_count": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64"
           },
           "parse_ms": {
             "type": [
@@ -11136,7 +11123,7 @@
           "attachments": {
             "type": "integer",
             "format": "int64",
-            "description": "Attachment rows deleted (on-disk files are removed too).",
+            "description": "Attachment rows deleted. Their files are removed too, unless the\naccount has a running Import Run.",
             "minimum": 0
           },
           "conversations": {
@@ -13614,7 +13601,7 @@
       },
       "Problem": {
         "type": "object",
-        "description": "An RFC 7807 problem document: the body of every failure the server answers,\nserved as `application/problem+json` (`docs/architecture/http-api.md`).\n\n`type` is the URL of the page describing this kind of failure, one page per\ntype, or `about:blank` for an internal error. A validation failure carries\n`errors`, every field that failed, in place of `detail`. Every problem\nrepeats the response's `x-request-id` as `request_id`, so the person\nreading the failure and the operator reading the log are looking at the\nsame request.\n\nThe extension members belong to one type each: `word` and `did_you_mean`\nto `search-query-invalid`, `retry_after` to `rate-limited`.",
+        "description": "An RFC 7807 problem document: the body of every failure the server answers,\nserved as `application/problem+json` (`docs/architecture/http-api.md`).\n\n`type` is the URL of the page describing this kind of failure, one page per\ntype, or `about:blank` for an internal error. A validation failure carries\n`errors`, every field that failed, in place of `detail`. Every problem\nrepeats the response's `x-request-id` as `request_id`, so the person\nreading the failure and the operator reading the log are looking at the\nsame request.\n\nThe extension members belong to one type each: `word` and `did_you_mean`\nto `search-query-invalid`, `retry_after` to `rate-limited`, `line` to\n`malformed-body`.",
         "required": [
           "type",
           "title",
@@ -13644,6 +13631,15 @@
               "type": "string"
             },
             "description": "Every rule the request broke, one sentence each. Only on\n`validation-failed`."
+          },
+          "line": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "`malformed-body` from an import batch: the line of the request body\nthe server could not read, counted from 1 with blank lines included.\nThe body is a batch the client packed, so only the client can say\nwhich file and line of its own that line came from.",
+            "minimum": 0
           },
           "request_id": {
             "type": [
@@ -14129,7 +14125,7 @@
               "string",
               "null"
             ],
-            "description": "Display name to set; `None` (or empty) leaves the current name unchanged."
+            "description": "Display name. Absent leaves the current name unchanged, `null` clears\nit, and a string sets it, trimmed. A string that is empty after\ntrimming clears it."
           },
           "remove_identities": {
             "type": "array",

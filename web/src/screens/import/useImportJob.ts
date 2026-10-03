@@ -18,9 +18,9 @@ import {
   type ImportStage,
   setImportStage,
 } from "../../lib/importSession";
-import { importSessionCreateBody } from "../../lib/importSource";
+import { importSessionCreateBody, showsAttachmentOptions } from "../../lib/importSource";
 import { CANCELLED_MESSAGE, createRunCancel, type RunCancel } from "../../lib/runCancel";
-import { mediaExtractFields, sbrExtractFields } from "../../lib/sbrExtractFields";
+import { sbrExtractFields } from "../../lib/sbrExtractFields";
 import { completeImport, createImport, getServerState } from "../../lib/serverApi";
 import { resolveImportStagingDir } from "../../lib/system-settings";
 import {
@@ -98,13 +98,13 @@ function mediaDoneDetail(mode: AttachmentMediaMode): string {
 }
 
 /**
- * Extract stages originals regardless of the chosen media mode (ffmpeg is
- * only required once Gate 1 is approved, not up front) — convert and
- * compress run afterward, against the staged folder, via
- * `invokeTranscodeStaging`. Copy and skip pass through unchanged.
+ * The form an Import Run is started with, its attachment mode as the form
+ * showed it. iMazing and OpenExtract show no Attachments field, so the
+ * field may still hold what was chosen for another source; their runs copy
+ * attachments, and the run's stored form says so.
  */
-function extractAttachmentMedia(mode: AttachmentMediaMode): AttachmentMediaMode {
-  return mode === "convert" || mode === "compress" ? "copy" : mode;
+function withShownAttachmentMode(form: ImportJobFormValues): ImportJobFormValues {
+  return showsAttachmentOptions(form.source) ? form : { ...form, attachmentMedia: "copy" };
 }
 
 /**
@@ -117,27 +117,6 @@ function assetLimitOf(form: Pick<ImportJobFormValues, "assetMaxBytes">): number 
     throw new Error("This Import Run has no attachment size limit stored with it.");
   }
   return form.assetMaxBytes;
-}
-
-/**
- * The fields `summarize_staging` and `transcode_staging` share: the media
- * fields read from the submitted form, and the run's attachment size limit.
- */
-function stagingMediaFields(
-  form: Pick<
-    ImportJobFormValues,
-    "attachmentMedia" | "maxResolution" | "maxFps" | "minSizeMb" | "assetMaxBytes"
-  >,
-): Omit<StagingConfig, "staging_dir"> {
-  return {
-    ...mediaExtractFields({
-      attachmentMedia: form.attachmentMedia,
-      maxResolution: form.maxResolution,
-      maxFps: form.maxFps,
-      minSizeMb: form.minSizeMb,
-    }),
-    asset_max_bytes: assetLimitOf(form),
-  };
 }
 
 /** What a step is doing and what it counts, for every step but `media`
@@ -346,14 +325,6 @@ type RunScratch = {
   importStartedAt: number;
   form: ImportJobFormValues | null;
   attachmentMode: AttachmentMediaMode;
-  /**
-   * What extract is doing to attachments right now: "copy" under
-   * convert/compress too, since extract only stages originals; the Media
-   * stage, not this, tells the convert/compress story. Kept apart from
-   * `attachmentMode`, the mode the person chose, which drives the Media
-   * row's wording and the row list's shape.
-   */
-  extractMediaMode: AttachmentMediaMode;
   lastAttachmentProgress: AttachmentProgressCounts | null;
   /**
    * The Staging row's latest line for each stage that reports on it. Reading
@@ -388,7 +359,6 @@ function freshScratch(): RunScratch {
     importStartedAt: 0,
     form: null,
     attachmentMode: "copy",
-    extractMediaMode: "copy",
     lastAttachmentProgress: null,
     stagingLines: {},
     reviewAction: false,
@@ -458,7 +428,6 @@ function beginRun(form: ImportJobFormValues, firstStep: ImportIssue["step"]): vo
   scratch.lastAttachmentProgress = null;
   scratch.stagingLines = {};
   scratch.attachmentMode = form.attachmentMedia;
-  scratch.extractMediaMode = extractAttachmentMedia(form.attachmentMedia);
   scratch.form = form;
   scratch.runCancel = createRunCancel();
 }
@@ -545,7 +514,7 @@ function progressDetail(event: ImportProgressEvent): string {
   if (event.step === "attachments") {
     const last = scratch.lastAttachmentProgress;
     return formatAttachmentProgress({
-      mode: scratch.extractMediaMode,
+      mode: scratch.attachmentMode,
       done: event.done,
       total: event.total,
       bytesDone: event.bytes_done ?? last?.bytesDone ?? 0,
@@ -677,7 +646,9 @@ function waitAtReview(phase: "staging_review" | "media_review"): void {
  * `cancelled` overrides `importOutcome`'s verdict outright: the person asked
  * for this, so it is never read as a failure. `paused` does the same for an
  * Upload stopped by Pause, and also skips `/complete`: the run stays at
- * `pushing` with its folder, and the next visit offers to resume it.
+ * `pushing` with its folder, and the next visit offers to resume it. A
+ * finished Upload whose `/complete` the server refuses ends the same way,
+ * with the server's error among the run's issues on screen.
  *
  * `skipComplete` is that one exception. A cancellation mid Media is routed
  * to the same recovery as a crash at that stage, and only an explicit
@@ -757,13 +728,13 @@ async function finishImport(args: {
       return { ...step, durationMs: duration };
     }),
   );
-  const ok = outcome === "completed" || outcome === "completed_with_issues";
+  let completeRefused: string | null = null;
   if (sessionId && !skipComplete && !paused) {
     try {
+      // The server counts the messages and attachments the run holds: a
+      // resumed Upload's report counts only what the resume sent.
       await completeImport(sessionId, {
         status: outcome,
-        message_count: pushReport?.messages_inserted,
-        attachment_count: pushReport?.assets_uploaded,
         bytes_uploaded: pushReport?.assets_bytes,
         parse_ms: parseMs,
         attachments_ms: attachmentsMs,
@@ -783,16 +754,40 @@ async function finishImport(args: {
         },
         issues: finalSummary.issues,
       });
-    } catch {
-      // Completing the run on the server is optional. The summary still shows local results.
+    } catch (e: unknown) {
+      completeRefused = e instanceof Error ? e.message : String(e);
     }
   }
-  // Once the server holds the import, the staging directory is a second,
-  // unprotected copy of the person's messages in a temp folder, so it goes:
-  // the push log, journal and report with it. The server's own import record
-  // (counts, timings, issues) is what stays. A failed, cancelled or paused
-  // run keeps its folder, since the staged files are what a resume reads.
-  const stagingDir = ok ? await deleteStagingAfterSuccess() : store.get().stagingDir;
+  const ok = outcome === "completed" || outcome === "completed_with_issues";
+  if (completeRefused != null) {
+    // The server still holds the run as running. A run whose Upload went
+    // through stays at `pushing`, paused, and the next visit resumes it: the
+    // resumed push finds every message already sent and posts `/complete`
+    // again. The error is shown here only, since the server never took the
+    // issues it would be recorded with.
+    if (ok) {
+      finalSummary.status = "paused";
+      setRowByLabel(UPLOAD_LABEL, { status: "error", detail: "Paused" });
+    }
+    finalSummary.issues = [
+      ...finalSummary.issues,
+      {
+        kind: "error",
+        step: "upload",
+        item: "Import",
+        reason: `Message Crate didn't record the import as finished: ${completeRefused}`,
+      },
+    ];
+  }
+  // Once the server holds the finished import, the staging directory is a
+  // second, unprotected copy of the person's messages in a temp folder, so
+  // it goes: the push log, journal and report with it. The server's own
+  // import record (counts, timings, issues) is what stays. A failed,
+  // cancelled or paused run keeps its folder, since the staged files are
+  // what a resume reads, and so does a run whose completion the server did
+  // not take, since it is still running there.
+  const stagingDir =
+    ok && completeRefused == null ? await deleteStagingAfterSuccess() : store.get().stagingDir;
   // The server writes this run's saved search and Contact Group when the run
   // completes, so a window closed mid-import still gets them.
   store.set({ summaryView: finalSummary, phase: "done", running: false, stagingDir });
@@ -956,12 +951,7 @@ async function runMediaPass(
   let threw = false;
   let cancelled = false;
   try {
-    const result = await runJob(() =>
-      invokeTranscodeStaging({
-        staging_dir: outputDir,
-        ...stagingMediaFields(form),
-      }),
-    );
+    const result = await runJob(() => invokeTranscodeStaging({ staging_dir: outputDir }));
     transcodeReport = result.transcode;
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -1003,10 +993,7 @@ async function runMediaPass(
 
   store.set({ computingSummary: true });
   try {
-    const actual = await summarizeStagingWithProgress({
-      staging_dir: outputDir,
-      ...stagingMediaFields(form),
-    });
+    const actual = await summarizeStagingWithProgress({ staging_dir: outputDir });
     store.set({ mediaSummary: actual, mediaFailedCount: transcodeReport?.failed ?? null });
     await moveStageAtReview(sessionId, "awaiting_gate_2", approvedSummary);
     waitAtReview("media_review");
@@ -1020,11 +1007,14 @@ async function runMediaPass(
   }
 }
 
-/** Fields extract needs for this form's source. */
+/**
+ * Fields extract needs for this form's source. The media fields go only to
+ * a source whose form shows them, as the person chose them: extract checks
+ * them before anything is staged and records them for the later stages.
+ */
 function extractFieldsFor(form: ImportJobFormValues) {
-  const attachmentMedia = extractAttachmentMedia(form.attachmentMedia);
   const media = {
-    attachmentMedia,
+    attachmentMedia: form.attachmentMedia,
     maxResolution: form.maxResolution,
     maxFps: form.maxFps,
     minSizeMb: form.minSizeMb,
@@ -1074,7 +1064,7 @@ async function runImport(
   resumeWrite?: ResumeWrite,
 ): Promise<void> {
   if (!isTauri()) return;
-  let form = submitted;
+  let form = withShownAttachmentMode(submitted);
   beginRun(form, "parse");
   store.set({
     running: true,
@@ -1171,6 +1161,7 @@ async function runImport(
         path: form.backupPath,
         output_dir: outputDir,
         ...(resumeWrite ? { resume: true } : {}),
+        asset_max_bytes: assetLimitOf(form),
         ...extractFieldsFor(form),
       }),
     );
@@ -1182,10 +1173,9 @@ async function runImport(
     const extractFinishedAt = performance.now();
     const { parseMs, attachmentsMs, prepareMs } = stageDurations(scratch.timing, extractFinishedAt);
     scratch.durations = { parseMs, attachmentsMs, prepareMs };
-    // What extract did ("Copied", not "Converted", under convert/compress
-    // too), as the Staging row's done line.
+    // What extract did, as the Staging row's done line.
     const attachmentDoneLine = attachmentDoneDetail(
-      extractAttachmentMedia(form.attachmentMedia),
+      form.attachmentMedia,
       scratch.lastAttachmentProgress,
     );
     store.set({
@@ -1213,10 +1203,7 @@ async function runImport(
     // written above (`awaiting_gate_1`) stays as it is: the next visit's
     // resume check finds the same run and offers this recompute again.
     try {
-      const summary = await summarizeStagingWithProgress({
-        staging_dir: outputDir,
-        ...stagingMediaFields(form),
-      });
+      const summary = await summarizeStagingWithProgress({ staging_dir: outputDir });
       const toolsMissing = await mediaToolsMissingFor(form.attachmentMedia);
       store.set({ stagingSummary: summary, mediaToolsMissing: toolsMissing });
       waitAtReview("staging_review");
@@ -1466,10 +1453,7 @@ export function useImportJob() {
         running: true,
       });
       try {
-        const actual = await summarizeStagingWithProgress({
-          staging_dir: outputDir,
-          ...stagingMediaFields(resumedForm),
-        });
+        const actual = await summarizeStagingWithProgress({ staging_dir: outputDir });
         if (review === "staging_review") {
           const missing = await mediaToolsMissingFor(resumedForm.attachmentMedia);
           store.set({

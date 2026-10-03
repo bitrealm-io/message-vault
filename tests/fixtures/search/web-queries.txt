@@ -48,7 +48,7 @@ conversations	handle:"Book Club"
 conversations	handle:"Family (close)"
 conversations	handle:"Family (close)" kind:group participants:=5
 conversations	handle:"Say ""Hi"""
-conversations	handle:"Say ""Hi""" participants:<2
+conversations	handle:"Say ""Hi""" participants:<2 source:sms-backup-restore
 conversations	handle:"Smith,Jones"
 conversations	handle:"Work*"
 conversations	handle:"x)"
@@ -58,6 +58,7 @@ conversations	kind:direct (with:#42)
 conversations	kind:group
 conversations	kind:group (handle:"Book Club")
 conversations	kind:group (with:#42)
+conversations	source:imessage,whatsapp,sms-backup-restore,imazing,openextract,go-sms-pro,sms-backup-plus
 conversations	tag:"#3"
 conversations	tag:"Book Club"
 conversations	tag:"Family (close)"

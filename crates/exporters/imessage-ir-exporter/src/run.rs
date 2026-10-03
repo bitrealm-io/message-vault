@@ -14,9 +14,10 @@ use imessage_reader_protocol::{ExportRequest, Platform, Request, Source};
 use message_crate_core::{
     AppleConfig, ApplePlatform, CancelFlag, ExportTransforms, ExporterConfig, LogSink,
     OutputFormat, ProgressEvent, ProgressSink, RunResult, SourceConfig, emit_progress,
+    prepare_outputs,
 };
 
-use crate::{backup::ios_backup_encrypted_flag, convert, helper::Helper};
+use crate::{backup::ios_backup_encrypted_flag, convert, helper::Helper, scratch::ScratchDir};
 
 /// User-facing copy when a custom attachment folder is missing.
 pub(crate) const ATTACHMENT_FOLDER_MISSING: &str = "Attachment folder does not exist.";
@@ -31,6 +32,9 @@ pub(crate) const NOT_AN_IPHONE_BACKUP: &str =
 /// Where an iPhone backup keeps the Messages database: the SHA-1 of its
 /// domain and path, under a folder named by its first two characters.
 const MESSAGES_DB_IN_IOS_BACKUP: &str = "3d/3d0d7e5fb2ce288813306e4d4636395e047a3d28";
+
+/// The folder under the output folder that the program decrypts into.
+const SCRATCH_FOLDER: &str = ".imessage-reader";
 
 /// Where the Messages database lives on a Mac.
 fn default_macos_db_path() -> PathBuf {
@@ -66,9 +70,14 @@ fn attachment_embed_from_copy_method(copy_method: &str) -> Result<AttachmentEmbe
 /// Everything one export run needs, checked and ready to send.
 #[derive(Debug)]
 pub(crate) struct ExportOptions {
-    /// The request for the `imessage-reader` program, minus the scratch
-    /// folder, which is created when the run starts.
-    pub request: ExportRequest,
+    /// The Messages data the `imessage-reader` program reads.
+    pub source: Source,
+    /// [`ExportRequest::attachment_root`].
+    pub attachment_root: Option<String>,
+    /// [`ExportRequest::contacts_path`].
+    pub contacts_path: Option<PathBuf>,
+    /// [`ExportRequest::use_caller_id`].
+    pub use_caller_id: bool,
     pub export_path: PathBuf,
     pub attachment_embed: AttachmentEmbed,
     /// Media / obfuscate transforms applied by [`message_ir_format::FormatSink`].
@@ -87,6 +96,17 @@ pub(crate) struct ExportOptions {
 }
 
 impl ExportOptions {
+    /// The request for the program, which decrypts into `scratch_dir`.
+    pub fn export_request(&self, scratch_dir: &Path) -> Request {
+        Request::Export(ExportRequest {
+            source: self.source.clone(),
+            attachment_root: self.attachment_root.clone(),
+            contacts_path: self.contacts_path.clone(),
+            use_caller_id: self.use_caller_id,
+            scratch_dir: scratch_dir.to_path_buf(),
+        })
+    }
+
     /// Write one log line when a log sink is configured.
     pub fn emit_log(&self, line: impl AsRef<str>) {
         message_crate_core::emit_log(self.log.as_ref(), line);
@@ -120,33 +140,37 @@ fn run_with(
     config: &ExporterConfig,
     spawn: impl FnOnce(&Request, Option<LogSink>, Option<ProgressSink>) -> Result<Helper>,
 ) -> Result<RunResult> {
-    // The program writes decrypted files here and this run deletes the
-    // folder when it ends, whichever way it ends.
-    let scratch = tempfile::Builder::new()
-        .prefix("imessage-reader-")
-        .tempdir()?;
-    let options = options_from_export_config(config, scratch.path().to_path_buf())?;
+    let options = options_from_export_config(config)?;
     options.check_cancel()?;
+    let output = convert::open_output(&options)?;
 
-    let mut helper = spawn(
-        &Request::Export(options.request.clone()),
-        options.log.clone(),
-        options.progress.clone(),
-    )?;
-    let report = convert::export(&mut helper, &options)?;
-    helper.finish()?;
-    drop(scratch);
+    // The program writes decrypted files into a folder under the output
+    // folder, on the disk the write step checks for room, rather than the
+    // system's temporary folder, which can be a small RAM disk that no
+    // check measures (#1134). The request's folder in it is deleted when
+    // the run ends, whichever way it ends, and the next run deletes what a
+    // killed one left there.
+    let scratch_root = options.export_path.join(SCRATCH_FOLDER);
+    let report = {
+        let scratch = ScratchDir::create(&scratch_root)?;
+        let mut helper = spawn(
+            &options.export_request(scratch.path()),
+            options.log.clone(),
+            options.progress.clone(),
+        )?;
+        let report = convert::export(&mut helper, &options, output)?;
+        helper.finish()?;
+        report
+    };
+    // Only this run uses the folder, so its lock file goes too.
+    let _ = std::fs::remove_dir_all(&scratch_root);
     options.check_cancel()?;
 
     message_crate_core::finish_run(config, &report, config.media.mode.needs_tools())
 }
 
 /// Translate the shared exporter config into this exporter's options, rejecting non-Apple sources.
-/// The program is told to decrypt into `scratch_dir`.
-fn options_from_export_config(
-    config: &ExporterConfig,
-    scratch_dir: PathBuf,
-) -> Result<ExportOptions> {
+fn options_from_export_config(config: &ExporterConfig) -> Result<ExportOptions> {
     let SourceConfig::Apple(source) = &config.source else {
         bail!("imessage-ir-exporter requires SourceConfig::Apple");
     };
@@ -175,22 +199,26 @@ fn options_from_export_config(
 
     let attachment_embed = attachment_embed_from_copy_method(&source.copy_method)?;
 
-    // Create the output directory; prior IR artifacts are removed in `convert`
-    // via ExportWriter::open.
-    std::fs::create_dir_all(&config.output)?;
+    // Create the output directory, refused when it is or holds the database,
+    // the backup or the attachment folder a Mac export reads, because
+    // `convert` cleans it through ExportWriter::open.
+    let mut inputs = vec![db_path.clone()];
+    if platform == Platform::MacOs
+        && let Some(root) = &source.attachment_root
+    {
+        inputs.push(PathBuf::from(root));
+    }
+    prepare_outputs(&inputs, &config.output)?;
 
     Ok(ExportOptions {
-        request: ExportRequest {
-            source: Source {
-                db_path,
-                platform,
-                backup_password: source.backup_password.clone(),
-            },
-            attachment_root: source.attachment_root.clone(),
-            contacts_path: source.apple_contacts.clone(),
-            use_caller_id: source.use_caller_id,
-            scratch_dir,
+        source: Source {
+            db_path,
+            platform,
+            backup_password: source.backup_password.clone(),
         },
+        attachment_root: source.attachment_root.clone(),
+        contacts_path: source.apple_contacts.clone(),
+        use_caller_id: source.use_caller_id,
         export_path: config.output.clone(),
         attachment_embed,
         transforms: ExportTransforms::from_config(config),
@@ -289,11 +317,6 @@ mod tests {
     use message_crate_core::{AppleConfig, MediaConfig, OutputFormat};
     use std::{fs, path::Path};
 
-    /// [`options_from_export_config`] with `/scratch` as the scratch folder.
-    fn options_for(config: &ExporterConfig) -> Result<ExportOptions> {
-        options_from_export_config(config, PathBuf::from("/scratch"))
-    }
-
     fn apple_cfg(input: &Path, apple: AppleConfig) -> ExporterConfig {
         ExporterConfig {
             inputs: vec![input.to_path_buf()],
@@ -317,7 +340,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let chat = dir.path().join("chat.db");
         fs::write(&chat, b"sqlite").unwrap();
-        let err = options_for(&apple_cfg(
+        let err = options_from_export_config(&apple_cfg(
             &chat,
             AppleConfig {
                 platform: Some(ApplePlatform::MacOs),
@@ -347,7 +370,7 @@ mod tests {
     fn missing_chat_db_uses_locked_copy() {
         let dir = tempfile::tempdir().unwrap();
         let missing = dir.path().join("chat.db");
-        let err = options_for(&apple_cfg(
+        let err = options_from_export_config(&apple_cfg(
             &missing,
             AppleConfig {
                 platform: Some(ApplePlatform::MacOs),
@@ -363,7 +386,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let chat = dir.path().join("chat.db");
         fs::write(&chat, b"sqlite").unwrap();
-        let err = options_for(&apple_cfg(
+        let err = options_from_export_config(&apple_cfg(
             &chat,
             AppleConfig {
                 platform: Some(ApplePlatform::MacOs),
@@ -380,7 +403,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let chat = dir.path().join("chat.db");
         fs::write(&chat, b"sqlite").unwrap();
-        let err = options_for(&apple_cfg(
+        let err = options_from_export_config(&apple_cfg(
             &chat,
             AppleConfig {
                 platform: Some(ApplePlatform::MacOs),
@@ -395,7 +418,7 @@ mod tests {
     #[test]
     fn empty_folder_is_not_an_iphone_backup() {
         let dir = tempfile::tempdir().unwrap();
-        let err = options_for(&apple_cfg(
+        let err = options_from_export_config(&apple_cfg(
             dir.path(),
             AppleConfig {
                 platform: Some(ApplePlatform::Ios),
@@ -417,7 +440,7 @@ mod tests {
 <plist version="1.0"><dict><key>IsEncrypted</key><false/></dict></plist>"#,
         )
         .unwrap();
-        let err = options_for(&apple_cfg(
+        let err = options_from_export_config(&apple_cfg(
             dir.path(),
             AppleConfig {
                 platform: Some(ApplePlatform::Ios),
@@ -443,7 +466,7 @@ mod tests {
         let hashed = dir.path().join(MESSAGES_DB_IN_IOS_BACKUP);
         fs::create_dir_all(hashed.parent().unwrap()).unwrap();
         fs::write(&hashed, b"sqlite").unwrap();
-        let options = options_for(&apple_cfg(
+        let options = options_from_export_config(&apple_cfg(
             dir.path(),
             AppleConfig {
                 platform: Some(ApplePlatform::Ios),
@@ -451,8 +474,55 @@ mod tests {
             },
         ))
         .unwrap();
-        assert_eq!(options.request.source.platform, Platform::Ios);
-        assert_eq!(options.request.source.db_path, dir.path());
+        assert_eq!(options.source.platform, Platform::Ios);
+        assert_eq!(options.source.db_path, dir.path());
+    }
+
+    /// The writer cleans its output folder before it writes, so an output
+    /// that is or holds the backup or `chat.db` would delete what is being
+    /// read.
+    #[test]
+    fn an_output_that_is_or_contains_the_input_is_refused() {
+        let tmp = tempfile::tempdir().unwrap();
+        let backup = tmp.path().join("backup");
+        fs::create_dir_all(&backup).unwrap();
+        fs::write(
+            backup.join("Manifest.plist"),
+            br#"<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict><key>IsEncrypted</key><false/></dict></plist>"#,
+        )
+        .unwrap();
+        let hashed = backup.join(MESSAGES_DB_IN_IOS_BACKUP);
+        fs::create_dir_all(hashed.parent().unwrap()).unwrap();
+        fs::write(&hashed, b"sqlite").unwrap();
+        let mac = tmp.path().join("mac");
+        fs::create_dir_all(&mac).unwrap();
+        let chat = mac.join("chat.db");
+        fs::write(&chat, b"sqlite").unwrap();
+
+        for (input, platform, output) in [
+            (&backup, ApplePlatform::Ios, backup.clone()),
+            (&backup, ApplePlatform::Ios, tmp.path().to_path_buf()),
+            (&chat, ApplePlatform::MacOs, mac.clone()),
+        ] {
+            let mut config = apple_cfg(
+                input,
+                AppleConfig {
+                    platform: Some(platform),
+                    ..AppleConfig::default()
+                },
+            );
+            config.output = output;
+            let Err(err) = options_from_export_config(&config) else {
+                panic!("{} was accepted", config.output.display());
+            };
+            assert!(
+                err.to_string()
+                    .contains("must not be the same as, or contain, the input"),
+                "{}: {err}",
+                config.output.display()
+            );
+        }
     }
 
     #[test]
@@ -477,7 +547,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let chat = dir.path().join("chat.db");
         fs::write(&chat, b"sqlite").unwrap();
-        let options = options_for(&apple_cfg(
+        let options = options_from_export_config(&apple_cfg(
             &chat,
             AppleConfig {
                 platform: None,
@@ -487,10 +557,13 @@ mod tests {
             },
         ))
         .unwrap();
-        assert_eq!(options.request.source.platform, Platform::MacOs);
-        assert_eq!(options.request.source.db_path, chat);
-        assert!(!options.request.use_caller_id);
-        assert_eq!(options.request.scratch_dir, Path::new("/scratch"));
+        assert_eq!(options.source.platform, Platform::MacOs);
+        assert_eq!(options.source.db_path, chat);
+        assert!(!options.use_caller_id);
+        let Request::Export(request) = options.export_request(Path::new("/scratch")) else {
+            panic!("an export run sends an export request");
+        };
+        assert_eq!(request.scratch_dir, Path::new("/scratch"));
         assert_eq!(options.attachment_embed, AttachmentEmbed::Disabled);
         assert!(options.export_path.ends_with("chat.export_out"));
     }
@@ -715,5 +788,199 @@ mod tests {
 
         let result = run_with(&config, |request, _, _| Ok(spawn_fake(&program, request))).unwrap();
         assert_eq!((result.conversations, result.message_count), (1, 2));
+    }
+
+    /// The program's script for an encrypted export of one message with a
+    /// video and a photo. It keeps the request in `<dir>/request.json`,
+    /// then answers the attachment request for the video with `video` and
+    /// the one for the photo with `photo`.
+    #[cfg(unix)]
+    fn encrypted_export_script(dir: &Path, video: &str, photo: &str) -> String {
+        use imessage_reader_protocol::{
+            Attachment, AttachmentSource, Conversation, Event, Message, PROTOCOL_VERSION,
+        };
+
+        let attachment = |name: &str, mime: &str| Attachment {
+            original_name: Some(name.into()),
+            mime_type: Some(mime.into()),
+            is_sticker: false,
+            transcription: None,
+            sticker_effect: None,
+            source: AttachmentSource::Path {
+                path: format!("/backup/{name}").into(),
+                size_hint: Some(10),
+            },
+        };
+        let events = [
+            Event::Conversation(Conversation {
+                chat_identifier: "+15555550122".into(),
+                conversation_type: "individual".into(),
+                group_title: None,
+                participants: Vec::new(),
+            }),
+            Event::Message(Box::new(Message {
+                chat_identifier: "+15555550122".into(),
+                guid: "g1".into(),
+                timestamp_unix_ms: 1_609_459_200_000,
+                outgoing: false,
+                service: "iMessage".into(),
+                message_kind: "imessage".into(),
+                sender_handle: Some("+15555550122".into()),
+                sender_display_name: None,
+                subject: None,
+                text: String::new(),
+                owner_handle: "+15555550100".into(),
+                owner_display_name: None,
+                imessage: None,
+                attachments: vec![
+                    attachment("IMG_0001.MOV", "video/quicktime"),
+                    attachment("IMG_0002.JPG", "image/jpeg"),
+                ],
+            })),
+            Event::ExportDone {
+                messages_seen: 1,
+                failures: 0,
+            },
+        ];
+        let mut body = format!(
+            r#"printf '%s' "$request" > '{}/request.json'
+scratch=$(printf '%s' "$request" | sed 's/.*"scratch_dir":"\([^"]*\)".*/\1/')
+echo '{{"event":"source","protocol_version":{PROTOCOL_VERSION},"encrypted":true}}'"#,
+            dir.display()
+        );
+        for event in &events {
+            body.push_str(&format!(
+                "\necho '{}'",
+                serde_json::to_string(event).unwrap()
+            ));
+        }
+        body.push_str(&format!(
+            r#"
+while read -r line; do
+  case "$line" in
+    *IMG_0001*) {video} ;;
+    *) {photo} ;;
+  esac
+done"#
+        ));
+        body
+    }
+
+    /// An attachment the program could not decrypt is counted on its own,
+    /// with its reason, and not passed off as one the backup does not hold
+    /// (#1134). The photo the backup does not hold is not counted with it.
+    #[cfg(unix)]
+    #[test]
+    fn an_attachment_that_fails_to_decrypt_is_counted_apart_from_missing_ones() {
+        use crate::helper::tests::{fake_helper, spawn_fake};
+
+        let dir = tempfile::tempdir().unwrap();
+        let chat = dir.path().join("chat.db");
+        fs::write(&chat, b"sqlite").unwrap();
+        let body = encrypted_export_script(
+            dir.path(),
+            r#"echo '{"event":"attachment","outcome":"failed","reason":"write the decrypted file: No space left on device"}'"#,
+            r#"echo '{"event":"attachment","outcome":"missing"}'"#,
+        );
+        let program = fake_helper(dir.path(), &body);
+        let config = apple_cfg(
+            &chat,
+            AppleConfig {
+                platform: Some(ApplePlatform::MacOs),
+                ..AppleConfig::default()
+            },
+        );
+
+        let result = run_with(&config, |request, _, _| Ok(spawn_fake(&program, request))).unwrap();
+        assert!(
+            result
+                .messages
+                .iter()
+                .any(|line| line == &format!("  {}: 1", convert::ATTACHMENT_NOT_DECRYPTED)),
+            "{:#?}",
+            result.messages
+        );
+        assert!(
+            result
+                .messages
+                .iter()
+                .any(|line| line.contains("IMG_0001.MOV")
+                    && line.contains("No space left on device")),
+            "{:#?}",
+            result.messages
+        );
+        assert!(
+            !result
+                .messages
+                .iter()
+                .any(|line| line.contains("IMG_0002.JPG")),
+            "{:#?}",
+            result.messages
+        );
+        // The Import Run lists the video, and only the video, as an issue.
+        assert_eq!(
+            result.issues,
+            [message_crate_core::RunIssue {
+                kind: "error".into(),
+                step: "attachments".into(),
+                item: "/backup/IMG_0001.MOV".into(),
+                reason: "could not be decrypted: write the decrypted file: No space left on device"
+                    .into(),
+            }]
+        );
+    }
+
+    /// The program decrypts into a folder under the output folder, on the
+    /// disk the run checks for space before it writes, and the folder is
+    /// gone once the run ends (#1134).
+    #[cfg(unix)]
+    #[test]
+    fn the_scratch_folder_is_under_the_output_folder_and_deleted_after() {
+        use crate::helper::tests::{fake_helper, spawn_fake};
+
+        let dir = tempfile::tempdir().unwrap();
+        let chat = dir.path().join("chat.db");
+        fs::write(&chat, b"sqlite").unwrap();
+        let body = encrypted_export_script(
+            dir.path(),
+            r#"echo video > "$scratch/video.mov"; echo "{\"event\":\"attachment\",\"outcome\":\"ready\",\"path\":\"$scratch/video.mov\"}""#,
+            r#"echo '{"event":"attachment","outcome":"missing"}'"#,
+        );
+        let program = fake_helper(dir.path(), &body);
+        let config = apple_cfg(
+            &chat,
+            AppleConfig {
+                platform: Some(ApplePlatform::MacOs),
+                ..AppleConfig::default()
+            },
+        );
+
+        let result = run_with(&config, |request, _, _| Ok(spawn_fake(&program, request))).unwrap();
+        assert!(
+            result.messages.iter().any(|l| l == "  saved 1 attachments"),
+            "{:#?}",
+            result.messages
+        );
+
+        let sent = fs::read_to_string(dir.path().join("request.json")).unwrap();
+        let Ok(Request::Export(sent)) = serde_json::from_str::<Request>(&sent) else {
+            panic!("the program was sent an export request: {sent}");
+        };
+        assert!(
+            sent.scratch_dir.starts_with(&config.output),
+            "{} is not under {}",
+            sent.scratch_dir.display(),
+            config.output.display()
+        );
+        assert!(!sent.scratch_dir.exists());
+        let mut left: Vec<String> = fs::read_dir(&config.output)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        assert_eq!(
+            left,
+            ["+15555550122.jsonl", ".message-crate-export", "attachments"]
+        );
     }
 }

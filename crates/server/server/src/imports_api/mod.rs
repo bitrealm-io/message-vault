@@ -26,10 +26,11 @@ use axum::http::HeaderMap;
 
 use crate::assets_api::AssetStats;
 use crate::config::{PathsConfig, validate_source_id};
-use crate::db::dialect;
 #[cfg(test)]
 use crate::db::engine;
+use crate::db::engine::BEGIN_IMMEDIATE_SQL;
 use crate::db::imports::{self, CompleteImportArgs};
+use crate::db::maintenance;
 use crate::db::schema;
 use media::MediaMode;
 
@@ -318,14 +319,14 @@ pub async fn import_jsonl_files_on_conn(
     // Stats on already-committed rows so promote's guid join can use the
     // indexes. Outside the transaction, because a failed ANALYZE is only a
     // warning.
-    dialect::analyze_import_tables(conn).await;
+    maintenance::analyze_import_tables(conn).await;
 
     // Staging and promote share one transaction. Staging makes contacts and,
     // by ADR-0013, discards trashed ones; none of that may outlive a promote
     // that fails. The write lock is taken up front (IMMEDIATE) so two
     // imports for different accounts cannot race into SQLITE_BUSY at the
     // first INSERT.
-    let mut tx = conn.begin_with(dialect::BEGIN_IMMEDIATE_SQL).await?;
+    let mut tx = conn.begin_with(BEGIN_IMMEDIATE_SQL).await?;
     let asset_stats = stage_all_files(&mut tx, paths, opts, &mut stats, started).await?;
 
     say(&format!(
@@ -555,15 +556,13 @@ pub(crate) struct CreateImportResponse {
 }
 
 /// Final stats and issues for a running Import Run. The outcome is stated
-/// once, as `status`.
+/// once, as `status`. The run's message and attachment counts are not part
+/// of it: the server counts what the run holds, since a resumed Upload's
+/// client knows only what the resume sent.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub(crate) struct CompleteImportRequest {
     /// How the run ended: `completed`, `completed_with_issues` or `failed`.
     pub(crate) status: String,
-    #[serde(default)]
-    pub(crate) message_count: Option<i64>,
-    #[serde(default)]
-    pub(crate) attachment_count: Option<i64>,
     #[serde(default)]
     pub(crate) bytes_uploaded: Option<i64>,
     #[serde(default)]
@@ -921,8 +920,8 @@ pub(crate) async fn complete_import(
         };
     let args = crate::db::imports::CompleteImportArgs {
         status: body.status,
-        message_count: body.message_count,
-        attachment_count: body.attachment_count,
+        message_count: None,
+        attachment_count: None,
         bytes_uploaded: body.bytes_uploaded,
         duration_ms: body.duration_ms,
         parse_ms: body.parse_ms,
@@ -1359,12 +1358,16 @@ fn import_semaphore() -> &'static tokio::sync::Semaphore {
 /// Turn an import's error into the HTTP failure a caller should see.
 ///
 /// The two failures a sender can fix by changing the file travel up the
-/// pipeline as `ImportFailure` and become `malformed-body` with their own sentence.
-/// Everything else (a disk or database error, a bug) is a 500: the message
-/// goes to stderr and the client sees "internal server error".
+/// pipeline as `ImportFailure` and become `malformed-body` with their own
+/// sentence and the line of the batch as `line`. Everything else (a disk or
+/// database error, a bug) is a 500: the message goes to stderr and the
+/// client sees "internal server error".
 fn classify_import_error(err: anyhow::Error) -> ApiError {
     match ImportFailure::in_error(&err) {
-        Some(failure) => ApiError::MalformedBody(failure.to_string()),
+        Some(failure) => ApiError::MalformedImportLine {
+            detail: failure.batch_sentence(),
+            line: failure.line(),
+        },
         None => ApiError::Internal(anyhow::anyhow!("{err:#}")),
     }
 }

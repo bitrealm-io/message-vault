@@ -1,11 +1,10 @@
 //! Attachment helpers: queue blobs as [`PendingAttachment`] metadata during
-//! parse, and merge attachment lists by content digest.
+//! parse.
 
 use crate::types::AttachmentBlob;
 use anyhow::Result;
 use message_ir::PendingAttachment;
 use message_staging::AttachmentSpool;
-use std::collections::HashSet;
 
 /// Queue attachment blobs as metadata. With a `spool`, each payload is
 /// written to it here, so no attachment's bytes stay in memory until the
@@ -36,17 +35,4 @@ pub(super) fn queue_attachments(
             })
         })
         .collect()
-}
-
-/// Union attachment lists by content digest so dedupe does not drop media.
-pub(super) fn merge_attachments(into: &mut Vec<PendingAttachment>, from: Vec<PendingAttachment>) {
-    let mut seen: HashSet<String> = into
-        .iter()
-        .map(|a| a.digest_sha256.clone().unwrap_or_default())
-        .collect();
-    for att in from {
-        if seen.insert(att.digest_sha256.clone().unwrap_or_default()) {
-            into.push(att);
-        }
-    }
 }

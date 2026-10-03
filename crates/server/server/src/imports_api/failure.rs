@@ -22,20 +22,47 @@ pub enum ImportFailure {
     Parse { line: usize, detail: String },
 }
 
+/// The server's `import` command reads files, so the line is a line of the file.
 impl fmt::Display for ImportFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::SchemaVersion { refusal, line } => write!(f, "{refusal} (line {line})."),
-            Self::Parse { line, detail } => {
-                write!(f, "Could not read line {line} of the file: {detail}.")
-            }
-        }
+        f.write_str(&self.sentence("the file"))
     }
 }
 
 impl std::error::Error for ImportFailure {}
 
 impl ImportFailure {
+    /// The line the failure is on, counted from 1 with blank lines included.
+    #[must_use]
+    pub fn line(&self) -> usize {
+        match self {
+            Self::SchemaVersion { line, .. } | Self::Parse { line, .. } => *line,
+        }
+    }
+
+    /// The sentence for a failure in one batch of an Import Run.
+    ///
+    /// A batch is the body of one request, which a client such as Upload
+    /// packs from parts of one or more staged files, so its line is a line of
+    /// the batch and not of any file the sender has. The client turns it into
+    /// a file and line of its own.
+    #[must_use]
+    pub fn batch_sentence(&self) -> String {
+        self.sentence("the batch")
+    }
+
+    /// The sentence, naming the line as a line of `whole`.
+    fn sentence(&self, whole: &str) -> String {
+        match self {
+            Self::SchemaVersion { refusal, line } => {
+                format!("{refusal} (line {line} of {whole}).")
+            }
+            Self::Parse { line, detail } => {
+                format!("Could not read line {line} of {whole}: {detail}.")
+            }
+        }
+    }
+
     /// The person-actionable failure inside `err`, if there is one.
     ///
     /// The import pipeline wraps errors in `anyhow` context on the way up;
@@ -59,7 +86,20 @@ mod tests {
         };
         assert_eq!(
             f.to_string(),
-            "This file is schema version 3; Message Crate reads version 4 (line 1)."
+            "This file is schema version 3; Message Crate reads version 4 (line 1 of the file)."
+        );
+    }
+
+    #[test]
+    fn a_batch_names_the_line_as_a_line_of_the_batch() {
+        let f = ImportFailure::Parse {
+            line: 3,
+            detail: "boom".into(),
+        };
+        assert_eq!(f.line(), 3);
+        assert_eq!(
+            f.batch_sentence(),
+            "Could not read line 3 of the batch: boom."
         );
     }
 

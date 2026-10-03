@@ -12,8 +12,17 @@ import {
 } from "./advancedSearchStyles";
 import type { ActivityFilter, DateBoundFilter } from "./buildAdvancedQuery";
 import { EMPTY_DATE_BOUND } from "./buildAdvancedQuery";
+import ChoiceMultiSelect, { type ChoiceItem } from "./ChoiceMultiSelect";
 import DateBoundField from "./DateBoundField";
-import ServiceMultiSelect from "./ServiceMultiSelect";
+
+/** The transports the search language knows, named the way people name them. */
+const SERVICE_ITEMS: readonly ChoiceItem[] = [
+  { id: "imessage", label: "iMessage" },
+  { id: "sms", label: "SMS" },
+  { id: "mms", label: "MMS" },
+  { id: "rcs", label: "RCS" },
+  { id: "whatsapp", label: "WhatsApp" },
+];
 
 export default function ContactsSearchFields({
   contactName,
@@ -153,7 +162,13 @@ export default function ContactsSearchFields({
           No identity
         </Checkbox>
       </div>
-      <ServiceMultiSelect value={services} onChange={onServicesChange} isDisabled={noHandle} />
+      <ChoiceMultiSelect
+        label="Service"
+        items={SERVICE_ITEMS}
+        value={services}
+        onChange={onServicesChange}
+        isDisabled={noHandle}
+      />
       <DateBoundField
         label="First message"
         value={firstMessageBound}

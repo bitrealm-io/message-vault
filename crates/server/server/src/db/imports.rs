@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Connection, Row, SqliteConnection};
 
-use crate::db::dialect;
+use crate::db::engine::BEGIN_IMMEDIATE_SQL;
 use crate::paging::{Direction, SortKey};
 
 /// Where a live import session is in its lifecycle.
@@ -642,7 +642,7 @@ pub async fn complete_import(
 
     // The update and the issue inserts land as one unit, and a failed
     // commit rolls back (sqlx drops the transaction).
-    let mut tx = conn.begin_with(dialect::BEGIN_IMMEDIATE_SQL).await?;
+    let mut tx = conn.begin_with(BEGIN_IMMEDIATE_SQL).await?;
     let updated = sqlx::query(
         r"
         UPDATE imports
@@ -913,6 +913,16 @@ pub async fn list_imports_page(
 pub async fn has_messages(conn: &mut SqliteConnection, import_id: i64) -> Result<bool> {
     let row = sqlx::query("SELECT 1 FROM messages WHERE import_id = $1 LIMIT 1")
         .bind(import_id)
+        .fetch_optional(&mut *conn)
+        .await?;
+    Ok(row.is_some())
+}
+
+/// Whether the account has a running Import Run. Such a run may have
+/// uploaded files that no row names yet, for a batch it has not sent.
+pub async fn has_running_import(conn: &mut SqliteConnection, account_id: i64) -> Result<bool> {
+    let row = sqlx::query("SELECT 1 FROM imports WHERE account_id = $1 AND status = 'running'")
+        .bind(account_id)
         .fetch_optional(&mut *conn)
         .await?;
     Ok(row.is_some())

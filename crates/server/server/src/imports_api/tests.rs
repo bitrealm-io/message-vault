@@ -248,7 +248,7 @@ fn missing_attachment_json(name: &str) -> String {
     )
 }
 
-const TAPBACK_IMESSAGE: &str = r#"{"is_reply":false,"in_reply_to_guid":null,"thread_originator_part":null,"num_replies":null,"is_deleted":false,"send_effect":null,"shared_location":null,"announcement":null,"read_receipt_rfc3339":null,"parts":null,"edits":null,"tapbacks":[{"emoji":null,"is_from_me":false,"kind":"liked","part_index":0,"sender":"+15555550999"}],"app":null,"balloon_bundle_id":null,"balloon_kind":null,"associated_guid":null,"associated_part":null,"tapback_kind":null,"tapback_emoji":null,"tapback_action":null}"#;
+const TAPBACK_IMESSAGE: &str = r#"{"is_reply":false,"in_reply_to_guid":null,"thread_originator_part":null,"num_replies":null,"is_deleted":false,"send_effect":null,"shared_location":null,"announcement":null,"read_receipt_rfc3339":null,"parts":null,"edits":null,"tapbacks":[{"emoji":null,"is_from_me":false,"kind":"liked","part_index":0,"reactor_handle":"+15555550999"}],"app":null,"balloon_bundle_id":null,"balloon_kind":null,"associated_guid":null,"associated_part":null,"tapback_kind":null,"tapback_emoji":null,"tapback_action":null}"#;
 
 fn chunk_boundary_jsonl() -> String {
     let header = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550123","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550123","display_name":null},{"handle":"+15555550999","display_name":null}],"stats":{"message_count":56,"attachment_count":2,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183517000}}}"#;
@@ -312,6 +312,48 @@ async fn staging_chunks_56_messages_and_keeps_children_on_right_rows() {
     assert_eq!(first_atts, 1);
     assert_eq!(last_atts, 1);
     assert_eq!(second_taps, 1);
+}
+
+/// Bob hearts the owner's message and then removes the heart. The Apple
+/// Messages reader writes both reactions as rows of their own and leaves the
+/// removed heart out of the message's `tapbacks` list. The import stores the
+/// message alone, with no heart on it (#1213).
+#[tokio::test]
+async fn a_removed_reaction_leaves_no_message_and_no_reaction() {
+    let tmp = TempDir::new().unwrap();
+    let db = tmp.path().join("messagecrate.db");
+    let assets = tmp.path().join("assets");
+    let header = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550123","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550123","display_name":"Bob"}],"stats":{"message_count":3,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183464000}}}"#;
+    let target = r#"{"guid":"g-hi","timestamp_unix_ms":1426183462000,"direction":"outgoing","service":"imessage","message_kind":"imessage","sender_handle":null,"sender_display_name":null,"subject":null,"text":"hi","attachments":[],"imessage":null,"source":null}"#;
+    let reaction = |guid: &str, ts: i64, text: &str, action: &str| {
+        format!(
+            r#"{{"guid":"{guid}","timestamp_unix_ms":{ts},"direction":"incoming","service":"imessage","message_kind":"tapback","sender_handle":"+15555550123","sender_display_name":"Bob","subject":null,"text":"{text}","attachments":[],"imessage":{{"is_reply":false,"is_deleted":false,"associated_guid":"g-hi","associated_part":0,"tapback_kind":"loved","tapback_action":"{action}"}},"source":null}}"#
+        )
+    };
+    let loved = reaction("g-love", 1_426_183_463_000, "Loved a message", "add");
+    let removed = reaction("g-unlove", 1_426_183_464_000, "Removed Heart", "remove");
+    let path = write_jsonl(
+        tmp.path(),
+        "removed-heart.jsonl",
+        &format!("{header}\n{target}\n{loved}\n{removed}\n"),
+    );
+    let stats = import_jsonl_files(&db, &[path], &replace_opts(&assets, tmp.path(), "imessage"))
+        .await
+        .unwrap();
+    assert_eq!(stats.messages, 1);
+    assert_eq!(stats.tapbacks, 0);
+
+    let (_pool, mut conn) = open_verify(&db).await;
+    let guids: Vec<String> = sqlx::query_scalar("SELECT guid FROM messages ORDER BY guid")
+        .fetch_all(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(guids, ["g-hi"]);
+    let tapbacks: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tapbacks")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(tapbacks, 0);
 }
 
 #[tokio::test]
@@ -432,7 +474,7 @@ async fn append_existing_guid_adds_missing_children() {
         "children-second.jsonl",
         &format!(
             "{header}\n{}\n",
-            r#"{"guid":"g-children","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550123","sender_display_name":null,"subject":null,"text":"replacement body","attachments":[{"path":"attachments/missing.bin","original_name":"zqinvoice.pdf","mime_type":"application/octet-stream","digest_sha256":null,"is_sticker":false,"transcription":null,"sticker_effect":null,"size_bytes":12,"missing_reason":"not_found"}],"imessage":{"is_reply":false,"in_reply_to_guid":null,"thread_originator_part":null,"num_replies":null,"is_deleted":false,"send_effect":null,"shared_location":null,"announcement":null,"read_receipt_rfc3339":null,"parts":null,"edits":null,"tapbacks":[{"emoji":null,"is_from_me":false,"kind":"liked","part_index":0,"sender":"+15555550999"}],"app":null,"balloon_bundle_id":null,"balloon_kind":null,"associated_guid":null,"associated_part":null,"tapback_kind":null,"tapback_emoji":null,"tapback_action":null},"source":null}"#
+            r#"{"guid":"g-children","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550123","sender_display_name":null,"subject":null,"text":"replacement body","attachments":[{"path":"attachments/missing.bin","original_name":"zqinvoice.pdf","mime_type":"application/octet-stream","digest_sha256":null,"is_sticker":false,"transcription":null,"sticker_effect":null,"size_bytes":12,"missing_reason":"not_found"}],"imessage":{"is_reply":false,"in_reply_to_guid":null,"thread_originator_part":null,"num_replies":null,"is_deleted":false,"send_effect":null,"shared_location":null,"announcement":null,"read_receipt_rfc3339":null,"parts":null,"edits":null,"tapbacks":[{"emoji":null,"is_from_me":false,"kind":"liked","part_index":0,"reactor_handle":"+15555550999"}],"app":null,"balloon_bundle_id":null,"balloon_kind":null,"associated_guid":null,"associated_part":null,"tapback_kind":null,"tapback_emoji":null,"tapback_action":null},"source":null}"#
         ),
     );
 
@@ -1713,27 +1755,37 @@ async fn http_import_of_a_schema_3_file_is_a_400_naming_both_versions() {
     let err: serde_json::Value = serde_json::from_str(&text).unwrap();
     assert_eq!(
         err["detail"],
-        "This file is schema version 3; Message Crate reads version 4 (line 1)."
+        "This file is schema version 3; Message Crate reads version 4 (line 1 of the batch)."
     );
+    assert_eq!(err["line"], 1, "{text}");
 }
 
+/// A batch is a request body, not a file the sender has: Upload packs it
+/// from parts of one or more staged files. The failure names the line of the
+/// batch, in the sentence and as `line`, so the client can turn it into the
+/// line of the file it came from.
 #[tokio::test]
-async fn http_import_of_a_line_that_is_not_json_is_a_400_naming_the_line() {
+async fn http_import_of_a_line_that_is_not_json_is_a_400_naming_the_line_of_the_batch() {
     let (state, _fixture, token) = importer().await;
     let path = batches_path(&state, &token, "whatsapp").await;
-    let (status, text) = crate::test_support::post_raw(
-        &state,
-        &path,
-        &token,
-        "application/jsonl",
+    let body = concat!(
+        r#"{"schema_version":4,"export":{"source":"whatsapp","tool":"t","tool_version":"1","owner_handle":"+15550000001","owner_display_name":"Me"},"#,
+        r#""conversation":{"chat_identifier":"+15550000002","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15550000002","display_name":"Sam"}],"#,
+        r#""stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1400773261000,"last_timestamp_unix_ms":1400773261000}}}"#,
+        "\n\n",
         "this is not json\n",
-    )
-    .await;
-    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST, "{text}");
-    let err: serde_json::Value = serde_json::from_str(&text).unwrap();
-    let message = err["detail"].as_str().unwrap();
+    );
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &token, "application/jsonl", body).await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::MalformedBody,
+    );
+    assert_eq!(problem.line, Some(3), "{text}");
+    let message = problem.detail.unwrap();
     assert!(
-        message.starts_with("Could not read line 1 of the file:"),
+        message.starts_with("Could not read line 3 of the batch:"),
         "{message}"
     );
 }
@@ -2208,6 +2260,45 @@ async fn completing_an_import_with_messages_creates_its_saved_search_and_contact
         .collect();
     texts.sort_unstable();
     assert_eq!(texts, ["g-1", "g-2"], "{page}");
+}
+
+/// The counts of a finished run are the server's own, never the client's.
+/// A resumed Upload's push report counts only what the resume sent, which
+/// is nothing when the run's first `/complete` was refused after every
+/// message landed. A count from the client would record that run as
+/// holding no messages, and give it no Saved Search.
+#[tokio::test]
+async fn completing_a_run_counts_its_messages_whatever_the_body_says() {
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+    let import_id: i64 = path
+        .trim_start_matches("/v1/imports/")
+        .trim_end_matches("/batches")
+        .parse()
+        .unwrap();
+    let (status, text) = crate::test_support::post_raw(
+        &state,
+        &path,
+        &token,
+        "application/jsonl",
+        wipe_test_batch("whatsapp", &["g-1", "g-2"]),
+    )
+    .await;
+    assert_eq!(status, axum::http::StatusCode::OK, "{text}");
+
+    let _: serde_json::Value = post_json(
+        &state,
+        &format!("/v1/imports/{import_id}/complete"),
+        &token,
+        serde_json::json!({ "status": "completed", "message_count": 0, "attachment_count": 0 }),
+    )
+    .await;
+
+    let completed: serde_json::Value =
+        get_json(&state, &format!("/v1/imports/{import_id}"), &token).await;
+    assert_eq!(completed["message_count"], 2, "{completed}");
+    let (searches, _) = shortcuts(&state, run_account(&state, import_id).await).await;
+    assert_eq!(searches.len(), 1, "the run's saved search: {searches:?}");
 }
 
 /// A run that stored nothing gets no saved search: one matching no
@@ -3060,5 +3151,32 @@ async fn two_conversations_on_one_identity_in_one_batch_become_one() {
         messages,
         [("m1".to_string(), 0), ("m2".to_string(), 1)],
         "both messages are in the one conversation, in the batch's order"
+    );
+}
+
+/// #1172: a group header that lists one person twice, under two spellings of
+/// one number that normalise to one handle, is taken with `200 OK` and the
+/// group lists that person once.
+#[tokio::test]
+async fn a_participant_listed_twice_under_one_identity_is_listed_once() {
+    let (state, _fixture, token) = importer().await;
+    let header = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"chat1000000172","conversation_type":"group","group_title":"Trip","participants":[{"handle":"+1 (555) 123-4567","display_name":null},{"handle":"5551234567","display_name":null}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}"#;
+    let body = format!(
+        "{header}\n{}\n",
+        same_second_message("m1", 1_426_183_462_000)
+    );
+    post_batches_of_one_run(&state, &token, vec![body]).await;
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let participants: Vec<String> = sqlx::query_scalar(
+        "SELECT h.normalized FROM participants p JOIN handles h ON h.id = p.handle_id",
+    )
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(
+        participants,
+        ["+15551234567"],
+        "the one number is listed once"
     );
 }

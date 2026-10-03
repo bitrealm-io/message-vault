@@ -9,11 +9,11 @@
 //! finishes successfully, since the server then holds everything the folder
 //! held.
 //!
-//! `summarize_staging` and `transcode_staging` both build a
-//! [`message_staging::TranscodeOptions`] from the same form fields
-//! `extract` parses, reusing its parsing helpers rather than re-deriving
-//! them, so a summary and the pass it forecasts always agree on what
-//! `Convert`/`Compress` mean.
+//! `summarize_staging` and `transcode_staging` take only the folder. They
+//! read the run's media settings from it, where `extract` recorded them
+//! ([`message_staging::read_media_settings`]), so a summary, the pass it
+//! forecasts, and the Staging before them all work to the one set of values
+//! the Import Run was started with.
 //!
 //! ## The staging-child guard
 //!
@@ -39,14 +39,12 @@ use message_staging::{StagingSummary, TranscodeOptions, TranscodeReport};
 
 use super::events;
 use super::events::ExtractProgressEvent;
-use super::extract::{parse_attachment_media, parse_compress_options, parse_max_resolution};
 use super::jobs::{spawn_job, start_job};
 use super::paths::{resolve_openable_path, resolve_staging_root};
 use crate::state::AppState;
 
-/// Form fields shared by `summarize_staging` and `transcode_staging` — the
-/// same media fields `extract` parses, addressed at an already-staged
-/// folder instead of a fresh backup.
+/// The folder `summarize_staging`, `transcode_staging` and `delete_staging`
+/// act on, and the Staging Directory it must live under.
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StagingArgs {
@@ -55,19 +53,6 @@ pub struct StagingArgs {
     /// Staging Directory root every staging folder must live under —
     /// the same root `open_path` guards.
     pub staging_root: String,
-    /// Attachment handling choice: `copy`, `convert`, `compress`, or `skip`.
-    pub attachment_media: Option<String>,
-    /// Long-edge cap for compressed video: `720p`, `1080p`, or `4k`.
-    pub media_max_resolution: Option<String>,
-    /// Frame-rate cap for compressed video, for example `30`.
-    pub media_max_fps: Option<String>,
-    /// Size below which a video is not compressed, for example `20M`.
-    pub media_min_size: Option<String>,
-    /// The server's attachment size limit, in bytes, as the app read it from
-    /// `GET /v1/server` when the Import Run was created. The Staging Review's
-    /// forecast and the Media stage both measure against it, and Upload is
-    /// given the same number.
-    pub asset_max_bytes: u64,
 }
 
 /// Resolve `staging_dir` and confirm it is safe to act on: a direct child of
@@ -115,25 +100,22 @@ fn resolve_staging_child(
     Ok(resolved)
 }
 
-/// Build the [`TranscodeOptions`] a summary or media pass runs with, from the
-/// same fields `extract` parses.
+/// Resolve the staged folder through [`resolve_staging_child`] and read the
+/// media settings its Staging recorded there.
 ///
 /// # Errors
 ///
-/// Returns an error if any field fails to parse (see
-/// [`parse_attachment_media`], [`parse_max_resolution`], and
-/// [`parse_compress_options`]).
-fn build_transcode_options(args: &StagingArgs) -> Result<TranscodeOptions, String> {
-    let chosen = parse_attachment_media(args.attachment_media.as_deref())?;
-    let max_resolution = parse_max_resolution(args.media_max_resolution.as_deref())?;
-    let max_fps = args.media_max_fps.as_deref().unwrap_or("30");
-    let min_size = args.media_min_size.as_deref().unwrap_or("20M");
-    let compress = parse_compress_options(chosen, max_resolution, max_fps, min_size)?;
-    Ok(TranscodeOptions {
-        mode: chosen.media_mode(),
-        compress,
-        asset_max_bytes: args.asset_max_bytes,
-    })
+/// Returns an error when the folder fails the guard, or holds no readable
+/// media settings because its Staging never finished.
+fn staged_folder(
+    args: &StagingArgs,
+    require_sentinel: bool,
+) -> Result<(PathBuf, TranscodeOptions), String> {
+    let staging_dir =
+        resolve_staging_child(&args.staging_dir, &args.staging_root, require_sentinel)?;
+    let options =
+        message_staging::read_media_settings(&staging_dir).map_err(|error| format!("{error:#}"))?;
+    Ok((staging_dir, options))
 }
 
 /// Recompute what a staged folder holds, for the first review.
@@ -146,17 +128,16 @@ fn build_transcode_options(args: &StagingArgs) -> Result<TranscodeOptions, Strin
 ///
 /// # Errors
 ///
-/// Returns an error if a form field is invalid, `staging_dir` is not a
-/// direct child of `staging_root`, the folder cannot be read, or the
-/// blocking task panicked.
+/// Returns an error if `staging_dir` is not a direct child of
+/// `staging_root`, holds no media settings, cannot be read, or the blocking
+/// task panicked.
 #[tauri::command]
 pub async fn summarize_staging(
     app: tauri::AppHandle,
     args: StagingArgs,
 ) -> Result<StagingSummary, String> {
-    let options = build_transcode_options(&args)?;
     // Read-only: no sentinel required, only containment.
-    let staging_dir = resolve_staging_child(&args.staging_dir, &args.staging_root, false)?;
+    let (staging_dir, options) = staged_folder(&args, false)?;
 
     let progress_app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
@@ -243,8 +224,8 @@ fn transcode_summary(report: &TranscodeReport) -> String {
 ///
 /// # Errors
 ///
-/// Returns an error if a form field is invalid, `staging_dir` is not a
-/// direct child of `staging_root` or is missing the export sentinel, another
+/// Returns an error if `staging_dir` is not a direct child of
+/// `staging_root` or is missing the export sentinel or the media settings, another
 /// job is running, or another thread panicked while holding the shared state lock. Failures
 /// during the pass — including a cancellation and ffmpeg/ffprobe being
 /// unavailable — are sent as `extract:error`, verbatim, not returned here.
@@ -254,9 +235,8 @@ pub fn transcode_staging(
     app: tauri::AppHandle,
     args: StagingArgs,
 ) -> Result<(), String> {
-    let options = build_transcode_options(&args)?;
     // Writes to and deletes originals inside the folder: sentinel required.
-    let staging_dir = resolve_staging_child(&args.staging_dir, &args.staging_root, true)?;
+    let (staging_dir, options) = staged_folder(&args, true)?;
     let job = start_job(&state, "a Media pass")?;
     let cancel = job.cancel_flag();
     let has_media_step = matches!(
@@ -327,17 +307,6 @@ pub fn transcode_staging(
     Ok(())
 }
 
-/// Arguments for [`delete_staging`].
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DeleteStagingArgs {
-    /// Staging folder to remove.
-    pub staging_dir: String,
-    /// Staging Directory root every staging folder must live under —
-    /// the same root `open_path` guards.
-    pub staging_root: String,
-}
-
 /// Delete a staging folder: the decline path's terminal action (Decision
 /// 16), and the last step of a successful import, whose staged copy of the
 /// messages, push log, journal and report the server has no further use for.
@@ -353,7 +322,7 @@ pub struct DeleteStagingArgs {
 /// removed. Refuses rather than silently doing nothing, so a path bug here
 /// cannot turn into a delete somewhere else on disk.
 #[tauri::command(async)]
-pub fn delete_staging(args: DeleteStagingArgs) -> Result<(), String> {
+pub fn delete_staging(args: StagingArgs) -> Result<(), String> {
     delete_staging_dir(&args.staging_root, &args.staging_dir)
 }
 
@@ -566,39 +535,50 @@ mod tests {
     }
 
     #[test]
-    fn transcode_options_use_the_asset_max_bytes_they_are_given() {
-        let args = StagingArgs {
-            staging_dir: "/tmp/staging-root/staging-run".into(),
-            staging_root: "/tmp/staging-root".into(),
-            attachment_media: Some("compress".into()),
-            media_max_resolution: Some("720p".into()),
-            media_max_fps: Some("24".into()),
-            media_min_size: Some("5M".into()),
+    fn a_staged_folder_is_read_with_the_settings_its_staging_recorded() {
+        // The summary and the Media stage are given only the folder, so they
+        // cannot be handed a mode the run did not start with (#1153).
+        let root = tempfile::tempdir().unwrap();
+        let staged = stage_export(root.path(), "staging-run-1");
+        let recorded = TranscodeOptions {
+            mode: MediaMode::Compress,
+            compress: media::CompressOptions {
+                max_fps: 24.0,
+                ..Default::default()
+            },
             asset_max_bytes: 123_456_789,
         };
-        let options = build_transcode_options(&args).unwrap();
-        // The server's limit, passed in. The desktop app has no number of its own.
-        assert_eq!(options.asset_max_bytes, 123_456_789);
-        assert_eq!(options.mode, MediaMode::Compress);
-        assert_eq!(options.compress.max_fps, 24.0);
+        message_staging::write_media_settings(&staged, &recorded).unwrap();
+
+        for require_sentinel in [false, true] {
+            let (dir, options) = staged_folder(
+                &StagingArgs {
+                    staging_dir: staged.to_str().unwrap().into(),
+                    staging_root: root.path().to_str().unwrap().into(),
+                },
+                require_sentinel,
+            )
+            .unwrap();
+            assert_eq!(dir, staged.canonicalize().unwrap());
+            assert_eq!(options, recorded);
+        }
     }
 
     #[test]
-    fn transcode_options_default_the_media_fields_like_extract_does() {
-        let args = StagingArgs {
-            staging_dir: "/tmp/staging-root/staging-run".into(),
-            staging_root: "/tmp/staging-root".into(),
-            attachment_media: Some("convert".into()),
-            media_max_resolution: None,
-            media_max_fps: None,
-            media_min_size: None,
-            asset_max_bytes: 512 * 1024 * 1024,
-        };
-        let options = build_transcode_options(&args).unwrap();
-        assert_eq!(options.mode, MediaMode::Convert);
-        // Convert does not use CompressOptions, but defaulting must still
-        // succeed rather than error on missing fields.
-        assert_eq!(options.compress, media::CompressOptions::default());
+    fn a_folder_whose_staging_recorded_no_settings_is_refused() {
+        let root = tempfile::tempdir().unwrap();
+        let staged = stage_export(root.path(), "staging-run-1");
+
+        let err = staged_folder(
+            &StagingArgs {
+                staging_dir: staged.to_str().unwrap().into(),
+                staging_root: root.path().to_str().unwrap().into(),
+            },
+            false,
+        )
+        .unwrap_err();
+
+        assert!(err.contains("media settings"), "{err}");
     }
 
     #[test]

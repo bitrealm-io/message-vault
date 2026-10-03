@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crabapple::error::BackupError;
 use imessage_database::tables::attachment::Attachment;
-use imessage_reader_protocol::Event;
+use imessage_reader_protocol::{AttachmentFile, Event};
 
 use crate::{backup::decrypt_file, error::RuntimeError, session::MailSession};
 
@@ -25,10 +25,12 @@ pub(crate) fn resolved_path(session: &MailSession, attachment: &Attachment) -> O
 /// into the scratch folder and name the file; otherwise name the path itself
 /// when it exists.
 ///
-/// A missing entry is not an error. The app records the attachment as
-/// missing and moves on, the same as it does for a plain file that is gone,
-/// and the reason is on the log so a run's worth of gaps does not go
-/// unexplained.
+/// An entry the backup does not hold is [`AttachmentFile::Missing`]: the
+/// app records the attachment as missing and moves on, the same as it does
+/// for a plain file that is gone, and the reason is on the log so a run's
+/// worth of gaps does not go unexplained. Any other error, such as a scratch
+/// folder with no room left, is [`AttachmentFile::Failed`] with the error,
+/// which the app counts and reports on its own.
 pub(crate) fn decrypt_for_app(session: &MailSession, source: &Path) -> Event {
     let Some(backup) = session
         .data_source
@@ -36,27 +38,29 @@ pub(crate) fn decrypt_for_app(session: &MailSession, source: &Path) -> Event {
         .as_ref()
         .filter(|b| b.is_encrypted())
     else {
-        return Event::Attachment {
-            path: source.is_file().then(|| source.to_path_buf()),
-        };
+        return Event::Attachment(if source.is_file() {
+            AttachmentFile::Ready {
+                path: source.to_path_buf(),
+            }
+        } else {
+            AttachmentFile::Missing
+        });
     };
-    match decrypt_file(backup, source, session.options.scratch_dir()) {
-        Ok(temp) => Event::Attachment { path: Some(temp) },
-        Err(RuntimeError::BackupError(BackupError::FileNotFoundInBackup(_))) => {
-            session.options.emit_log(format!(
-                "warning: attachment {} not found in encrypted backup; skipping bytes",
-                source.display()
-            ));
-            Event::Attachment { path: None }
-        }
-        Err(e) => {
-            session.options.emit_log(format!(
-                "warning: attachment {} could not be decrypted: {e}",
-                source.display()
-            ));
-            Event::Attachment { path: None }
-        }
-    }
+    Event::Attachment(
+        match decrypt_file(backup, source, session.options.scratch_dir()) {
+            Ok(temp) => AttachmentFile::Ready { path: temp },
+            Err(RuntimeError::BackupError(BackupError::FileNotFoundInBackup(_))) => {
+                session.options.emit_log(format!(
+                    "warning: attachment {} not found in encrypted backup; skipping bytes",
+                    source.display()
+                ));
+                AttachmentFile::Missing
+            }
+            Err(e) => AttachmentFile::Failed {
+                reason: e.to_string(),
+            },
+        },
+    )
 }
 
 #[cfg(test)]
@@ -94,11 +98,11 @@ mod tests {
 
         assert!(matches!(
             decrypt_for_app(&session, &photo),
-            Event::Attachment { path: Some(p) } if p == photo
+            Event::Attachment(AttachmentFile::Ready { path }) if path == photo
         ));
         assert!(matches!(
             decrypt_for_app(&session, &fixture.dir.path().join("gone.jpg")),
-            Event::Attachment { path: None }
+            Event::Attachment(AttachmentFile::Missing)
         ));
     }
 }

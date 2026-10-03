@@ -445,6 +445,14 @@ pub enum ApiError {
     ValidationFailed(Vec<String>),
     /// `400` — the request cannot be read at all.
     MalformedBody(String),
+    /// `400` — a line of an import batch is not the JSON Lines the server
+    /// reads. A `malformed-body` that also carries the line as `line`.
+    MalformedImportLine {
+        /// The sentence, naming the line as a line of the batch.
+        detail: String,
+        /// The line of the batch, counted from 1 with blank lines included.
+        line: usize,
+    },
     /// `415` — `Content-Type` absent or not one the route accepts.
     UnsupportedMediaType(String),
     /// `413` — the body is over the configured cap.
@@ -507,7 +515,7 @@ impl ApiError {
     pub fn problem_type(&self) -> Option<ProblemType> {
         Some(match self {
             Self::ValidationFailed(_) => ProblemType::ValidationFailed,
-            Self::MalformedBody(_) => ProblemType::MalformedBody,
+            Self::MalformedBody(_) | Self::MalformedImportLine { .. } => ProblemType::MalformedBody,
             Self::UnsupportedMediaType(_) => ProblemType::UnsupportedMediaType,
             Self::PayloadTooLarge(_) => ProblemType::PayloadTooLarge,
             Self::InvalidCredentials(_) => ProblemType::InvalidCredentials,
@@ -557,6 +565,7 @@ impl ApiError {
                 word: None,
                 did_you_mean: None,
                 retry_after: None,
+                line: None,
             };
         };
         let mut problem = Problem {
@@ -569,6 +578,7 @@ impl ApiError {
             word: None,
             did_you_mean: None,
             retry_after: None,
+            line: None,
         };
         match self {
             Self::ValidationFailed(errors) => problem.errors = Some(errors.clone()),
@@ -586,6 +596,10 @@ impl ApiError {
                 problem.detail = Some(detail.clone());
                 problem.word = word.map(str::to_string);
                 problem.did_you_mean = did_you_mean.map(str::to_string);
+            }
+            Self::MalformedImportLine { detail, line } => {
+                problem.detail = Some(detail.clone());
+                problem.line = Some(*line as u64);
             }
             Self::MalformedBody(m)
             | Self::UnsupportedMediaType(m)
@@ -623,7 +637,9 @@ impl std::fmt::Display for ApiError {
                 f,
                 "too many authentication attempts; try again in {retry_after_secs} seconds"
             ),
-            Self::SearchQueryInvalid { detail, .. } => f.write_str(detail),
+            Self::SearchQueryInvalid { detail, .. } | Self::MalformedImportLine { detail, .. } => {
+                f.write_str(detail)
+            }
             Self::MalformedBody(m)
             | Self::UnsupportedMediaType(m)
             | Self::PayloadTooLarge(m)
@@ -1085,6 +1101,11 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
         opened.cfg.paths.db.display()
     );
     let state = AppState::new(opened, server.asset_part_size);
+    if crate::server_api::recover_stopped_demo_build(&state).await? {
+        eprintln!(
+            "  demo: the server stopped during a Demo Account build; the part-built Demo Account was removed"
+        );
+    }
     // Reported as they stand now; each upload reads them again. Any stored
     // limit starts the server: a part is never larger than the limit.
     let upload_limits = state.upload_limits().await?;
@@ -1094,13 +1115,18 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
         upload_limits.part_size as u64 / message_ir::MIB
     );
 
+    let demo_build = state.demo_build.clone();
     let app = http_app(state);
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     eprintln!("message-crate-server serve listening on http://{bind}");
     eprintln!(
         "  routes: `message-crate-server dump-openapi` lists them all; set [server] openapi_ui = true for /docs"
     );
-    serve_until_shutdown(listener, app).await?;
+    let served = serve_until_shutdown(listener, app).await;
+    // A Demo Account build the owner started would otherwise end part-way
+    // when the process exits (#1215).
+    demo_build.stop().await;
+    served?;
     Ok(())
 }
 

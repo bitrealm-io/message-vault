@@ -75,11 +75,11 @@ The folder layout is described in [Export structure](/docs/developer/reference/e
 
 Convert clears an earlier export out of the output folder before it writes.
 A second run into the same output folder therefore replaces the first instead of mixing with it.
-Writing into the input folder would delete the files being read.
+Writing into the input folder, or into a folder that holds it, would delete the files being read.
 
 Two checks prevent that.
 The screen keeps **Convert** disabled while both fields name the same folder, and says "Choose a different output folder."
-The conversion itself refuses two paths that resolve to one folder, with `input and output directories must be different`.
+The conversion itself refuses an output folder that resolves to the input folder or to a folder above it, with `output <folder> must not be the same as, or contain, the input <folder>`.
 The second check also catches a symbolic link that points at the input folder.
 
 ## What the output folder may hold

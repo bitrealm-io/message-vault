@@ -4,9 +4,9 @@ use anyhow::{Context, Result};
 use chrono::{TimeZone, Utc};
 use message_ir::{
     ConversationHeader, HandleService, HandleType, IrAttachment, IrDirection, IrImessage,
-    IrMessage, IrMessageKind, IrService, check_schema_version_in_json,
+    IrMessage, IrMessageKind, check_schema_version_in_json,
 };
-use phone::sanitize_number;
+use phone::Handle;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -61,7 +61,9 @@ pub struct MessageRecord {
     pub is_from_me: bool,
     /// Sender handle for incoming messages.
     pub sender: Option<String>,
-    /// Sender handle type (phone, email, or username).
+    /// The sender's identity type read from the address alone (phone, email
+    /// or other). Staging prefers the type the header gives a participant
+    /// with the same address.
     pub sender_handle_type: Option<HandleType>,
     /// The account holder's own address on this message, sent from or
     /// received at: the message's owner handle, else the header's.
@@ -300,7 +302,7 @@ fn message_from_ir(msg: &IrMessage, header_owner: Option<&str>) -> Result<Messag
         sender_handle_type: if is_from_me {
             None
         } else {
-            infer_sender_handle_type(msg.sender_handle.as_deref(), msg.service)
+            sender_handle_type(msg.sender_handle.as_deref())
         },
         owner: msg
             .owner_handle
@@ -322,29 +324,17 @@ fn message_from_ir(msg: &IrMessage, header_owner: Option<&str>) -> Result<Messag
     })
 }
 
-/// Infer the sender's handle type for import records.
+/// The type of a sender's identity, read from the address alone.
 ///
-/// IR participants carry an explicit `handle_type` when the source knows it;
-/// message rows only carry a raw sender handle, so the type is inferred here
-/// from the handle shape plus the service. Handles containing `@` are emails;
-/// SMS/iMessage/WhatsApp/RCS handles that sanitize as phone numbers are
-/// phones; anything else is `Other`.
-fn infer_sender_handle_type(sender_handle: Option<&str>, service: IrService) -> Option<HandleType> {
-    let handle = sender_handle?.trim();
-    if handle.is_empty() {
-        return None;
-    }
-    if handle.contains('@') {
-        return Some(HandleType::Email);
-    }
-    if matches!(
-        service,
-        IrService::Sms | IrService::IMessage | IrService::Whatsapp | IrService::Rcs
-    ) && sanitize_number(handle).is_some()
-    {
-        return Some(HandleType::Phone);
-    }
-    Some(HandleType::Other)
+/// A message carries only the sender's address, never its type. Staging uses
+/// the type the header gives the participant with the same address, and this
+/// one only when the header lists no such participant. It is
+/// [`Handle::parse`], the one rule for what an address is, and it does not
+/// read the message's service: a contact's number is a phone number on a
+/// service the model does not know too, such as a message Apple Messages sent
+/// by satellite (#1144).
+fn sender_handle_type(sender_handle: Option<&str>) -> Option<HandleType> {
+    sender_handle.and_then(Handle::parse).map(|h| h.kind())
 }
 
 /// Map one IR attachment onto the server's attachment record.
@@ -568,24 +558,18 @@ mod tests {
     }
 
     #[test]
-    fn infers_sender_handle_type_from_handle_and_service() {
+    fn types_a_sender_by_the_address_alone() {
         assert_eq!(
-            infer_sender_handle_type(Some("alice@example.com"), IrService::Unknown),
+            sender_handle_type(Some("alice@example.com")),
             Some(HandleType::Email)
         );
         assert_eq!(
-            infer_sender_handle_type(Some("+15555550101"), IrService::Sms),
+            sender_handle_type(Some("+1 (555) 555-0101")),
             Some(HandleType::Phone)
         );
-        assert_eq!(
-            infer_sender_handle_type(Some("+15555550101"), IrService::Signal),
-            Some(HandleType::Other)
-        );
-        assert_eq!(
-            infer_sender_handle_type(Some("alice_discord"), IrService::Discord),
-            Some(HandleType::Other)
-        );
-        assert_eq!(infer_sender_handle_type(None, IrService::Sms), None);
+        assert_eq!(sender_handle_type(Some("AMAZON")), Some(HandleType::Other));
+        assert_eq!(sender_handle_type(Some("  ")), None);
+        assert_eq!(sender_handle_type(None), None);
     }
 
     #[test]

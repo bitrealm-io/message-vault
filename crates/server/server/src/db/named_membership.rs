@@ -81,6 +81,9 @@ pub struct MembershipSpec {
     pub reserved: &'static [&'static str],
     /// Reserved names with dedicated error messages (lowercase name, message).
     pub special_reserved: &'static [(&'static str, &'static str)],
+    /// A character a name may not hold, with the reason written to follow
+    /// "because".
+    pub refused_char: Option<(char, &'static str)>,
     /// Extra work after a membership change (groups touch the contact row).
     pub on_change: Option<ChangeHook>,
 }
@@ -119,6 +122,8 @@ pub fn tag_spec() -> &'static MembershipSpec {
             "none",
         ],
         special_reserved: &[],
+        // Message Tags are not in the address book, so a tag may hold `;`.
+        refused_char: None,
         on_change: None,
     };
     &SPEC
@@ -184,6 +189,12 @@ pub fn group_spec() -> &'static MembershipSpec {
             ("group messages 2", "Group Messages is a reserved name"),
             ("group-messages-2", "Group Messages is a reserved name"),
         ],
+        // A name holding `;` would come back from an address book export
+        // and load as two Contact Groups.
+        refused_char: Some((
+            crate::db::address_book::GROUP_SEPARATOR,
+            "the address book separates Contact Group names with it",
+        )),
         on_change: Some(touch_member_owner),
     };
     &SPEC
@@ -262,7 +273,8 @@ fn reserved_error(spec: &MembershipSpec, name: &str) -> String {
     format!("\"{}\" is a reserved {}", name.trim(), spec.reserved_label)
 }
 
-/// Trim and validate a set name against the spec's length and reserved-name rules.
+/// Trim and validate a set name against the spec's length, refused-character
+/// and reserved-name rules.
 fn normalize_name(spec: &MembershipSpec, name: &str) -> Result<String, MembershipError> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
@@ -274,6 +286,13 @@ fn normalize_name(spec: &MembershipSpec, name: &str) -> Result<String, Membershi
             spec.max_name_len
         )));
     }
+    if let Some((refused, reason)) = spec.refused_char
+        && trimmed.contains(refused)
+    {
+        return Err(MembershipError::BadRequest(format!(
+            "name can't hold \"{refused}\", because {reason}"
+        )));
+    }
     if is_reserved(spec, trimmed) {
         return Err(MembershipError::BadRequest(reserved_error(spec, trimmed)));
     }
@@ -281,7 +300,8 @@ fn normalize_name(spec: &MembershipSpec, name: &str) -> Result<String, Membershi
 }
 
 /// The trimmed name when a person could create a set under it, else the
-/// sentence that says why not: blank, too long, or reserved. For a caller
+/// sentence that says why not: blank, too long, holding the refused
+/// character, or reserved. For a caller
 /// that creates sets by name outside the set routes, as an address book load
 /// does for the Contact Groups its rows list.
 ///

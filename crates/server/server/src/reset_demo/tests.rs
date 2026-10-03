@@ -1489,10 +1489,9 @@ async fn the_demo_address_book_names_the_unknowns_the_imports_made() {
     let rewritten = address_book::rewrite_ids_to_nameless(&mut conn, DEMO_ACCOUNT_ID, &text)
         .await
         .expect("rewrite the demo address book");
-    let book_ids: BTreeSet<i64> = rewritten
-        .lines()
-        .skip(1)
-        .filter_map(|line| line.split(',').next()?.parse().ok())
+    let book_ids: BTreeSet<i64> = address_book::contact_ids_of(&rewritten)
+        .iter()
+        .filter_map(|id| id.parse().ok())
         .collect();
     assert!(!book_ids.is_empty(), "the book names an Unknown in place");
     close_test_db(pool, conn).await;

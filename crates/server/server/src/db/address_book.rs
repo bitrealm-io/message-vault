@@ -80,12 +80,9 @@ pub struct LoadCounts {
 }
 
 impl LoadCounts {
-    /// The contacts the load created or updated. For a file that only gives
-    /// names, such as the demo address book, these are the contacts it named:
-    /// a nameless contact named in place counts as updated, and a new one as
-    /// created.
+    /// The contacts the load created or updated.
     #[must_use]
-    pub fn contacts_named(&self) -> u64 {
+    pub fn contacts_changed(&self) -> u64 {
         self.contacts_created + self.contacts_updated
     }
 }
@@ -887,6 +884,22 @@ pub(crate) async fn rewrite_ids_to_nameless(
         ]
     });
     write_book(book)
+}
+
+/// The `contact_id` cell of each data row of an address book file, read with
+/// the CSV reader the load uses.
+#[cfg(test)]
+pub(crate) fn contact_ids_of(text: &str) -> Vec<String> {
+    csv::Reader::from_reader(text.as_bytes())
+        .records()
+        .map(|record| {
+            record
+                .expect("an address book row")
+                .get(0)
+                .unwrap_or_default()
+                .to_string()
+        })
+        .collect()
 }
 
 /// The address book file of `rows`, each in the order of [`COLUMNS`], under

@@ -552,7 +552,7 @@ async fn run_reset_demo(args: ResetDemoArgs) -> Result<()> {
     println!("  tapbacks:             {}", stats.import.tapbacks);
     println!(
         "  contacts named:       {} (from the demo address book)",
-        stats.address_book.contacts_named()
+        stats.address_book.contacts_changed()
     );
     println!();
     println!("Media files on disk (assets/)");

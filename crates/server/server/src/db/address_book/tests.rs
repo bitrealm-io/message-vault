@@ -1534,10 +1534,7 @@ async fn a_write_that_commits_while_the_load_reads_does_not_fail_it() {
 
 /// The `contact_id` cell of each data row of a file.
 fn ids_of(text: &str) -> Vec<String> {
-    text.lines()
-        .skip(1)
-        .map(|line| line.split(',').next().unwrap_or_default().to_string())
-        .collect()
+    contact_ids_of(text)
 }
 
 #[tokio::test]

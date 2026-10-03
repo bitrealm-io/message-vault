@@ -221,7 +221,7 @@ export default function IdentityTable({
           <Row
             key={`${row.service ?? ""}-${row.address}`}
             id={`${row.service ?? ""}-${row.address}`}
-            className="border-b border-border outline-none"
+            className="border-b border-border outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
           >
             <Cell className={`${cellClass} whitespace-nowrap text-left text-muted`}>
               {formatHandleServiceLabel(row.address, row.service)}
@@ -249,7 +249,10 @@ export default function IdentityTable({
           </Row>
         ))}
         {summary ? (
-          <Row id="summary" className="border-t-2 border-border font-semibold outline-none">
+          <Row
+            id="summary"
+            className="border-t-2 border-border font-semibold outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+          >
             <Cell className={`${cellClass} text-left`}>Summary</Cell>
             <Cell className={`${cellClass} text-left text-muted`}>—</Cell>
             {renderCounts(summary, undefined)}

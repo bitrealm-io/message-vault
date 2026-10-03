@@ -230,4 +230,16 @@ describe("IdentityTable focus", () => {
       expect(header.className).toContain("focus-visible:ring-2 focus-visible:ring-accent");
     }
   });
+
+  it("draws the focus ring on every row, the summary row included", () => {
+    render(<IdentityTable {...dates} rows={rows} totalConversations={2} onRemove={() => {}} />);
+    const bodyRows = screen.getAllByRole("row").slice(1);
+    expect(bodyRows).toHaveLength(4);
+    expect(bodyRows.some((row) => row.textContent?.startsWith("Summary"))).toBe(true);
+    for (const row of bodyRows) {
+      expect(row.className).toContain(
+        "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
+      );
+    }
+  });
 });

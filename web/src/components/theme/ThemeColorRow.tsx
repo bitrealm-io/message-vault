@@ -47,7 +47,7 @@ export function ColorRow({
             (e.target as HTMLInputElement).blur();
           }
         }}
-        className="min-w-0 flex-1 rounded-md border border-border bg-bg px-2.5 py-1.5 font-mono text-[0.813rem] text-text outline-none"
+        className="min-w-0 flex-1 rounded-md border border-border bg-bg px-2.5 py-1.5 font-mono text-[0.813rem] text-text outline-none focus:border-accent"
       />
     </div>
   );

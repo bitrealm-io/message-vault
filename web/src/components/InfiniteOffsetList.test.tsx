@@ -413,6 +413,39 @@ describe("InfiniteOffsetList choosing a row", () => {
     expect(lead.className).toContain("z-[1]");
   });
 
+  // A row sets outline-none, which also removes the app's own :focus-visible
+  // outline, so it draws the style guide's ring itself, inside the row because
+  // the list's scroll region clips a ring drawn outside it.
+  it("draws the focus ring on a row reached with Tab", () => {
+    renderList([{ id: "1", name: "Alice" }]);
+    expect(screen.getByRole("button", { name: "Alice" }).className).toContain(
+      "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
+    );
+  });
+
+  it("draws the focus ring around the whole row when its select button beside a lead cell has focus", () => {
+    renderList([{ id: "1", name: "Alice" }], { lead: true });
+    const row = screen.getByRole("button", { name: "Alice" }).parentElement as HTMLElement;
+    expect(row.className).toContain(
+      "has-[>button:focus-visible]:ring-2 has-[>button:focus-visible]:ring-inset has-[>button:focus-visible]:ring-accent",
+    );
+  });
+
+  it("draws the focus ring on a row of the desktop app's list, reached with the arrow keys", async () => {
+    tauriMock.current = true;
+    const heights = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(400);
+    const widths = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(300);
+    try {
+      renderList([{ id: "1", name: "Alice" }], { sectioned: false });
+      expect((await screen.findByRole("option", { name: "Alice" })).className).toContain(
+        "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
+      );
+    } finally {
+      heights.mockRestore();
+      widths.mockRestore();
+    }
+  });
+
   it("selects from the row and not from the lead cell", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();

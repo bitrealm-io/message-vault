@@ -53,7 +53,10 @@ export default function ApiTokensTable({
           className="outline-none"
         >
           {(item) => (
-            <Row id={item.id} className="border-b border-border last:border-b-0 outline-none">
+            <Row
+              id={item.id}
+              className="border-b border-border last:border-b-0 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+            >
               <Cell className={`${tdClass} truncate font-medium`}>
                 <span className="block truncate" title={item.label}>
                   {item.label}

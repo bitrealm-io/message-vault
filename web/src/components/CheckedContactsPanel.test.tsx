@@ -63,6 +63,25 @@ describe("CheckedContactsPanel", () => {
     }
   });
 
+  it("draws the focus ring on every contact's row", () => {
+    render(
+      <CheckedContactsPanel
+        contacts={[
+          { id: "1", name: "Ada" },
+          { id: "2", name: "Bob" },
+        ]}
+        onClear={() => {}}
+      />,
+    );
+    const bodyRows = screen.getAllByRole("row").slice(1);
+    expect(bodyRows).toHaveLength(2);
+    for (const row of bodyRows) {
+      expect(row.className).toContain(
+        "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
+      );
+    }
+  });
+
   it("says the figures could not be loaded and loads them on Try again", async () => {
     summaries.mockRejectedValueOnce(new Error("The server could not answer."));
     summaries.mockResolvedValueOnce({

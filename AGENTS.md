@@ -162,7 +162,11 @@ only the user resolves it.
    request, let the run finish, because GitHub reruns the failed jobs of a
    finished run only. Then sort every failed job: any that failed because of
    the pull request is fixed and pushed, which replaces the rerun; only when
-   every failure is outside does the run get its rerun. The run is green only
+   every failure is outside does the run get its rerun. Before the rerun,
+   look at the latest run on `main`: if the same job fails there, `main` is
+   red, so do not rerun, and report the pull request as blocked on `main`. A
+   job that fails outside the pull request again after its rerun also stops
+   the review, with a report. The run is green only
    when its conclusion is `success`. A `cancelled` run means something pushed
    over it, so check the head. Green counts only while the pull request's
    head is still the commit you pushed: a push from another session moves it,
@@ -192,7 +196,8 @@ only the user resolves it.
    do sleep 30; done                    # stops at the first failed job
    gh run view "$run" --json conclusion,jobs -q '.conclusion, (.jobs[] | select(.conclusion == "failure") | .name)'
    gh run watch "$run"                  # an outside failure: wait for the run to finish
-   gh run rerun "$run" --failed
+   gh run list --branch main --workflow ci.yml --event push -L 1 --json conclusion,url
+   gh run rerun "$run" --failed         # only when main is not red on the same job
    [ "$(gh pr view <N> --json headRefOid -q .headRefOid)" = "$sha" ] || echo moved
    ```
 

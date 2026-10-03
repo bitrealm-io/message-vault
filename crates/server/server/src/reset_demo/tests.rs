@@ -2,6 +2,7 @@ use super::*;
 use crate::config::PathsConfig;
 use crate::imports_api::IMPORT_CONTACT_GROUP_NAME_SQL;
 use sqlx::SqliteConnection;
+use std::collections::BTreeSet;
 
 pub(crate) fn write_tiny_reset_bundle(root: &Path) {
     fs::create_dir_all(root.join("config")).expect("create bundle config");
@@ -1482,6 +1483,18 @@ async fn the_demo_address_book_names_the_unknowns_the_imports_made() {
         unknowns_holding(&mut conn, &wanted).await > 0,
         "the imports made Unknowns for the people the book names"
     );
+    // The contacts the book names in place: the ids the load's rewrite of
+    // the book gives its contacts, read before the load changes anything.
+    let text = fs::read_to_string(&prepared.contacts_csv).expect("read the demo address book");
+    let rewritten = address_book::rewrite_ids_to_nameless(&mut conn, DEMO_ACCOUNT_ID, &text)
+        .await
+        .expect("rewrite the demo address book");
+    let book_ids: BTreeSet<i64> = rewritten
+        .lines()
+        .skip(1)
+        .filter_map(|line| line.split(',').next()?.parse().ok())
+        .collect();
+    assert!(!book_ids.is_empty(), "the book names an Unknown in place");
     close_test_db(pool, conn).await;
 
     let counts = load_demo_address_book(&build, &prepared, DEMO_ACCOUNT_ID)
@@ -1553,16 +1566,22 @@ async fn the_demo_address_book_names_the_unknowns_the_imports_made() {
 
     // The conversations follow the identity to the named contact: a
     // one-to-one conversation with a number the book names reads as that
-    // person.
-    let named_conversations = count(
-        &mut conn,
+    // person. Only the contacts the book lists count, so a name an import
+    // gave does not pass for one the book gave.
+    let book_ids_json = serde_json::to_string(&book_ids).expect("write the ids as JSON");
+    let named_conversations: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM conversations cv
          JOIN contact_handles ch ON ch.handle_id = cv.chat_handle_id
          JOIN contacts c ON c.id = ch.contact_id
          WHERE cv.account_id = $1 AND cv.conversation_type = 'individual'
-           AND trim(c.preferred_name) <> ''",
+           AND trim(c.preferred_name) <> ''
+           AND c.id IN (SELECT value FROM json_each($2))",
     )
-    .await;
+    .bind(DEMO_ACCOUNT_ID)
+    .bind(&book_ids_json)
+    .fetch_one(&mut *conn)
+    .await
+    .expect("count the conversations the book named");
     assert!(named_conversations > 0);
     close_test_db(pool, conn).await;
 }

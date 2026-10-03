@@ -1,7 +1,8 @@
 import Button from "../../components/Button";
+import type { StagingDeleteFailure } from "./importRunStore";
 
 type StagingDeleteFailureNoticeProps = {
-  failure: { path: string; reason: string };
+  failure: StagingDeleteFailure;
   onDismiss: () => void;
 };
 

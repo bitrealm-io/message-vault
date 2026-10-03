@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActiveImportSession } from "../lib/importSession";
 import type { StagingSummary } from "../lib/tauri";
 import { mockedAuth, renderWithProviders } from "../test/providers";
+import type { StagingDeleteFailure } from "./import/importRunStore";
 import type { ResumeDecision } from "./import/resumeDecision";
 
 const hookState = vi.hoisted(() => ({
@@ -28,7 +29,7 @@ const hookState = vi.hoisted(() => ({
   mediaPartiallyRan: false,
   resumeError: null as string | null,
   sourceIdentities: null as string[] | null,
-  stagingDeleteFailure: null as { path: string; reason: string } | null,
+  stagingDeleteFailure: null as StagingDeleteFailure | null,
 }));
 const dismissStagingDeleteFailureMock = vi.hoisted(() => vi.fn());
 const startImportMock = vi.hoisted(() => vi.fn());

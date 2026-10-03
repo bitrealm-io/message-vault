@@ -15,4 +15,5 @@
 
 pub mod commands;
 pub mod local_server;
+pub mod staging_folders;
 pub mod state;

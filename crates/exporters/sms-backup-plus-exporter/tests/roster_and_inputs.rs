@@ -1,8 +1,8 @@
 //! Who is in a chat and what they are called, which files count as
 //! messages, and which MIME parts become attachments.
 //!
-//! Every fixture here is synthetic: Alice is +14075551234, Bob is
-//! +14075555678, the owner is +15555550100, and the JPEG is a 22-byte
+//! Every fixture here is synthetic: Alice is +14075550107, Bob is
+//! +14075550108, the owner is +15555550100, and the JPEG is a 22-byte
 //! header with no image data.
 
 use crate::emit::{ConvertExportArgs, convert_export};
@@ -75,17 +75,17 @@ fn one_to_one_roster_holds_the_peer_named_from_the_subject() {
     assert_eq!(report.conversations, 1);
 
     let docs = documents(&out);
-    let alice = &docs["+14075551234"];
+    let alice = &docs["+14075550107"];
     let roster: Vec<(Option<&str>, Option<&str>)> = alice
         .conversation
         .participants
         .iter()
         .map(|p| (p.handle.as_deref(), p.display_name.as_deref()))
         .collect();
-    assert_eq!(roster, vec![(Some("+14075551234"), Some("Alice"))]);
+    assert_eq!(roster, vec![(Some("+14075550107"), Some("Alice"))]);
 
     let msg = &alice.messages[0];
-    assert_eq!(msg.sender_handle.as_deref(), Some("+14075551234"));
+    assert_eq!(msg.sender_handle.as_deref(), Some("+14075550107"));
     assert_eq!(msg.sender_display_name.as_deref(), Some("Alice"));
 }
 
@@ -115,11 +115,11 @@ fn group_roster_holds_both_peers_and_the_sender_is_the_one_in_from() {
         .filter_map(|p| p.handle.as_deref())
         .collect();
     handles.sort_unstable();
-    assert_eq!(handles, vec!["+14075551234", "+14075555678"]);
+    assert_eq!(handles, vec!["+14075550107", "+14075550108"]);
 
     let msg = &group.messages[0];
     assert_eq!(msg.text.trim(), "Hello group from Bob");
-    assert_eq!(msg.sender_handle.as_deref(), Some("+14075555678"));
+    assert_eq!(msg.sender_handle.as_deref(), Some("+14075550108"));
 }
 
 /// A mail that names the peer but records no address still gets its own
@@ -234,7 +234,7 @@ fn ordinary_mail_is_skipped_and_counted_as_not_sms() {
     assert_eq!(report.messages, 1);
     let docs = documents(&out);
     assert_eq!(
-        docs["+14075551234"].messages[0].text.trim(),
+        docs["+14075550107"].messages[0].text.trim(),
         "Hello from Alice"
     );
 }
@@ -270,7 +270,7 @@ fn files_under_duplicate_and_exclude_are_skipped() {
     );
     assert_eq!(report.messages, 1);
     let docs = documents(&out);
-    let texts: Vec<&str> = docs["+14075551234"]
+    let texts: Vec<&str> = docs["+14075550107"]
         .messages
         .iter()
         .map(|m| m.text.trim())
@@ -311,7 +311,7 @@ fn a_jpeg_part_is_exactly_one_jpg_attachment_and_a_plain_sms_has_none() {
     assert_eq!(report.attachments_saved, 1);
 
     let docs = documents(&out);
-    let alice = &docs["+14075551234"];
+    let alice = &docs["+14075550107"];
     assert_eq!(alice.messages.len(), 2);
 
     let plain = &alice.messages[0];

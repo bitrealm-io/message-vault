@@ -52,7 +52,7 @@ Write each HTTP handler's doc comment as plain prose. The summary says what the 
 Keep `# Errors` rustdoc sections out of handler docs that become OpenAPI descriptions. Fold failure cases into the description prose.
 
 - `crates/server/server/src/conversations_api.rs`, `fn delete_conversation` — "Trash is the only door to deletion, so a conversation that is not in the trash answers 409 rather than being deleted from wherever it was." — Good: the failure case and its reason are description prose, so the reference reads correctly.
-- `crates/server/server/src/trash_api.rs`, `fn remove_orphaned_files` — "# Errors … `Internal` when a file exists and cannot be removed, or when a stored path would escape the directory it belongs under." — Good: a `# Errors` section belongs on a function that is not a handler, because rustdoc is the only place it appears.
+- `crates/server/server/src/asset_store.rs`, `fn sweep_unreferenced` — "# Errors … Returns a database error, or an error when the file walk stops. A file that cannot be removed is logged and the walk goes on." — Good: a `# Errors` section belongs on a function that is not a handler, because rustdoc is the only place it appears.
 
 ## Cover every public item
 

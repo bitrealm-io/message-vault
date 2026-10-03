@@ -1,0 +1,15 @@
+From: "Alice" <+15555550101@unknown.email>
+To: owner@example.com
+Subject: SMS with Alice
+Date: Fri, 01 Jan 2021 00:00:00 +0000
+Message-ID: <a1@sms-backup-plus.local>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+X-smssync-datatype: SMS
+X-smssync-type: 1
+X-smssync-address: +15555550101
+X-smssync-date: 1609459200123
+X-smssync-id: 101
+
+Hello from Alice

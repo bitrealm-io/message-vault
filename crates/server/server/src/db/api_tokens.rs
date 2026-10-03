@@ -31,26 +31,21 @@ pub struct ApiTokenRow {
 pub const DEFAULT_API_TOKEN_TTL_SECS: u64 = 365 * 24 * 60 * 60;
 
 const API_TOKEN_PREFIX: &str = "mc-api-";
-const LEGACY_APP_PASSWORD_PREFIX: &str = "mc-app-";
 const HINT_HEAD: usize = 2;
 const HINT_TAIL: usize = 2;
 
-/// Mask a plaintext API token for list display (keeps `mc-api-` or legacy `mc-app-` + ends).
+/// Mask a plaintext API token for list display (keeps `mc-api-` and the ends).
 /// Format: `mc-api-xx..yy`.
 pub fn mask_api_token(token: &str) -> String {
-    let (prefix, secret) = if let Some(s) = token.strip_prefix(API_TOKEN_PREFIX) {
-        (API_TOKEN_PREFIX, s)
-    } else if let Some(s) = token.strip_prefix(LEGACY_APP_PASSWORD_PREFIX) {
-        (LEGACY_APP_PASSWORD_PREFIX, s)
-    } else {
+    let Some(secret) = token.strip_prefix(API_TOKEN_PREFIX) else {
         return format!("{API_TOKEN_PREFIX}..");
     };
     if secret.len() < HINT_HEAD + HINT_TAIL {
-        return format!("{prefix}..");
+        return format!("{API_TOKEN_PREFIX}..");
     }
     let head = &secret[..HINT_HEAD];
     let tail = &secret[secret.len() - HINT_TAIL..];
-    format!("{prefix}{head}..{tail}")
+    format!("{API_TOKEN_PREFIX}{head}..{tail}")
 }
 
 /// Account + permissions for a presented API token Bearer value.
@@ -60,6 +55,10 @@ pub struct ApiTokenAuth {
     pub account_id: i64,
     /// What this token may do (not yet intersected with its owner's grant).
     pub permissions: Permissions,
+    /// The token's label, which a run it starts records.
+    pub label: String,
+    /// The token's masked hint, which a run it starts records.
+    pub token_hint: String,
 }
 
 /// Label validation failures.
@@ -100,6 +99,10 @@ pub fn generate_api_token() -> Result<String> {
     generate_prefixed_token("mc-api-")
 }
 
+/// One token's row as a Bearer lookup reads it: account_id, can_import,
+/// can_export, expires_at, disabled, label, token_hint.
+type TokenAuthRow = (i64, i64, i64, Option<String>, i64, String, String);
+
 /// Look up which account owns this API token Bearer value.
 /// On a successful match, updates `last_accessed_at`; a failed update is
 /// logged and does not reject the token. Expired or disabled tokens are
@@ -113,15 +116,15 @@ pub async fn lookup_account_for_api_token(
     token: &str,
 ) -> Result<Option<ApiTokenAuth>> {
     let token_hash = hash_api_token(token);
-    let row: Option<(i64, i64, i64, Option<String>, i64)> = sqlx::query_as(
-        "SELECT account_id, can_import, can_export, expires_at, disabled
+    let row: Option<TokenAuthRow> = sqlx::query_as(
+        "SELECT account_id, can_import, can_export, expires_at, disabled, label, token_hint
          FROM account_api_tokens WHERE token_hash = $1",
     )
     .bind(token_hash.as_str())
     .fetch_optional(&mut *conn)
     .await?;
     match row {
-        Some((account_id, can_import, can_export, expires_at, disabled)) => {
+        Some((account_id, can_import, can_export, expires_at, disabled, label, token_hint)) => {
             if disabled != 0 {
                 return Ok(None);
             }
@@ -149,6 +152,8 @@ pub async fn lookup_account_for_api_token(
             Ok(Some(ApiTokenAuth {
                 account_id,
                 permissions: Permissions::token(can_import != 0, can_export != 0),
+                label,
+                token_hint,
             }))
         }
         None => Ok(None),
@@ -238,6 +243,33 @@ type ApiTokenRowRaw = (
     i64,
 );
 
+impl From<ApiTokenRowRaw> for ApiTokenRow {
+    fn from(
+        (
+            id,
+            label,
+            can_import,
+            can_export,
+            token_hint,
+            created_at,
+            last_accessed_at,
+            expires_at,
+            disabled,
+        ): ApiTokenRowRaw,
+    ) -> Self {
+        Self {
+            id,
+            label,
+            permissions: Permissions::token(can_import != 0, can_export != 0),
+            token_hint,
+            created_at,
+            last_accessed_at,
+            expires_at,
+            disabled: disabled != 0,
+        }
+    }
+}
+
 /// List API tokens for an account (no secrets).
 ///
 /// # Errors
@@ -256,11 +288,11 @@ pub async fn list_api_tokens(
     .bind(account_id)
     .fetch_all(&mut *conn)
     .await?;
-    Ok(rows.into_iter().map(api_token_row).collect())
+    Ok(rows.into_iter().map(ApiTokenRow::from).collect())
 }
 
-/// One API token of the account (no secret); `None` when the account holds
-/// no token with this id.
+/// One of the account's API tokens (no secret), or `None` when the account
+/// holds no token with that id.
 ///
 /// # Errors
 ///
@@ -273,38 +305,13 @@ pub async fn get_api_token(
     let row: Option<ApiTokenRowRaw> = sqlx::query_as(
         "SELECT id, label, can_import, can_export, token_hint, created_at, last_accessed_at, expires_at, disabled
          FROM account_api_tokens
-         WHERE id = $1 AND account_id = $2",
+         WHERE account_id = $1 AND id = $2",
     )
-    .bind(id)
     .bind(account_id)
+    .bind(id)
     .fetch_optional(&mut *conn)
     .await?;
-    Ok(row.map(api_token_row))
-}
-
-fn api_token_row(
-    (
-        id,
-        label,
-        can_import,
-        can_export,
-        token_hint,
-        created_at,
-        last_accessed_at,
-        expires_at,
-        disabled,
-    ): ApiTokenRowRaw,
-) -> ApiTokenRow {
-    ApiTokenRow {
-        id,
-        label,
-        permissions: Permissions::token(can_import != 0, can_export != 0),
-        token_hint,
-        created_at,
-        last_accessed_at,
-        expires_at,
-        disabled: disabled != 0,
-    }
+    Ok(row.map(ApiTokenRow::from))
 }
 
 /// Delete one API token if it belongs to the account.
@@ -428,10 +435,6 @@ mod tests {
         assert_eq!(
             mask_api_token("mc-api-Sd1abcdefghijklmnopqrsmtuvwxyZmE"),
             "mc-api-Sd..mE"
-        );
-        assert_eq!(
-            mask_api_token("mc-app-Sd1abcdefghijklmnopqrsmtuvwxyZmE"),
-            "mc-app-Sd..mE"
         );
 
         let listed = list_api_tokens(&mut conn, account_id).await.unwrap();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contactAvatarColor, contactInitials } from "./contactInitials";
+import { contactAvatarClass, contactInitials } from "./contactInitials";
 
 describe("contactInitials", () => {
   it("uses first and last name letters", () => {
@@ -19,13 +19,13 @@ describe("contactInitials", () => {
   });
 });
 
-describe("contactAvatarColor", () => {
+describe("contactAvatarClass", () => {
   it("is stable for the same person seed", () => {
-    const a = contactAvatarColor({
+    const a = contactAvatarClass({
       preferredName: "Ada",
       preferredHandle: "+15551212",
     });
-    const b = contactAvatarColor({
+    const b = contactAvatarClass({
       preferredName: "Ada",
       preferredHandle: "+1 (555) 1212",
     });
@@ -33,8 +33,8 @@ describe("contactAvatarColor", () => {
   });
 
   it("differs for different people", () => {
-    const a = contactAvatarColor({ preferredName: "Ada" });
-    const b = contactAvatarColor({ preferredName: "Grace" });
+    const a = contactAvatarClass({ preferredName: "Ada" });
+    const b = contactAvatarClass({ preferredName: "Grace" });
     expect(a).not.toBe(b);
   });
 });

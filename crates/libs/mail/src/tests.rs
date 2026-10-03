@@ -190,13 +190,13 @@ fn writes_group_mms_with_image_part() {
 #[test]
 fn encodes_email_handles_and_imessage_message_id() {
     let mut msg = base_sms();
-    msg.chat_identifier = "friend@icloud.com".into();
+    msg.chat_identifier = "friend@example.com".into();
     msg.participants = vec![Participant {
-        handle: "friend@icloud.com".into(),
+        handle: "friend@example.com".into(),
         display_name: Some("Friend".into()),
     }];
-    msg.message.sender_handle = Some("friend@icloud.com".into());
-    msg.owner_handle = "me@icloud.com".into();
+    msg.message.sender_handle = Some("friend@example.com".into());
+    msg.owner_handle = "me@example.com".into();
     msg.message.service = message_ir::IrService::IMessage;
     msg.message.message_kind = message_ir::IrMessageKind::IMessage;
     msg.message.guid = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE".into();
@@ -209,11 +209,11 @@ fn encodes_email_handles_and_imessage_message_id() {
     let headers = mail.get_headers();
     let from = headers.get_first_value("From").unwrap();
     assert!(
-        from.contains("friend=icloud.com@handle.local"),
+        from.contains("friend=example.com@handle.local"),
         "From was {from}"
     );
     let to = headers.get_first_value("To").unwrap();
-    assert!(to.contains("me=icloud.com@handle.local"), "To was {to}");
+    assert!(to.contains("me=example.com@handle.local"), "To was {to}");
     let mid = headers.get_first_value("Message-ID").unwrap();
     assert!(
         mid.contains("AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE@imessage.local"),
@@ -550,13 +550,13 @@ fn clean_previous_mail_output_accepts_a_missing_folder() {
 fn a_messages_own_owner_survives_an_mbox_round_trip() {
     let mut msg = base_sms();
     msg.message.direction = IrDirection::Outgoing;
-    msg.message.owner_handle = Some("me@icloud.com".into());
+    msg.message.owner_handle = Some("me@example.com".into());
     let tmp = tempfile::tempdir().unwrap();
     let path = write_conversation_mbox(tmp.path(), &[msg]).unwrap();
     let parsed = mail_messages_from_mbox(&path).unwrap();
     assert_eq!(
         parsed[0].message.owner_handle.as_deref(),
-        Some("me@icloud.com")
+        Some("me@example.com")
     );
     // The conversation's owner stays where it was.
     assert_eq!(parsed[0].owner_handle, "+15555550100");

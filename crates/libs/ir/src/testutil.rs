@@ -59,6 +59,24 @@ pub fn sample_document(text: &str) -> ConversationDocument {
     doc
 }
 
+/// One-message WhatsApp conversation fixture: [`sample_document`] with
+/// `+15555550102` as the other person and every message on the WhatsApp
+/// service, with no source bag. `text` becomes the message body.
+pub fn sample_whatsapp_document(text: &str) -> ConversationDocument {
+    let mut doc = sample_document(text);
+    doc.export.source = "whatsapp".into();
+    doc.conversation.chat_identifier = "+15555550102".into();
+    doc.conversation.participants[0].handle = Some("+15555550102".into());
+    for msg in &mut doc.messages {
+        msg.guid = "ffeeddccbbaa99887766554433221100".into();
+        msg.service = IrService::Whatsapp;
+        msg.message_kind = IrMessageKind::Unknown;
+        msg.sender_handle = Some("+15555550102".into());
+        msg.source = None;
+    }
+    doc
+}
+
 /// Two-message iMessage conversation fixture: an incoming reply with a
 /// send effect, tapbacks and parts, then the owner's outgoing tapback on
 /// it. Every iMessage-only field a writer might mirror is set, so a format

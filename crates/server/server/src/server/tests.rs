@@ -679,7 +679,7 @@ async fn imports_create_stores_source_identities() {
         device_id: None,
         form: None,
         source_fingerprint: None,
-        source_identities: Some(serde_json::json!(["+15550001111", "owner@example.com"])),
+        source_identities: Some(serde_json::json!(["+15555550110", "owner@example.com"])),
     };
     let _ = create_import(
         State(state.clone()),
@@ -694,7 +694,7 @@ async fn imports_create_stores_source_identities() {
         .expect("a running run is listed");
     assert_eq!(
         session.source_identities,
-        serde_json::json!(["+15550001111", "owner@example.com"])
+        serde_json::json!(["+15555550110", "owner@example.com"])
     );
 }
 
@@ -1344,6 +1344,16 @@ fn every_api_error_answers_the_status_its_problem_type_declares() {
     }
 }
 
+/// A request refused because another request to the same upload holds its
+/// lock found the upload busy, not wrong: `409 state-conflict`, so a client
+/// sends it again rather than blaming its bytes.
+#[test]
+fn an_asset_upload_held_by_another_request_is_a_state_conflict() {
+    let error = ApiError::from(crate::assets_api::AssetError::Locked);
+    assert_eq!(error.problem_type(), Some(ProblemType::StateConflict));
+    assert_eq!(error.status(), StatusCode::CONFLICT);
+}
+
 #[test]
 fn every_api_error_displays_its_detail_sentence() {
     assert_eq!(
@@ -1839,14 +1849,14 @@ async fn a_small_attachment_size_limit_holds_only_the_attachment_uploads() {
     )
     .await;
     let mut batch = String::from(concat!(
-        r#"{"schema_version":4,"export":{"source":"whatsapp","tool":"t","tool_version":"0","owner_handle":"+15550000001","owner_display_name":"Me"},"#,
-        r#""conversation":{"chat_identifier":"+15550000002","conversation_type":"individual","group_title":null,"#,
-        r#""participants":[{"handle":"+15550000002","display_name":null}],"#,
+        r#"{"schema_version":4,"export":{"source":"whatsapp","tool":"t","tool_version":"0","owner_handle":"+15555550106","owner_display_name":"Me"},"#,
+        r#""conversation":{"chat_identifier":"+15555550107","conversation_type":"individual","group_title":null,"#,
+        r#""participants":[{"handle":"+15555550107","display_name":null}],"#,
         r#""stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1700000000000,"last_timestamp_unix_ms":1700000000000}}}"#,
         "\n",
     ));
     batch.push_str(&format!(
-        r#"{{"guid":"g-1","timestamp_unix_ms":1700000000000,"direction":"incoming","service":"whatsapp","message_kind":"sms","sender_handle":"+15550000002","sender_display_name":null,"subject":null,"text":"{}","attachments":[],"imessage":null,"source":null}}"#,
+        r#"{{"guid":"g-1","timestamp_unix_ms":1700000000000,"direction":"incoming","service":"whatsapp","message_kind":"sms","sender_handle":"+15555550107","sender_display_name":null,"subject":null,"text":"{}","attachments":[],"imessage":null,"source":null}}"#,
         "a".repeat(4096)
     ));
     batch.push('\n');

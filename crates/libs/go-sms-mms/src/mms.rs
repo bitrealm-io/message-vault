@@ -32,7 +32,7 @@
 //!    7.3); otherwise the body is one part of that type. Every real MMS is a
 //!    `multipart.related` or `multipart.mixed`.
 //! 6. **Addresses keep their wire form.** A phone number is
-//!    `+14075551234/TYPE=PLMN`; an email address has no suffix. What to do
+//!    `+14075550107/TYPE=PLMN`; an email address has no suffix. What to do
 //!    with the suffix is the caller's decision, not the decoder's.
 //!
 //! Message-type tokens (section 7.2.14): 0x80 m-send-req, 0x81 m-send-conf,

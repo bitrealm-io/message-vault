@@ -113,7 +113,7 @@ describe("read-only web vault mutations", () => {
     assert.equal(unlocked.read_only, false);
 
     runWithAccount(accountId, () => {
-      trashHandle("+15555550999");
+      trashHandle("+15555550167");
       const conversationId = seedGroupConversation("chat.group.unlocked");
       trashConversation(conversationId);
       const contact = createContact({

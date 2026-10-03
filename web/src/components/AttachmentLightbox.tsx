@@ -4,6 +4,7 @@ import { useAssetObjectUrl } from "../hooks/useAssetObjectUrl";
 import { hasPreview } from "../lib/attachmentPreview";
 import type { MessageAttachment } from "../lib/types";
 import { Z_MODAL } from "../lib/zLayers";
+import PlainButton from "./PlainButton";
 
 export type LightboxItem = {
   attachment: MessageAttachment;
@@ -49,9 +50,9 @@ export default function AttachmentLightbox({
 
   let media: ReactNode;
   if (error) {
-    media = <div className="text-[0.875rem] text-white">Failed to load attachment</div>;
+    media = <div className="text-[0.875rem] text-lightbox-text">Failed to load attachment</div>;
   } else if (loading || !url) {
-    media = <div className="text-[0.875rem] text-white">Loading…</div>;
+    media = <div className="text-[0.875rem] text-lightbox-text">Loading…</div>;
   } else {
     media = (
       <img
@@ -68,7 +69,7 @@ export default function AttachmentLightbox({
       isOpen
       onOpenChange={() => onClose()}
       isDismissable
-      className={`fixed inset-0 flex items-center justify-center bg-[rgba(0,0,0,0.9)] ${Z_MODAL}`}
+      className={`fixed inset-0 flex items-center justify-center bg-lightbox-bg ${Z_MODAL}`}
     >
       <Modal className="flex min-h-0 w-full items-center justify-center outline-none">
         <Dialog
@@ -77,41 +78,38 @@ export default function AttachmentLightbox({
         >
           <div className="flex items-center justify-center outline-none">
             {items.length > 1 && (
-              <button
-                type="button"
-                onClick={onPrev}
+              <PlainButton
+                onPress={onPrev}
                 aria-label="Previous attachment"
-                className="absolute left-4 top-1/2 flex h-12 w-12 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border-none bg-[rgba(255,255,255,0.2)] text-[2rem] text-white"
+                className="absolute left-4 top-1/2 flex h-12 w-12 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border-none bg-lightbox-control text-[2rem] text-lightbox-text"
               >
                 ‹
-              </button>
+              </PlainButton>
             )}
 
             {media}
 
             {items.length > 1 && (
-              <button
-                type="button"
-                onClick={onNext}
+              <PlainButton
+                onPress={onNext}
                 aria-label="Next attachment"
-                className="absolute right-4 top-1/2 flex h-12 w-12 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border-none bg-[rgba(255,255,255,0.2)] text-[2rem] text-white"
+                className="absolute right-4 top-1/2 flex h-12 w-12 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border-none bg-lightbox-control text-[2rem] text-lightbox-text"
               >
                 ›
-              </button>
+              </PlainButton>
             )}
 
             <div className="absolute right-4 top-4 flex items-center gap-4">
-              <span className="text-[0.875rem] text-white">
+              <span className="text-[0.875rem] text-lightbox-text">
                 {currentIndex + 1} / {items.length}
               </span>
-              <button
-                type="button"
-                onClick={onClose}
+              <PlainButton
+                onPress={onClose}
                 aria-label="Close attachment viewer"
-                className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border-none bg-[rgba(255,255,255,0.2)] text-[1.5rem] text-white"
+                className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border-none bg-lightbox-control text-[1.5rem] text-lightbox-text"
               >
                 ×
-              </button>
+              </PlainButton>
             </div>
           </div>
         </Dialog>

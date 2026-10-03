@@ -45,29 +45,10 @@ describe("missingAttachmentChipLabel", () => {
         att({
           original_name: "IMG_0421.HEIC",
           mime_type: "image/heic",
-          missing_reason: "skipped",
+          missing_reason: "not_copied",
         }),
       ),
     ).toBe("IMG_0421.HEIC · image/heic (skipped)");
-  });
-
-  it("labels the iMessage embed_disabled reason as skipped too", () => {
-    expect(
-      missingAttachmentChipLabel(
-        att({
-          original_name: "clip.mov",
-          missing_reason: "embed_disabled",
-        }),
-      ),
-    ).toBe("clip.mov (skipped)");
-  });
-
-  it("labels not_copied and both legacy spellings as skipped", () => {
-    for (const reason of ["not_copied", "skipped", "embed_disabled"]) {
-      expect(
-        missingAttachmentChipLabel(att({ original_name: "a.jpg", missing_reason: reason })),
-      ).toBe("a.jpg (skipped)");
-    }
   });
 
   it("keeps the ffmpeg detail from a convert_failed reason", () => {

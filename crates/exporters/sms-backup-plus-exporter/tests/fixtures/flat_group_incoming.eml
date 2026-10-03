@@ -1,8 +1,8 @@
-From: "Bob" <+14075555678@unknown.email>
+From: "Bob" <+14075550108@unknown.email>
 To: me@example.com
 Subject: SMS with Alice, Bob
 X-smssync-type: 132
-X-smssync-address: +14075551234~+14075555678
+X-smssync-address: +14075550107~+14075550108
 X-smssync-date: 1609459260000
 Content-Type: text/plain; charset=utf-8
 

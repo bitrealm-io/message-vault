@@ -9,7 +9,7 @@ function msg(
   return {
     source: "imessage",
     isFromMe: false,
-    sender: "+15551234567",
+    sender: "+15555550119",
     senderName: "Alex",
     body: "hi",
     isAnnouncement: false,

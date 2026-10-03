@@ -11,13 +11,13 @@ fn normalize_collapses_whitespace() {
 #[test]
 fn group_chat_identity_is_sorted_handles() {
     let handles = vec![
-        "+14075550002".to_string(),
-        "+14075550001".to_string(),
-        "+14075550002".to_string(),
+        "+14075550105".to_string(),
+        "+14075550104".to_string(),
+        "+14075550105".to_string(),
     ];
     assert_eq!(
         chat_identity_for_content_key("chat999", Some(&handles)),
-        "group:+14075550001|+14075550002"
+        "group:+14075550104|+14075550105"
     );
     assert_eq!(chat_identity_for_content_key("chat999", None), "chat999");
 }
@@ -27,7 +27,7 @@ fn content_key_stable_across_whitespace_and_offset_forms() {
     // The server stores the instant in UTC with a Z; the key hashes the epoch
     // it names, so an offset spelling of the same instant hashes the same.
     let a = compute_content_key(
-        "+14075551212",
+        "+14075550106",
         true,
         None,
         "2015-03-12T18:04:22Z",
@@ -35,7 +35,7 @@ fn content_key_stable_across_whitespace_and_offset_forms() {
         &[],
     );
     let b = compute_content_key(
-        "+14075551212",
+        "+14075550106",
         true,
         None,
         "2015-03-12T18:04:22+00:00",
@@ -43,7 +43,7 @@ fn content_key_stable_across_whitespace_and_offset_forms() {
         &[],
     );
     let c = compute_content_key(
-        "+14075551212",
+        "+14075550106",
         true,
         None,
         "2015-03-12T14:04:22-04:00",
@@ -60,18 +60,18 @@ fn content_key_stable_across_whitespace_and_offset_forms() {
 #[test]
 fn the_content_key_is_the_message_identity_at_whole_seconds() {
     let key = compute_content_key(
-        "+14075551212",
+        "+14075550106",
         false,
-        Some("+14075551212"),
+        Some("+14075550106"),
         "2015-03-12T18:04:22Z",
         Some("hi"),
         &[],
     )
     .unwrap();
     let identity = message_ir::MessageIdentity {
-        chat: "+14075551212",
+        chat: "+14075550106",
         is_from_me: false,
-        sender: Some("+14075551212"),
+        sender: Some("+14075550106"),
         timestamp_unix_ms: 1_426_183_462_345,
         text: "hi",
         attachment_digests: &[],
@@ -84,7 +84,7 @@ fn the_content_key_is_the_message_identity_at_whole_seconds() {
 #[test]
 fn a_time_that_does_not_parse_gives_no_content_key() {
     assert_eq!(
-        compute_content_key("+14075551212", true, None, "yesterday", Some("hi"), &[]),
+        compute_content_key("+14075550106", true, None, "yesterday", Some("hi"), &[]),
         None
     );
 }
@@ -95,7 +95,7 @@ fn parallel_content_keys_match_serial() {
         (
             1,
             10,
-            "+14075551212".into(),
+            "+14075550106".into(),
             "individual".into(),
             1,
             "2015-03-12T18:04:22Z".into(),
@@ -110,11 +110,11 @@ fn parallel_content_keys_match_serial() {
             0,
             "2015-03-12T18:04:23Z".into(),
             Some("yo".into()),
-            Some("+15555550001".into()),
+            Some("+15555550128".into()),
         ),
     ];
     let mut groups = HashMap::new();
-    groups.insert(11, vec!["+15555550001".into(), "+15555550002".into()]);
+    groups.insert(11, vec!["+15555550128".into(), "+15555550129".into()]);
     let mut shas = HashMap::new();
     shas.insert(2, vec!["abc".into()]);
     let parallel = hash_content_keys(&rows, &groups, &shas);
@@ -132,11 +132,11 @@ fn parallel_content_keys_match_serial() {
         vec![
             (
                 1,
-                "dbe62b7f59674ef9f38f923fb3c387ec66c00d8a813c0d0d7edb0ceb70217bd0".to_string()
+                "9f97e8b88bb589e4d531460b9c447e08ef07a4b49255d72b5ac3be694deea36b".to_string()
             ),
             (
                 2,
-                "8e9ab8eb840faf0f50a805e3a68c430ab4234ff3b8b87792fdcd70f7078cae03".to_string()
+                "814058642ddb0da5c96bc40b697ed7007e4b60162a62b79be4a98da471a34fe1".to_string()
             ),
         ],
         "the content key decides which messages are duplicates; changing it          re-partitions every database, so it is pinned deliberately"
@@ -148,7 +148,7 @@ fn content_key_distinguishes_group_senders() {
     let alice = compute_content_key(
         "group:+1|+2",
         false,
-        Some("+15555550001"),
+        Some("+15555550128"),
         "2015-03-12T18:04:22Z",
         Some("same text"),
         &[],
@@ -156,7 +156,7 @@ fn content_key_distinguishes_group_senders() {
     let bob = compute_content_key(
         "group:+1|+2",
         false,
-        Some("+15555550002"),
+        Some("+15555550129"),
         "2015-03-12T18:04:22Z",
         Some("same text"),
         &[],
@@ -176,7 +176,7 @@ async fn setup_db(conn: &mut SqliteConnection) {
     sqlx::query(
         r"
         INSERT INTO handles (account_id, raw, normalized, handle_type, service)
-        VALUES ($1, '+14075551212', '+14075551212', 'phone', 'phone')
+        VALUES ($1, '+14075550106', '+14075550106', 'phone', 'phone')
         ",
     )
     .bind(TEST_ACCOUNT_ID)
@@ -184,7 +184,7 @@ async fn setup_db(conn: &mut SqliteConnection) {
     .await
     .unwrap();
     let handle_id: i64 = sqlx::query_scalar(
-        "SELECT id FROM handles WHERE account_id = $1 AND normalized = '+14075551212'",
+        "SELECT id FROM handles WHERE account_id = $1 AND normalized = '+14075550106'",
     )
     .bind(TEST_ACCOUNT_ID)
     .fetch_one(&mut *conn)
@@ -1024,8 +1024,8 @@ async fn an_attachment_added_after_the_first_dedupe_changes_the_content_key() {
     let x = conversation(&mut conn, "chat-x", "group").await;
     let y = conversation(&mut conn, "chat-y", "group").await;
     for conv in [x, y] {
-        add_participant(&mut conn, conv, "+15555550001").await;
-        add_participant(&mut conn, conv, "+15555550002").await;
+        add_participant(&mut conn, conv, "+15555550128").await;
+        add_participant(&mut conn, conv, "+15555550129").await;
     }
 
     let first = message(
@@ -1088,7 +1088,7 @@ async fn a_participant_added_after_the_first_dedupe_changes_the_group_content_ke
     let x = conversation(&mut conn, "chat-x", "group").await;
     let y = conversation(&mut conn, "chat-y", "group").await;
     // The first export of chat-x named only one of the two people.
-    add_participant(&mut conn, x, "+15555550001").await;
+    add_participant(&mut conn, x, "+15555550128").await;
     let first = message(
         &mut conn,
         Msg {
@@ -1106,9 +1106,9 @@ async fn a_participant_added_after_the_first_dedupe_changes_the_group_content_ke
         .await
         .unwrap();
 
-    add_participant(&mut conn, x, "+15555550002").await;
-    add_participant(&mut conn, y, "+15555550001").await;
-    add_participant(&mut conn, y, "+15555550002").await;
+    add_participant(&mut conn, x, "+15555550129").await;
+    add_participant(&mut conn, y, "+15555550128").await;
+    add_participant(&mut conn, y, "+15555550129").await;
     let twin = message(
         &mut conn,
         Msg {
@@ -1146,7 +1146,7 @@ async fn a_failed_dedupe_keeps_the_previous_duplicates_hidden() {
         let (pool, _dir) = engine::test_pool().await;
         let mut conn = pool.acquire().await.unwrap();
         setup_account(&mut conn).await;
-        let peer = conversation(&mut conn, "+14075551212", "individual").await;
+        let peer = conversation(&mut conn, "+14075550106", "individual").await;
         let mut ids = Vec::new();
         // An exact twin (same second) and a near-time twin (one second apart).
         for (source, guid, timestamp, body) in [
@@ -1238,10 +1238,10 @@ impl Lcg {
 
 const GEN_WINDOW_SECS: i64 = 2;
 const GEN_PEOPLE: [&str; 4] = [
-    "+15555550001",
-    "+15555550002",
-    "+15555550003",
-    "+15555550004",
+    "+15555550128",
+    "+15555550129",
+    "+15555550130",
+    "+15555550131",
 ];
 const GEN_SOURCES: [&str; 3] = ["imessage", "sms-backup-plus", "go-sms-pro"];
 const GEN_BODIES: [&str; 5] = ["ok", "on my way", "see you at 6", "lol", ""];

@@ -46,16 +46,13 @@ afterEach(() => {
 });
 
 /** Renders the current path so a test can read where `navigate` landed. */
-// biome-ignore lint/style/useComponentExportOnlyModules: local test harness only
 function LocationDisplay() {
   const location = useLocation();
   return <div data-testid="location">{location.pathname}</div>;
 }
 
 function renderGroups(path: string, groups: string[]) {
-  routes.listContactGroups.mockResolvedValue({
-    items: groups.map((name, i) => ({ id: i + 1, name })),
-  });
+  routes.listContactGroups.mockResolvedValue(groups.map((name, i) => ({ id: i + 1, name })));
   return render(
     <Providers>
       <MemoryRouter initialEntries={[path]}>
@@ -67,9 +64,7 @@ function renderGroups(path: string, groups: string[]) {
 }
 
 function renderTags(path: string, tags: string[]) {
-  routes.listMessageTags.mockResolvedValue({
-    items: tags.map((name, i) => ({ id: i + 1, name })),
-  });
+  routes.listMessageTags.mockResolvedValue(tags.map((name, i) => ({ id: i + 1, name })));
   return render(
     <Providers>
       <MemoryRouter initialEntries={[path]}>

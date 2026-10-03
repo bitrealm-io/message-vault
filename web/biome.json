@@ -39,7 +39,15 @@
       "preset": "recommended",
       "correctness": {
         "useHookAtTopLevel": "error",
-        "useExhaustiveDependencies": "error"
+        "useExhaustiveDependencies": "error",
+        "noRestrictedElements": {
+          "level": "error",
+          "options": {
+            "elements": {
+              "button": "Use Button or PlainButton from src/components, which are React Aria's Button (STYLE_GUIDE.md, rule 4)."
+            }
+          }
+        }
       },
       "style": {
         "useComponentExportOnlyModules": {
@@ -72,6 +80,21 @@
       }
     }
   },
+  "overrides": [
+    {
+      "includes": ["**/*.test.tsx"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noRestrictedElements": "off"
+          },
+          "style": {
+            "useComponentExportOnlyModules": "off"
+          }
+        }
+      }
+    }
+  ],
   "assist": {
     "enabled": true,
     "actions": {

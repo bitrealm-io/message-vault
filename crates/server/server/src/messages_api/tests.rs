@@ -58,7 +58,7 @@ async fn seeded() -> (TestFixture, RegisteredAccount, i64, i64) {
     let mut conn = fixture.state.db.acquire().await.unwrap();
     let member: i64 = sqlx::query_scalar(
         "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
-         VALUES ($1, '+15555550200', '+15555550200', 'phone', 'phone') RETURNING id",
+         VALUES ($1, '+15555550135', '+15555550135', 'phone', 'phone') RETURNING id",
     )
     .bind(alice.account_id)
     .fetch_one(&mut *conn)
@@ -75,7 +75,7 @@ async fn seeded() -> (TestFixture, RegisteredAccount, i64, i64) {
         &fixture.state,
         &SeedConversation {
             account_id: bob.account_id,
-            handle: "+15555550999",
+            handle: "+15555550167",
             conversation_type: "individual",
             group_title: None,
             source_file: "t.json",
@@ -134,7 +134,7 @@ async fn a_page_across_two_conversations_names_each_conversations_own_participan
         [
             (direct, "+15555550100"),
             (direct, "+15555550100"),
-            (group, "+15555550200"),
+            (group, "+15555550135"),
         ]
     );
 }
@@ -299,8 +299,8 @@ async fn import_reactions_and_flags(fixture: &TestFixture, account_id: i64) {
             "group_title": "Reactions",
             "participants": [
                 {"handle": "+15555550123", "display_name": null},
-                {"handle": "+15555550999", "display_name": null},
-                {"handle": "+15555550888", "display_name": null}
+                {"handle": "+15555550167", "display_name": null},
+                {"handle": "+15555550161", "display_name": null}
             ],
             "stats": {"message_count": 3, "attachment_count": 3,
                       "first_timestamp_unix_ms": 1426183462000_i64,
@@ -317,9 +317,9 @@ async fn import_reactions_and_flags(fixture: &TestFixture, account_id: i64) {
             "is_deleted": false,
             "tapbacks": [
                 {"kind": "liked", "emoji": null, "part_index": 0,
-                 "is_from_me": false, "reactor_handle": "+15555550999"},
+                 "is_from_me": false, "reactor_handle": "+15555550167"},
                 {"kind": "emoji", "emoji": "🎉", "part_index": 1,
-                 "is_from_me": false, "reactor_handle": "+15555550888"}
+                 "is_from_me": false, "reactor_handle": "+15555550161"}
             ]
         }),
     );
@@ -333,7 +333,7 @@ async fn import_reactions_and_flags(fixture: &TestFixture, account_id: i64) {
             "is_deleted": false,
             "announcement": "named the conversation Reactions",
             "tapbacks": {"kind": "loved", "emoji": null, "part_index": 2,
-                         "is_from_me": false, "reactor_handle": "+15555550999"}
+                         "is_from_me": false, "reactor_handle": "+15555550167"}
         }),
     );
     let plain = ir_message(
@@ -399,16 +399,16 @@ async fn reactions_and_message_flags_are_read_back_as_imported() {
         reply["tapbacks"],
         serde_json::json!([
             {"part_index": 0, "kind": "liked",
-             "is_from_me": false, "sender": "+15555550999"},
+             "is_from_me": false, "sender": "+15555550167"},
             {"part_index": 1, "kind": "emoji", "emoji": "🎉",
-             "is_from_me": false, "sender": "+15555550888"}
+             "is_from_me": false, "sender": "+15555550161"}
         ])
     );
     assert_eq!(
         announcement["tapbacks"],
         serde_json::json!([
             {"part_index": 2, "kind": "loved",
-             "is_from_me": false, "sender": "+15555550999"}
+             "is_from_me": false, "sender": "+15555550167"}
         ])
     );
     assert_eq!(plain["tapbacks"], serde_json::json!([]));

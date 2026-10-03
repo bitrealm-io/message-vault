@@ -24,7 +24,7 @@ function isGenericGroupTitle(title: string | null | undefined): boolean {
   if (/^chat\d+/i.test(t)) return true;
 
   // SMS Backup-style titles that are only phone numbers, e.g.
-  // "Group: +14073412612, +14073766590, and 6 others"
+  // "Group: +14075550102, +14075550103, and 6 others"
   let rest = t.replace(/^group:\s*/i, "").trim();
   rest = rest.replace(/,?\s*and\s+\d+\s+others?\.?$/i, "").trim();
   if (!rest) return true;

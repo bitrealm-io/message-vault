@@ -37,7 +37,7 @@ pub mod failure;
 pub mod promote;
 pub mod staging;
 
-pub use failure::{ImportFailure, MISSING_GUID_LINES_NAMED};
+pub use failure::{ImportError, ImportFailure, MISSING_GUID_LINES_NAMED};
 
 use staging::StagingInserts;
 
@@ -263,8 +263,9 @@ pub enum ImportSchemaMode {
 
 /// Test helper: open a configured database and run one import.
 ///
-/// Production paths use [`import_jsonl_files_on_conn`] on their own
-/// connection (HTTP serve, CLI import, the Demo Account build).
+/// Production paths run on their own connection: HTTP serve through
+/// [`import_jsonl_files_on_conn`], and the `import` command and the Demo
+/// Account build through [`import_on_conn`].
 #[cfg(test)]
 pub(crate) async fn import_jsonl_files(
     db_path: &Path,
@@ -286,7 +287,7 @@ pub(crate) async fn import_jsonl_files(
     let mut conn = pool.acquire().await?;
     println!("  sql:      opened {}", db_path.display());
     let _ = io::stdout().flush();
-    import_jsonl_files_on_conn(&mut conn, paths, opts, ImportSchemaMode::Ensure).await
+    import_on_conn(&mut conn, paths, opts, ImportSchemaMode::Ensure).await
 }
 
 /// A fixed source needs no check here: every caller that passes one has
@@ -302,8 +303,23 @@ fn validate_import_options(opts: &ImportOptions<'_>) -> Result<()> {
 ///
 /// # Errors
 ///
-/// Returns an error when options are invalid or staging / promote fails.
+/// Returns [`ImportError::Rejected`] when the file breaks a rule the sender
+/// can fix, [`ImportError::Run`] when the import run is no longer running,
+/// and [`ImportError::Internal`] when the options are invalid or
+/// staging or promote fails for any other reason.
 pub async fn import_jsonl_files_on_conn(
+    conn: &mut SqliteConnection,
+    paths: &[PathBuf],
+    opts: &ImportOptions<'_>,
+    schema_mode: ImportSchemaMode,
+) -> Result<ImportStats, ImportError> {
+    Ok(import_on_conn(conn, paths, opts, schema_mode).await?)
+}
+
+/// [`import_jsonl_files_on_conn`], with every failure still inside `anyhow`,
+/// for the callers that only report it: the `import` command, `reset-demo`
+/// and [`import_jsonl_files`].
+pub(crate) async fn import_on_conn(
     conn: &mut SqliteConnection,
     paths: &[PathBuf],
     opts: &ImportOptions<'_>,
@@ -1046,7 +1062,12 @@ pub(crate) async fn create_import(
         source_fingerprint: fingerprint_json.as_deref(),
         source_identities: identities_json.as_deref(),
     };
-    let id = crate::db::imports::start_import(&mut conn, &args).await?;
+    // The run and what started it land together, so a run never reads as
+    // one the server started.
+    let mut tx = crate::db::begin_write(&mut conn).await?;
+    let id = crate::db::imports::start_import(&mut tx, &args).await?;
+    crate::db::imports::record_credential(&mut tx, id, &auth.credential).await?;
+    tx.commit().await?;
 
     Ok(Created {
         location: format!("/v1/imports/{id}"),
@@ -1115,8 +1136,10 @@ pub(crate) async fn complete_import(
                 Err(other) => ApiError::Internal(other),
             },
         )?;
-
-    import_run(&mut conn, row).await.map(Json)
+    let run = import_run(&mut conn, row).await?;
+    drop(conn);
+    crate::asset_store::sweep_after_run(&state.db, &state.cfg.paths, account).await;
+    Ok(Json(run))
 }
 
 /// Add the sidebar shortcut to the messages this run brought in.
@@ -1271,6 +1294,15 @@ fn import_contact_group_name(row: &crate::db::imports::ImportRow) -> String {
     format!("{} import {}", row.source, import_date_ymd(row))
 }
 
+/// [`import_contact_group_name`] as an SQL expression over an `imports` row
+/// aliased `i`, for a test query that finds a run's Contact Group. It falls
+/// back from `finished_at` to `started_at` as [`import_date_ymd`] does, and
+/// leaves out the fall back to today, which only a timestamp shorter than a
+/// date takes, and the " 2" a taken name gets.
+#[cfg(test)]
+pub(crate) const IMPORT_CONTACT_GROUP_NAME_SQL: &str =
+    "i.source || ' import ' || substr(coalesce(i.finished_at, i.started_at), 1, 10)";
+
 /// Calendar date to name an import's saved search after: the day the run
 /// finished, falling back to the day it started, then to today. All three are
 /// UTC, because that is what `imports` stores.
@@ -1423,9 +1455,10 @@ pub(crate) async fn discard_import(
     let account = resolve_import_account(&auth);
     let mut conn = state.db.acquire().await?;
     crate::db::imports::discard_import(&mut conn, account, import_id).await?;
-    full_import_run(&mut conn, account, import_id)
-        .await
-        .map(Json)
+    let run = full_import_run(&mut conn, account, import_id).await?;
+    drop(conn);
+    crate::asset_store::sweep_after_run(&state.db, &state.cfg.paths, account).await;
+    Ok(Json(run))
 }
 
 /// Import one message-ir JSONL body.
@@ -1486,7 +1519,7 @@ pub(crate) async fn create_import_batch(
         )
         .await?;
         if n == 0 {
-            return Err(ApiError::MalformedBody("request body is empty".into()));
+            return Err(ImportFailure::Empty.into());
         }
         // The import pipeline does blocking file IO (JSONL parse, asset
         // hashing and copies) — run it off the async workers so a large
@@ -1517,34 +1550,6 @@ const MAX_CONCURRENT_IMPORTS: usize = 2;
 fn import_semaphore() -> &'static tokio::sync::Semaphore {
     static SEMAPHORE: std::sync::OnceLock<tokio::sync::Semaphore> = std::sync::OnceLock::new();
     SEMAPHORE.get_or_init(|| tokio::sync::Semaphore::new(MAX_CONCURRENT_IMPORTS))
-}
-
-/// Turn an import's error into the HTTP failure a caller should see.
-///
-/// The failures a sender can fix by changing the file travel up the
-/// pipeline as `ImportFailure`, each with its own sentence and the line of
-/// the batch as `line`. A line that could not be read is `malformed-body`;
-/// messages that were read and have no guid are `validation-failed`.
-/// Everything else (a disk or database error, a bug) is a 500: the message
-/// goes to stderr and the client sees "internal server error".
-fn classify_import_error(err: anyhow::Error) -> ApiError {
-    // The run ended while the batch uploaded: refused as the check before
-    // the body refuses it.
-    let err = match err.downcast::<crate::db::imports::ImportLookupError>() {
-        Ok(lookup) => return ApiError::from(lookup),
-        Err(err) => err,
-    };
-    match ImportFailure::in_error(&err) {
-        Some(failure @ ImportFailure::MissingGuid { .. }) => ApiError::InvalidImportLines {
-            errors: vec![failure.batch_sentence()],
-            line: failure.line(),
-        },
-        Some(failure) => ApiError::MalformedImportLine {
-            detail: failure.batch_sentence(),
-            line: failure.line(),
-        },
-        None => ApiError::Internal(anyhow::anyhow!("{err:#}")),
-    }
 }
 
 /// `create_import_batch` is the only entry point, and the run's `source`,
@@ -1607,7 +1612,7 @@ async fn run_import_path(
         imports_api::ImportSchemaMode::AssumeReady,
     )
     .await;
-    let stats = import_result.map_err(classify_import_error)?;
+    let stats = import_result?;
     let dedupe_stats = if do_dedupe {
         Some(dedupe::dedupe_cross_source(&mut conn, account, None, 2).await?)
     } else {

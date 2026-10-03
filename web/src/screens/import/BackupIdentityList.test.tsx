@@ -9,19 +9,19 @@ afterEach(() => {
   cleanup();
 });
 
-const profile = { phones: ["+15550001111"], emails: [] };
+const profile = { phones: ["+15555550110"], emails: [] };
 
 describe("BackupIdentityList", () => {
   it("is a table inside a stage: sent and received per identity, and Add only where the answer is No", () => {
     render(
       <BackupIdentityList
-        identities={["+15550001111", "owner@example.com"]}
+        identities={["+15555550110", "owner@example.com"]}
         profile={profile}
         onAdd={vi.fn()}
         messageCounts={[
           // Two spellings of one number count under the same identity.
-          { handle: "+15550001111", sent: 1200, received: 900 },
-          { handle: "(555) 000-1111", sent: 34, received: 1 },
+          { handle: "+15555550110", sent: 1200, received: 900 },
+          { handle: "(555) 555-0110", sent: 34, received: 1 },
           { handle: "owner@example.com", sent: 0, received: 7 },
         ]}
       />,
@@ -38,7 +38,7 @@ describe("BackupIdentityList", () => {
       within(phone)
         .getAllByRole("cell")
         .map((cell) => cell.textContent),
-    ).toEqual(["+15550001111", "1,234", "901", "Yes", ""]);
+    ).toEqual(["+15555550110", "1,234", "901", "Yes", ""]);
     expect(
       within(email)
         .getAllByRole("cell")
@@ -52,12 +52,12 @@ describe("BackupIdentityList", () => {
   it("marks matched addresses and offers to add unmatched ones", () => {
     render(
       <BackupIdentityList
-        identities={["+15550001111", "owner@example.com"]}
+        identities={["+15555550110", "owner@example.com"]}
         profile={profile}
         onAdd={vi.fn()}
       />,
     );
-    expect(screen.getByText("+15550001111")).toBeInTheDocument();
+    expect(screen.getByText("+15555550110")).toBeInTheDocument();
     expect(screen.getByText("On your profile")).toBeInTheDocument();
     expect(screen.getByText("owner@example.com")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add to profile" })).toBeInTheDocument();

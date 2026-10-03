@@ -20,14 +20,16 @@ git clone --depth 1 https://github.com/mattpocock/skills /tmp/mp-skills
 for cat in engineering productivity misc; do
   cp -r /tmp/mp-skills/skills/$cat/*/ .claude/skills/
 done
+rm -rf .claude/skills/code-review   # replaced by pr-review, see Local edits
 ```
 
 Local edits to these files are fine — that is the point of vendoring rather than
 subscribing to the plugin — but note them here so an update does not silently
 revert them.
 
-## Note on `code-review`
+## Local edits
 
-Claude Code ships its own built-in `code-review` skill. The vendored skill of the
-same name takes precedence in this project. Rename the directory if you want the
-built-in one back.
+- `code-review` is replaced by `pr-review`, which follows this repo's
+  review process (`AGENTS.md`, "Review on the pull request"). The update
+  loop above deletes upstream's `code-review` again. `implement`, `tdd` and
+  `ask-matt` name `pr-review` instead of `code-review`.

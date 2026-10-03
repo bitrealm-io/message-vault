@@ -25,7 +25,7 @@ export function removePhoneToken(current: readonly string[], phone: string): str
   return [...current.slice(0, index), ...current.slice(index + 1)];
 }
 
-/** Digits only for comparison (`+1 555-123-4567` → `15551234567`). */
+/** Digits only for comparison (`+1 555-555-0119` → `15555550119`). */
 export function normalizePhoneDigits(phone: string): string {
   return phone.replace(/\D/g, "");
 }
@@ -44,7 +44,7 @@ export function toUsNationalDigits(phone: string): string {
 
 /**
  * True when two phone strings are the same US number despite formatting
- * (`9412660605` vs `+19412660605`). Empty digit strings never match.
+ * (`9415550100` vs `+19415550100`). Empty digit strings never match.
  */
 export function phonesMatch(a: string, b: string): boolean {
   const na = toUsNationalDigits(a);

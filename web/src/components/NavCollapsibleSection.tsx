@@ -7,6 +7,7 @@ import {
   NAV_LEADING_ROW_CLASS,
   NAV_SECTION_GRID_CLASS,
 } from "./navSectionLayout";
+import PlainButton from "./PlainButton";
 
 const STORAGE_PREFIX = "mc-left-nav-open:";
 
@@ -76,24 +77,22 @@ export default function NavCollapsibleSection({
     <div className={className}>
       <div className={`mb-1 ${NAV_SECTION_GRID_CLASS}`}>
         {showAdd ? (
-          <button
-            type="button"
+          <PlainButton
             aria-expanded={open}
-            onClick={toggleOpen}
+            onPress={toggleOpen}
             className={`${NAV_LEADING_ROW_CLASS} ${headingClass}`}
           >
             {titleInner}
-          </button>
+          </PlainButton>
         ) : (
-          <button
-            type="button"
+          <PlainButton
             aria-expanded={open}
-            onClick={toggleOpen}
+            onPress={toggleOpen}
             className={`${NAV_SECTION_GRID_CLASS} col-span-2 ${headingClass}`}
           >
             <span className={NAV_LEADING_ROW_CLASS}>{titleInner}</span>
             <span aria-hidden className="size-6 shrink-0" />
-          </button>
+          </PlainButton>
         )}
         {showAdd ? (
           <NavGlyphButton aria-label={addLabel} disabled={addDisabled} onClick={onAdd}>

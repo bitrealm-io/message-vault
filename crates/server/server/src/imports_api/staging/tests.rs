@@ -45,7 +45,7 @@ async fn import_one(
         fill_content_keys: false,
         import_id: None,
     });
-    import_jsonl_files_on_conn(conn, &[path], &opts, ImportSchemaMode::Ensure).await
+    Ok(import_jsonl_files_on_conn(conn, &[path], &opts, ImportSchemaMode::Ensure).await?)
 }
 
 /// The reason an import was refused: its error text after the file's temp
@@ -96,6 +96,7 @@ fn a_reused_blob_takes_the_export_mime_type_when_the_record_has_one() {
         &export_dir,
         &assets_dir,
         &mut stats,
+        2,
     )
     .unwrap()
     .expect("the stored blob is reused");
@@ -107,6 +108,7 @@ fn a_reused_blob_takes_the_export_mime_type_when_the_record_has_one() {
         &export_dir,
         &assets_dir,
         &mut stats,
+        2,
     )
     .unwrap()
     .expect("the stored blob is reused");
@@ -139,12 +141,15 @@ fn a_path_that_leaves_the_export_folder_is_refused_whether_or_not_its_fingerprin
         };
         let mut stats = AssetStats::default();
 
-        let err = store_claimed_or_path(&att, &export_dir, &assets_dir, &mut stats)
+        let err = store_claimed_or_path(&att, &export_dir, &assets_dir, &mut stats, 2)
             .expect_err("the path is refused");
 
         assert_eq!(
             err.to_string(),
-            format!("{}: ../escape.txt", message_ir::UNSAFE_ATTACHMENT_PATH)
+            format!(
+                "Line 2 of the file: {}: ../escape.txt.",
+                message_ir::UNSAFE_ATTACHMENT_PATH
+            )
         );
         assert_eq!(stats.deduped, 0);
     }
@@ -162,9 +167,9 @@ async fn a_file_that_does_not_match_its_claimed_sha256_fails_the_import_and_is_n
     let assets = tmp.path().join("assets");
     std::fs::write(tmp.path().join("photo.bin"), b"the bytes on disk").unwrap();
     let claimed_sha = assets_api::Sha256::of_bytes(b"the bytes the export saw");
-    let header = ORPHANED_HEADER.replace("orphaned", "+15555550701");
+    let header = ORPHANED_HEADER.replace("orphaned", "+15555550154");
     let message = format!(
-        r#"{{"guid":"g-mismatch","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550701","sender_display_name":null,"subject":null,"text":"hi","attachments":[{{"path":"photo.bin","original_name":"photo.bin","mime_type":"application/octet-stream","digest_sha256":"{claimed_sha}","is_sticker":false,"transcription":null,"sticker_effect":null}}],"imessage":null,"source":null}}"#
+        r#"{{"guid":"g-mismatch","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550154","sender_display_name":null,"subject":null,"text":"hi","attachments":[{{"path":"photo.bin","original_name":"photo.bin","mime_type":"application/octet-stream","digest_sha256":"{claimed_sha}","is_sticker":false,"transcription":null,"sticker_effect":null}}],"imessage":null,"source":null}}"#
     );
     let path = tmp.path().join("mismatch.jsonl");
     std::fs::write(&path, format!("{header}{message}\n")).unwrap();
@@ -183,7 +188,7 @@ async fn a_file_that_does_not_match_its_claimed_sha256_fails_the_import_and_is_n
         .expect_err("a mismatched file fails the import");
 
     assert!(
-        format!("{err:#}").contains("sha256 mismatch"),
+        format!("{err:#}").contains("photo.bin hash to"),
         "the refusal says why: {err:#}"
     );
     for sha in [
@@ -211,8 +216,8 @@ async fn orphaned_jsonl_is_staged_as_the_orphaned_conversation() {
     let (pool, _dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
     let body = ORPHANED_HEADER.to_string()
-        + &incoming("g-orphan-1", "+15555550701")
-        + &incoming("g-orphan-2", "+15555550701");
+        + &incoming("g-orphan-1", "+15555550154")
+        + &incoming("g-orphan-2", "+15555550154");
     let stats = import_one(&mut conn, "orphaned.jsonl", &body)
         .await
         .unwrap();
@@ -250,7 +255,7 @@ async fn orphaned_jsonl_is_staged_as_the_orphaned_conversation() {
     .fetch_all(&mut *conn)
     .await
     .unwrap();
-    assert_eq!(contacts, ["+15555550701"], "only the sender is a person");
+    assert_eq!(contacts, ["+15555550154"], "only the sender is a person");
 }
 
 /// Every file, `orphaned.jsonl` included, needs its conversation header
@@ -263,7 +268,7 @@ async fn a_file_with_messages_and_no_header_is_refused() {
         let result = import_one(&mut conn, name, &incoming("g1", "+15555550100")).await;
         assert_eq!(
             refusal(result),
-            "Could not read line 1 of the file: a message appears before the conversation header.",
+            "Line 1 of the file: a message appears before the conversation header.",
             "{name}"
         );
     }
@@ -276,7 +281,7 @@ async fn a_file_with_neither_header_nor_messages_is_refused() {
     let result = import_one(&mut conn, "+15555550100.jsonl", "\n").await;
     assert_eq!(
         refusal(result),
-        "Could not read line 1 of the file: the file has no conversation header."
+        "Line 1 of the file: the file has no conversation header."
     );
 }
 
@@ -315,8 +320,8 @@ async fn a_group_chat_id_is_stored_as_other_whatever_its_shape() {
     let body = whatsapp_header(
         "120363042@g.us",
         "group",
-        r#"[{"handle":"+15555550702","display_name":null,"handle_type":"phone"}]"#,
-    ) + &incoming_whatsapp("g-group-1", "+15555550702");
+        r#"[{"handle":"+15555550156","display_name":null,"handle_type":"phone"}]"#,
+    ) + &incoming_whatsapp("g-group-1", "+15555550156");
     import_one(&mut conn, "120363042@g.us.jsonl", &body)
         .await
         .unwrap();
@@ -324,7 +329,7 @@ async fn a_group_chat_id_is_stored_as_other_whatever_its_shape() {
     assert_eq!(
         handle_types(&mut conn).await,
         [
-            ("+15555550702".to_string(), "phone".to_string()),
+            ("+15555550156".to_string(), "phone".to_string()),
             ("120363042@g.us".to_string(), "other".to_string()),
         ]
     );
@@ -418,7 +423,7 @@ async fn a_sender_who_is_not_a_participant_is_typed_by_the_address_not_the_servi
     let body = imessage_header(
         "chat1000000005",
         "group",
-        r#"[{"handle":"+15555550702","display_name":null,"handle_type":"phone"}]"#,
+        r#"[{"handle":"+15555550156","display_name":null,"handle_type":"phone"}]"#,
     ) + &incoming_unknown_service("g-sat-3", "+15555550199");
     import_one(&mut conn, "chat1000000005.jsonl", &body)
         .await
@@ -427,8 +432,8 @@ async fn a_sender_who_is_not_a_participant_is_typed_by_the_address_not_the_servi
     assert_eq!(
         handle_types(&mut conn).await,
         [
+            ("+15555550156".to_string(), "phone".to_string()),
             ("+15555550199".to_string(), "phone".to_string()),
-            ("+15555550702".to_string(), "phone".to_string()),
             ("chat1000000005".to_string(), "other".to_string()),
         ]
     );

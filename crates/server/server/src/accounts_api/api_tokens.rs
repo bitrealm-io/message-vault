@@ -1,10 +1,10 @@
 //! An account's named API tokens: `/v1/accounts/{id}/api-tokens`.
 //!
-//! The account itself makes, renames, lists and revokes its tokens. The
-//! owner lists and revokes them too, and makes and renames none: the owner
-//! must be able to end a credential that has leaked, and a token's label,
-//! permissions and last use are not message content. The owner never reads
-//! any part of a secret, so its list leaves out `token_hint`. A logged-in
+//! The account itself makes, renames, lists, reads and revokes its tokens. The
+//! owner lists, reads and revokes them too, and makes and renames none: the
+//! owner must be able to end a credential that has leaked, and a token's label,
+//! permissions and last use are not message content. The owner never reads any
+//! part of a secret, so what it is shown leaves out `token_hint`. A logged-in
 //! session is required; a token cannot mint, rename or revoke tokens.
 
 use crate::extract::{Json, Path, Query};
@@ -12,8 +12,9 @@ use crate::paging::{DEFAULT_LIST_LIMIT, Page, PageQuery, page_of, page_params};
 use axum::extract::State;
 use serde::{Deserialize, Serialize};
 
-use super::{Admits, require_account_reach};
+use super::{Admits, Reach, require_account_reach};
 use crate::db::api_tokens;
+use crate::db::audit_trail::{self, AuditAction, Details};
 use crate::db::permissions::Permissions;
 use crate::db::{account_profile, schema};
 use crate::server::{ApiError, AppState, Created, FullAccess, LoggedIn};
@@ -159,18 +160,17 @@ pub async fn list_api_tokens(
     schema::ensure_accounts_schema(&mut conn).await?;
     let rows = api_tokens::list_api_tokens(&mut conn, account_id).await?;
     let account_permissions = holder_permissions(&mut conn, account_id).await?;
-    let shows_hint = reach.is_own();
     let items: Vec<ApiToken> = rows
         .into_iter()
-        .map(|row| shown_token(row, account_permissions, shows_hint))
+        .map(|row| as_shown_to(reach, row, account_permissions))
         .collect();
 
     Ok(Json(page_of(items, params)))
 }
 
-/// The permissions of the account that holds the tokens, as they are on
-/// this request. They are read from the account's row, not from the caller,
-/// who may be the owner and holds none.
+/// The permissions of the account that holds the tokens, as they are on this
+/// request. They are read from the account's row, not from the caller, who
+/// may be the owner and holds none.
 async fn holder_permissions(
     conn: &mut sqlx::SqliteConnection,
     account_id: i64,
@@ -180,23 +180,56 @@ async fn holder_permissions(
         .map_or_else(Permissions::none, |a| a.permissions))
 }
 
-/// A token as the interface hands it out: what it may do now, its stored
-/// scopes capped by `account_permissions`, so a permission the owner turned
-/// off after the token was made shows as off; and its masked secret only
-/// when `shows_hint`.
-fn shown_token(
+/// A token as `reach` is shown it: what it may do now, its stored scopes
+/// capped by the holding account's permissions, so a permission the owner
+/// turned off after the token was made shows as off. The masked secret is
+/// shown only to the account that holds the token, never to the owner of
+/// another account: the hint is part of the secret.
+fn as_shown_to(
+    reach: Reach,
     row: api_tokens::ApiTokenRow,
     account_permissions: Permissions,
-    shows_hint: bool,
 ) -> ApiToken {
     let token = ApiToken::from(api_tokens::ApiTokenRow {
         permissions: row.permissions.intersect(account_permissions),
         ..row
     });
     ApiToken {
-        token_hint: token.token_hint.filter(|_| shows_hint),
+        token_hint: token.token_hint.filter(|_| reach.is_own()),
         ..token
     }
+}
+
+/// Read one named API token as the list shows it: label, permissions, masked
+/// secret and last use. The secret itself is never answered again. The owner
+/// reads any account's token, without its masked secret, as its list does.
+#[utoipa::path(
+    get,
+    path = "/v1/accounts/{id}/api-tokens/{token_id}",
+    tag = "Accounts",
+    security(("session" = [])),
+    params(
+        ("id" = i64, Path, description = "Account id; the caller's own, or any for the owner"),
+        ("token_id" = i64, Path, description = "API token id")
+    ),
+    responses(
+        (status = 200, body = ApiToken),
+        crate::problem::openapi::NotTheOwner
+    )
+)]
+pub async fn get_api_token(
+    State(state): State<AppState>,
+    Path((account_id, id)): Path<(i64, i64)>,
+    LoggedIn(auth): LoggedIn,
+) -> Result<Json<ApiToken>, ApiError> {
+    let mut conn = state.db.acquire().await?;
+    let reach = require_account_reach(&mut conn, &auth, account_id, Admits::Owner).await?;
+    schema::ensure_accounts_schema(&mut conn).await?;
+    let row = api_tokens::get_api_token(&mut conn, account_id, id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("API token not found".into()))?;
+    let account_permissions = holder_permissions(&mut conn, account_id).await?;
+    Ok(Json(as_shown_to(reach, row, account_permissions)))
 }
 
 /// Create a named API token. Returns the plaintext secret once, at creation;
@@ -224,7 +257,7 @@ pub async fn create_api_token(
     Json(req): Json<CreateApiTokenRequest>,
 ) -> Result<Created<CreateApiTokenResponse>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    require_account_reach(&mut conn, &auth, account_id, HOLDER_ONLY).await?;
+    let reach = require_account_reach(&mut conn, &auth, account_id, HOLDER_ONLY).await?;
     let label = req.label;
     // A token can narrow its account's permissions, never widen them, so
     // what it stores is what the request asked and the account holds.
@@ -237,6 +270,19 @@ pub async fn create_api_token(
         api_tokens::create_api_token(&mut conn, account_id, &label, permissions, expires_in_days)
             .await
             .map_err(map_label_error)?;
+    let token_hint = api_tokens::mask_api_token(&created.token);
+    audit_trail::record_about(
+        &mut conn,
+        AuditAction::ApiTokenCreated,
+        reach.actor(),
+        account_id,
+        Details {
+            api_token_label: Some(created.label.clone()),
+            api_token_hint: Some(token_hint.clone()),
+            ..Details::default()
+        },
+    )
+    .await?;
 
     Ok(Created {
         location: format!("/v1/accounts/{account_id}/api-tokens/{}", created.id),
@@ -247,7 +293,7 @@ pub async fn create_api_token(
             can_export: created.permissions.export,
             created_at: created.created_at,
             expires_at: created.expires_at,
-            token_hint: api_tokens::mask_api_token(&created.token),
+            token_hint,
             token: created.token,
         },
     })
@@ -276,13 +322,29 @@ pub async fn delete_api_token(
     LoggedIn(auth): LoggedIn,
 ) -> Result<axum::http::StatusCode, ApiError> {
     let mut conn = state.db.acquire().await?;
-    require_account_reach(&mut conn, &auth, account_id, Admits::Owner).await?;
+    let reach = require_account_reach(&mut conn, &auth, account_id, Admits::Owner).await?;
     schema::ensure_accounts_schema(&mut conn).await?;
+    let token = api_tokens::list_api_tokens(&mut conn, account_id)
+        .await?
+        .into_iter()
+        .find(|token| token.id == id);
     let deleted = api_tokens::delete_api_token(&mut conn, account_id, id).await?;
 
-    if !deleted {
+    let Some(token) = token.filter(|_| deleted) else {
         return Err(ApiError::NotFound("API token not found".into()));
-    }
+    };
+    audit_trail::record_about(
+        &mut conn,
+        AuditAction::ApiTokenDeleted,
+        reach.actor(),
+        account_id,
+        Details {
+            api_token_label: Some(token.label),
+            api_token_hint: Some(token.token_hint),
+            ..Details::default()
+        },
+    )
+    .await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
@@ -309,7 +371,7 @@ pub async fn update_api_token(
     Json(req): Json<UpdateApiTokenRequest>,
 ) -> Result<Json<ApiToken>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    require_account_reach(&mut conn, &auth, account_id, HOLDER_ONLY).await?;
+    let reach = require_account_reach(&mut conn, &auth, account_id, HOLDER_ONLY).await?;
     let label = req.label;
 
     schema::ensure_accounts_schema(&mut conn).await?;
@@ -325,13 +387,42 @@ pub async fn update_api_token(
         .await?
         .ok_or_else(|| ApiError::NotFound("API token not found".into()))?;
     let account_permissions = holder_permissions(&mut conn, account_id).await?;
-    Ok(Json(shown_token(row, account_permissions, true)))
+    Ok(Json(as_shown_to(reach, row, account_permissions)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::db::api_tokens::{ApiTokenLabelError, ApiTokenMutationError};
+
+    /// One token read at its own path answers it as the list shows it, with
+    /// its masked secret and never the secret itself; a token id the account
+    /// does not hold answers `404 Not Found`.
+    #[tokio::test]
+    async fn a_token_reads_as_the_list_shows_it() {
+        use crate::test_support::{fixture_with_account, get_json, get_raw, post_created_json};
+
+        let (fixture, alice) = fixture_with_account().await;
+        let state = fixture.state.clone();
+        let tokens = format!("/v1/accounts/{}/api-tokens", alice.account_id);
+        let (_, created): (String, serde_json::Value) = post_created_json(
+            &state,
+            &tokens,
+            &alice.token,
+            serde_json::json!({ "label": "pull", "can_import": false }),
+        )
+        .await;
+
+        let one = format!("{tokens}/{}", created["id"]);
+        let token: serde_json::Value = get_json(&state, &one, &alice.token).await;
+        let listed: serde_json::Value = get_json(&state, &tokens, &alice.token).await;
+        assert_eq!(token, listed["items"][0], "{token}");
+        assert_eq!(token["token_hint"], created["token_hint"], "{token}");
+        assert!(token.get("token").is_none(), "{token}");
+
+        let (status, text) = get_raw(&state, &format!("{tokens}/999999"), &alice.token).await;
+        crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
+    }
 
     #[test]
     fn label_errors_map_to_validation_failed_with_the_same_message() {
@@ -456,6 +547,17 @@ mod tests {
 
         let own: serde_json::Value = get_json(&state, &alices, &alice.token).await;
         assert!(own["items"][0]["token_hint"].is_string(), "{own}");
+
+        // One token read at its own path is shown as the list shows it, to
+        // the owner and to the account alike.
+        let one = format!("{alices}/{}", created["id"]);
+        let read: serde_json::Value = get_json(&state, &one, &owner.token).await;
+        assert_eq!(&read, item, "the owner reads the token as it lists it");
+        let own_one: serde_json::Value = get_json(&state, &one, &alice.token).await;
+        assert_eq!(
+            own_one, own["items"][0],
+            "the account reads its token as it lists it"
+        );
     }
 
     /// The owner revokes another account's token, and the token is refused

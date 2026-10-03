@@ -27,19 +27,17 @@ beforeEach(() => {
   apiList.mockReset();
   apiDelete.mockReset();
   // The owner's list carries no `token_hint`: the server leaves it out.
-  apiList.mockResolvedValue({
-    items: [
-      {
-        id: 3,
-        label: "Backup script",
-        can_import: true,
-        can_export: false,
-        created_at: "1700000000",
-        last_accessed_at: "1700086400",
-        disabled: false,
-      },
-    ],
-  });
+  apiList.mockResolvedValue([
+    {
+      id: 3,
+      label: "Backup script",
+      can_import: true,
+      can_export: false,
+      created_at: "1700000000",
+      last_accessed_at: "1700086400",
+      disabled: false,
+    },
+  ]);
   apiDelete.mockResolvedValue(undefined);
 });
 

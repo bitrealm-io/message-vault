@@ -1,13 +1,16 @@
 //! SMS Backup & Restore's backup format, in both directions: [`read_backup`]
 //! turns `smses.xml` into the shared conversation structure
 //! ([`message_ir::ConversationDocument`]) every exporter writes, and
-//! [`SbrArchive`] writes conversations back out as one `smses.xml`.
+//! [`SbrArchive`] writes the SMS and MMS of conversations back out as one
+//! `smses.xml`.
 //!
 //! Library entry: [`run`] for the full export pipeline.
 
 mod emit;
 mod read;
 mod run;
+#[cfg(any(test, feature = "testutil"))]
+pub mod testutil;
 mod write;
 
 pub use read::{ReadOptions, ReadReport, read_backup};

@@ -122,3 +122,87 @@ fn a_call_log_mail_is_skipped_and_counted_in_the_summary() {
         result.messages
     );
 }
+
+/// A received group MMS whose `From` names nobody in the group is written
+/// with no sender, and the summary and the Import Run's issues count it once,
+/// even when the archive holds two copies of the mail.
+#[test]
+fn a_group_message_with_no_readable_sender_is_kept_and_counted_once() {
+    let tmp = tempfile::tempdir().unwrap();
+    let input = tmp.path().join("backup");
+    fs::create_dir_all(&input).unwrap();
+    let mail = "From: Bob <bob@example.org>\n\
+         To: me@example.com\n\
+         Subject: SMS with group\n\
+         X-smssync-type: 132\n\
+         X-smssync-address: 4075551111~4075555678\n\
+         X-smssync-date: 1609459200000\n\
+         Content-Type: text/plain; charset=utf-8\n\
+         \n\
+         Hello group\n";
+    fs::write(input.join("1.eml"), mail).unwrap();
+    fs::write(input.join("2.eml"), mail).unwrap();
+    let output = tmp.path().join("out");
+
+    let result = crate::run(&jsonl_run_config(&[&input], &output, source(true))).expect("run");
+
+    let written = assert_run_wrote_jsonl(&result, &output, 1);
+    assert!(written.contains("Hello group"), "{written}");
+    assert!(
+        result
+            .messages
+            .iter()
+            .any(|l| l == "  group_messages_without_sender: 1"),
+        "{:?}",
+        result.messages
+    );
+    assert_eq!(result.issues.len(), 1, "{:?}", result.issues);
+    let issue = &result.issues[0];
+    assert_eq!(
+        (
+            issue.kind.as_str(),
+            issue.step.as_str(),
+            issue.item.as_str()
+        ),
+        ("skip", "parse", "1.eml (sender)")
+    );
+    assert!(issue.reason.contains("left out"), "{}", issue.reason);
+    assert!(issue.reason.contains("kept"), "{}", issue.reason);
+}
+
+/// A received group MMS whose `To` names none of the owner's addresses is
+/// filed one-to-one under its `From`, and the summary counts it once, even
+/// when the archive holds two copies of the mail. Its sender was read, so it
+/// is not an issue.
+#[test]
+fn a_group_message_not_naming_the_owner_is_counted_once() {
+    let tmp = tempfile::tempdir().unwrap();
+    let input = tmp.path().join("backup");
+    fs::create_dir_all(&input).unwrap();
+    let mail = "From: carol@example.org\n\
+         To: <me@icloud.example>, <+14075551111@unknown.email>\n\
+         Subject: SMS with Alice\n\
+         X-smssync-type: 132\n\
+         X-smssync-address: 4075551111\n\
+         X-smssync-date: 1609459200000\n\
+         Content-Type: text/plain; charset=utf-8\n\
+         \n\
+         Hello from Carol\n";
+    fs::write(input.join("1.eml"), mail).unwrap();
+    fs::write(input.join("2.eml"), mail).unwrap();
+    let output = tmp.path().join("out");
+
+    let result = crate::run(&jsonl_run_config(&[&input], &output, source(true))).expect("run");
+
+    let written = assert_run_wrote_jsonl(&result, &output, 1);
+    assert!(written.contains("Hello from Carol"), "{written}");
+    assert!(
+        result
+            .messages
+            .iter()
+            .any(|l| l == "  group_messages_owner_not_named: 1"),
+        "{:?}",
+        result.messages
+    );
+    assert!(result.issues.is_empty(), "{:?}", result.issues);
+}

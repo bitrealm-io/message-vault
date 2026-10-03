@@ -1,7 +1,8 @@
 //! Small shared helpers for reading and writing conversation documents.
 
 use anyhow::{Context, Result};
-use message_ir::{HandleType, IrAttachment};
+use message_ir::{ConversationDocument, HandleType, IrAttachment};
+use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
@@ -32,12 +33,30 @@ pub(crate) fn infer_handle_type(handle: &str) -> HandleType {
     HandleType::Other
 }
 
-/// Stem packaging suffix used for WhatsApp exports (`__whatsapp`).
-pub(crate) fn packaging_suffix_from_stem(stem: &str) -> Option<String> {
-    if stem.ends_with("__whatsapp") {
-        Some("__whatsapp".into())
-    } else {
-        None
+/// Give `doc` back the stem suffix its file was written with.
+///
+/// An exporter chooses the suffix, such as one per source app so two apps'
+/// chats with one person land in two files, and the suffix is never written
+/// inside the file. It is whatever follows the stem the document would have
+/// without one, when that starts with `__`. This crate knows no suffix by
+/// name. A document that already has a suffix, or a file renamed so its
+/// stem no longer starts with the document's own, is left as it is.
+pub(crate) fn recover_stem_suffix(doc: &mut ConversationDocument, file_stem: Option<&OsStr>) {
+    if doc.packaging_stem_suffix.is_some() {
+        return;
+    }
+    let Some(file_stem) = file_stem.and_then(OsStr::to_str) else {
+        return;
+    };
+    let base = doc.filename_stem();
+    if base.is_empty() {
+        return;
+    }
+    if let Some(rest) = file_stem.strip_prefix(base.as_str())
+        && rest.len() > 2
+        && rest.starts_with("__")
+    {
+        doc.packaging_stem_suffix = Some(rest.to_string());
     }
 }
 

@@ -14,7 +14,7 @@ use crate::server::AppState;
 #[openapi(
     info(
         title = "Message Crate HTTP API",
-        description = "HTTP API for a Message Crate server. Bearer session tokens come from login. API tokens come from Settings → Account.",
+        description = "HTTP API for a Message Crate server. Bearer session tokens come from login. API tokens come from Settings → Account.\n\nA method a path does not take answers `405 Method Not Allowed` as a [`method-not-allowed`](https://messagecrate.app/docs/developer/reference/errors/method-not-allowed) problem document on every `/v1` path. No operation lists it, because it is the answer for an operation that does not exist.",
         license(
             name = "Fair Core License 1.0 (ALv2 future)",
             url = "https://github.com/messagecrate/message-crate/blob/main/LICENSE.md"
@@ -25,12 +25,14 @@ use crate::server::AppState;
     components(schemas(
         crate::search::ListKind,
         crate::problem::Problem,
-        crate::db::address_book::LoadMode
+        crate::db::address_book::LoadMode,
+        crate::exports_api::OwnerExportRun
     )),
     tags(
         (name = "Health", description = "Process liveness"),
         (name = "Session", description = "The logged-in credential: log in, check it, log out"),
         (name = "Accounts", description = "The accounts: the owner manages them, and each account reads and writes its own, API tokens included"),
+        (name = "Audit Trail", description = "What each user did on this Message Crate, and when: the owner reads every account's, and each account its own"),
         (name = "Import", description = "Import Runs: start one, send JSON Lines batches into it, close it"),
         (name = "Export", description = "Export Runs: create one, page its messages, close it"),
         (name = "Assets", description = "Attachment bytes"),
@@ -130,11 +132,14 @@ pub fn api_openapi() -> OpenApiRouter<AppState> {
         .routes(routes!(crate::accounts_api::list_account_imports))
         .routes(routes!(crate::accounts_api::get_account_import))
         .routes(routes!(crate::accounts_api::list_account_exports))
+        .routes(routes!(crate::accounts_api::list_account_audit_trail))
+        .routes(routes!(crate::audit_trail_api::list_audit_trail))
         .routes(routes!(
             crate::api_tokens_api::list_api_tokens,
             crate::api_tokens_api::create_api_token
         ))
         .routes(routes!(
+            crate::api_tokens_api::get_api_token,
             crate::api_tokens_api::update_api_token,
             crate::api_tokens_api::delete_api_token
         ))
@@ -209,7 +214,10 @@ pub fn api_openapi() -> OpenApiRouter<AppState> {
         .routes(routes!(crate::assets_api::create_asset_upload))
         .routes(routes!(crate::assets_api::replace_asset_upload_part))
         .routes(routes!(crate::assets_api::complete_asset_upload))
-        .routes(routes!(crate::assets_api::delete_asset_upload))
+        .routes(routes!(
+            crate::assets_api::get_asset_upload,
+            crate::assets_api::delete_asset_upload
+        ))
         .routes(routes!(crate::server_api::get_server_settings))
         .routes(routes!(crate::server_api::update_server_settings))
         .routes(routes!(crate::server_api::get_server_storage))

@@ -234,9 +234,23 @@ that counts something else is a second shape.
 Export Run's messages. `offset` is at most 50 000 on the browse lists. A value
 outside the range is `validation-failed`, never a silent clamp. One
 conversation's messages, `GET /v1/conversations/{id}/messages`, is not a browse
-list and has no `offset` cap. Why: the conversation page reads a thread by
-stepping `offset` forward, and a cap would leave the rest of a long thread out
-of reach.
+list and has no `offset` cap. Why: every message of a long conversation must
+be reachable, and a cap would leave the rest of a long thread out of reach.
+
+One conversation's messages can also be read beside one message, in place of
+`offset`: `around={message_id}` answers the page with that message in the
+middle, and `before={message_id}` and `after={message_id}` the page just
+before or just after it in the page's order, without it. The answer is the
+same page, and its `offset` says where the page sits, so `total` and the
+position stay known. A request sends at most one of `offset`, `around`,
+`before` and `after`, and a message the conversation does not show (another
+conversation's, a duplicate, or none) is `validation-failed`. Why: a jump to a
+message (a search result, a Find match, the first message of a year) does not
+know the message's offset, and a screen that scrolls from there reads the next
+page from the message at its edge rather than from a number that an import
+or a deletion in between would shift. This is not the cursor paging rejected
+below: the page keeps `total` and `offset`, and the parameters name a message,
+not an opaque token.
 
 Sorting is `sort=-field,field`: comma-separated keys, a leading `-` for
 descending. Each list declares the keys it accepts, and an unlisted key is
@@ -372,6 +386,12 @@ What each reaches:
   session: the account's own with the `delete` permission, or, for an
   account's messages and for the account itself, the owner's. A token is
   refused whatever its scopes.
+- The Demo Account is refused with `403 Forbidden` and
+  `demo-account-protected` by its id, whatever its permission row says, on
+  every route that needs the `import` scope or the `delete` permission and on
+  `POST /v1/contacts`. Its profile reports `export` and neither `import` nor
+  `delete`, from the same id. Why: it has no password, so its limits must not
+  rest on a row (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`).
 - An account may do everything with its own messages, deleting them and
   itself included, unless the owner limits it. Deleting an account deletes
   every message it owns, so an account whose `delete` permission is off
@@ -400,6 +420,24 @@ What each reaches:
   them. Each pair answers from one function, so the two lists cannot differ.
   Which contacts a run created is content, so `/v1/imports/{id}/contacts` has
   no twin under the account.
+- The Audit Trail is read at `GET /v1/audit-trail`, every account's entries,
+  which is the owner's alone, and at `GET /v1/accounts/{id}/audit-trail`, the
+  entries about one account, which the owner and that account read. Both answer
+  from one function, so the two lists cannot differ. No route writes, changes
+  or deletes an entry: the server writes one as part of the act it records.
+  Why: an account holder reads what the owner did to their account, and a
+  record its subject or the owner could edit would be no check on either
+  (`docs/adr/0020-the-audit-trail-outlives-the-account.md`).
+- The account reads its own runs in full. The owner reads each run as an
+  `OwnerImportRun` or `OwnerExportRun`: the source, mode, tool, times,
+  outcome and counts, with the counts an import's summary reported and how
+  many issues it recorded, and for an export only which form its scope took.
+  Why: a staging summary lists the addresses of everyone in the backup, an
+  issue names its conversation's file, and an export's query is a search over
+  the account's messages, all content under
+  `docs/adr/0008-the-owner-holds-no-messages.md`. The owner's view is a type
+  of its own rather than the account's with fields removed, so a field added
+  to a run reaches the owner only when someone adds it to that type.
 - `GET /v1/server` and `POST /v1/server/claim` take no credential.
   `/v1/server/settings` and `GET /v1/server/storage` are the owner's: the
   storage totals sum every account, and no account holds more than its own.
@@ -451,7 +489,10 @@ takes a handful of registrations, so a server-wide count never stops a person.
 ## Runs
 
 An Import Run and an Export Run are recorded permanently, whether they
-completed, failed or were cancelled, and the client closes them: a run's
+completed, failed or were cancelled, and outlive the account that ran them, as
+the rest of the Audit Trail does. Each run records what started it: a Session
+with the app it named, or an API token by its label and hint as they were
+then. The client closes a run: a run's
 settings are stated once on creation, never per batch or per page, and
 `complete`, `discard` (imports) and `cancel` (exports) are the only ways out.
 There is no sessionless import and no unrecorded export.
@@ -521,25 +562,29 @@ when the two differ, and CI checks the web app's generated types against it.
 An operation's error responses are built from shared parts, never written out
 by hand. The credential a route accepts brings its `401` and `403`; a request
 body brings `400`, `413`, `415` and `422`; an id in the path brings `404` and
-`422`; and every `/v1` route brings `422` for a query parameter it does not
-declare. The handler adds only what is its own, such as `409` for a run in the
-wrong state, by naming the problem type (`crate::problem::openapi`).
+`422`; every `/v1` route brings `422` for a query parameter it does not
+declare; and every `/v1` route that answers JSON brings `406` for an `Accept`
+that names nothing JSON. `405` is said once, in the document's own
+description, because it answers a method no operation has. The handler adds
+only what is its own, such as `409` for a run in the wrong state, by naming
+the problem type (`crate::problem::openapi`).
 Every error response is declared as `application/problem+json`, names the
 problem types it can carry (in its description and in `x-problem-types`), and
-has a description. The first sentence of a
-handler's doc comment is the operation's summary, and the rest is its
-description.
+has a description. The first sentence of a handler's doc comment is the
+operation's summary, and the rest is its description.
 Why: every mismatch between the reference and the handlers that the September
 2026 review found was in a hand-written list.
 
 A rule that can be checked by walking every operation in the document is
 checked that way, by one test, as `openapi/credential_matrix.rs` checks every
 route's reach: the page shape and paging parameters on every list, a
-`Location` on every `201`, a problem document on every failure, `401` without
-a credential, a refused unknown query parameter, `415` for a body without an
-accepted `Content-Type`, `400` for a JSON body that is not JSON, kebab-case
-paths and the nesting depth. Why: a rule checked one route at a time is
-checked on the routes someone remembered.
+`Location` on every `201` that the credential which made it can `GET`, a
+problem document on every failure, `401` without a credential, a refused
+unknown query parameter, `415` for a body without an accepted `Content-Type`,
+`400` for a JSON body that is not JSON, `406` exactly where the document lists
+it, a successful `GET` in a media type its document declares, no body on a
+`HEAD` answer, kebab-case paths and the nesting depth. Why: a rule checked one
+route at a time is checked on the routes someone remembered.
 
 The shared failures are checked by calling each operation into them, and the
 status and problem type the server answers must be ones the document lists.

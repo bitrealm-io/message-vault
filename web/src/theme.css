@@ -295,10 +295,12 @@
     outline-offset: 1px;
   }
 
-  /* Compact list checkbox: 14px box, check drawn inside instead of the OS glyph. */
+  /*
+   * Compact list checkbox: 14px box, check drawn inside instead of the OS glyph.
+   * `Checkbox.tsx` draws it as a span inside React Aria's label (`.mc-check`),
+   * which carries the state as data attributes; the input itself is hidden.
+   */
   .mc-list-check {
-    appearance: none;
-    -webkit-appearance: none;
     box-sizing: border-box;
     width: 0.875rem;
     height: 0.875rem;
@@ -310,13 +312,13 @@
     place-content: center;
   }
 
-  .mc-list-check:checked,
-  .mc-list-check:indeterminate {
+  .mc-check[data-selected] > .mc-list-check,
+  .mc-check[data-indeterminate] > .mc-list-check {
     background-color: var(--accent);
     border-color: var(--accent);
   }
 
-  .mc-list-check:checked::after {
+  .mc-check[data-selected] > .mc-list-check::after {
     content: "";
     width: 0.35rem;
     height: 0.2rem;
@@ -326,11 +328,21 @@
     transform: rotate(-45deg);
   }
 
-  .mc-list-check:indeterminate::after {
+  .mc-check[data-indeterminate] > .mc-list-check::after {
     content: "";
     width: 0.4rem;
     height: 0;
     border-bottom: 1.5px solid var(--checkbox-check);
+  }
+
+  .mc-check[data-disabled] > .mc-list-check {
+    opacity: 0.4;
+  }
+
+  /* The box draws the focus ring the hidden input would have, as :focus-visible above does. */
+  .mc-check[data-focus-visible] > .mc-list-check {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
   }
 
   /* Used by ProgressBar (moved out of ProgressBar.tsx later) */

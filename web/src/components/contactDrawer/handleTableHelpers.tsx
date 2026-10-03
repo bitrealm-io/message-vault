@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Column, ColumnResizer, Group } from "react-aria-components";
+import PlainButton from "../PlainButton";
 import {
   columnResizerClass,
   linkClass,
@@ -76,29 +77,14 @@ export function SortableColumn({
 
 export function CountCell({
   value,
-  onClick,
   loading = false,
 }: {
   value: number;
-  onClick?: () => void;
   /** When true, show an em dash instead of a zeroed stub count. */
   loading?: boolean;
 }) {
   if (loading) {
     return <span className={mutedClass}>—</span>;
   }
-  const text = value.toLocaleString();
-  if (value > 0 && onClick) {
-    return (
-      <button
-        type="button"
-        className={linkClass}
-        onClick={onClick}
-        aria-label={`Open ${text} threads`}
-      >
-        {text}
-      </button>
-    );
-  }
-  return <span className={value === 0 ? mutedClass : undefined}>{text}</span>;
+  return <span className={value === 0 ? mutedClass : undefined}>{value.toLocaleString()}</span>;
 }

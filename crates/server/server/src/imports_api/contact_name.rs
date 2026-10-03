@@ -24,11 +24,13 @@ use crate::db::trash;
 ///
 /// A contact in the Trash is the one exception to reuse. ADR-0013: a backup
 /// that still holds someone the person set aside is the person saying they
-/// still talk to them, so the import discards the trashed contact together
-/// with every handle it had and makes a fresh one from the backup, as a first
-/// import would. The fresh contact carries this handle and its siblings (the
-/// same number on another service); any other handle the trashed contact had
-/// belongs to no contact until the backup, or the person, says otherwise.
+/// still talk to them, so the import makes a fresh contact from the backup,
+/// as a first import would, and moves this handle and its siblings on the
+/// trashed contact (the same number on another service) to it. It then
+/// discards the trashed contact: each handle that contact still held leaves
+/// it the one way a handle leaves a contact, so one in a conversation goes to
+/// a new contact with no name and is Unknown until the backup, or the person,
+/// says who it is.
 ///
 /// Whatever the run does to the contact is recorded against `import_id`
 /// (`db::import_contacts`), so the run can say afterwards which contacts it
@@ -42,10 +44,8 @@ pub(super) async fn ensure_contact_for_handle(
     stats: &mut ImportStats,
 ) -> Result<i64> {
     let name = backup_name.and_then(trimmed).unwrap_or("");
-    let replaced_trashed = match ensure_sibling_contact_link(tx, account_id, import_id, handle_id)
-        .await?
-    {
-        Some(existing) if !trash::discard_contact_if_trashed(tx, account_id, existing).await? => {
+    let trashed = match ensure_sibling_contact_link(tx, account_id, import_id, handle_id).await? {
+        Some(existing) if !trash::is_contact_trashed(tx, account_id, existing).await? => {
             // An import names only a contact an earlier import left
             // nameless; `contacts::propose_name` is where that rule and
             // its two siblings live.
@@ -56,58 +56,41 @@ pub(super) async fn ensure_contact_for_handle(
             }
             return Ok(existing);
         }
-        Some(_) => true,
-        None => false,
+        Some(existing) => Some(existing),
+        None => None,
     };
     let contact_id =
         contacts::create_contact(tx, account_id, name, contacts::Origin::Import).await?;
-    contacts::link_handle_to_contact(
-        tx,
-        account_id,
-        handle_id,
-        contact_id,
-        contacts::Origin::Import,
-    )
-    .await?;
-    let reason = if replaced_trashed {
-        contacts::link_sibling_handles_to_contact(tx, account_id, handle_id, contact_id).await?;
-        ContactReason::ReplacedTrashed
-    } else {
-        ContactReason::Created
+    let goes = contacts::IdentityGoes::To(contact_id, contacts::Origin::Import);
+    contacts::move_identity(tx, account_id, handle_id, goes).await?;
+    let reason = match trashed {
+        Some(trashed) => {
+            for sibling in contacts::siblings_on_contact(tx, account_id, handle_id, trashed).await?
+            {
+                contacts::move_identity(tx, account_id, sibling, goes).await?;
+            }
+            for unknown in trash::discard_trashed_contact(tx, account_id, trashed).await? {
+                import_contacts::record(tx, import_id, unknown, ContactReason::Created).await?;
+                stats.contacts_created += 1;
+            }
+            ContactReason::ReplacedTrashed
+        }
+        None => ContactReason::Created,
     };
     import_contacts::record(tx, import_id, contact_id, reason).await?;
     stats.contacts_created += 1;
     Ok(contact_id)
 }
 
-/// Bind a participant the source named without recording any address.
-///
-/// A single existing contact under that name is reused, so the same person
-/// named across several conversations does not become several contacts. A
-/// contact in the Trash is never a match. When no contact matches — or when
-/// two do, which is ambiguous — a contact is created carrying the name and no
-/// identity. Either way the result is Unknown
-/// until the person supplies an address for them.
-///
-/// Returns the contact and the display name to record on the participant.
-pub(super) async fn resolve_name_only_participant(
-    tx: &mut SqliteConnection,
-    account_id: i64,
-    import_id: Option<i64>,
-    name: Option<&str>,
-) -> Result<(Option<i64>, Option<String>)> {
-    let Some(name) = name.and_then(trimmed) else {
-        // A participant with neither an address nor a name says nothing at
-        // all; there is nothing to create and nothing to show.
-        return Ok((None, None));
-    };
-    if let Some(existing) = contacts::contact_id_by_preferred_name(tx, account_id, name).await? {
-        return Ok((Some(existing), Some(name.to_string())));
+/// Count `handle_type` in `stats` when it is `Other` and this run meets the
+/// identity for the first time (`cached` is false). An identity of type
+/// `other` that is a person is a name with no address, or a sender such as
+/// `AMAZON`: something the exporter could not tie to an address, which the
+/// run's counts name.
+pub(super) fn count_other_identity(handle_type: HandleType, cached: bool, stats: &mut ImportStats) {
+    if handle_type == HandleType::Other && !cached {
+        stats.other_identities += 1;
     }
-    let contact_id =
-        contacts::create_contact(tx, account_id, name, contacts::Origin::Import).await?;
-    import_contacts::record(tx, import_id, contact_id, ContactReason::Created).await?;
-    Ok((Some(contact_id), Some(name.to_string())))
 }
 
 /// What one message says about who sent it. Its own type because these four
@@ -117,7 +100,8 @@ pub(super) struct IncomingSender<'a> {
     /// True when the account owner sent it, in which case there is no sender
     /// handle to resolve.
     pub is_from_me: bool,
-    /// The sender's address as the backup recorded it, when it recorded one.
+    /// The sender's address as the backup recorded it, or the name it gave
+    /// with no address (typed `Other`), when it recorded either.
     pub address: Option<&'a str>,
     /// The address's type when the source stated it; inferred from the
     /// address's shape when it did not.
@@ -159,6 +143,7 @@ pub(super) async fn resolve_incoming_sender_handle(
     if flagged {
         stats.phones_needing_review += 1;
     }
+    count_other_identity(handle_type, cached, stats);
     // A sender is a person the import met, whether or not a conversation
     // header named them: `orphaned.jsonl` names nobody, and a group header
     // can leave out someone who wrote in it. So the sender gets a contact

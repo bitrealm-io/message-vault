@@ -1,11 +1,15 @@
 name: CI
 
-# Every job runs on every pull request and reports a result, so all of them
-# can be required by the ruleset on main. Path filtering happens inside the
-# workflow (the `changes` job), not on the trigger: a workflow that never
+# Every job runs on every ready pull request and reports a result, so all of
+# them can be required by the ruleset on main. Path filtering happens inside
+# the workflow (the `changes` job), not on the trigger: a workflow that never
 # starts reports nothing, and a required check that never reports holds the
 # pull request pending forever. A job skipped by its `if:` counts as passed.
 # Why: docs/adr/0007-ci-is-the-only-gate.md.
+#
+# A draft's run skips every job: `changes` skips on a draft, so every job skips
+# with it. Marking the pull request ready starts a run that does the work. Why, and what a draft's
+# green checks mean: docs/adr/0007-ci-is-the-only-gate.md, "Consequences".
 
 on:
   push:
@@ -13,6 +17,7 @@ on:
     tags: ['v*']
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
     inputs:
       push_docker_image:
@@ -22,11 +27,8 @@ on:
 
 # A new push to a pull request cancels its previous run, so queued Rust
 # jobs do not sit until the 6-hour default timeout on a branch nobody is
-# waiting for any more. Pushes to main and tags are never cancelled: the
-# ruleset checks each pull request against the main it branched from, not
-# the main it lands on, so two green pull requests can merge into a red
-# main. The run on each main commit is the only thing that reports that,
-# and it has to finish to do so.
+# waiting for any more. Pushes to main and tags are never cancelled: each has
+# its own ref, and its verdict is the one that counts.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -40,10 +42,12 @@ permissions:
 
 jobs:
   # ── Always: classify what the change touches ──────────────────────────
-  # On anything but a pull request there is no base to diff against, so
-  # every output is true and everything runs.
+  # A pull request diffs against its base branch. On anything else there is no
+  # base to diff against, so every output is true and everything runs.
+  # A draft skips this job, so every job that needs it skips too.
   changes:
     name: Classify changes
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -63,11 +67,14 @@ jobs:
           BASE: ${{ github.base_ref }}
         run: |
           set -euo pipefail
-          if [[ "$EVENT" != "pull_request" ]]; then
-            printf 'rust=true\nweb=true\ndocs=true\ndocker=true\n' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          git fetch --quiet origin "$BASE"
+          case "$EVENT" in
+            pull_request)
+              git fetch --quiet origin "$BASE"
+              range="origin/$BASE...HEAD" ;;
+            *)
+              printf 'rust=true\nweb=true\ndocs=true\ndocker=true\n' >> "$GITHUB_OUTPUT"
+              exit 0 ;;
+          esac
           rust=false web=false docs=false docker=false
           while IFS= read -r f; do
             case "$f" in
@@ -90,7 +97,7 @@ jobs:
               *.md) ;;
               *) rust=true ;;               # crates, src-tauri, vendor, schema,
             esac                            # scripts — Rust CI
-          done < <(git diff --name-only "origin/$BASE...HEAD")
+          done < <(git diff --name-only "$range")
           printf 'rust=%s\nweb=%s\ndocs=%s\ndocker=%s\n' "$rust" "$web" "$docs" "$docker" >> "$GITHUB_OUTPUT"
           echo "rust=$rust web=$web docs=$docs docker=$docker"
 
@@ -313,8 +320,8 @@ jobs:
   # pull request that broke docker/Dockerfile merged green and the tag
   # failed. This job builds it without pushing whenever the Dockerfile, a
   # Cargo manifest or the lockfile changes. Pull requests only: the tag job
-  # below builds and pushes the same image, and a push to main is checked
-  # by the pull request that produced it.
+  # below builds and pushes the same image, and nightly.yml builds it from
+  # main.
   docker-build:
     name: Docker image builds
     needs: changes

@@ -7,8 +7,7 @@ import { useRouteCache, useRouteQuery } from "../../lib/routeQuery";
 import { createApiToken, deleteApiToken, listApiTokens, renameApiToken } from "../../lib/serverApi";
 import type { ApiTokenItem } from "./apiTokensUtils";
 
-const fetchTokens = (signal: AbortSignal) =>
-  listApiTokens({ signal }).then((res) => res.items ?? []);
+const fetchTokens = (signal: AbortSignal) => listApiTokens({ signal });
 
 type NewToken = Parameters<typeof createApiToken>[0];
 type CreatedToken = Awaited<ReturnType<typeof createApiToken>>;
@@ -206,7 +205,7 @@ export function useManagedApiTokens(accountId: number) {
     isPending: loading,
     error: loadError,
   } = useRouteQuery(keys.ownerAccounts.apiTokens(accountId), (signal) =>
-    listApiTokens({ signal }, accountId).then((res) => res.items ?? []),
+    listApiTokens({ signal }, accountId),
   );
   const revokeToken = useApiTokenWrite((id: number) => deleteApiToken(id, accountId));
 

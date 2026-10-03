@@ -9,7 +9,7 @@
 use std::fmt;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
@@ -21,6 +21,7 @@ use axum::extract::{Request, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 
+use crate::asset_store::sidecar_path;
 use crate::asset_uploads;
 use crate::config::validate_source_id;
 use crate::server::{
@@ -54,6 +55,38 @@ pub struct StoredAsset {
     pub mime_type: Option<String>,
 }
 
+/// Why the asset store refused or failed, by kind. The HTTP status for each
+/// kind is chosen once, in `server.rs`; no handler picks one.
+#[derive(Debug, thiserror::Error)]
+pub enum AssetError {
+    /// The bytes do not hash to the fingerprint they were sent under.
+    #[error("sha256 mismatch: claimed {claimed}, got {actual}")]
+    Mismatch {
+        /// The fingerprint the caller stated.
+        claimed: Sha256,
+        /// The fingerprint of the bytes that arrived.
+        actual: Sha256,
+    },
+    /// The request broke a rule of the upload: a fingerprint or upload id
+    /// that is not one, a part out of range or of the wrong length, a size
+    /// over the limit, or a completion with parts missing.
+    #[error("{0}")]
+    Invalid(String),
+    /// The upload id names no upload in progress.
+    #[error("no upload with this id is in progress")]
+    UploadNotFound,
+    /// Another request to the same upload holds its lock: the upload is
+    /// busy, not wrong, so the request is sent again once that one finishes.
+    #[error(
+        "another request to this upload holds its lock; send this request again when that one finishes"
+    )]
+    Locked,
+    /// The server could not store the file: its own I/O, or a state of its
+    /// store it refuses to write over. Nothing the caller can change.
+    #[error(transparent)]
+    Internal(#[from] anyhow::Error),
+}
+
 /// A SHA-256 fingerprint that has been checked: exactly 64 hex digits, held
 /// lower-cased.
 ///
@@ -71,10 +104,13 @@ impl Sha256 {
     ///
     /// # Errors
     ///
-    /// Returns an error when `value` is not exactly 64 hex digits.
-    pub fn parse(value: &str) -> Result<Self> {
+    /// Returns [`AssetError::Invalid`] when `value` is not exactly 64 hex
+    /// digits.
+    pub fn parse(value: &str) -> Result<Self, AssetError> {
         if value.len() != 64 || !value.bytes().all(|b| b.is_ascii_hexdigit()) {
-            bail!("invalid sha256 (expected 64 hex digits)");
+            return Err(AssetError::Invalid(
+                "invalid sha256 (expected 64 hex digits)".into(),
+            ));
         }
         Ok(Self(value.to_ascii_lowercase()))
     }
@@ -90,7 +126,7 @@ impl Sha256 {
     }
 
     /// The first two hex digits: the folder the file is stored in.
-    fn shard(&self) -> &str {
+    pub(crate) fn shard(&self) -> &str {
         &self.0[..2]
     }
 }
@@ -186,7 +222,7 @@ pub fn store_verified(
     export_mime: Option<&str>,
     consume_source: bool,
     _skip_hash: bool,
-) -> Result<(StoredAsset, bool)> {
+) -> Result<(StoredAsset, bool), AssetError> {
     store_verified_inner(
         source,
         claimed_sha256,
@@ -207,7 +243,7 @@ fn store_verified_inner(
     consume_source: bool,
     copy_ready: impl FnOnce(),
     selection_ready: impl FnOnce(),
-) -> Result<(StoredAsset, bool)> {
+) -> Result<(StoredAsset, bool), AssetError> {
     ensure_regular_file(source)?;
     // The export's claim, else a guess from the source file's name. The stored
     // file has no extension, so it can say nothing about its own type.
@@ -253,7 +289,7 @@ fn install_blob(
     consume_source: bool,
     copy_ready: impl FnOnce(),
     selection_ready: impl FnOnce(),
-) -> Result<bool> {
+) -> Result<bool, AssetError> {
     let shard = assets_root.join(claimed_sha256.shard());
     fs::create_dir_all(&shard).with_context(|| format!("failed to create {}", shard.display()))?;
 
@@ -264,13 +300,16 @@ fn install_blob(
 
     if let Ok(meta) = fs::symlink_metadata(&dest) {
         if meta.file_type().is_symlink() {
-            bail!("refusing to install over symlink {}", dest.display());
+            return Err(
+                anyhow::anyhow!("refusing to install over symlink {}", dest.display()).into(),
+            );
         }
         if !meta.is_file() {
-            bail!(
+            return Err(anyhow::anyhow!(
                 "asset destination exists and is not a regular file: {}",
                 dest.display()
-            );
+            )
+            .into());
         }
         if hash_file(&dest).is_ok_and(|actual| actual == claimed_sha256.as_str()) {
             verify_source_digest(source, claimed_sha256)?;
@@ -305,7 +344,9 @@ fn install_blob(
                     .with_context(|| format!("replace corrupt asset {}", dest.display()))?;
             }
             Err(err) => {
-                return Err(err.error).with_context(|| format!("install {}", dest.display()));
+                return Err(anyhow::Error::from(err.error)
+                    .context(format!("install {}", dest.display()))
+                    .into());
             }
         }
     }
@@ -319,10 +360,13 @@ fn install_blob(
 ///
 /// Used when skipping the copy because a matching file is already stored. Without
 /// this check, a wrong claim would be accepted just because that file exists.
-fn verify_source_digest(source: &Path, claimed_sha256: &Sha256) -> Result<()> {
+fn verify_source_digest(source: &Path, claimed_sha256: &Sha256) -> Result<(), AssetError> {
     let actual = hash_file(source).with_context(|| format!("read source {}", source.display()))?;
     if actual != claimed_sha256.as_str() {
-        bail!("sha256 mismatch: claimed {claimed_sha256}, got {actual}");
+        return Err(AssetError::Mismatch {
+            claimed: claimed_sha256.clone(),
+            actual: Sha256(actual),
+        });
     }
     Ok(())
 }
@@ -336,7 +380,7 @@ fn copy_to_verified_temp(
     source: &Path,
     shard: &Path,
     claimed_sha256: &Sha256,
-) -> Result<tempfile::NamedTempFile> {
+) -> Result<tempfile::NamedTempFile, AssetError> {
     let mut temporary = tempfile::NamedTempFile::new_in(shard)
         .with_context(|| format!("create temporary asset in {}", shard.display()))?;
     let mut src =
@@ -355,11 +399,16 @@ fn copy_to_verified_temp(
             .write_all(&buf[..n])
             .with_context(|| format!("write temporary asset for {}", source.display()))?;
     }
-    temporary.flush()?;
-    temporary.as_file().sync_all()?;
+    temporary
+        .flush()
+        .and_then(|()| temporary.as_file().sync_all())
+        .with_context(|| format!("flush temporary asset for {}", source.display()))?;
     let actual = hex_encode(&hasher.finalize());
     if actual != claimed_sha256.as_str() {
-        bail!("sha256 mismatch: claimed {claimed_sha256}, got {actual}");
+        return Err(AssetError::Mismatch {
+            claimed: claimed_sha256.clone(),
+            actual: Sha256(actual),
+        });
     }
     Ok(temporary)
 }
@@ -392,58 +441,6 @@ pub fn hash_and_store(
     Ok(Some(stored))
 }
 
-/// Delete abandoned multipart upload folders under `{assets}/.incoming` older
-/// than `max_age_secs`.
-///
-/// Finished uploads already remove their session folders. Abandoned ones can
-/// sit forever without this sweep, which runs from upload start.
-///
-/// # Errors
-///
-/// Returns an error when `{assets}/.incoming` cannot be read.
-pub fn gc_stale_incoming(assets_root: &Path, max_age_secs: u64) -> Result<u64> {
-    let incoming = assets_root.join(".incoming");
-    if !incoming.is_dir() {
-        return Ok(0);
-    }
-    let now = std::time::SystemTime::now();
-    let mut removed = 0u64;
-    for sha_entry in
-        fs::read_dir(&incoming).with_context(|| format!("read {}", incoming.display()))?
-    {
-        let sha_entry = sha_entry?;
-        let sha_path = sha_entry.path();
-        if !sha_path.is_dir() {
-            continue;
-        }
-        for session_entry in fs::read_dir(&sha_path)? {
-            let session_entry = session_entry?;
-            let session_path = session_entry.path();
-            if !session_path.is_dir() {
-                continue;
-            }
-            let Ok(meta) = session_entry.metadata() else {
-                continue;
-            };
-            let Ok(modified) = meta.modified() else {
-                continue;
-            };
-            let Ok(age) = now.duration_since(modified) else {
-                continue;
-            };
-            if age.as_secs() >= max_age_secs {
-                let _ = fs::remove_dir_all(&session_path);
-                removed += 1;
-            }
-        }
-        // Remove empty fingerprint folders left after the last session is gone.
-        if fs::read_dir(&sha_path)?.next().is_none() {
-            let _ = fs::remove_dir(&sha_path);
-        }
-    }
-    Ok(removed)
-}
-
 /// SHA-256 fingerprint of the file at `path`, as 64 lowercase hex digits.
 ///
 /// # Errors
@@ -464,14 +461,9 @@ pub(crate) fn hash_file(path: &Path) -> Result<String> {
     Ok(hex_encode(&hasher.finalize()))
 }
 
-/// Path of the hidden `.<sha>.mime` sidecar that records a blob's MIME type, since the blob's name carries none.
-fn mime_metadata_path(assets_root: &Path, sha: &Sha256) -> PathBuf {
-    assets_root.join(sha.shard()).join(format!(".{sha}.mime"))
-}
-
 /// Read the MIME sidecar for `sha`, if present and non-empty.
 fn read_mime_metadata(assets_root: &Path, sha: &Sha256) -> Option<String> {
-    let file = open_nofollow_read(&mime_metadata_path(assets_root, sha)).ok()?;
+    let file = open_nofollow_read(&sidecar_path(assets_root, sha)).ok()?;
     let mut mime = String::new();
     file.take(1024).read_to_string(&mut mime).ok()?;
     let mime = mime.trim();
@@ -488,7 +480,7 @@ fn store_mime_metadata(assets_root: &Path, sha: &Sha256, mime: &str) -> Result<(
     if mime.is_empty() {
         return Ok(());
     }
-    let path = mime_metadata_path(assets_root, sha);
+    let path = sidecar_path(assets_root, sha);
     if read_mime_metadata(assets_root, sha).is_some() {
         return Ok(());
     }
@@ -656,7 +648,7 @@ async fn resolve_asset_lookup(
         ("source" = String, Query)
     ),
     responses(
-        (status = 200, body = Asset),
+        (status = 200, description = "The asset is stored; a HEAD answer has no body"),
     )
 )]
 pub(crate) async fn head_asset(
@@ -686,7 +678,11 @@ pub(crate) async fn head_asset(
         ("source" = String, Query)
     ),
     responses(
-        (status = 200, description = "Raw asset bytes", content_type = "application/octet-stream"),
+        (
+            status = 200,
+            description = "The asset's bytes, in the media type it was stored with, or `application/octet-stream` when none was stored",
+            content_type = "*/*"
+        ),
     )
 )]
 pub(crate) async fn get_asset(
@@ -721,7 +717,11 @@ pub(crate) async fn get_asset(
         ("source" = String, Query)
     ),
     responses(
-        (status = 200, description = "Raw preview bytes", content_type = "application/octet-stream"),
+        (
+            status = 200,
+            description = "The preview's bytes, in the preview's own media type, or `application/octet-stream` when none is stored",
+            content_type = "*/*"
+        ),
     )
 )]
 pub(crate) async fn get_asset_preview(
@@ -887,7 +887,8 @@ pub(crate) async fn replace_asset(
     let tmp_for_store = tmp_path.clone();
     let assets_dir_store = assets_dir.clone();
     let stored = tokio::task::spawn_blocking(move || {
-        std::fs::create_dir_all(&assets_dir_store)?;
+        std::fs::create_dir_all(&assets_dir_store)
+            .with_context(|| format!("create {}", assets_dir_store.display()))?;
         store_verified(
             &tmp_for_store,
             &sha,
@@ -902,9 +903,8 @@ pub(crate) async fn replace_asset(
     // body that does not match the fingerprint included, leaves it, and it
     // is removed here before the answer, so a refused upload keeps nothing.
     let _ = tokio::fs::remove_file(&tmp_path).await;
-    let (stored, already_present) = stored
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("asset upload task: {e}")))?
-        .map_err(|e| ApiError::AssetUploadInvalid(e.to_string()))?;
+    let (stored, already_present) =
+        stored.map_err(|e| ApiError::Internal(anyhow::anyhow!("asset upload task: {e}")))??;
     // A racing upload of the same bytes may have stored them first; then
     // this request made nothing.
     if already_present {
@@ -992,8 +992,7 @@ pub(crate) async fn create_asset_upload(
         asset_uploads::start_upload(&assets_dir, &sha, bytes, mime.as_deref(), limits)
     })
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("upload start task: {e}")))?
-    .map_err(|e| ApiError::AssetUploadInvalid(e.to_string()))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("upload start task: {e}")))??;
 
     // Only a fresh upload is a creation. An asset already in the store made
     // nothing, so it answers 200 OK with where the bytes already are.
@@ -1007,7 +1006,10 @@ pub(crate) async fn create_asset_upload(
         })
         .into_response()),
         (None, Some(start)) => Ok(Created {
-            location: format!("/v1/assets/{sha256}/uploads/{}", start.upload_id),
+            location: format!(
+                "/v1/assets/{sha256}/uploads/{}?source={source_id}",
+                start.upload_id
+            ),
             body: CreateAssetUploadResponse {
                 upload_id: Some(start.upload_id),
                 part_size: Some(start.part_size),
@@ -1038,7 +1040,8 @@ pub(crate) async fn create_asset_upload(
     request_body(content_type = "application/octet-stream", description = "Raw part bytes"),
     responses(
         (status = 200, body = ReplaceAssetUploadPartResponse),
-        crate::problem::openapi::AssetUploadInvalid
+        crate::problem::openapi::AssetUploadInvalid,
+        crate::problem::openapi::StateConflict
     )
 )]
 pub(crate) async fn replace_asset_upload_part(
@@ -1066,8 +1069,7 @@ pub(crate) async fn replace_asset_upload_part(
             asset_uploads::session_part_size(&assets_dir, &sha, &uid)
         })
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("upload part task: {e}")))?
-        .map_err(|e| ApiError::AssetUploadInvalid(e.to_string()))?
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("upload part task: {e}")))??
     };
     let declared = headers
         .get(header::CONTENT_LENGTH)
@@ -1085,8 +1087,7 @@ pub(crate) async fn replace_asset_upload_part(
         asset_uploads::put_part(&assets_dir, &sha, &uid, part, &body)
     })
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("upload part task: {e}")))?
-    .map_err(|e| ApiError::AssetUploadInvalid(e.to_string()))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("upload part task: {e}")))??;
     Ok(Json(ReplaceAssetUploadPartResponse {
         part,
         bytes: written,
@@ -1113,7 +1114,8 @@ pub(crate) async fn replace_asset_upload_part(
             headers(("Location" = String, description = "Path of the stored asset"))
         ),
         (status = 200, body = Asset, description = "The server already held the asset"),
-        crate::problem::openapi::AssetUploadInvalid
+        crate::problem::openapi::AssetUploadInvalid,
+        crate::problem::openapi::StateConflict
     )
 )]
 pub(crate) async fn complete_asset_upload(
@@ -1134,7 +1136,7 @@ pub(crate) async fn complete_asset_upload(
         })
         .await
         .map_err(anyhow::Error::from)
-        .and_then(|result| result);
+        .and_then(|result| result.map_err(anyhow::Error::from));
         if let Err(error) = dropped {
             tracing::warn!(
                 upload_id,
@@ -1157,8 +1159,7 @@ pub(crate) async fn complete_asset_upload(
         asset_uploads::complete_upload(&assets_dir, &sha, &uid)
     })
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("upload complete task: {e}")))?
-    .map_err(|e| ApiError::AssetUploadInvalid(e.to_string()))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("upload complete task: {e}")))??;
 
     // A racing single PUT of the same bytes may have stored them first; then
     // this completion made nothing.
@@ -1171,6 +1172,62 @@ pub(crate) async fn complete_asset_upload(
         body,
     }
     .into_response())
+}
+
+/// A chunked asset upload in progress: what it is assembling and which parts
+/// have arrived.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct AssetUpload {
+    upload_id: String,
+    /// SHA-256 fingerprint of the file the parts assemble into.
+    sha256: String,
+    /// Size of the whole file in bytes.
+    bytes: u64,
+    /// Size of every part but the last, fixed when the upload started.
+    part_size: usize,
+    /// Part numbers received so far (1-based), in order.
+    received_parts: Vec<u32>,
+}
+
+/// Read a chunked asset upload in progress: its size, part size and the
+/// parts received so far.
+#[utoipa::path(
+    get,
+    path = "/v1/assets/{sha256}/uploads/{upload_id}",
+    tag = "Assets",
+    security(("session" = ["import"]), ("api-token" = ["import"])),
+    params(
+        ("sha256" = String, Path, description = "Content SHA-256 hex"),
+        ("upload_id" = String, Path),
+        ("source" = String, Query)
+    ),
+    responses(
+        (status = 200, body = AssetUpload),
+        crate::problem::openapi::AssetUploadInvalid
+    )
+)]
+pub(crate) async fn get_asset_upload(
+    State(state): State<AppState>,
+    ImportAccess(auth): ImportAccess,
+    AxumPath((sha256, upload_id)): AxumPath<(Sha256, String)>,
+    Query(query): Query<AssetQuery>,
+) -> Result<Json<AssetUpload>, ApiError> {
+    let (account, source_id, _existing) =
+        resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Write).await?;
+    let assets_dir = state.cfg.paths.assets_dir_for_account(account, &source_id);
+    let sha = sha256.clone();
+    let uid = upload_id.clone();
+    let manifest =
+        tokio::task::spawn_blocking(move || asset_uploads::read_upload(&assets_dir, &sha, &uid))
+            .await
+            .map_err(|e| ApiError::Internal(anyhow::anyhow!("upload read task: {e}")))??;
+    Ok(Json(AssetUpload {
+        upload_id,
+        sha256: manifest.sha256,
+        bytes: manifest.bytes,
+        part_size: manifest.part_size,
+        received_parts: manifest.received.into_iter().collect(),
+    }))
 }
 
 /// Abort and delete a chunked asset upload's staging files.
@@ -1186,7 +1243,8 @@ pub(crate) async fn complete_asset_upload(
     ),
     responses(
         (status = 204, description = "Upload aborted"),
-        crate::problem::openapi::AssetUploadInvalid
+        crate::problem::openapi::AssetUploadInvalid,
+        crate::problem::openapi::StateConflict
     )
 )]
 pub(crate) async fn delete_asset_upload(
@@ -1202,8 +1260,7 @@ pub(crate) async fn delete_asset_upload(
     let uid = upload_id.clone();
     tokio::task::spawn_blocking(move || asset_uploads::abort_upload(&assets_dir, &sha, &uid))
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("upload abort task: {e}")))?
-        .map_err(|e| ApiError::AssetUploadInvalid(e.to_string()))?;
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("upload abort task: {e}")))??;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 

@@ -37,7 +37,7 @@ pub mod failure;
 pub mod promote;
 pub mod staging;
 
-pub use failure::{ImportFailure, MISSING_GUID_LINES_NAMED};
+pub use failure::{ImportError, ImportFailure, MISSING_GUID_LINES_NAMED};
 
 use staging::StagingInserts;
 
@@ -147,6 +147,11 @@ pub struct ImportStats {
     pub mode: ImportMode,
     /// Flagged phone handles (ambiguous; review note set) inserted by this import.
     pub phones_needing_review: u64,
+    /// Identities of type `other` this import met for people: a name the
+    /// backup gave with no address, or a sender such as `AMAZON`. Each one is
+    /// a person the exporter could not tie to an address, so a count above
+    /// zero says the import is incomplete.
+    pub other_identities: u64,
 }
 
 impl ImportStats {
@@ -160,6 +165,7 @@ impl ImportStats {
         self.contacts_created += other.contacts_created;
         self.messages_deduped += other.messages_deduped;
         self.phones_needing_review += other.phones_needing_review;
+        self.other_identities += other.other_identities;
     }
 
     /// Add a whole import run's counts onto a running total, files and assets
@@ -257,8 +263,9 @@ pub enum ImportSchemaMode {
 
 /// Test helper: open a configured database and run one import.
 ///
-/// Production paths use [`import_jsonl_files_on_conn`] on their own
-/// connection (HTTP serve, CLI import, the Demo Account build).
+/// Production paths run on their own connection: HTTP serve through
+/// [`import_jsonl_files_on_conn`], and the `import` command and the Demo
+/// Account build through [`import_on_conn`].
 #[cfg(test)]
 pub(crate) async fn import_jsonl_files(
     db_path: &Path,
@@ -280,7 +287,7 @@ pub(crate) async fn import_jsonl_files(
     let mut conn = pool.acquire().await?;
     println!("  sql:      opened {}", db_path.display());
     let _ = io::stdout().flush();
-    import_jsonl_files_on_conn(&mut conn, paths, opts, ImportSchemaMode::Ensure).await
+    import_on_conn(&mut conn, paths, opts, ImportSchemaMode::Ensure).await
 }
 
 /// A fixed source needs no check here: every caller that passes one has
@@ -296,8 +303,23 @@ fn validate_import_options(opts: &ImportOptions<'_>) -> Result<()> {
 ///
 /// # Errors
 ///
-/// Returns an error when options are invalid or staging / promote fails.
+/// Returns [`ImportError::Rejected`] when the file breaks a rule the sender
+/// can fix, [`ImportError::Run`] when the import run is no longer running,
+/// and [`ImportError::Internal`] when the options are invalid or
+/// staging or promote fails for any other reason.
 pub async fn import_jsonl_files_on_conn(
+    conn: &mut SqliteConnection,
+    paths: &[PathBuf],
+    opts: &ImportOptions<'_>,
+    schema_mode: ImportSchemaMode,
+) -> Result<ImportStats, ImportError> {
+    Ok(import_on_conn(conn, paths, opts, schema_mode).await?)
+}
+
+/// [`import_jsonl_files_on_conn`], with every failure still inside `anyhow`,
+/// for the callers that only report it: the `import` command, `reset-demo`
+/// and [`import_jsonl_files`].
+pub(crate) async fn import_on_conn(
     conn: &mut SqliteConnection,
     paths: &[PathBuf],
     opts: &ImportOptions<'_>,
@@ -733,6 +755,97 @@ pub(crate) struct ImportRun {
     pub(crate) contacts_changed: u64,
 }
 
+/// An Import Run as the owner reads it under another account: its source,
+/// mode, times, outcome and counts, and nothing of what the backup held
+/// (`docs/adr/0008-the-owner-holds-no-messages.md`, "What the owner may
+/// see"). The run's summary, its issues and its form say whom the account
+/// talks to, so they stay out, and a field reaches the owner only by being
+/// added here.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct OwnerImportRun {
+    /// Import Run id.
+    pub(crate) id: i64,
+    /// Source id the run imports.
+    source: String,
+    /// Importing tool, e.g. `message-crate-push`.
+    tool: Option<String>,
+    /// Import mode (`replace` or `append`).
+    mode: String,
+    /// Lifecycle status.
+    status: crate::db::imports::ImportStatus,
+    /// UTC time the run started.
+    started_at: String,
+    /// UTC time the run finished, when it has.
+    finished_at: Option<String>,
+    /// Messages counted for the run.
+    message_count: i64,
+    /// Attachments counted for the run.
+    attachment_count: i64,
+    /// Bytes uploaded so far.
+    bytes_uploaded: i64,
+    /// Total wall-clock duration, when finished.
+    duration_ms: Option<i64>,
+    /// Time spent parsing, when finished.
+    parse_ms: Option<i64>,
+    /// Time spent on attachments, when finished.
+    attachments_ms: Option<i64>,
+    /// Time spent preparing conversation files, when finished.
+    prepare_ms: Option<i64>,
+    /// Time spent uploading, when finished.
+    upload_ms: Option<i64>,
+    /// The whole numbers the run's summary reported, by name. The summary's
+    /// other values, among them the addresses a staging summary lists, are
+    /// the account's own.
+    counts: std::collections::BTreeMap<String, i64>,
+    /// Issues the run recorded. Each names the conversation it was about, so
+    /// the owner reads how many and not which.
+    issue_count: u64,
+    /// Contacts this run created.
+    contacts_new: u64,
+    /// Contacts it only changed.
+    contacts_changed: u64,
+}
+
+/// The owner's view of one Import Run, read from the run's row, its issue
+/// count and its contact tally.
+pub(crate) async fn owner_import_run(
+    conn: &mut SqliteConnection,
+    row: crate::db::imports::ImportRow,
+) -> Result<OwnerImportRun, ApiError> {
+    let issue_count = crate::db::imports::issue_count(conn, row.id).await?;
+    let contacts = crate::db::import_contacts::counts(conn, row.id)
+        .await
+        .map_err(ApiError::Internal)?;
+    let counts = match crate::db::imports::json_column(row.summary_json) {
+        serde_json::Value::Object(summary) => summary
+            .into_iter()
+            .filter_map(|(name, value)| value.as_i64().map(|n| (name, n)))
+            .collect(),
+        _ => std::collections::BTreeMap::new(),
+    };
+    Ok(OwnerImportRun {
+        id: row.id,
+        source: row.source,
+        tool: row.tool,
+        mode: row.mode,
+        status: row.status,
+        started_at: row.started_at,
+        finished_at: row.finished_at,
+        message_count: row.message_count,
+        attachment_count: row.attachment_count,
+        bytes_uploaded: row.bytes_uploaded,
+        duration_ms: row.duration_ms,
+        parse_ms: row.parse_ms,
+        attachments_ms: row.attachments_ms,
+        prepare_ms: row.prepare_ms,
+        upload_ms: row.upload_ms,
+        counts,
+        issue_count,
+        contacts_new: contacts.new_count,
+        contacts_changed: contacts.changed_count,
+    })
+}
+
 /// The account's Import Runs, newest first, as a page. `status=running`
 /// finds the one run the desktop app may resume.
 #[utoipa::path(
@@ -755,17 +868,25 @@ pub(crate) async fn list_imports(
     ImportAccess(auth): ImportAccess,
     Query(query): Query<ListImportsQuery>,
 ) -> Result<Json<Page<crate::db::imports::ImportSummary>>, ApiError> {
-    imports_page(&state, resolve_import_account(&auth), query).await
+    let mut conn = state.db.acquire().await?;
+    let rows = import_rows_page(&mut conn, resolve_import_account(&auth), query).await?;
+    Ok(Json(Page {
+        items: rows.items.into_iter().map(Into::into).collect(),
+        total: rows.total,
+        limit: rows.limit,
+        offset: rows.offset,
+    }))
 }
 
-/// One account's Import Runs as a page. `GET /v1/imports` answers it for the
-/// credential's account and `GET /v1/accounts/{id}/imports` for the account
-/// named, so the two lists cannot drift.
-pub(crate) async fn imports_page(
-    state: &AppState,
+/// One account's Import Runs as a page of rows. `GET /v1/imports` answers
+/// from it for the credential's account and `GET /v1/accounts/{id}/imports`
+/// for the account named, so the two lists cannot drift; each shapes the
+/// rows for whoever reads them.
+pub(crate) async fn import_rows_page(
+    conn: &mut SqliteConnection,
     account: i64,
     query: ListImportsQuery,
-) -> Result<Json<Page<crate::db::imports::ImportSummary>>, ApiError> {
+) -> Result<Page<crate::db::imports::ImportRow>, ApiError> {
     let page = page_params(
         query.limit,
         query.offset,
@@ -793,9 +914,8 @@ pub(crate) async fn imports_page(
         )));
     }
 
-    let mut conn = state.db.acquire().await?;
     let (items, total) = crate::db::imports::list_imports_page(
-        &mut conn,
+        conn,
         account,
         status,
         &order,
@@ -803,12 +923,12 @@ pub(crate) async fn imports_page(
         i64::try_from(page.offset).map_err(anyhow::Error::from)?,
     )
     .await?;
-    Ok(Json(Page {
+    Ok(Page {
         items,
         total,
         limit: page.limit,
         offset: page.offset,
-    }))
+    })
 }
 
 /// Status, timings, and issues for one Import Run.
@@ -827,24 +947,27 @@ pub(crate) async fn get_import(
     ImportAccess(auth): ImportAccess,
     AxumPath(import_id): AxumPath<i64>,
 ) -> Result<Json<ImportRun>, ApiError> {
-    import_detail(&state, auth.account_id, import_id).await
+    let mut conn = state.db.acquire().await?;
+    import_detail(&mut conn, auth.account_id, import_id)
+        .await
+        .map(Json)
 }
 
-/// One of an account's Import Runs. A run that is another account's is a 404.
+/// One of an account's Import Runs in full. A run that is another account's
+/// is a 404.
 pub(crate) async fn import_detail(
-    state: &AppState,
+    conn: &mut SqliteConnection,
     account: i64,
     import_id: i64,
-) -> Result<Json<ImportRun>, ApiError> {
-    let mut conn = state.db.acquire().await?;
-    let detail = crate::db::imports::get_import_detail(&mut conn, account, import_id)
+) -> Result<ImportRun, ApiError> {
+    let detail = crate::db::imports::get_import_detail(conn, account, import_id)
         .await
         .map_err(ApiError::from)?;
-    let contacts = crate::db::import_contacts::counts(&mut conn, import_id)
+    let contacts = crate::db::import_contacts::counts(conn, import_id)
         .await
         .map_err(ApiError::Internal)?;
 
-    Ok(Json(import_detail_response(detail, contacts)))
+    Ok(import_detail_response(detail, contacts))
 }
 
 /// Start an Import Run and return its id. Finish the run at
@@ -906,7 +1029,12 @@ pub(crate) async fn create_import(
         source_fingerprint: fingerprint_json.as_deref(),
         source_identities: identities_json.as_deref(),
     };
-    let id = crate::db::imports::start_import(&mut conn, &args).await?;
+    // The run and what started it land together, so a run never reads as
+    // one the server started.
+    let mut tx = crate::db::begin_write(&mut conn).await?;
+    let id = crate::db::imports::start_import(&mut tx, &args).await?;
+    crate::db::imports::record_credential(&mut tx, id, &auth.credential).await?;
+    tx.commit().await?;
 
     Ok(Created {
         location: format!("/v1/imports/{id}"),
@@ -974,6 +1102,8 @@ pub(crate) async fn complete_import(
                 Err(other) => ApiError::Internal(other),
             },
         )?;
+    drop(conn);
+    crate::asset_store::sweep_after_run(&state.db, &state.cfg.paths, account).await;
 
     Ok(Json(CompleteImportResponse {
         id: row.id,
@@ -1285,6 +1415,8 @@ pub(crate) async fn discard_import(
     let account = resolve_import_account(&auth);
     let mut conn = state.db.acquire().await?;
     crate::db::imports::discard_import(&mut conn, account, import_id).await?;
+    drop(conn);
+    crate::asset_store::sweep_after_run(&state.db, &state.cfg.paths, account).await;
     Ok(Json(DiscardImportResponse {
         id: import_id,
         status: crate::db::imports::ImportStatus::Cancelled,
@@ -1349,7 +1481,7 @@ pub(crate) async fn create_import_batch(
         )
         .await?;
         if n == 0 {
-            return Err(ApiError::MalformedBody("request body is empty".into()));
+            return Err(ImportFailure::Empty.into());
         }
         // The import pipeline does blocking file IO (JSONL parse, asset
         // hashing and copies) — run it off the async workers so a large
@@ -1380,34 +1512,6 @@ const MAX_CONCURRENT_IMPORTS: usize = 2;
 fn import_semaphore() -> &'static tokio::sync::Semaphore {
     static SEMAPHORE: std::sync::OnceLock<tokio::sync::Semaphore> = std::sync::OnceLock::new();
     SEMAPHORE.get_or_init(|| tokio::sync::Semaphore::new(MAX_CONCURRENT_IMPORTS))
-}
-
-/// Turn an import's error into the HTTP failure a caller should see.
-///
-/// The failures a sender can fix by changing the file travel up the
-/// pipeline as `ImportFailure`, each with its own sentence and the line of
-/// the batch as `line`. A line that could not be read is `malformed-body`;
-/// messages that were read and have no guid are `validation-failed`.
-/// Everything else (a disk or database error, a bug) is a 500: the message
-/// goes to stderr and the client sees "internal server error".
-fn classify_import_error(err: anyhow::Error) -> ApiError {
-    // The run ended while the batch uploaded: refused as the check before
-    // the body refuses it.
-    let err = match err.downcast::<crate::db::imports::ImportLookupError>() {
-        Ok(lookup) => return ApiError::from(lookup),
-        Err(err) => err,
-    };
-    match ImportFailure::in_error(&err) {
-        Some(failure @ ImportFailure::MissingGuid { .. }) => ApiError::InvalidImportLines {
-            errors: vec![failure.batch_sentence()],
-            line: failure.line(),
-        },
-        Some(failure) => ApiError::MalformedImportLine {
-            detail: failure.batch_sentence(),
-            line: failure.line(),
-        },
-        None => ApiError::Internal(anyhow::anyhow!("{err:#}")),
-    }
 }
 
 /// `create_import_batch` is the only entry point, and the run's `source`,
@@ -1470,7 +1574,7 @@ async fn run_import_path(
         imports_api::ImportSchemaMode::AssumeReady,
     )
     .await;
-    let stats = import_result.map_err(classify_import_error)?;
+    let stats = import_result?;
     let dedupe_stats = if do_dedupe {
         Some(dedupe::dedupe_cross_source(&mut conn, account, None, 2).await?)
     } else {

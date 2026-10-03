@@ -13,7 +13,6 @@
 //! how much it holds, never what it says.
 //! See `docs/adr/0008-the-owner-holds-no-messages.md`.
 
-use anyhow::Context;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -26,13 +25,19 @@ use crate::credentials::{
     hash_user_password, password_bucket, passwords_match, refuse_when_rate_limited,
     require_username_free, require_valid_username,
 };
+use crate::db::audit_trail::{self, AuditAction, AuditActor, Details, NewEntry};
 use crate::db::handles::{self, Identity};
+use crate::db::permissions::Permission;
 use crate::db::storage::{self, Scope};
 use crate::db::{WriteTx, begin_write};
 use crate::db::{account_profile, imports, server_settings, session_tokens};
+use crate::exports_api::OwnerExportRun;
 use crate::extract::{Json, Path, Query};
+use crate::imports_api::{ImportRun, OwnerImportRun};
 use crate::paging::{DEFAULT_LIST_LIMIT, Page, PageQuery, page_of, page_params};
-use crate::server::{ApiError, AppState, AuthIdentity, Created, LoggedIn, Owner};
+use crate::server::{
+    ApiError, AppState, AuthIdentity, Created, LoggedIn, Owner, refuse_for_demo_account,
+};
 
 // ---------------------------------------------------------------------------
 // The account as every caller sees it
@@ -173,6 +178,15 @@ impl Reach {
     /// True when the row is the caller's own, the owner's included.
     pub(crate) fn is_own(self) -> bool {
         matches!(self, Self::Own | Self::OwnersOwn)
+    }
+
+    /// Who the Audit Trail says acted: the owner, on any account, or the
+    /// holder on their own.
+    pub(crate) fn actor(self) -> AuditActor {
+        match self {
+            Self::Owner | Self::OwnersOwn => AuditActor::Owner,
+            Self::Own => AuditActor::Holder,
+        }
     }
 }
 
@@ -325,6 +339,7 @@ pub struct CreateAccountResponse {
 pub async fn create_account(
     State(state): State<AppState>,
     auth: Option<AuthIdentity>,
+    headers: axum::http::HeaderMap,
     Json(req): Json<CreateAccountRequest>,
 ) -> Result<Created<CreateAccountResponse>, ApiError> {
     let username = require_valid_username(&req.username)?;
@@ -381,11 +396,22 @@ pub async fn create_account(
     if preferred_name.is_none() && phone.is_none() {
         account_profile::set_must_set_up_profile(&mut tx, account_id, true).await?;
     }
+    let actor = if by_owner {
+        AuditActor::Owner
+    } else {
+        AuditActor::Anonymous
+    };
+    audit_trail::record(
+        &mut tx,
+        &NewEntry::about(AuditAction::AccountCreated, actor, (account_id, &username)),
+    )
+    .await?;
     let token = if by_owner {
         None
     } else {
         // Registering opens a Session, so it is the account's first login.
-        let token = session_tokens::insert_account_session_token(&mut tx, account_id)
+        let app = crate::server::connecting_app(&headers);
+        let token = session_tokens::open_session(&mut tx, account_id, &username, app.as_ref())
             .await
             .map_err(ApiError::Internal)?;
         account_profile::record_login(&mut tx, account_id).await?;
@@ -669,11 +695,20 @@ async fn update_profile_in(
 /// account has already issued, because a token's permissions are intersected
 /// with its account's on every request. The owner restrains the account and
 /// the tokens follow, without ever seeing one.
+///
+/// What changed goes in the Audit Trail as the owner's act: disabling or
+/// re-enabling, and which permissions were turned on and off. A flag sent
+/// with the value it already had changes nothing and records nothing. The
+/// caller holds the write transaction, so the change and its record land
+/// together.
 async fn apply_flags(
     conn: &mut SqliteConnection,
     account_id: i64,
     req: &UpdateAccountRequest,
 ) -> Result<(), ApiError> {
+    let before = account_profile::load_account_auth(conn, account_id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound(format!("account {account_id} not found")))?;
     let flags = account_profile::AccountFlags {
         disabled: req.disabled,
         can_import: req.can_import,
@@ -681,19 +716,50 @@ async fn apply_flags(
         can_delete: req.can_delete,
     };
     account_profile::set_account_flags(conn, account_id, flags).await?;
-    Ok(())
-}
-
-/// Refuse an act the Demo Account is never open to, whoever asks.
-///
-/// The Demo Account has no password, so anyone at the login card can enter
-/// it. Its limits are therefore fixed here, by its id, and are not settings
-/// the owner can change (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`).
-fn refuse_for_demo_account(target: i64, what: &str) -> Result<(), ApiError> {
-    if account_profile::is_demo_account(target) {
-        return Err(ApiError::DemoAccountProtected(format!(
-            "the demo account's {what}; the owner can delete the account, and reset-demo restores it"
-        )));
+    if let Some(disabled) = req.disabled.filter(|d| *d != before.disabled) {
+        let action = if disabled {
+            AuditAction::AccountDisabled
+        } else {
+            AuditAction::AccountEnabled
+        };
+        audit_trail::record_about(
+            conn,
+            action,
+            AuditActor::Owner,
+            account_id,
+            Details::default(),
+        )
+        .await?;
+    }
+    let was = before.permissions;
+    let changes = [
+        (Permission::Import, was.import, req.can_import),
+        (Permission::Export, was.export, req.can_export),
+        (Permission::Delete, was.delete, req.can_delete),
+    ];
+    let mut added = Vec::new();
+    let mut removed = Vec::new();
+    for (name, was, asked) in changes {
+        match asked {
+            Some(true) if !was => added.push(name),
+            Some(false) if was => removed.push(name),
+            _ => {}
+        }
+    }
+    if !added.is_empty() || !removed.is_empty() {
+        let details = Details {
+            permissions_added: Some(added),
+            permissions_removed: Some(removed),
+            ..Details::default()
+        };
+        audit_trail::record_about(
+            conn,
+            AuditAction::PermissionsChanged,
+            AuditActor::Owner,
+            account_id,
+            details,
+        )
+        .await?;
     }
     Ok(())
 }
@@ -702,8 +768,10 @@ fn refuse_for_demo_account(target: i64, what: &str) -> Result<(), ApiError> {
 /// the account itself or by the owner; only the owner sets an
 /// account's disabled flag and its import, export and delete permissions. A
 /// field the caller may not set answers `403 Forbidden`, and the reloaded
-/// account is the answer. The Demo Account's status, permissions and
-/// identities are fixed for everyone; its display name and time zone are not.
+/// account is the answer. The Demo Account's status, permissions,
+/// identities, display name and time zone are fixed for everyone, the owner
+/// included: every visitor shares the account, so a change one makes is what
+/// the next one finds.
 #[utoipa::path(
     patch,
     path = "/v1/accounts/{id}",
@@ -732,6 +800,12 @@ pub async fn update_account(
         // They decide which messages read as sent and which as received, so a
         // change would make every conversation in Demo Data read wrong.
         refuse_for_demo_account(target, "identities are fixed")?;
+    }
+    if req.preferred_name.is_some() || req.time_zone.is_some() {
+        // The seed sets "Demo User" and UTC. The server files each message by
+        // day in the stored zone, so one stored zone serves display and
+        // search alike for every visitor.
+        refuse_for_demo_account(target, "display name and time zone are fixed")?;
     }
     match reach {
         reach @ (Reach::Own | Reach::OwnersOwn) => {
@@ -860,28 +934,27 @@ pub async fn delete_account(
         }
     }
 
-    account_profile::delete_account(&mut conn, target).await?;
+    account_profile::delete_account(&mut conn, target, reach.actor()).await?;
     // The account is gone once its row is, so a folder that cannot be removed
     // (a permission error, a busy file) is logged with its path rather than
     // answered as a failure. No later account takes this id, so the folder
     // stays out of every account's reach until someone removes it.
-    let account_root = state.cfg.paths.data_dir.join(target.to_string());
-    if account_root.exists() {
-        let root = account_root.clone();
-        let removed = tokio::task::spawn_blocking(move || std::fs::remove_dir_all(&root)).await;
-        let failure = match removed {
-            Ok(Ok(())) => None,
-            Ok(Err(e)) => Some(e.to_string()),
-            Err(e) => Some(e.to_string()),
-        };
-        if let Some(error) = failure {
-            tracing::warn!(
-                account_id = target,
-                path = %account_root.display(),
-                %error,
-                "account deleted, but its data folder could not be removed"
-            );
-        }
+    let paths = state.cfg.paths.clone();
+    let removed =
+        tokio::task::spawn_blocking(move || crate::asset_store::remove_account_dir(&paths, target))
+            .await;
+    let failure = match removed {
+        Ok(Ok(())) => None,
+        Ok(Err(e)) => Some(e.to_string()),
+        Err(e) => Some(e.to_string()),
+    };
+    if let Some(error) = failure {
+        tracing::warn!(
+            account_id = target,
+            path = %crate::asset_store::account_dir(&state.cfg.paths, target).display(),
+            %error,
+            "account deleted, but its data folder could not be removed"
+        );
     }
     Ok(StatusCode::NO_CONTENT)
 }
@@ -1011,7 +1084,17 @@ pub async fn replace_account_password(
             Ok(Json(ReplaceAccountPasswordResponse { token }).into_response())
         }
         Reach::Owner => {
-            account_profile::update_password_hash(&mut conn, target, new_hash).await?;
+            let mut tx = begin_write(&mut conn).await?;
+            account_profile::update_password_hash(&mut tx, target, new_hash).await?;
+            audit_trail::record_about(
+                &mut tx,
+                AuditAction::PasswordSet,
+                AuditActor::Owner,
+                target,
+                Details::default(),
+            )
+            .await?;
+            tx.commit().await?;
             Ok(StatusCode::NO_CONTENT.into_response())
         }
     }
@@ -1034,48 +1117,19 @@ pub struct DeleteMessagesRequest {
 pub struct DeleteMessagesResponse {
     /// Conversations deleted.
     pub conversations: u64,
-    /// Attachment rows deleted. Their files are removed too, unless the
-    /// account has a running Import Run.
+    /// Attachment rows deleted. Their files are removed too. While the
+    /// account has a running Import Run, the originals stay until it ends.
     pub attachments: u64,
-}
-
-/// Delete on-disk attachment trees for every source under this account.
-fn remove_account_asset_trees(
-    data_dir: &std::path::Path,
-    account_id: i64,
-    assets_name: &str,
-    converted_name: &str,
-) -> anyhow::Result<()> {
-    let account_root = data_dir.join(account_id.to_string());
-    if !account_root.is_dir() {
-        return Ok(());
-    }
-    for entry in std::fs::read_dir(&account_root)
-        .with_context(|| format!("read {}", account_root.display()))?
-    {
-        let entry = entry?;
-        if !entry.file_type()?.is_dir() {
-            continue;
-        }
-        let source_root = entry.path();
-        for name in [assets_name, converted_name] {
-            let dir = source_root.join(name);
-            if dir.exists() {
-                std::fs::remove_dir_all(&dir)
-                    .with_context(|| format!("remove {}", dir.display()))?;
-            }
-        }
-    }
-    Ok(())
 }
 
 /// Destroy one account's conversations, messages, and attachments. The
 /// account itself, its contacts, and its login survive.
 ///
 /// The rows go in one transaction, between two batches of a running Import
-/// Run and never inside one. The attachment files go after it, unless the
-/// account has a running Import Run: that run may have uploaded files for a
-/// batch it has not sent yet, so every file stays on disk.
+/// Run and never inside one. The attachment files go after it. While the
+/// account has a running Import Run, the originals stay: that run may have
+/// uploaded files for a batch it has not sent yet. The run's end removes
+/// the ones no batch named.
 ///
 /// The owner may, on any account. The account itself may with a
 /// session that carries the `delete` permission, and confirms in the body.
@@ -1120,17 +1174,15 @@ pub async fn delete_account_messages(
     drop(conn);
     let _batch_lock = state.account_import_locks.lock(target.to_string()).await;
     let mut conn = state.db.acquire().await?;
-    let stats = account_profile::delete_all_messages_for_account(&mut conn, target).await?;
-    // A running Import Run may have uploaded files for a batch it has not
-    // sent yet, and no row names them, so its account's files stay on disk.
-    if !stats.import_running {
-        remove_account_asset_trees(
-            &state.cfg.paths.data_dir,
-            target,
-            &state.cfg.paths.assets_dir,
-            &state.cfg.paths.assets_converted_dir,
-        )?;
-    }
+    let stats =
+        account_profile::delete_all_messages_for_account(&mut conn, target, reach.actor()).await?;
+    drop(conn);
+    crate::asset_store::remove_all_attachment_files(
+        &state.db,
+        std::sync::Arc::clone(&state.cfg),
+        target,
+    )
+    .await;
 
     Ok(Json(DeleteMessagesResponse {
         conversations: stats.conversations,
@@ -1242,9 +1294,49 @@ pub(crate) async fn list_account_identities(
 // carries; these ask only who is calling. Which contacts a run created is the
 // holder's address book, so `/v1/imports/{id}/contacts` has no twin here: the
 // run's detail carries the counts.
+//
+// The account reads its runs in full. The owner reads each as an
+// `OwnerImportRun` or `OwnerExportRun`, which hold only what ADR 0008 lists:
+// a run's summary, its issues and an export's query say whom the account
+// talks to and what it searched for. The owner's view is a type of its own
+// rather than the account's with fields removed, so a field added to a run
+// reaches the owner only when someone adds it to that type.
+
+/// An account's Import Runs as its reader may see them: in full for the
+/// account itself, each an `OwnerImportRun` for the owner.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[serde(untagged)]
+pub(crate) enum AccountImportRuns {
+    /// The account's own runs.
+    Own(Page<imports::ImportSummary>),
+    /// Another account's runs, as the owner reads them.
+    Owner(Page<OwnerImportRun>),
+}
+
+/// One of an account's Import Runs as its reader may see it.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[serde(untagged)]
+pub(crate) enum AccountImportRun {
+    /// The account's own run.
+    Own(ImportRun),
+    /// Another account's run, as the owner reads it.
+    Owner(OwnerImportRun),
+}
+
+/// An account's Export Runs as its reader may see them: in full for the
+/// account itself, each an `OwnerExportRun` for the owner.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[serde(untagged)]
+pub(crate) enum AccountExportRuns {
+    /// The account's own runs.
+    Own(Page<message_crate_api_types::ExportRun>),
+    /// Another account's runs, as the owner reads them.
+    Owner(Page<OwnerExportRun>),
+}
 
 /// An account's Import Runs as a page, newest first unless `sort` says
-/// otherwise. The owner reads any account's; an account reads its own.
+/// otherwise. The owner reads any account's, each an `OwnerImportRun`; an
+/// account reads its own in full.
 #[utoipa::path(
     get,
     path = "/v1/accounts/{id}/imports",
@@ -1258,7 +1350,7 @@ pub(crate) async fn list_account_identities(
         ("sort" = Option<String>, Query, description = "`started_at` or `-started_at`. Default `-started_at`, newest first.")
     ),
     responses(
-        (status = 200, body = Page<imports::ImportSummary>),
+        (status = 200, body = AccountImportRuns),
         crate::problem::openapi::NotTheOwner
     )
 )]
@@ -1267,13 +1359,33 @@ pub(crate) async fn list_account_imports(
     Path(target): Path<i64>,
     LoggedIn(auth): LoggedIn,
     Query(query): Query<crate::imports_api::ListImportsQuery>,
-) -> Result<Json<Page<imports::ImportSummary>>, ApiError> {
-    require_reach(&state, &auth, target).await?;
-    crate::imports_api::imports_page(&state, target, query).await
+) -> Result<Json<AccountImportRuns>, ApiError> {
+    let mut conn = state.db.acquire().await?;
+    let reach = require_account_reach(&mut conn, &auth, target, Admits::Owner).await?;
+    let rows = crate::imports_api::import_rows_page(&mut conn, target, query).await?;
+    if !reach.is_own() {
+        let mut items = Vec::with_capacity(rows.items.len());
+        for row in rows.items {
+            items.push(crate::imports_api::owner_import_run(&mut conn, row).await?);
+        }
+        return Ok(Json(AccountImportRuns::Owner(Page {
+            items,
+            total: rows.total,
+            limit: rows.limit,
+            offset: rows.offset,
+        })));
+    }
+    Ok(Json(AccountImportRuns::Own(Page {
+        items: rows.items.into_iter().map(Into::into).collect(),
+        total: rows.total,
+        limit: rows.limit,
+        offset: rows.offset,
+    })))
 }
 
-/// One of an account's Import Runs: status, timings, counts and issues. A run
-/// that is another account's is a 404.
+/// One of an account's Import Runs: status, timings and counts, and for the
+/// account itself its summary and issues. A run that is another account's
+/// is a 404.
 #[utoipa::path(
     get,
     path = "/v1/accounts/{id}/imports/{import_id}",
@@ -1284,7 +1396,7 @@ pub(crate) async fn list_account_imports(
         ("import_id" = i64, Path, description = "Import Run id")
     ),
     responses(
-        (status = 200, body = crate::imports_api::ImportRun),
+        (status = 200, body = AccountImportRun),
         crate::problem::openapi::NotTheOwner
     )
 )]
@@ -1292,13 +1404,23 @@ pub(crate) async fn get_account_import(
     State(state): State<AppState>,
     Path((target, import_id)): Path<(i64, i64)>,
     LoggedIn(auth): LoggedIn,
-) -> Result<Json<crate::imports_api::ImportRun>, ApiError> {
-    require_reach(&state, &auth, target).await?;
-    crate::imports_api::import_detail(&state, target, import_id).await
+) -> Result<Json<AccountImportRun>, ApiError> {
+    let mut conn = state.db.acquire().await?;
+    let reach = require_account_reach(&mut conn, &auth, target, Admits::Owner).await?;
+    if !reach.is_own() {
+        let row = imports::get_owned_import(&mut conn, target, import_id)
+            .await
+            .map_err(ApiError::from)?;
+        let run = crate::imports_api::owner_import_run(&mut conn, row).await?;
+        return Ok(Json(AccountImportRun::Owner(run)));
+    }
+    let run = crate::imports_api::import_detail(&mut conn, target, import_id).await?;
+    Ok(Json(AccountImportRun::Own(run)))
 }
 
 /// An account's Export Runs as a page, newest first unless `sort` says
-/// otherwise. The owner reads any account's; an account reads its own.
+/// otherwise. The owner reads any account's, each an `OwnerExportRun`; an
+/// account reads its own in full.
 #[utoipa::path(
     get,
     path = "/v1/accounts/{id}/exports",
@@ -1312,7 +1434,7 @@ pub(crate) async fn get_account_import(
         ("sort" = Option<String>, Query, description = "`started_at` or `-started_at`. Default `-started_at`, newest first.")
     ),
     responses(
-        (status = 200, body = Page<message_crate_api_types::ExportRun>),
+        (status = 200, body = AccountExportRuns),
         crate::problem::openapi::NotTheOwner
     )
 )]
@@ -1321,9 +1443,54 @@ pub(crate) async fn list_account_exports(
     Path(target): Path<i64>,
     LoggedIn(auth): LoggedIn,
     Query(query): Query<crate::exports_api::ListExportsQuery>,
-) -> Result<Json<Page<message_crate_api_types::ExportRun>>, ApiError> {
+) -> Result<Json<AccountExportRuns>, ApiError> {
+    let mut conn = state.db.acquire().await?;
+    let reach = require_account_reach(&mut conn, &auth, target, Admits::Owner).await?;
+    let page = crate::exports_api::exports_page(&mut conn, target, query).await?;
+    if !reach.is_own() {
+        return Ok(Json(AccountExportRuns::Owner(Page {
+            items: page.items.into_iter().map(OwnerExportRun::from).collect(),
+            total: page.total,
+            limit: page.limit,
+            offset: page.offset,
+        })));
+    }
+    Ok(Json(AccountExportRuns::Own(page)))
+}
+
+/// An account's Audit Trail, newest first: every entry about the account,
+/// whoever acted, the owner's changes to it and the logins refused for its
+/// username included, with its Import and Export Runs. The owner reads any
+/// account's; an account reads its own.
+#[utoipa::path(
+    get,
+    path = "/v1/accounts/{id}/audit-trail",
+    tag = "Audit Trail",
+    security(("session" = [])),
+    params(
+        ("id" = i64, Path, description = "Account id"),
+        ("limit" = Option<usize>, Query, description = "Page size, default 40, at most 500"),
+        ("offset" = Option<usize>, Query, description = "Rows to skip, at most 50000")
+    ),
+    responses(
+        (status = 200, body = Page<crate::db::audit_trail::AuditEntry>),
+        crate::problem::openapi::NotTheOwner
+    )
+)]
+pub(crate) async fn list_account_audit_trail(
+    State(state): State<AppState>,
+    Path(target): Path<i64>,
+    LoggedIn(auth): LoggedIn,
+    Query(query): Query<crate::audit_trail_api::ListAuditTrailQuery>,
+) -> Result<Json<Page<crate::db::audit_trail::AuditEntry>>, ApiError> {
     require_reach(&state, &auth, target).await?;
-    crate::exports_api::exports_page(&state, target, query).await
+    crate::audit_trail_api::audit_trail_page(
+        &state,
+        crate::db::audit_trail::Scope::Account(target),
+        auth.account_id,
+        query,
+    )
+    .await
 }
 
 /// [`require_account_reach`], admitting the owner, on a connection of its

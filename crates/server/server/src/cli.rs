@@ -409,6 +409,9 @@ async fn run_imports_discard(args: ImportsDiscardArgs) -> Result<()> {
     let mut conn = opened.conn().await?;
     let discarded = crate::db::imports::discard_running_import(&mut conn, account).await?;
     drop(conn);
+    if discarded.is_some() {
+        crate::asset_store::sweep_after_run(&opened.db, &opened.cfg.paths, account).await;
+    }
     opened.close().await;
     print!(
         "{}",
@@ -473,6 +476,13 @@ fn format_import_stats(import: &crate::imports_api::ImportStats) -> String {
             out,
             "  phones needing review: {} (ambiguous numbers — fix them in Message Crate)",
             import.phones_needing_review
+        );
+    }
+    if import.other_identities > 0 {
+        let _ = writeln!(
+            out,
+            "  identities with no address: {} (a name the backup gave in place of an address; the export is incomplete)",
+            import.other_identities
         );
     }
     out

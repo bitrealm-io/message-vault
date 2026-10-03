@@ -138,35 +138,39 @@ pub(crate) async fn conversation(
     .await
     .unwrap();
     for h in participants {
-        let contact_id: Option<i64> = sqlx::query_scalar(
-            "SELECT contact_id FROM contact_handles WHERE account_id = $1 AND handle_id = $2",
-        )
-        .bind(account)
-        .bind(h)
-        .fetch_optional(&mut *conn)
-        .await
-        .unwrap();
-        sqlx::query(
-            "INSERT INTO participants (conversation_id, handle_id, contact_id) VALUES ($1, $2, $3)",
-        )
-        .bind(id)
-        .bind(h)
-        .bind(contact_id)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
+        sqlx::query("INSERT INTO participants (conversation_id, handle_id) VALUES ($1, $2)")
+            .bind(id)
+            .bind(h)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
     }
     id
 }
 
-/// A participant the source named but gave no address for: `handle_id` is
-/// NULL and `name_alias` carries who they are.
+/// A participant the source named but gave no address for: their identity
+/// is of type `other` and holds the name, and `name_alias` carries the name
+/// too.
 pub(crate) async fn named_participant(conn: &mut SqliteConnection, conversation: i64, alias: &str) {
+    let account: i64 = sqlx::query_scalar("SELECT account_id FROM conversations WHERE id = $1")
+        .bind(conversation)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    let (handle_id, _) = crate::db::handles::upsert_handle_row(
+        conn,
+        account,
+        alias,
+        message_ir::HandleType::Other,
+        Some("phone"),
+    )
+    .await
+    .unwrap();
     sqlx::query(
-        "INSERT INTO participants (conversation_id, handle_id, contact_id, name_alias)
-         VALUES ($1, NULL, NULL, $2)",
+        "INSERT INTO participants (conversation_id, handle_id, name_alias) VALUES ($1, $2, $3)",
     )
     .bind(conversation)
+    .bind(handle_id)
     .bind(alias)
     .execute(&mut *conn)
     .await
@@ -2307,15 +2311,12 @@ mod trash_across_lists {
         let a = ACCOUNT;
         let binned_h = handle(&mut conn, a, "+15550201", "sms").await;
         let binned = contact(&mut conn, a, "Binned", &[binned_h]).await;
-        sqlx::query(
-            "INSERT INTO participants (conversation_id, handle_id, contact_id) VALUES ($1, $2, $3)",
-        )
-        .bind(f.trashed_conv)
-        .bind(binned_h)
-        .bind(binned)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
+        sqlx::query("INSERT INTO participants (conversation_id, handle_id) VALUES ($1, $2)")
+            .bind(f.trashed_conv)
+            .bind(binned_h)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
         message(
             &mut conn,
             a,

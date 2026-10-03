@@ -7,13 +7,13 @@ fast pre-flight that catches the mistakes not worth a round trip, and
 `check-all.sh` runs the whole set locally for anyone who wants it before
 pushing.
 
-`ci.yml` holds eleven jobs on a pull request. A `changes` job diffs the branch
-against its base and publishes four booleans — `rust`, `web`, `docs`, `docker`
-— and the heavy jobs read them:
+`ci.yml` holds eleven jobs on a ready pull request. On a draft, all of them
+skip. A `changes` job diffs the branch against its base and publishes four
+booleans — `rust`, `web`, `docs`, `docker` — and the heavy jobs read them:
 
 | Job | Runs when | What it does |
 | --- | --- | --- |
-| `changes` | always | Diffs against the base and outputs `rust`, `web`, `docs`, `docker` |
+| `changes` | always, except on a draft | Diffs against the base and outputs `rust`, `web`, `docs`, `docker` |
 | `fmt` | `rust` | `cargo fmt --check` on the workspace and on `src-tauri` |
 | `clippy` | `rust` | `cargo clippy --workspace --all-targets -- -D warnings` |
 | `test` | `rust` | `cargo build --workspace` and `cargo test --workspace` |
@@ -35,8 +35,7 @@ image building while the Rust jobs stay green. Before `docker-build` existed
 the image was built for the first time on the release tag, so a pull request
 that broke `docker/Dockerfile` merged green and the failure appeared where the
 fix is a new tag. The job runs on pull requests only: the tag job builds and
-pushes the same image, and a push to `main` was checked by the pull request
-that produced it.
+pushes the same image, and `nightly.yml` builds it from `main`.
 
 `src-tauri`'s Clippy stays inside `check-tauri` rather than the `clippy` job,
 because its build needs the webkit and gtk system packages that job already
@@ -225,6 +224,17 @@ workflow, into the `changes` job.
 
 ## Consequences
 
+A draft pull request's run of `ci.yml` skips every job. `changes` skips on a
+draft, and every other job needs it, so they skip too. Marking the pull
+request ready starts a run that does the work.
+Pushes before a review, and a review's own pushes before its last one, were
+building heads that the next push replaced, so they now cost no runners.
+The price: a skipped job counts as passed, so a draft's required checks read
+green while nothing ran. They mean nothing until the pull request is ready,
+and `pr-review` watches the run started by marking it ready rather than the
+check list (AGENTS.md, "Review on the pull request", step 6). GitHub does not
+merge a draft, so a green draft cannot merge.
+
 `check-pr.sh` checks rather than rewrites. It no longer calls `format-all.sh`,
 so it can now fail on formatting, which it never could before. `format-all.sh`
 is the thing to run when it does.
@@ -248,23 +258,52 @@ so twenty-six tests, the crash-recovery and resume suite among them, passed
 on every pull request without running. A test that skips itself is not a
 gate, so the tool it needs is part of the job.
 
-The ruleset does not require a branch to be up to date with `main` before it
-merges, so each pull request is checked against the `main` it branched from,
-not the `main` it lands on. Two pull requests that are green on their own can
-squash-merge into a `main` that does not compile. Requiring up-to-date branches
-would prevent that at the cost of a rebase before every merge; a merge queue
-would prevent it without the rebase, at the cost of one more CI run per merge.
-Neither is in place. What is in place is detection: `ci.yml` cancels an
+A pull request's own run checks it against the `main` it branched from, not
+the `main` it lands on, so two pull requests that are green on their own can
+squash-merge into a `main` that does not compile. The ruleset required the
+merge queue for a time (#1514), which ran `ci.yml` again on each pull request
+merged onto the latest `main`, and no longer does (#1548): a pull request
+merges directly once its own checks are green. The queue made every merge
+wait for a second CI run after its own checks were already green: its 11
+successful runs on 2026-10-03 took up to 8 minutes each, 4 at the median. On
+2026-10-02, the day before the queue, 179 pull requests merged to `main`; at
+that rate the wait held up more work than fixing the rare red `main` it
+prevents. The run on the
+push to `main` is where such a break shows, and it is fixed forward: a pull
+request whose review finds `main` red on the same job stops and says so
+(AGENTS.md, "Review on the pull request", step 6). `ci.yml` cancels an
 in-progress run only for a `pull_request` event, never for a push to `main` or
-a tag, so every commit on `main` gets its own verdict and a bad combination
-shows up on the merge that caused it. Before this, a burst of squash merges
-cancelled every `main` run but the last — twelve merges on 2026-09-05 left
-eleven cancelled runs and one result.
+a tag, so every commit on `main` keeps its own verdict. Before this, a burst of squash
+merges cancelled every `main` run but the last — twelve merges on 2026-09-05
+left eleven cancelled runs and one result.
+
+The ruleset also requires every review conversation to be resolved before a
+merge. It requires no approving review: GitHub does not let the author of a
+pull request approve it, and the agent that opens a pull request uses the
+same account as the one that reviews it. The review is the conversations: the
+reviewer leaves each finding as a comment on the line, the author answers it
+with the commit that fixes it or the reason it stays, and resolves it. A pull
+request with an open finding cannot merge. Approvals from a second
+account or a paid review bot would add a cost and no check that the
+conversations do not already make.
+
+The `pr-review` skill (`.claude/skills/pr-review/`) is that review. Three
+sub-agents read the diff with fresh context, one each for the repo's
+standards, the issue it implements, and correctness, so one axis cannot mask
+another. Every finding is posted, judgement calls included, and closes as
+fixed, declined with evidence, or deferred to a filed issue, so nothing the
+review raised is dropped without a record. The fix commits get one more
+Standards and Correctness pass. Its comments carry a `<!-- pr-review -->`
+marker, because the user and the agents post from one account, and only the
+user resolves a thread without it. A pull request the skill has taken through
+all of that, with green checks, is merged without asking the user. The review
+is the check a merge used to wait on them for.
 
 The `changes` job is load-bearing and worth testing before the ruleset is
 enabled. A diff that is too broad runs the Rust matrix on a README edit; a diff
-that is too narrow skips it on a code change. On a tag or a `workflow_dispatch`
-there is no base commit to diff against, so every output is `true`.
+that is too narrow skips it on a code change. On a push, a tag or
+a `workflow_dispatch` there is no base commit to diff against, so every output
+is `true`.
 
 `ci.yml` granted `contents: write` and `packages: write` to every job. Only
 `github-release` writes anything with the GitHub token, and the Docker image

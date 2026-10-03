@@ -1,6 +1,8 @@
 //! Contacts and their links to identities and Contact Groups. Loading and
 //! writing the address book is in `db::address_book`.
 
+use std::collections::HashMap;
+
 use anyhow::Result;
 use chrono::Utc;
 use sqlx::SqliteConnection;
@@ -169,48 +171,42 @@ pub async fn link_handle_to_contact(
     Ok(inserted > 0)
 }
 
-/// Link every sibling of `handle_id` that belongs to no contact — the same
-/// normalized value and handle type on another platform service — to
-/// `contact_id`. Returns how many links were made.
+/// `handle_id`'s siblings that `contact_id` holds: the same normalized value
+/// and handle type on another platform service.
 ///
-/// A handle is only ever unowned beside a linked sibling after an import
-/// discarded a trashed contact (ADR-0013). One number is one person on every
+/// An import that replaces a trashed contact (ADR-0013) moves these to the
+/// fresh contact with the identity it met. One number is one person on every
 /// service, the rule [`contact_id_of_sibling_handle`] applies in the other
-/// direction, so the fresh contact takes the number on every service the
-/// server has met it on rather than leaving half of it Unknown.
+/// direction, so the fresh contact takes the number on every service rather
+/// than leaving half of it Unknown.
 ///
 /// # Errors
 ///
-/// Returns an error when the insert fails.
-pub async fn link_sibling_handles_to_contact(
+/// Returns an error when the query fails.
+pub async fn siblings_on_contact(
     conn: &mut SqliteConnection,
     account_id: i64,
     handle_id: i64,
     contact_id: i64,
-) -> Result<u64> {
-    let inserted = sqlx::query(
-        "INSERT INTO contact_handles (account_id, handle_id, contact_id, origin)
-         SELECT h2.account_id, h2.id, $3, $4
+) -> Result<Vec<i64>> {
+    Ok(sqlx::query_scalar(
+        "SELECT h2.id
          FROM handles h
          JOIN handles h2
            ON h2.account_id = h.account_id
           AND h2.normalized = h.normalized
           AND h2.handle_type = h.handle_type
           AND h2.id != h.id
-         WHERE h.id = $2 AND h.account_id = $1
-           AND NOT EXISTS (
-               SELECT 1 FROM contact_handles ch
-               WHERE ch.account_id = h2.account_id AND ch.handle_id = h2.id
-           )",
+         JOIN contact_handles ch
+           ON ch.account_id = h2.account_id AND ch.handle_id = h2.id
+         WHERE h.id = $2 AND h.account_id = $1 AND ch.contact_id = $3
+         ORDER BY h2.id",
     )
     .bind(account_id)
     .bind(handle_id)
     .bind(contact_id)
-    .bind(Origin::Import.as_str())
-    .execute(&mut *conn)
-    .await?
-    .rows_affected();
-    Ok(inserted)
+    .fetch_all(&mut *conn)
+    .await?)
 }
 
 /// The contact a sibling of `handle_id` is on, if any: the same normalized
@@ -249,49 +245,6 @@ pub async fn contact_id_of_sibling_handle(
     Ok(contact_id)
 }
 
-/// The contact this account already has under exactly `name`, if any.
-///
-/// Used to resolve a participant the source named without recording any
-/// address: a unique match binds to that contact instead of creating a second
-/// row for the same person.
-///
-/// A contact in the Trash is left out, as it is from the rest of an import
-/// (ADR 0013). The same run may discard it on meeting one of its identities,
-/// and a participant bound to it would then point at a deleted id. A trashed
-/// contact that shares a live contact's name would also make the name look
-/// ambiguous.
-///
-/// # Errors
-///
-/// Returns an error when the query fails.
-pub async fn contact_id_by_preferred_name(
-    conn: &mut SqliteConnection,
-    account_id: i64,
-    name: &str,
-) -> Result<Option<i64>> {
-    let name = name.trim();
-    if name.is_empty() {
-        return Ok(None);
-    }
-    // Two contacts sharing a name is ambiguous, and choosing between them
-    // would silently merge different people. Leave that for the person.
-    let ids: Vec<i64> = sqlx::query_scalar(
-        "SELECT c.id FROM contacts c
-         WHERE c.account_id = $1 AND lower(trim(c.preferred_name)) = lower($2)
-           AND NOT EXISTS (SELECT 1 FROM trashed_contacts t
-                           WHERE t.account_id = c.account_id AND t.contact_id = c.id)
-         LIMIT 2",
-    )
-    .bind(account_id)
-    .bind(name)
-    .fetch_all(&mut *conn)
-    .await?;
-    match ids.as_slice() {
-        [id] => Ok(Some(*id)),
-        _ => Ok(None),
-    }
-}
-
 /// Create an empty Contact Group for one Import Run and answer its id and
 /// name. The name is `base`, or `base` with " 2", " 3", … when the account
 /// already has a group under that name in any case, the same rule the run's
@@ -327,14 +280,19 @@ pub async fn create_import_group(
 /// SQL predicate selecting the Unknown contacts of alias `ct`.
 ///
 /// Unknown is a contact missing either half of what makes a contact useful:
-/// one with no identity at all, or one with identities but no preferred name.
-/// Membership is computed rather than stored, because a contact stops being
-/// Unknown the moment someone names it or links an identity to it.
+/// one with no address, or one with addresses but no preferred name. An
+/// identity of type `other` is no address: it holds a name the backup gave
+/// with no address, so a contact whose only identities are of that type is
+/// Unknown however it is named. Membership is computed rather than stored,
+/// because a contact stops being Unknown the moment someone names it or
+/// links an address to it.
 pub const UNKNOWN_CONTACT_SQL: &str = "(
     trim(ct.preferred_name) = ''
     OR NOT EXISTS (
         SELECT 1 FROM contact_handles ch2
+        JOIN handles h2 ON h2.id = ch2.handle_id
         WHERE ch2.account_id = ct.account_id AND ch2.contact_id = ct.id
+          AND h2.handle_type <> 'other'
     )
 )";
 
@@ -427,53 +385,282 @@ pub async fn linked_handle_id(
     Ok(row.map(|(id, service)| (id, message_ir::HandleService::parse(&service))))
 }
 
-/// Point the contact's link at `new_handle_id` in place of `old_handle_id`.
+/// Where an identity goes when it leaves its contact.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IdentityGoes {
+    /// Onto this contact, the link marked as made by the `Origin`.
+    To(i64, Origin),
+    /// Off its contact, to wherever the rule sends it: see [`move_identity`].
+    Off,
+}
+
+/// What [`move_identity`] did with an identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IdentityMoved {
+    /// It is on the contact it was given.
+    To(i64),
+    /// It is in a conversation, so it is on this new contact with no name:
+    /// the person is Unknown again.
+    NewContact(i64),
+    /// Only the account holder's side uses it (a message's owner identity,
+    /// one of the account's identities, a group's id), so it is on no
+    /// contact, as the holder's identities always are (ADR-0015).
+    Unlinked,
+    /// Nothing used it, so it is gone.
+    Deleted,
+}
+
+/// The one way an identity leaves a contact: moved to the contact it is
+/// given, or taken off.
+///
+/// An identity in a conversation is a person, and every person is a contact
+/// (`docs/architecture/contacts-identities-and-messages.md`), so one that is
+/// taken off goes to a new contact with no name and the person is Unknown
+/// again. "In a conversation" means a participant, the sender of a message or
+/// a reaction, or a one-to-one conversation's chat handle, in the promoted
+/// tables or in staging. An identity nothing refers to is deleted, because on
+/// no contact it would appear in no list. One that only the holder's side
+/// uses comes off and stays, because the holder's identities are on no
+/// contact.
+///
+/// The identity's sibling on another service (the same number on WhatsApp)
+/// is not touched; [`take_identities_off`] keeps siblings it takes off
+/// together.
 ///
 /// # Errors
 ///
-/// Returns an error when the statement fails.
-pub async fn relink_handle(
+/// Returns an error when a statement fails.
+pub async fn move_identity(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    handle_id: i64,
+    goes: IdentityGoes,
+) -> Result<IdentityMoved> {
+    match goes {
+        IdentityGoes::To(contact_id, origin) => {
+            put_on_contact(conn, account_id, handle_id, contact_id, origin).await?;
+            Ok(IdentityMoved::To(contact_id))
+        }
+        IdentityGoes::Off => match identity_use(conn, account_id, handle_id).await? {
+            IdentityUse::Person => {
+                let contact_id = create_contact(conn, account_id, "", Origin::Import).await?;
+                put_on_contact(conn, account_id, handle_id, contact_id, Origin::Import).await?;
+                Ok(IdentityMoved::NewContact(contact_id))
+            }
+            IdentityUse::Holder => {
+                sqlx::query("DELETE FROM contact_handles WHERE account_id = $1 AND handle_id = $2")
+                    .bind(account_id)
+                    .bind(handle_id)
+                    .execute(&mut *conn)
+                    .await?;
+                Ok(IdentityMoved::Unlinked)
+            }
+            IdentityUse::Nothing => {
+                // The cascade takes the `contact_handles` link with it.
+                sqlx::query("DELETE FROM handles WHERE account_id = $1 AND id = $2")
+                    .bind(account_id)
+                    .bind(handle_id)
+                    .execute(&mut *conn)
+                    .await?;
+                Ok(IdentityMoved::Deleted)
+            }
+        },
+    }
+}
+
+/// Take each of `handle_ids` off its contact with [`move_identity`], in
+/// order, and answer what happened to each. Siblings among them (one number
+/// on two services) that go to a new contact go to the same one, because one
+/// number is one person on every service.
+///
+/// # Errors
+///
+/// Returns an error when a statement fails.
+pub async fn take_identities_off(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    handle_ids: &[i64],
+) -> Result<Vec<IdentityMoved>> {
+    let mut new_contact_of: HashMap<(String, String), i64> = HashMap::new();
+    let mut out = Vec::with_capacity(handle_ids.len());
+    for &handle_id in handle_ids {
+        let key: Option<(String, String)> = sqlx::query_as(
+            "SELECT normalized, handle_type FROM handles WHERE account_id = $1 AND id = $2",
+        )
+        .bind(account_id)
+        .bind(handle_id)
+        .fetch_optional(&mut *conn)
+        .await?;
+        let Some(key) = key else {
+            continue;
+        };
+        if let Some(&contact_id) = new_contact_of.get(&key) {
+            let goes = IdentityGoes::To(contact_id, Origin::Import);
+            out.push(move_identity(conn, account_id, handle_id, goes).await?);
+            continue;
+        }
+        let moved = move_identity(conn, account_id, handle_id, IdentityGoes::Off).await?;
+        if let IdentityMoved::NewContact(contact_id) = moved {
+            new_contact_of.insert(key, contact_id);
+        }
+        out.push(moved);
+    }
+    Ok(out)
+}
+
+/// True when `contact_id` has no preferred name.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn is_nameless(
     conn: &mut SqliteConnection,
     account_id: i64,
     contact_id: i64,
-    old_handle_id: i64,
-    new_handle_id: i64,
-) -> Result<()> {
-    sqlx::query(
-        "UPDATE contact_handles SET handle_id = $1
-         WHERE account_id = $2 AND contact_id = $3 AND handle_id = $4",
+) -> Result<bool> {
+    let nameless: Option<bool> = sqlx::query_scalar(
+        "SELECT trim(preferred_name) = '' FROM contacts WHERE account_id = $1 AND id = $2",
     )
-    .bind(new_handle_id)
     .bind(account_id)
     .bind(contact_id)
-    .bind(old_handle_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+    Ok(nameless.unwrap_or(false))
+}
+
+/// Delete `contact_id` when it has neither a name nor an identity, which
+/// nothing could ever reach, with its trash marker. Returns true when it
+/// went.
+///
+/// # Errors
+///
+/// Returns an error when a statement fails.
+pub async fn delete_if_empty(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    contact_id: i64,
+) -> Result<bool> {
+    let deleted = sqlx::query(
+        "DELETE FROM contacts
+         WHERE account_id = $1 AND id = $2 AND trim(preferred_name) = ''
+           AND NOT EXISTS (SELECT 1 FROM contact_handles ch
+                           WHERE ch.account_id = $1 AND ch.contact_id = $2)",
+    )
+    .bind(account_id)
+    .bind(contact_id)
+    .execute(&mut *conn)
+    .await?
+    .rows_affected()
+        > 0;
+    if deleted {
+        sqlx::query("DELETE FROM trashed_contacts WHERE account_id = $1 AND contact_id = $2")
+            .bind(account_id)
+            .bind(contact_id)
+            .execute(&mut *conn)
+            .await?;
+    }
+    Ok(deleted)
+}
+
+/// The identities `contact_id` holds, in the order they were linked.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn identities_of_contact(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    contact_id: i64,
+) -> Result<Vec<i64>> {
+    Ok(sqlx::query_scalar(
+        "SELECT handle_id FROM contact_handles
+         WHERE account_id = $1 AND contact_id = $2
+         ORDER BY rowid",
+    )
+    .bind(account_id)
+    .bind(contact_id)
+    .fetch_all(&mut *conn)
+    .await?)
+}
+
+/// Link `handle_id` to `contact_id`, moving it there when another contact
+/// holds it.
+async fn put_on_contact(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    handle_id: i64,
+    contact_id: i64,
+    origin: Origin,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO contact_handles (account_id, handle_id, contact_id, origin)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (account_id, handle_id)
+         DO UPDATE SET contact_id = excluded.contact_id, origin = excluded.origin",
+    )
+    .bind(account_id)
+    .bind(handle_id)
+    .bind(contact_id)
+    .bind(origin.as_str())
     .execute(&mut *conn)
     .await?;
     Ok(())
 }
 
-/// Drop the link between the contact and the handle. The handle row itself
-/// stays: messages still cite it.
-///
-/// # Errors
-///
-/// Returns an error when the statement fails.
-pub async fn unlink_handle(
+/// What refers to an identity, for [`move_identity`] to decide where it goes.
+enum IdentityUse {
+    /// A person in a conversation: a participant, a sender, or a one-to-one
+    /// conversation's chat handle.
+    Person,
+    /// Only the account holder's side: a message's owner identity, one of
+    /// the account's identities, or a group's id.
+    Holder,
+    /// Nothing.
+    Nothing,
+}
+
+/// Which of [`IdentityUse`] `handle_id` is. Staging counts as well as the
+/// promoted tables, because an import takes identities off a trashed contact
+/// while its rows are staged.
+async fn identity_use(
     conn: &mut SqliteConnection,
     account_id: i64,
-    contact_id: i64,
     handle_id: i64,
-) -> Result<()> {
-    sqlx::query(
-        "DELETE FROM contact_handles
-         WHERE account_id = $1 AND contact_id = $2 AND handle_id = $3",
+) -> Result<IdentityUse> {
+    let (person, holder): (bool, bool) = sqlx::query_as(
+        "SELECT
+           EXISTS (SELECT 1 FROM participants WHERE handle_id = $2)
+           OR EXISTS (SELECT 1 FROM staging_participants WHERE handle_id = $2)
+           OR EXISTS (SELECT 1 FROM messages WHERE account_id = $1 AND sender_handle_id = $2)
+           OR EXISTS (SELECT 1 FROM staging_messages
+                      WHERE account_id = $1 AND sender_handle_id = $2)
+           OR EXISTS (SELECT 1 FROM tapbacks WHERE sender_handle_id = $2)
+           OR EXISTS (SELECT 1 FROM staging_tapbacks WHERE sender_handle_id = $2)
+           OR EXISTS (SELECT 1 FROM conversations
+                      WHERE account_id = $1 AND chat_handle_id = $2
+                        AND conversation_type = 'individual' COLLATE NOCASE)
+           OR EXISTS (SELECT 1 FROM staging_conversations
+                      WHERE account_id = $1 AND chat_handle_id = $2
+                        AND conversation_type = 'individual' COLLATE NOCASE),
+           EXISTS (SELECT 1 FROM messages WHERE account_id = $1 AND owner_handle_id = $2)
+           OR EXISTS (SELECT 1 FROM staging_messages
+                      WHERE account_id = $1 AND owner_handle_id = $2)
+           OR EXISTS (SELECT 1 FROM account_handles WHERE account_id = $1 AND handle_id = $2)
+           OR EXISTS (SELECT 1 FROM conversations WHERE account_id = $1 AND chat_handle_id = $2)
+           OR EXISTS (SELECT 1 FROM staging_conversations
+                      WHERE account_id = $1 AND chat_handle_id = $2)",
     )
     .bind(account_id)
-    .bind(contact_id)
     .bind(handle_id)
-    .execute(&mut *conn)
+    .fetch_one(&mut *conn)
     .await?;
-    Ok(())
+    Ok(if person {
+        IdentityUse::Person
+    } else if holder {
+        IdentityUse::Holder
+    } else {
+        IdentityUse::Nothing
+    })
 }
 
 #[cfg(test)]

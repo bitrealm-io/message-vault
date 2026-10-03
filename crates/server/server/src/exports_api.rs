@@ -10,14 +10,15 @@
 use crate::extract::{Json, Path as AxumPath, Query};
 use axum::extract::State;
 use message_crate_api_types::{ExportQueryList, ExportRun, ExportScope, ExportStatus};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sqlx::SqliteConnection;
 
 use crate::db::conversation_messages::{
     DEFAULT_MESSAGE_SORT, MESSAGE_SORT_KEYS, Message, selection_where,
 };
 use crate::db::exports::{
-    self, DEFAULT_EXPORT_SORT, EXPORT_SORT_KEYS, ExportPageOpts, StartExportArgs, export_messages,
+    self, DEFAULT_EXPORT_SORT, EXPORT_SORT_KEYS, ExportPageOpts, ExportScopeKind, StartExportArgs,
+    export_messages,
 };
 use crate::db::ownership::{OwnedTable, missing_ids};
 use crate::messages_api::message_filter;
@@ -29,10 +30,62 @@ use crate::server::{ApiError, AppState, Created, ExportAccess};
 /// uses.
 pub const MAX_SELECTION_IDS: usize = 500;
 
+/// An Export Run as the owner reads it under another account: the form of
+/// its scope, its tool, times, outcome and counts
+/// (`docs/adr/0008-the-owner-holds-no-messages.md`, "What the owner may
+/// see"). A query's text is a search over the account's messages, and a
+/// selection names its conversations, so neither is here, and a field
+/// reaches the owner only by being added here.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct OwnerExportRun {
+    /// Export Run id.
+    id: i64,
+    /// The form of the scope the run asked for.
+    scope_kind: ExportScopeKind,
+    /// Exporting tool, e.g. `message-crate-pull`, when the client named one.
+    tool: Option<String>,
+    /// Lifecycle status.
+    status: ExportStatus,
+    /// UTC time the run started.
+    started_at: String,
+    /// UTC time the run finished, when it has.
+    finished_at: Option<String>,
+    /// Messages the scope matched when the run was created.
+    message_count: i64,
+    /// Distinct conversations with at least one matching message.
+    conversation_count: i64,
+    /// Distinct attachment fingerprints among the matching messages.
+    attachment_count: i64,
+    /// Sum of the known sizes of those distinct attachments, in bytes.
+    total_bytes: i64,
+    /// How far the run's messages have been read, in places.
+    messages_delivered: i64,
+}
+
+impl From<ExportRun> for OwnerExportRun {
+    fn from(run: ExportRun) -> Self {
+        let scope_kind = ExportScopeKind::of(&run.scope);
+        Self {
+            id: run.id,
+            scope_kind,
+            tool: run.tool,
+            status: run.status,
+            started_at: run.started_at,
+            finished_at: run.finished_at,
+            message_count: run.message_count,
+            conversation_count: run.conversation_count,
+            attachment_count: run.attachment_count,
+            total_bytes: run.total_bytes,
+            messages_delivered: run.messages_delivered,
+        }
+    }
+}
+
 /// Start an Export Run over `scope`: compile the scope, list the ids of the
-/// messages it matches now, count them, and record the run as `running`, all
-/// in one transaction. The run's pages read that list, never the scope again,
-/// so what a run hands over is fixed when it is created.
+/// messages it matches now, count them, and record the run as `running` with
+/// the credential that started it, all in one transaction. The run's pages
+/// read that list, never the scope again, so what a run hands over is fixed
+/// when it is created.
 ///
 /// # Errors
 ///
@@ -44,6 +97,7 @@ pub async fn start_export_run(
     scope: &ExportScope,
     tool: Option<&str>,
     clock: (chrono_tz::Tz, chrono::NaiveDate),
+    credential: &crate::db::audit_trail::CredentialUsed,
 ) -> Result<ExportRun, ApiError> {
     let mut tx = crate::db::begin_write(conn).await?;
     let filter = scope_filter(&mut tx, account_id, scope, clock).await?;
@@ -57,6 +111,7 @@ pub async fn start_export_run(
         },
     )
     .await?;
+    exports::record_credential(&mut tx, export_id, credential).await?;
 
     exports::list_run_messages(&mut tx, export_id, &filter).await?;
     let counts = exports::export_counts(&mut tx, export_id).await?;
@@ -281,7 +336,15 @@ pub(crate) async fn create_export(
     let tool = body.tool.as_deref().and_then(message_ir::trimmed);
     let mut conn = state.db.acquire().await?;
     let clock = crate::db::account_profile::account_clock(&mut conn, account).await?;
-    let run = start_export_run(&mut conn, account, &body.scope, tool, clock).await?;
+    let run = start_export_run(
+        &mut conn,
+        account,
+        &body.scope,
+        tool,
+        clock,
+        &auth.credential,
+    )
+    .await?;
     Ok(Created {
         location: format!("/v1/exports/{}", run.id),
         body: run,
@@ -310,17 +373,21 @@ pub(crate) async fn list_exports(
     ExportAccess(auth): ExportAccess,
     Query(query): Query<ListExportsQuery>,
 ) -> Result<Json<Page<ExportRun>>, ApiError> {
-    exports_page(&state, auth.account_id, query).await
+    let mut conn = state.db.acquire().await?;
+    exports_page(&mut conn, auth.account_id, query)
+        .await
+        .map(Json)
 }
 
-/// One account's Export Runs as a page. `GET /v1/exports` answers it for the
-/// credential's account and `GET /v1/accounts/{id}/exports` for the account
-/// named, so the two lists cannot drift.
+/// One account's Export Runs as a page, in full. `GET /v1/exports` answers
+/// from it for the credential's account and `GET /v1/accounts/{id}/exports`
+/// for the account named, so the two lists cannot drift; the second shapes
+/// it for the owner as [`OwnerExportRun`].
 pub(crate) async fn exports_page(
-    state: &AppState,
+    conn: &mut SqliteConnection,
     account: i64,
     query: ListExportsQuery,
-) -> Result<Json<Page<ExportRun>>, ApiError> {
+) -> Result<Page<ExportRun>, ApiError> {
     let page = page_params(
         query.limit,
         query.offset,
@@ -346,9 +413,8 @@ pub(crate) async fn exports_page(
         )));
     }
 
-    let mut conn = state.db.acquire().await?;
     let (items, total) = exports::list_exports_page(
-        &mut conn,
+        conn,
         account,
         status,
         &order,
@@ -356,12 +422,12 @@ pub(crate) async fn exports_page(
         i64::try_from(page.offset).map_err(anyhow::Error::from)?,
     )
     .await?;
-    Ok(Json(Page {
+    Ok(Page {
         items,
         total,
         limit: page.limit,
         offset: page.offset,
-    }))
+    })
 }
 
 /// One Export Run.

@@ -21,6 +21,14 @@ released versions carry their date on the heading.
 
 ### Features
 
+- 2026-10-03 **An Audit Trail of what each user did, and when.** Owner Home's
+  Activity panel is now the Audit Trail: every login, session ending and
+  refused login, every import and export, and every change to an account,
+  newest first, with who did it and from which app. The owner reads every
+  account's and can narrow it to one. Each person reads what concerns their
+  own account under Settings, including what the owner changed. Nobody can
+  edit or remove an entry, and an account's entries stay, under its old
+  username, after the account is deleted.
 - 2026-09-22 **One identity table, on the contact drawer and on an account's
   Profile.** An account's identities now show what a contact's do: the
   service, the address, when it was first and last heard from, and how many
@@ -129,6 +137,11 @@ released versions carry their date on the heading.
   for the password before the import starts. The encrypted backup you made
   for your iPhone messages now serves for WhatsApp too; a second,
   unencrypted backup is no longer needed.
+- 2026-10-03 **Export and Convert write SMS Backup+ mail.** Choose **EML
+  (SMS Backup+)** to get your SMS and MMS back as the mail SMS Backup+
+  writes, one folder per conversation, which the SMS Backup+ import reads
+  again and any mail program can keep. Other messages are left out, and the
+  log says how many.
 
 ### Design
 
@@ -216,11 +229,21 @@ released versions carry their date on the heading.
   fiction.** No Demo Data number can be dialled or belong to a real person.
   Demo Data messages also fall in the daytime, between 08:00 and 23:00,
   where most of them used to fall overnight.
+- 2026-10-03 **Convert reads JSON Lines files only when they end in
+  `.jsonl`,** the name Message Crate gives them. A file ending in `.ndjson`
+  is no longer taken for one.
 
 ### Fixes
 
 #### Importing
 
+- 2026-10-03 **Group texts from an SMS Backup+ archive are group
+  conversations.** Every group text used to be filed as a conversation with
+  one of its members alone. A group text you sent and the replies to it now
+  land together in one group conversation, each reply credited to the person
+  who sent it. A group text whose sender matches nobody in the group shows
+  no sender instead of the first member. Each such group text is also listed
+  among the import's issues.
 - 2026-09-23 **A group text from an SMS Backup & Restore backup is no longer
   credited to the wrong person when the backup names no sender.** A group
   MMS without a sender address was shown as sent by whichever member the
@@ -416,6 +439,10 @@ released versions carry their date on the heading.
 
 #### Exporting and converting
 
+- 2026-10-03 **Android XML holds only SMS and MMS.** Export and Convert
+  wrote every message as a text message, so an iMessage or a WhatsApp
+  message came back from a re-import as an SMS. They now leave every other
+  message out, and the log says how many were left out and why.
 - 2026-10-01 **An export from the Conversations list holds those
   conversations.** Export opened from a filtered Conversations list wrote
   only the matching messages, or refused a search such as `messages:>100`.

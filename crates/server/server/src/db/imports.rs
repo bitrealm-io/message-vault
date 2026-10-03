@@ -1,6 +1,6 @@
 //! Per-account import session records (one row per message-crate-push / CLI import run).
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqliteRow;
@@ -873,6 +873,7 @@ pub const DEFAULT_IMPORT_SORT: [SortKey<ImportSort>; 1] = [SortKey {
 
 /// One page of an account's Import Runs, in the order `order` asks for,
 /// narrowed to one `status` when given, with the total the page is cut from.
+/// The rows are whole; each route shapes them for whoever reads them.
 pub async fn list_imports_page(
     conn: &mut SqliteConnection,
     account_id: i64,
@@ -880,7 +881,7 @@ pub async fn list_imports_page(
     order: &[SortKey<ImportSort>],
     limit: i64,
     offset: i64,
-) -> Result<(Vec<ImportSummary>, u64)> {
+) -> Result<(Vec<ImportRow>, u64)> {
     let status_sql = if status.is_some() {
         " AND status = $2"
     } else {
@@ -918,9 +919,18 @@ pub async fn list_imports_page(
     let items = rows
         .iter()
         .map(import_from_row)
-        .map(|r| r.map(Into::into))
         .collect::<Result<Vec<_>, _>>()?;
     Ok((items, total))
+}
+
+/// How many issues the run recorded. The caller has already established
+/// that `import_id` is the account's.
+pub async fn issue_count(conn: &mut SqliteConnection, import_id: i64) -> Result<u64> {
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM import_issues WHERE import_id = $1")
+        .bind(import_id)
+        .fetch_one(&mut *conn)
+        .await?;
+    Ok(count.max(0) as u64)
 }
 
 /// Whether the run has stamped any message yet: the first batch of a
@@ -935,7 +945,10 @@ pub async fn has_messages(conn: &mut SqliteConnection, import_id: i64) -> Result
 
 /// Whether the account has a running Import Run. Such a run may have
 /// uploaded files that no row names yet, for a batch it has not sent.
-pub async fn has_running_import(conn: &mut SqliteConnection, account_id: i64) -> Result<bool> {
+pub async fn has_running_import(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+) -> Result<bool, sqlx::Error> {
     let row = sqlx::query("SELECT 1 FROM imports WHERE account_id = $1 AND status = 'running'")
         .bind(account_id)
         .fetch_optional(&mut *conn)
@@ -1039,6 +1052,77 @@ pub async fn top_attachments_by_size(
             },
         )
         .collect())
+}
+
+/// Record what started the Import Run on its row: a Session and the app it
+/// named, or an API token's label and hint as they are now.
+///
+/// # Errors
+///
+/// Returns an error when the update fails.
+pub async fn record_credential(
+    conn: &mut SqliteConnection,
+    import_id: i64,
+    credential: &crate::db::audit_trail::CredentialUsed,
+) -> Result<()> {
+    let columns = credential.run_columns();
+    sqlx::query(
+        "UPDATE imports SET credential = $1, app_kind = $2, app_build = $3,
+                api_token_label = $4, api_token_hint = $5
+         WHERE id = $6",
+    )
+    .bind(columns.credential)
+    .bind(columns.app_kind)
+    .bind(columns.app_build)
+    .bind(columns.api_token_label)
+    .bind(columns.api_token_hint)
+    .bind(import_id)
+    .execute(&mut *conn)
+    .await
+    .with_context(|| format!("record what started import {import_id}"))?;
+    Ok(())
+}
+
+/// Ready the account's Import Runs to outlive it, just before the account is
+/// deleted: each keeps `username` and its counts, a run still open is closed
+/// as `cancelled` at `now`, and what describes the person's messages goes:
+/// its issues, form, staging folder, source details and the addresses the
+/// backup sent from (ADR 0020).
+///
+/// # Errors
+///
+/// Returns an error when a statement fails.
+pub async fn detach_from_account(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    username: &str,
+    now: &str,
+) -> Result<()> {
+    sqlx::query(
+        "UPDATE imports SET status = 'cancelled', finished_at = $2, stage = NULL
+         WHERE account_id = $1 AND status = 'running'",
+    )
+    .bind(account_id)
+    .bind(now)
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query(
+        "DELETE FROM import_issues
+         WHERE import_id IN (SELECT id FROM imports WHERE account_id = $1)",
+    )
+    .bind(account_id)
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query(
+        "UPDATE imports SET username = $2, form_json = NULL, staging_dir = NULL,
+                source_fingerprint = NULL, source_identities = NULL, summary_json = NULL
+         WHERE account_id = $1",
+    )
+    .bind(account_id)
+    .bind(username)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
 }
 
 #[cfg(test)]

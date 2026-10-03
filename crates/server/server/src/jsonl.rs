@@ -23,9 +23,23 @@ pub fn read_records(path: &Path) -> Result<Vec<ExportRecord>> {
     let reader = BufReader::new(file);
     let mut lines = Vec::new();
     for (line_no, line) in reader.lines().enumerate() {
-        let line = line.with_context(|| {
-            format!("failed to read line {} of {}", line_no + 1, path.display())
-        })?;
+        let line = match line {
+            Ok(line) => line,
+            // Bytes that are not UTF-8 are not text, so not JSON: the
+            // sender's to fix, like any other line that cannot be read.
+            Err(err) if err.kind() == std::io::ErrorKind::InvalidData => {
+                return Err(crate::imports_api::ImportFailure::NotJson {
+                    line: line_no + 1,
+                    detail: "the line is not valid UTF-8".into(),
+                })
+                .with_context(|| format!("failed to read {}", path.display()));
+            }
+            Err(err) => {
+                return Err(err).with_context(|| {
+                    format!("failed to read line {} of {}", line_no + 1, path.display())
+                });
+            }
+        };
         // A blank line is kept: `parse_ir_lines` skips it but still counts
         // it, so a failure names the line as it is numbered in the file.
         lines.push(line);
@@ -63,8 +77,8 @@ mod tests {
 
         let err = read_records(&path).unwrap_err();
         match ImportFailure::in_error(&err).expect("typed failure") {
-            ImportFailure::Parse { line, .. } => assert_eq!(*line, 10),
-            other => panic!("expected Parse, got {other:?}"),
+            ImportFailure::NotJson { line, .. } => assert_eq!(*line, 10),
+            other => panic!("expected NotJson, got {other:?}"),
         }
     }
 }

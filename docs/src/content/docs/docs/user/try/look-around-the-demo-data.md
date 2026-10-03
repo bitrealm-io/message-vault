@@ -21,7 +21,7 @@ The name at the top right, **demo**, shows which account is logged in.
 **Open a conversation.**
 **Messages** in the left panel shows every conversation.
 Selecting one opens its messages on the right.
-The year buttons above the messages jump to that year, and **Find in conversation** searches inside the one conversation.
+It opens at the newest message, and scrolling up loads older ones. **Jump to** goes to the newest message or to any year, and **Find** searches inside the one conversation.
 
 **Search.**
 The search box at the top takes plain words, and words with a meaning of their own.
@@ -39,7 +39,8 @@ The demo text is sampled from *Pride and Prejudice*, which is why the conversati
 ## What the Demo Account cannot do
 
 The Demo Account may export, and move things to the Trash and restore them.
-It may not import or delete for good.
+It may not import, delete for good, or load an address book.
+Its display name and time zone stay as they are.
 Anyone who reaches this Message Crate can enter it, so those limits keep a person's own messages out of the demo data and keep one visitor from emptying it for the next.
 
 Names given to contacts, groups, tags, and saved searches made here stay until the Owner resets the Demo Account.

@@ -30,6 +30,7 @@ import {
   problemFromBody,
 } from "./api";
 import { buildAssetPath, buildAssetPreviewPath } from "./assetUrl";
+import { PAGE_SIZE_MAX } from "./listPaging";
 import type { components, paths } from "./serverApi.types";
 
 type Schema = components["schemas"];
@@ -53,6 +54,31 @@ function query(params: Record<string, string | number | boolean | undefined | nu
     search.set(key, String(value));
   }
   return search.toString();
+}
+
+/**
+ * Every row of a paged list, read in pages of the server's maximum.
+ *
+ * Every `/v1` list answers one page, and 40 rows when no `limit` is sent, so
+ * a caller that takes one answer as the whole list loses every row past the
+ * page (issue #1145). This asks for the next page until the rows read reach
+ * the `total` the last page reported. An empty page ends the reading too,
+ * because a list that shrank between two requests reports a total it no
+ * longer has.
+ */
+async function readEveryPage<Page extends { items: unknown[]; total: number }>(
+  path: string,
+  opts?: RequestOptions,
+): Promise<Page["items"]> {
+  const rows: Page["items"] = [];
+  for (;;) {
+    const page = await apiClient.get<Page>(
+      withQuery(path, query({ limit: PAGE_SIZE_MAX, offset: rows.length })),
+      opts,
+    );
+    rows.push(...page.items);
+    if (page.items.length === 0 || rows.length >= page.total) return rows;
+  }
 }
 
 /** Append a query string only when it has something in it. */
@@ -125,9 +151,9 @@ export function claimServer(
 // the account id; the ones Settings calls address the logged-in
 // account through `ownAccountPath`.
 
-/** The accounts of this Message Crate, for the owner: the owner's own first, then the rest by username. */
-export function listAccounts(opts?: RequestOptions): Promise<Schema["Page_Account"]> {
-  return apiClient.get<Schema["Page_Account"]>("/v1/accounts", opts);
+/** Every account of this Message Crate, for the owner: the owner's own first, then the rest by username. */
+export function listAccounts(opts?: RequestOptions): Promise<Schema["Account"][]> {
+  return readEveryPage<Schema["Page_Account"]>("/v1/accounts", opts);
 }
 
 /**
@@ -256,46 +282,85 @@ function accountBase(accountId?: number): string {
   return accountId === undefined ? ownAccountPath() : accountPath(accountId);
 }
 
-/** An account's identities with the messages held at each: the logged-in one, or as the owner the one named. */
+/** Every identity of an account with the messages held at each: the logged-in one, or as the owner the one named. */
 export function listAccountIdentities(
   opts?: RequestOptions,
   accountId?: number,
-): Promise<Schema["Page_Identity"]> {
-  return apiClient.get<Schema["Page_Identity"]>(`${accountBase(accountId)}/identities`, opts);
+): Promise<Schema["Identity"][]> {
+  const path = `${accountBase(accountId)}/identities`;
+  return readEveryPage<Schema["Page_Identity"]>(path, opts);
 }
 
 /** Which page of an account's run history to read. Absent values are left off the URL. */
 export type AccountRunListParams = { limit?: number; offset?: number };
 
-/** An account's Import Runs, newest first: the logged-in one, or as the owner the one named. */
+/**
+ * An account's Import Runs, newest first: the logged-in one in full, or as the
+ * owner the one named, each without what the run held.
+ */
 export function listAccountImports(
   params: AccountRunListParams,
   opts?: RequestOptions,
   accountId?: number,
-): Promise<Schema["Page_ImportSummary"]> {
-  return apiClient.get<Schema["Page_ImportSummary"]>(
+): Promise<Schema["AccountImportRuns"]> {
+  return apiClient.get<Schema["AccountImportRuns"]>(
     withQuery(`${accountBase(accountId)}/imports`, query(params)),
     opts,
   );
 }
 
-/** One of an account's Import Runs, with its counts, timings and issues. */
+/**
+ * One of an account's Import Runs, with its counts and timings, and for the
+ * logged-in account its summary and issues.
+ */
 export function getAccountImport(
   importId: number,
   opts?: RequestOptions,
   accountId?: number,
-): Promise<Schema["ImportRun"]> {
-  return apiClient.get<Schema["ImportRun"]>(`${accountBase(accountId)}/imports/${importId}`, opts);
+): Promise<Schema["AccountImportRun"]> {
+  return apiClient.get<Schema["AccountImportRun"]>(
+    `${accountBase(accountId)}/imports/${importId}`,
+    opts,
+  );
 }
 
-/** An account's Export Runs, newest first: the logged-in one, or as the owner the one named. */
+/**
+ * An account's Export Runs, newest first: the logged-in one in full, or as
+ * the owner the one named, each without what the run asked for.
+ */
 export function listAccountExports(
   params: AccountRunListParams,
   opts?: RequestOptions,
   accountId?: number,
-): Promise<Schema["Page_ExportRun"]> {
-  return apiClient.get<Schema["Page_ExportRun"]>(
+): Promise<Schema["AccountExportRuns"]> {
+  return apiClient.get<Schema["AccountExportRuns"]>(
     withQuery(`${accountBase(accountId)}/exports`, query(params)),
+    opts,
+  );
+}
+
+/** Which page of an Audit Trail to read. Absent values are left off the URL. */
+export type AuditTrailParams = { limit?: number; offset?: number };
+
+/** Every account's Audit Trail, newest first. The owner's alone. */
+export function listAuditTrail(
+  params: AuditTrailParams,
+  opts?: RequestOptions,
+): Promise<Schema["Page_AuditEntry"]> {
+  return apiClient.get<Schema["Page_AuditEntry"]>(
+    withQuery("/v1/audit-trail", query(params)),
+    opts,
+  );
+}
+
+/** One account's Audit Trail, newest first: the logged-in one, or as the owner the one named. */
+export function listAccountAuditTrail(
+  params: AuditTrailParams,
+  opts?: RequestOptions,
+  accountId?: number,
+): Promise<Schema["Page_AuditEntry"]> {
+  return apiClient.get<Schema["Page_AuditEntry"]>(
+    withQuery(`${accountBase(accountId)}/audit-trail`, query(params)),
     opts,
   );
 }
@@ -313,12 +378,13 @@ export function deleteAllMessages(
 // lists and revokes them; the owner lists and revokes them too, so it can end
 // a leaked one, and its list carries no `token_hint`.
 
-/** An account's API tokens: the logged-in one's, or as the owner the one named. */
+/** An account's API tokens, every page: the logged-in one's, or as the owner the one named. */
 export function listApiTokens(
   opts?: RequestOptions,
   accountId?: number,
-): Promise<Schema["Page_ApiToken"]> {
-  return apiClient.get<Schema["Page_ApiToken"]>(`${accountBase(accountId)}/api-tokens`, opts);
+): Promise<Schema["ApiToken"][]> {
+  const path = `${accountBase(accountId)}/api-tokens`;
+  return readEveryPage<Schema["Page_ApiToken"]>(path, opts);
 }
 
 export function createApiToken(
@@ -399,11 +465,23 @@ export function getConversation(
   return apiClient.get<Schema["ConversationSummary"]>(`/v1/conversations/${conversationId}`, opts);
 }
 
-/** Paging for `GET /v1/conversations/{id}/messages`. Opening a conversation
- * takes no filter: a year inside one is the search `in:#id date:YYYY`. */
+/**
+ * Paging for `GET /v1/conversations/{id}/messages`. Opening a conversation
+ * takes no filter: a year inside one is the search `in:#id date:YYYY`.
+ *
+ * The page starts at `offset`, or beside one message: `around` puts it in the
+ * middle, `before` and `after` read the page just before or after it in the
+ * page's order. Send at most one of the four; the answer's `offset` says
+ * where the page sits.
+ */
 export type ConversationMessagesParams = {
   offset?: number;
   limit?: number;
+  /** `date` (oldest first, the default) or `-date`. */
+  sort?: "date" | "-date";
+  around?: number;
+  before?: number;
+  after?: number;
 };
 
 export function listConversationMessages(
@@ -422,6 +500,8 @@ export type MessagesListParams = {
   q?: string;
   offset?: number;
   limit?: number;
+  /** `date` (oldest first, the default) or `-date`. */
+  sort?: "date" | "-date";
 };
 
 /**
@@ -435,14 +515,13 @@ export function listMessages(
   return apiClient.get<Schema["Page_Message"]>(withQuery("/v1/messages", query(params)), opts);
 }
 
+/** Every source a conversation's messages came from. */
 export function getConversationSources(
   conversationId: number,
   opts?: RequestOptions,
-): Promise<Schema["Page_ConversationSource"]> {
-  return apiClient.get<Schema["Page_ConversationSource"]>(
-    `/v1/conversations/${conversationId}/sources`,
-    opts,
-  );
+): Promise<Schema["ConversationSource"][]> {
+  const path = `/v1/conversations/${conversationId}/sources`;
+  return readEveryPage<Schema["Page_ConversationSource"]>(path, opts);
 }
 
 /** Put a conversation in the trash. Idempotent: trashing an already-trashed one still answers. */
@@ -584,8 +663,9 @@ export function deleteContact(contactId: string | number): Promise<void> {
 // A Contact Group is addressed by its id. Screens hold names; the lookup from
 // a name to an id lives in `nameCollection.ts`, not here.
 
-export function listContactGroups(opts?: RequestOptions): Promise<Schema["Page_NamedSet"]> {
-  return apiClient.get<Schema["Page_NamedSet"]>("/v1/contact-groups", opts);
+/** Every Contact Group of the logged-in account. */
+export function listContactGroups(opts?: RequestOptions): Promise<Schema["NamedSet"][]> {
+  return readEveryPage<Schema["Page_NamedSet"]>("/v1/contact-groups", opts);
 }
 
 export function createContactGroup(
@@ -628,8 +708,9 @@ export function updateContactGroupMembers(
 
 // ── Message Tags ────────────────────────────────────────────────────────────
 
-export function listMessageTags(opts?: RequestOptions): Promise<Schema["Page_NamedSet"]> {
-  return apiClient.get<Schema["Page_NamedSet"]>("/v1/message-tags", opts);
+/** Every Message Tag of the logged-in account. */
+export function listMessageTags(opts?: RequestOptions): Promise<Schema["NamedSet"][]> {
+  return readEveryPage<Schema["Page_NamedSet"]>("/v1/message-tags", opts);
 }
 
 export function createMessageTag(
@@ -672,8 +753,9 @@ export function updateMessageTagMembers(
 
 // ── Saved Searches ──────────────────────────────────────────────────────────
 
-export function listSavedSearches(opts?: RequestOptions): Promise<Schema["Page_SavedSearch"]> {
-  return apiClient.get<Schema["Page_SavedSearch"]>("/v1/saved-searches", opts);
+/** Every Saved Search of the logged-in account. */
+export function listSavedSearches(opts?: RequestOptions): Promise<Schema["SavedSearch"][]> {
+  return readEveryPage<Schema["Page_SavedSearch"]>("/v1/saved-searches", opts);
 }
 
 export function createSavedSearch(
@@ -698,12 +780,13 @@ export function deleteSavedSearch(id: number): Promise<void> {
 /** The lists whose search words the server describes, one path each. */
 export type SearchFieldList = "contacts" | "conversations";
 
-/** The words the search language accepts on one list. */
+/** Every word the search language accepts on one list. */
 export function listSearchFields(
   list: SearchFieldList,
   opts?: RequestOptions,
-): Promise<Schema["Page_FieldDoc"]> {
-  return apiClient.get<Schema["Page_FieldDoc"]>(`/v1/search-fields/${list}`, opts);
+): Promise<Schema["FieldDoc"][]> {
+  const path = `/v1/search-fields/${list}`;
+  return readEveryPage<Schema["Page_FieldDoc"]>(path, opts);
 }
 
 // ── Import Runs ─────────────────────────────────────────────────────────────

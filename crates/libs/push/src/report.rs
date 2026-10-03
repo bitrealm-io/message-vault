@@ -136,8 +136,6 @@ pub struct PushReport {
     /// Messages in HTTP requests that failed after all retries.
     #[serde(default)]
     pub messages_failed: u64,
-    /// Legacy count: the `messages` of every `ok` row in `results`, summed.
-    pub messages: u64,
     /// Attachments whose bytes went up this run.
     pub assets_uploaded: u64,
     /// Attachments whose bytes did not go up this run: the server or another
@@ -183,21 +181,14 @@ pub(crate) struct FileResultCounts {
     pub failed: u64,
     pub skipped: u64,
     pub cancelled: u64,
-    pub messages: u64,
-    pub attachments: u64,
 }
 
-/// Count ok / failed / skipped / cancelled conversations and sum the messages
-/// and attachments of the ok ones.
+/// Count ok / failed / skipped / cancelled conversations.
 pub(crate) fn count_file_results(results: &[FileResult]) -> FileResultCounts {
     let mut counted = FileResultCounts::default();
     for result in results {
         match result.status.as_str() {
-            "ok" => {
-                counted.ok += 1;
-                counted.messages += result.messages;
-                counted.attachments += result.attachments;
-            }
+            "ok" => counted.ok += 1,
             "failed" => counted.failed += 1,
             "skipped" => counted.skipped += 1,
             "cancelled" => counted.cancelled += 1,
@@ -264,7 +255,6 @@ pub fn format_push_summary(report: &PushReport) -> String {
         "==== Summary ====\n\
 Import {status}\n\
 Conversations: {} ok, {} failed, {} skipped, {} cancelled ({} total)\n\
-Messages: {}\n\
 Message accounting: {} attempted = {} new + {} deduped + {} failed\n\
 Assets: {} uploaded, {} skipped\n\
 Elapsed: {} ({} ms)",
@@ -273,7 +263,6 @@ Elapsed: {} ({} ms)",
         report.conversations_skipped,
         report.conversations_cancelled,
         report.conversations_total,
-        report.messages,
         report.messages_attempted,
         report.messages_inserted,
         report.messages_deduped,
@@ -332,7 +321,6 @@ mod tests {
             messages_inserted: 90,
             messages_deduped: 10,
             messages_failed: 0,
-            messages: 100,
             assets_uploaded: 5,
             assets_skipped: 0,
             assets_bytes: 1_000,
@@ -358,7 +346,6 @@ mod tests {
         assert!(
             summary.contains("Conversations: 8 ok, 1 failed, 1 skipped, 0 cancelled (10 total)")
         );
-        assert!(summary.contains("Messages: 100"));
         assert!(
             summary.contains("Message accounting: 100 attempted = 90 new + 10 deduped + 0 failed")
         );
@@ -405,7 +392,7 @@ mod tests {
     }
 
     #[test]
-    fn count_file_results_sums_only_ok_rows() {
+    fn count_file_results_counts_each_status() {
         let results = vec![
             FileResult {
                 file: "a.jsonl".into(),
@@ -429,6 +416,5 @@ mod tests {
             ),
             (1, 1, 1, 1)
         );
-        assert_eq!((counted.messages, counted.attachments), (5, 2));
     }
 }

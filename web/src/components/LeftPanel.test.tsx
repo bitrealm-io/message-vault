@@ -68,7 +68,6 @@ beforeEach(() => {
 });
 
 /** Where the router is now, as `pathname + search`. */
-// biome-ignore lint/style/useComponentExportOnlyModules: local test harness only
 function LocationProbe() {
   const location = useLocation();
   return <output data-testid="location">{location.pathname + location.search}</output>;

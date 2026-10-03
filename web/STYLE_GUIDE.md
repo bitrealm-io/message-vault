@@ -56,7 +56,11 @@ These drive a `color-mix` derivation tree in `theme.css`. Three `data-theme` mod
 ## Interaction Patterns
 
 - **Hover:** `hover:bg-hover` or `hover:brightness-*`
-- **Focus:** `outline-none` (custom) + `focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1`
+- **Focus:** `outline-none` (custom) + `focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1`.
+  The variant depends on which element takes focus.
+  A button, a menu item, a table row or a list row takes DOM focus itself, so its ring uses `focus-visible:`.
+  React Aria's `Checkbox`, `Radio` and `ColumnResizer` put focus on a hidden input, which `:focus-visible` cannot style, so their ring uses `data-focus-visible:` on the label React Aria marks (or the `isFocusVisible` render prop).
+- **Current item in a menu or popdown:** `data-focused:bg-hover`. React Aria moves focus to the item under the pointer as well as the one the arrow keys reach, so one item is highlighted at a time.
 - **Disabled:** `disabled:opacity-50` or `disabled:brightness-[0.72]` + `disabled:cursor-not-allowed`
 - **Active/Selected:** `bg-accent text-sent-text`
 
@@ -72,7 +76,6 @@ Defined as named constants in `src/lib/zLayers.ts`. Use those rather than a bare
 | 60 | `Z_RESIZE_HANDLE` | Column resize handles |
 | 70 | `Z_INLINE_PANEL` | Inline overlays (advanced search panel) — clears the resize handle |
 | 71 | `Z_INLINE_PANEL_TAIL` | The pointer tail on an inline panel |
-| 80 | `Z_ROW_MENU` | Sidebar row action menus |
 | 100 | `Z_POPOVER` | Select/ComboBox popovers, menus, the contact-search popdown |
 | 200 | `Z_MODAL` | Modal dialogs, lightbox |
 | 250 | `Z_POPOVER_IN_MODAL` | A select popover opened inside a modal |
@@ -82,5 +85,5 @@ Defined as named constants in `src/lib/zLayers.ts`. Use those rather than a bare
 1. **Tokens only.** No raw hex colors in component code. Use Tailwind utilities that reference theme tokens.
 2. **No global border-box.** Some controls rely on `content-box`. Converted controls opt in with `box-border`.
 3. **Compact density.** Keep the existing compact visual density — 13–14px body text, tight padding.
-4. **React Aria for interactivity.** All interactive components (buttons, selects, dialogs, tabs, etc.) use `react-aria-components` for accessibility.
+4. **React Aria for interactivity.** All interactive components (buttons, selects, dialogs, tabs, etc.) use `react-aria-components` for accessibility. A button is `Button` (the app's variants and sizes) or `PlainButton` (no look of its own), both React Aria's `Button`, and a button that stays pressed is React Aria's `ToggleButton`. Biome's `noRestrictedElements` refuses a native `<button>` outside tests. A checkbox is `Checkbox`, and a menu is `PopupMenu`.
 5. **Inline styles only for dynamic values.** Layout math (VirtualList), dynamic widths, positions — keep as `style={{}}`. Static values → Tailwind className.

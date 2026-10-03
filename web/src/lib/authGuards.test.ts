@@ -16,9 +16,8 @@ describe("initialLoginServerUrl", () => {
     expect(initialLoginServerUrl("", false)).toBe("");
   });
 
-  it("rewrites the old localhost default and keeps any other saved URL", () => {
-    expect(initialLoginServerUrl("http://localhost:8080", true)).toBe(DEFAULT_TAURI_SERVER_URL);
-    expect(initialLoginServerUrl("http://localhost:8080/", false)).toBe(DEFAULT_TAURI_SERVER_URL);
+  it("keeps a saved URL as it was saved", () => {
+    expect(initialLoginServerUrl("http://localhost:8080", true)).toBe("http://localhost:8080");
     expect(initialLoginServerUrl("https://server.example.com", true)).toBe(
       "https://server.example.com",
     );

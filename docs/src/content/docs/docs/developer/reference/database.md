@@ -33,7 +33,6 @@ erDiagram
     contact_groups ||--o{ contact_group_members : "has"
     conversations ||--o{ message_tag_members : "tagged"
     message_tags ||--o{ message_tag_members : "has"
-    participants }o--o| contacts : "contact_id"
 ```
 
 ## Chats and texts
@@ -48,8 +47,10 @@ values.
 
 ### `participants`
 
-One row = one handle in one chat (`handle_id` → `handles`, optional
-`contact_id` → `contacts`, optional `name_alias`).
+One row = one handle in one chat (`handle_id` → `handles`, required, and an
+optional `name_alias`). A person the backup names with no address has a handle
+of type `other` holding the name. The participant's contact is the one its
+handle is on in `contact_handles`.
 
 ### `messages`
 
@@ -74,6 +75,18 @@ Web accounts log in with **user ID** (`username`) and optional password.
 never used for login. GUI **session** tokens live in `account_session_tokens` (one
 per account; rotated on login; prefix `mc-user-`). Named **API tokens** for program
 import/export live in `account_api_tokens` (many per account; prefix `mc-api-`).
+
+### `audit_entries`
+
+The Audit Trail: what each user did, and when, for everything `imports` and
+`exports` do not already record. A row names the `action`, the `actor`, the
+account it is about and that account's `username`, with counts and names in
+`details`. A session's `logged_in` row carries `session_expires_at`, and the
+`session_ended` row that closes it points back through `session_entry_id`; a
+session with no such row reads as expired from its expiry. Deleting an account
+sets `account_id` NULL here and on its `imports` and `exports`, which keep the
+`username`. Refused logins for a username no account has are deleted after 90
+days; nothing else is.
 
 ### `handles`
 
@@ -153,8 +166,6 @@ There is no `contact_id` on conversations. The link is the `handles` table:
 - 1:1 `conversations.chat_handle_id` and `participants.handle_id` on the chat
   side
 - `contact_handles.handle_id` on the contact side
-- `participants.contact_id`, set when import resolves a participant's handle
-  to a contact
 
 Chat-side and contact-side reference the same per-account handle rows, so when
 a chat handle and a contact handle are the same identity, the UI treats that

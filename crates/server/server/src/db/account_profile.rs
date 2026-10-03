@@ -231,20 +231,46 @@ pub async fn load_last_login(
     Ok(at.flatten())
 }
 
-/// Permanently delete an account. All dependent rows are removed by
-/// ON DELETE CASCADE (messages, conversations, contacts, `imports`,
-/// `account_handles/emails/api_tokens`).
-pub async fn delete_account(conn: &mut SqliteConnection, account_id: i64) -> Result<()> {
+/// Permanently delete an account, `actor` acting. Its data rows are removed
+/// by ON DELETE CASCADE (messages, conversations, contacts,
+/// `account_handles/emails/api_tokens`). Its Audit Trail stays: entries and
+/// runs are unlinked, keep its username, and gain an `account_deleted` entry
+/// (`docs/adr/0020-the-audit-trail-outlives-the-account.md`). One
+/// transaction, so the record and the deletion land together. Returns
+/// whether there was an account to delete.
+pub async fn delete_account(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    actor: crate::db::audit_trail::AuditActor,
+) -> Result<bool> {
+    let mut tx = begin_write(conn).await?;
+    let existed =
+        crate::db::audit_trail::prepare_account_deletion(&mut tx, account_id, actor).await?;
     sqlx::query("DELETE FROM accounts WHERE id = $1")
         .bind(account_id)
-        .execute(&mut *conn)
+        .execute(&mut *tx)
         .await
         .with_context(|| format!("delete account {account_id}"))?;
-    Ok(())
+    tx.commit().await?;
+    Ok(existed)
 }
 
 /// Stable id for the seeded demo account (`reset-demo`).
 pub const DEMO_ACCOUNT_ID: i64 = 2;
+
+/// What the Demo Account may do, known from its id and never read from its
+/// row: export, and neither import nor delete for good
+/// (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`).
+/// [`load_account_auth`] answers it for the Demo Account, so the profile and
+/// the owner's account list report what the guards, which refuse the Demo
+/// Account by its id, enforce: a row changed by hand cannot make a screen
+/// offer what the server refuses.
+pub const DEMO_ACCOUNT_PERMISSIONS: crate::db::permissions::Permissions =
+    crate::db::permissions::Permissions {
+        import: false,
+        export: true,
+        delete: false,
+    };
 
 /// The Demo Account's username. It stays reserved while the Demo Account is
 /// absent, so no other account can take it and block the next build.
@@ -305,7 +331,11 @@ pub async fn load_account_auth(
         |(disabled, must_set_up, import, export, delete)| AccountAuth {
             disabled: disabled != 0,
             must_set_up_profile: must_set_up != 0,
-            permissions: crate::db::permissions::Permissions::from_ints(import, export, delete),
+            permissions: if is_demo_account(account_id) {
+                DEMO_ACCOUNT_PERMISSIONS
+            } else {
+                crate::db::permissions::Permissions::from_ints(import, export, delete)
+            },
         },
     ))
 }
@@ -338,10 +368,6 @@ pub struct DeletedMessagesStats {
     pub conversations: u64,
     /// Attachment rows deleted (files on disk are removed by the caller).
     pub attachments: u64,
-    /// The account had a running Import Run when the delete committed. The
-    /// run may have uploaded files that no row names yet, so the caller
-    /// leaves the account's files on disk.
-    pub import_running: bool,
 }
 
 /// Permanently delete one account's conversations (cascades to messages,
@@ -351,6 +377,7 @@ pub struct DeletedMessagesStats {
 pub async fn delete_all_messages_for_account(
     conn: &mut SqliteConnection,
     account_id: i64,
+    actor: crate::db::audit_trail::AuditActor,
 ) -> Result<DeletedMessagesStats> {
     schema::ensure_schema(conn).await?;
     let mut tx = begin_write(conn).await?;
@@ -366,7 +393,6 @@ pub async fn delete_all_messages_for_account(
     .bind(account_id)
     .fetch_one(&mut *tx)
     .await?;
-    let import_running = crate::db::imports::has_running_import(&mut tx, account_id).await?;
     let conversations = sqlx::query("DELETE FROM conversations WHERE account_id = $1")
         .bind(account_id)
         .execute(&mut *tx)
@@ -381,11 +407,23 @@ pub async fn delete_all_messages_for_account(
     crate::db::trash::purge_account(&mut tx, account_id)
         .await
         .with_context(|| format!("purge trash markers for {account_id}"))?;
+    // Recorded in the delete's own transaction, so the two land together.
+    crate::db::audit_trail::record_about(
+        &mut tx,
+        crate::db::audit_trail::AuditAction::MessagesDeleted,
+        actor,
+        account_id,
+        crate::db::audit_trail::Details {
+            conversations: Some(i64::try_from(conversations).unwrap_or(i64::MAX)),
+            attachments: Some(attachment_count),
+            ..crate::db::audit_trail::Details::default()
+        },
+    )
+    .await?;
     tx.commit().await?;
     Ok(DeletedMessagesStats {
         conversations,
         attachments: u64::try_from(attachment_count).unwrap_or(0),
-        import_running,
     })
 }
 
@@ -757,14 +795,20 @@ mod tests {
             .await
             .unwrap();
         let bob = insert_account(&mut conn, "bob", None, None).await.unwrap();
-        delete_account(&mut conn, bob).await.unwrap();
+        delete_account(&mut conn, bob, crate::db::audit_trail::AuditActor::Owner)
+            .await
+            .unwrap();
         let carol = insert_account(&mut conn, "carol", None, None)
             .await
             .unwrap();
         assert!(carol > bob, "carol got {carol}, after bob's {bob}");
         // With every generated account gone, the next id still climbs.
-        delete_account(&mut conn, carol).await.unwrap();
-        delete_account(&mut conn, alice).await.unwrap();
+        delete_account(&mut conn, carol, crate::db::audit_trail::AuditActor::Owner)
+            .await
+            .unwrap();
+        delete_account(&mut conn, alice, crate::db::audit_trail::AuditActor::Owner)
+            .await
+            .unwrap();
         let dave = insert_account(&mut conn, "dave", None, None).await.unwrap();
         assert!(dave > carol, "dave got {dave}, after carol's {carol}");
     }
@@ -942,7 +986,12 @@ mod tests {
         .await
         .unwrap();
 
-        let result = delete_all_messages_for_account(&mut conn, ACCOUNT_ID).await;
+        let result = delete_all_messages_for_account(
+            &mut conn,
+            ACCOUNT_ID,
+            crate::db::audit_trail::AuditActor::Holder,
+        )
+        .await;
 
         assert!(result.is_err(), "the staging delete was made to fail");
         let left: i64 =
@@ -1006,9 +1055,13 @@ mod tests {
         .await
         .unwrap();
 
-        let stats = delete_all_messages_for_account(&mut conn, ACCOUNT_ID)
-            .await
-            .unwrap();
+        let stats = delete_all_messages_for_account(
+            &mut conn,
+            ACCOUNT_ID,
+            crate::db::audit_trail::AuditActor::Holder,
+        )
+        .await
+        .unwrap();
         assert_eq!(stats.conversations, 1);
         assert_eq!(stats.attachments, 1);
         let remaining_msgs: i64 =

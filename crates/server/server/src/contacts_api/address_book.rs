@@ -29,7 +29,7 @@ const EXPORT_FILE_NAME: &str = "address-book.csv";
 
 /// The query of `POST /v1/contacts`.
 #[derive(Debug, Deserialize)]
-pub(crate) struct LoadQuery {
+pub(crate) struct CreateContactsQuery {
     #[serde(default)]
     mode: LoadMode,
 }
@@ -89,7 +89,7 @@ impl From<LoadError> for ApiError {
 pub(crate) async fn create_contacts(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
-    Query(query): Query<LoadQuery>,
+    Query(query): Query<CreateContactsQuery>,
     request: Request,
 ) -> Result<Json<CreateContactsResponse>, ApiError> {
     if !content_type_base(request.headers())

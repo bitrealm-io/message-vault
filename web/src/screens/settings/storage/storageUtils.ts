@@ -25,7 +25,7 @@ type Schema = components["schemas"];
  * One past Import Run, as the imports list returns it: in full to the
  * account itself, and to the owner without what the run held.
  */
-export type ImportRow = Schema["ImportRun"] | Schema["OwnerImportRun"];
+export type ListedImportRun = Schema["ImportRun"] | Schema["OwnerImportRun"];
 
 /**
  * One Export Run as the history table lists it: in full to the account
@@ -88,7 +88,7 @@ export function describeExportScope(scope: Schema["ExportScope"]): string {
  * One Import Run: in full, with its summary and issues, to the account
  * itself; to the owner with the summary's counts and how many issues.
  */
-export type ImportDetailResponse = Schema["AccountImportRun"];
+export type AccountImportRun = Schema["AccountImportRun"];
 
 /** Human-readable file size (for example "1.2 MB"). */
 export function formatBytes(bytes: number): string {
@@ -168,7 +168,7 @@ export function importStatusLabel(status: Schema["ImportStatus"]): string {
 }
 
 /** Build the import summary panel model from a server import-detail response. */
-export function toImportSummaryView(detail: ImportDetailResponse): ImportSummaryView {
+export function toImportSummaryView(detail: AccountImportRun): ImportSummaryView {
   // The owner reads the summary's counts and nothing else of it.
   const summary: Record<string, unknown> =
     "counts" in detail

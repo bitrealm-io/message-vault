@@ -113,7 +113,7 @@ export function getServerState(opts?: RequestOptions): Promise<Server> {
 
 /** Claim an unclaimed Message Crate by creating its owner. Returns their session. */
 export function claimServer(
-  body: Schema["ClaimRequest"],
+  body: Schema["ClaimServerRequest"],
 ): Promise<Schema["CreateSessionResponse"]> {
   return apiClient.post<Schema["CreateSessionResponse"]>("/v1/server/claim", body);
 }

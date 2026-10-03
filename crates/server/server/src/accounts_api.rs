@@ -1,4 +1,4 @@
-//! The accounts collection: `/v1/accounts` and everything under a member
+//! The accounts collection: `/v1/accounts` and everything under a member.
 //! API tokens, `/v1/accounts/{id}/api-tokens`, are in the `api_tokens`
 //! submodule.
 //!
@@ -1372,7 +1372,7 @@ pub(crate) async fn get_account_import(
         let run = crate::imports_api::owner_import_run(&mut conn, row).await?;
         return Ok(Json(AccountImportRun::Owner(run)));
     }
-    let run = crate::imports_api::import_detail(&mut conn, target, import_id).await?;
+    let run = crate::imports_api::owned_import_run(&mut conn, target, import_id).await?;
     Ok(Json(AccountImportRun::Own(run)))
 }
 

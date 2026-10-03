@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  type AccountImportRun,
   describeExportRun,
   describeExportScope,
   formatBytes,
   formatImportDate,
-  type ImportDetailResponse,
   importStatusLabel,
   toImportSummaryView,
 } from "./storageUtils";
 
-function detail(partial: Partial<ImportDetailResponse> = {}): ImportDetailResponse {
+function detail(partial: Partial<AccountImportRun> = {}): AccountImportRun {
   return {
     id: 1,
     source: "imessage-ios",

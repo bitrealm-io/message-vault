@@ -62,7 +62,7 @@ pub struct Server {
 
 /// Body for claiming a Message Crate.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub struct ClaimRequest {
+pub struct ClaimServerRequest {
     /// Login username for the owner.
     pub username: String,
     /// Password for the owner. Must satisfy the server's password policy.
@@ -118,7 +118,7 @@ pub async fn get_server(State(state): State<AppState>) -> Result<Json<Server>, A
     post,
     path = "/v1/server/claim",
     tag = "Server",
-    request_body = ClaimRequest,
+    request_body = ClaimServerRequest,
     responses(
         (
             status = 201,
@@ -132,7 +132,7 @@ pub async fn get_server(State(state): State<AppState>) -> Result<Json<Server>, A
 )]
 pub async fn claim_server(
     State(state): State<AppState>,
-    Json(req): Json<ClaimRequest>,
+    Json(req): Json<ClaimServerRequest>,
 ) -> Result<Created<crate::session_api::CreateSessionResponse>, ApiError> {
     let username = crate::credentials::require_valid_username(&req.username)?;
     crate::credentials::check_auth_rate_limit(&state.auth_rate_limits, "claim")?;

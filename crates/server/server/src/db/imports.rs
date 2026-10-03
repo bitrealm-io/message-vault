@@ -241,15 +241,6 @@ pub struct ImportIssueRow {
     pub created_at: String,
 }
 
-/// An import session row plus its recorded issues.
-#[derive(Debug, Clone, Serialize)]
-pub struct ImportDetail {
-    /// The session.
-    pub row: ImportRow,
-    /// Issues recorded for it.
-    pub issues: Vec<ImportIssueRow>,
-}
-
 /// Failure looking up or reusing an import session.
 #[derive(Debug, thiserror::Error)]
 pub enum ImportLookupError {
@@ -735,17 +726,6 @@ fn validate_issue_kind(kind: &str) -> Result<()> {
         "error" | "skip" => Ok(()),
         other => bail!("invalid import issue kind '{other}'; expected 'error' or 'skip'"),
     }
-}
-
-/// Load one import row and its issue list.
-pub async fn get_import_detail(
-    conn: &mut SqliteConnection,
-    account_id: i64,
-    import_id: i64,
-) -> std::result::Result<ImportDetail, ImportLookupError> {
-    let row = get_owned_import(conn, account_id, import_id).await?;
-    let issues = list_import_issues(conn, import_id).await?;
-    Ok(ImportDetail { row, issues })
 }
 
 /// The issues recorded for one import, oldest first. The caller has already

@@ -1535,7 +1535,7 @@ export interface components {
             transcription?: string | null;
         };
         /** @description Body for claiming a Message Crate. */
-        ClaimRequest: {
+        ClaimServerRequest: {
             /** @description Password for the owner. Must satisfy the server's password policy. */
             password: string;
             /** @description Login username for the owner. */
@@ -9825,7 +9825,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ClaimRequest"];
+                "application/json": components["schemas"]["ClaimServerRequest"];
             };
         };
         responses: {

@@ -9026,7 +9026,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ClaimRequest"
+                "$ref": "#/components/schemas/ClaimServerRequest"
               }
             }
           },
@@ -10313,7 +10313,7 @@
           }
         }
       },
-      "ClaimRequest": {
+      "ClaimServerRequest": {
         "type": "object",
         "description": "Body for claiming a Message Crate.",
         "required": [

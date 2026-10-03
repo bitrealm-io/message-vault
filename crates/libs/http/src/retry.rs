@@ -77,7 +77,7 @@ pub fn classify_retry(error: &anyhow::Error) -> RetryKind {
     }
     if let Some(auth) = error.downcast_ref::<AuthError>() {
         return match auth {
-            AuthError::InvalidKey
+            AuthError::Unauthorized
             | AuthError::Forbidden { .. }
             | AuthError::ApiNotFound { .. }
             | AuthError::RateLimited { .. }
@@ -159,7 +159,10 @@ mod tests {
         assert!(classified(classify_retry(&e)));
         let e = anyhow::Error::from(HttpError::new(413, "import rejected: HTTP 413"));
         assert!(classified(classify_retry(&e)));
-        let e = anyhow::Error::from(HttpError::new(401, "invalid API key"));
+        let e = anyhow::Error::from(HttpError::new(
+            401,
+            "the server did not accept this session",
+        ));
         assert!(classified(classify_retry(&e)));
     }
 
@@ -181,7 +184,7 @@ mod tests {
     #[test]
     fn auth_failures_are_permanent() {
         assert!(classified(classify_retry(&anyhow::Error::from(
-            AuthError::InvalidKey
+            AuthError::Unauthorized
         ))));
         assert!(classified(classify_retry(&anyhow::Error::from(
             AuthError::Forbidden {

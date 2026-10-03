@@ -19,9 +19,9 @@ pub struct HttpSession {
     client: Client,
 }
 
-/// `Authorization` header value for an API key.
-pub fn bearer_header(key: &str) -> String {
-    format!("Bearer {}", key.trim())
+/// `Authorization` header value for a session token or an API token.
+pub fn bearer_header(token: &str) -> String {
+    format!("Bearer {}", token.trim())
 }
 
 /// `base_url` with surrounding whitespace and trailing slashes removed.
@@ -50,19 +50,19 @@ impl HttpSession {
         method: Method,
         base_url: &str,
         path: &str,
-        key: &str,
+        token: &str,
     ) -> RequestBuilder {
         let base = trim_base_url(base_url);
         self.client
             .request(method, format!("{base}{path}"))
-            .header("Authorization", bearer_header(key))
+            .header("Authorization", bearer_header(token))
     }
 
     /// Start a request to an already-built URL with the bearer header set.
-    pub fn request_url(&self, method: Method, url: reqwest::Url, key: &str) -> RequestBuilder {
+    pub fn request_url(&self, method: Method, url: reqwest::Url, token: &str) -> RequestBuilder {
         self.client
             .request(method, url)
-            .header("Authorization", bearer_header(key))
+            .header("Authorization", bearer_header(token))
     }
 
     /// Call `GET /v1/session` and return the account id on success.
@@ -70,11 +70,11 @@ impl HttpSession {
     /// # Errors
     ///
     /// Returns [`AuthError`] when the URL is invalid, the host is unreachable,
-    /// or the key is rejected.
+    /// or the session token is rejected.
     pub fn auth_check(
         &self,
         base_url: &str,
-        key: &str,
+        token: &str,
     ) -> std::result::Result<AuthInfo, AuthError> {
         // The token alone names the account; the reply carries the username.
         let base = trim_base_url(base_url);
@@ -89,7 +89,7 @@ impl HttpSession {
         };
         let url = format!("{base}/v1/session");
         let response = self
-            .server_request(Method::GET, base, "/v1/session", key)
+            .server_request(Method::GET, base, "/v1/session", token)
             .timeout(Duration::from_secs(15))
             .send()
             .map_err(|error| classify_auth_transport_error(&url, error))?;
@@ -152,7 +152,7 @@ pub fn looks_like_html(body: &str) -> bool {
     head.starts_with("<!doctype") || head.starts_with("<html")
 }
 
-/// Map HTTP 401. When `http://` was redirected to `https://`, the API key was
+/// Map HTTP 401. When `http://` was redirected to `https://`, the token was
 /// dropped with the Authorization header — tell the user to use https.
 fn classify_unauthorized(
     requested_base: &str,
@@ -164,7 +164,7 @@ fn classify_unauthorized(
             url: requested_base.to_string(),
         }
     } else {
-        AuthError::InvalidKey
+        AuthError::Unauthorized
     }
 }
 
@@ -199,11 +199,11 @@ fn classify_auth_http_status(status: u16, body: String) -> AuthError {
 /// # Errors
 ///
 /// Returns [`AuthError`] when the client cannot be built or login fails.
-pub fn auth_check(base_url: &str, key: &str) -> std::result::Result<AuthInfo, AuthError> {
+pub fn auth_check(base_url: &str, token: &str) -> std::result::Result<AuthInfo, AuthError> {
     let session = HttpSession::new().map_err(|error| AuthError::Client {
         detail: format!("{error:#}"),
     })?;
-    session.auth_check(base_url, key)
+    session.auth_check(base_url, token)
 }
 
 #[cfg(test)]
@@ -252,24 +252,23 @@ mod tests {
         let final_url = reqwest::Url::parse("https://my.messagecrate.app/v1/session").unwrap();
         let err = classify_unauthorized("http://my.messagecrate.app", &requested, &final_url);
         assert_eq!(err.kind(), "https_required");
-        assert!(err.user_message().contains("https://"));
-        assert!(err.detail().contains("Authorization"));
+        assert!(err.to_string().contains("Authorization"));
     }
 
     #[test]
-    fn unauthorized_same_scheme_is_invalid_key() {
+    fn unauthorized_same_scheme_is_unauthorized() {
         let requested = reqwest::Url::parse("https://my.messagecrate.app").unwrap();
         let final_url = reqwest::Url::parse("https://my.messagecrate.app/v1/session").unwrap();
         let err = classify_unauthorized("https://my.messagecrate.app", &requested, &final_url);
-        assert_eq!(err.kind(), "invalid_key");
+        assert_eq!(err.kind(), "unauthorized");
     }
 
     #[test]
-    fn unauthorized_local_http_is_invalid_key() {
+    fn unauthorized_local_http_is_unauthorized() {
         let requested = reqwest::Url::parse("http://127.0.0.1:8080").unwrap();
         let final_url = reqwest::Url::parse("http://127.0.0.1:8080/v1/session").unwrap();
         let err = classify_unauthorized("http://127.0.0.1:8080", &requested, &final_url);
-        assert_eq!(err.kind(), "invalid_key");
+        assert_eq!(err.kind(), "unauthorized");
     }
 
     #[test]

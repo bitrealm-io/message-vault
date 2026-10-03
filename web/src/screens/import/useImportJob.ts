@@ -1007,7 +1007,7 @@ async function uploadAndFinish(
       invokePush({
         base_url: baseUrl,
         username: "",
-        key: token,
+        token,
         input_dir: outputDir,
         mode: "append",
         skip_attachments: false,

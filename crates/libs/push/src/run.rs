@@ -5,7 +5,7 @@
 //! An export folder has one `.jsonl` file per conversation, plus an
 //! `attachments/` folder of media files. A push:
 //!
-//! 1. Logs in to the server with the API key.
+//! 1. Logs in to the server with the session token.
 //! 2. For each conversation file, finds attachments, uploads any the server
 //!    does not already have, then sends the messages in batches.
 //! 3. Remembers progress in a journal file so a later run can skip work that
@@ -98,8 +98,9 @@ pub struct PushConfig {
     /// events carry the username the server reports at login, else the
     /// account id.
     pub username: String,
-    /// API token or session token for the server.
-    pub key: String,
+    /// The logged-in Session's token. The desktop app never passes an API
+    /// Token.
+    pub token: String,
     /// `Append` adds to existing data; `Replace` clears then imports (with force).
     pub mode: ImportMode,
     /// If true, ignore the journal and upload/import everything again.
@@ -143,14 +144,17 @@ pub struct PushConfig {
     pub import_id: Option<i64>,
 }
 
-/// Check the API key against the server without importing any messages.
+/// Check the session token against the server without importing any messages.
 ///
 /// # Errors
 ///
 /// Returns [`crate::AuthError`] when the URL is invalid, the host is unreachable,
-/// or the key is rejected.
-pub fn authenticate(base_url: &str, key: &str) -> std::result::Result<AuthInfo, crate::AuthError> {
-    message_crate_http::auth_check(base_url, key)
+/// or the session token is rejected.
+pub fn authenticate(
+    base_url: &str,
+    token: &str,
+) -> std::result::Result<AuthInfo, crate::AuthError> {
+    message_crate_http::auth_check(base_url, token)
 }
 
 /// The authenticated connection one push run uses for every request.
@@ -159,9 +163,9 @@ pub(crate) struct Session {
     pub http: HttpSession,
     /// Base URL with any trailing slash removed.
     pub url: String,
-    /// The API key every request carries.
-    pub key: String,
-    /// The account the API key resolved to (server-reported name, or the id).
+    /// The session token every request carries.
+    pub token: String,
+    /// The account the session token resolved to (server-reported name, or the id).
     pub username: String,
     pub auth: AuthInfo,
 }
@@ -298,18 +302,18 @@ pub fn run(cfg: &PushConfig, progress: Option<&mut ProgressFn<'_>>) -> Result<Pu
     Ok(report)
 }
 
-/// Check the API key and pick the account name the rest of the run uses.
+/// Check the session token and pick the account name the rest of the run uses.
 ///
-/// The API key decides which account this run uses. The username the server
+/// The session token decides which account this run uses. The username the server
 /// returns wins; the account id is the fallback when that is empty.
 ///
 /// # Errors
 ///
-/// Returns an error when the HTTP client cannot be built or the key is rejected.
+/// Returns an error when the HTTP client cannot be built or the session token is rejected.
 fn login(cfg: &PushConfig, out: &mut Reporter<'_, '_>) -> Result<Session> {
     let url = cfg.base_url.trim_end_matches('/').to_string();
     let http = HttpSession::new()?;
-    let auth = http.auth_check(&url, &cfg.key)?;
+    let auth = http.auth_check(&url, &cfg.token)?;
     let username = auth
         .username
         .as_deref()
@@ -333,7 +337,7 @@ fn login(cfg: &PushConfig, out: &mut Reporter<'_, '_>) -> Result<Session> {
     Ok(Session {
         http,
         url,
-        key: cfg.key.clone(),
+        token: cfg.token.clone(),
         username,
         auth,
     })

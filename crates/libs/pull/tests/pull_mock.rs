@@ -114,7 +114,7 @@ fn export_run(scope: Value, status: &str) -> Value {
     })
 }
 
-/// The login: the key resolves to account `1`, username `alice`.
+/// The login: the token resolves to account `1`, username `alice`.
 fn mock_auth(server: &MockServer) -> httpmock::Mock<'_> {
     server.mock(|when, then| {
         when.method(GET).path("/v1/session");
@@ -215,7 +215,7 @@ fn mock_pages<'a>(
 }
 
 /// `GET /v1/assets/{sha256}`, answering `bytes`. The fingerprint alone names
-/// the attachment and the key names the account, and the server refuses a
+/// the attachment and the token names the account, and the server refuses a
 /// parameter a route does not declare, so a download that still sent
 /// `source=` or `account=` would not match.
 fn mock_asset<'a>(server: &'a MockServer, sha256: &str, bytes: &[u8]) -> httpmock::Mock<'a> {
@@ -237,7 +237,7 @@ fn config(out_dir: &Path, base_url: String) -> PullConfig {
         out_dir: out_dir.to_path_buf(),
         base_url,
         username: "alice".into(),
-        key: "mc_test".into(),
+        token: "mc_test".into(),
         query: String::new(),
         list: ExportQueryList::Messages,
         skip_attachments: false,
@@ -860,11 +860,11 @@ fn a_scope_the_server_refuses_fails_the_run_with_the_servers_sentence() {
 }
 
 #[test]
-fn a_blank_key_or_output_folder_is_refused_before_login() {
+fn a_blank_token_or_output_folder_is_refused_before_login() {
     let dir = tempdir().unwrap();
     let base_url = "http://127.0.0.1:1".to_string();
-    let blank_key = PullConfig {
-        key: "  ".into(),
+    let blank_token = PullConfig {
+        token: "  ".into(),
         ..config(dir.path(), base_url.clone())
     };
     let blank_out_dir = PullConfig {
@@ -873,13 +873,34 @@ fn a_blank_key_or_output_folder_is_refused_before_login() {
     };
 
     assert_eq!(
-        run(&blank_key, None).unwrap_err().to_string(),
-        "API key is required"
+        run(&blank_token, None).unwrap_err().to_string(),
+        "session token is required"
     );
     assert_eq!(
         run(&blank_out_dir, None).unwrap_err().to_string(),
         "output directory is required"
     );
+}
+
+/// The desktop app sends a session token, so a session the server refuses
+/// (expired, or revoked from another window) says to log in again and names
+/// no API key (#1400).
+#[test]
+fn a_refused_session_says_to_log_in_again() {
+    let server = MockServer::start();
+    let _session = server.mock(|when, then| {
+        when.method(GET).path("/v1/session");
+        then.status(401).body("unauthorized");
+    });
+    let dir = tempdir().unwrap();
+
+    let message = format!(
+        "{:#}",
+        run(&config(dir.path(), server.base_url()), None).unwrap_err()
+    );
+
+    assert!(message.contains("Log in again"), "{message}");
+    assert!(!message.contains("API key"), "{message}");
 }
 
 /// Staging names a file by date and fingerprint, so one menu sent on two days

@@ -92,10 +92,16 @@ pub fn ok_json<T: DeserializeOwned>(
             .into()
         });
     }
-    let error = HttpError::new(
-        status.as_u16(),
-        format!("{what} failed (HTTP {status}): {}", error_sentence(body)),
-    );
+    // A 401 mid-run means the session expired or was ended since login, so
+    // the message says to log in again rather than what the server wrote.
+    let error = if status == reqwest::StatusCode::UNAUTHORIZED {
+        crate::session_refused(what)
+    } else {
+        HttpError::new(
+            status.as_u16(),
+            format!("{what} failed (HTTP {status}): {}", error_sentence(body)),
+        )
+    };
     Err(match serde_json::from_str::<Problem>(body) {
         Ok(problem) => error.with_problem(problem),
         Err(_) => error,
@@ -126,6 +132,24 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "asset upload failed (HTTP 400 Bad Request): sha256 mismatch: claimed abc, got def (request id 3f2b1c0e-8d4a-4b6e-9f21-5c7d8e9a0b1c)"
+        );
+    }
+
+    #[test]
+    fn a_401_says_to_log_in_again_and_stays_permanent() {
+        let err = ok_json::<Answer>(
+            "import batch",
+            reqwest::StatusCode::UNAUTHORIZED,
+            r#"{"type":"https://messagecrate.app/docs/developer/reference/errors/authentication-required","title":"Authentication required","status":401,"detail":"Authentication required."}"#,
+        )
+        .unwrap_err();
+        let message = err.to_string();
+        assert!(message.starts_with("import batch failed."), "got {message}");
+        assert!(message.contains("Log in again"), "got {message}");
+        assert_eq!(
+            crate::classify_retry(&err),
+            crate::RetryKind::Permanent,
+            "a refused session is not retried"
         );
     }
 

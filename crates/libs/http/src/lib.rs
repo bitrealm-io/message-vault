@@ -15,7 +15,7 @@ mod response;
 mod retry;
 mod session;
 
-pub use auth_error::AuthError;
+pub use auth_error::{AuthError, SESSION_REFUSED, session_refused};
 pub use response::{error_sentence, ok_json, read_body};
 pub use retry::{HttpError, RetryKind, classify_retry, with_retries};
 pub use session::{HttpSession, auth_check, bearer_header, looks_like_html, trim_base_url};

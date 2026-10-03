@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow};
 use message_crate_http::{
-    HttpError, error_sentence, looks_like_html, ok_json, read_body, trim_base_url,
+    HttpError, error_sentence, looks_like_html, ok_json, read_body, session_refused, trim_base_url,
 };
 use reqwest::Method;
 use serde::Deserialize;
@@ -106,8 +106,8 @@ fn payload_too_large_message(kind: &str, bytes: Option<usize>) -> String {
 }
 
 /// Build `{base}/v1/assets/...` with extra path segments (percent-encoded).
-/// An attachment is addressed by its SHA-256 alone; the account is not a
-/// parameter: the API key names it.
+/// An attachment is addressed by its SHA-256 alone. The account is not a
+/// parameter, because the session token names it.
 fn asset_url(base_url: &str, segments: &[&str]) -> Result<reqwest::Url> {
     let base = trim_base_url(base_url);
     let mut url =
@@ -133,15 +133,15 @@ impl Session {
     ///
     /// # Errors
     ///
-    /// Returns an error when the server does not accept the credential
-    /// (`401 Unauthorized`: unknown or expired), refuses the account
+    /// Returns an error when the server does not accept the session
+    /// (`401 Unauthorized`, because it expired or was ended), refuses the account
     /// (`403 Forbidden`: disabled, or neither import nor export), or the
     /// request fails in any other way.
     pub(crate) fn head_asset(&self, sha256: &str) -> Result<bool> {
         let url = self.asset_url(&[sha256])?;
         let response = self
             .http
-            .request_url(Method::HEAD, url.clone(), &self.key)
+            .request_url(Method::HEAD, url.clone(), &self.token)
             .timeout(Duration::from_secs(15))
             .send()
             .with_context(|| format!("HEAD {url}"))?;
@@ -149,12 +149,7 @@ impl Session {
         match status.as_u16() {
             404 => return Ok(false),
             401 => {
-                return Err(HttpError::new(
-                    401,
-                    "The server did not accept this credential (401 Unauthorized): \
-                     it is unknown or has expired.",
-                )
-                .into());
+                return Err(session_refused("asset HEAD").into());
             }
             403 => {
                 return Err(HttpError::new(
@@ -204,7 +199,7 @@ impl Session {
             .unwrap_or("application/octet-stream");
         let response = self
             .http
-            .request_url(Method::PUT, url.clone(), &self.key)
+            .request_url(Method::PUT, url.clone(), &self.token)
             .timeout(Duration::from_secs(600))
             .header("Content-Type", content_type)
             .body(bytes)
@@ -274,7 +269,7 @@ impl Session {
         let path = format!("/v1/imports/{import_id}/batches");
         let response = self
             .http
-            .server_request(Method::POST, &self.url, &path, &self.key)
+            .server_request(Method::POST, &self.url, &path, &self.token)
             .timeout(Duration::from_secs(600))
             .header("Content-Type", "application/jsonl")
             .body(ndjson)
@@ -311,7 +306,7 @@ impl Session {
         }
         let response = self
             .http
-            .server_request(Method::POST, &self.url, "/v1/imports", &self.key)
+            .server_request(Method::POST, &self.url, "/v1/imports", &self.token)
             .timeout(Duration::from_secs(60))
             .header("Content-Type", "application/json")
             .json(&body)
@@ -342,7 +337,7 @@ impl Session {
                 Method::POST,
                 &self.url,
                 &format!("/v1/imports/{import_id}/complete"),
-                &self.key,
+                &self.token,
             )
             .timeout(Duration::from_secs(60))
             .header("Content-Type", "application/json")
@@ -385,7 +380,7 @@ impl<'a> MultipartUpload<'a> {
         }
         let response = session
             .http
-            .request_url(Method::POST, start_url.clone(), &session.key)
+            .request_url(Method::POST, start_url.clone(), &session.token)
             .timeout(Duration::from_secs(30))
             .header("Content-Type", "application/json")
             .json(&start_body)
@@ -435,7 +430,7 @@ impl<'a> MultipartUpload<'a> {
         let response = self
             .session
             .http
-            .request_url(Method::PUT, part_url.clone(), &self.session.key)
+            .request_url(Method::PUT, part_url.clone(), &self.session.token)
             .timeout(Duration::from_secs(600))
             .header("Content-Type", "application/octet-stream")
             .body(buf)
@@ -449,6 +444,9 @@ impl<'a> MultipartUpload<'a> {
                 payload_too_large_message("asset upload part", Some(part_len)),
             )
             .into());
+        }
+        if status == reqwest::StatusCode::UNAUTHORIZED {
+            return Err(session_refused(&format!("asset part {part}")).into());
         }
         if !status.is_success() {
             return Err(HttpError::new(
@@ -469,7 +467,7 @@ impl<'a> MultipartUpload<'a> {
         let response = self
             .session
             .http
-            .request_url(Method::POST, complete_url.clone(), &self.session.key)
+            .request_url(Method::POST, complete_url.clone(), &self.session.token)
             .timeout(Duration::from_secs(600))
             .send()
             .with_context(|| format!("POST {complete_url}"))?;
@@ -486,7 +484,7 @@ impl<'a> MultipartUpload<'a> {
         let _ = self
             .session
             .http
-            .request_url(Method::DELETE, url, &self.session.key)
+            .request_url(Method::DELETE, url, &self.session.token)
             .timeout(Duration::from_secs(30))
             .send();
     }
@@ -504,7 +502,7 @@ mod tests {
         Session {
             http: HttpSession::new().unwrap(),
             url,
-            key: "mc-user-test".into(),
+            token: "mc-user-test".into(),
             username: "alice".into(),
             auth: AuthInfo {
                 account_id: 1,
@@ -540,10 +538,38 @@ mod tests {
     }
 
     #[test]
-    fn head_asset_401_does_not_name_an_api_key() {
+    fn head_asset_401_says_to_log_in_again_and_names_no_api_key() {
         let message = head_asset_error(401);
         assert!(message.contains("401 Unauthorized"), "got {message}");
+        assert!(message.contains("Log in again"), "got {message}");
         assert!(!message.contains("API key"), "got {message}");
+    }
+
+    /// A session that expires during a multipart upload answers 401 to a
+    /// part, and the message names the part and says to log in again.
+    #[test]
+    fn send_part_401_names_the_part_and_says_to_log_in_again() {
+        let server = MockServer::start();
+        let _part = server.mock(|when, then| {
+            when.method("PUT")
+                .path(format!("/v1/assets/{DIGEST}/uploads/up-1/parts/2"));
+            then.status(401);
+        });
+        let session = session(server.base_url());
+        let upload = MultipartUpload {
+            session: &session,
+            sha256: DIGEST,
+            upload_id: "up-1".into(),
+            part_size: 4,
+        };
+        let err = upload.send_part(2, vec![0; 4]).unwrap_err();
+        let message = err.to_string();
+        assert!(message.starts_with("asset part 2 failed."), "got {message}");
+        assert!(message.contains("Log in again"), "got {message}");
+        assert_eq!(
+            message_crate_http::classify_retry(&err),
+            message_crate_http::RetryKind::Permanent
+        );
     }
 
     #[test]

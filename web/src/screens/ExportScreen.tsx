@@ -141,7 +141,7 @@ export default function ExportScreen() {
           invokePull({
             base_url: getBaseUrl(),
             username: "",
-            key: token,
+            token,
             out_dir: outDir,
             query: scope === "search" ? query.trim() : "",
             list,

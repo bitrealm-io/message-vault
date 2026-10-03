@@ -20,9 +20,9 @@ pub struct PullArgs {
     pub base_url: String,
     /// Account name.
     pub username: String,
-    /// Bearer token for the server: an API token, or the logged-in Session's
-    /// token. Never a password.
-    pub key: String,
+    /// The logged-in Session's token, sent as the bearer token. Never an API
+    /// Token, and never a password.
+    pub token: String,
     /// Folder the pulled conversation files are written into.
     pub out_dir: String,
     /// Search query selecting what to pull. Blank pulls everything.
@@ -61,7 +61,7 @@ pub fn pull(
             out_dir: PathBuf::from(&args.out_dir),
             base_url: args.base_url,
             username: args.username,
-            key: args.key,
+            token: args.token,
             query: args.query,
             list: args.list,
             skip_attachments: args.skip_attachments,

@@ -39,8 +39,9 @@ pub struct PullConfig {
     /// events carry the username the server reports at login, else the
     /// account id.
     pub username: String,
-    /// API token or session token for the server.
-    pub key: String,
+    /// The logged-in Session's token. The desktop app never passes an API
+    /// Token.
+    pub token: String,
     /// A query in the server's search language. Blank asks for everything the
     /// account holds; anything else is the run's `query` scope.
     pub query: String,
@@ -62,7 +63,7 @@ pub struct PullConfig {
 /// Final summary of a download (conversations, messages, attachment counts).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PullReport {
-    /// Account id the key resolved to.
+    /// Account id the token resolved to.
     pub account: i64,
     /// The Export Run the server recorded for this pull.
     pub export_id: i64,
@@ -89,9 +90,9 @@ pub struct PullReport {
 pub enum ProgressEvent {
     /// One line for the log panel.
     Log(String),
-    /// The key was accepted; the run knows which account it is reading.
+    /// The token was accepted; the run knows which account it is reading.
     Auth {
-        /// Account id the key resolved to.
+        /// Account id the token resolved to.
         account_id: i64,
         /// Username the server reports for that account, else the account id.
         username: String,
@@ -168,11 +169,11 @@ fn prepare_out_dir(out_dir: &Path, skip_attachments: bool) -> Result<()> {
 ///
 /// # Errors
 ///
-/// Returns an error when the key or output folder is missing, login fails, a
+/// Returns an error when the session token or output folder is missing, login fails, a
 /// page or download fails, or a conversation file cannot be written.
 pub fn run(cfg: &PullConfig, mut on_progress: Option<&mut ProgressFn<'_>>) -> Result<PullReport> {
-    if cfg.key.trim().is_empty() {
-        bail!("API key is required");
+    if cfg.token.trim().is_empty() {
+        bail!("session token is required");
     }
     if cfg.out_dir.as_os_str().is_empty() {
         bail!("output directory is required");
@@ -283,14 +284,13 @@ struct Pull<'a> {
 }
 
 impl<'a> Pull<'a> {
-    /// Check the key, announce the account and query, and load the journal.
+    /// Check the token, announce the account and query, and load the journal.
     ///
     /// # Errors
     ///
     /// Returns an error when login fails or the journal cannot be read.
     fn login(cfg: &'a PullConfig, out: &mut Option<&mut ProgressFn<'_>>) -> Result<Self> {
-        let auth =
-            authenticate(&cfg.base_url, &cfg.key).map_err(|e| anyhow::anyhow!("{}", e.detail()))?;
+        let auth = authenticate(&cfg.base_url, &cfg.token).map_err(|e| anyhow::anyhow!("{e}"))?;
         let account = auth.account_id;
         let username = auth.username.unwrap_or_else(|| account.to_string());
         emit(
@@ -357,7 +357,7 @@ impl<'a> Pull<'a> {
             crate::http::create_export(
                 &self.session,
                 &cfg.base_url,
-                &cfg.key,
+                &cfg.token,
                 &self.scope(),
                 TOOL_NAME,
             )
@@ -380,7 +380,7 @@ impl<'a> Pull<'a> {
     fn close_export(&self, export_id: i64, action: &str) -> Result<ExportRun> {
         let cfg = self.cfg;
         with_retries(MAX_RETRIES, || {
-            crate::http::close_export(&self.session, &cfg.base_url, &cfg.key, export_id, action)
+            crate::http::close_export(&self.session, &cfg.base_url, &cfg.token, export_id, action)
         })
     }
 
@@ -450,7 +450,7 @@ impl<'a> Pull<'a> {
                     &self.session,
                     ExportMessagesArgs {
                         base_url: &cfg.base_url,
-                        key: &cfg.key,
+                        token: &cfg.token,
                         export_id: export.id,
                         limit,
                         offset,
@@ -526,7 +526,7 @@ impl<'a> Pull<'a> {
         let stats = download_assets_parallel(DownloadAssetsParallelArgs {
             session: &self.session,
             base_url: &cfg.base_url,
-            key: &cfg.key,
+            token: &cfg.token,
             assets: &to_download,
             out_dir: &cfg.out_dir,
             workers: cfg.asset_download_workers,
@@ -785,7 +785,7 @@ fn assets_needing_download(
 struct DownloadAssetsParallelArgs<'a> {
     session: &'a crate::http::HttpSession,
     base_url: &'a str,
-    key: &'a str,
+    token: &'a str,
     assets: &'a HashMap<String, String>, // sha256 -> rel_path
     out_dir: &'a Path,
     workers: usize,
@@ -797,7 +797,7 @@ fn download_assets_parallel(args: DownloadAssetsParallelArgs<'_>) -> Result<Asse
     let DownloadAssetsParallelArgs {
         session,
         base_url,
-        key,
+        token,
         assets,
         out_dir,
         workers,
@@ -822,7 +822,7 @@ fn download_assets_parallel(args: DownloadAssetsParallelArgs<'_>) -> Result<Asse
 
     let results = parallel_for_each(&jobs, workers, cancel, |job| {
         with_retries(MAX_RETRIES, || {
-            crate::http::download_asset(session, base_url, key, &job.sha256, &job.dest)?;
+            crate::http::download_asset(session, base_url, token, &job.sha256, &job.dest)?;
             let meta = fs::metadata(&job.dest)
                 .with_context(|| format!("stat after download {}", job.dest.display()))?;
             Ok(meta.len())

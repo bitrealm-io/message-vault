@@ -102,7 +102,7 @@ pub struct PushReport {
     /// and leaves `cancelled` rows, but this stays `false`, so a caller can
     /// tell a pause from a failure.
     pub cancelled: bool,
-    /// Account id the key resolved to.
+    /// Account id the token resolved to.
     pub account: i64,
     /// Username the server reports for that account, else the account id.
     pub username: String,

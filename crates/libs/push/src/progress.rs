@@ -19,9 +19,9 @@ use crate::report::{FileResult, PushReport, UploadProfile, elapsed_ms, format_pr
 pub enum ProgressEvent {
     /// One line for the log panel.
     Log(String),
-    /// The key was accepted; the run knows which account it imports into.
+    /// The token was accepted; the run knows which account it imports into.
     Auth {
-        /// Account id the key resolved to.
+        /// Account id the token resolved to.
         account_id: i64,
         /// Username the server reports for that account, else the account id.
         username: String,

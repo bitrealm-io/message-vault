@@ -26,10 +26,11 @@ use axum::http::HeaderMap;
 
 use crate::assets_api::AssetStats;
 use crate::config::{PathsConfig, validate_source_id};
-use crate::db::dialect;
 #[cfg(test)]
 use crate::db::engine;
+use crate::db::engine::BEGIN_IMMEDIATE_SQL;
 use crate::db::imports::{self, CompleteImportArgs};
+use crate::db::maintenance;
 use crate::db::schema;
 use media::MediaMode;
 
@@ -318,14 +319,14 @@ pub async fn import_jsonl_files_on_conn(
     // Stats on already-committed rows so promote's guid join can use the
     // indexes. Outside the transaction, because a failed ANALYZE is only a
     // warning.
-    dialect::analyze_import_tables(conn).await;
+    maintenance::analyze_import_tables(conn).await;
 
     // Staging and promote share one transaction. Staging makes contacts and,
     // by ADR-0013, discards trashed ones; none of that may outlive a promote
     // that fails. The write lock is taken up front (IMMEDIATE) so two
     // imports for different accounts cannot race into SQLITE_BUSY at the
     // first INSERT.
-    let mut tx = conn.begin_with(dialect::BEGIN_IMMEDIATE_SQL).await?;
+    let mut tx = conn.begin_with(BEGIN_IMMEDIATE_SQL).await?;
     let asset_stats = stage_all_files(&mut tx, paths, opts, &mut stats, started).await?;
 
     say(&format!(

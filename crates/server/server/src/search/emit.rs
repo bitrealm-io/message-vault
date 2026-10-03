@@ -4,7 +4,6 @@
 use chrono::NaiveDate;
 
 use crate::db::contacts::UNKNOWN_CONTACT_SQL;
-use crate::db::dialect::name_eq_ci;
 
 use super::bridge::{ListCtx, MessageAgg, Sql, TrashScope};
 use super::error::{QueryError, QueryErrorKind};
@@ -160,7 +159,7 @@ fn emit_expr(ctx: &ListCtx, out: &mut Sql, expr: &Expr) -> Result<(), QueryError
 /// (`free_text_match`) and the text words (`text_match`) both go through it.
 /// It escapes the text first, so a `%`, `_`, or `\` a person types is that
 /// character and never a wildcard: `filename:IMG_0001` does not find
-/// `IMGX0001`. `like_ci` names `\` as the escape character.
+/// `IMGX0001`. `Sql::like` names `\` as the escape character.
 fn like_contains(out: &mut Sql, column: &str, text: &str, prefix: bool) {
     let text = like_escape(text);
     if prefix {
@@ -626,8 +625,9 @@ impl NamedSet {
                 Ok(())
             }
             Value::Text(t) => {
-                out.push(&name_eq_ci("ns.name", "?"));
-                out.param_text(t.clone());
+                out.push("lower(ns.name) = lower(");
+                out.bind_text(t.clone());
+                out.push(")");
                 Ok(())
             }
             Value::Prefix(t) => {

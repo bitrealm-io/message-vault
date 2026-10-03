@@ -13,7 +13,6 @@ use serde::Serialize;
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Row, SqliteConnection};
 
-use crate::db::dialect::{name_eq_ci, order_by_name_ci};
 use crate::db::named_membership::MAX_NAME_LEN;
 
 /// How a saved search was created.
@@ -125,28 +124,24 @@ async fn find_id_by_name(
     account_id: i64,
     name: &str,
 ) -> Result<Option<i64>> {
-    let sql = format!(
-        "SELECT id FROM saved_searches WHERE account_id = $1 AND {}",
-        name_eq_ci("name", "$2")
-    );
-    let id = sqlx::query_scalar::<_, i64>(&sql)
-        .bind(account_id)
-        .bind(name)
-        .fetch_optional(&mut *conn)
-        .await?;
+    let id = sqlx::query_scalar::<_, i64>(
+        "SELECT id FROM saved_searches WHERE account_id = $1 AND lower(name) = lower($2)",
+    )
+    .bind(account_id)
+    .bind(name)
+    .fetch_optional(&mut *conn)
+    .await?;
     Ok(id)
 }
 
 /// One account's saved searches, A–Z.
 pub async fn list(conn: &mut SqliteConnection, account_id: i64) -> Result<Vec<SavedSearch>> {
-    let sql = format!(
-        "SELECT id, name, query, kind FROM saved_searches WHERE account_id = $1 {}",
-        order_by_name_ci("name")
-    );
-    let rows = sqlx::query(&sql)
-        .bind(account_id)
-        .fetch_all(&mut *conn)
-        .await?;
+    let rows = sqlx::query(
+        "SELECT id, name, query, kind FROM saved_searches WHERE account_id = $1 ORDER BY lower(name)",
+    )
+    .bind(account_id)
+    .fetch_all(&mut *conn)
+    .await?;
     rows.iter().map(row_to_saved_search).collect()
 }
 
@@ -268,7 +263,7 @@ pub async fn delete(conn: &mut SqliteConnection, account_id: i64, id: i64) -> Re
 /// The name is `Import <source> <date>`, or that with " 2", " 3", … when the
 /// account already has a saved search under the name in any letter case. The
 /// insert itself claims the name, through
-/// [`crate::db::dialect::insert_under_free_name`], which the run's Contact
+/// [`crate::db::free_name::insert_under_free_name`], which the run's Contact
 /// Group goes through too. A saved search a person made under that name is
 /// left alone.
 pub async fn create_for_import(
@@ -281,7 +276,7 @@ pub async fn create_for_import(
     let base = normalize_name(&format!("Import {source} {date_ymd}"))?;
     let query = format!("import:#{import_id}");
     let kind = SavedSearchKind::Import.as_str();
-    let claimed = crate::db::dialect::insert_under_free_name(
+    let claimed = crate::db::free_name::insert_under_free_name(
         conn,
         "saved_searches",
         account_id,

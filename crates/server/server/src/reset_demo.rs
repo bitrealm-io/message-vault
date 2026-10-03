@@ -21,8 +21,8 @@ use crate::config::Config;
 use crate::db::account_profile;
 use crate::db::address_book::{self, LoadCounts, LoadMode};
 use crate::db::demo_account_build;
-use crate::db::dialect;
 use crate::db::engine;
+use crate::db::maintenance;
 use crate::db::schema;
 use crate::dedupe;
 use crate::imports_api::{self, FixedImportArgs, ImportMode, ImportOptions, ImportSchemaMode};
@@ -1438,7 +1438,7 @@ async fn vacuum_after_demo(db: &SqlitePool) {
             return;
         }
     };
-    dialect::vacuum_import_tables(&mut conn).await;
+    maintenance::vacuum_import_tables(&mut conn).await;
 }
 
 /// Parse `config/seed.toml` from the bundle.

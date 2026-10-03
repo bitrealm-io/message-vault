@@ -1365,8 +1365,7 @@ pub(crate) async fn import_run(
     })
 }
 
-/// New stage for a running Import Run: `parse`, `write`, `staging_review`,
-/// `media`, `media_review` or `upload`.
+/// New stage for a running Import Run.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub(crate) struct UpdateImportRequest {
     /// The stage the run moves to.

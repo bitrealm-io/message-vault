@@ -739,7 +739,7 @@ async fn a_second_session_is_refused_with_conflict() {
 }
 
 #[tokio::test]
-async fn stage_endpoint_advances_and_rejects_an_unknown_stage() {
+async fn stage_endpoint_advances() {
     let (_dir, state, token, import_id) = test_state().await;
 
     let _ = update_import(

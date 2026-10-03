@@ -4239,10 +4239,7 @@ export interface components {
             remove_identity?: components["schemas"]["RemoveContactIdentityRequest"] | null;
             update_identity?: components["schemas"]["UpdateContactIdentityRequest"] | null;
         };
-        /**
-         * @description New stage for a running Import Run: `parse`, `write`, `staging_review`,
-         *     `media`, `media_review` or `upload`.
-         */
+        /** @description New stage for a running Import Run. */
         UpdateImportRequest: {
             /** @description The stage the run moves to. */
             stage: components["schemas"]["ImportStage"];

@@ -17166,7 +17166,7 @@
       },
       "UpdateImportRequest": {
         "type": "object",
-        "description": "New stage for a running Import Run: `parse`, `write`, `staging_review`,\n`media`, `media_review` or `upload`.",
+        "description": "New stage for a running Import Run.",
         "required": [
           "stage"
         ],

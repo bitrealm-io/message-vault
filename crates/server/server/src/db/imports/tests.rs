@@ -482,15 +482,15 @@ async fn completing_a_session_frees_the_slot_too() {
 
 #[test]
 fn every_stage_round_trips_through_its_string() {
-    for stage in [
-        ImportStage::Parse,
-        ImportStage::Write,
-        ImportStage::StagingReview,
-        ImportStage::Media,
-        ImportStage::MediaReview,
-        ImportStage::Upload,
-    ] {
+    // The column's spelling is the wire's: a stage the API accepts is stored
+    // as a word every later read of the row can parse.
+    for stage in ImportStage::ALL {
         assert_eq!(ImportStage::parse(stage.as_str()), Some(stage));
+        assert_eq!(serde_json::to_value(stage).unwrap(), stage.as_str());
+    }
+    for stage in ImportIssueStage::ALL {
+        assert_eq!(ImportIssueStage::parse(stage.as_str()), Some(stage));
+        assert_eq!(serde_json::to_value(stage).unwrap(), stage.as_str());
     }
     assert_eq!(ImportStage::parse("gate_1"), None);
 }

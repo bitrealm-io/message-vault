@@ -131,6 +131,7 @@ Line 1 is the header (includes `conversation.stats`; no `messages` array). Each 
 | CSV | unified [`CSV_HEADERS`](https://github.com/messagecrate/message-crate/blob/main/crates/libs/ir-format/src/write.rs) (header from first data row on read) | `read_conversation_csv` |
 | EML / MBOX | common message → `MailMessage` → [`mail`](https://github.com/messagecrate/message-crate/tree/main/crates/libs/mail) | `read_conversation_eml_dir` / `read_conversation_mbox` |
 | XML | single `smses.xml` via [`sms_backup_restore_exporter::SbrArchive`](https://github.com/messagecrate/message-crate/tree/main/crates/exporters/sms-backup-restore-exporter) handed to `FormatSink::with_archive` | `sms_backup_restore_exporter::read_backup` (owner inferred when omitted) |
+| SMS Backup+ | one folder of `X-smssync-*` mail per conversation, SMS and MMS only, via [`sms_backup_plus_exporter::SmsBackupPlusArchive`](https://github.com/messagecrate/message-crate/tree/main/crates/exporters/sms-backup-plus-exporter) handed to `FormatSink::with_archive` | `sms_backup_plus_exporter::run` (the SMS Backup+ import) |
 
 **Directory convert:** [`message-reexport`](https://github.com/messagecrate/message-crate/tree/main/crates/libs/reexport) auto-detects one format in an export folder and writes another via `FormatSink`. Export calls it for any format other than JSON Lines.
 

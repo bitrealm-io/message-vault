@@ -307,6 +307,7 @@ export const EXPORT_FORMATS = [
   { id: "eml", label: "EML (one file per message)" },
   { id: "mbox", label: "MBOX (.mbox)" },
   { id: "xml", label: "Android XML (smses.xml)" },
+  { id: "sms-backup-plus", label: "EML (SMS Backup+)" },
 ] as const;
 
 /** Id of a format the Export screen can write. */

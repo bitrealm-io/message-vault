@@ -14,6 +14,7 @@ use message_ir_format::{
     read_conversation_mbox,
 };
 use message_staging::AttachmentSpool;
+use sms_backup_plus_exporter::{SmsBackupPlusArchive, left_out_line};
 use sms_backup_restore_exporter::{ReadOptions, SbrArchive, read_backup};
 use std::collections::HashSet;
 use std::fs::{self, File};
@@ -62,12 +63,15 @@ impl ReexportReport {
             ));
         }
         lines.extend(self.report.media_lines());
+        lines.extend(left_out_line(&self.report));
         lines
     }
 }
 
 /// Detect the input format, copy attachments if needed, and write the new export.
 fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportReport> {
+    // SMS Backup+ mail records when its backup was made: this run's start.
+    let started = chrono::Utc::now();
     // The output is cleaned below, so one that is or holds the input is
     // refused before anything is written.
     prepare_outputs(&[input_dir.to_path_buf()], &config.output)?;
@@ -106,8 +110,12 @@ fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportR
 
     report.conversations = documents.len() as u64;
     let mut sink = FormatSink::open(&config.output, config.output_format, transforms)?;
-    if config.output_format == OutputFormat::Xml {
-        sink = sink.with_archive(Box::new(SbrArchive));
+    match config.output_format {
+        OutputFormat::Xml => sink = sink.with_archive(Box::new(SbrArchive)),
+        OutputFormat::SmsBackupPlus => {
+            sink = sink.with_archive(Box::new(SmsBackupPlusArchive::new(started)));
+        }
+        _ => {}
     }
     for document in documents {
         sink.write_document(document)?;
@@ -220,6 +228,7 @@ fn read_artifact(path: &Path, format: OutputFormat) -> Result<ConversationDocume
         OutputFormat::Mbox => read_conversation_mbox(path),
         OutputFormat::Eml => read_conversation_eml_dir(path),
         OutputFormat::Xml => unreachable!("XML handled above"),
+        OutputFormat::SmsBackupPlus => unreachable!("never detected as an input"),
     }
 }
 
@@ -277,6 +286,7 @@ fn detect_ir_export(input_dir: &Path) -> Result<DetectedExport> {
         OutputFormat::Csv => 3,
         OutputFormat::Mbox => 4,
         OutputFormat::Eml => 5,
+        OutputFormat::SmsBackupPlus => 6,
     });
 
     match present.as_slice() {
@@ -337,6 +347,8 @@ fn list_artifacts(input_dir: &Path, format: OutputFormat) -> Result<Vec<PathBuf>
                     && path.extension().and_then(|extension| extension.to_str()) == Some("mbox")
             }
             OutputFormat::Eml => path.is_dir() && dir_has_eml(&path)?,
+            // Never detected as an input: its folders are found as `Eml`.
+            OutputFormat::SmsBackupPlus => false,
         };
         if matches {
             paths.push(path);

@@ -21,8 +21,9 @@ use crate::state::AppState;
 /// # Errors
 ///
 /// Returns an error if `output_format` is not one of json, jsonl, csv, eml,
-/// mbox, or xml, if another job is running, or if another thread panicked
-/// while holding the shared state lock. Failures during conversion are sent as `extract:error`.
+/// mbox, xml, or sms-backup-plus, if another job is running, or if another
+/// thread panicked while holding the shared state lock. Failures during
+/// conversion are sent as `extract:error`.
 #[tauri::command(async)]
 pub fn format(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
@@ -38,6 +39,7 @@ pub fn format(
         "eml" => OutputFormat::Eml,
         "mbox" => OutputFormat::Mbox,
         "xml" => OutputFormat::Xml,
+        "sms-backup-plus" => OutputFormat::SmsBackupPlus,
         _ => return Err(format!("unsupported output format '{output_format}'")),
     };
 

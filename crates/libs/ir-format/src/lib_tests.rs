@@ -506,7 +506,7 @@ fn hard_texts_survive_every_format() {
                 OutputFormat::Csv => read_conversation_csv(&path),
                 OutputFormat::Eml => read_conversation_eml_dir(&path),
                 OutputFormat::Mbox => read_conversation_mbox(&path),
-                OutputFormat::Xml => unreachable!(),
+                OutputFormat::Xml | OutputFormat::SmsBackupPlus => unreachable!(),
             };
             let back = match back {
                 Ok(back) => back,

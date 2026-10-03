@@ -7,6 +7,7 @@ license = "LicenseRef-FCL-1.0-ALv2"
 
 [dependencies]
 anyhow = { workspace = true }
+chrono = { workspace = true }
 csv = { workspace = true }
 message-crate-core = { path = "../../core/message-crate-core" }
 message-ir = { path = "../ir" }
@@ -14,6 +15,7 @@ message-ir-format = { path = "../ir-format" }
 message-staging = { path = "../staging" }
 media = { path = "../media" }
 serde_json = { workspace = true }
+sms-backup-plus-exporter = { path = "../../exporters/sms-backup-plus-exporter" }
 sms-backup-restore-exporter = { path = "../../exporters/sms-backup-restore-exporter" }
 
 [dev-dependencies]

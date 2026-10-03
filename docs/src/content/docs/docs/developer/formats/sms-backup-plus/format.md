@@ -32,3 +32,23 @@ Message Crate has no model for a call, so the exporter skips every `CALLLOG` mai
 ## Import mapping and deduplication
 
 Source-field mapping and online cover-key deduplication: [SMS Backup+ mapping](/docs/developer/formats/sms-backup-plus/mapping/).
+
+## Writing SMS Backup+ mail
+
+The **EML (SMS Backup+)** export format writes SMS and MMS back out as this mail, through `SmsBackupPlusArchive` in `sms-backup-plus-exporter` (ADR 0021). A message whose service is not SMS is left out and counted, and the run's log says how many.
+
+Each conversation is one folder, named as the EML archive names its folders, holding one `.eml` per message, named as the EML archive names its files.
+
+Every mail carries `Subject` (`SMS with <name>`), `From`, `To`, `Date`, `Message-ID` and `References` (`<…@sms-backup-plus.local>`), `MIME-Version`, `Content-Type`, `Content-Transfer-Encoding`, and:
+
+| Header | Value |
+|---|---|
+| `X-smssync-datatype` | `SMS`, or `MMS` for an MMS or a message with an attachment |
+| `X-smssync-address` | The other person's address; in a group, every other person's, joined by `~` |
+| `X-smssync-date` | The message time in epoch milliseconds |
+| `X-smssync-type` | `1` received or `2` sent for SMS; `132` received or `128` sent for MMS |
+| `X-smssync-backup-time` | The start of the run that wrote the file, in epoch milliseconds |
+
+An SMS is `text/plain`. An MMS is `multipart/mixed`: the text, then each stored attachment with its content type and file name.
+
+The database does not keep the phone's row and thread ids, read and status flags, protocol, or the app's build, so `X-smssync-id`, `-thread`, `-read`, `-status`, `-protocol` and `-version` are never written. `X-GM-THRID` and `X-Gmail-Labels` are Gmail's, not the app's, and are never written either.

@@ -914,3 +914,62 @@ fn a_version_3_file_among_version_4_files_stops_the_run_and_writes_nothing() {
         "the previous export in the output is left as it was"
     );
 }
+
+/// Export writes every format but JSON Lines through Convert. An export
+/// whose scope holds an iMessage and a WhatsApp conversation beside an SMS
+/// one, written as `EML (SMS Backup+)`, holds only the SMS conversation,
+/// and the run's log says how many messages were left out and why (#543).
+#[test]
+fn sms_backup_plus_writes_only_sms_and_mms_and_says_what_it_left_out() {
+    let source = tempfile::tempdir().unwrap();
+    let mut sink =
+        FormatSink::open(source.path(), OutputFormat::Jsonl, ExportTransforms::none()).unwrap();
+    sink.write_document(message_ir::testutil::sample_document("an sms"))
+        .unwrap();
+    let mut imessage = message_ir::testutil::sample_imessage_document();
+    imessage.conversation.chat_identifier = "+15555550102".into();
+    imessage.conversation.participants[0].handle = Some("+15555550102".into());
+    sink.write_document(imessage).unwrap();
+    let mut whatsapp = message_ir::testutil::sample_document("a whatsapp message");
+    whatsapp.conversation.chat_identifier = "+15555550103".into();
+    whatsapp.conversation.participants[0].handle = Some("+15555550103".into());
+    whatsapp.messages[0].service = message_ir::IrService::Whatsapp;
+    sink.write_document(whatsapp).unwrap();
+    sink.finish(&mut ExportReport::default()).unwrap();
+    let destination = tempfile::tempdir().unwrap();
+
+    let report = convert_export(
+        source.path(),
+        &config(
+            source.path(),
+            destination.path(),
+            OutputFormat::SmsBackupPlus,
+        ),
+    )
+    .unwrap();
+
+    let written: Vec<String> = fs::read_dir(destination.path())
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().is_dir())
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(written, ["+15555550101"]);
+    let mail = fs::read_dir(destination.path().join("+15555550101"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let mail = fs::read_to_string(mail).unwrap();
+    assert!(mail.contains("X-smssync-type: 1"), "{mail}");
+    assert!(
+        report.log_lines().contains(
+            &"Left out 3 message(s) that are not SMS or MMS, because SMS Backup+ holds \
+              only SMS and MMS"
+                .to_string()
+        ),
+        "{:?}",
+        report.log_lines()
+    );
+}

@@ -66,14 +66,14 @@ pub const CSV_HEADERS: &[&str] = &[
 
 /// Write one conversation in a per-chat format.
 ///
-/// A merged archive is one file for every conversation, so it cannot be
-/// written a conversation at a time: [`OutputFormat::Xml`] is refused here
-/// and goes through [`FormatSink::with_archive`](crate::FormatSink::with_archive).
+/// A vendor format is written by the crate that owns it, so
+/// [`OutputFormat::Xml`] and [`OutputFormat::SmsBackupPlus`] are refused
+/// here and go through [`FormatSink::with_archive`](crate::FormatSink::with_archive).
 ///
 /// # Errors
 ///
 /// Returns an error when the directory cannot be created, a file cannot be
-/// written, or `format` is a merged archive.
+/// written, or `format` is a vendor format.
 pub fn write_format(
     output_dir: &Path,
     format: OutputFormat,
@@ -86,8 +86,8 @@ pub fn write_format(
         OutputFormat::Jsonl => write_conversation_jsonl(output_dir, &doc),
         OutputFormat::Eml => write_conversation_mail(output_dir, &doc, MailPackage::EmlFolders),
         OutputFormat::Mbox => write_conversation_mail(output_dir, &doc, MailPackage::Mbox),
-        OutputFormat::Xml => anyhow::bail!(
-            "{} is a merged archive of every conversation: supply its MergedArchive to \
+        OutputFormat::Xml | OutputFormat::SmsBackupPlus => anyhow::bail!(
+            "{} is written by the crate that owns it: supply its merged archive to \
              FormatSink instead of writing one conversation",
             format.as_str()
         ),

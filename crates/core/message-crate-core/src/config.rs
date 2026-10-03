@@ -28,6 +28,9 @@ pub enum OutputFormat {
     Jsonl,
     /// Single SMS Backup & Restore XML backup (`smses.xml`).
     Xml,
+    /// SMS Backup+ mail: a folder of `.eml` files per conversation with the
+    /// `X-smssync-*` headers, holding only SMS and MMS.
+    SmsBackupPlus,
 }
 
 impl fmt::Display for OutputFormat {
@@ -39,6 +42,7 @@ impl fmt::Display for OutputFormat {
             Self::Json => "JSON (common message)",
             Self::Jsonl => "JSONL (common message lines)",
             Self::Xml => "XML (SMS Backup & Restore)",
+            Self::SmsBackupPlus => "EML (SMS Backup+)",
         })
     }
 }
@@ -54,10 +58,12 @@ impl OutputFormat {
             Self::Json => "json",
             Self::Jsonl => "jsonl",
             Self::Xml => "xml",
+            Self::SmsBackupPlus => "sms-backup-plus",
         }
     }
 
-    /// Parse a format id. `ndjson` is accepted as JSON Lines; `sbr`/`smses` as XML.
+    /// Parse a format id. `ndjson` is accepted as JSON Lines; `sbr`/`smses` as
+    /// XML; `smsbackupplus` as `sms-backup-plus`.
     ///
     /// # Errors
     ///
@@ -70,8 +76,10 @@ impl OutputFormat {
             "json" => Ok(Self::Json),
             "jsonl" | "ndjson" => Ok(Self::Jsonl),
             "xml" | "sbr" | "smses" => Ok(Self::Xml),
+            "sms-backup-plus" | "smsbackupplus" => Ok(Self::SmsBackupPlus),
             other => Err(format!(
-                "unknown output format '{other}' (expected csv, eml, mbox, json, jsonl, or xml)"
+                "unknown output format '{other}' (expected csv, eml, mbox, json, jsonl, xml, \
+                 or sms-backup-plus)"
             )),
         }
     }
@@ -107,7 +115,8 @@ pub struct ExporterConfig {
     /// nothing; the desktop app sets a sink and drives its progress bar
     /// from the events. Log lines are never read for counts.
     pub progress: Option<ProgressSink>,
-    /// Packaging format (`csv` / `eml` / `mbox` / `json` / `jsonl` / `xml`).
+    /// Packaging format (`csv` / `eml` / `mbox` / `json` / `jsonl` / `xml` /
+    /// `sms-backup-plus`).
     pub output_format: OutputFormat,
     /// Continue an interrupted export in the same output directory: previous
     /// output is kept, and conversations already written are skipped. Only
@@ -330,6 +339,18 @@ mod tests {
         assert_eq!(OutputFormat::parse("xml"), Ok(OutputFormat::Xml));
         assert_eq!(OutputFormat::parse("sbr"), Ok(OutputFormat::Xml));
         assert_eq!(OutputFormat::parse("smses"), Ok(OutputFormat::Xml));
+        assert_eq!(
+            OutputFormat::parse("sms-backup-plus"),
+            Ok(OutputFormat::SmsBackupPlus)
+        );
+        assert_eq!(
+            OutputFormat::parse("smsbackupplus"),
+            Ok(OutputFormat::SmsBackupPlus)
+        );
+        assert_eq!(
+            OutputFormat::parse(OutputFormat::SmsBackupPlus.as_str()),
+            Ok(OutputFormat::SmsBackupPlus)
+        );
     }
 
     #[test]
@@ -343,7 +364,8 @@ mod tests {
         assert_eq!(
             OutputFormat::parse("pdf"),
             Err(
-                "unknown output format 'pdf' (expected csv, eml, mbox, json, jsonl, or xml)"
+                "unknown output format 'pdf' (expected csv, eml, mbox, json, jsonl, xml, or \
+                 sms-backup-plus)"
                     .to_string()
             )
         );

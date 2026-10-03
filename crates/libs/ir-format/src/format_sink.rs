@@ -11,13 +11,14 @@ use message_ir::ConversationDocument;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// A format that folds every conversation into one file with the attachment
-/// bytes inside it. The crate that owns such a format implements this and
-/// the caller that wants it hands it to [`FormatSink::with_archive`]; this
-/// crate knows no archive format by name.
+/// A vendor format that writes every conversation in one pass with the
+/// attachment bytes inside it: one `smses.xml`, or a folder of SMS Backup+
+/// mail per conversation. The crate that owns such a format implements this
+/// and the caller that wants it hands it to [`FormatSink::with_archive`];
+/// this crate knows no archive format by name.
 pub trait MergedArchive: std::fmt::Debug + Send {
-    /// Write `documents` under `output_dir` as one file and return its path.
-    /// Anything the format could not carry is counted in `report`.
+    /// Write `documents` under `output_dir` and return the path of what was
+    /// written. Anything the format could not carry is counted in `report`.
     ///
     /// # Errors
     ///

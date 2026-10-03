@@ -72,6 +72,7 @@ Convert reads every file before it writes, so a refused file stops the whole run
 | **EML (one file per message)** | One folder per conversation, one `.eml` per message | Embedded |
 | **MBOX (.mbox)** | One `.mbox` per conversation | Embedded |
 | **Android XML (smses.xml)** | One `smses.xml` | Embedded. Apple-only fields are dropped |
+| **EML (SMS Backup+)** | One folder per conversation, one `.eml` per SMS or MMS | Embedded. Messages that are not SMS or MMS are left out, and the log says how many |
 
 The folder layout is described in [Export structure](/docs/developer/reference/export-structure/).
 
@@ -101,3 +102,4 @@ It leaves a hidden file named `.message-crate-export` behind, which marks the fo
 
 - Attachments reach the output only when they are present in the input folder, because Convert copies them from its `attachments` folder and never fetches them from the server.
 - Android XML has no place for Apple-only fields such as message effects and Tapbacks, so JSON or JSON Lines is the format to choose when that detail matters.
+- EML (SMS Backup+) holds only SMS and MMS. Its mail is read back by the SMS Backup+ import, not by Convert.

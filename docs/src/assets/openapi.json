@@ -690,13 +690,13 @@
           "Accounts"
         ],
         "summary": "List the account's named API tokens with their permissions and masked secrets.",
-        "description": "Each token's permissions are capped by the account's as they are now.",
+        "description": "Each token's permissions are capped by the account's as they are now. The owner lists any account's tokens, without their masked secrets.",
         "operationId": "list_api_tokens",
         "parameters": [
           {
             "name": "id",
             "in": "path",
-            "description": "Account id; must be the caller's own",
+            "description": "Account id; the caller's own, or any for the owner",
             "required": true,
             "schema": {
               "type": "integer",
@@ -749,7 +749,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -758,6 +758,7 @@
               }
             },
             "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/not-the-owner",
               "https://messagecrate.app/docs/developer/reference/errors/insufficient-scope",
               "https://messagecrate.app/docs/developer/reference/errors/account-disabled"
             ]
@@ -949,13 +950,13 @@
           "Accounts"
         ],
         "summary": "Delete one named API token.",
-        "description": "Requests using it start failing on the next call.",
+        "description": "Requests using it start failing on the next call. The owner revokes any account's token, so a leaked one can be ended without the account's help.",
         "operationId": "delete_api_token",
         "parameters": [
           {
             "name": "id",
             "in": "path",
-            "description": "Account id; must be the caller's own",
+            "description": "Account id; the caller's own, or any for the owner",
             "required": true,
             "schema": {
               "type": "integer",
@@ -991,7 +992,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1000,6 +1001,7 @@
               }
             },
             "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/not-the-owner",
               "https://messagecrate.app/docs/developer/reference/errors/insufficient-scope",
               "https://messagecrate.app/docs/developer/reference/errors/account-disabled"
             ]
@@ -10119,7 +10121,6 @@
           "label",
           "can_import",
           "can_export",
-          "token_hint",
           "created_at",
           "disabled"
         ],
@@ -10164,8 +10165,11 @@
             "description": "Unix-seconds string of last use; absent when never used."
           },
           "token_hint": {
-            "type": "string",
-            "description": "Masked secret for Settings (e.g. `mc-api-Sd..mE`)."
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Masked secret for Settings (e.g. `mc-api-Sd..mE`). Absent when the\nowner lists another account's tokens: the hint is part of the secret."
           }
         }
       },
@@ -12343,7 +12347,6 @@
                 "label",
                 "can_import",
                 "can_export",
-                "token_hint",
                 "created_at",
                 "disabled"
               ],
@@ -12388,8 +12391,11 @@
                   "description": "Unix-seconds string of last use; absent when never used."
                 },
                 "token_hint": {
-                  "type": "string",
-                  "description": "Masked secret for Settings (e.g. `mc-api-Sd..mE`)."
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Masked secret for Settings (e.g. `mc-api-Sd..mE`). Absent when the\nowner lists another account's tokens: the hint is part of the secret."
                 }
               }
             },

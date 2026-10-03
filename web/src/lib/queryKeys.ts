@@ -80,6 +80,8 @@ export const keys = {
     member: (accountId: number) => ["owner-accounts", accountId] as const,
     storage: (accountId: number) => ["owner-accounts", accountId, "storage"] as const,
     identities: (accountId: number) => ["owner-accounts", accountId, "identities"] as const,
+    /** The account's API tokens, as the owner sees them: no masked secret. */
+    apiTokens: (accountId: number) => ["owner-accounts", accountId, "api-tokens"] as const,
     /** One page of the account's Import Runs. Under `storage`, like the run it opens. */
     imports: (accountId: number, page: number) =>
       ["owner-accounts", accountId, "storage", "imports", page] as const,

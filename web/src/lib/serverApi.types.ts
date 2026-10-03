@@ -92,7 +92,7 @@ export interface paths {
         };
         /**
          * List the account's named API tokens with their permissions and masked secrets.
-         * @description Each token's permissions are capped by the account's as they are now.
+         * @description Each token's permissions are capped by the account's as they are now. The owner lists any account's tokens, without their masked secrets.
          */
         get: operations["list_api_tokens"];
         put?: never;
@@ -119,7 +119,7 @@ export interface paths {
         post?: never;
         /**
          * Delete one named API token.
-         * @description Requests using it start failing on the next call.
+         * @description Requests using it start failing on the next call. The owner revokes any account's token, so a leaked one can be ended without the account's help.
          */
         delete: operations["delete_api_token"];
         options?: never;
@@ -1474,8 +1474,11 @@ export interface components {
             label: string;
             /** @description Unix-seconds string of last use; absent when never used. */
             last_accessed_at?: string | null;
-            /** @description Masked secret for Settings (e.g. `mc-api-Sd..mE`). */
-            token_hint: string;
+            /**
+             * @description Masked secret for Settings (e.g. `mc-api-Sd..mE`). Absent when the
+             *     owner lists another account's tokens: the hint is part of the secret.
+             */
+            token_hint?: string | null;
         };
         /**
          * @description Which app a session's requests come from. The server records it beside the
@@ -2578,8 +2581,11 @@ export interface components {
                 label: string;
                 /** @description Unix-seconds string of last use; absent when never used. */
                 last_accessed_at?: string | null;
-                /** @description Masked secret for Settings (e.g. `mc-api-Sd..mE`). */
-                token_hint: string;
+                /**
+                 * @description Masked secret for Settings (e.g. `mc-api-Sd..mE`). Absent when the
+                 *     owner lists another account's tokens: the hint is part of the secret.
+                 */
+                token_hint?: string | null;
             }[];
             /** @description Page size used. */
             limit: number;
@@ -4052,7 +4058,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                /** @description Account id; must be the caller's own */
+                /** @description Account id; the caller's own, or any for the owner */
                 id: number;
             };
             cookie?: never;
@@ -4078,7 +4084,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -4211,7 +4219,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Account id; must be the caller's own */
+                /** @description Account id; the caller's own, or any for the owner */
                 id: number;
                 /** @description API token id */
                 token_id: number;
@@ -4237,7 +4245,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */

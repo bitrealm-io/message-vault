@@ -1291,7 +1291,7 @@ fn sms_backup_plus_mail_records_the_export_runs_start() {
         OutputFormat::SmsBackupPlus,
     );
     config.source = SourceConfig::Format(FormatConfig {
-        run_started_ms: Some(1_791_000_000_000),
+        run_started: chrono::DateTime::from_timestamp_millis(1_791_000_000_000),
     });
 
     convert_export(source.path(), &config).unwrap();
@@ -1307,4 +1307,25 @@ fn sms_backup_plus_mail_records_the_export_runs_start() {
         mail.contains("X-smssync-backup-time: 1791000000000"),
         "{mail}"
     );
+}
+
+/// An attachment the staging step already found missing is counted once,
+/// not again by the SMS Backup+ writer that then has no bytes for it.
+#[test]
+fn a_missing_attachment_converted_to_sms_backup_plus_is_counted_once() {
+    let source = tempfile::tempdir().unwrap();
+    write_mail_fixture(source.path(), OutputFormat::Mbox, true);
+    let destination = tempfile::tempdir().unwrap();
+
+    let report = convert_export(
+        source.path(),
+        &config(
+            source.path(),
+            destination.path(),
+            OutputFormat::SmsBackupPlus,
+        ),
+    )
+    .unwrap();
+
+    assert_eq!(report.report.extra(ATTACHMENTS_MISSING), 1);
 }

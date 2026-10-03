@@ -30,8 +30,9 @@ pub use exporters::{
     WhatsappPlatform, ensure_output_dir,
 };
 pub use pipeline::{
-    ExportReport, NOT_SMS_OR_MMS_LEFT_OUT, RunIssue, RunResult, discover_files, export_meta,
-    prepare_outputs, project_conversation, prune_and_finish_conversation,
+    ATTACHMENTS_MISSING, ExportReport, NOT_SMS_OR_MMS_LEFT_OUT, RunIssue, RunResult,
+    discover_files, export_meta, prepare_outputs, project_conversation,
+    prune_and_finish_conversation,
 };
 pub use process::{
     CancelFlag, Cancelled, LogSink, check_cancel, emit_log, is_cancelled, parallel_for_each,

@@ -190,11 +190,11 @@ pub enum SourceConfig {
 #[derive(Debug, Clone, Default)]
 /// Convert an existing export folder to another output format.
 pub struct FormatConfig {
-    /// When the Export Run this conversion is part of started, in epoch
-    /// milliseconds. Export pulls JSON Lines from the server and then
-    /// converts them, so its run starts well before the conversion does.
-    /// `None` for Settings → Convert, which is a run of its own.
-    pub run_started_ms: Option<i64>,
+    /// When the Export Run this conversion is part of started. Export pulls
+    /// JSON Lines from the server and then converts them, so its run starts
+    /// well before the conversion does. `None` for Settings → Convert, which
+    /// is a run of its own.
+    pub run_started: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(Debug, Clone)]

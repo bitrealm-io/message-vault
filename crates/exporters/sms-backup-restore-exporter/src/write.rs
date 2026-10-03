@@ -523,6 +523,10 @@ impl MergedArchive for SbrArchive {
     fn file_names(&self) -> Vec<String> {
         sbr::backup_file_names()
     }
+
+    fn format_name(&self) -> &'static str {
+        "SMS Backup & Restore"
+    }
 }
 
 #[cfg(test)]

@@ -140,6 +140,10 @@ pub struct ExportReport {
 /// SMS would come back from a re-import as an SMS under a new id (ADR 0021).
 pub const NOT_SMS_OR_MMS_LEFT_OUT: &str = "messages_not_sms_or_mms_left_out";
 
+/// The report counter for attachments an export could not write because
+/// their file was gone. Convert's log says how many.
+pub const ATTACHMENTS_MISSING: &str = "attachments_missing";
+
 impl ExportReport {
     /// The run's log line for [`NOT_SMS_OR_MMS_LEFT_OUT`]: how many messages
     /// were left out of `format`, the format that holds only SMS and MMS, and

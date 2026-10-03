@@ -43,6 +43,12 @@ pub fn format(
         "sms-backup-plus" => OutputFormat::SmsBackupPlus,
         _ => return Err(format!("unsupported output format '{output_format}'")),
     };
+    let run_started = run_started_ms
+        .map(|ms| {
+            chrono::DateTime::from_timestamp_millis(ms)
+                .ok_or_else(|| format!("{ms} is not a time the Export Run could have started"))
+        })
+        .transpose()?;
 
     let job = start_job(&state, "a format conversion")?;
     let cancel = job.cancel_flag();
@@ -64,7 +70,7 @@ pub fn format(
             progress: None,
             output_format: fmt,
             resume: false,
-            source: SourceConfig::Format(FormatConfig { run_started_ms }),
+            source: SourceConfig::Format(FormatConfig { run_started }),
         };
 
         let run_result = message_reexport::run(&config)?;

@@ -1,12 +1,11 @@
 //! Convert an existing Message Crate output directory to another format.
 
 use anyhow::{Context, Result, bail};
-use chrono::TimeZone;
 use media::{CompressOptions, MediaMode};
 pub use message_crate_core::RunResult;
 use message_crate_core::{
-    ExportReport, ExportTransforms, ExporterConfig, MediaConfig, OutputFormat, SourceConfig,
-    document_messages, prepare_outputs, stage_conversation_attachments,
+    ATTACHMENTS_MISSING, ExportReport, ExportTransforms, ExporterConfig, MediaConfig, OutputFormat,
+    SourceConfig, document_messages, prepare_outputs, stage_conversation_attachments,
 };
 use message_ir::{ConversationDocument, IrMessage};
 use message_ir_format::{
@@ -70,7 +69,7 @@ impl ReexportReport {
                 self.report.attachments_saved
             ));
         }
-        let missing = self.report.extra("attachments_missing");
+        let missing = self.report.extra(ATTACHMENTS_MISSING);
         if missing > 0 {
             lines.push(format!("  {missing} attachments missing"));
         }
@@ -84,10 +83,9 @@ fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportR
     // SMS Backup+ mail records when its backup was made: the start of the
     // Export Run this conversion is part of, or of this run when it is one.
     let started = match &config.source {
-        SourceConfig::Format(format) => format.run_started_ms,
+        SourceConfig::Format(format) => format.run_started,
         _ => None,
     }
-    .and_then(|ms| chrono::Utc.timestamp_millis_opt(ms).single())
     .unwrap_or_else(chrono::Utc::now);
     // The output is cleaned below, so one that is or holds the input is
     // refused before anything is written.
@@ -133,8 +131,8 @@ fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportR
     let mut sink = FormatSink::open(&config.output, config.output_format, transforms)?;
     report.conversations = documents.len() as u64;
     let sms_only = sms_only_archive(config.output_format, started);
-    let sms_only_format = sms_only.as_ref().map(|(_, name)| *name);
-    if let Some((archive, _)) = sms_only {
+    let sms_only_format = sms_only.as_ref().map(|archive| archive.format_name());
+    if let Some(archive) = sms_only {
         sink = sink.with_archive(archive);
         // The archive writes nothing for a conversation with no SMS or MMS,
         // so only the others are counted.
@@ -155,18 +153,16 @@ fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportR
     })
 }
 
-/// The archive that writes `format` and the format's name, for a format
-/// that holds only SMS and MMS and so leaves every other message out. `None`
-/// for every other format, which the sink writes itself.
+/// The archive that writes `format`, for a format that holds only SMS and
+/// MMS and so leaves every other message out. `None` for every other format,
+/// which the sink writes itself.
 fn sms_only_archive(
     format: OutputFormat,
     started: chrono::DateTime<chrono::Utc>,
-) -> Option<(Box<dyn MergedArchive>, &'static str)> {
+) -> Option<Box<dyn MergedArchive>> {
     match format {
-        OutputFormat::Xml => Some((Box::new(SbrArchive), "SMS Backup & Restore")),
-        OutputFormat::SmsBackupPlus => {
-            Some((Box::new(SmsBackupPlusArchive::new(started)), "SMS Backup+"))
-        }
+        OutputFormat::Xml => Some(Box::new(SbrArchive)),
+        OutputFormat::SmsBackupPlus => Some(Box::new(SmsBackupPlusArchive::new(started))),
         _ => None,
     }
 }
@@ -250,7 +246,7 @@ fn apply_reexport_convert(
         }
     }
     if missing > 0 {
-        report.bump("attachments_missing", missing);
+        report.bump(ATTACHMENTS_MISSING, missing);
     }
     Ok(())
 }

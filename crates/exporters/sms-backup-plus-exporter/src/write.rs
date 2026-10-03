@@ -16,9 +16,9 @@ use mail_builder::headers::address::Address;
 use mail_builder::headers::date::Date;
 use mail_builder::headers::text::Text;
 use mail_builder::mime::MimePart;
-use message_crate_core::{ExportReport, NOT_SMS_OR_MMS_LEFT_OUT};
+use message_crate_core::{ATTACHMENTS_MISSING, ExportReport, NOT_SMS_OR_MMS_LEFT_OUT};
 use message_ir::{
-    ConversationDocument, IrConversationType, IrDirection, IrMessage, IrMessageKind,
+    ConversationDocument, HandleType, IrConversationType, IrDirection, IrMessage, IrMessageKind,
     give_each_document_its_own_file, trimmed,
 };
 use message_ir_format::{MergedArchive, load_attachment_bytes};
@@ -27,10 +27,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::flat_eml::UNKNOWN_EMAIL_DOMAIN;
-
-/// The export report counter for attachments whose file was gone, which
-/// Convert's log reports.
-const ATTACHMENTS_MISSING: &str = "attachments_missing";
 
 /// Domain of the `Message-ID` and `References` the writer makes up. `.local`
 /// is never routed.
@@ -104,6 +100,10 @@ impl MergedArchive for SmsBackupPlusArchive {
     fn file_names(&self) -> Vec<String> {
         Vec::new()
     }
+
+    fn format_name(&self) -> &'static str {
+        "SMS Backup+"
+    }
 }
 
 impl SmsBackupPlusArchive {
@@ -147,9 +147,12 @@ impl SmsBackupPlusArchive {
             let bytes = load_attachment_bytes(attachment, output_dir)?;
             // An attachment whose file is gone has nothing to carry, and
             // the importer skips an empty part, so it is counted and the
-            // run's log says how many.
+            // run's log says how many. One the staging step already found
+            // missing (`missing_reason`) was counted there.
             if bytes.is_empty() {
-                report.bump(ATTACHMENTS_MISSING, 1);
+                if attachment.missing_reason.is_none() {
+                    report.bump(ATTACHMENTS_MISSING, 1);
+                }
                 continue;
             }
             let mime = attachment
@@ -183,7 +186,7 @@ impl SmsBackupPlusArchive {
         let builder = MessageBuilder::new()
             .from(from)
             .to(to)
-            .subject(format!("SMS with {}", conversation.subject_name(message)))
+            .subject(conversation.subject(message))
             .date(Date::new(message.timestamp_unix_ms.div_euclid(1000)))
             .message_id(format!("{}@{DOMAIN}", message.guid))
             .references(format!("{}@{DOMAIN}", conversation.thread))
@@ -276,16 +279,11 @@ impl<'a> Conversation<'a> {
             .and_then(trimmed)
     }
 
-    /// The name after `SMS with`. The importer takes it as the name of the
-    /// person the mail is with, and credits the message to that name, so it
-    /// names the sender of a received message and the peer of a sent
-    /// one-to-one message. A sent group message, or a received one whose
-    /// sender is unknown, is named by a peer's handle, which the importer
-    /// never takes as a name: a group title or a list of names would be
-    /// given to one person.
-    fn subject_name(&self, message: &IrMessage) -> String {
-        // As `From` names it: a one-to-one message is from its one peer.
-        let sender = message
+    /// Who a received message is from: its sender, or for a one-to-one
+    /// message, which can only be from its one peer, that peer. `None` for a
+    /// group message whose sender is unknown.
+    fn sender_of<'m>(&'m self, message: &'m IrMessage) -> Option<&'m str> {
+        message
             .sender_handle
             .as_deref()
             .and_then(trimmed)
@@ -293,7 +291,21 @@ impl<'a> Conversation<'a> {
                 (!self.is_group())
                     .then(|| self.peers.first().copied())
                     .flatten()
-            });
+            })
+    }
+
+    /// The `Subject`: `SMS with <name>`. The importer takes the name as the
+    /// name of the person the mail is with, and credits the message to it, so
+    /// it names the sender of a received message and the peer of a sent
+    /// one-to-one message. A sent group message, or a received one whose
+    /// sender is unknown, names no one: a group title or a list of names
+    /// would be given to one person. It is `SMS with` a member's number,
+    /// written as its key (`+15555550101`, or a short code's digits), which
+    /// the importer never takes as a name, or plain `SMS` when no member has
+    /// a number. The importer knows the mail by `X-smssync-type`, not by
+    /// its subject.
+    fn subject(&self, message: &IrMessage) -> String {
+        let sender = self.sender_of(message);
         let named = match message.direction {
             IrDirection::Incoming => sender.map(|handle| {
                 message
@@ -302,17 +314,25 @@ impl<'a> Conversation<'a> {
                     .and_then(trimmed)
                     .or_else(|| self.display_name(handle))
                     .unwrap_or(handle)
+                    .to_string()
             }),
             IrDirection::Outgoing if !self.is_group() => self
                 .peers
                 .first()
-                .map(|peer| self.display_name(peer).unwrap_or(peer)),
+                .map(|peer| self.display_name(peer).unwrap_or(peer).to_string()),
             IrDirection::Outgoing => None,
         };
-        named
-            .or_else(|| self.peers.first().copied())
-            .unwrap_or("Unknown")
-            .to_string()
+        let unnamed = || {
+            self.peers.iter().find_map(|peer| {
+                phone::Handle::parse(peer)
+                    .filter(|handle| handle.kind() == HandleType::Phone)
+                    .map(phone::Handle::into_key)
+            })
+        };
+        match named.or_else(unnamed) {
+            Some(name) => format!("SMS with {name}"),
+            None => "SMS".to_string(),
+        }
     }
 
     /// `From` and `To`: the sender to the owner for an incoming message,
@@ -336,18 +356,7 @@ impl<'a> Conversation<'a> {
             IrDirection::Incoming => {
                 // A group message whose sender is unknown keeps it unknown: an
                 // address no peer has, which the importer reads as no sender.
-                // A one-to-one message can only be from the one peer.
-                let fallback = if self.is_group() {
-                    None
-                } else {
-                    self.peers.first().copied()
-                };
-                let sender = message
-                    .sender_handle
-                    .as_deref()
-                    .and_then(trimmed)
-                    .or(fallback)
-                    .unwrap_or("unknown");
+                let sender = self.sender_of(message).unwrap_or("unknown");
                 let name = message
                     .sender_display_name
                     .as_deref()

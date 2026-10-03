@@ -326,3 +326,36 @@ fn an_attachment_whose_file_is_gone_is_counted_as_missing() {
 
     assert_eq!(report.extra(ATTACHMENTS_MISSING), 1);
 }
+
+/// A sent group message names no one in its subject: a member's number, as
+/// its key, when one has a number, and plain `SMS` when none has, so the
+/// importer gives no member the name of another, or an email address.
+#[test]
+fn a_sent_group_message_names_no_one_in_its_subject() {
+    let subject_of = |handles: &[&str]| {
+        let mut doc = sample_document("hello group");
+        doc.conversation.chat_identifier = "chat-group-1".into();
+        doc.conversation.conversation_type = IrConversationType::Group;
+        doc.conversation.participants = handles
+            .iter()
+            .map(|handle| IrParticipant {
+                handle: Some((*handle).into()),
+                display_name: Some("Carol".into()),
+                handle_type: None,
+            })
+            .collect();
+        doc.messages[0].direction = IrDirection::Outgoing;
+        doc.messages[0].sender_handle = None;
+        let tmp = tempfile::tempdir().unwrap();
+        archive()
+            .write(tmp.path(), &[doc.clone()], &mut ExportReport::default())
+            .unwrap();
+        header(&mails(tmp.path(), &doc.filename_stem())[0].1, "Subject").unwrap()
+    };
+
+    assert_eq!(
+        subject_of(&["carol@example.org", "(555) 555-0102"]),
+        "SMS with +15555550102"
+    );
+    assert_eq!(subject_of(&["carol@example.org", "dan@example.org"]), "SMS");
+}

@@ -36,6 +36,11 @@ pub trait MergedArchive: std::fmt::Debug + Send {
     /// writes, so the next fresh export into the folder removes them
     /// whatever format it writes.
     fn file_names(&self) -> Vec<String>;
+
+    /// The format's name as a person knows it, such as the app it belongs
+    /// to, for the run's log. The crate that owns the archive names it, so
+    /// this crate names no vendor format.
+    fn format_name(&self) -> &'static str;
 }
 
 /// Writes conversations in the requested [`OutputFormat`], or through a
@@ -349,6 +354,10 @@ mod tests {
 
         fn file_names(&self) -> Vec<String> {
             vec!["all.txt".into()]
+        }
+
+        fn format_name(&self) -> &'static str {
+            "one line per conversation"
         }
     }
 

@@ -1421,7 +1421,7 @@ async fn claimed_import_rejects_corrupt_existing_asset() {
     let tmp = TempDir::new().unwrap();
     let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
-    let sha = assets_api::sha256_hex(b"expected-asset");
+    let sha = assets_api::Sha256::of_bytes(b"expected-asset");
     let corrupt = assets.join(assets_api::shard_rel_path(&sha, ""));
     fs::create_dir_all(corrupt.parent().unwrap()).unwrap();
     fs::write(&corrupt, b"corrupt-asset").unwrap();

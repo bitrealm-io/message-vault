@@ -1324,7 +1324,7 @@ async fn deleting_messages_keeps_a_file_a_running_import_has_uploaded() {
     )
     .await;
     let bytes = b"photo uploaded for the next batch";
-    let sha = crate::assets_api::sha256_hex(bytes);
+    let sha = crate::assets_api::Sha256::of_bytes(bytes);
     let (status, text) = put_raw(
         &state,
         &format!("/v1/assets/{sha}?source=imessage"),

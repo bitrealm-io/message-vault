@@ -356,10 +356,6 @@ pub struct DeletedMessagesStats {
     pub conversations: u64,
     /// Attachment rows deleted (files on disk are removed by the caller).
     pub attachments: u64,
-    /// The account had a running Import Run when the delete committed. The
-    /// run may have uploaded files that no row names yet, so the caller
-    /// leaves the account's files on disk.
-    pub import_running: bool,
 }
 
 /// Permanently delete one account's conversations (cascades to messages,
@@ -384,7 +380,6 @@ pub async fn delete_all_messages_for_account(
     .bind(account_id)
     .fetch_one(&mut *tx)
     .await?;
-    let import_running = crate::db::imports::has_running_import(&mut tx, account_id).await?;
     let conversations = sqlx::query("DELETE FROM conversations WHERE account_id = $1")
         .bind(account_id)
         .execute(&mut *tx)
@@ -403,7 +398,6 @@ pub async fn delete_all_messages_for_account(
     Ok(DeletedMessagesStats {
         conversations,
         attachments: u64::try_from(attachment_count).unwrap_or(0),
-        import_running,
     })
 }
 

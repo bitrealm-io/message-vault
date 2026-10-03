@@ -9,7 +9,7 @@
 use std::fmt;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
@@ -21,6 +21,7 @@ use axum::extract::{Request, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 
+use crate::asset_store::sidecar_path;
 use crate::asset_uploads;
 use crate::config::validate_source_id;
 use crate::server::{
@@ -125,7 +126,7 @@ impl Sha256 {
     }
 
     /// The first two hex digits: the folder the file is stored in.
-    fn shard(&self) -> &str {
+    pub(crate) fn shard(&self) -> &str {
         &self.0[..2]
     }
 }
@@ -440,58 +441,6 @@ pub fn hash_and_store(
     Ok(Some(stored))
 }
 
-/// Delete abandoned multipart upload folders under `{assets}/.incoming` older
-/// than `max_age_secs`.
-///
-/// Finished uploads already remove their session folders. Abandoned ones can
-/// sit forever without this sweep, which runs from upload start.
-///
-/// # Errors
-///
-/// Returns an error when `{assets}/.incoming` cannot be read.
-pub fn gc_stale_incoming(assets_root: &Path, max_age_secs: u64) -> Result<u64> {
-    let incoming = assets_root.join(".incoming");
-    if !incoming.is_dir() {
-        return Ok(0);
-    }
-    let now = std::time::SystemTime::now();
-    let mut removed = 0u64;
-    for sha_entry in
-        fs::read_dir(&incoming).with_context(|| format!("read {}", incoming.display()))?
-    {
-        let sha_entry = sha_entry?;
-        let sha_path = sha_entry.path();
-        if !sha_path.is_dir() {
-            continue;
-        }
-        for session_entry in fs::read_dir(&sha_path)? {
-            let session_entry = session_entry?;
-            let session_path = session_entry.path();
-            if !session_path.is_dir() {
-                continue;
-            }
-            let Ok(meta) = session_entry.metadata() else {
-                continue;
-            };
-            let Ok(modified) = meta.modified() else {
-                continue;
-            };
-            let Ok(age) = now.duration_since(modified) else {
-                continue;
-            };
-            if age.as_secs() >= max_age_secs {
-                let _ = fs::remove_dir_all(&session_path);
-                removed += 1;
-            }
-        }
-        // Remove empty fingerprint folders left after the last session is gone.
-        if fs::read_dir(&sha_path)?.next().is_none() {
-            let _ = fs::remove_dir(&sha_path);
-        }
-    }
-    Ok(removed)
-}
-
 /// SHA-256 fingerprint of the file at `path`, as 64 lowercase hex digits.
 ///
 /// # Errors
@@ -512,14 +461,9 @@ pub(crate) fn hash_file(path: &Path) -> Result<String> {
     Ok(hex_encode(&hasher.finalize()))
 }
 
-/// Path of the hidden `.<sha>.mime` sidecar that records a blob's MIME type, since the blob's name carries none.
-fn mime_metadata_path(assets_root: &Path, sha: &Sha256) -> PathBuf {
-    assets_root.join(sha.shard()).join(format!(".{sha}.mime"))
-}
-
 /// Read the MIME sidecar for `sha`, if present and non-empty.
 fn read_mime_metadata(assets_root: &Path, sha: &Sha256) -> Option<String> {
-    let file = open_nofollow_read(&mime_metadata_path(assets_root, sha)).ok()?;
+    let file = open_nofollow_read(&sidecar_path(assets_root, sha)).ok()?;
     let mut mime = String::new();
     file.take(1024).read_to_string(&mut mime).ok()?;
     let mime = mime.trim();
@@ -536,7 +480,7 @@ fn store_mime_metadata(assets_root: &Path, sha: &Sha256, mime: &str) -> Result<(
     if mime.is_empty() {
         return Ok(());
     }
-    let path = mime_metadata_path(assets_root, sha);
+    let path = sidecar_path(assets_root, sha);
     if read_mime_metadata(assets_root, sha).is_some() {
         return Ok(());
     }

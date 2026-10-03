@@ -1561,16 +1561,12 @@ async fn wipe_demo_account(cfg: &Config, db: &SqlitePool, account_id: i64) -> Re
     println!("  sql:      demo account rows removed (accounts matched={deleted})");
     drop(conn);
 
-    let account_root = cfg.paths.data_dir.join(account_id.to_string());
-    remove_tree_if_exists(&account_root)?;
-    Ok(())
-}
-/// Remove a folder tree; a missing folder is not an error.
-fn remove_tree_if_exists(path: &Path) -> Result<()> {
-    if path.exists() {
-        fs::remove_dir_all(path).with_context(|| format!("remove {}", path.display()))?;
-    }
-    Ok(())
+    crate::asset_store::remove_account_dir(&cfg.paths, account_id).with_context(|| {
+        format!(
+            "remove {}",
+            crate::asset_store::account_dir(&cfg.paths, account_id).display()
+        )
+    })
 }
 
 #[cfg(test)]

@@ -945,7 +945,10 @@ pub async fn has_messages(conn: &mut SqliteConnection, import_id: i64) -> Result
 
 /// Whether the account has a running Import Run. Such a run may have
 /// uploaded files that no row names yet, for a batch it has not sent.
-pub async fn has_running_import(conn: &mut SqliteConnection, account_id: i64) -> Result<bool> {
+pub async fn has_running_import(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+) -> Result<bool, sqlx::Error> {
     let row = sqlx::query("SELECT 1 FROM imports WHERE account_id = $1 AND status = 'running'")
         .bind(account_id)
         .fetch_optional(&mut *conn)

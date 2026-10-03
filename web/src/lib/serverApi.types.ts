@@ -226,9 +226,10 @@ export interface paths {
          * @description The account itself, its contacts, and its login survive.
          *
          *     The rows go in one transaction, between two batches of a running Import
-         *     Run and never inside one. The attachment files go after it, unless the
-         *     account has a running Import Run: that run may have uploaded files for a
-         *     batch it has not sent yet, so every file stays on disk.
+         *     Run and never inside one. The attachment files go after it. While the
+         *     account has a running Import Run, the originals stay: that run may have
+         *     uploaded files for a batch it has not sent yet. The run's end removes
+         *     the ones no batch named.
          *
          *     The owner may, on any account. The account itself may with a
          *     session that carries the `delete` permission, and confirms in the body.
@@ -1950,8 +1951,8 @@ export interface components {
         DeleteMessagesResponse: {
             /**
              * Format: int64
-             * @description Attachment rows deleted. Their files are removed too, unless the
-             *     account has a running Import Run.
+             * @description Attachment rows deleted. Their files are removed too. While the
+             *     account has a running Import Run, the originals stay until it ends.
              */
             attachments: number;
             /**

@@ -16,8 +16,6 @@ use crate::assets_api::{self, AssetError, Sha256, StoredAsset};
 
 /// Default part size advertised to clients (under Cloudflare ~100 MiB).
 pub const DEFAULT_PART_SIZE: usize = 64 * 1024 * 1024;
-/// Drop abandoned `.incoming` sessions older than this (24h).
-const STALE_INCOMING_SECS: u64 = 24 * 60 * 60;
 
 /// Limits for one upload: the attachment size limit from the Server Settings
 /// as it is when the upload starts, and the part size worked out from it and
@@ -214,8 +212,8 @@ pub fn start_upload(
             limits.max_bytes / message_ir::MIB
         )));
     }
-    // Best-effort: drop abandoned multipart staging so disk does not grow forever.
-    let _ = assets_api::gc_stale_incoming(assets_root, STALE_INCOMING_SECS);
+    // Abandoned upload temps go here, so `.incoming/` does not grow forever.
+    crate::asset_store::sweep_incoming(assets_root, false);
 
     if let Some(existing) = assets_api::lookup_by_sha256(assets_root, sha) {
         return Ok((Some(existing), None));

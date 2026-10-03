@@ -22,7 +22,6 @@ use crate::paging::{
     DEFAULT_LIST_LIMIT, ListRequest, Page, PageQuery, page_of, page_params, parse_sort,
 };
 use crate::server::{ApiError, AppState, FullAccess, FullDeleteAccess};
-use crate::trash_api::remove_orphaned_files;
 
 /// Page through conversations with participants, message counts, and tags.
 /// Newest activity first unless `sort` says otherwise.
@@ -320,8 +319,14 @@ pub(crate) async fn delete_conversation(
         .await?
     };
     match outcome {
-        DeleteOutcome::Deleted(orphaned) => {
-            remove_orphaned_files(Arc::clone(&state.cfg), auth.account_id, orphaned).await?;
+        DeleteOutcome::Deleted(unreferenced) => {
+            crate::asset_store::remove_unreferenced(
+                &state.db,
+                Arc::clone(&state.cfg),
+                auth.account_id,
+                unreferenced,
+            )
+            .await;
             Ok(StatusCode::NO_CONTENT)
         }
         DeleteOutcome::NotOwned => Err(ApiError::NotFound("conversation not found".into())),

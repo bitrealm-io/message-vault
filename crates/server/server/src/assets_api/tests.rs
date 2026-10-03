@@ -1,5 +1,6 @@
 use super::*;
 use std::io::Write;
+use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Barrier};
 use std::time::{Duration, Instant};
@@ -420,18 +421,6 @@ fn store_verified_rejects_symlink_source() {
             "unexpected error: {err}"
         );
     }
-}
-
-#[test]
-fn gc_stale_incoming_removes_old_sessions() {
-    let dir = tempdir().unwrap();
-    let root = dir.path();
-    let session = root.join(".incoming").join("ab").join("deadbeef");
-    fs::create_dir_all(&session).unwrap();
-    fs::write(session.join("manifest.json"), b"{}").unwrap();
-    let removed = gc_stale_incoming(root, 0).unwrap();
-    assert_eq!(removed, 1);
-    assert!(!session.exists());
 }
 
 #[tokio::test]
@@ -1049,7 +1038,7 @@ async fn an_asset_put_keeps_its_media_type_but_not_octet_stream() {
         Some("image/jpeg")
     );
     assert!(
-        !mime_metadata_path(&assets_dir, &blob_sha).exists(),
+        !crate::asset_store::sidecar_path(&assets_dir, &blob_sha).exists(),
         "octet-stream must not be recorded as the asset's type"
     );
 }

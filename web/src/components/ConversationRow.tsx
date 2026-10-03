@@ -1,26 +1,11 @@
 import { type ReactNode, useId } from "react";
 import { formatDateSpan } from "../lib/formatDate";
+import { conversationServiceLabel } from "../lib/serviceLabel";
 import { useTimeZone } from "../lib/timeZone";
 import { listRowDivider } from "../lib/tw";
 import type { Conversation } from "../lib/types";
 import Checkbox from "./Checkbox";
 import { useColumnResizing } from "./columnResizeState";
-
-/**
- * Short service label for a row.
- *
- * iMessage and SMS/MMS are the same thing to someone reading their messages — a
- * text message — and which transport carried it is not what the row is for.
- * Anything else (WhatsApp, say) keeps its own name.
- */
-function formatServiceLabel(service: string | null | undefined): string | null {
-  const s = (service ?? "").trim();
-  if (!s || s.toLowerCase() === "unknown") return null;
-  const lower = s.toLowerCase();
-  const texting = ["imessage", "ios", "sms/mms", "sms", "mms"];
-  if (texting.includes(lower) || lower.includes("sms")) return "Text Message";
-  return s;
-}
 
 function GroupIcon() {
   return (
@@ -82,11 +67,6 @@ function conversationTitleText(conv: Conversation): string {
   return conv.participants.map((p) => p.name).join(", ");
 }
 
-/** Bottom-left for groups: service only (count sits upper-right). */
-function GroupService({ conv }: { conv: Conversation }) {
-  return formatServiceLabel(conv.service);
-}
-
 function GroupParticipantCount({ count }: { count: number }) {
   return (
     <span
@@ -97,13 +77,6 @@ function GroupParticipantCount({ count }: { count: number }) {
       <GroupIcon />
     </span>
   );
-}
-
-function directService(conv: Conversation): string | null {
-  const fromConv = formatServiceLabel(conv.service);
-  if (fromConv) return fromConv;
-  const p = conv.participants[0];
-  return p ? formatServiceLabel(p.service) : null;
 }
 
 export default function ConversationRow({
@@ -128,7 +101,7 @@ export default function ConversationRow({
     conversation.last_message_at || conversation.date_range_end,
     useTimeZone(),
   );
-  const bottomLeft = isGroup ? <GroupService conv={conversation} /> : directService(conversation);
+  const bottomLeft = conversationServiceLabel(conversation);
 
   const body = (
     <div className="flex min-w-0 flex-1 flex-col gap-[0.3rem]">

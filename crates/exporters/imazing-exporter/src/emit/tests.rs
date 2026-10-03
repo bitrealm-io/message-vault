@@ -370,14 +370,19 @@ const MESSAGES_HEADER: &str = "Chat Session,Message Date,Service,Type,Sender ID,
 /// Convert one Messages CSV holding `rows` to JSON and read each
 /// conversation back.
 fn convert_rows(rows: &str) -> Vec<message_ir::ConversationDocument> {
+    convert_files(&[("Messages.csv", &format!("{MESSAGES_HEADER}{rows}"))])
+}
+
+/// Write each `(path, contents)` under one input folder, convert it to JSON,
+/// and read each conversation back, sorted by chat id.
+fn convert_files(files: &[(&str, &str)]) -> Vec<message_ir::ConversationDocument> {
     let dir = tempfile::tempdir().unwrap();
     let input = dir.path().join("in");
-    fs::create_dir(&input).unwrap();
-    fs::write(
-        input.join("Messages.csv"),
-        format!("{MESSAGES_HEADER}{rows}"),
-    )
-    .unwrap();
+    for (path, contents) in files {
+        let path = input.join(path);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, contents).unwrap();
+    }
     let out = dir.path().join("out");
     convert_export(ConvertExportArgs {
         input: &input,
@@ -913,8 +918,7 @@ fn an_incoming_group_row_without_a_sender_has_no_made_up_sender() {
 
 /// #1080: one person writing from a number and an email address is one
 /// person, so the conversation is one-to-one and not a group. The same holds
-/// for one contact's two numbers in one chat. The chat's address is the
-/// smallest of them, whichever wrote first.
+/// for one contact's two numbers in one chat.
 #[test]
 fn one_person_from_two_addresses_is_not_a_group() {
     for second in ["bob@icloud.com", "+15555550199"] {
@@ -1028,18 +1032,16 @@ fn a_groups_chat_id_does_not_depend_on_row_order() {
     );
 }
 
-/// The address of a one-to-one chat in which one person wrote from two
-/// addresses does not depend on which one wrote first, so an export that
-/// starts later in the chat gives it the same key.
+/// A one-to-one chat keeps its address when the person later writes from a
+/// second one, even an address that sorts first.
 #[test]
-fn a_direct_chats_address_does_not_depend_on_which_address_wrote_first() {
-    let phone_first = "Alice,2020-01-01 12:00:00,iMessage,Incoming,+15555550111,Alice,Read,,,One,,,\n\
-Alice,2020-01-01 12:01:00,iMessage,Incoming,alice@example.com,Alice,Read,,,Two,,,\n";
-    let email_first = "Alice,2020-01-01 12:00:00,iMessage,Incoming,alice@example.com,Alice,Read,,,One,,,\n\
-Alice,2020-01-01 12:01:00,iMessage,Incoming,+15555550111,Alice,Read,,,Two,,,\n";
+fn a_direct_chat_keeps_its_address_when_a_second_one_writes() {
+    let email =
+        "Alice,2020-01-01 12:00:00,iMessage,Incoming,alice@example.com,Alice,Read,,,One,,,\n";
+    let phone = "Alice,2020-02-01 12:00:00,iMessage,Incoming,+15555550111,Alice,Read,,,Two,,,\n";
     let chat_id = |rows: &str| convert_rows(rows)[0].conversation.chat_identifier.clone();
-    assert_eq!(chat_id(phone_first), "+15555550111");
-    assert_eq!(chat_id(email_first), "+15555550111");
+    assert_eq!(chat_id(email), "alice@example.com");
+    assert_eq!(chat_id(&format!("{email}{phone}")), "alice@example.com");
 }
 
 const WHATSAPP_HEADER: &str = "Chat Session,Message Date,Sent Date,Type,Sender ID,Sender Name,Status,Forwarded,Text,Attachment info\n";
@@ -1048,34 +1050,13 @@ const WHATSAPP_HEADER: &str = "Chat Session,Message Date,Sent Date,Type,Sender I
 /// are two people, and the chat they wrote in is a group.
 #[test]
 fn two_whatsapp_people_with_one_name_make_a_group() {
-    let dir = tempfile::tempdir().unwrap();
-    let input = dir.path().join("in");
-    fs::create_dir(&input).unwrap();
-    fs::write(
-        input.join("WhatsApp - Climbing.csv"),
-        format!(
+    let documents = convert_files(&[(
+        "WhatsApp - Climbing.csv",
+        &format!(
             "{WHATSAPP_HEADER}Climbing,2020-01-01 12:00:00,,Incoming,+15555550111,Chris,Read,,Hi,\n\
 Climbing,2020-01-01 12:01:00,,Incoming,+15555550122,Chris,Read,,Hey,\n"
         ),
-    )
-    .unwrap();
-    let out = dir.path().join("out");
-    convert_export(ConvertExportArgs {
-        input: &input,
-        output: &out,
-        timezone: Some("UTC"),
-        transforms: ExportTransforms::none(),
-        output_format: OutputFormat::Json,
-        cancel: None,
-        resume: false,
-    })
-    .unwrap();
-    let documents: Vec<_> = fs::read_dir(&out)
-        .unwrap()
-        .map(|entry| entry.unwrap().path())
-        .filter(|path| path.extension().is_some_and(|ext| ext == "json"))
-        .map(|path| message_ir_format::read_conversation_json(&path).unwrap())
-        .collect();
+    )]);
     assert_eq!(documents.len(), 1);
     let conversation = &documents[0].conversation;
     assert_eq!(
@@ -1090,58 +1071,92 @@ Climbing,2020-01-01 12:01:00,,Incoming,+15555550122,Chris,Read,,Hey,\n"
 /// conversations, and each keeps its key whichever file is read first.
 #[test]
 fn two_groups_that_start_with_one_row_stay_two_conversations() {
-    let first = "Hi all,2020-01-01 12:00:00,iMessage,Outgoing,,,Sent,,,Happy new year,,,\n";
+    let first = |session: &str| {
+        format!("{session},2020-01-01 12:00:00,iMessage,Outgoing,,,Sent,,,Happy new year,,,\n")
+    };
     let book_club = format!(
-        "{}Book Club,2020-01-01 12:05:00,iMessage,Incoming,+15555550111,Alice,Read,,,Thanks,,,\n\
+        "{MESSAGES_HEADER}{}Book Club,2020-01-01 12:05:00,iMessage,Incoming,+15555550111,Alice,Read,,,Thanks,,,\n\
 Book Club,2020-01-01 12:06:00,iMessage,Incoming,+15555550122,Bob,Read,,,Same,,,\n",
-        first.replace("Hi all", "Book Club")
+        first("Book Club")
     );
     let climbing = format!(
-        "{}Climbing,2020-01-01 12:07:00,iMessage,Incoming,+15555550133,Carol,Read,,,You too,,,\n\
+        "{MESSAGES_HEADER}{}Climbing,2020-01-01 12:07:00,iMessage,Incoming,+15555550133,Carol,Read,,,You too,,,\n\
 Climbing,2020-01-01 12:08:00,iMessage,Incoming,+15555550144,Dan,Read,,,Cheers,,,\n",
-        first.replace("Hi all", "Climbing")
+        first("Climbing")
     );
-    let ids = |files: [(&str, &str); 2]| {
-        let dir = tempfile::tempdir().unwrap();
-        let input = dir.path().join("in");
-        for (folder, rows) in files {
-            let chat = input.join(folder);
-            fs::create_dir_all(&chat).unwrap();
-            fs::write(
-                chat.join("Messages.csv"),
-                format!("{MESSAGES_HEADER}{rows}"),
-            )
-            .unwrap();
-        }
-        let out = dir.path().join("out");
-        convert_export(ConvertExportArgs {
-            input: &input,
-            output: &out,
-            timezone: Some("UTC"),
-            transforms: ExportTransforms::none(),
-            output_format: OutputFormat::Json,
-            cancel: None,
-            resume: false,
-        })
-        .unwrap();
-        let mut ids: Vec<(String, String)> = fs::read_dir(&out)
-            .unwrap()
-            .map(|entry| entry.unwrap().path())
-            .filter(|path| path.extension().is_some_and(|ext| ext == "json"))
-            .map(|path| message_ir_format::read_conversation_json(&path).unwrap())
+    let ids = |files: &[(&str, &str)]| {
+        let mut ids: Vec<(String, String)> = convert_files(files)
+            .into_iter()
             .map(|doc| {
                 (
-                    doc.conversation.group_title.clone().unwrap_or_default(),
-                    doc.conversation.chat_identifier.clone(),
+                    doc.conversation.participants[0].handle.clone().unwrap(),
+                    doc.conversation.chat_identifier,
                 )
             })
             .collect();
         ids.sort();
         ids
     };
-    let in_order = ids([("a - Book Club", &book_club), ("b - Climbing", &climbing)]);
-    let swapped = ids([("a - Climbing", &climbing), ("b - Book Club", &book_club)]);
+    let in_order = ids(&[
+        ("a - Book Club/Messages.csv", &book_club),
+        ("b - Climbing/Messages.csv", &climbing),
+    ]);
+    let swapped = ids(&[
+        ("a - Climbing/Messages.csv", &climbing),
+        ("b - Book Club/Messages.csv", &book_club),
+    ]);
     assert_eq!(in_order.len(), 2, "{in_order:?}");
     assert_ne!(in_order[0].1, in_order[1].1);
     assert_eq!(in_order, swapped);
+
+    // A third group that shares Book Club's first two rows changes Book
+    // Club's key, which it is told apart from, and not Climbing's.
+    let hiking = format!(
+        "{MESSAGES_HEADER}{}Hiking,2020-01-01 12:05:00,iMessage,Incoming,+15555550111,Alice,Read,,,Thanks,,,\n\
+Hiking,2020-01-01 12:09:00,iMessage,Incoming,+15555550166,Fay,Read,,,Hi,,,\n",
+        first("Hiking")
+    );
+    let with_a_third = ids(&[
+        ("a - Book Club/Messages.csv", &book_club),
+        ("b - Climbing/Messages.csv", &climbing),
+        ("c - Hiking/Messages.csv", &hiking),
+    ]);
+    assert_eq!(with_a_third.len(), 3, "{with_a_third:?}");
+    let climbing_id = |ids: &[(String, String)]| {
+        ids.iter()
+            .find(|(member, _)| member == "+15555550133")
+            .unwrap()
+            .1
+            .clone()
+    };
+    assert_eq!(climbing_id(&with_a_third), climbing_id(&in_order));
+}
+
+/// Two exports of one device in one input folder hold one group twice: the
+/// older one's rows are the first rows of the newer one. That is one group,
+/// not two that start with the same row.
+#[test]
+fn one_group_from_two_exports_in_one_folder_is_one_conversation() {
+    let older = "Book Club,2020-01-01 12:00:00,iMessage,Incoming,+15555550111,Alice,Read,,,Hi,,,\n\
+Book Club,2020-01-01 12:01:00,iMessage,Incoming,+15555550122,Bob,Read,,,Hey,,,\n";
+    let newer = format!(
+        "{older}Book Club,2020-02-01 12:00:00,iMessage,Incoming,+15555550133,Carol,Read,,,Hello,,,\n"
+    );
+    let documents = convert_files(&[
+        (
+            "2020-01-01 - Book Club/Messages.csv",
+            &format!("{MESSAGES_HEADER}{older}"),
+        ),
+        (
+            "2020-02-01 - Book Club/Messages.csv",
+            &format!("{MESSAGES_HEADER}{newer}"),
+        ),
+    ]);
+    assert_eq!(documents.len(), 1);
+    assert_eq!(documents[0].messages.len(), 3);
+    // It keeps the key one export of the group alone gives it.
+    assert_eq!(
+        documents[0].conversation.chat_identifier,
+        convert_rows(&newer)[0].conversation.chat_identifier
+    );
 }

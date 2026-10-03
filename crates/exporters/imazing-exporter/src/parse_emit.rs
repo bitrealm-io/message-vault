@@ -119,35 +119,34 @@ fn root(parent: &HashMap<String, String>, node: &str) -> String {
 /// has one number, so in WhatsApp two addresses are always two people, and
 /// a name joins only a row that has no address.
 fn people_who_wrote(kind: SourceKind, rows: &[&RawRow]) -> usize {
+    let names_join_addresses = kind == SourceKind::Messages;
+    // Each received row's address and lowercased Sender Name.
+    let writers: Vec<(Option<String>, Option<String>)> = rows
+        .iter()
+        .filter(|row| written_by_someone_else(row))
+        .map(|row| {
+            let name = row.sender_name.trim().to_lowercase();
+            (
+                sender_address(&row.sender_id),
+                (!name.is_empty()).then_some(name),
+            )
+        })
+        .collect();
+    let names_with_an_address: HashSet<&String> = writers
+        .iter()
+        .filter(|(address, _)| address.is_some())
+        .filter_map(|(_, name)| name.as_ref())
+        .collect();
     // Union-find over the addresses and the names the rows give.
     let mut parent: HashMap<String, String> = HashMap::new();
-    let mut whatsapp_named: HashSet<String> = HashSet::new();
-    let rows_written: Vec<&RawRow> = rows
-        .iter()
-        .copied()
-        .filter(|row| written_by_someone_else(row))
-        .collect();
-    if kind == SourceKind::WhatsApp {
-        for row in &rows_written {
-            let name = row.sender_name.trim().to_lowercase();
-            if sender_address(&row.sender_id).is_some() && !name.is_empty() {
-                whatsapp_named.insert(name);
-            }
-        }
-    }
-    for row in rows_written {
-        let address = sender_address(&row.sender_id).map(|a| format!("address:{a}"));
-        let name = row.sender_name.trim().to_lowercase();
-        let name = if name.is_empty()
-            || (kind == SourceKind::WhatsApp
-                && (address.is_some() || whatsapp_named.contains(&name)))
-        {
-            // A WhatsApp name never joins two addresses, and a row with no
-            // address whose name a row with an address gives is that person.
-            None
-        } else {
-            Some(format!("name:{name}"))
-        };
+    for (address, name) in &writers {
+        let name = name
+            .as_ref()
+            .filter(|name| {
+                names_join_addresses || (address.is_none() && !names_with_an_address.contains(name))
+            })
+            .map(|name| format!("name:{name}"));
+        let address = address.as_ref().map(|a| format!("address:{a}"));
         let nodes: Vec<String> = address.into_iter().chain(name).collect();
         for node in &nodes {
             parent.entry(node.clone()).or_insert_with(|| node.clone());
@@ -188,9 +187,9 @@ impl<'a> RowOrder<'a> {
 }
 
 /// The address of a one-to-one chat: the one its session name gives, else
-/// the smallest address the received rows give. That is the same address in
-/// every export that holds both of a person's addresses, whichever one wrote
-/// first. `None` when the source records no address for the person.
+/// the address of the earliest received row that has one. New messages do
+/// not change it; it changes only when the oldest messages are gone from the
+/// export. `None` when the source records no address for the person.
 fn direct_handle(session: &str, rows: &[&RawRow]) -> Option<String> {
     if let Some(phone) = phones_in_text(session).into_iter().next() {
         return Some(phone);
@@ -205,8 +204,9 @@ fn direct_handle(session: &str, rows: &[&RawRow]) -> Option<String> {
     }
     rows.iter()
         .filter(|row| written_by_someone_else(row))
-        .filter_map(|row| sender_address(&row.sender_id))
-        .min()
+        .filter_map(|row| Some((RowOrder::of(row), sender_address(&row.sender_id)?)))
+        .min_by(|a, b| a.0.cmp(&b.0))
+        .map(|(_, address)| address)
 }
 
 /// A group's members: everyone who wrote, every number in the session name,

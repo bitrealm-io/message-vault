@@ -30,20 +30,10 @@ const EXPORT_SOURCE: &str = "imazing";
 const EXPORT_TOOL: &str = "iMazing";
 const EXPORT_TOOL_VERSION: &str = "3.5.5";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum TransportFamily {
     Messages,
     WhatsApp,
-}
-
-impl TransportFamily {
-    /// The conversation-key prefix that keeps Messages and WhatsApp chats with the same peer apart.
-    fn key_prefix(self) -> &'static str {
-        match self {
-            Self::Messages => "messages",
-            Self::WhatsApp => "whatsapp",
-        }
-    }
 }
 
 /// Inputs for [`convert_export`].
@@ -161,64 +151,99 @@ struct Conversation {
     row_digests: Vec<[u8; 32]>,
 }
 
-/// Give two groups whose earliest rows are the same a key each.
+/// Which pending conversation a session's rows go to.
+///
+/// A one-to-one chat is one conversation across every CSV that names its
+/// address. A group session is a conversation of its own, even when another
+/// starts with the same row: `separate_groups_with_one_earliest_row` decides
+/// which ones are one group once every CSV is read.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct ConvoKey {
+    /// Keeps a Messages chat and a WhatsApp chat with the same peer apart.
+    family: TransportFamily,
+    chat_id: String,
+    /// For a group, the CSV it was read from and its session name.
+    group_session: Option<(usize, String)>,
+}
+
+/// Give every group a key of its own when several start with the same row.
 ///
 /// A group's key is its earliest row, and two groups can start with the same
 /// row: the account holder sends one message to two new groups in the same
-/// second. Each such group's vendor id then hashes its earliest rows, as few
-/// as tell every one of them apart. That depends only on the groups' own
-/// rows, so the next export gives each the same key while its earliest rows
-/// are in it. Groups whose rows are all the same cannot be told apart and
-/// stay one conversation.
-fn separate_groups_with_one_earliest_row(conversations: &mut BTreeMap<String, Conversation>) {
-    let mut by_chat_id: BTreeMap<(String, String), Vec<String>> = BTreeMap::new();
-    for (map_key, conversation) in conversations.iter() {
-        if conversation.key.is_group() {
-            let kind = conversation.convo.extra_str("source_kind").to_string();
-            by_chat_id
-                .entry((kind, conversation.convo.chat_id.clone()))
-                .or_default()
-                .push(map_key.clone());
-        }
+/// second. Of the groups that share an earliest row:
+///
+/// - One whose rows are the first rows of another is the same group, read
+///   from an older export in the same input folder, and is merged into it.
+/// - Each other one hashes its earliest rows, as few as tell it apart from
+///   every one of the others ([`group_vendor_id`]).
+///
+/// Such a key depends on the groups it is told apart from, so it changes
+/// when one of them is gone from the phone, or a new one shares more of its
+/// earliest rows.
+fn separate_groups_with_one_earliest_row(conversations: &mut BTreeMap<ConvoKey, Conversation>) {
+    let mut by_chat_id: BTreeMap<(TransportFamily, String), Vec<ConvoKey>> = BTreeMap::new();
+    for key in conversations
+        .keys()
+        .filter(|key| key.group_session.is_some())
+    {
+        by_chat_id
+            .entry((key.family, key.chat_id.clone()))
+            .or_default()
+            .push(key.clone());
     }
-    for map_keys in by_chat_id.into_values().filter(|keys| keys.len() > 1) {
-        let deepest = map_keys
-            .iter()
-            .map(|key| conversations[key].row_digests.len())
-            .max()
-            .unwrap_or(1);
-        let mut ids: Vec<String> = Vec::new();
-        for depth in 2..=deepest.max(2) {
-            ids = map_keys
+    for mut keys in by_chat_id.into_values().filter(|keys| keys.len() > 1) {
+        // Longest first, so a group read from an older export folds into
+        // the newest one.
+        keys.sort_by_key(|key| std::cmp::Reverse(conversations[key].row_digests.len()));
+        let mut kept: Vec<ConvoKey> = Vec::new();
+        for key in keys {
+            let digests = &conversations[&key].row_digests;
+            let Some(longer) = kept
                 .iter()
-                .map(|key| group_vendor_id(&conversations[key].row_digests, depth))
-                .collect();
-            if ids.iter().collect::<HashSet<_>>().len() == ids.len() {
-                break;
-            }
-        }
-        let mut first_with_id: HashMap<String, String> = HashMap::new();
-        for (map_key, id) in map_keys.into_iter().zip(ids) {
-            if let Some(first) = first_with_id.get(&id) {
-                let duplicate = conversations
-                    .remove(&map_key)
-                    .expect("the key was listed above");
-                merge_group_into(conversations.get_mut(first).expect("kept above"), duplicate);
+                .find(|held| conversations[*held].row_digests.starts_with(digests))
+                .cloned()
+            else {
+                kept.push(key);
                 continue;
-            }
-            let conversation = conversations
-                .get_mut(&map_key)
-                .expect("the key was listed above");
+            };
+            let older = conversations.remove(&key).expect("listed above");
+            merge_group_into(conversations.get_mut(&longer).expect("kept above"), older);
+        }
+        if kept.len() < 2 {
+            continue;
+        }
+        let ids: Vec<String> = kept
+            .iter()
+            .map(|key| {
+                let digests = &conversations[key].row_digests;
+                let shared = kept
+                    .iter()
+                    .filter(|other| *other != key)
+                    .map(|other| {
+                        digests
+                            .iter()
+                            .zip(&conversations[other].row_digests)
+                            .take_while(|(a, b)| a == b)
+                            .count()
+                    })
+                    .max()
+                    .unwrap_or(0);
+                // No group's rows are the first rows of another here, so
+                // one row past the longest shared run is one of its own.
+                group_vendor_id(digests, shared + 1)
+            })
+            .collect();
+        for (key, id) in kept.iter().zip(ids) {
+            let conversation = conversations.get_mut(key).expect("kept above");
             conversation.convo.chat_id = format!("{GROUP_CHAT_ID_PREFIX}{id}");
             if let ConversationKey::Group { vendor_id, .. } = &mut conversation.key {
-                vendor_id.clone_from(&id);
+                *vendor_id = id;
             }
-            first_with_id.insert(id, map_key);
         }
     }
 }
 
-/// Fold `other`, a group with the same rows as `into`, into it.
+/// Fold `other`, a group whose rows are the first rows of `into`, into it.
 fn merge_group_into(into: &mut Conversation, other: Conversation) {
     into.convo.messages.extend(other.convo.messages);
     if let (
@@ -245,9 +270,7 @@ struct Ingest {
     tz: Zone,
     attachment_index: Option<AttachmentIndex>,
     copy_attachments: bool,
-    /// Keyed by `<family>|<chat id>` so a Messages chat and a WhatsApp chat
-    /// with the same peer stay separate conversations.
-    conversations: BTreeMap<String, Conversation>,
+    conversations: BTreeMap<ConvoKey, Conversation>,
     /// Every row matched to a file, in the order the rows were read.
     claims: Vec<FileClaim>,
     /// Each chat folder's row texts, keyed by the row's `Message Date` as
@@ -267,7 +290,7 @@ struct FileClaim {
     /// Where the row sits in the export: the CSV's place in discovery order,
     /// then the row's place in that CSV.
     order: (usize, usize),
-    convo_key: String,
+    convo_key: ConvoKey,
     message: usize,
 }
 
@@ -337,17 +360,14 @@ impl Ingest {
             "unresolved_group_participants",
             session.unresolved_roster_labels,
         );
-        let family = TransportFamily::from_kind(discovered.kind);
         let chat_id = session.key.chat_id();
-        // A group session is a conversation of its own, even when another
-        // starts with the same row (`separate_groups_with_one_earliest_row`).
-        let convo_key = if session.key.is_group() {
-            format!(
-                "{}|{chat_id}|{csv_index}|{session_name}",
-                family.key_prefix()
-            )
-        } else {
-            format!("{}|{chat_id}", family.key_prefix())
+        let convo_key = ConvoKey {
+            family: TransportFamily::from_kind(discovered.kind),
+            chat_id: chat_id.clone(),
+            group_session: session
+                .key
+                .is_group()
+                .then(|| (csv_index, session_name.to_string())),
         };
         self.conversations
             .entry(convo_key.clone())

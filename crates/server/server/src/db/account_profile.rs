@@ -291,6 +291,35 @@ pub async fn delete_account(
     Ok(existed)
 }
 
+/// Delete up to `limit` of `account_id`'s messages in one write transaction
+/// of its own. Their attachments, tapbacks and search-index rows go with
+/// them, through `ON DELETE CASCADE` and the search triggers. Returns the
+/// number of messages deleted; fewer than `limit` means none are left.
+///
+/// Messages are nearly all of an account's rows (54,241 of the Demo
+/// Account's medium set, beside 106 conversations and 99 contacts), so
+/// deleting them this way before [`delete_account`] leaves that one
+/// statement little to do.
+pub async fn delete_account_messages_batch(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    limit: i64,
+) -> Result<u64> {
+    let mut tx = begin_write(conn).await?;
+    let deleted = sqlx::query(
+        "DELETE FROM messages WHERE id IN
+         (SELECT id FROM messages WHERE account_id = $1 LIMIT $2)",
+    )
+    .bind(account_id)
+    .bind(limit)
+    .execute(&mut *tx)
+    .await
+    .with_context(|| format!("delete a batch of account {account_id}'s messages"))?
+    .rows_affected();
+    tx.commit().await?;
+    Ok(deleted)
+}
+
 /// Stable id for the seeded demo account (`reset-demo`).
 pub const DEMO_ACCOUNT_ID: i64 = 2;
 

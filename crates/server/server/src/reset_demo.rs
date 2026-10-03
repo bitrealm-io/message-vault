@@ -518,7 +518,11 @@ async fn whole_demo_account_or_none(
 
 /// Build the Demo Account in the database `db`, the one `cfg` names, from
 /// the bundle at `bundle`. There is nothing to snapshot or swap: this writes
-/// to the database directly, touching the Demo Account alone.
+/// to the database directly, touching the Demo Account alone. It runs no
+/// `VACUUM`: on a running server that rewrites every account's rows while
+/// holding the write lock, and on a first start it only reclaims the
+/// staging tables' churn while the desktop app waits for the server to
+/// listen (#1404).
 async fn build_from_bundle(
     cfg: &Config,
     db: &SqlitePool,
@@ -526,7 +530,7 @@ async fn build_from_bundle(
     actor: AuditActor,
 ) -> Result<ResetPreparedStats> {
     let prepared = validate_prepared_bundle(bundle)?;
-    rebuild_demo_account(cfg, db, &prepared, DEMO_ACCOUNT_ID, actor).await
+    rebuild_demo_account(cfg, db, &prepared, DEMO_ACCOUNT_ID, actor, Vacuum::Skip).await
 }
 
 /// Build the new state in a prepared database next to the active one, prove
@@ -581,6 +585,10 @@ async fn reset_prepared_bundle_with(
         &prepared,
         account_id,
         AuditActor::CommandLine,
+        // The command serves no one while it runs, and the database it
+        // writes is a copy swapped in afterwards, so rewriting the file
+        // holds up no other writer.
+        Vacuum::Run,
     )
     .await
     {
@@ -634,11 +642,12 @@ async fn install_reset_state_or_keep_work(
     Err(error)
 }
 
-/// Wipe, seed, import, load the address book, dedupe, convert media, and
-/// vacuum the demo account in the database `db`, the one `cfg` names. A new
-/// database, a reset and a build on a running server all run exactly this;
-/// what differs is what the caller does around it (a reset snapshots the
-/// database first and swaps it in after). Every step uses `db`, so on a
+/// Wipe, seed, import, load the address book, dedupe, and convert media for
+/// the demo account in the database `db`, the one `cfg` names, then run
+/// `VACUUM` when `vacuum` asks for it. A new database, a reset and a build on
+/// a running server all run exactly this; what differs is what the caller
+/// does around it (a reset snapshots the database first, vacuums, and swaps
+/// it in after). Every step uses `db`, so on a
 /// running server the build shares the server's pool. The build's record in
 /// `demo_account_build` is written first and removed last, so a database
 /// that still holds it after a stop has a part-built Demo Account (#1215).
@@ -648,6 +657,7 @@ async fn rebuild_demo_account(
     prepared: &PreparedBundle,
     account_id: i64,
     actor: AuditActor,
+    vacuum: Vacuum,
 ) -> Result<ResetPreparedStats> {
     begin_demo_build(db).await?;
     wipe_demo_account(cfg, db, account_id, actor).await?;
@@ -656,7 +666,9 @@ async fn rebuild_demo_account(
     let import = import_demo_sources(cfg, db, prepared, account_id).await?;
     let address_book = load_demo_address_book(db, prepared, account_id).await?;
     let (dedupe_stats, process_stats) = dedupe_and_process_assets(cfg, db, account_id).await?;
-    vacuum_after_demo(db).await;
+    if vacuum == Vacuum::Run {
+        vacuum_after_demo(db).await;
+    }
     let mut conn = db.acquire().await?;
     demo_account_build::end(&mut conn)
         .await
@@ -668,6 +680,17 @@ async fn rebuild_demo_account(
         dedupe_keys_filled: dedupe_stats.keys_filled,
         process_assets: process_stats,
     })
+}
+
+/// Whether a Demo Account build ends by running `VACUUM`, which rewrites the
+/// whole database file and holds the write lock while it does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Vacuum {
+    /// Run it: the `reset-demo` command, on a copy no one else writes.
+    Run,
+    /// Leave the freed pages for the database to reuse: a build on a running
+    /// server, and the build `serve` runs on a new database.
+    Skip,
 }
 
 /// The most JSONL a build imports in one transaction: what an Upload sends
@@ -1547,15 +1570,39 @@ async fn seed_demo_account_on_conn(
     Ok(())
 }
 
+/// The most messages the wipe deletes in one transaction. A batch also
+/// deletes the messages' attachments, tapbacks and search-index rows; 5,000
+/// took 0.13 s on the medium set, far under the 15-second busy timeout
+/// another writer waits, while the large set's 613,000 messages still go in
+/// about 120 batches rather than thousands.
+const WIPE_BATCH_ROWS: i64 = 5_000;
+
 /// Delete the demo account, `actor` acting, and its on-disk attachments.
-/// Leaves the database and other accounts intact. Its data rows follow via
-/// CASCADE; its Audit Trail stays, unlinked, with an `account_deleted` entry,
-/// as any account's does (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`).
+/// Leaves the database and other accounts intact. Its messages, nearly all
+/// its rows, go first in batches of [`WIPE_BATCH_ROWS`], each its own
+/// transaction, so another account's write waits for one batch at most
+/// (#1404). The rest of its rows follow the account row via CASCADE; its
+/// Audit Trail stays, unlinked, with an `account_deleted` entry, as any
+/// account's does (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`).
 async fn wipe_demo_account(
     cfg: &Config,
     db: &SqlitePool,
     account_id: i64,
     actor: AuditActor,
+) -> Result<()> {
+    wipe_demo_account_with(cfg, db, account_id, actor, WIPE_BATCH_ROWS, async || Ok(())).await
+}
+
+/// [`wipe_demo_account`] in batches of at most `batch_rows` messages, calling
+/// `after_batch` once each batch that deleted rows is committed, so a test
+/// can write for another account between two batches.
+async fn wipe_demo_account_with(
+    cfg: &Config,
+    db: &SqlitePool,
+    account_id: i64,
+    actor: AuditActor,
+    batch_rows: i64,
+    mut after_batch: impl AsyncFnMut() -> Result<()>,
 ) -> Result<()> {
     println!(
         "Reset demo — clearing account data in {}",
@@ -1565,6 +1612,18 @@ async fn wipe_demo_account(
         .acquire()
         .await
         .with_context(|| format!("open {} for demo account wipe", cfg.paths.db.display()))?;
+    loop {
+        let deleted =
+            account_profile::delete_account_messages_batch(&mut conn, account_id, batch_rows)
+                .await?;
+        if deleted == 0 {
+            break;
+        }
+        after_batch().await?;
+        if deleted < u64::try_from(batch_rows).unwrap_or(u64::MAX) {
+            break;
+        }
+    }
     let deleted = account_profile::delete_account(&mut conn, account_id, actor).await?;
     println!("  sql:      demo account rows removed (account existed={deleted})");
     drop(conn);

@@ -9,7 +9,7 @@ import { useAccountProfile } from "../lib/useAccountProfile";
 import { useContactGroups } from "../lib/useContactGroups";
 import { useMessageTags } from "../lib/useMessageTags";
 import { Z_ROW_MENU } from "../lib/zLayers";
-import { useImportAttention } from "../screens/import/useImportAttention";
+import { type ImportAttention, useImportAttention } from "../screens/import/useImportAttention";
 import ColumnResizeHandle from "./ColumnResizeHandle";
 import { useReportColumnResizing } from "./columnResizeState";
 import GroupsNav from "./GroupsNav";
@@ -34,6 +34,13 @@ import {
 import PopupMenu from "./PopupMenu";
 import SavedSearchForm from "./SavedSearchForm";
 import { useColumnResize } from "./useColumnResize";
+
+/** The Import entry's badge: its word, and the sentence its tooltip reads. */
+const IMPORT_BADGE: Record<ImportAttention, { label: string; title: string }> = {
+  waiting: { label: "Waiting", title: "An import is waiting for your approval" },
+  paused: { label: "Paused", title: "An import is paused and can be resumed" },
+  failed: { label: "Failed", title: "The last import failed" },
+};
 
 function NavIcon({ children }: { children: ReactNode }) {
   return (
@@ -260,13 +267,9 @@ export default function LeftPanel({
                         ? "bg-danger text-sent-text"
                         : "bg-accent text-sent-text"
                     }`}
-                    title={
-                      importAttention === "failed"
-                        ? "The last import failed"
-                        : "An import is waiting for your approval"
-                    }
+                    title={IMPORT_BADGE[importAttention].title}
                   >
-                    {importAttention === "failed" ? "Failed" : "Waiting"}
+                    {IMPORT_BADGE[importAttention].label}
                   </span>
                 ) : null}
               </span>

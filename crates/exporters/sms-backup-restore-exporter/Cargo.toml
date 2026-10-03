@@ -14,6 +14,7 @@ message-staging = { path = "../../libs/staging" }
 message-csv = { path = "../../libs/csv" }
 media = { path = "../../libs/media" }
 phone = { path = "../../libs/phone" }
+mms-parts = { path = "../../libs/mms-parts" }
 sbr = { path = "../../libs/sbr" }
 serde_json = { workspace = true }
 

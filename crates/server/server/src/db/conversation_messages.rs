@@ -42,6 +42,7 @@ struct RawRow {
     sort_order: i64,
     is_from_me: bool,
     sender: Option<String>,
+    owner: Option<String>,
     subject: Option<String>,
     body: Option<String>,
     is_announcement: bool,
@@ -56,7 +57,7 @@ struct RawRow {
 
 /// FROM clause for message queries. The compiled filter mentions only `m`;
 /// these joins are here for the SELECT list, which reports the conversation
-/// and the two handles' raw text.
+/// and the three handles' raw text.
 ///
 /// Export's count statements carry the same joins, because a search filter can
 /// name a conversation column and would not compile against `messages` alone.
@@ -64,19 +65,22 @@ struct RawRow {
 /// filter is a conversation id, an account id, and `duplicate_of`, all on
 /// `m`. The two still count the same rows, because
 /// `conversations.chat_handle_id` is `NOT NULL` with a foreign key to
-/// `handles`, so the one inner join here never drops a row (`hs` is a
-/// `LEFT JOIN` and cannot drop one either).
+/// `handles`, so the one inner join here never drops a row (`hs` and `ho` are
+/// `LEFT JOIN`s and cannot drop one either).
 pub(crate) fn messages_from_sql() -> String {
     format!("FROM messages m\n{}", conversation_join_sql())
 }
 
 /// Handles joins for a query already anchored on `messages m`.
 /// `hc` supplies `c.chat_handle_id` raw text; `hs` supplies `m.sender_handle_id`
-/// raw text (LEFT, since outgoing messages carry no sender handle).
+/// raw text (LEFT, since outgoing messages carry no sender handle); `ho`
+/// supplies `m.owner_handle_id` raw text (LEFT, since a backup that names no
+/// owner leaves it empty).
 pub(crate) fn conversation_join_sql() -> String {
     "JOIN conversations c ON c.id = m.conversation_id
      JOIN handles hc ON hc.id = c.chat_handle_id
-     LEFT JOIN handles hs ON hs.id = m.sender_handle_id"
+     LEFT JOIN handles hs ON hs.id = m.sender_handle_id
+     LEFT JOIN handles ho ON ho.id = m.owner_handle_id"
         .into()
 }
 
@@ -137,7 +141,7 @@ pub async fn load_messages(
 /// [`load_messages`] with the caller's own `FROM` clause and `ORDER BY`.
 ///
 /// `from_sql` must bind `messages m` and carry [`conversation_join_sql`],
-/// because the `SELECT` list reads `c`, `hc` and `hs`. An Export Run uses it
+/// because the `SELECT` list reads `c`, `hc`, `hs` and `ho`. An Export Run uses it
 /// to page the message ids it stored at creation, in the order it stored them.
 ///
 /// # Errors
@@ -157,7 +161,8 @@ pub(crate) async fn load_messages_from(
                 m.sort_order, m.is_from_me, hs.raw AS sender, m.subject, m.body,
                 m.is_announcement, m.is_reply, m.thread_originator_guid,
                 m.thread_originator_part, m.num_replies,
-                hc.raw AS chat_identifier, c.conversation_type, c.group_title
+                hc.raw AS chat_identifier, c.conversation_type, c.group_title,
+                ho.raw AS owner
          {from_sql}
          WHERE {where_sql}
          ORDER BY {order_by} LIMIT ? OFFSET ?"
@@ -192,6 +197,7 @@ pub(crate) async fn load_messages_from(
                 chat_identifier: row.try_get(16)?,
                 conversation_type: row.try_get(17)?,
                 group_title: row.try_get(18)?,
+                owner: row.try_get(19)?,
             })
         })
         .collect::<Result<Vec<RawRow>, ApiError>>()?;
@@ -218,6 +224,7 @@ pub(crate) async fn load_messages_from(
                 sort_order: r.sort_order,
                 is_from_me: r.is_from_me,
                 sender: r.sender,
+                owner: r.owner,
                 subject: r.subject,
                 text: r.body,
                 is_announcement: r.is_announcement,
@@ -397,15 +404,76 @@ fn conversation_messages_where(conversation_id: i64, account_id: i64) -> (String
     )
 }
 
-/// One page of a conversation's messages, in the order `order` names. `None`
-/// when the conversation does not exist or belongs to another account —
-/// checked before the message query runs, so an unknown id and another
-/// account's conversation id are indistinguishable from the outside, the same
-/// guarantee [`get_conversation_summary`](crate::db::conversations::get_conversation_summary)
+/// Where a page of one conversation's messages sits in the conversation, in
+/// the order the page is sorted. A screen that jumps to a message does not
+/// know its offset, so it names the message and the answer's `offset` says
+/// where the page landed (`docs/architecture/http-api.md`, "Lists").
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MessageWindow {
+    /// Starting this many messages in.
+    Offset(usize),
+    /// With this message in the middle, or as near the middle as the ends
+    /// of the conversation allow.
+    Around(i64),
+    /// The messages just before this one, without it.
+    Before(i64),
+    /// The messages just after this one, without it.
+    After(i64),
+}
+
+impl MessageWindow {
+    /// The query parameter that names the message, and the message's id.
+    const fn anchor(self) -> Option<(&'static str, i64)> {
+        match self {
+            Self::Offset(_) => None,
+            Self::Around(id) => Some(("around", id)),
+            Self::Before(id) => Some(("before", id)),
+            Self::After(id) => Some(("after", id)),
+        }
+    }
+}
+
+/// How many messages a page beside a message takes from each side of it, and
+/// whether it holds the message itself. `position` is how many of the
+/// conversation's `total` messages come before it in the page's order.
+///
+/// A page around a message puts it in the middle; where an end of the
+/// conversation leaves one side short, the other side makes up the page, so
+/// a jump to the first or last message still fills `limit`.
+fn window_sides(
+    window: MessageWindow,
+    position: usize,
+    total: usize,
+    limit: usize,
+) -> (usize, bool, usize) {
+    let before_available = position;
+    let after_available = total.saturating_sub(position + 1);
+    match window {
+        MessageWindow::Offset(_) => (0, false, 0),
+        MessageWindow::Before(_) => (limit.min(before_available), false, 0),
+        MessageWindow::After(_) => (0, false, limit.min(after_available)),
+        MessageWindow::Around(_) => {
+            let others = limit - 1;
+            let after_wanted = after_available.min(others - others / 2);
+            let before = before_available.min(others - after_wanted);
+            let after = after_available.min(others - before);
+            (before, true, after)
+        }
+    }
+}
+
+/// One page of a conversation's messages, in the order `order` names, at the
+/// place `window` names. `None` when the conversation does not exist or
+/// belongs to another account — checked before the message query runs, so an
+/// unknown id and another account's conversation id are indistinguishable
+/// from the outside, the same guarantee
+/// [`get_conversation_summary`](crate::db::conversations::get_conversation_summary)
 /// gives.
 ///
 /// # Errors
 ///
+/// `validation-failed` when `window` names a message this conversation does
+/// not show: one of another conversation, a duplicate, or no message at all.
 /// `Internal` when a statement fails.
 pub async fn get_conversation_messages(
     conn: &mut SqliteConnection,
@@ -413,7 +481,7 @@ pub async fn get_conversation_messages(
     conversation_id: i64,
     order: &[SortKey<MessageSort>],
     limit: usize,
-    offset: usize,
+    window: MessageWindow,
 ) -> Result<Option<Page<Message>>, ApiError> {
     if !owns_conversation(conn, account_id, conversation_id).await? {
         return Ok(None);
@@ -427,8 +495,135 @@ pub async fn get_conversation_messages(
         .await?;
     let total = total.max(0) as u64;
 
-    let items = load_messages(conn, &where_sql, &params, order, limit, offset).await?;
+    let Some((parameter, anchor_id)) = window.anchor() else {
+        let offset = match window {
+            MessageWindow::Offset(offset) => offset,
+            _ => 0,
+        };
+        let items = load_messages(conn, &where_sql, &params, order, limit, offset).await?;
+        return Ok(Some(Page {
+            items,
+            total,
+            limit,
+            offset,
+        }));
+    };
 
+    // The message's place in the order: its timestamp, `sort_order` and id,
+    // the three keys every message list sorts by.
+    let anchor: Option<(String, i64)> = sqlx::query_as_with(
+        &format!("SELECT m.timestamp, m.sort_order FROM messages m WHERE {where_sql} AND m.id = ?"),
+        bind_args(
+            &params
+                .iter()
+                .cloned()
+                .chain([SqlParam::Int(anchor_id)])
+                .collect::<Vec<_>>(),
+        ),
+    )
+    .fetch_optional(&mut *conn)
+    .await?;
+    let Some((timestamp, sort_order)) = anchor else {
+        return Err(ApiError::validation(format!(
+            "{parameter}: message {anchor_id} is not in this conversation"
+        )));
+    };
+
+    let direction = order
+        .iter()
+        .find(|k| k.key == MessageSort::Date)
+        .map_or(Direction::Asc, |k| k.direction);
+    let (precedes, follows, reverse) = match direction {
+        Direction::Asc => ("<", ">", Direction::Desc),
+        Direction::Desc => (">", "<", Direction::Asc),
+    };
+    let order_by = |d: Direction| {
+        let d = d.sql();
+        format!("m.timestamp {d}, m.sort_order {d}, m.id {d}")
+    };
+    let beside = |op: &str| {
+        let mut side = params.clone();
+        side.extend([
+            SqlParam::Text(timestamp.clone()),
+            SqlParam::Int(sort_order),
+            SqlParam::Int(anchor_id),
+        ]);
+        (
+            format!("{where_sql} AND (m.timestamp, m.sort_order, m.id) {op} (?, ?, ?)"),
+            side,
+        )
+    };
+
+    let (preceding_where, preceding_params) = beside(precedes);
+    let position: i64 = sqlx::query_scalar_with(
+        &format!("SELECT COUNT(*) FROM messages m WHERE {preceding_where}"),
+        bind_args(&preceding_params),
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+    let position = usize::try_from(position.max(0)).unwrap_or(usize::MAX);
+    let (before, holds_anchor, after) = window_sides(
+        window,
+        position,
+        usize::try_from(total).unwrap_or(usize::MAX),
+        limit,
+    );
+
+    let from_sql = messages_from_sql();
+    // The nearest messages before it, read outward from it and turned back
+    // into the page's order.
+    let mut items = if before > 0 {
+        let mut rows = load_messages_from(
+            conn,
+            &from_sql,
+            &preceding_where,
+            &preceding_params,
+            &order_by(reverse),
+            before,
+            0,
+        )
+        .await?;
+        rows.reverse();
+        rows
+    } else {
+        Vec::new()
+    };
+    if holds_anchor {
+        let mut own = params.clone();
+        own.push(SqlParam::Int(anchor_id));
+        items.extend(
+            load_messages_from(
+                conn,
+                &from_sql,
+                &format!("{where_sql} AND m.id = ?"),
+                &own,
+                &order_by(direction),
+                1,
+                0,
+            )
+            .await?,
+        );
+    }
+    if after > 0 {
+        let (following_where, following_params) = beside(follows);
+        items.extend(
+            load_messages_from(
+                conn,
+                &from_sql,
+                &following_where,
+                &following_params,
+                &order_by(direction),
+                after,
+                0,
+            )
+            .await?,
+        );
+    }
+
+    let offset = match window {
+        MessageWindow::After(_) => position + 1,
+        _ => position - before,
+    };
     Ok(Some(Page {
         items,
         total,

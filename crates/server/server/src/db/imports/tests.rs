@@ -323,7 +323,7 @@ async fn running_import(conn: &mut SqliteConnection, account: i64) -> Option<Imp
     let (items, _) = list_imports_page(conn, account, Some("running"), &DEFAULT_IMPORT_SORT, 1, 0)
         .await
         .unwrap();
-    items.into_iter().next()
+    items.into_iter().next().map(Into::into)
 }
 
 #[tokio::test]
@@ -558,6 +558,80 @@ async fn complete_import_refuses_a_run_that_has_finished() {
         .unwrap();
     assert_eq!(row.status.as_str(), "completed_with_issues");
     assert_eq!(issue_count(&mut conn, completed).await, 1);
+}
+
+/// The desktop app posts `complete` while the person clicks Discard. The
+/// discard read the run as running, the completion committed, and the discard
+/// then rewrote the completed run as `cancelled` with a new `finished_at`.
+#[tokio::test]
+async fn a_discard_that_lands_after_the_run_completed_is_refused() {
+    let (pool, _dir) = setup_accounts_only().await;
+    let mut conn = pool.acquire().await.unwrap();
+    let id = start_import(&mut conn, &default_start_args(ACCOUNT_ID))
+        .await
+        .unwrap();
+
+    let mut other_conn = pool.acquire().await.unwrap();
+    let mut other = crate::db::begin_write(&mut other_conn).await.unwrap();
+    complete_elsewhere(&mut other, id).await;
+    let err = crate::db::write_tx::commit_during(other, discard_import(&mut conn, ACCOUNT_ID, id))
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(err, ImportLookupError::InvalidSession { .. }),
+        "{err:?}"
+    );
+    let row = get_owned_import(&mut conn, ACCOUNT_ID, id).await.unwrap();
+    assert_eq!(row.status.as_str(), "completed");
+    assert_eq!(row.finished_at.as_deref(), Some(COMPLETED_AT));
+}
+
+/// A stage change that lands after the run completed left a stage on a
+/// finished run.
+#[tokio::test]
+async fn a_stage_change_that_lands_after_the_run_completed_is_refused() {
+    let (pool, _dir) = setup_accounts_only().await;
+    let mut conn = pool.acquire().await.unwrap();
+    let id = start_import(&mut conn, &default_start_args(ACCOUNT_ID))
+        .await
+        .unwrap();
+
+    let mut other_conn = pool.acquire().await.unwrap();
+    let mut other = crate::db::begin_write(&mut other_conn).await.unwrap();
+    complete_elsewhere(&mut other, id).await;
+    let err = crate::db::write_tx::commit_during(
+        other,
+        set_import_stage(&mut conn, ACCOUNT_ID, id, ImportStage::Pushing, None),
+    )
+    .await
+    .unwrap_err();
+
+    assert!(
+        matches!(err, ImportLookupError::InvalidSession { .. }),
+        "{err:?}"
+    );
+    let stage: Option<String> = sqlx::query_scalar("SELECT stage FROM imports WHERE id = $1")
+        .bind(id)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(stage, None);
+}
+
+/// When [`complete_elsewhere`] says the run finished.
+const COMPLETED_AT: &str = "2026-10-02T12:00:00+00:00";
+
+/// Complete run `id` on `other`, as `complete_import` leaves a run.
+async fn complete_elsewhere(other: &mut crate::db::WriteTx<'_>, id: i64) {
+    sqlx::query(
+        "UPDATE imports SET status = 'completed', stage = NULL, finished_at = $1 WHERE id = $2",
+    )
+    .bind(COMPLETED_AT)
+    .bind(id)
+    .execute(&mut **other)
+    .await
+    .unwrap();
 }
 
 /// The database column and the wire carry one spelling of each status: the

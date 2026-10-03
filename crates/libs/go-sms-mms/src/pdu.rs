@@ -20,14 +20,16 @@
 //!    address it is, the caller decides.
 //! 3. **The time is the Date header**, and the file name's seconds when
 //!    the header is absent. Every real PDU has the header.
-//! 4. **The body is the `text/plain` parts joined with a newline**, in wire
-//!    order, with GO SMS Pro's `+g<hex>` emoji escapes decoded. When there
-//!    is no text part, the Subject is the body, so a photo sent with a
-//!    subject line keeps its words. SMIL layout parts are not text and are
-//!    never shown.
-//! 5. **Every part that is not text and not SMIL is an attachment**, with
-//!    its content type and the name the part headers give it. Nothing is
-//!    dropped for being small or having an unexpected type.
+//! 4. **The body is the `text/plain` parts joined with a newline**, with
+//!    GO SMS Pro's `+g<hex>` emoji escapes decoded, by the rules of
+//!    [`mms_parts::body_of`] that every MMS reader shares: the parts the SMIL
+//!    names in its order, then the rest in wire order. When there is no text
+//!    part, the Subject is the body, so a photo sent with a subject line
+//!    keeps its words. SMIL layout parts are not text and are never shown.
+//! 5. **Every part that is not `text/plain` and not SMIL is an
+//!    attachment**, with its content type and the name the part headers give
+//!    it, in the same order as the text. Nothing is dropped for being small
+//!    or having an unexpected type.
 //! 6. **A stub is a file that does not start with a message type.** GO SMS
 //!    Pro writes a 17-byte `application/smil\0` file for an MMS it never
 //!    downloaded, and that is a stub, not an error.
@@ -140,27 +142,20 @@ pub fn parse_pdu_bytes(path: &Path, data: &[u8]) -> Result<ParsedPdu, PduError> 
         .or_else(|| timestamp_from_filename(path))
         .unwrap_or(0);
 
-    let mut texts: Vec<String> = Vec::new();
-    let mut attachments = Vec::new();
-    for part in &msg.parts {
-        let media = part.content_type.media.as_str();
-        if media == "text/plain" {
-            let text = decode_text(&part.data, part.content_type.charset());
-            let text = text.trim_matches('\0').trim().to_string();
-            if !text.is_empty() {
-                texts.push(decode_gosms_emojis(&text));
-            }
-        } else if media != "application/smil" {
-            attachments.push(attachment(part));
-        }
-    }
-    let body = if texts.is_empty() {
+    let shaped: Vec<mms_parts::Part<'_>> = msg.parts.iter().map(shaped_part).collect();
+    let parts_body = mms_parts::body_of(&shaped);
+    let attachments = parts_body
+        .attachments
+        .iter()
+        .map(|&index| attachment(&msg.parts[index]))
+        .collect();
+    let body = if parts_body.text.is_empty() {
         msg.subject
             .as_deref()
             .map(|s| decode_gosms_emojis(s.trim()))
             .unwrap_or_default()
     } else {
-        texts.join("\n")
+        parts_body.text
     };
 
     let mut fields = msg.headers;
@@ -200,6 +195,32 @@ fn timestamp_from_filename(path: &Path) -> Option<i64> {
         .strip_prefix("I_")
         .or_else(|| name.strip_prefix("S_"))?;
     rest.split('_').next()?.parse().ok()
+}
+
+/// A part as [`mms_parts::body_of`] reads it: a `text/plain` part's text
+/// decoded by its charset, with NULs and surrounding space trimmed and GO SMS
+/// Pro's emoji escapes decoded (rule 4), and any other part's bytes as stored.
+fn shaped_part(part: &Part) -> mms_parts::Part<'_> {
+    let content = if mms_parts::is_text(&part.content_type.media) {
+        let text = decode_text(&part.data, part.content_type.charset());
+        mms_parts::Content::Text(decode_gosms_emojis(text.trim_matches('\0').trim()))
+    } else {
+        mms_parts::Content::Bytes(&part.data)
+    };
+    let params = &part.content_type.params;
+    mms_parts::Part {
+        content_type: &part.content_type.media,
+        keys: [
+            params.get("Filename").map(String::as_str),
+            params.get("Name").map(String::as_str),
+            part.content_location.as_deref(),
+            part.content_id.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        .collect(),
+        content,
+    }
 }
 
 fn attachment(part: &Part) -> ParsedAttachment {

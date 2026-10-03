@@ -56,7 +56,6 @@
     "ix_contact_handles_contact_id",
     "ix_handles_account_id",
     "ix_handles_normalized",
-    "ix_participants_contact_id",
     "ix_participants_handle_id",
     "ix_account_api_tokens_account",
     "ux_imports_active_account"

@@ -80,11 +80,11 @@ describe("names the server would read as syntax", () => {
 
 describe("forHandle", () => {
   it("trims and builds a bare handle term", () => {
-    expect(forHandle("  ann@example.com  ")).toBe("handle:ann@example.com");
+    expect(forHandle("  ann@example.com  ")).toBe("identity:ann@example.com");
   });
 
   it("quotes a handle with a space", () => {
-    expect(forHandle("Ann Lee")).toBe('handle:"Ann Lee"');
+    expect(forHandle("Ann Lee")).toBe('identity:"Ann Lee"');
   });
 
   it("produces the same text on a messages screen and a contacts screen", () => {
@@ -93,6 +93,7 @@ describe("forHandle", () => {
       handle: "Ann Lee",
       msgType: "all",
       participants: { comparator: "any", value: "" },
+      sources: [],
     });
     const contacts = advancedContacts({
       contactName: "",
@@ -277,6 +278,7 @@ describe("advancedMessages", () => {
         handle: "",
         msgType: "all",
         participants: { comparator: "any", value: "" },
+        sources: [],
       }),
     ).toBe("");
   });
@@ -288,8 +290,9 @@ describe("advancedMessages", () => {
         handle: "Ann Lee",
         msgType: "direct",
         participants: { comparator: ">", value: "3" },
+        sources: [],
       }),
-    ).toBe('ada handle:"Ann Lee" kind:direct participants:>3');
+    ).toBe('ada identity:"Ann Lee" kind:direct participants:>3');
   });
 
   it("drops a participants comparison that is not a whole number", () => {
@@ -299,6 +302,7 @@ describe("advancedMessages", () => {
         handle: "",
         msgType: "all",
         participants: { comparator: ">", value: "abc" },
+        sources: [],
       }),
     ).toBe("");
   });
@@ -365,7 +369,7 @@ describe("advancedContacts", () => {
         noHandle: false,
         services: [],
       }),
-    ).toBe("handle:ann@example.com");
+    ).toBe("identity:ann@example.com");
   });
 });
 
@@ -472,24 +476,43 @@ function buildFixtureLines(): string[] {
       handle: "",
       msgType: "all",
       participants: { comparator: "any", value: "" },
+      sources: [],
     },
     {
       nameOrHandle: "ada",
       handle: "Ann Lee",
       msgType: "direct",
       participants: { comparator: ">", value: "3" },
+      sources: [],
     },
     {
       nameOrHandle: "",
       handle: "Family (close)",
       msgType: "group",
       participants: { comparator: "=", value: "5" },
+      sources: [],
     },
     {
       nameOrHandle: "",
       handle: 'Say "Hi"',
       msgType: "all",
       participants: { comparator: "<", value: "2" },
+      sources: ["sms-backup-restore"],
+    },
+    {
+      nameOrHandle: "",
+      handle: "",
+      msgType: "all",
+      participants: { comparator: "any", value: "" },
+      sources: [
+        "imessage",
+        "whatsapp",
+        "sms-backup-restore",
+        "imazing",
+        "openextract",
+        "go-sms-pro",
+        "sms-backup-plus",
+      ],
     },
   ];
   // Tagged "conversations", not "messages": the Advanced Search messages form

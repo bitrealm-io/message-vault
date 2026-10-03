@@ -43,6 +43,7 @@ describe("buildMessagesQuery", () => {
         handle: "",
         msgType: "all",
         participants: EMPTY_COUNT,
+        sources: [],
       }),
     ).toBe("");
     expect(
@@ -51,6 +52,7 @@ describe("buildMessagesQuery", () => {
         handle: "",
         msgType: "all",
         participants: EMPTY_COUNT,
+        sources: [],
       }),
     ).toBe(false);
   });
@@ -62,6 +64,7 @@ describe("buildMessagesQuery", () => {
         handle: "",
         msgType: "direct",
         participants: EMPTY_COUNT,
+        sources: [],
       }),
     ).toBe("jane kind:direct");
     expect(
@@ -70,8 +73,21 @@ describe("buildMessagesQuery", () => {
         handle: "+1555",
         msgType: "group",
         participants: { comparator: ">", value: "3" },
+        sources: [],
       }),
-    ).toBe("handle:+1555 kind:group participants:>3");
+    ).toBe("identity:+1555 kind:group participants:>3");
+  });
+
+  it("puts several ticked sources in one word, by the id an import writes", () => {
+    const input = {
+      nameOrHandle: "",
+      handle: "",
+      msgType: "all" as const,
+      participants: EMPTY_COUNT,
+      sources: ["imazing", "go-sms-pro", "sms-backup-plus"],
+    };
+    expect(buildMessagesQuery(input)).toBe("source:imazing,go-sms-pro,sms-backup-plus");
+    expect(canSubmitMessages(input)).toBe(true);
   });
 });
 
@@ -94,13 +110,13 @@ describe("buildContactsQuery", () => {
         services: ["whatsapp"],
       }),
     ).toBe(
-      'ana handle:"+1 555" first-message:>=2019-01-01 last-message:2022-01-01..2023-01-01 messages:>0 name:none service:whatsapp',
+      'ana identity:"+1 555" first-message:>=2019-01-01 last-message:2022-01-01..2023-01-01 messages:>0 name:none service:whatsapp',
     );
   });
 
   it("asks for contacts with no messages and no identity", () => {
     expect(buildContactsQuery({ ...emptyContacts, activity: "no-messages", noHandle: true })).toBe(
-      "messages:0 handle:none",
+      "messages:0 identity:none",
     );
   });
 

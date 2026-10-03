@@ -217,6 +217,24 @@ async fn a_word_the_messages_list_does_not_have_is_a_422_with_a_sentence() {
     );
 }
 
+/// `source:` takes the id an import writes, so `sms`, which once stood for
+/// SMS Backup & Restore, is an unknown value like any other (#1116).
+#[tokio::test]
+async fn source_sms_is_a_422_that_names_the_sources() {
+    let (fixture, alice) = fixture_with_account().await;
+    let (status, text) = get_raw(&fixture.state, "/v1/messages?q=source%3Asms", &alice.token).await;
+    let problem = expect_problem(status, &text, ProblemType::SearchQueryInvalid);
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(
+        problem
+            .detail
+            .as_deref()
+            .unwrap()
+            .contains("sms-backup-restore"),
+        "{text}"
+    );
+}
+
 /// Every list checks `sort` before it compiles `q`
 /// (`paging::ListRequest::read`), so with both wrong the Messages list
 /// reports the sort, as the contact and conversation lists do.

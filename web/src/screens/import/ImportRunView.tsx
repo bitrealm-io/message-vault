@@ -202,6 +202,7 @@ export default function ImportRunView({
   completionText,
   reviewWaiting,
   unknownContacts,
+  unknownContactsError,
   mediaToolsMissing,
   mediaPartiallyRan,
   identityPanel,
@@ -231,10 +232,13 @@ export default function ImportRunView({
   reviewWaiting: ReviewKind | null;
   /**
    * Null while the contact-match lookup is in flight or failed. The split
-   * into existing and new is a nicety, not a blocker, so a failed lookup
-   * omits it rather than stalling the review.
+   * into existing and new helps the person decide, and approving does not
+   * depend on it, so a failed lookup leaves it out rather than stalling the
+   * review.
    */
   unknownContacts: number | null;
+  /** Why the contact-match lookup failed, shown in place of the split; null when it did not. */
+  unknownContactsError: string | null;
   /** Convert or compress is chosen and ffmpeg was not found: approving would only fail later. */
   mediaToolsMissing?: boolean;
   /**
@@ -337,6 +341,14 @@ export default function ImportRunView({
                 <FactRow label="Existing" value={(contacts - unknownContacts).toLocaleString()} />
                 <FactRow label="New" value={unknownContacts.toLocaleString()} />
               </>
+            ) : unknownContactsError != null ? (
+              <FactRow
+                label={
+                  <span className="text-danger">
+                    The server didn't count which contacts are new: {unknownContactsError}
+                  </span>
+                }
+              />
             ) : null}
           </FactGroup>
           <AttachmentLimitGroup summary={summary} />

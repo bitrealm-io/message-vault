@@ -1,6 +1,6 @@
 //! Parse SMS Backup+ EMLs: one text message per `.eml` file.
 
-use crate::assets::extract_attachments;
+use crate::assets::extract_body;
 use crate::types::ParsedMessage;
 use mailparse::{MailHeaderMap, ParsedMail};
 use phone::{Handle, OwnerHandleSet};
@@ -155,26 +155,6 @@ fn is_sent(headers: &MailHeaders, owner_emails: &[String]) -> bool {
         .any(|e| !e.is_empty() && from_addr == e.as_str())
 }
 
-/// The first body of one MIME type in the tree, newlines normalized to `\n`.
-///
-/// `mail.parts()` is a depth-first walk that starts with the mail itself, so a
-/// single-part message is covered without a special case.
-fn first_body_of_type(mail: &ParsedMail<'_>, want: &str) -> Option<String> {
-    mail.parts()
-        .filter(|part| part.ctype.mimetype.eq_ignore_ascii_case(want))
-        .find_map(|part| part.get_body().ok())
-        .map(|body| body.replace("\r\n", "\n").replace('\r', "\n"))
-}
-
-/// The message text: the first `text/plain` part of the mail.
-///
-/// SMS Backup+ writes the message body as `text/plain` on every mail it
-/// produces — zero of 20,000 sampled carry a `text/html` part — so plain text
-/// is the only part worth reading.
-pub(crate) fn extract_body_text(mail: &ParsedMail<'_>) -> String {
-    first_body_of_type(mail, "text/plain").unwrap_or_default()
-}
-
 /// True when the EML is one SMS Backup+ message rather than unrelated mail
 /// or a call from the call log.
 fn is_single_sms_eml(headers: &MailHeaders) -> bool {
@@ -212,7 +192,7 @@ pub(crate) fn parse_flat_eml_mail(
     let conversation = addresses.conversation(headers, sent, name_alias.as_deref())?;
 
     let file_key = hex::encode(Sha256::digest(path.to_string_lossy().as_bytes()));
-    let attachments = extract_attachments(
+    let body = extract_body(
         mail,
         timestamp_secs * 1000.0,
         Some(&file_key[..12.min(file_key.len())]),
@@ -226,8 +206,9 @@ pub(crate) fn parse_flat_eml_mail(
         has_milliseconds,
         is_from_me: sent,
         sender: conversation.sender,
-        text: extract_body_text(mail),
-        attachments,
+        text: body.text,
+        attachments: body.attachments,
+        unreadable_parts: body.unreadable_parts,
         name_alias,
         smssync_id: (!headers.smssync_id.is_empty()).then(|| headers.smssync_id.clone()),
         android_type: headers.smssync_type.clone(),
@@ -493,6 +474,54 @@ old message\r\n"
         let owners: Vec<String> = owners.iter().map(|s| s.to_string()).collect();
         let owners = OwnerHandleSet::from_phones(&owners).unwrap();
         parse_flat_eml_mail(&path, &mail, &headers, &owners, &[])
+    }
+
+    /// An incoming MMS from 4075551234 whose MIME parts are `body`.
+    fn mms_mail(body: &str) -> ParsedMessage {
+        parse(
+            &format!(
+                "From: x@unknown.email\nTo: me@example.com\nSubject: SMS with X\nX-smssync-type: 1\nX-smssync-address: 4075551234\nX-smssync-date: 1609459200000\nMIME-Version: 1.0\nContent-Type: multipart/mixed; boundary=\"b\"\n\n{body}--b--\n"
+            ),
+            &["5555550100"],
+        )
+        .unwrap()
+    }
+
+    /// Every `text/plain` part is the message's text, in the order of the
+    /// parts, and nothing is removed for repeating another.
+    #[test]
+    fn every_text_part_is_kept_in_order() {
+        let msg = mms_mail(
+            "--b\nContent-Type: text/plain; charset=utf-8\n\nTickets attached\n--b\nContent-Type: text/plain; charset=utf-8\n\nAll three are for Friday\n--b\nContent-Type: text/plain; charset=utf-8\n\nTickets attached\n",
+        );
+        assert_eq!(
+            msg.text,
+            "Tickets attached\nAll three are for Friday\nTickets attached"
+        );
+    }
+
+    /// A contact card is a text type, and an attachment all the same.
+    #[test]
+    fn a_contact_card_is_an_attachment() {
+        let msg = mms_mail(
+            "--b\nContent-Type: text/plain; charset=utf-8\n\ncard\n--b\nContent-Type: text/x-vcard; name=\"sam.vcf\"\n\nBEGIN:VCARD\nFN:Sam\nEND:VCARD\n",
+        );
+        assert_eq!(msg.text, "card");
+        assert_eq!(msg.attachments.len(), 1);
+        assert_eq!(msg.attachments[0].original_name.as_deref(), Some("sam.vcf"));
+        assert!(msg.attachments[0].data.starts_with(b"BEGIN:VCARD"));
+    }
+
+    /// A part whose bytes cannot be decoded is neither text nor an
+    /// attachment, and it is counted.
+    #[test]
+    fn a_part_that_cannot_be_decoded_is_counted() {
+        let msg = mms_mail(
+            "--b\nContent-Type: text/plain; charset=utf-8\n\nhi\n--b\nContent-Type: image/jpeg\nContent-Transfer-Encoding: base64\n\n@@@@\n",
+        );
+        assert_eq!(msg.text, "hi");
+        assert!(msg.attachments.is_empty());
+        assert_eq!(msg.unreadable_parts, 1);
     }
 
     /// SMS Backup+ writes `X-smssync-type` on a call-log mail too, holding

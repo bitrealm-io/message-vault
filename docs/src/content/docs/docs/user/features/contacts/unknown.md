@@ -14,7 +14,7 @@ Message Crate works it out from the contacts each time, so it empties as people 
 A contact is Unknown when either of these is true:
 
 - It has one or more identities and no name.
-- It has no identity, whether or not it has a name.
+- It has no phone number, email address or username, whether or not it has a name. A name the backup gave with no address does not count as one.
 
 Unknown is not a list of strangers.
 A contact named `Ada` with no identity is Unknown, because nothing ties the name to a message.
@@ -24,8 +24,8 @@ A contact named `Ada` with no identity is Unknown, because nothing ties the name
 Four things put a contact in Unknown:
 
 - **An import meets a phone number the backup has no name for.** The import makes a contact with that identity and no name, because an identity on no contact could never be found or named.
-- **An import meets a person the backup names without an address.** The import makes a contact with a name and no identity.
-- **The last identity is removed from a contact.** The contact keeps its name and has nothing left to reach it.
+- **An import meets a person the backup names without an address.** The import keeps the name as the person's identity and makes a contact with that name. Nothing ties the name to an address, so the contact is Unknown until one is added.
+- **An identity is removed from a contact.** An identity that is in a conversation goes to a new contact with no name. A contact whose last identity is removed keeps its name and has nothing left to reach it.
 - **A contact is deleted from the Trash.** Its name and details go, its identities stay in their conversations, and the contact is Unknown again.
 
 ## What Unknown looks like

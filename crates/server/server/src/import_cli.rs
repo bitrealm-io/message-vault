@@ -1,5 +1,6 @@
 //! CLI directory import: any JSONL folder; source from IR `export.source` unless overridden.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -40,39 +41,42 @@ pub struct CliImportOptions {
 pub struct CliImportStats {
     /// Input folder that was imported.
     pub input_dir: PathBuf,
-    /// Source ids written (one per conversation unless overridden).
+    /// Source ids written, one Import Run each.
     pub sources: Vec<String>,
-    /// Import stage counts.
+    /// Import stage counts, summed over the runs.
     pub import: ImportStats,
     /// Dedupe counts when the pass ran, `None` when skipped.
     pub dedupe: Option<DedupeStats>,
 }
 
-/// Which source ids the import writes, and where that decision came from.
+/// Which source ids the import writes, the files of each, and where that
+/// decision came from. Each source is one Import Run, so each run has one
+/// source, its own counts, its own Contact Group and its own Saved Search.
 struct SourcePlan {
-    /// Source ids written (one per conversation unless overridden).
-    sources: Vec<String>,
+    /// Each source id with its files, in source order.
+    runs: BTreeMap<String, Vec<PathBuf>>,
     /// True when the ids were read from each conversation's `export.source`.
     from_jsonl: bool,
 }
 
 impl SourcePlan {
-    /// Use the `--source` override when given, else read every conversation
-    /// header and collect the distinct `export.source` values.
+    /// Use the `--source` override for every file when given, else read
+    /// every conversation header and group the files by `export.source`.
     ///
     /// # Errors
     ///
-    /// Returns an error for an invalid source id, an unreadable file, or a
-    /// folder with no `export.source` anywhere.
+    /// Returns an error for an invalid source id, an unreadable file, a file
+    /// holding conversations of two sources, or a folder with no
+    /// `export.source` anywhere.
     fn resolve(opts: &CliImportOptions, paths: &[PathBuf], input: &Path) -> Result<Self> {
         if let Some(source) = &opts.source_override {
             validate_source_id(source)?;
             return Ok(Self {
-                sources: vec![source.clone()],
+                runs: BTreeMap::from([(source.clone(), paths.to_vec())]),
                 from_jsonl: false,
             });
         }
-        let discovered = discover_sources(paths)?;
+        let discovered = files_by_source(paths)?;
         if discovered.is_empty() {
             bail!(
                 "no conversation export.source found in {}; each conversation needs \
@@ -80,13 +84,18 @@ impl SourcePlan {
                 input.display()
             );
         }
-        for source in &discovered {
+        for source in discovered.keys() {
             validate_source_id(source)?;
         }
         Ok(Self {
-            sources: discovered,
+            runs: discovered,
             from_jsonl: true,
         })
+    }
+
+    /// The source ids, in the order their runs import.
+    fn sources(&self) -> Vec<String> {
+        self.runs.keys().cloned().collect()
     }
 }
 
@@ -112,7 +121,14 @@ pub async fn run(opened: &OpenDb, opts: &CliImportOptions) -> Result<CliImportSt
     let mut conn = opened.conn().await?;
     account_profile::ensure_account_row(&mut conn, opts.account_id).await?;
 
-    let import_stats = import_under_session(&opened.cfg, opts, &mut conn, &paths, &plan).await?;
+    let mut import_stats = ImportStats {
+        mode: opts.mode,
+        ..Default::default()
+    };
+    for (source, files) in &plan.runs {
+        let run = import_under_session(&opened.cfg, opts, &mut conn, source, files, &plan).await?;
+        import_stats.add_run(&run);
+    }
     let dedupe = if opts.skip_dedupe {
         None
     } else {
@@ -127,7 +143,7 @@ pub async fn run(opened: &OpenDb, opts: &CliImportOptions) -> Result<CliImportSt
 
     Ok(CliImportStats {
         input_dir: input.clone(),
-        sources: plan.sources,
+        sources: plan.sources(),
         import: import_stats,
         dedupe,
     })
@@ -140,7 +156,7 @@ fn print_plan(opts: &CliImportOptions, opened: &OpenDb, plan: &SourcePlan) {
     println!("  account:      {}", opts.account_id);
     println!("  input:        {}", opts.input_dir.display());
     println!("  db:           {}", opened.location().display());
-    println!("  sources:      {}", plan.sources.join(", "));
+    println!("  sources:      {}", plan.sources().join(", "));
     if plan.from_jsonl {
         println!("  source mode:  from JSONL export.source");
     } else {
@@ -150,29 +166,30 @@ fn print_plan(opts: &CliImportOptions, opened: &OpenDb, plan: &SourcePlan) {
     println!("  media:        {}", opts.media.as_str());
 }
 
-/// Record an import session, run the import inside it, and mark the session
-/// finished either way so the Settings import table never shows a run stuck
-/// in progress.
+/// Record the Import Run of one source, import that source's `paths` inside
+/// it, and mark the run finished either way so the Settings import table
+/// never shows a run stuck in progress.
 ///
 /// # Errors
 ///
-/// Returns the import's error after the session has been marked failed.
+/// Returns the import's error after the run has been marked failed.
 async fn import_under_session(
     cfg: &crate::config::Config,
     opts: &CliImportOptions,
     conn: &mut sqlx::pool::PoolConnection<sqlx::Sqlite>,
+    source: &str,
     paths: &[PathBuf],
     plan: &SourcePlan,
 ) -> Result<ImportStats> {
     let account_id = opts.account_id;
-    let assets_dir = opts.assets_dir.clone().unwrap_or_else(|| {
-        cfg.paths
-            .assets_dir_for_account(account_id, plan.sources.first().expect("sources non-empty"))
-    });
+    let assets_dir = opts
+        .assets_dir
+        .clone()
+        .unwrap_or_else(|| cfg.paths.assets_dir_for_account(account_id, source));
     let session = imports_api::OwnedSession::start(
         conn,
         account_id,
-        &plan.sources.join(","),
+        source,
         opts.mode,
         "message-crate-server",
     )
@@ -189,7 +206,7 @@ async fn import_under_session(
         source_from_jsonl: plan.from_jsonl,
         paths: plan.from_jsonl.then_some(&cfg.paths),
         media: opts.media,
-        wipe_sources: Some(plan.sources.clone()),
+        wipe_sources: Some(vec![source.to_string()]),
     };
     let result = imports_api::import_jsonl_files_on_conn(
         conn,
@@ -235,14 +252,16 @@ fn jsonl_paths(
     Ok(paths)
 }
 
-/// Collect distinct IR `export.source` values from conversation headers.
+/// Group the files by the IR `export.source` of their conversation headers.
 ///
 /// # Errors
 ///
-/// Returns an error when a JSON Lines file cannot be read.
-pub fn discover_sources(paths: &[PathBuf]) -> Result<Vec<String>> {
-    let mut set = std::collections::BTreeSet::new();
+/// Returns an error when a JSON Lines file cannot be read, a conversation
+/// has no `export.source`, or one file holds conversations of two sources.
+fn files_by_source(paths: &[PathBuf]) -> Result<BTreeMap<String, Vec<PathBuf>>> {
+    let mut runs: BTreeMap<String, Vec<PathBuf>> = BTreeMap::new();
     for path in paths {
+        let mut file_source: Option<String> = None;
         // `read_records` refuses a file with no conversation header.
         for record in jsonl::read_records(path)? {
             if let ExportRecord::Conversation(c) = record {
@@ -254,11 +273,22 @@ pub fn discover_sources(paths: &[PathBuf]) -> Result<Vec<String>> {
                         c.chat_identifier
                     );
                 };
-                set.insert(source.to_string());
+                match &file_source {
+                    Some(first) if first != source => bail!(
+                        "{}: holds conversations of two sources, '{first}' and '{source}'; \
+                         each file is imported in the Import Run of its one source",
+                        path.display()
+                    ),
+                    Some(_) => {}
+                    None => file_source = Some(source.to_string()),
+                }
             }
         }
+        if let Some(source) = file_source {
+            runs.entry(source).or_default().push(path.clone());
+        }
     }
-    Ok(set.into_iter().collect())
+    Ok(runs)
 }
 
 #[cfg(test)]
@@ -285,7 +315,7 @@ mod tests {
     /// A database with account alice and an export folder holding one
     /// conversation with `PHONE`.
     async fn fixture_with_export(dir: &Path) -> (OpenDb, CliImportOptions) {
-        let opened = OpenDb::open(fresh_config(dir)).await.unwrap();
+        let opened = OpenDb::create_or_open(fresh_config(dir)).await.unwrap();
         let mut conn = opened.conn().await.unwrap();
         account_profile::insert_account_at(&mut conn, ALICE, "alice", None, None)
             .await
@@ -374,6 +404,82 @@ mod tests {
         opened.close().await;
     }
 
+    /// Each Import Run of alice, by run id: its source, the name of its
+    /// Contact Group, how many contacts that group holds, and its Saved
+    /// Search's query. A run missing either shortcut is left out.
+    async fn runs_with_their_shortcuts(opened: &OpenDb) -> Vec<(String, String, i64, String)> {
+        let mut conn = opened.conn().await.unwrap();
+        sqlx::query_as(
+            "SELECT i.source, g.name,
+                    (SELECT COUNT(*) FROM contact_group_members m WHERE m.group_id = g.id),
+                    s.query
+             FROM imports i
+             JOIN contact_groups g
+               ON g.account_id = i.account_id AND g.kind = 'import'
+              AND g.name = i.source || ' import ' || substr(i.finished_at, 1, 10)
+             JOIN saved_searches s
+               ON s.account_id = i.account_id AND s.query = 'import:#' || i.id
+             WHERE i.account_id = $1
+             ORDER BY i.id",
+        )
+        .bind(ALICE)
+        .fetch_all(&mut *conn)
+        .await
+        .unwrap()
+    }
+
+    /// Issue #1107: a run of the `import` command makes the run's Contact
+    /// Group, holding the contact it created, and its Saved Search, as a run
+    /// completed over HTTP does.
+    #[tokio::test]
+    async fn an_import_makes_the_runs_contact_group_and_saved_search() {
+        let dir = TempDir::new().unwrap();
+        let (opened, opts) = fixture_with_export(dir.path()).await;
+
+        run(&opened, &opts).await.unwrap();
+
+        let runs = runs_with_their_shortcuts(&opened).await;
+        assert_eq!(runs.len(), 1, "{runs:?}");
+        let (source, group, members, _) = &runs[0];
+        assert_eq!(source, "sms-backup-restore");
+        assert!(group.starts_with("sms-backup-restore import "), "{group}");
+        assert_eq!(*members, 1, "the group holds the contact the run created");
+        opened.close().await;
+    }
+
+    /// Issue #1107: a folder holding two sources imports as two Import Runs,
+    /// each with one source, its own Contact Group and its own Saved Search.
+    #[tokio::test]
+    async fn a_folder_of_two_sources_imports_as_one_run_per_source() {
+        let dir = TempDir::new().unwrap();
+        let (opened, opts) = fixture_with_export(dir.path()).await;
+        let apple = conversation_with("+14075550123")
+            .replace("sms-backup-restore", "imessage")
+            .replace("g-contacts-1", "g-apple-1");
+        fs::write(opts.input_dir.join("apple.jsonl"), apple).unwrap();
+
+        let stats = run(&opened, &opts).await.unwrap();
+
+        assert_eq!(stats.import.messages, 2, "both runs' messages are counted");
+        assert_eq!(
+            count(
+                &opened,
+                "SELECT COUNT(*) FROM imports WHERE account_id = $1"
+            )
+            .await,
+            2,
+            "one run per source, and none names both"
+        );
+        let runs = runs_with_their_shortcuts(&opened).await;
+        let sources: Vec<&str> = runs.iter().map(|run| run.0.as_str()).collect();
+        assert_eq!(sources, ["imessage", "sms-backup-restore"], "{runs:?}");
+        assert!(
+            runs.iter().all(|run| run.2 == 1),
+            "each run's group holds the contact that run created: {runs:?}"
+        );
+        opened.close().await;
+    }
+
     /// Issue #1166: an entry of the folder that cannot be read fails the
     /// listing, naming the folder, instead of being skipped.
     #[test]
@@ -393,7 +499,7 @@ mod tests {
     }
 
     #[test]
-    fn discover_sources_from_ir_headers() {
+    fn files_are_grouped_by_the_source_in_their_headers() {
         let tmp = TempDir::new().unwrap();
         fs::write(
             tmp.path().join("a.jsonl"),
@@ -408,10 +514,13 @@ mod tests {
         )
         .unwrap();
         let paths = list_jsonl_files(tmp.path()).unwrap();
-        let sources = discover_sources(&paths).unwrap();
+        let runs = files_by_source(&paths).unwrap();
         assert_eq!(
-            sources,
-            vec!["go-sms-pro".to_string(), "imessage".to_string()]
+            runs,
+            BTreeMap::from([
+                ("go-sms-pro".to_string(), vec![tmp.path().join("b.jsonl")]),
+                ("imessage".to_string(), vec![tmp.path().join("a.jsonl")]),
+            ])
         );
     }
 }

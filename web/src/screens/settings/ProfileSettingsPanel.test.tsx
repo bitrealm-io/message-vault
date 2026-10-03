@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AccountProfile } from "../../lib/account";
@@ -35,9 +35,12 @@ beforeEach(() => {
   // answers the new profile, as the server does.
   let current = stored;
   getAccountProfile.mockImplementation(async () => ({ ...current }));
-  // The server answers with the profile as it now stands: a new object.
+  // The server answers with the profile as it now stands: a new object. A
+  // field the body leaves out, as JSON leaves out `undefined`, stays as it
+  // was; `null` clears it.
   updateAccountProfile.mockImplementation(async (body: Partial<AccountProfile>) => {
-    current = { ...current, ...body };
+    const sent = Object.fromEntries(Object.entries(body).filter(([, v]) => v !== undefined));
+    current = { ...current, ...sent };
     return { ...current };
   });
 });
@@ -67,5 +70,22 @@ describe("ProfileSettingsPanel", () => {
     await waitFor(() => expect(zoneField().value).toMatch(/Central Time/));
 
     expect(nameField().value).toBe("Typed Name");
+  });
+
+  it("clears the display name when an emptied field is saved", async () => {
+    render(<ProfileSettingsPanel />);
+    await waitFor(() => expect(nameField().value).toBe("Stored Name"));
+
+    await userEvent.clear(nameField());
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    // The server clears the name on `null`; leaving the field out keeps it.
+    expect(updateAccountProfile).toHaveBeenCalledWith({ preferred_name: null });
+    // Once the answer arrives the field shows the name it carries, so the
+    // field reads empty only when the answer has no name.
+    await act(async () => {
+      await updateAccountProfile.mock.results[0].value;
+    });
+    expect(nameField().value).toBe("");
   });
 });

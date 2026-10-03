@@ -42,9 +42,19 @@ struct Record {
     /// The Staging Directory from Settings. `None` means the default,
     /// `{home}/message-crate`.
     root: Option<PathBuf>,
-    /// Every staging folder this app made and has not deleted, in the
-    /// canonical form it was given when it was made.
-    folders: Vec<PathBuf>,
+    /// Every staging folder this app made and has not deleted.
+    folders: Vec<MadeFolder>,
+}
+
+/// One staging folder this app made.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct MadeFolder {
+    /// The folder, in the canonical form it was given when it was made.
+    path: PathBuf,
+    /// The device the folder was made on, where the operating system reports
+    /// one. A folder whose parent is now on another device, such as the
+    /// empty mount point of an unplugged drive, is not counted as deleted.
+    device: Option<u64>,
 }
 
 /// The Staging Directory as Settings show it.
@@ -239,7 +249,10 @@ impl StagingFolders {
             .canonicalize()
             .map_err(|error| format!("Could not resolve {}: {error}", folder.display()))?;
         self.change(|record| {
-            record.folders.push(folder.clone());
+            record.folders.push(MadeFolder {
+                path: folder.clone(),
+                device: std::fs::metadata(&folder).ok().as_ref().and_then(device_of),
+            });
             Ok(())
         })?;
         Ok(folder)
@@ -257,7 +270,12 @@ impl StagingFolders {
         let canonical = path
             .canonicalize()
             .map_err(|error| format!("Could not find the staging folder {dir}: {error}"))?;
-        if !self.read()?.folders.contains(&canonical) {
+        if !self
+            .read()?
+            .folders
+            .iter()
+            .any(|made| made.path == canonical)
+        {
             return Err(format!(
                 "{} is not a staging folder Message Crate made",
                 canonical.display()
@@ -286,7 +304,20 @@ impl StagingFolders {
     /// checks, cannot be removed, or the record cannot be saved.
     pub fn delete(&self, dir: &str) -> Result<(), String> {
         let path = absolute(dir)?;
-        if is_gone(&path) {
+        let made = self
+            .read()?
+            .folders
+            .into_iter()
+            .find(|made| made.path == path);
+        if is_gone(&path, made.as_ref().and_then(|made| made.device)) {
+            return self.forget(&path);
+        }
+        // A delete that stopped after the sentinel went, as when another
+        // program held the emptied folder open, left it empty. It is finished
+        // rather than refused for the missing sentinel.
+        if made.is_some() && is_empty_dir(&path) {
+            std::fs::remove_dir(&path)
+                .map_err(|error| format!("Could not delete {}: {error}", path.display()))?;
             return self.forget(&path);
         }
         let folder = self.folder(dir)?;
@@ -298,7 +329,7 @@ impl StagingFolders {
     /// Drop `folder` from the record.
     fn forget(&self, folder: &Path) -> Result<(), String> {
         self.change(|record| {
-            record.folders.retain(|recorded| recorded != folder);
+            record.folders.retain(|made| made.path != folder);
             Ok(())
         })
     }
@@ -315,7 +346,7 @@ impl StagingFolders {
         self.read()?
             .folders
             .iter()
-            .find_map(|folder| resolve_openable_path(path, &folder.display().to_string()).ok())
+            .find_map(|made| resolve_openable_path(path, &made.path.display().to_string()).ok())
             .ok_or_else(|| "Path is not in a staging folder Message Crate made".to_string())
     }
 
@@ -333,12 +364,39 @@ impl StagingFolders {
 }
 
 /// Whether `path` is known to be gone: not found, in a folder that is still
-/// there. A path that cannot be read for any other reason is not gone.
-fn is_gone(path: &Path) -> bool {
-    matches!(
+/// there on `device`, the device it was made on. A path that cannot be read
+/// for any other reason is not gone, and neither is one whose parent is now
+/// on another device, as an unplugged drive's empty mount point is.
+fn is_gone(path: &Path, device: Option<u64>) -> bool {
+    let not_found = matches!(
         std::fs::symlink_metadata(path),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound
-    ) && path.parent().is_some_and(Path::is_dir)
+    );
+    not_found
+        && path
+            .parent()
+            .and_then(|parent| std::fs::metadata(parent).ok())
+            .is_some_and(|parent| {
+                parent.is_dir() && device.is_none_or(|device| device_of(&parent) == Some(device))
+            })
+}
+
+/// The device a file or folder is on, where the operating system reports one.
+#[cfg(unix)]
+fn device_of(metadata: &std::fs::Metadata) -> Option<u64> {
+    use std::os::unix::fs::MetadataExt;
+    Some(metadata.dev())
+}
+
+/// The device a file or folder is on, where the operating system reports one.
+#[cfg(not(unix))]
+fn device_of(_metadata: &std::fs::Metadata) -> Option<u64> {
+    None
+}
+
+/// Whether `path` is a folder with nothing in it.
+fn is_empty_dir(path: &Path) -> bool {
+    std::fs::read_dir(path).is_ok_and(|mut entries| entries.next().is_none())
 }
 
 /// Remove `folder`, its export sentinel last. A removal that fails part-way
@@ -350,7 +408,11 @@ fn remove_sentinel_last(folder: &Path) -> std::io::Result<()> {
         if entry.file_name() == EXPORT_SENTINEL {
             continue;
         }
-        if entry.file_type()?.is_dir() {
+        // A link to a folder, or a Windows junction, is removed as a link and
+        // never followed: `remove_dir_all` does that, where `remove_file`
+        // fails on a folder link on Windows.
+        let kind = entry.file_type()?;
+        if kind.is_dir() || kind.is_symlink() {
             std::fs::remove_dir_all(entry.path())?;
         } else {
             std::fs::remove_file(entry.path())?;
@@ -516,9 +578,10 @@ mod tests {
     }
 
     #[test]
-    fn a_made_folder_whose_sentinel_is_gone_is_refused() {
+    fn a_made_folder_that_holds_files_but_no_sentinel_is_refused() {
         let scratch = Scratch::new();
         let run = scratch.folders.create("export", NOW).unwrap();
+        fs::write(run.join("notes.txt"), "someone's own").unwrap();
         fs::remove_file(run.join(EXPORT_SENTINEL)).unwrap();
 
         let err = scratch.reopen().delete(run.to_str().unwrap()).unwrap_err();
@@ -578,7 +641,60 @@ mod tests {
         let err = scratch.reopen().delete(run.to_str().unwrap()).unwrap_err();
 
         assert!(err.contains("Could not find"), "{err}");
-        assert_eq!(scratch.reopen().read().unwrap().folders, vec![run]);
+        let recorded = scratch.reopen().read().unwrap().folders;
+        assert_eq!(
+            recorded.iter().map(|made| &made.path).collect::<Vec<_>>(),
+            [&run]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_folder_whose_parent_is_now_on_another_device_is_not_counted_as_deleted() {
+        // As when the drive is unplugged and its mount point stays behind as
+        // an empty folder: the folder is not found, but nothing deleted it.
+        let scratch = Scratch::new();
+        let run = scratch.folders.create("export", NOW).unwrap();
+        scratch
+            .folders
+            .change(|record| {
+                for made in &mut record.folders {
+                    made.device = made.device.map(|device| device + 1);
+                }
+                Ok(())
+            })
+            .unwrap();
+        fs::remove_dir_all(&run).unwrap();
+
+        assert!(scratch.folders.delete(run.to_str().unwrap()).is_err());
+        assert_eq!(scratch.folders.read().unwrap().folders.len(), 1);
+    }
+
+    #[test]
+    fn a_delete_that_stopped_after_the_sentinel_went_is_finished() {
+        let scratch = Scratch::new();
+        let run = scratch.folders.create("export", NOW).unwrap();
+        fs::remove_file(run.join(EXPORT_SENTINEL)).unwrap();
+
+        scratch.folders.delete(run.to_str().unwrap()).unwrap();
+
+        assert!(!run.exists());
+        assert!(scratch.folders.read().unwrap().folders.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_link_to_a_folder_elsewhere_is_removed_and_not_followed() {
+        let scratch = Scratch::new();
+        let run = scratch.folders.create("export", NOW).unwrap();
+        let elsewhere = tempfile::tempdir().unwrap();
+        fs::write(elsewhere.path().join("keep.txt"), "kept").unwrap();
+        std::os::unix::fs::symlink(elsewhere.path(), run.join("link")).unwrap();
+
+        scratch.folders.delete(run.to_str().unwrap()).unwrap();
+
+        assert!(!run.exists());
+        assert!(elsewhere.path().join("keep.txt").is_file());
     }
 
     #[test]

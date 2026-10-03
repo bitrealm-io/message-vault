@@ -45,8 +45,7 @@ impl fmt::Display for OutputFormat {
 }
 
 impl OutputFormat {
-    /// Short format id (`json`, `jsonl`, `csv`, …) that the export form stores
-    /// and [`OutputFormat::parse`] reads back.
+    /// Short format id (`json`, `jsonl`, `csv`, …) that the export form stores.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Csv => "csv",
@@ -55,25 +54,6 @@ impl OutputFormat {
             Self::Json => "json",
             Self::Jsonl => "jsonl",
             Self::Xml => "xml",
-        }
-    }
-
-    /// Parse a format id. `ndjson` is accepted as JSON Lines.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error string when `s` is not a known format.
-    pub fn parse(s: &str) -> Result<Self, String> {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "csv" => Ok(Self::Csv),
-            "eml" => Ok(Self::Eml),
-            "mbox" => Ok(Self::Mbox),
-            "json" => Ok(Self::Json),
-            "jsonl" | "ndjson" => Ok(Self::Jsonl),
-            "xml" => Ok(Self::Xml),
-            other => Err(format!(
-                "unknown output format '{other}' (expected csv, eml, mbox, json, jsonl, or xml)"
-            )),
         }
     }
 
@@ -318,34 +298,6 @@ mod tests {
             resume: false,
             source: SourceConfig::Format(FormatConfig {}),
         }
-    }
-
-    #[test]
-    fn parse_accepts_every_format_id_and_its_aliases() {
-        assert_eq!(OutputFormat::parse("csv"), Ok(OutputFormat::Csv));
-        assert_eq!(OutputFormat::parse("eml"), Ok(OutputFormat::Eml));
-        assert_eq!(OutputFormat::parse("mbox"), Ok(OutputFormat::Mbox));
-        assert_eq!(OutputFormat::parse("json"), Ok(OutputFormat::Json));
-        assert_eq!(OutputFormat::parse("jsonl"), Ok(OutputFormat::Jsonl));
-        assert_eq!(OutputFormat::parse("ndjson"), Ok(OutputFormat::Jsonl));
-        assert_eq!(OutputFormat::parse("xml"), Ok(OutputFormat::Xml));
-    }
-
-    #[test]
-    fn parse_ignores_case_and_surrounding_whitespace() {
-        assert_eq!(OutputFormat::parse("  JSONL\n"), Ok(OutputFormat::Jsonl));
-        assert_eq!(OutputFormat::parse("Csv"), Ok(OutputFormat::Csv));
-    }
-
-    #[test]
-    fn parse_refuses_an_unknown_format_and_lists_the_known_ones() {
-        assert_eq!(
-            OutputFormat::parse("pdf"),
-            Err(
-                "unknown output format 'pdf' (expected csv, eml, mbox, json, jsonl, or xml)"
-                    .to_string()
-            )
-        );
     }
 
     #[test]

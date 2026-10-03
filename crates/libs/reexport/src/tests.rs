@@ -671,7 +671,6 @@ fn a_jsonl_whose_first_line_is_not_a_conversation_is_refused() {
         "{\"level\":\"info\",\"msg\":\"started\"}\n         {\"schema_version\":4,\"export\":{},\"conversation\":{},\"messages\":[]}\n",
     )
     .unwrap();
-    std::fs::write(dir.path().join("empty.ndjson"), "").unwrap();
 
     let err = detect_ir_export(dir.path()).unwrap_err();
     assert!(

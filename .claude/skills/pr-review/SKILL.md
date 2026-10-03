@@ -112,11 +112,11 @@ brief ends with the same output rule:
   overrides the baseline. Skip what tooling enforces."
 - **Spec**: the issue text. "Report requirements the spec asked for that are
   missing or partial, behaviour the spec did not ask for, and requirements that
-  look implemented but wrong. Quote the spec line for each (`spec`)."
+  look implemented but wrong (`spec`). Quote the spec line for each."
 - **Correctness**: "Find inputs or states that make this change produce a wrong
   result, crash, or lose data. Each finding names the concrete failing scenario:
-  the input or state, and the wrong outcome. A worry with no scenario is not a
-  finding (`bug`)."
+  the input or state, and the wrong outcome (`bug`). A worry with no scenario is
+  not a finding."
 
 Keep the axes separate, and post each axis's findings as its sub-agent
 returned them, so one axis cannot mask another.

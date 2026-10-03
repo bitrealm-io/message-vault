@@ -10,7 +10,6 @@ pub mod config;
 pub mod error_docs;
 
 pub(crate) mod accounts_api;
-pub(crate) mod api_tokens_api;
 pub(crate) mod asset_store;
 pub(crate) mod asset_uploads;
 pub(crate) mod assets_api;

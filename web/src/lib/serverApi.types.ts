@@ -130,7 +130,7 @@ export interface paths {
         head?: never;
         /**
          * Rename one named API token.
-         * @description The label is trimmed before storing.
+         * @description The label is trimmed before storing. The answer is the token, as `GET /v1/accounts/{id}/api-tokens` lists it.
          */
         patch: operations["update_api_token"];
         trace?: never;
@@ -581,7 +581,7 @@ export interface paths {
          *     runs such a cell as a formula and drops the `+` of a phone number.
          *     `POST /v1/contacts` loads the file back and takes that `'` off.
          */
-        post: operations["export_address_book"];
+        post: operations["get_address_book"];
         delete?: never;
         options?: never;
         head?: never;
@@ -598,7 +598,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** First/last message dates and counts for a list of contact ids. */
-        post: operations["summarize_contacts"];
+        post: operations["list_contact_summaries"];
         delete?: never;
         options?: never;
         head?: never;
@@ -615,7 +615,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Report which identifiers this account has no contact for. */
-        post: operations["find_unmatched_identities"];
+        post: operations["list_unmatched_identities"];
         delete?: never;
         options?: never;
         head?: never;
@@ -987,7 +987,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Record the outcome of an Import Run started with POST /v1/imports. */
+        /**
+         * Record the outcome of an Import Run started with POST /v1/imports.
+         * @description The answer is the run as it now stands.
+         */
         post: operations["complete_import"];
         delete?: never;
         options?: never;
@@ -1028,7 +1031,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Discard a running Import Run, freeing the account's single slot. */
+        /**
+         * Discard a running Import Run, freeing the account's single slot.
+         * @description The answer is the run, now `cancelled`.
+         */
         post: operations["discard_import"];
         delete?: never;
         options?: never;
@@ -1372,7 +1378,7 @@ export interface paths {
          * Empty the trash: every trashed conversation is deleted for good, with its messages and any attachment file no other message uses, and every trashed contact loses its name and details and becomes Unknown, its conversations untouched.
          * @description Trash is the only door to permanent deletion; this is the door for everything in it at once.
          */
-        delete: operations["empty_trash"];
+        delete: operations["delete_trash"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1458,20 +1464,13 @@ export interface components {
          *     account itself, each an `OwnerExportRun` for the owner.
          */
         AccountExportRuns: components["schemas"]["Page_ExportRun"] | components["schemas"]["Page_OwnerExportRun"];
-        /** @description One identity to link or unlink, with its platform service. */
-        AccountIdentityRequest: {
-            /** @description The address as typed, e.g. `+15555550100` or `alex@example.com`. */
-            address: string;
-            /** @description Platform the address belongs to: `phone`, `email`, or `whatsapp`. */
-            service: string;
-        };
         /** @description One of an account's Import Runs as its reader may see it. */
         AccountImportRun: components["schemas"]["ImportRun"] | components["schemas"]["OwnerImportRun"];
         /**
          * @description An account's Import Runs as its reader may see them: in full for the
          *     account itself, each an `OwnerImportRun` for the owner.
          */
-        AccountImportRuns: components["schemas"]["Page_ImportSummary"] | components["schemas"]["Page_OwnerImportRun"];
+        AccountImportRuns: components["schemas"]["Page_ImportRun"] | components["schemas"]["Page_OwnerImportRun"];
         /** @description One account's share of the messages held: an id, a username and numbers. */
         AccountMessages: {
             /** Format: int64 */
@@ -1725,7 +1724,7 @@ export interface components {
          */
         AuditReason: "logged_out" | "replaced" | "revoked" | "expired" | "unknown_username" | "wrong_password" | "account_disabled";
         /** @description Body for claiming a Message Crate. */
-        ClaimRequest: {
+        ClaimServerRequest: {
             /** @description Password for the owner. Must satisfy the server's password policy. */
             password: string;
             /** @description Login username for the owner. */
@@ -1761,18 +1760,6 @@ export interface components {
             summary?: unknown;
             /** Format: int64 */
             upload_ms?: number | null;
-        };
-        /** @description The Import Run that was completed. */
-        CompleteImportResponse: {
-            /** Format: int64 */
-            attachment_count: number;
-            /** Format: int64 */
-            bytes_uploaded: number;
-            /** Format: int64 */
-            id: number;
-            /** Format: int64 */
-            message_count: number;
-            status: components["schemas"]["ImportStatus"];
         };
         /** @description Full contact view: every identity with stats, plus totals across them. */
         Contact: {
@@ -2033,6 +2020,54 @@ export interface components {
             sha256?: string | null;
             upload_id?: string | null;
         };
+        /** @description What an address book load changed. */
+        CreateContactsResponse: {
+            /**
+             * Format: int64
+             * @description Contacts the load created.
+             */
+            contacts_created: number;
+            /**
+             * Format: int64
+             * @description Contacts the load deleted: the ones it left with neither a name nor
+             *     an identity.
+             */
+            contacts_deleted: number;
+            /**
+             * Format: int64
+             * @description Contacts the load renamed, or whose identities or Contact Group
+             *     memberships it changed.
+             */
+            contacts_updated: number;
+            /**
+             * Format: int64
+             * @description Contact Groups the load created.
+             */
+            groups_created: number;
+            /**
+             * Format: int64
+             * @description Identities linked to a contact that no contact held before.
+             */
+            identities_added: number;
+            /**
+             * Format: int64
+             * @description Identities taken from one contact and given to another.
+             */
+            identities_moved: number;
+            /**
+             * Format: int64
+             * @description Identities taken off a contact, which only Edit does.
+             */
+            identities_removed: number;
+            /**
+             * @description One sentence for each phone number the file wrote without `+` that
+             *     the load matched to the `+` key its contact holds, or that became a
+             *     new identity. Each starts with its row number. A spreadsheet can drop
+             *     the `+` from a number without showing it, so the load says how it
+             *     read the number.
+             */
+            notes: string[];
+        };
         /** @description Body of `POST /v1/exports`: the scope, and the tool that asked. */
         CreateExportRequest: {
             /** @description What to export. */
@@ -2079,6 +2114,15 @@ export interface components {
         CreateImportResponse: {
             /** Format: int64 */
             id: number;
+        };
+        /** @description The name of a new set. */
+        CreateNamedSetRequest: {
+            name: string;
+        };
+        /** @description The name and query of a new saved search. */
+        CreateSavedSearchRequest: {
+            name: string;
+            query: string;
         };
         /** @description Username and password, the body of `POST /v1/session`. */
         CreateSessionRequest: {
@@ -2160,28 +2204,6 @@ export interface components {
          * @enum {string}
          */
         DemoDataSize: "medium" | "large";
-        /** @description Confirmation that an Import Run was discarded. */
-        DiscardImportResponse: {
-            /** Format: int64 */
-            id: number;
-            status: components["schemas"]["ImportStatus"];
-        };
-        /**
-         * @description Which contacts `POST /v1/contacts/address-book` writes: the Contacts
-         *     list's search and its checked rows.
-         */
-        ExportAddressBookRequest: {
-            /**
-             * @description Contact ids to keep from what `q` matches. Absent or empty keeps
-             *     them all.
-             */
-            ids?: number[];
-            /**
-             * @description A Contacts search, as `GET /v1/contacts` takes in `q`. Absent or
-             *     empty matches every contact.
-             */
-            q?: string | null;
-        };
         /**
          * @description Which list an Export Run's query is for (`docs/architecture/http-api.md`,
          *     "Runs"). The list decides which search words the query may use and what
@@ -2294,10 +2316,21 @@ export interface components {
             /** @description The spelling, without the colon. */
             word: string;
         };
-        /** @description Body for `POST /v1/contacts/unmatched-identities`. */
-        FindUnmatchedIdentitiesRequest: {
-            /** @description Raw identifiers — phone numbers, emails — as they appear in an export. */
-            identifiers: string[];
+        /**
+         * @description Which contacts `POST /v1/contacts/address-book` writes: the Contacts
+         *     list's search and its checked rows.
+         */
+        GetAddressBookRequest: {
+            /**
+             * @description Contact ids to keep from what `q` matches. Absent or empty keeps
+             *     them all.
+             */
+            ids?: number[];
+            /**
+             * @description A Contacts search, as `GET /v1/contacts` takes in `q`. Absent or
+             *     empty matches every contact.
+             */
+            q?: string | null;
         };
         /**
          * @description One identity of a contact or an account, and its messages: for a contact,
@@ -2373,13 +2406,26 @@ export interface components {
          * @enum {string}
          */
         ImportMode: "replace" | "append";
-        /** @description Full Import Run record. */
+        /**
+         * @description An Import Run: one per import, the same record wherever the interface
+         *     hands one out. It holds the counts Settings shows, everything the desktop
+         *     app needs to resume a running run, and the issues the run recorded.
+         */
         ImportRun: {
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Attachments counted for the run.
+             */
             attachment_count: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Time spent on attachments, when finished.
+             */
             attachments_ms?: number | null;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Bytes uploaded so far.
+             */
             bytes_uploaded: number;
             /**
              * Format: int64
@@ -2391,25 +2437,68 @@ export interface components {
              * @description Contacts this run created.
              */
             contacts_new: number;
-            /** Format: int64 */
+            /** @description Whether cross-source dedupe runs after each batch. */
+            dedupe: boolean;
+            /** @description Which install created the run. */
+            device_id?: string | null;
+            /**
+             * Format: int64
+             * @description Total wall-clock duration, when finished.
+             */
             duration_ms?: number | null;
+            /** @description UTC time the run finished, when it has. */
             finished_at?: string | null;
-            /** Format: int64 */
+            /** @description Import form snapshot, or null. */
+            form: unknown;
+            /**
+             * Format: int64
+             * @description Import Run id.
+             */
             id: number;
+            /** @description Issues the run recorded, oldest first. */
             issues: components["schemas"]["ImportIssue"][];
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Messages counted for the run.
+             */
             message_count: number;
+            /** @description Import mode (`replace` or `append`). */
             mode: string;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Time spent parsing, when finished.
+             */
             parse_ms?: number | null;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Time spent preparing conversation files, when finished.
+             */
             prepare_ms?: number | null;
+            /** @description Source id the run imports. */
             source: string;
+            /** @description Source path, size, mtime, and message count, or null. */
+            source_fingerprint: unknown;
+            /** @description Addresses the backup's device sent from (JSON array), or null. */
+            source_identities: unknown;
+            /** @description Where a running run is; null once it is over. */
+            stage?: string | null;
+            /** @description Absolute path to the staging folder on the client that owns the run. */
+            staging_dir?: string | null;
+            /** @description UTC time the run started. */
             started_at: string;
+            /** @description Lifecycle status. */
             status: components["schemas"]["ImportStatus"];
+            /**
+             * @description What the user approved at the last gate they passed, or null. The
+             *     column `PATCH /v1/imports/{id}` writes with its `summary`.
+             */
             summary: unknown;
+            /** @description Importing tool, e.g. `message-crate-push`. */
             tool?: string | null;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Time spent uploading, when finished.
+             */
             upload_ms?: number | null;
         };
         /** @description Counters for one import run (staging and promote results). */
@@ -2496,67 +2585,20 @@ export interface components {
          * @enum {string}
          */
         ImportStatus: "running" | "completed" | "completed_with_issues" | "failed" | "cancelled";
-        /**
-         * @description One Import Run as `GET /v1/imports` lists it: the counts Settings shows,
-         *     and everything the desktop app needs to resume a running one.
-         */
-        ImportSummary: {
+        /** @description One identity to link onto the account, with its platform service. */
+        LinkAccountIdentityRequest: {
+            /** @description The address as typed, e.g. `+15555550100` or `alex@example.com`. */
+            address: string;
+            /** @description Platform the address belongs to: `phone`, `email`, or `whatsapp`. */
+            service: string;
+        };
+        /** @description Body for `POST /v1/contacts/summaries`. */
+        ListContactSummariesRequest: {
             /**
-             * Format: int64
-             * @description Attachments counted for the run.
+             * @description Contact ids to summarize: at least one, and at most 500. Every
+             *     contact is listed by `GET /v1/contacts`.
              */
-            attachment_count: number;
-            /**
-             * Format: int64
-             * @description Bytes uploaded so far.
-             */
-            bytes_uploaded: number;
-            /** @description Whether cross-source dedupe runs after each batch. */
-            dedupe: boolean;
-            /** @description Which install created the run. */
-            device_id?: string | null;
-            /**
-             * Format: int64
-             * @description Total wall-clock duration, when finished.
-             */
-            duration_ms?: number | null;
-            /** @description UTC time the run finished, when it has. */
-            finished_at?: string | null;
-            /** @description Import form snapshot, or null. */
-            form: unknown;
-            /**
-             * Format: int64
-             * @description Import Run id.
-             */
-            id: number;
-            /**
-             * Format: int64
-             * @description Messages counted for the run.
-             */
-            message_count: number;
-            /** @description Import mode (`replace` or `append`). */
-            mode: string;
-            /** @description Source id the run imports. */
-            source: string;
-            /** @description Source path, size, mtime, and message count, or null. */
-            source_fingerprint: unknown;
-            /** @description Addresses the backup's device sent from (JSON array), or null. */
-            source_identities: unknown;
-            /** @description Where a running run is; null once it is over. */
-            stage?: string | null;
-            /** @description Absolute path to the staging folder on the client that owns the run. */
-            staging_dir?: string | null;
-            /** @description UTC time the run started. */
-            started_at: string;
-            /** @description Lifecycle status. */
-            status: components["schemas"]["ImportStatus"];
-            /**
-             * @description What the user approved at the last gate they passed, or null. The
-             *     column `PATCH /v1/imports/{id}` writes with its `summary`.
-             */
-            summary: unknown;
-            /** @description Importing tool, e.g. `message-crate-push`. */
-            tool?: string | null;
+            ids: number[];
         };
         /**
          * @description Which list a query is compiled for. Each list accepts its own subset of
@@ -2564,53 +2606,10 @@ export interface components {
          * @enum {string}
          */
         ListKind: "contacts" | "conversations" | "messages";
-        /** @description What a load changed. */
-        LoadCounts: {
-            /**
-             * Format: int64
-             * @description Contacts the load created.
-             */
-            contacts_created: number;
-            /**
-             * Format: int64
-             * @description Contacts the load deleted: the ones it left with neither a name nor
-             *     an identity.
-             */
-            contacts_deleted: number;
-            /**
-             * Format: int64
-             * @description Contacts the load renamed, or whose identities or Contact Group
-             *     memberships it changed.
-             */
-            contacts_updated: number;
-            /**
-             * Format: int64
-             * @description Contact Groups the load created.
-             */
-            groups_created: number;
-            /**
-             * Format: int64
-             * @description Identities linked to a contact that no contact held before.
-             */
-            identities_added: number;
-            /**
-             * Format: int64
-             * @description Identities taken from one contact and given to another.
-             */
-            identities_moved: number;
-            /**
-             * Format: int64
-             * @description Identities taken off a contact, which only Edit does.
-             */
-            identities_removed: number;
-            /**
-             * @description One sentence for each phone number the file wrote without `+` that
-             *     the load matched to the `+` key its contact holds, or that became a
-             *     new identity. Each starts with its row number. A spreadsheet can drop
-             *     the `+` from a number without showing it, so the load says how it
-             *     read the number.
-             */
-            notes: string[];
+        /** @description Body for `POST /v1/contacts/unmatched-identities`. */
+        ListUnmatchedIdentitiesRequest: {
+            /** @description Raw identifiers — phone numbers, emails — as they appear in an export. */
+            identifiers: string[];
         };
         /**
          * @description How a load applies the file.
@@ -2702,10 +2701,6 @@ export interface components {
         NamedSet: {
             /** Format: int64 */
             id: number;
-            name: string;
-        };
-        /** @description A name to create, or the new name for an existing set. */
-        NamedSetRequest: {
             name: string;
         };
         /**
@@ -3412,7 +3407,7 @@ export interface components {
             total: number;
         };
         /** @description One page of a list. */
-        Page_ImportSummary: {
+        Page_ImportRun: {
             /** @description The rows on this page. */
             items: {
                 /**
@@ -3422,9 +3417,24 @@ export interface components {
                 attachment_count: number;
                 /**
                  * Format: int64
+                 * @description Time spent on attachments, when finished.
+                 */
+                attachments_ms?: number | null;
+                /**
+                 * Format: int64
                  * @description Bytes uploaded so far.
                  */
                 bytes_uploaded: number;
+                /**
+                 * Format: int64
+                 * @description Contacts it only changed.
+                 */
+                contacts_changed: number;
+                /**
+                 * Format: int64
+                 * @description Contacts this run created.
+                 */
+                contacts_new: number;
                 /** @description Whether cross-source dedupe runs after each batch. */
                 dedupe: boolean;
                 /** @description Which install created the run. */
@@ -3443,6 +3453,8 @@ export interface components {
                  * @description Import Run id.
                  */
                 id: number;
+                /** @description Issues the run recorded, oldest first. */
+                issues: components["schemas"]["ImportIssue"][];
                 /**
                  * Format: int64
                  * @description Messages counted for the run.
@@ -3450,6 +3462,16 @@ export interface components {
                 message_count: number;
                 /** @description Import mode (`replace` or `append`). */
                 mode: string;
+                /**
+                 * Format: int64
+                 * @description Time spent parsing, when finished.
+                 */
+                parse_ms?: number | null;
+                /**
+                 * Format: int64
+                 * @description Time spent preparing conversation files, when finished.
+                 */
+                prepare_ms?: number | null;
                 /** @description Source id the run imports. */
                 source: string;
                 /** @description Source path, size, mtime, and message count, or null. */
@@ -3471,6 +3493,11 @@ export interface components {
                 summary: unknown;
                 /** @description Importing tool, e.g. `message-crate-push`. */
                 tool?: string | null;
+                /**
+                 * Format: int64
+                 * @description Time spent uploading, when finished.
+                 */
+                upload_ms?: number | null;
             }[];
             /** @description Page size used. */
             limit: number;
@@ -3953,13 +3980,8 @@ export interface components {
             /** @description Query string, run against the conversation list. */
             query: string;
         };
-        /** @description A saved search's name and query. */
-        SavedSearchRequest: {
-            name: string;
-            query: string;
-        };
         /** @description The state of this Message Crate, for the screen a logged-out person sees. */
-        ServerInfo: {
+        Server: {
             /**
              * Format: int64
              * @description The attachment size limit, in bytes: the largest asset the server
@@ -4068,14 +4090,6 @@ export interface components {
             sources: string[];
             username?: string | null;
         };
-        /** @description Body for `POST /v1/contacts/summaries`. */
-        SummarizeContactsRequest: {
-            /**
-             * @description Contact ids to summarize: at least one, and at most 500. Every
-             *     contact is listed by `GET /v1/contacts`.
-             */
-            ids: number[];
-        };
         /** @description One tapback reaction on an exported message. */
         Tapback: {
             /** @description Emoji form of the reaction, when one exists. */
@@ -4120,6 +4134,13 @@ export interface components {
              */
             size_bytes: number;
         };
+        /** @description One identity to unlink from the account, with its platform service. */
+        UnlinkAccountIdentityRequest: {
+            /** @description The address as typed, e.g. `+15555550100` or `alex@example.com`. */
+            address: string;
+            /** @description Platform the address belongs to: `phone`, `email`, or `whatsapp`. */
+            service: string;
+        };
         /**
          * @description Body for changing an account. Omitted fields are left alone. The name,
          *     zone and identities are set by the account or by the owner; the
@@ -4135,7 +4156,7 @@ export interface components {
             /** @description Disable or re-enable login. */
             disabled?: boolean | null;
             /** @description Identities to link onto the account profile. */
-            identities?: components["schemas"]["AccountIdentityRequest"][];
+            identities?: components["schemas"]["LinkAccountIdentityRequest"][];
             /**
              * @description Display name. Absent leaves the current name unchanged, `null` clears
              *     it, and a string sets it, trimmed. A string that is empty after
@@ -4143,7 +4164,7 @@ export interface components {
              */
             preferred_name?: string | null;
             /** @description Identities to unlink from the account profile. */
-            remove_identities?: components["schemas"]["AccountIdentityRequest"][];
+            remove_identities?: components["schemas"]["UnlinkAccountIdentityRequest"][];
             /**
              * @description IANA time zone to set, for example `America/New_York`; `None` leaves
              *     the current zone unchanged. An unknown name is a 422.
@@ -4153,16 +4174,6 @@ export interface components {
         /** @description Body for renaming a token. */
         UpdateApiTokenRequest: {
             /** @description Replacement label. */
-            label: string;
-        };
-        /** @description The renamed token's id and stored label. */
-        UpdateApiTokenResponse: {
-            /**
-             * Format: int64
-             * @description Token id that was renamed.
-             */
-            id: number;
-            /** @description Stored label after the rename. */
             label: string;
         };
         /** @description The previous and new addresses for a link change. */
@@ -4212,6 +4223,15 @@ export interface components {
             added: number;
             /** Format: int64 */
             removed: number;
+        };
+        /** @description The new name for an existing set. */
+        UpdateNamedSetRequest: {
+            name: string;
+        };
+        /** @description A saved search's new name and query. */
+        UpdateSavedSearchRequest: {
+            name: string;
+            query: string;
         };
         /** @description Body for changing the server settings. Omitted fields are left alone. */
         UpdateServerSettingsRequest: {
@@ -5108,7 +5128,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UpdateApiTokenResponse"];
+                    "application/json": components["schemas"]["ApiToken"];
                 };
             };
             /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
@@ -6879,7 +6899,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["NamedSetRequest"];
+                "application/json": components["schemas"]["CreateNamedSetRequest"];
             };
         };
         responses: {
@@ -7054,7 +7074,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["NamedSetRequest"];
+                "application/json": components["schemas"]["UpdateNamedSetRequest"];
             };
         };
         responses: {
@@ -7430,7 +7450,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LoadCounts"];
+                    "application/json": components["schemas"]["CreateContactsResponse"];
                 };
             };
             /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
@@ -7504,7 +7524,7 @@ export interface operations {
             };
         };
     };
-    export_address_book: {
+    get_address_book: {
         parameters: {
             query?: never;
             header?: never;
@@ -7513,7 +7533,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ExportAddressBookRequest"];
+                "application/json": components["schemas"]["GetAddressBookRequest"];
             };
         };
         responses: {
@@ -7592,7 +7612,7 @@ export interface operations {
             };
         };
     };
-    summarize_contacts: {
+    list_contact_summaries: {
         parameters: {
             query?: never;
             header?: never;
@@ -7601,7 +7621,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SummarizeContactsRequest"];
+                "application/json": components["schemas"]["ListContactSummariesRequest"];
             };
         };
         responses: {
@@ -7683,7 +7703,7 @@ export interface operations {
             };
         };
     };
-    find_unmatched_identities: {
+    list_unmatched_identities: {
         parameters: {
             query?: never;
             header?: never;
@@ -7692,7 +7712,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["FindUnmatchedIdentitiesRequest"];
+                "application/json": components["schemas"]["ListUnmatchedIdentitiesRequest"];
             };
         };
         responses: {
@@ -9210,7 +9230,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Page_ImportSummary"];
+                    "application/json": components["schemas"]["Page_ImportRun"];
                 };
             };
             /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
@@ -9687,7 +9707,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CompleteImportResponse"];
+                    "application/json": components["schemas"]["ImportRun"];
                 };
             };
             /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not JSON or not UTF-8, or the body failed to arrive. */
@@ -9876,7 +9896,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DiscardImportResponse"];
+                    "application/json": components["schemas"]["ImportRun"];
                 };
             };
             /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
@@ -10015,7 +10035,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["NamedSetRequest"];
+                "application/json": components["schemas"]["CreateNamedSetRequest"];
             };
         };
         responses: {
@@ -10190,7 +10210,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["NamedSetRequest"];
+                "application/json": components["schemas"]["UpdateNamedSetRequest"];
             };
         };
         responses: {
@@ -10689,7 +10709,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SavedSearchRequest"];
+                "application/json": components["schemas"]["CreateSavedSearchRequest"];
             };
         };
         responses: {
@@ -10864,7 +10884,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SavedSearchRequest"];
+                "application/json": components["schemas"]["UpdateSavedSearchRequest"];
             };
         };
         responses: {
@@ -11109,7 +11129,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ServerInfo"];
+                    "application/json": components["schemas"]["Server"];
                 };
             };
             /** @description [`not-acceptable`](https://messagecrate.app/docs/developer/reference/errors/not-acceptable): The request's `Accept` header named nothing this route can produce. */
@@ -11141,7 +11161,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ClaimRequest"];
+                "application/json": components["schemas"]["ClaimServerRequest"];
             };
         };
         responses: {
@@ -11822,7 +11842,7 @@ export interface operations {
             };
         };
     };
-    empty_trash: {
+    delete_trash: {
         parameters: {
             query?: never;
             header?: never;

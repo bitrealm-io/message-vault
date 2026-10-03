@@ -135,13 +135,13 @@ pub fn api_openapi() -> OpenApiRouter<AppState> {
         .routes(routes!(crate::accounts_api::list_account_audit_trail))
         .routes(routes!(crate::audit_trail_api::list_audit_trail))
         .routes(routes!(
-            crate::api_tokens_api::list_api_tokens,
-            crate::api_tokens_api::create_api_token
+            crate::accounts_api::api_tokens::list_api_tokens,
+            crate::accounts_api::api_tokens::create_api_token
         ))
         .routes(routes!(
-            crate::api_tokens_api::get_api_token,
-            crate::api_tokens_api::update_api_token,
-            crate::api_tokens_api::delete_api_token
+            crate::accounts_api::api_tokens::get_api_token,
+            crate::accounts_api::api_tokens::update_api_token,
+            crate::accounts_api::api_tokens::delete_api_token
         ))
         .routes(routes!(
             crate::exports_api::list_exports,
@@ -152,17 +152,15 @@ pub fn api_openapi() -> OpenApiRouter<AppState> {
         .routes(routes!(crate::exports_api::complete_export))
         .routes(routes!(crate::exports_api::cancel_export))
         .routes(routes!(crate::contacts_api::list_contacts))
-        .routes(routes!(crate::contacts_api::summarize_contacts))
+        .routes(routes!(crate::contacts_api::list_contact_summaries))
         .routes(routes!(crate::contacts_api::get_contact))
         .routes(routes!(crate::contacts_api::update_contact))
         .routes(routes!(crate::contacts_api::trash_contact))
         .routes(routes!(crate::contacts_api::restore_contact))
         .routes(routes!(crate::contacts_api::delete_contact))
-        .routes(routes!(crate::contacts_api::find_unmatched_identities))
+        .routes(routes!(crate::contacts_api::list_unmatched_identities))
         .routes(routes!(crate::contacts_api::address_book::create_contacts))
-        .routes(routes!(
-            crate::contacts_api::address_book::export_address_book
-        ))
+        .routes(routes!(crate::contacts_api::address_book::get_address_book))
         .routes(routes!(crate::named_set_api::list_contact_groups))
         .routes(routes!(crate::named_set_api::create_contact_group))
         .routes(routes!(crate::named_set_api::update_contact_group))
@@ -196,7 +194,7 @@ pub fn api_openapi() -> OpenApiRouter<AppState> {
         .routes(routes!(crate::conversations_api::trash_conversation))
         .routes(routes!(crate::conversations_api::restore_conversation))
         .routes(routes!(crate::conversations_api::delete_conversation))
-        .routes(routes!(crate::trash_api::empty_trash))
+        .routes(routes!(crate::trash_api::delete_trash))
         .routes(routes!(crate::imports_api::list_imports))
         .routes(routes!(crate::imports_api::create_import))
         .routes(routes!(

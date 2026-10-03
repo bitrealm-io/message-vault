@@ -52,30 +52,25 @@ pub enum LoadMode {
     Edit,
 }
 
-/// What a load changed.
-#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, utoipa::ToSchema)]
+/// What a load changed. `POST /v1/contacts` answers it as
+/// `CreateContactsResponse`, whose fields say what each count means.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct LoadCounts {
-    /// Contacts the load created.
+    /// Contacts created.
     pub contacts_created: u64,
-    /// Contacts the load renamed, or whose identities or Contact Group
-    /// memberships it changed.
+    /// Contacts updated.
     pub contacts_updated: u64,
-    /// Contacts the load deleted: the ones it left with neither a name nor
-    /// an identity.
+    /// Contacts deleted.
     pub contacts_deleted: u64,
-    /// Identities linked to a contact that no contact held before.
+    /// Identities added.
     pub identities_added: u64,
-    /// Identities taken from one contact and given to another.
+    /// Identities moved.
     pub identities_moved: u64,
-    /// Identities taken off a contact, which only Edit does.
+    /// Identities removed.
     pub identities_removed: u64,
-    /// Contact Groups the load created.
+    /// Contact Groups created.
     pub groups_created: u64,
-    /// One sentence for each phone number the file wrote without `+` that
-    /// the load matched to the `+` key its contact holds, or that became a
-    /// new identity. Each starts with its row number. A spreadsheet can drop
-    /// the `+` from a number without showing it, so the load says how it
-    /// read the number.
+    /// How each phone number written without `+` was read.
     pub notes: Vec<String>,
 }
 

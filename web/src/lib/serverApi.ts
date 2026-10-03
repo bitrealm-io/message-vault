@@ -35,7 +35,7 @@ import type { components, paths } from "./serverApi.types";
 
 type Schema = components["schemas"];
 /** What `GET /v1/server` answers, named by its route so a renamed schema changes nothing here. */
-type ServerInfo = paths["/v1/server"]["get"]["responses"][200]["content"]["application/json"];
+type Server = paths["/v1/server"]["get"]["responses"][200]["content"]["application/json"];
 
 /** Options every read accepts, so a caller can cancel an in-flight request. */
 export type RequestOptions = ApiRequestOptions;
@@ -133,13 +133,13 @@ export function logout(opts?: RequestOptions): Promise<void> {
  * joining "does an owner exist" to "is registration open" is stated once, on
  * the server. See `docs/adr/0008-the-owner-holds-no-messages.md`.
  */
-export function getServerState(opts?: RequestOptions): Promise<ServerInfo> {
-  return apiClient.get<ServerInfo>("/v1/server", opts);
+export function getServerState(opts?: RequestOptions): Promise<Server> {
+  return apiClient.get<Server>("/v1/server", opts);
 }
 
 /** Claim an unclaimed Message Crate by creating its owner. Returns their session. */
 export function claimServer(
-  body: Schema["ClaimRequest"],
+  body: Schema["ClaimServerRequest"],
 ): Promise<Schema["CreateSessionResponse"]> {
   return apiClient.post<Schema["CreateSessionResponse"]>("/v1/server/claim", body);
 }
@@ -396,11 +396,8 @@ export function createApiToken(
 export function renameApiToken(
   id: number,
   body: Schema["UpdateApiTokenRequest"],
-): Promise<Schema["UpdateApiTokenResponse"]> {
-  return apiClient.patch<Schema["UpdateApiTokenResponse"]>(
-    `${ownAccountPath()}/api-tokens/${id}`,
-    body,
-  );
+): Promise<Schema["ApiToken"]> {
+  return apiClient.patch<Schema["ApiToken"]>(`${ownAccountPath()}/api-tokens/${id}`, body);
 }
 
 /** Revoke one API token: the logged-in account's, or as the owner one of the account named. */
@@ -593,7 +590,7 @@ export function updateContact(
 }
 
 export function getContactSummaries(
-  body: Schema["SummarizeContactsRequest"],
+  body: Schema["ListContactSummariesRequest"],
   opts?: RequestOptions,
 ): Promise<Schema["Page_ContactSelectionSummary"]> {
   return apiClient.post<Schema["Page_ContactSelectionSummary"]>(
@@ -605,7 +602,7 @@ export function getContactSummaries(
 
 /** Which of these identifiers the account has no contact for. */
 export function unmatchedIdentities(
-  body: Schema["FindUnmatchedIdentitiesRequest"],
+  body: Schema["ListUnmatchedIdentitiesRequest"],
   opts?: RequestOptions,
 ): Promise<Schema["Page_String"]> {
   return apiClient.post<Schema["Page_String"]>("/v1/contacts/unmatched-identities", body, opts);
@@ -622,8 +619,8 @@ export type AddressBookLoadMode = Schema["LoadMode"];
 export function loadAddressBook(
   content: string,
   mode: AddressBookLoadMode,
-): Promise<Schema["LoadCounts"]> {
-  return apiClient.postRaw<Schema["LoadCounts"]>(
+): Promise<Schema["CreateContactsResponse"]> {
+  return apiClient.postRaw<Schema["CreateContactsResponse"]>(
     withQuery("/v1/contacts", query({ mode })),
     content,
     "text/csv",
@@ -634,7 +631,7 @@ export function loadAddressBook(
  * The address book as CSV text, for the contacts a search matches, the
  * checked ones, or every contact when the body names neither.
  */
-export function exportAddressBook(body: Schema["ExportAddressBookRequest"]): Promise<string> {
+export function exportAddressBook(body: Schema["GetAddressBookRequest"]): Promise<string> {
   return apiClient.postText("/v1/contacts/address-book", body);
 }
 
@@ -669,7 +666,7 @@ export function listContactGroups(opts?: RequestOptions): Promise<Schema["NamedS
 }
 
 export function createContactGroup(
-  body: Schema["NamedSetRequest"],
+  body: Schema["CreateNamedSetRequest"],
   opts?: RequestOptions,
 ): Promise<Schema["NamedSet"]> {
   return apiClient.post<Schema["NamedSet"]>("/v1/contact-groups", body, opts);
@@ -677,7 +674,7 @@ export function createContactGroup(
 
 export function updateContactGroup(
   id: number,
-  body: Schema["NamedSetRequest"],
+  body: Schema["UpdateNamedSetRequest"],
   opts?: RequestOptions,
 ): Promise<Schema["NamedSet"]> {
   return apiClient.patch<Schema["NamedSet"]>(`/v1/contact-groups/${id}`, body, opts);
@@ -714,7 +711,7 @@ export function listMessageTags(opts?: RequestOptions): Promise<Schema["NamedSet
 }
 
 export function createMessageTag(
-  body: Schema["NamedSetRequest"],
+  body: Schema["CreateNamedSetRequest"],
   opts?: RequestOptions,
 ): Promise<Schema["NamedSet"]> {
   return apiClient.post<Schema["NamedSet"]>("/v1/message-tags", body, opts);
@@ -722,7 +719,7 @@ export function createMessageTag(
 
 export function updateMessageTag(
   id: number,
-  body: Schema["NamedSetRequest"],
+  body: Schema["UpdateNamedSetRequest"],
   opts?: RequestOptions,
 ): Promise<Schema["NamedSet"]> {
   return apiClient.patch<Schema["NamedSet"]>(`/v1/message-tags/${id}`, body, opts);
@@ -759,14 +756,14 @@ export function listSavedSearches(opts?: RequestOptions): Promise<Schema["SavedS
 }
 
 export function createSavedSearch(
-  body: Schema["SavedSearchRequest"],
+  body: Schema["CreateSavedSearchRequest"],
 ): Promise<Schema["SavedSearch"]> {
   return apiClient.post<Schema["SavedSearch"]>("/v1/saved-searches", body);
 }
 
 export function updateSavedSearch(
   id: number,
-  body: Schema["SavedSearchRequest"],
+  body: Schema["UpdateSavedSearchRequest"],
 ): Promise<Schema["SavedSearch"]> {
   return apiClient.patch<Schema["SavedSearch"]>(`/v1/saved-searches/${id}`, body);
 }
@@ -801,8 +798,8 @@ export type ImportListParams = {
 export function listImports(
   params: ImportListParams = {},
   opts?: RequestOptions,
-): Promise<Schema["Page_ImportSummary"]> {
-  return apiClient.get<Schema["Page_ImportSummary"]>(withQuery("/v1/imports", query(params)), opts);
+): Promise<Schema["Page_ImportRun"]> {
+  return apiClient.get<Schema["Page_ImportRun"]>(withQuery("/v1/imports", query(params)), opts);
 }
 
 export function getImport(id: number, opts?: RequestOptions): Promise<Schema["ImportRun"]> {
@@ -826,12 +823,12 @@ export function setImportStage(
 export function completeImport(
   id: number,
   body: Schema["CompleteImportRequest"],
-): Promise<Schema["CompleteImportResponse"]> {
-  return apiClient.post<Schema["CompleteImportResponse"]>(`/v1/imports/${id}/complete`, body);
+): Promise<Schema["ImportRun"]> {
+  return apiClient.post<Schema["ImportRun"]>(`/v1/imports/${id}/complete`, body);
 }
 
-export function discardImport(id: number): Promise<Schema["DiscardImportResponse"]> {
-  return apiClient.post<Schema["DiscardImportResponse"]>(`/v1/imports/${id}/discard`, {});
+export function discardImport(id: number): Promise<Schema["ImportRun"]> {
+  return apiClient.post<Schema["ImportRun"]>(`/v1/imports/${id}/discard`, {});
 }
 
 /** Which page of an Import Run's contacts to read. Absent values are left off the URL. */

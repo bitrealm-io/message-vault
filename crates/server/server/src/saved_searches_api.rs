@@ -14,9 +14,16 @@ use serde::Deserialize;
 use crate::db::saved_searches::{self, SavedSearch, SavedSearchKind};
 use crate::server::{ApiError, AppState, Created, FullAccess};
 
-/// A saved search's name and query.
+/// The name and query of a new saved search.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub(crate) struct SavedSearchRequest {
+pub(crate) struct CreateSavedSearchRequest {
+    name: String,
+    query: String,
+}
+
+/// A saved search's new name and query.
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+pub(crate) struct UpdateSavedSearchRequest {
     name: String,
     query: String,
 }
@@ -58,7 +65,7 @@ pub(crate) async fn list_saved_searches(
     path = "/v1/saved-searches",
     tag = "Saved searches",
     security(("session" = [])),
-    request_body = SavedSearchRequest,
+    request_body = CreateSavedSearchRequest,
     responses(
         (
             status = 201,
@@ -71,7 +78,7 @@ pub(crate) async fn list_saved_searches(
 pub(crate) async fn create_saved_search(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
-    Json(body): Json<SavedSearchRequest>,
+    Json(body): Json<CreateSavedSearchRequest>,
 ) -> Result<Created<SavedSearch>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let row = saved_searches::create(
@@ -95,7 +102,7 @@ pub(crate) async fn create_saved_search(
     tag = "Saved searches",
     security(("session" = [])),
     params(("id" = i64, Path, description = "Saved search id")),
-    request_body = SavedSearchRequest,
+    request_body = UpdateSavedSearchRequest,
     responses(
         (status = 200, body = SavedSearch),
         crate::problem::openapi::NameTaken
@@ -105,7 +112,7 @@ pub(crate) async fn update_saved_search(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
     Path(id): Path<i64>,
-    Json(body): Json<SavedSearchRequest>,
+    Json(body): Json<UpdateSavedSearchRequest>,
 ) -> Result<Json<SavedSearch>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let row =

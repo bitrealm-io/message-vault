@@ -3976,6 +3976,66 @@ async fn the_batch_answer_counts_the_contacts_it_created() {
     assert_eq!(answer["participants"], 1, "{text}");
 }
 
+/// An Import Run is one record wherever the interface hands it out: the
+/// answer to `complete` and to `discard`, `GET /v1/imports/{id}`, and the
+/// run's row in `GET /v1/imports` are the same JSON, issues included.
+#[tokio::test]
+async fn an_import_run_reads_the_same_from_every_route() {
+    let (fixture, account) = fixture_with_account().await;
+    let state = &fixture.state;
+    let token = account.token.as_str();
+
+    let (_, created): (String, serde_json::Value) = post_created_json(
+        state,
+        "/v1/imports",
+        token,
+        serde_json::json!({ "source": "imessage" }),
+    )
+    .await;
+    let completed_id = created["id"].as_i64().unwrap();
+    let completed: serde_json::Value = post_json(
+        state,
+        &format!("/v1/imports/{completed_id}/complete"),
+        token,
+        serde_json::json!({
+            "status": "completed_with_issues",
+            "issues": [{ "kind": "skip", "step": "parse", "item": "a.jsonl", "reason": "empty" }],
+        }),
+    )
+    .await;
+    assert_eq!(completed["issues"][0]["item"], "a.jsonl", "{completed}");
+
+    let (_, created): (String, serde_json::Value) = post_created_json(
+        state,
+        "/v1/imports",
+        token,
+        serde_json::json!({ "source": "imessage" }),
+    )
+    .await;
+    let discarded_id = created["id"].as_i64().unwrap();
+    let discarded: serde_json::Value = post_json(
+        state,
+        &format!("/v1/imports/{discarded_id}/discard"),
+        token,
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(discarded["status"], "cancelled", "{discarded}");
+
+    let page: serde_json::Value = get_json(state, "/v1/imports", token).await;
+    for (id, answered) in [(completed_id, &completed), (discarded_id, &discarded)] {
+        let got: serde_json::Value = get_json(state, &format!("/v1/imports/{id}"), token).await;
+        assert_eq!(&got, answered, "GET /v1/imports/{id}");
+        let listed = page["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|run| run["id"] == id)
+            .unwrap_or_else(|| panic!("run {id} is listed: {page}"));
+        assert_eq!(listed, answered, "GET /v1/imports, run {id}");
+    }
+}
+
 /// The SQL form of an Import Run's Contact Group name is the name the run's
 /// group is given, before and after the run finishes.
 #[tokio::test]

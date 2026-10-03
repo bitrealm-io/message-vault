@@ -4,7 +4,7 @@ import PlainButton from "../../../components/PlainButton";
 import ScrollingTableCard from "../../../components/ScrollingTableCard";
 import ImportDetailPanel from "./ImportDetailPanel";
 import PageControl from "./PageControl";
-import type { ImportDetailResponse, ImportRow } from "./storageUtils";
+import type { AccountImportRun, ListedImportRun } from "./storageUtils";
 import {
   formatBytes,
   formatImportDate,
@@ -31,14 +31,14 @@ export default function ImportHistoryTable({
   onCloseDetail,
 }: {
   /** The runs on this page. */
-  imports: ImportRow[];
+  imports: ListedImportRun[];
   /** How many runs the account has, across every page. */
   total: number;
   page: number;
   onPageChange: (page: number) => void;
   listContacts: boolean;
   selectedImportId: number | null;
-  selectedImport: ImportDetailResponse | null;
+  selectedImport: AccountImportRun | null;
   selectedImportSummary: ImportSummaryView | null;
   selectedImportLoading: boolean;
   selectedImportError: string;

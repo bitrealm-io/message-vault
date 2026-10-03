@@ -12,7 +12,7 @@ use crate::paging::{DEFAULT_LIST_LIMIT, Page, PageQuery, page_of, page_params};
 use axum::extract::State;
 use serde::{Deserialize, Serialize};
 
-use crate::accounts_api::{Admits, Reach, require_account_reach};
+use super::{Admits, Reach, require_account_reach};
 use crate::db::api_tokens;
 use crate::db::audit_trail::{self, AuditAction, Details};
 use crate::db::permissions::Permissions;
@@ -126,15 +126,6 @@ pub struct CreateApiTokenResponse {
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct UpdateApiTokenRequest {
     /// Replacement label.
-    pub label: String,
-}
-
-/// The renamed token's id and stored label.
-#[derive(Debug, Serialize, utoipa::ToSchema)]
-pub struct UpdateApiTokenResponse {
-    /// Token id that was renamed.
-    pub id: i64,
-    /// Stored label after the rename.
     pub label: String,
 }
 
@@ -357,7 +348,8 @@ pub async fn delete_api_token(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
-/// Rename one named API token. The label is trimmed before storing.
+/// Rename one named API token. The label is trimmed before storing. The
+/// answer is the token, as `GET /v1/accounts/{id}/api-tokens` lists it.
 #[utoipa::path(
     patch,
     path = "/v1/accounts/{id}/api-tokens/{token_id}",
@@ -369,7 +361,7 @@ pub async fn delete_api_token(
     ),
     request_body = UpdateApiTokenRequest,
     responses(
-        (status = 200, body = UpdateApiTokenResponse),
+        (status = 200, body = ApiToken),
     )
 )]
 pub async fn update_api_token(
@@ -377,9 +369,9 @@ pub async fn update_api_token(
     Path((account_id, id)): Path<(i64, i64)>,
     FullAccess(auth): FullAccess,
     Json(req): Json<UpdateApiTokenRequest>,
-) -> Result<Json<UpdateApiTokenResponse>, ApiError> {
+) -> Result<Json<ApiToken>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    require_account_reach(&mut conn, &auth, account_id, HOLDER_ONLY).await?;
+    let reach = require_account_reach(&mut conn, &auth, account_id, HOLDER_ONLY).await?;
     let label = req.label;
 
     schema::ensure_accounts_schema(&mut conn).await?;
@@ -391,7 +383,11 @@ pub async fn update_api_token(
     if !ok {
         return Err(ApiError::NotFound("API token not found".into()));
     }
-    Ok(Json(UpdateApiTokenResponse { id, label: trimmed }))
+    let row = api_tokens::get_api_token(&mut conn, account_id, id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("API token not found".into()))?;
+    let account_permissions = holder_permissions(&mut conn, account_id).await?;
+    Ok(Json(as_shown_to(reach, row, account_permissions)))
 }
 
 #[cfg(test)]
@@ -663,8 +659,8 @@ mod tests {
         );
     }
 
-    /// A rename answers the new label, trimmed, and the list shows it; an id
-    /// the account does not hold is a 404.
+    /// A rename answers the token with its new label, trimmed, as the list
+    /// shows it; an id the account does not hold is a 404.
     #[tokio::test]
     async fn renaming_a_token_answers_and_stores_the_new_label() {
         use crate::test_support::{
@@ -691,12 +687,12 @@ mod tests {
             serde_json::json!({ "label": "  new name  " }),
         )
         .await;
-        assert_eq!(
-            renamed,
-            serde_json::json!({ "id": id, "label": "new name" })
-        );
         let listed: serde_json::Value = get_json(&state, &collection, &alice.token).await;
         assert_eq!(listed["items"][0]["label"], "new name", "{listed}");
+        assert_eq!(
+            renamed, listed["items"][0],
+            "the rename answers the token as the list shows it"
+        );
 
         assert_eq!(
             patch_status(

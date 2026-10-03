@@ -597,12 +597,17 @@ A route group is one module named for the route's first path segment, with
 `_api`: `contacts_api`, `conversations_api`, `imports_api`, `exports_api`,
 `assets_api`, `search_fields_api`, `session_api`, `server_api`, `trash_api`.
 Contact Groups and Message Tags, one shape served twice, share
-`named_set_api`. Why: a route's code is found from its URL without searching.
+`named_set_api`. A collection nested under a member is a submodule of that
+group: `/v1/accounts/{id}/api-tokens` is `accounts_api::api_tokens`.
+Why: a route's code is found from its URL without searching.
 
 A handler is named `verb_noun`, with no `_handler` suffix. The verb is `list`,
 `get`, `create`, `update` (`PATCH`), `replace` (`PUT`) or `delete`, or the
 action's own verb: `list_contacts`, `get_contact`, `update_contact`,
 `claim_server`, `complete_import`.
+A `HEAD` handler takes the method's own verb, `head`: `head_asset`.
+A `POST` that reads is named for what it returns, as its route is:
+`list_contact_summaries`, `get_address_book`.
 
 A type on the wire is named one of two ways, and a reader can tell which from
 the name:

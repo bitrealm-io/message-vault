@@ -29,19 +29,37 @@ const MAX_STEM_CHARS: usize = 40;
 /// name: `YYYY-MM-DD HH MM SS`.
 ///
 /// A date the CSV writes without seconds gets ` 00`, because iMazing always
-/// writes the seconds into a file name. A date that does not parse has each
-/// `:` replaced by a space.
-pub(crate) fn file_name_second(message_date: &str) -> String {
+/// writes the seconds into a file name. `None` for a date that does not
+/// parse, because the row of such a date is not imported.
+pub(crate) fn file_name_second(message_date: &str) -> Option<String> {
     let raw = message_date.trim();
     NaiveDateTime::parse_from_str(raw, "%Y-%m-%d %H:%M:%S")
         .or_else(|_| NaiveDateTime::parse_from_str(raw, "%Y-%m-%d %H:%M"))
         .map(|date| date.format("%Y-%m-%d %H %M %S").to_string())
-        .unwrap_or_else(|_| raw.replace(':', " "))
+        .ok()
 }
 
-/// The regular files directly in one chat folder.
+/// The length of a [`file_name_second`] in bytes.
+const SECOND_LEN: usize = "YYYY-MM-DD HH MM SS".len();
+
+/// The separator iMazing writes between the parts of a media file's name.
+const SEPARATOR: &str = " - ";
+
+/// The regular files directly in one chat folder, by the second their name
+/// starts with.
 pub(crate) struct FolderFiles {
-    files: Vec<(String, PathBuf)>,
+    by_second: HashMap<String, SecondFiles>,
+}
+
+/// The files of one chat folder whose names start with one second and
+/// ` - `.
+#[derive(Default)]
+struct SecondFiles {
+    /// Each file's path, and every name the file's name ends with after a
+    /// ` - ` that follows the second's ` - `.
+    files: Vec<(PathBuf, Vec<String>)>,
+    /// The files, by each name their name ends with (indices into `files`).
+    by_name: HashMap<String, Vec<usize>>,
 }
 
 impl FolderFiles {
@@ -49,24 +67,50 @@ impl FolderFiles {
     ///
     /// Symbolic links are skipped, because following one can reach a file
     /// outside the export. A name that is not UTF-8 is skipped, because no
-    /// CSV cell can name it.
+    /// CSV cell can name it. A name that does not start with a second and
+    /// ` - ` is skipped, because iMazing wrote it for no row.
     pub(crate) fn read(folder: &Path) -> Self {
-        let mut files = Vec::new();
-        if let Ok(entries) = fs::read_dir(folder) {
-            for entry in entries.flatten() {
-                let Ok(file_type) = entry.file_type() else {
-                    continue;
-                };
-                if file_type.is_symlink() || !file_type.is_file() {
-                    continue;
-                }
-                let path = entry.path();
-                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    files.push((name.to_string(), path));
-                }
+        let mut by_second: HashMap<String, SecondFiles> = HashMap::new();
+        let Ok(entries) = fs::read_dir(folder) else {
+            return FolderFiles { by_second };
+        };
+        for entry in entries.flatten() {
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_symlink() || !file_type.is_file() {
+                continue;
             }
+            let path = entry.path();
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            let Some(second) = name.get(..SECOND_LEN) else {
+                continue;
+            };
+            let label_start = SECOND_LEN + SEPARATOR.len();
+            if name.get(SECOND_LEN..label_start) != Some(SEPARATOR) {
+                continue;
+            }
+            // Every ` - ` at or after the label's start can begin the name
+            // part, because the label may be empty and the name may hold
+            // ` - ` itself.
+            let ends: Vec<String> = name[label_start..]
+                .match_indices(SEPARATOR)
+                .map(|(at, _)| name[label_start + at + SEPARATOR.len()..].to_string())
+                .collect();
+            let second_files = by_second.entry(second.to_string()).or_default();
+            let index = second_files.files.len();
+            for end in &ends {
+                second_files
+                    .by_name
+                    .entry(end.clone())
+                    .or_default()
+                    .push(index);
+            }
+            second_files.files.push((path, ends));
         }
-        FolderFiles { files }
+        FolderFiles { by_second }
     }
 
     /// The file iMazing wrote for `row`: a name that starts with the row's
@@ -79,26 +123,25 @@ impl FolderFiles {
     /// when two or more do, because then nothing tells which file is the
     /// row's.
     fn find(&self, row: &RowAttachment<'_>) -> Option<&Path> {
-        let start = format!("{} - ", row.second);
-        let others: Vec<String> = row
-            .same_second
-            .iter()
-            .filter(|&&other| other != row.name)
-            .flat_map(names_on_disk)
-            .map(|name| format!(" - {name}"))
-            .collect();
-        let fits = |file: &str, end: &str| {
-            file.len() >= start.len() + end.len() && file.starts_with(&start) && file.ends_with(end)
+        let second_files = self.by_second.get(row.second)?;
+        let taken_by_other = |ends: &[String], name: &str| {
+            ends.iter().any(|end| {
+                end.len() > name.len()
+                    && row
+                        .same_second
+                        .get(end)
+                        .is_some_and(|owners| owners.iter().any(|&owner| owner != row.name))
+            })
         };
         for name in names_on_disk(&row.name) {
-            let end = format!(" - {name}");
-            let mut matches = self.files.iter().filter(|(file, _)| {
-                fits(file, &end)
-                    && !others
-                        .iter()
-                        .any(|other| other.len() > end.len() && fits(file, other))
-            });
-            if let Some((_, path)) = matches.next() {
+            let Some(indices) = second_files.by_name.get(&name) else {
+                continue;
+            };
+            let mut matches = indices
+                .iter()
+                .map(|&index| &second_files.files[index])
+                .filter(|(_, ends)| !taken_by_other(ends, &name));
+            if let Some((path, _)) = matches.next() {
                 return matches.next().is_none().then_some(path.as_path());
             }
         }
@@ -106,51 +149,61 @@ impl FolderFiles {
     }
 }
 
+/// The rows of one second that name a file, by each name iMazing may have
+/// given their files ([`names_on_disk`]).
+type NamesAtSecond<'a> = HashMap<String, Vec<NumberedName<'a>>>;
+
 /// The file iMazing wrote for each row of one CSV, in the CSV's order, from
-/// the files of the CSV's chat folder. `None` for a row that names no file,
-/// and for a row whose file can't be told apart from another row's:
+/// the files of the CSV's chat folder. `seconds` holds each row's
+/// [`file_name_second`], in the same order. `None` for a row that names no
+/// file or whose date does not parse, and for a row whose file can't be told
+/// apart from another row's:
 ///
 /// - rows of one second and one numbering name ([`numbering_name`]) whose
 ///   files are not all in the folder get none, because a missing file moves
 ///   the ` 2`, ` 3` numbers and nothing tells which row's file is gone;
 /// - a file that two or more rows would take goes to none of them, because
 ///   one file is never two rows' attachment.
-pub(crate) fn row_sources(rows: &[RawRow], files: &FolderFiles) -> Vec<Option<PathBuf>> {
-    let seconds: Vec<String> = rows
-        .iter()
-        .map(|row| file_name_second(&row.message_date))
-        .collect();
+pub(crate) fn row_sources(
+    rows: &[RawRow],
+    seconds: &[Option<String>],
+    files: &FolderFiles,
+) -> Vec<Option<PathBuf>> {
     // Each row's numbering group and its place in it, counting from 1.
     let mut groups: HashMap<(&str, String), Vec<usize>> = HashMap::new();
-    let mut names: Vec<Option<NumberedName<'_>>> = Vec::with_capacity(rows.len());
-    for (index, (row, second)) in rows.iter().zip(&seconds).enumerate() {
-        if row.attachment.is_empty() {
-            names.push(None);
+    let mut named: Vec<Option<(&str, NumberedName<'_>)>> = Vec::with_capacity(rows.len());
+    for (index, (row, second)) in rows.iter().zip(seconds).enumerate() {
+        let Some(second) = second.as_deref().filter(|_| !row.attachment.is_empty()) else {
+            named.push(None);
             continue;
-        }
+        };
         let group = groups
-            .entry((second.as_str(), numbering_name(&row.attachment)))
+            .entry((second, numbering_name(&row.attachment)))
             .or_default();
         group.push(index);
-        names.push(Some(NumberedName {
-            csv_name: &row.attachment,
-            ordinal: group.len(),
-        }));
+        named.push(Some((
+            second,
+            NumberedName {
+                csv_name: &row.attachment,
+                ordinal: group.len(),
+            },
+        )));
     }
-    let mut by_second: HashMap<&str, Vec<NumberedName<'_>>> = HashMap::new();
-    for (name, second) in names.iter().zip(&seconds) {
-        if let Some(name) = name {
-            by_second.entry(second.as_str()).or_default().push(*name);
+    let mut by_second: HashMap<&str, NamesAtSecond<'_>> = HashMap::new();
+    for &(second, name) in named.iter().flatten() {
+        let names = by_second.entry(second).or_default();
+        for name_on_disk in names_on_disk(&name) {
+            names.entry(name_on_disk).or_default().push(name);
         }
     }
-    let mut sources: Vec<Option<&Path>> = names
+    let mut sources: Vec<Option<&Path>> = named
         .iter()
-        .zip(&seconds)
-        .map(|(name, second)| {
+        .map(|named| {
+            let (second, name) = (*named)?;
             files.find(&RowAttachment {
-                name: (*name)?,
+                name,
                 second,
-                same_second: &by_second[second.as_str()],
+                same_second: by_second.get(second)?,
             })
         })
         .collect();
@@ -182,9 +235,9 @@ struct RowAttachment<'a> {
     /// The row's `Message Date` as iMazing writes it into a file name
     /// ([`file_name_second`]).
     second: &'a str,
-    /// The [`NumberedName`] of every row of the CSV at this row's second,
-    /// this row's among them.
-    same_second: &'a [NumberedName<'a>],
+    /// Every row of the CSV at this row's second, this row among them, by
+    /// each name iMazing may have given its file.
+    same_second: &'a NamesAtSecond<'a>,
 }
 
 /// A row's `Attachment` cell and its place among the rows of its CSV that
@@ -383,7 +436,7 @@ mod tests {
                 ordinal: 1,
             },
             second: "2020-01-01 12 00 00",
-            same_second: &[],
+            same_second: Box::leak(Box::default()),
         }
     }
 
@@ -404,12 +457,12 @@ mod tests {
         let source = files.find(&row("photo.jpg"));
         assert!(
             cell.meta.digest_sha256.is_none(),
-            "resolve must not hash or write"
+            "building the cell must not hash or write"
         );
         assert!(cell.meta.path.is_none());
         assert!(
             fs::read_dir(&attachments).unwrap().next().is_none(),
-            "resolve must not write files"
+            "finding the file must not write files"
         );
         let source = source.expect("source path found");
         let mut att = IrAttachment {
@@ -518,13 +571,13 @@ mod tests {
     #[test]
     fn the_file_name_second_always_has_seconds() {
         assert_eq!(
-            file_name_second("2020-01-01 12:01:00"),
-            "2020-01-01 12 01 00"
+            file_name_second("2020-01-01 12:01:00").as_deref(),
+            Some("2020-01-01 12 01 00")
         );
         assert_eq!(
-            file_name_second(" 2020-01-01 12:01 "),
-            "2020-01-01 12 01 00"
+            file_name_second(" 2020-01-01 12:01 ").as_deref(),
+            Some("2020-01-01 12 01 00")
         );
-        assert_eq!(file_name_second("not a date"), "not a date");
+        assert_eq!(file_name_second("not a date"), None);
     }
 }

@@ -340,9 +340,15 @@ impl Ingest {
             }
         };
         let folder = csv_folder(discovered).to_path_buf();
+        // Each row's second as iMazing writes it into a file name, worked
+        // out once for both uses below.
+        let seconds: Vec<Option<String>> = rows
+            .iter()
+            .map(|row| file_name_second(&row.message_date))
+            .collect();
         // Only a run that copies attachments looks for a row's file.
         let sources = if self.copy_attachments {
-            row_sources(&rows, &FolderFiles::read(&folder))
+            row_sources(&rows, &seconds, &FolderFiles::read(&folder))
         } else {
             vec![None; rows.len()]
         };
@@ -351,9 +357,12 @@ impl Ingest {
         for (row_index, row) in rows.iter().enumerate() {
             // Only a run that copies attachments looks at the folder's files
             // (`attach_unnamed_files`), so only it needs the texts.
-            if self.copy_attachments && !row.text.is_empty() {
+            if let Some(second) = &seconds[row_index]
+                && self.copy_attachments
+                && !row.text.is_empty()
+            {
                 texts
-                    .entry(file_name_second(&row.message_date))
+                    .entry(second.clone())
                     .or_default()
                     .push(row.text.clone());
             }

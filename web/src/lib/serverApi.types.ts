@@ -684,7 +684,15 @@ export interface paths {
         };
         /**
          * A conversation's messages, ascending by timestamp then `sort_order`.
-         * @description The read path a screen uses to open a conversation: no search query to compose, just the conversation id. `offset` has no cap: the conversation page reads a thread by stepping it forward, and every message must be reachable.
+         * @description The read path a screen uses to open a conversation: no search query to compose, just the conversation id.
+         *
+         *     The page starts at `offset`, or beside one message: `around` puts the
+         *     message in the middle of the page, and `before` and `after` answer the
+         *     messages just before or just after it in the page's order, without it.
+         *     The answer's `offset` says where the page sits either way, so a screen
+         *     that jumps to a message (a search result, a Find match, the first message
+         *     of a year) can keep reading in both directions from there. `offset` has
+         *     no cap: every message of a long conversation must be reachable.
          */
         get: operations["list_conversation_messages"];
         put?: never;
@@ -7030,10 +7038,16 @@ export interface operations {
             query?: {
                 /** @description Page size, default 40, max 500 */
                 limit?: number;
-                /** @description Page offset, no maximum */
+                /** @description Page offset, no maximum. Not with `around`, `before` or `after`. */
                 offset?: number;
                 /** @description `date` or `-date`. Default `date`, oldest first. */
                 sort?: string;
+                /** @description Message id: the page with this message in the middle. Not with `offset`, `before` or `after`. */
+                around?: number;
+                /** @description Message id: the page just before this message in the page's order, without it. Not with `offset`, `around` or `after`. */
+                before?: number;
+                /** @description Message id: the page just after this message in the page's order, without it. Not with `offset`, `around` or `before`. */
+                after?: number;
             };
             header?: never;
             path: {

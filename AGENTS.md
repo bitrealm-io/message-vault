@@ -42,6 +42,11 @@ and requires no approval: the reviewing agent and the author share one GitHub
 account, and GitHub does not let an author approve their own pull request.
 Why: `docs/adr/0007-ci-is-the-only-gate.md`.
 
+Review a pull request with the `pr-review` skill (`.claude/skills/pr-review/`).
+It runs the steps below, fixes what it finds, and queues the pull request.
+Every comment it posts starts with the line `<!-- pr-review -->`; a thread
+without that marker is the user's, and only the user resolves it.
+
 1. **The reviewer posts each finding on its line**, all in one review:
 
    ```bash
@@ -67,6 +72,13 @@ Why: `docs/adr/0007-ci-is-the-only-gate.md`.
    ```
 
    Never resolve a thread without a reply in it.
+3. **Wait for the required checks**, and rerun only the failed jobs of a run
+   that failed for a reason outside the pull request:
+
+   ```bash
+   gh pr checks <N> --watch --required
+   gh run rerun <run-id> --failed
+   ```
 
 #### Merging
 
@@ -76,6 +88,10 @@ takes no `--squash`, because the queue's merge method is fixed. The queue
 runs `ci.yml` again on the pull request merged onto the latest `main`, and
 lands it only when that run is green. Never pass `--admin`: it merges past the
 queue.
+
+A pull request that `pr-review` has reviewed, whose threads are all resolved
+and whose checks are green, is queued without asking. Any other merge waits
+for the user to ask for it.
 
 ## Tools
 

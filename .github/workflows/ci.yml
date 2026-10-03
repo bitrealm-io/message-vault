@@ -7,8 +7,8 @@ name: CI
 # pull request pending forever. A job skipped by its `if:` counts as passed.
 # Why: docs/adr/0007-ci-is-the-only-gate.md.
 #
-# A draft runs nothing: `changes` skips on a draft, so every job skips with it,
-# and marking the pull request ready starts the run. Why, and what a draft's
+# A draft's run skips every job: `changes` skips on a draft, so every job skips
+# with it. Marking the pull request ready starts a run that does the work. Why, and what a draft's
 # green checks mean: docs/adr/0007-ci-is-the-only-gate.md, "Consequences".
 
 on:

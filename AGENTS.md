@@ -18,9 +18,9 @@ vocabulary. Read it before writing any of those.
 
 ### Submitting Work
 
-Open the pull request as a draft, with `gh pr create --draft`. CI runs
-nothing on a draft, and marking it ready starts the run; `pr-review` marks it
-ready after the review's last push. A draft's checks are skipped, and a
+Open the pull request as a draft, with `gh pr create --draft`. A draft's run
+of `ci.yml` skips every job, and marking it ready starts a run that does the
+work. `pr-review` marks it ready after the review's last push. A draft's checks are skipped, and a
 skipped check reads as passed, so they say nothing. Why:
 `docs/adr/0007-ci-is-the-only-gate.md`, "Consequences".
 **Write the description to one of the templates in `.github/PULL_REQUEST_TEMPLATE/`.**
@@ -55,13 +55,6 @@ Every comment `pr-review` posts starts with the line `<!-- pr-review -->`. The u
 so the marker is how their threads are told apart. A thread whose first
 comment carries it is an agent thread. Any other thread is a user thread, and
 only the user resolves it.
-
-GitHub limits how fast one account creates content (reviews, comments,
-replies, pull requests), apart from its hourly limit, and every session posts
-from the same account. So make those calls one at a time, at least a second
-apart. When GitHub refuses one ("submitted too quickly", or a 403 or 422 that
-names a secondary rate limit), check that it did not land, wait a minute (or
-the `retry-after` it gives), and send the same call again.
 
 1. **Read the pull request**: its head, base, draft state, the issues it
    closes, and the diff.
@@ -107,7 +100,7 @@ the `retry-after` it gives), and send the same call again.
    ```
 
    If the push is rejected because the branch moved, step 5 says how to
-   bring it in.
+   bring it in. A draft stays a draft until a push lands.
 4. **Answer every thread**, with the commit that fixes it or the reason it
    stays as it is. Then resolve it if it is an agent thread:
 
@@ -155,10 +148,11 @@ the `retry-after` it gives), and send the same call again.
    skipped checks on the same commit, which read as passed. With nothing left
    to push, mark it ready and watch the run that starts. A later push to a
    pull request that is already ready, such as a fix for a failed job, starts
-   its run itself and is watched the same way, from `last=0`.
+   its run itself, and the snippet's `isDraft` branch skips straight to it.
 
-   If the push is rejected, stop: the pull request stays a draft, and step 5
-   says how to bring the moved branch in.
+   A rejected push is handled as step 3 says. If the head moved past your
+   push, another session pushed commits nobody reviewed: stop before marking
+   the pull request ready, so it stays a draft, and report it.
 
    Watch only the head you mean to queue: a new push to the pull request
    cancels the run on the head before it (`ci.yml`'s concurrency group), so
@@ -168,22 +162,26 @@ the `retry-after` it gives), and send the same call again.
    finished run only. Then sort every failed job: any that failed because of
    the pull request is fixed and pushed, which replaces the rerun; only when
    every failure is outside does the run get its rerun. The run is green only
-   when its conclusion is `success`; a `cancelled` run means something pushed
+   when its conclusion is `success`. A `cancelled` run means something pushed
    over it, so check the head. Green counts only while the pull request's
    head is still the commit you pushed: a push from another session moves it,
    and its commits have not been reviewed.
 
    ```bash
    before=$(gh pr view <N> --json headRefOid -q .headRefOid)
-   git push origin HEAD:<headRefName> || exit 1   # rejected: stop, see step 5
+   git push origin HEAD:<headRefName> || exit 1   # rejected: see step 3
    sha=$(git rev-parse HEAD)
    until h=$(gh pr view <N> --json headRefOid -q .headRefOid) && [ "$h" != "$before" ] || [ "$sha" = "$before" ]
    do sleep 10; done
-   [ "$h" = "$sha" ] || echo moved      # another session pushed on top
-   until last=$(gh run list --commit "$sha" --workflow ci.yml --json databaseId -q 'map(.databaseId) | max // empty') &&
-         [ -n "$last" ]
-   do sleep 10; done                    # the draft's own run, all skipped
-   gh pr ready <N>
+   [ "$h" = "$sha" ] || { echo moved; exit 1; }   # another session pushed on top
+   if [ "$(gh pr view <N> --json isDraft -q .isDraft)" = true ]; then
+     until last=$(gh run list --commit "$sha" --workflow ci.yml --json databaseId -q 'map(.databaseId) | max // empty') &&
+           [ -n "$last" ]
+     do sleep 10; done                  # the draft's own run, all skipped
+     gh pr ready <N>
+   else
+     last=0                             # already ready: the push started the run
+   fi
    until run=$(gh run list --commit "$sha" --workflow ci.yml --json databaseId \
                  -q "map(select(.databaseId > $last)) | .[0].databaseId // empty") && [ -n "$run" ]
    do sleep 10; done
@@ -196,6 +194,15 @@ the `retry-after` it gives), and send the same call again.
    gh run rerun "$run" --failed
    [ "$(gh pr view <N> --json headRefOid -q .headRefOid)" = "$sha" ] || echo moved
    ```
+
+##### Posting pace
+
+GitHub limits how fast one account creates content (reviews, comments,
+replies, pull requests), apart from its hourly limit, and every session posts
+from the same account. So make those calls one at a time, at least a second
+apart. When GitHub refuses one ("submitted too quickly", or a 403 or 422 that
+names a secondary rate limit), check that it did not land, wait a minute (or
+the `retry-after` it gives), and send the same call again.
 
 #### Merging
 

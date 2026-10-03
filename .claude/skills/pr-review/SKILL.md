@@ -36,7 +36,7 @@ ready after its push, and CI is watched on that head alone (AGENTS.md
 step 6).
 
 **Every call that posts** (a review, a comment, a reply) goes one at a time,
-and a refusal is retried as AGENTS.md says before its step 1.
+and a refusal is retried (AGENTS.md, "Posting pace").
 
 **Before every push**, run the local checks (AGENTS.md step 3).
 
@@ -165,8 +165,8 @@ resolved, and every user thread has a reply.
 ### 6. Green CI
 
 Watch the CI run that marking the PR ready started, stopping at its first
-failed job (AGENTS.md step 6). A job that fails because of the PR is a finding: fix it,
-run the local checks, push, and watch the new run.
+failed job (AGENTS.md step 6). A job that fails because of the PR is a
+finding: fix it, run the local checks, push, and watch the new run.
 
 A check that fails for a reason outside the PR (a red `main`, a runner fault,
 a network fetch) gets one rerun of its failed jobs. If it fails again, stop

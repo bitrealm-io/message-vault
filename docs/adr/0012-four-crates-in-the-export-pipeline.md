@@ -5,18 +5,38 @@ one holds a single job.
 
 - **`message-crate-core`** is the run model: the configuration a run is given,
   the report it produces, the shared run skeleton, and the one function that
-  stages a conversation's attachments.
+  stages a conversation's attachments. It also holds the desktop app's form
+  model (`Form`, its labels and its validation in `src/exporters.rs`), because
+  the form's only job is to produce that configuration, and every backup type
+  validates the same way before a run starts.
 - **`message-ir-format`** reads and writes the formats Message Crate itself
   emits — JSON, JSON Lines, CSV, EML, MBOX — and nothing else.
 - **`message-staging`** is the resumable write path: the bounded write queue, the
   transcode pass, the staging summary, and the `ExportWriter` that drives them.
 - **`sms-backup-restore-exporter`** owns the SMS Backup & Restore wire shape in
-  both directions, reading `smses.xml` and writing it.
+  both directions, reading `smses.xml` and writing it. Its public items are
+  `read_backup`, `ReadOptions`, `ReadReport` and `SbrArchive`.
+
+The XML reader and writer underneath that exporter are a fifth crate, `sbr`
+(`crates/libs/sbr`), which knows the XML and nothing about a run.
+`sms-backup-restore-exporter` is its only user. `message-reexport` and the
+desktop app reach SMS Backup & Restore through the exporter, never through
+`sbr`, so the exporter still owns the format.
 
 The dependencies run in one direction: `message-crate-core` at the bottom,
 then `ir-format`, then `message-staging`, with the vendor exporters on top. No
 crate in the pipeline names a vendor format except the crate that owns that
 format.
+
+This decision covers the path from a phone backup to files on disk. Export,
+which reads the server rather than a phone backup, is a different path:
+`message-crate-pull` writes JSON Lines through
+`message_ir_format::write_conversation_jsonl` and never uses `message-staging`.
+It keeps a resumable path of its own, a journal in the output folder
+(`.message-crate-pull-state.jsonl`, `crates/libs/pull/src/journal.rs`) that
+records each attachment already downloaded, so a later run skips it. A run
+that finishes appends `backup_complete` and then compacts the journal to one
+line per attachment plus that `backup_complete` line.
 
 ## Why
 
@@ -65,12 +85,12 @@ on `is_sbr_xml()` and constructed an `SbrBackupSession` directly, and
 field named `xml_path`, documented as the path of the written `smses.xml`. Eight
 call sites set that field to `None` purely to satisfy one vendor, among them
 `write_queue.rs` and `imessage-ir-exporter/src/convert.rs`. The predicate itself,
-`is_sbr_xml()`, sat in `io-core`'s configuration module, so the shared core knew
+`is_sbr_xml()`, sat in `message-crate-core`'s configuration module, so the shared core knew
 the name of a vendor format too. Inverting that seam is what allows the SBR
 writer to leave without a dependency cycle, and it is worth doing on its own
 terms: after `xml_path` is removed, `FormatSinkResult` holds a media report and
 a count of obfuscated documents, which is a run report rather than anything
-about formats, and it moves to `io-core` with the rest of the run model.
+about formats, and it moves to `message-crate-core` with the rest of the run model.
 
 ## Considered and rejected: enforcing the split with modules
 
@@ -144,10 +164,10 @@ case into Convert would have to be undone.
   in the manifest and referenced nowhere in the crate's sources.
 - The work lands as six pull requests, split for reviewability and for clean
   reverts: unify the path check, unify the staging sequences, invert the SBR
-  seam, move the SBR reader and writer, push the run model down into `io-core`,
+  seam, move the SBR reader and writer, push the run model down into `message-crate-core`,
   extract `message-staging`. The first two change behaviour and are deliberately
   not carried along with a file move. The SBR seam has to be inverted before the
-  writer can move, and before `FormatSinkResult` travels to `io-core`.
+  writer can move, and before `FormatSinkResult` travels to `message-crate-core`.
 - Progress, by step: (1) the path check is `message_ir::safe_attachment_path`,
   PR #638. (2) `stage_conversation_attachments` takes the messages and returns
   the count of distinct files written; `message-reexport`, the SBR reader and

@@ -67,6 +67,25 @@ around it. The audience question above — who would use a command, and for
 what — has the same answer it had: nobody yet, and when it changes the answer
 is one `message-crate` command, not a reader that happens to be executable.
 
+## Amendment: a developer tool is not a command line either
+
+`demo-seed` (`crates/server/demo-seed`) builds a binary with a clap command
+line (`src/main.rs`), and this decision still holds. `cargo run -p
+demo-seed` writes the files the Demo Data is generated from into
+`crates/server/demo-seed/staging/`, one folder per made-up backup (iMessage,
+SMS Backup & Restore, WhatsApp), so a developer can read them on disk. Its
+flags are `--size`, `--config`, `--out` and `--seed`.
+
+That binary is not a command line in this decision's sense, because no
+person who uses Message Crate ever gets it. The release Docker image builds
+only `message-crate-server` (`docker/Dockerfile`), and the desktop installer
+carries only `imessage-reader` and `message-crate-server`
+(`externalBin` in `src-tauri/tauri.conf.json`). The server links `demo-seed`
+as a library and runs the generator in process for `serve` and
+`reset-demo`, so a Message Crate gets its Demo Account without the binary.
+The binary is a convenience for working on the repository, run through
+`cargo`, in the same way a script under `scripts/` is.
+
 ## Consequences
 
 - `crates/cli/` no longer exists. `message-crate-push` and `message-crate-pull` live in
@@ -75,9 +94,10 @@ is one `message-crate` command, not a reader that happens to be executable.
   since the server's own page is the only one left to generate.
 - The exporter crates keep `run` as their entire public entry point. Adding a
   binary back to one of them is a decision about product surface, not a
-  convenience. `imessage-reader` is the one program beside the server, and it
-  is not an exporter: it reads the database and the FCL exporter still does
-  the exporting.
+  convenience. Two programs sit beside the server. `imessage-reader` is not an
+  exporter: it reads the database and the FCL exporter still does the
+  exporting. `demo-seed` writes the demo files for developers and ships in no
+  release.
 - The documentation pages for these commands were deleted without redirects.
   Before a stable release this project keeps no compatibility path — not for
   database schemas, not for stored data, and not for URLs — so those

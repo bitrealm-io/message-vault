@@ -13,6 +13,7 @@ use serde::Serialize;
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Row, SqliteConnection};
 
+use crate::db::begin_write;
 use crate::db::named_membership::MAX_NAME_LEN;
 
 /// How a saved search was created.
@@ -171,24 +172,21 @@ pub async fn create(
 ) -> Result<SavedSearch> {
     let name = normalize_name(name)?;
     let query = normalize_query(query)?;
-    if find_id_by_name(conn, account_id, &name).await?.is_some() {
+    // One statement checks the name, inserts the row and answers its id, so
+    // a Saved Search created under the name meanwhile, in any letter case,
+    // makes this a conflict.
+    let Some(id) = crate::db::free_name::insert_if_name_free(
+        conn,
+        "saved_searches",
+        account_id,
+        &name,
+        &[("query", &query), ("kind", kind.as_str())],
+    )
+    .await?
+    else {
         return Err(SavedSearchError::Conflict(
             "saved search already exists".into(),
         ));
-    }
-    sqlx::query(
-        "INSERT INTO saved_searches (account_id, name, query, kind) VALUES ($1, $2, $3, $4)",
-    )
-    .bind(account_id)
-    .bind(&name)
-    .bind(&query)
-    .bind(kind.as_str())
-    .execute(&mut *conn)
-    .await?;
-    let Some(id) = find_id_by_name(conn, account_id, &name).await? else {
-        return Err(SavedSearchError::Internal(anyhow::anyhow!(
-            "saved search vanished after insert"
-        )));
     };
     Ok(SavedSearch {
         id,
@@ -209,12 +207,15 @@ pub async fn update(
 ) -> Result<SavedSearch> {
     let name = normalize_name(name)?;
     let query = normalize_query(query)?;
-    let Some(existing) = get(conn, account_id, id).await? else {
+    // The checks and the update are one write transaction, so the name
+    // cannot be taken, nor the row deleted, between them.
+    let mut tx = begin_write(conn).await?;
+    let Some(existing) = get(&mut tx, account_id, id).await? else {
         return Err(SavedSearchError::NotFound("saved search not found".into()));
     };
     // A name already used by a *different* row is a conflict; keeping or
     // recasing this row's own name is not.
-    if let Some(other) = find_id_by_name(conn, account_id, &name).await?
+    if let Some(other) = find_id_by_name(&mut tx, account_id, &name).await?
         && other != id
     {
         return Err(SavedSearchError::Conflict(
@@ -228,8 +229,9 @@ pub async fn update(
     .bind(&query)
     .bind(account_id)
     .bind(id)
-    .execute(&mut *conn)
+    .execute(&mut *tx)
     .await?;
+    tx.commit().await?;
     Ok(SavedSearch {
         id,
         name,

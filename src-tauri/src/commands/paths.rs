@@ -92,7 +92,7 @@ pub fn ios_backup_encrypted(path: String) -> Option<bool> {
     if trimmed.is_empty() {
         return None;
     }
-    imessage_ir_exporter::ios_backup_encrypted_flag(Path::new(trimmed))
+    ios_backup::ios_backup_encrypted_flag(Path::new(trimmed))
 }
 
 /// Addresses an iMessage backup's device sent from, for the Import
@@ -115,13 +115,8 @@ pub async fn imessage_backup_identities(
         .join(IMESSAGE_READER_SCRATCH);
     tauri::async_runtime::spawn_blocking(move || {
         let password = backup_password.as_deref().and_then(message_ir::trimmed);
-        imessage_ir_exporter::backup_identities(
-            Path::new(path.trim()),
-            ios,
-            password,
-            &scratch_root,
-        )
-        .map_err(|e| format!("{e:#}"))
+        ios_backup::backup_identities(Path::new(path.trim()), ios, password, &scratch_root)
+            .map_err(|e| format!("{e:#}"))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -162,33 +157,60 @@ pub fn open_path(path: String, staging_root: String) -> Result<(), String> {
     open::that_detached(&resolved).map_err(|error| format!("Could not open path: {error}"))
 }
 
-/// Write `contents` to the file at `path`, replacing a file already there.
+/// Show the Save dialog with `file_name` filled in, and write `contents` to
+/// the file the person chose, replacing a file already there.
 ///
-/// The window calls this with the path the person chose in the Save dialog,
-/// for a file the server answered as text, such as the address book. A
-/// desktop window has no downloads folder of its own, so the app writes the
-/// file where the person asked.
+/// The window calls this for a file the server answered as text, such as the
+/// address book. A desktop window has no downloads folder of its own, so the
+/// app writes the file where the person asked. The path comes from the
+/// dialog this command shows, never from the window, so a script in the
+/// window cannot name a file for the app to overwrite.
+///
+/// Returns `false` when the person closed the dialog without choosing a
+/// place, and `true` once the file is written.
 ///
 /// # Errors
 ///
-/// Returns an error when the path is empty or not absolute, or the file
+/// Returns an error when the dialog's choice is not a file path, or the file
 /// cannot be written.
 #[tauri::command]
-pub fn save_text_file(path: String, contents: String) -> Result<(), String> {
-    save_text_file_inner(&path, &contents)
+pub async fn save_text_file(
+    app: AppHandle,
+    file_name: String,
+    contents: String,
+) -> Result<bool, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let mut dialog = app.dialog().file().set_file_name(&file_name);
+    if let Some(extension) = Path::new(&file_name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .filter(|e| !e.is_empty())
+    {
+        dialog = dialog.add_filter(extension.to_uppercase(), &[extension]);
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        dialog = dialog.set_parent(&window);
+    }
+    // The blocking call waits for the person on a blocking-pool thread, so
+    // the dialog never waits on the thread that runs the window.
+    let chosen = tauri::async_runtime::spawn_blocking(move || dialog.blocking_save_file())
+        .await
+        .map_err(|e| e.to_string())?;
+    let Some(chosen) = chosen else {
+        return Ok(false);
+    };
+    let path = chosen
+        .into_path()
+        .map_err(|e| format!("The place chosen to save to is not a file path: {e}"))?;
+    write_text_file(&path, &contents)?;
+    Ok(true)
 }
 
-/// The work of [`save_text_file`], apart from the command wrapper.
-pub(crate) fn save_text_file_inner(path: &str, contents: &str) -> Result<(), String> {
-    let trimmed = path.trim();
-    if trimmed.is_empty() {
-        return Err("The path to save to is empty".to_string());
-    }
-    let path = Path::new(trimmed);
-    if !path.is_absolute() {
-        return Err(format!("The path to save to must be absolute: {trimmed}"));
-    }
-    std::fs::write(path, contents).map_err(|error| format!("Could not save {trimmed}: {error}"))
+/// Write `contents` to `path`, replacing a file already there.
+pub(crate) fn write_text_file(path: &Path, contents: &str) -> Result<(), String> {
+    std::fs::write(path, contents)
+        .map_err(|error| format!("Could not save {}: {error}", path.display()))
 }
 
 /// Error when a resolved staging path is not on disk yet.
@@ -392,12 +414,12 @@ mod tests {
     }
 
     #[test]
-    fn save_text_file_writes_the_text_and_replaces_what_was_there() {
+    fn write_text_file_writes_the_text_and_replaces_what_was_there() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("address-book.csv");
         fs::write(&path, "old").unwrap();
 
-        save_text_file_inner(path.to_str().unwrap(), "contact_id,display_name\n").unwrap();
+        write_text_file(&path, "contact_id,display_name\n").unwrap();
 
         assert_eq!(
             fs::read_to_string(&path).unwrap(),
@@ -406,20 +428,10 @@ mod tests {
     }
 
     #[test]
-    fn save_text_file_refuses_an_empty_or_relative_path_and_reports_a_failed_write() {
-        assert!(
-            save_text_file_inner("  ", "x")
-                .unwrap_err()
-                .contains("empty")
-        );
-        assert!(
-            save_text_file_inner("address-book.csv", "x")
-                .unwrap_err()
-                .contains("absolute")
-        );
+    fn write_text_file_reports_a_failed_write() {
         let dir = tempfile::tempdir().unwrap();
         let missing = dir.path().join("no-such-folder").join("address-book.csv");
-        let err = save_text_file_inner(missing.to_str().unwrap(), "x").unwrap_err();
+        let err = write_text_file(&missing, "x").unwrap_err();
         assert!(err.starts_with("Could not save "), "{err}");
     }
 

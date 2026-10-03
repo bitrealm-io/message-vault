@@ -25,7 +25,8 @@ use crate::server::AppState;
     components(schemas(
         crate::search::ListKind,
         crate::problem::Problem,
-        crate::db::address_book::LoadMode
+        crate::db::address_book::LoadMode,
+        crate::exports_api::OwnerExportRun
     )),
     tags(
         (name = "Health", description = "Process liveness"),

@@ -16,8 +16,8 @@ vi.mock("../lib/serverApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/serverApi")>()),
   // The sidebar list `MessageRoute` renders alongside the thread.
   listConversations: vi.fn().mockResolvedValue({ items: [], total: 0, limit: 40, offset: 0 }),
-  listContactGroups: vi.fn().mockResolvedValue({ items: [] }),
-  listMessageTags: vi.fn().mockResolvedValue({ items: [] }),
+  listContactGroups: vi.fn().mockResolvedValue([]),
+  listMessageTags: vi.fn().mockResolvedValue([]),
   getConversation: vi.fn(),
   listConversationMessages: vi.fn(),
   trashConversation: vi.fn(),
@@ -179,7 +179,8 @@ describe("MessageRoute", () => {
 
     renderAt("/messages/7");
     await screen.findByText("Chat 7");
-    await user.click(screen.getByRole("button", { name: "Move to trash" }));
+    await user.click(screen.getByRole("button", { name: "More for this conversation" }));
+    await user.click(screen.getByRole("menuitem", { name: "Move to trash" }));
     await screen.findByText("Trash refused.");
 
     await user.click(screen.getByRole("button", { name: "open 8" }));
@@ -199,13 +200,16 @@ describe("MessageRoute", () => {
 
     renderAt("/messages/7");
     await screen.findByText("Chat 7");
-    await user.click(screen.getByRole("button", { name: "Move to trash" }));
+    await user.click(screen.getByRole("button", { name: "More for this conversation" }));
+    await user.click(screen.getByRole("menuitem", { name: "Move to trash" }));
     await waitFor(() => expect(trashConversationMock).toHaveBeenCalledWith(7, expect.anything()));
 
     await user.click(screen.getByRole("button", { name: "open 8" }));
     await screen.findByText("Chat 8");
-    // Conversation 8 has nothing pending, so its button is live.
-    expect(screen.getByRole("button", { name: "Move to trash" })).not.toBeDisabled();
+    // Conversation 8 has nothing pending, so its Move to trash is live.
+    await user.click(screen.getByRole("button", { name: "More for this conversation" }));
+    expect(screen.getByRole("menuitem", { name: "Move to trash" })).not.toBeDisabled();
+    await user.keyboard("{Escape}");
 
     finishTrash();
     await waitFor(() => expect(trashConversationMock.mock.results[0]?.type).toBe("return"));

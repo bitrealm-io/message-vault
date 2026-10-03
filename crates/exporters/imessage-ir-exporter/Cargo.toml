@@ -18,16 +18,17 @@ path = "src/lib.rs"
 [dependencies]
 anyhow = { workspace = true }
 imessage-reader-protocol = { path = "../../helpers/imessage-reader-protocol" }
+ios-backup = { path = "../../libs/ios-backup" }
 message-crate-core = { path = "../../core/message-crate-core" }
 message-ir = { path = "../../libs/ir" }
 message-ir-format = { path = "../../libs/ir-format" }
 message-staging = { path = "../../libs/staging" }
-plist = "1.9.0"
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 
 [dev-dependencies]
 chat-db-fixture = { path = "../../helpers/chat-db-fixture" }
+ios-backup = { path = "../../libs/ios-backup", features = ["testutil"] }
 serde_json = { workspace = true }
 
 [lints]

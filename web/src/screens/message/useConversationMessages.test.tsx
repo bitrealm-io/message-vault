@@ -5,11 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { listConversationMessages, listMessages } from "../../lib/serverApi";
 import type { Message } from "../../lib/types";
 import { mockedAuth, Providers } from "../../test/providers";
-import {
-  buildFooterLabel,
-  conversationYears,
-  useConversationMessages,
-} from "./useConversationMessages";
+import { conversationYears, useConversationMessages } from "./useConversationMessages";
 
 vi.mock("../../lib/auth", () => ({ useAuth: () => mockedAuth }));
 
@@ -122,94 +118,183 @@ describe("useConversationMessages", () => {
     expect(result.current.loading).toBe(false);
   });
 
-  it("searches for a year inside the conversation, one page at a time like every other view", async () => {
-    getMessages.mockResolvedValue(page([message(9)]));
-    searchMessages
-      .mockResolvedValueOnce({ items: [message(1), message(2)], total: 3, limit: 50, offset: 0 })
-      .mockResolvedValueOnce({ items: [message(3)], total: 3, limit: 50, offset: 50 });
+  it("opens at the newest message and reads older ones before the oldest loaded", async () => {
+    // The conversation holds messages 1..120; the newest page is read newest first.
+    getMessages.mockImplementation((async (_id: number, params: { before?: number }) =>
+      params.before === undefined
+        ? {
+            items: [120, 119, 118].map(message),
+            total: 120,
+            limit: 50,
+            offset: 0,
+          }
+        : {
+            items: [115, 116, 117].map(message),
+            total: 120,
+            limit: 50,
+            offset: 114,
+          }) as unknown as typeof listConversationMessages);
 
-    const { result } = renderHook(({ id }: { id: number }) => useConversationMessages(id), {
-      initialProps: { id: 7 },
-      wrapper: Providers,
-    });
+    const { result } = renderHook(() => useConversationMessages(7), { wrapper: Providers });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    // Browsing all years opens the conversation by id, with no filter.
     expect(getMessages).toHaveBeenCalledWith(
       7,
-      { offset: 0, limit: 50 },
+      { sort: "-date", limit: 50 },
       expect.objectContaining({ signal: expect.anything() }),
     );
+    // Shown oldest first, with the newest at the bottom and nothing newer.
+    expect(result.current.messages.map((m) => m.id)).toEqual([118, 119, 120]);
+    expect(result.current.hasNewer).toBe(false);
+    expect(result.current.hasOlder).toBe(true);
+    expect(result.current.landing.to).toBe("bottom");
 
-    act(() => result.current.selectYear(2020));
-    await waitFor(() => expect(result.current.messages.map((m) => m.id)).toEqual([1, 2]));
-
-    // A year is a search scoped to the conversation, not a filter on the
-    // read by id: the server refuses `year=` there. The conversation is
-    // reached in the trash too, because it can be opened from there.
-    expect(searchMessages).toHaveBeenNthCalledWith(
-      1,
-      { q: "in:#7 trashed:any date:2020", offset: 0, limit: 50 },
+    act(() => result.current.loadOlder());
+    await waitFor(() =>
+      expect(result.current.messages.map((m) => m.id)).toEqual([115, 116, 117, 118, 119, 120]),
+    );
+    expect(getMessages).toHaveBeenLastCalledWith(
+      7,
+      { before: 118, limit: 50 },
       expect.objectContaining({ signal: expect.anything() }),
     );
-    expect(result.current.total).toBe(3);
-
-    act(() => result.current.fetchConversationPage(50));
-    await waitFor(() => expect(result.current.messages.map((m) => m.id)).toEqual([3]));
-    expect(searchMessages).toHaveBeenNthCalledWith(
-      2,
-      { q: "in:#7 trashed:any date:2020", offset: 50, limit: 50 },
-      expect.objectContaining({ signal: expect.anything() }),
-    );
-    expect(getMessages).toHaveBeenCalledTimes(1);
-    expect(result.current.finding).toBe(false);
   });
 
-  it("runs the find box on the server, scoped to the conversation and the chosen year", async () => {
-    getMessages.mockResolvedValue(page([message(9)]));
+  it("opens at a message when asked, with the messages around it", async () => {
+    getMessages.mockResolvedValue({
+      items: [41, 42, 43].map(message),
+      total: 90,
+      limit: 50,
+      offset: 40,
+    });
+    const { result } = renderHook(() => useConversationMessages(7, 42), { wrapper: Providers });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(getMessages).toHaveBeenCalledWith(
+      7,
+      { around: 42, limit: 50 },
+      expect.objectContaining({ signal: expect.anything() }),
+    );
+    expect(result.current.highlightId).toBe(42);
+    expect(result.current.landing.to).toEqual({ id: 42, align: "center" });
+    expect(result.current.hasOlder).toBe(true);
+    expect(result.current.hasNewer).toBe(true);
+  });
+
+  it("jumps to a year's first message, searched for in the conversation", async () => {
+    getMessages.mockImplementation((async (_id: number, params: { around?: number }) => ({
+      items: params.around === undefined ? [message(99)] : [message(params.around)],
+      total: 99,
+      limit: 50,
+      offset: params.around === undefined ? 98 : 0,
+    })) as unknown as typeof listConversationMessages);
+    searchMessages.mockResolvedValue({ items: [message(3)], total: 40, limit: 1, offset: 0 });
+
+    const { result } = renderHook(() => useConversationMessages(7), { wrapper: Providers });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(() => result.current.jumpToYear(2021));
+    // The first message from 2021 on: a year with no messages lands on the next one.
+    expect(searchMessages).toHaveBeenCalledWith(
+      { q: "in:#7 trashed:any date:>=2021", sort: "date", limit: 1 },
+      expect.objectContaining({ signal: expect.anything() }),
+    );
+    await waitFor(() => expect(result.current.messages.map((m) => m.id)).toEqual([3]));
+    expect(getMessages).toHaveBeenLastCalledWith(
+      7,
+      { around: 3, limit: 50 },
+      expect.objectContaining({ signal: expect.anything() }),
+    );
+    expect(result.current.landing.to).toEqual({ id: 3, align: "start" });
+  });
+
+  it("steps Find through the matches in place, newest first, without hiding the thread", async () => {
+    getMessages.mockImplementation((async (_id: number, params: { around?: number }) => ({
+      items: params.around === undefined ? [message(99)] : [message(params.around)],
+      total: 99,
+      limit: 50,
+      offset: 0,
+    })) as unknown as typeof listConversationMessages);
     searchMessages.mockResolvedValue({
-      items: [message(4), message(5)],
+      items: [message(60), message(20)],
       total: 2,
       limit: 50,
       offset: 0,
     });
 
-    const { result } = renderHook(({ id }: { id: number }) => useConversationMessages(id), {
-      initialProps: { id: 7 },
-      wrapper: Providers,
-    });
+    const { result } = renderHook(() => useConversationMessages(7), { wrapper: Providers });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    act(() => result.current.setFindTerm("dentist"));
-    await waitFor(() => expect(result.current.messages.map((m) => m.id)).toEqual([4, 5]));
-    expect(result.current.finding).toBe(true);
-    expect(result.current.total).toBe(2);
-    // `in:#id` plus the term as free text: the same language every list speaks.
+    act(() => result.current.find.openFind());
+    act(() => result.current.find.setTerm("dentist"));
+    // Typing jumps to the newest match, with the messages around it.
+    await waitFor(() => expect(result.current.highlightId).toBe(60));
     expect(searchMessages).toHaveBeenLastCalledWith(
-      { q: "in:#7 trashed:any dentist", offset: 0, limit: 50 },
+      { q: "in:#7 trashed:any dentist", sort: "-date", offset: 0, limit: 50 },
       expect.objectContaining({ signal: expect.anything() }),
     );
+    await waitFor(() => expect(result.current.messages.map((m) => m.id)).toEqual([60]));
+    expect(result.current.find.total).toBe(2);
+    expect(result.current.find.position).toBe(0);
 
-    act(() => result.current.selectYear(2021));
-    await waitFor(() =>
-      expect(searchMessages).toHaveBeenLastCalledWith(
-        { q: "in:#7 trashed:any date:2021 dentist", offset: 0, limit: 50 },
-        expect.objectContaining({ signal: expect.anything() }),
-      ),
-    );
+    // ▲ is the older match.
+    act(() => result.current.find.prevMatch());
+    await waitFor(() => expect(result.current.highlightId).toBe(20));
+    expect(result.current.find.position).toBe(1);
+    await waitFor(() => expect(result.current.messages.map((m) => m.id)).toEqual([20]));
+
+    // ✕ leaves the thread where it is.
+    act(() => result.current.find.close());
+    expect(result.current.highlightId).toBeNull();
+    expect(result.current.messages.map((m) => m.id)).toEqual([20]);
 
     // A phrase with a space is quoted for the language.
-    act(() => result.current.setFindTerm("book club"));
+    act(() => result.current.find.openFind());
+    act(() => result.current.find.setTerm("book club"));
     await waitFor(() =>
       expect(searchMessages).toHaveBeenLastCalledWith(
-        { q: 'in:#7 trashed:any date:2021 "book club"', offset: 0, limit: 50 },
+        { q: 'in:#7 trashed:any "book club"', sort: "-date", offset: 0, limit: 50 },
         expect.objectContaining({ signal: expect.anything() }),
       ),
     );
+  });
 
-    // Clearing the box returns to the thread.
-    act(() => result.current.setFindTerm(""));
-    await waitFor(() => expect(result.current.finding).toBe(false));
+  it("steps Find past a page of matches, and round from the oldest to the newest (#1145)", async () => {
+    const matches = 120;
+    getMessages.mockImplementation((async (_id: number, params: { around?: number }) =>
+      page([message(params.around ?? matches)])) as unknown as typeof listConversationMessages);
+    // The server pages the matches 50 at a time, newest first, and counts all of them.
+    searchMessages.mockImplementation(async ({ offset = 0, limit = 50 }) => ({
+      items: Array.from({ length: Math.max(0, Math.min(limit, matches - offset)) }, (_, i) =>
+        message(matches - offset - i),
+      ),
+      total: matches,
+      limit,
+      offset,
+    }));
+
+    const { result } = renderHook(() => useConversationMessages(7), { wrapper: Providers });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => result.current.find.openFind());
+    act(() => result.current.find.setTerm("hello"));
+    await waitFor(() => expect(result.current.highlightId).toBe(120));
+
+    // ▲ 50 times: from the last match of the first page onto the second page.
+    for (let i = 0; i < 50; i++) act(() => result.current.find.prevMatch());
+    await waitFor(() => expect(result.current.highlightId).toBe(70));
+    expect(result.current.find.position).toBe(50);
+    expect(result.current.find.total).toBe(matches);
+    expect(searchMessages).toHaveBeenLastCalledWith(
+      expect.objectContaining({ offset: 50 }),
+      expect.anything(),
+    );
+
+    // ▼ from the newest goes round to the oldest, on the last page.
+    for (let i = 0; i < 50; i++) act(() => result.current.find.nextMatch());
+    await waitFor(() => expect(result.current.highlightId).toBe(120));
+    act(() => result.current.find.nextMatch());
+    await waitFor(() => expect(result.current.highlightId).toBe(1));
+    expect(result.current.find.position).toBe(matches - 1);
   });
 });
 
@@ -233,21 +318,5 @@ describe("conversationYears", () => {
 
   it("returns nothing without both endpoints", () => {
     expect(conversationYears(null, "2022-02-01T00:00:00Z", "UTC")).toEqual([]);
-  });
-});
-
-describe("buildFooterLabel", () => {
-  it("shows the page window for a year filter, since a year pages like everything else", () => {
-    expect(buildFooterLabel(2021, 120, 0)).toBe("2021: 1–50 of 120");
-    expect(buildFooterLabel(2021, 120, 100)).toBe("2021: 101–120 of 120");
-  });
-
-  it("shows the page window when browsing all years", () => {
-    expect(buildFooterLabel(null, 120, 50)).toBe("Messages 51–100 of 120");
-  });
-
-  it("names the rows as matches while finding", () => {
-    expect(buildFooterLabel(null, 7, 0, true)).toBe("Matches 1–7 of 7");
-    expect(buildFooterLabel(2021, 0, 0, true)).toBe("Matches 0 of 0");
   });
 });

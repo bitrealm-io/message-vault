@@ -7,8 +7,7 @@ import { useRouteCache, useRouteQuery } from "../../lib/routeQuery";
 import { createApiToken, deleteApiToken, listApiTokens, renameApiToken } from "../../lib/serverApi";
 import type { ApiTokenItem } from "./apiTokensUtils";
 
-const fetchTokens = (signal: AbortSignal) =>
-  listApiTokens({ signal }).then((res) => res.items ?? []);
+const fetchTokens = (signal: AbortSignal) => listApiTokens({ signal });
 
 type NewToken = Parameters<typeof createApiToken>[0];
 type CreatedToken = Awaited<ReturnType<typeof createApiToken>>;
@@ -190,6 +189,39 @@ export function useApiTokens() {
     closeRename,
     create,
     rename,
+    revoke,
+  };
+}
+
+/**
+ * Another account's API tokens, as the owner sees them: each token's label,
+ * permissions and use, never its masked secret. The owner revokes a token
+ * here, to end one that has leaked, and makes and renames none.
+ */
+export function useManagedApiTokens(accountId: number) {
+  const [revokeTarget, setRevokeTarget] = useState<ApiTokenItem | null>(null);
+  const {
+    data,
+    isPending: loading,
+    error: loadError,
+  } = useRouteQuery(keys.ownerAccounts.apiTokens(accountId), (signal) =>
+    listApiTokens({ signal }, accountId),
+  );
+  const revokeToken = useApiTokenWrite((id: number) => deleteApiToken(id, accountId));
+
+  /** The dialog closes whether or not the server agreed; the refusal shows in `actionError`. */
+  const revoke = (item: ApiTokenItem) => {
+    revokeToken.mutate(item.id, { onSettled: () => setRevokeTarget(null) });
+  };
+
+  return {
+    items: data ?? [],
+    loading,
+    loadError: loadError ? apiErrorMessage(loadError, "Could not load API Tokens.") : "",
+    busy: revokeToken.isPending,
+    actionError: revokeToken.error ? revokeToken.error.message : "",
+    revokeTarget,
+    setRevokeTarget,
     revoke,
   };
 }

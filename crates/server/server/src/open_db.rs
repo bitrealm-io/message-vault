@@ -2,17 +2,21 @@
 //!
 //! Every command line entry point and the HTTP server open the database the
 //! same way: the config (with the command line's `--db` already applied, see
-//! [`Config::with_db_override`]) names the file, the pool opens it, and the schema is made sure of before anything reads.
+//! [`Config::load_with_db`]) names the file, the pool opens it, and the schema is made sure of before anything reads.
+//! Only a Message Crate database is opened ([`schema::APPLICATION_ID`]),
+//! and only `serve`, `create-database` and `reset-demo` make a new one.
 //! [`OpenDb`] is that opened database plus the config it came from, so a
 //! caller holds one value and never re-derives the file.
 
 use std::path::Path;
 
-use anyhow::{Context, Result};
-use sqlx::SqlitePool;
+use anyhow::{Context, Result, bail};
 use sqlx::pool::PoolConnection;
+use sqlx::sqlite::SqliteConnectOptions;
+use sqlx::{ConnectOptions, Connection, SqlitePool};
 
 use crate::config::Config;
+use crate::db::schema::DatabaseKind;
 use crate::db::{account_profile, engine, schema};
 
 /// An opened database and the config it was opened from.
@@ -24,23 +28,82 @@ pub struct OpenDb {
     pub db: SqlitePool,
 }
 
+/// What is at `path`: `None` when no file is there, or else what the file is.
+///
+/// The file is read through a read-only connection, so a file that is not a
+/// Message Crate database is refused before any statement changes it: the
+/// server's own pool would switch it to write-ahead logging on open.
+///
+/// # Errors
+///
+/// Returns an error, naming the file, when it cannot be read as SQLite.
+pub(crate) async fn inspect(path: &Path) -> Result<Option<DatabaseKind>> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let mut conn = SqliteConnectOptions::new()
+        .filename(path)
+        .read_only(true)
+        .connect()
+        .await
+        .with_context(|| format!("failed to open database {}", path.display()))?;
+    let kind = schema::database_kind(&mut conn)
+        .await
+        .with_context(|| format!("failed to read database {}", path.display()));
+    conn.close().await?;
+    Ok(Some(kind?))
+}
+
 impl OpenDb {
-    /// Open the database `cfg` names and make sure the schema exists.
-    ///
-    /// A database file that does not exist yet is created, folder and all,
-    /// which is how a new Message Crate begins.
+    /// Open the Message Crate database `cfg` names and make sure its schema
+    /// is current. This is how every command but `serve` and
+    /// `create-database` opens it.
     ///
     /// # Errors
     ///
-    /// Returns an error when the file cannot be opened or created, or the
-    /// schema cannot be applied.
+    /// Returns an error, naming the path, when no file is there or the file
+    /// is not a Message Crate database; then nothing is created or changed,
+    /// so a mistyped `--db` or another program's SQLite file is left alone.
+    /// Also when the file cannot be opened or the schema cannot be applied.
     pub async fn open(cfg: Config) -> Result<Self> {
+        match inspect(&cfg.paths.db).await? {
+            Some(DatabaseKind::MessageCrate) => Self::open_pool(cfg).await,
+            Some(DatabaseKind::Empty | DatabaseKind::Foreign) => {
+                Err(schema::not_a_message_crate_database(&cfg.paths.db))
+            }
+            None => bail!(
+                "there is no database at {}. Only `serve` and `create-database` make a new \
+                 one; this command opens a database that exists",
+                cfg.paths.db.display()
+            ),
+        }
+    }
+
+    /// Open the database `cfg` names, making it when no file is there or the
+    /// file is empty. A new database's folder is made too, which is how a new
+    /// Message Crate begins. `serve` and `create-database` open it this way,
+    /// as does `reset-demo`, which builds the Demo Account into a new one.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error, naming the path, when the file there is not a
+    /// Message Crate database; the file is left as it is. Also when the file
+    /// cannot be opened or created, or the schema cannot be applied.
+    pub async fn create_or_open(cfg: Config) -> Result<Self> {
+        if inspect(&cfg.paths.db).await? == Some(DatabaseKind::Foreign) {
+            return Err(schema::not_a_message_crate_database(&cfg.paths.db));
+        }
         if let Some(parent) = cfg.paths.db.parent()
             && !parent.as_os_str().is_empty()
         {
             std::fs::create_dir_all(parent)
                 .with_context(|| format!("create {}", parent.display()))?;
         }
+        Self::open_pool(cfg).await
+    }
+
+    /// Open the pool on the file `cfg` names and make sure of the schema.
+    async fn open_pool(cfg: Config) -> Result<Self> {
         let db = engine::open_pool_for_path(&cfg.paths.db).await?;
         {
             let mut conn = db.acquire().await?;
@@ -107,7 +170,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut cfg = fresh_config(dir.path());
         cfg.paths.db = dir.path().join("new/folder/messagecrate.db");
-        let opened = OpenDb::open(cfg).await.unwrap();
+        let opened = OpenDb::create_or_open(cfg).await.unwrap();
 
         let mut conn = opened.conn().await.unwrap();
         let accounts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM accounts")
@@ -120,7 +183,9 @@ mod tests {
     #[tokio::test]
     async fn account_id_resolves_a_username_and_rejects_an_unknown_one() {
         let dir = tempfile::tempdir().unwrap();
-        let opened = OpenDb::open(fresh_config(dir.path())).await.unwrap();
+        let opened = OpenDb::create_or_open(fresh_config(dir.path()))
+            .await
+            .unwrap();
         let mut conn = opened.conn().await.unwrap();
         let alice = account_profile::insert_account(&mut conn, "alice", None, None)
             .await
@@ -135,10 +200,89 @@ mod tests {
         );
     }
 
+    /// S7-12: a mistyped `--db` names a path where no file is. The command
+    /// stops there, naming the path, and creates neither the file nor its
+    /// folder.
+    #[tokio::test]
+    async fn opening_a_path_where_no_file_is_refuses_and_creates_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut cfg = fresh_config(dir.path());
+        cfg.paths.db = dir.path().join("mistyped/messagecrate.db");
+
+        let err = OpenDb::open(cfg.clone()).await.unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains(&cfg.paths.db.display().to_string()),
+            "{err}"
+        );
+        assert!(!dir.path().join("mistyped").exists());
+    }
+
+    /// S7-3: another program's SQLite file is refused by name, by the
+    /// commands that open a database and by those that make one, and is
+    /// left byte for byte as it was: not rebuilt, and not even switched to
+    /// write-ahead logging.
+    #[tokio::test]
+    async fn another_programs_sqlite_file_is_refused_and_left_unchanged() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut cfg = fresh_config(dir.path());
+        cfg.paths.db = dir.path().join("chat.db");
+        let mut conn = SqliteConnectOptions::new()
+            .filename(&cfg.paths.db)
+            .create_if_missing(true)
+            .connect()
+            .await
+            .unwrap();
+        sqlx::query("CREATE TABLE message (ROWID INTEGER PRIMARY KEY, text TEXT)")
+            .execute(&mut conn)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO message (text) VALUES ('hello from another program')")
+            .execute(&mut conn)
+            .await
+            .unwrap();
+        conn.close().await.unwrap();
+        let before = std::fs::read(&cfg.paths.db).unwrap();
+
+        for refused in [
+            OpenDb::open(cfg.clone()).await,
+            OpenDb::create_or_open(cfg.clone()).await,
+        ] {
+            let err = refused.unwrap_err().to_string();
+            assert!(err.contains("chat.db"), "{err}");
+            assert!(err.contains("not a Message Crate database"), "{err}");
+        }
+
+        assert_eq!(std::fs::read(&cfg.paths.db).unwrap(), before);
+    }
+
+    /// A database this server made opens again, and an empty file is not
+    /// one: only the commands that make a database build in it.
+    #[tokio::test]
+    async fn open_takes_a_message_crate_database_and_refuses_an_empty_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = fresh_config(dir.path());
+        OpenDb::create_or_open(cfg.clone())
+            .await
+            .unwrap()
+            .close()
+            .await;
+        OpenDb::open(cfg.clone()).await.unwrap().close().await;
+
+        let mut empty = fresh_config(dir.path());
+        empty.paths.db = dir.path().join("empty.db");
+        std::fs::write(&empty.paths.db, b"").unwrap();
+        assert!(OpenDb::open(empty.clone()).await.is_err());
+        OpenDb::create_or_open(empty).await.unwrap().close().await;
+    }
+
     #[tokio::test]
     async fn location_names_the_sqlite_file() {
         let dir = tempfile::tempdir().unwrap();
-        let opened = OpenDb::open(fresh_config(dir.path())).await.unwrap();
+        let opened = OpenDb::create_or_open(fresh_config(dir.path()))
+            .await
+            .unwrap();
 
         assert_eq!(opened.location(), dir.path().join("messagecrate.db"));
         opened.close().await;

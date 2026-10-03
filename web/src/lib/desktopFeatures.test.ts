@@ -46,4 +46,11 @@ describe("importExportBlock", () => {
     expect(importExportBlock("import", demo)).toBe("demo");
     expect(importExportBlock("export", demo)).toBe("not-allowed");
   });
+
+  it("blocks Import on the Demo Account whatever its permission row says", () => {
+    // The server refuses every import into it by its id (ADR 0016).
+    const demo = { can_import: true, can_export: true, is_demo: true };
+    expect(importExportBlock("import", demo)).toBe("demo");
+    expect(importExportBlock("export", demo)).toBeNull();
+  });
 });

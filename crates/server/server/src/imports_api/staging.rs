@@ -8,7 +8,7 @@ use anyhow::{Context, Result, bail};
 use message_ir::{HandleService, HandleType, nonempty, trimmed};
 use sqlx::SqliteConnection;
 
-use crate::assets_api::{self, AssetStats, StoredAsset};
+use crate::assets_api::{self, AssetError, AssetStats, StoredAsset};
 use crate::config::validate_source_id;
 use crate::db::handles::{
     HandleIdCache, infer_handle_type_from_shape as infer_handle_type, upsert_handle_row,
@@ -25,10 +25,9 @@ use crate::models::{
 use media::MediaMode;
 
 use super::contact_name::{
-    IncomingSender, ensure_contact_for_handle, resolve_incoming_sender_handle,
-    resolve_name_only_participant,
+    IncomingSender, count_other_identity, ensure_contact_for_handle, resolve_incoming_sender_handle,
 };
-use super::{ImportOptions, ImportStats};
+use super::{ImportFailure, ImportOptions, ImportStats};
 
 struct PreparedAttachment {
     record: AttachmentRecord,
@@ -42,6 +41,13 @@ fn stored_size_bytes(assets_dir: &Path, assets_path: Option<&str>) -> Option<i64
     Some(meta.len() as i64)
 }
 
+/// The file an attachment path names inside `export_dir`, refusing a path
+/// that could leave it, for the message on `line`.
+fn safe_source(export_dir: &Path, rel: &str, line: usize) -> Result<PathBuf> {
+    Ok(message_ir::safe_attachment_path(export_dir, rel)
+        .map_err(|refusal| ImportFailure::UnsafeAttachmentPath { refusal, line })?)
+}
+
 /// Convert/compress when requested; `None` means fall through to claimed-sha / path store.
 fn try_store_converted(
     att: &mut AttachmentRecord,
@@ -50,6 +56,7 @@ fn try_store_converted(
     asset_stats: &mut AssetStats,
     media: MediaMode,
     media_work: &Path,
+    line: usize,
 ) -> Result<Option<StoredAsset>> {
     if !matches!(media, MediaMode::Convert | MediaMode::Compress) {
         return Ok(None);
@@ -57,7 +64,7 @@ fn try_store_converted(
     let Some(rel) = att.path.as_deref().and_then(trimmed) else {
         return Ok(None);
     };
-    let source = message_ir::safe_attachment_path(export_dir, rel)?;
+    let source = safe_source(export_dir, rel, line)?;
     if !source.is_file() {
         return Ok(None);
     }
@@ -84,6 +91,7 @@ fn store_claimed_or_path(
     export_dir: &Path,
     assets_dir: &Path,
     asset_stats: &mut AssetStats,
+    line: usize,
 ) -> Result<Option<StoredAsset>> {
     // Checked before the stored-fingerprint lookup, which never reads the
     // file: `attachments.path` keeps the path as sent, and an Export writes
@@ -92,10 +100,13 @@ fn store_claimed_or_path(
         .path
         .as_deref()
         .and_then(trimmed)
-        .map(|rel| message_ir::safe_attachment_path(export_dir, rel))
+        .map(|rel| safe_source(export_dir, rel, line))
         .transpose()?;
     if let Some(sha) = att.sha256.as_deref().and_then(trimmed) {
-        if let Some(found) = assets_api::lookup_by_sha256(assets_dir, sha) {
+        let claimed = assets_api::Sha256::parse(sha);
+        if let Ok(claimed) = &claimed
+            && let Some(found) = assets_api::lookup_by_sha256(assets_dir, claimed)
+        {
             asset_stats.deduped += 1;
             return Ok(Some(StoredAsset {
                 mime_type: att.mime_type.clone().or(found.mime_type),
@@ -103,9 +114,26 @@ fn store_claimed_or_path(
             }));
         }
         if let Some(source) = checked {
+            let claimed = match claimed {
+                Ok(claimed) => claimed,
+                Err(_) if !source.is_file() => {
+                    asset_stats.missing += 1;
+                    return Ok(None);
+                }
+                // A stated fingerprint that is not one: the sender's to fix,
+                // naming the line and the path as sent.
+                Err(_) => {
+                    return Err(ImportFailure::AttachmentSha256Invalid {
+                        path: att.path.clone().unwrap_or_default(),
+                        stated: sha.to_string(),
+                        line,
+                    }
+                    .into());
+                }
+            };
             return match assets_api::store_verified(
                 &source,
-                sha,
+                &claimed,
                 assets_dir,
                 att.mime_type.as_deref(),
                 false,
@@ -123,7 +151,18 @@ fn store_claimed_or_path(
                     asset_stats.missing += 1;
                     Ok(None)
                 }
-                Err(e) => Err(e),
+                // The export states a fingerprint its file does not have:
+                // the sender's to fix, naming the line and the path as sent.
+                Err(AssetError::Mismatch { claimed, actual }) => {
+                    Err(ImportFailure::AttachmentMismatch {
+                        path: att.path.clone().unwrap_or_default(),
+                        stated: claimed,
+                        actual,
+                        line,
+                    }
+                    .into())
+                }
+                Err(err) => Err(err.into()),
             };
         }
         asset_stats.missing += 1;
@@ -131,7 +170,7 @@ fn store_claimed_or_path(
     }
 
     if let Some(rel) = att.path.as_deref() {
-        let source = message_ir::safe_attachment_path(export_dir, rel)?;
+        let source = safe_source(export_dir, rel, line)?;
         return assets_api::hash_and_store(
             &source,
             assets_dir,
@@ -151,6 +190,7 @@ fn prepare_attachments(
     asset_stats: &mut AssetStats,
     media: MediaMode,
     media_work: &Path,
+    line: usize,
 ) -> Result<Vec<PreparedAttachment>> {
     if media == MediaMode::Disabled {
         return Ok(Vec::new());
@@ -165,9 +205,10 @@ fn prepare_attachments(
             asset_stats,
             media,
             media_work,
+            line,
         )? {
             Some(stored) => Some(stored),
-            None => store_claimed_or_path(&att, export_dir, assets_dir, asset_stats)?,
+            None => store_claimed_or_path(&att, export_dir, assets_dir, asset_stats, line)?,
         };
         prepared.push(PreparedAttachment {
             record: att,
@@ -202,9 +243,10 @@ impl StagingInserts {
     }
 }
 
-/// One participant as the conversation header records it: handle, the name
-/// this backup used for them, and the handle type when the source said.
-type StagedParticipant = (Option<String>, Option<String>, Option<HandleType>);
+/// One participant as the conversation header records it: handle (the name,
+/// typed `Other`, for a person named with no address), the name this backup
+/// used for them, and the handle type when the source said.
+type StagedParticipant = (String, Option<String>, Option<HandleType>);
 
 /// The source id for a conversation: its header's `export.source` when sources come from the files, else the fixed override.
 fn resolve_conversation_source(
@@ -403,7 +445,7 @@ impl FileStaging<'_> {
         } else {
             HandleType::Other
         };
-        let (chat_handle_id, flagged, _cached) = upsert_handle_row_cached(
+        let (chat_handle_id, flagged, chat_cached) = upsert_handle_row_cached(
             self.tx,
             &mut self.stmts.handles,
             self.stmts.account_id,
@@ -424,6 +466,7 @@ impl FileStaging<'_> {
         // that anything gave it a contact.
         let chat_is_a_person = individual && !is_orphaned_export(Path::new(&self.source_file));
         if chat_is_a_person {
+            count_other_identity(chat_handle_type, chat_cached, &mut stats);
             let _ = ensure_contact_for_handle(
                 self.tx,
                 self.stmts.account_id,
@@ -495,9 +538,7 @@ impl FileStaging<'_> {
 fn header_handle_types(participants: &[StagedParticipant]) -> HashMap<String, HandleType> {
     participants
         .iter()
-        .filter_map(|(handle, _, handle_type)| {
-            Some((handle.as_deref()?.trim().to_string(), (*handle_type)?))
-        })
+        .filter_map(|(handle, _, handle_type)| Some((handle.trim().to_string(), (*handle_type)?)))
         .collect()
 }
 
@@ -538,14 +579,15 @@ fn prepare_message_attachments(
             asset_stats,
             opts.media,
             media_work,
+            msg.line,
         )?;
         prepared.push((msg, attachments));
     }
     Ok(prepared)
 }
 
-/// Insert one participant row, bound to a handle when the source recorded an
-/// address and to a name-only contact when it did not.
+/// Insert one participant row, bound to its handle, and give the handle a
+/// contact.
 ///
 /// # Errors
 ///
@@ -558,39 +600,9 @@ async fn insert_participant(
     platform: HandleService,
     stats: &mut ImportStats,
 ) -> Result<()> {
-    let Some(handle) = handle else {
-        // The source named this person and recorded no address for them.
-        // Nothing but a contact can hold a name with no identity, so the
-        // participant is bound to one and carries no handle.
-        let (contact_id, name_alias) = resolve_name_only_participant(
-            tx,
-            stmts.account_id,
-            stmts.import_id,
-            name_alias.as_deref(),
-        )
-        .await?;
-        // `resolve_name_only_participant` returns `(None, None)` when
-        // there is nothing to create and nothing to show; honor that here
-        // instead of inserting a row that names no one.
-        let (Some(contact_id), Some(name_alias)) = (contact_id, name_alias) else {
-            return Ok(());
-        };
-        if db_staging::insert_participant(
-            tx,
-            conversation_id,
-            None,
-            Some(contact_id),
-            Some(&name_alias),
-        )
-        .await?
-        {
-            stats.participants += 1;
-        }
-        return Ok(());
-    };
     // Prefer the source-provided type; fall back to shape inference.
     let handle_type = handle_type.unwrap_or_else(|| infer_handle_type(&handle));
-    let (handle_id, flagged, _cached) = upsert_handle_row_cached(
+    let (handle_id, flagged, cached) = upsert_handle_row_cached(
         tx,
         &mut stmts.handles,
         stmts.account_id,
@@ -602,8 +614,9 @@ async fn insert_participant(
     if flagged {
         stats.phones_needing_review += 1;
     }
+    count_other_identity(handle_type, cached, stats);
     let backup_name = name_alias.as_deref().and_then(nonempty);
-    let contact_id = ensure_contact_for_handle(
+    ensure_contact_for_handle(
         tx,
         stmts.account_id,
         stmts.import_id,
@@ -615,14 +628,8 @@ async fn insert_participant(
     // `participants.name_alias` keeps what this backup called them in this
     // conversation. It is the second clause of the naming rule, never the
     // first.
-    if db_staging::insert_participant(
-        tx,
-        conversation_id,
-        Some(handle_id),
-        Some(contact_id),
-        backup_name.as_deref(),
-    )
-    .await?
+    if db_staging::insert_participant(tx, conversation_id, handle_id, backup_name.as_deref())
+        .await?
     {
         stats.participants += 1;
     }
@@ -791,7 +798,7 @@ async fn insert_message_rows(
             conversation_id,
             account_id: stmts.account_id,
             source,
-            guid: row.msg.guid.as_deref(),
+            guid: &row.msg.guid,
             timestamp: &row.msg.timestamp,
             is_from_me: row.msg.is_from_me as i64,
             sender_handle_id: row.sender_handle_id,

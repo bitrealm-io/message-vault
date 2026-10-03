@@ -470,6 +470,35 @@ async fn an_owner_password_reset_leaves_the_session_browsing() {
     );
 }
 
+/// Two logins at once after a logout, a double click or two devices: both
+/// read no session row, and the second insert broke the `account_id` primary
+/// key and answered `500`. The token is written as an upsert, so the later
+/// login replaces the earlier one's row.
+#[tokio::test]
+async fn a_login_whose_session_row_appears_meanwhile_still_signs_in() {
+    let fixture = test_fixture().await;
+    let account = fixture.account("alice").await;
+
+    let mut other_conn = fixture.conn().await;
+    let mut other = crate::db::begin_write(&mut other_conn).await.unwrap();
+    crate::db::session_tokens::rotate_account_session_token(&mut other, account)
+        .await
+        .unwrap();
+    let mut conn = fixture.conn().await;
+    let created = crate::db::write_tx::commit_during(
+        other,
+        CreateSessionResponse::for_existing_account(&mut conn, account),
+    )
+    .await
+    .expect("the second login signs in");
+
+    let auth = crate::server::resolve_auth_on_conn(&mut conn, &created.token, None)
+        .await
+        .unwrap();
+    assert_eq!(auth.account_id, account);
+    assert_eq!(session_rows(&mut conn, account).await, 1);
+}
+
 /// How many session rows `account` holds.
 async fn session_rows(conn: &mut sqlx::SqliteConnection, account: i64) -> i64 {
     sqlx::query_scalar("SELECT COUNT(*) FROM account_session_tokens WHERE account_id = $1")

@@ -319,14 +319,17 @@ pub(crate) async fn update_contact(
     Json(body): Json<UpdateContactRequest>,
 ) -> Result<Json<Contact>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    match mutate_contact(&mut conn, auth.account_id, contact_id, &body).await {
-        Ok(false) => Err(ApiError::NotFound("contact not found".into())),
-        Err(e) => Err(e.into()),
-        Ok(true) => get_contact_detail(&mut conn, auth.account_id, contact_id)
-            .await?
-            .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("contact missing after mutate")))
-            .map(Json),
+    // One write transaction for the edit and the contact it answers with, so
+    // a contact deleted meanwhile is `404`, never a half-applied edit.
+    let mut tx = crate::db::begin_write(&mut conn).await?;
+    if !mutate_contact(&mut tx, auth.account_id, contact_id, &body).await? {
+        return Err(ApiError::NotFound("contact not found".into()));
     }
+    let contact = get_contact_detail(&mut tx, auth.account_id, contact_id)
+        .await?
+        .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("contact missing after mutate")))?;
+    tx.commit().await?;
+    Ok(Json(contact))
 }
 
 /// Put a contact in the trash. Idempotent: trashing an already-trashed

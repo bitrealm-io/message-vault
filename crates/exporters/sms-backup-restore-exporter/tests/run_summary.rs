@@ -66,7 +66,7 @@ fn run_writes_the_conversation_and_reports_every_skip_and_error() {
     for line in [
         "  skipped 1 invalid-date rows",
         "  mms_seen: 2",
-        "  skipped_bad_attachment: 1",
+        "  skipped_unreadable_part: 1",
         "  skipped_draft_or_outbox: 1",
         "  skipped_empty_participants: 1",
         "  skipped_unknown_address: 1",

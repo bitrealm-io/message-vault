@@ -664,7 +664,9 @@ fn apply_transcode(
                 src,
                 "final derivative name collided with the source"
             );
-            std::fs::rename(&marker, &final_path)
+            // Synced before the original goes, so a power loss cannot
+            // leave an empty derivative and no original.
+            message_ir::rename_into_place(&marker, &final_path)
                 .with_context(|| format!("commit {}", final_path.display()))?;
             let _ = std::fs::remove_file(src);
             // A note from an earlier run under a lower limit no longer

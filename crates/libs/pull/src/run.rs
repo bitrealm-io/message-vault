@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use message_crate_core::{CancelFlag, check_cancel, parallel_for_each};
 use message_crate_http::{auth_check as authenticate, with_retries};
-use message_ir_format::write_export_sentinel;
+use message_ir_format::mark_export_folder;
 use serde::Serialize;
 
 use crate::http::{ExportMessagesArgs, HttpSession};
@@ -132,29 +132,32 @@ fn next_offset(offset: usize, limit: usize, total: u64) -> Option<usize> {
     (u64::try_from(next).unwrap_or(u64::MAX) < total).then_some(next)
 }
 
-/// Create the output folder and its `attachments/` child, and mark the folder
-/// as a Message Crate export.
+/// Create the output folder, mark it as a Message Crate export, and create its
+/// `attachments/` child.
 ///
 /// The sentinel names this folder as one an export wrote. The desktop app
 /// refuses to clean or transcode a folder without it
 /// (`resolve_staging_child` in `src-tauri/src/commands/staging.rs`), which is
 /// what stands between a path bug and a recursive delete somewhere else on
 /// disk. A pulled folder that skipped the sentinel could not be used as
-/// export staging.
+/// export staging. Because a marked folder may be cleaned by a later export,
+/// a folder of the person's own files is refused rather than marked
+/// ([`mark_export_folder`]). The folder is marked before `attachments/` is
+/// created, so a new folder is still empty when it is checked.
 ///
 /// # Errors
 ///
 /// Returns an error when the folder, its `attachments/` child, or the
-/// sentinel cannot be written.
+/// sentinel cannot be written, or the folder holds files and no sentinel.
 fn prepare_out_dir(out_dir: &Path, skip_attachments: bool) -> Result<()> {
     fs::create_dir_all(out_dir).with_context(|| format!("create {}", out_dir.display()))?;
+    mark_export_folder(out_dir)?;
     if !skip_attachments {
         let attachments_dir = out_dir.join("attachments");
         fs::create_dir_all(&attachments_dir)
             .with_context(|| format!("create {}", attachments_dir.display()))?;
     }
-    write_export_sentinel(out_dir)
-        .with_context(|| format!("mark {} as an export folder", out_dir.display()))
+    Ok(())
 }
 
 /// Download matching messages into `cfg.out_dir` as JSON Lines plus attachments.
@@ -242,6 +245,10 @@ struct Fetched {
     by_conv: BTreeMap<String, (Message, Vec<message_ir::IrMessage>)>,
     /// sha256 → (source, relative path under the output folder).
     assets: HashMap<String, (String, String)>,
+    /// sha256 → every other path a message names for the same bytes. The
+    /// file is downloaded once, at the path in `assets`, then placed at each
+    /// of these.
+    other_paths: BTreeMap<String, BTreeSet<String>>,
     /// Attachment paths the server sent that would leave the output folder.
     refused_paths: BTreeSet<String>,
     total_messages: u64,
@@ -394,7 +401,9 @@ impl<'a> Pull<'a> {
         let assets = if self.cfg.skip_attachments {
             AssetCounts::default()
         } else {
-            self.download_assets(&fetched.assets, out)?
+            let counts = self.download_assets(&fetched.assets, out)?;
+            place_other_paths(&self.cfg.out_dir, &fetched.assets, &fetched.other_paths)?;
+            counts
         };
         let conversations = self.write_conversations(fetched.by_conv)?;
         self.finish_journal(
@@ -428,6 +437,7 @@ impl<'a> Pull<'a> {
         let mut fetched = Fetched {
             by_conv: BTreeMap::new(),
             assets: HashMap::new(),
+            other_paths: BTreeMap::new(),
             refused_paths: BTreeSet::new(),
             total_messages: 0,
         };
@@ -458,7 +468,9 @@ impl<'a> Pull<'a> {
             );
             for msg in page.items {
                 if !cfg.skip_attachments {
-                    for (path, rel) in note_asset_refs(&msg, &mut fetched.assets) {
+                    for (path, rel) in
+                        note_asset_refs(&msg, &mut fetched.assets, &mut fetched.other_paths)
+                    {
                         let line = refused_path_line(&path, rel.as_deref());
                         if fetched.refused_paths.insert(path) {
                             emit(out, ProgressEvent::Log(line));
@@ -641,11 +653,15 @@ impl<'a> Pull<'a> {
 /// and return each attachment path [`export_path`] refused, with the path
 /// used in its place.
 ///
-/// The first message to mention a sha256 decides the source and path; the
-/// server stores one blob per fingerprint, so later mentions are the same file.
+/// The first message to mention a sha256 decides the source and the path it
+/// downloads to; the server stores one blob per fingerprint, so later
+/// mentions are the same file. A later mention under another path goes into
+/// `other_paths`, because staging names a file by date and fingerprint and
+/// one file sent on two days has two paths.
 fn note_asset_refs(
     msg: &Message,
     assets: &mut HashMap<String, (String, String)>,
+    other_paths: &mut BTreeMap<String, BTreeSet<String>>,
 ) -> Vec<(String, Option<String>)> {
     let mut refused = Vec::new();
     for att in &msg.attachments {
@@ -660,11 +676,57 @@ fn note_asset_refs(
         else {
             continue;
         };
-        assets
+        let (_, first) = assets
             .entry(sha.to_string())
-            .or_insert_with(|| (msg.source.clone(), rel));
+            .or_insert_with(|| (msg.source.clone(), rel.clone()));
+        if *first != rel {
+            other_paths.entry(sha.to_string()).or_default().insert(rel);
+        }
     }
     refused
+}
+
+/// Put each downloaded file at every other path a message names for it, so
+/// every path in the conversation files exists. A hard link costs no space;
+/// a copy stands in where the file system has no hard links (exFAT on a USB
+/// drive). A path that already holds a file is left alone, the same way the
+/// download skips one.
+///
+/// # Errors
+///
+/// Returns an error when a folder cannot be created or the file cannot be
+/// linked or copied.
+fn place_other_paths(
+    out_dir: &Path,
+    assets: &HashMap<String, (String, String)>,
+    other_paths: &BTreeMap<String, BTreeSet<String>>,
+) -> Result<()> {
+    for (sha, rels) in other_paths {
+        let Some((_source, first)) = assets.get(sha) else {
+            continue;
+        };
+        let from = out_dir.join(first);
+        for rel in rels {
+            let dest = out_dir.join(rel);
+            if dest.is_file() {
+                continue;
+            }
+            if let Some(parent) = dest.parent() {
+                fs::create_dir_all(parent)
+                    .with_context(|| format!("mkdir {}", parent.display()))?;
+            }
+            if fs::hard_link(&from, &dest).is_err() {
+                // Copy beside the destination and rename, so a crash never
+                // leaves a short file that a resume would take as finished.
+                let tmp = dest.with_extension("part");
+                fs::copy(&from, &tmp)
+                    .with_context(|| format!("copy {} -> {}", from.display(), tmp.display()))?;
+                fs::rename(&tmp, &dest)
+                    .with_context(|| format!("rename {} -> {}", tmp.display(), dest.display()))?;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// The progress line for an attachment path the export refused, naming the
@@ -862,6 +924,17 @@ mod out_dir_tests {
 
         assert!(out.join(EXPORT_SENTINEL).is_file());
     }
+
+    #[test]
+    fn refuses_a_folder_of_the_persons_own_files() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("budget.csv"), "mine").unwrap();
+
+        prepare_out_dir(dir.path(), false).unwrap_err();
+
+        assert!(!dir.path().join(EXPORT_SENTINEL).exists());
+        assert!(!dir.path().join("attachments").exists());
+    }
 }
 
 #[cfg(test)]
@@ -912,8 +985,10 @@ mod asset_ref_tests {
     }
 
     #[test]
-    fn the_first_mention_of_a_fingerprint_decides_its_source_and_path() {
+    fn the_first_mention_of_a_fingerprint_decides_its_source_and_path_and_every_other_path_is_kept()
+    {
         let mut assets = HashMap::new();
+        let mut other_paths = BTreeMap::new();
 
         let refused = note_asset_refs(
             &message_from(
@@ -927,10 +1002,18 @@ mod asset_ref_tests {
                 ]),
             ),
             &mut assets,
+            &mut other_paths,
         );
         note_asset_refs(
-            &message_from("sms", json!([{ "path": "other/menu.pdf", "sha256": "ab" }])),
+            &message_from(
+                "sms",
+                json!([
+                    { "path": "other/menu.pdf", "sha256": "ab" },
+                    { "path": "attachments/menu.pdf", "sha256": "ab" }
+                ]),
+            ),
             &mut assets,
+            &mut other_paths,
         );
 
         assert_eq!(
@@ -949,6 +1032,13 @@ mod asset_ref_tests {
                     ("imessage".to_string(), "attachments/ef".to_string())
                 ),
             ])
+        );
+        assert_eq!(
+            other_paths,
+            BTreeMap::from([(
+                "ab".to_string(),
+                BTreeSet::from(["other/menu.pdf".to_string()])
+            )])
         );
         assert_eq!(
             refused,

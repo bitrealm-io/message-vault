@@ -178,9 +178,9 @@ export function forTag(name: string): string {
   return `tag:${quote(name)}`;
 }
 
-/** A handle term, e.g. `handle:ann@example.com` or `handle:"Ann Lee"`. */
+/** An identity term, e.g. `identity:ann@example.com` or `identity:"Ann Lee"`. */
 export function forHandle(handle: string): string {
-  return `handle:${quote(handle.trim())}`;
+  return `identity:${quote(handle.trim())}`;
 }
 
 /**
@@ -333,7 +333,7 @@ export function advancedContacts(input: ContactsQueryInput): string {
   if (input.activity === "messages") push("messages:>0");
   if (input.activity === "no-messages") push("messages:0");
   if (input.noPreferredName) push("name:none");
-  if (input.noHandle) push("handle:none");
+  if (input.noHandle) push("identity:none");
   pushChoices(push, "service", input.services);
   return parts.join(" ");
 }

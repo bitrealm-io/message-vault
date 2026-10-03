@@ -38,16 +38,20 @@
 //! [`delete_trashed`].
 //!
 //! An import is the other way out of the trash. When it meets a handle that
-//! belongs to a trashed contact, [`discard_contact_if_trashed`] deletes that
-//! contact outright — row, handle links, Contact Group memberships and
-//! marker — and the import makes a fresh contact from the backup, as a first
-//! import would (ADR-0013). A backup that still holds the person is the
-//! person saying they still talk to them.
+//! belongs to a trashed contact, it makes a fresh contact from the backup, as
+//! a first import would, moves that handle to it, and
+//! [`discard_trashed_contact`] deletes the trashed contact outright — row,
+//! Contact Group memberships and marker — after taking off each handle it
+//! still held, so one in a conversation goes to a new contact with no name
+//! (ADR-0013). A backup that still holds
+//! the person is the person saying they still talk to them.
 
-use sqlx::{Connection, SqliteConnection};
+use sqlx::SqliteConnection;
 
+use crate::db::contacts;
 use crate::db::ownership::{owns_contact, owns_conversation};
 use crate::db::sql::{SQLITE_IN_CHUNK, in_placeholders};
+use crate::db::{WriteTx, begin_write};
 
 /// A thing that can be put in the trash, named by id.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -156,30 +160,53 @@ pub async fn restore(
     Ok(true)
 }
 
-/// Delete `contact_id` for good when it is `account_id`'s trashed contact,
-/// and do nothing when it is not trashed. Returns true when the contact was
-/// trashed and is now gone.
-///
-/// Unlike [`delete_trashed`], which forgets a contact and keeps its row, this
-/// deletes the row: the schema's cascades take its handle links and Contact
-/// Group memberships with it, so every handle it had belongs to no contact
-/// afterwards, and a participant the source named without an address loses
-/// its contact. The marker goes with the row. This is what an import does
-/// when the backup still holds someone the person set aside (ADR-0013); the
-/// import then makes a fresh contact, which is why nothing here creates one.
+/// True when `contact_id` carries `account_id`'s trash marker.
 ///
 /// # Errors
 ///
-/// Returns a database error when a statement fails.
-pub async fn discard_contact_if_trashed(
+/// Returns a database error when the query fails.
+pub async fn is_contact_trashed(
     conn: &mut SqliteConnection,
     account_id: i64,
     contact_id: i64,
 ) -> Result<bool, sqlx::Error> {
-    let target = Trashable::Contact(contact_id);
-    if !target.is_trashed(conn, account_id).await? {
-        return Ok(false);
-    }
+    Trashable::Contact(contact_id)
+        .is_trashed(conn, account_id)
+        .await
+}
+
+/// Delete `contact_id`, which the caller has established is `account_id`'s
+/// trashed contact, for good, and answer the new contacts its identities
+/// went to.
+///
+/// Unlike [`delete_trashed`], which forgets a contact and keeps its row, this
+/// deletes the row. This is what an import does when the backup still holds
+/// someone the person set aside (ADR-0013): the import first moves the
+/// identity it met, with its siblings, to a fresh contact. Every identity the
+/// contact still holds then leaves it through
+/// [`contacts::take_identities_off`], so one in a conversation goes to a new
+/// contact with no name and none is left on no contact. The Contact Group
+/// memberships and the marker go with the row.
+///
+/// # Errors
+///
+/// Returns an error when a statement fails.
+pub async fn discard_trashed_contact(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    contact_id: i64,
+) -> anyhow::Result<Vec<i64>> {
+    let held = contacts::identities_of_contact(conn, account_id, contact_id).await?;
+    let new_contacts = contacts::take_identities_off(conn, account_id, &held)
+        .await?
+        .into_iter()
+        .filter_map(|moved| match moved {
+            contacts::IdentityMoved::NewContact(id) => Some(id),
+            _ => None,
+        })
+        .collect::<std::collections::BTreeSet<i64>>()
+        .into_iter()
+        .collect();
     sqlx::query("DELETE FROM contacts WHERE account_id = $1 AND id = $2")
         .bind(account_id)
         .bind(contact_id)
@@ -190,7 +217,7 @@ pub async fn discard_contact_if_trashed(
         .bind(contact_id)
         .execute(&mut *conn)
         .await?;
-    Ok(true)
+    Ok(new_contacts)
 }
 
 /// Remove every trash marker `account_id` holds. Called when an account's
@@ -265,13 +292,15 @@ pub async fn delete_trashed(
     account_id: i64,
     target: Trashable,
 ) -> Result<DeleteOutcome, sqlx::Error> {
-    if !target.is_owned(conn, account_id).await? {
+    // The checks run inside the write transaction, so a restore cannot commit
+    // between the check of the Trash marker and the delete it allows.
+    let mut tx = begin_write(conn).await?;
+    if !target.is_owned(&mut tx, account_id).await? {
         return Ok(DeleteOutcome::NotOwned);
     }
-    if !target.is_trashed(conn, account_id).await? {
+    if !target.is_trashed(&mut tx, account_id).await? {
         return Ok(DeleteOutcome::NotTrashed);
     }
-    let mut tx = conn.begin().await?;
     let orphaned = match target {
         Trashable::Conversation(id) => delete_conversations(&mut tx, account_id, &[id]).await?,
         Trashable::Contact(id) => {
@@ -295,7 +324,7 @@ pub async fn empty_trash(
     conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<Vec<OrphanedFile>, sqlx::Error> {
-    let mut tx = conn.begin().await?;
+    let mut tx = begin_write(conn).await?;
     let conversation_ids: Vec<i64> = sqlx::query_scalar(
         "SELECT t.conversation_id
          FROM trashed_conversations t
@@ -337,17 +366,19 @@ type AttachmentFilesRow = (
     Option<String>,
 );
 
-/// Delete `ids`, which the caller has already established are `account_id`'s
-/// trashed conversations, and report the attachment files nothing references
-/// any more. The schema's cascades remove messages, attachments, tapbacks,
+/// Delete those of `ids` that are `account_id`'s trashed conversations, and
+/// report the attachment files nothing references any more. The `DELETE`
+/// checks the Trash marker itself, so a conversation restored since the
+/// caller listed it stays. The schema's cascades remove messages, attachments, tapbacks,
 /// participants and tag memberships; `duplicate_of` on a message elsewhere
 /// that pointed at one of these is set NULL, so the surviving copy becomes
 /// the one that shows.
 async fn delete_conversations(
-    conn: &mut SqliteConnection,
+    tx: &mut WriteTx<'_>,
     account_id: i64,
     ids: &[i64],
 ) -> Result<Vec<OrphanedFile>, sqlx::Error> {
+    let conn: &mut SqliteConnection = tx;
     if ids.is_empty() {
         return Ok(Vec::new());
     }
@@ -370,12 +401,20 @@ async fn delete_conversations(
     }
     for chunk in ids.chunks(SQLITE_IN_CHUNK) {
         let placeholders = in_placeholders(2, chunk.len());
-        for (table, id_column) in [
-            ("conversations", "id"),
-            ("trashed_conversations", "conversation_id"),
+        // The conversations go first, while their markers still say they are
+        // in the Trash.
+        for (table, id_column, trashed) in [
+            (
+                "conversations",
+                "id",
+                " AND id IN (SELECT conversation_id FROM trashed_conversations
+                             WHERE account_id = $1)",
+            ),
+            ("trashed_conversations", "conversation_id", ""),
         ] {
             let sql = format!(
-                "DELETE FROM {table} WHERE account_id = $1 AND {id_column} IN ({placeholders})"
+                "DELETE FROM {table}
+                 WHERE account_id = $1 AND {id_column} IN ({placeholders}){trashed}"
             );
             let mut q = sqlx::query(&sql).bind(account_id);
             for id in chunk {

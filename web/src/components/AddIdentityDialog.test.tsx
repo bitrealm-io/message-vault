@@ -8,14 +8,14 @@ import AddIdentityDialog from "./AddIdentityDialog";
 afterEach(cleanup);
 
 describe("AddIdentityDialog", () => {
-  it("offers Text message, Email and WhatsApp, and hands back the service picked", async () => {
+  it("offers Text Message, Email and WhatsApp, and hands back the service picked", async () => {
     const user = userEvent.setup({ delay: null });
     const onConfirm = vi.fn();
     render(<AddIdentityDialog open onClose={() => {}} onConfirm={onConfirm} />);
 
     await user.click(screen.getByRole("button", { name: /Service/ }));
     expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual([
-      "Text message",
+      "Text Message",
       "Email",
       "WhatsApp",
     ]);

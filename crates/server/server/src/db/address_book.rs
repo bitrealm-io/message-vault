@@ -350,7 +350,7 @@ fn written_cell(cell: &str) -> std::borrow::Cow<'_, str> {
 /// a spreadsheet reads as a formula follows it, which undoes
 /// [`written_cell`]. A spreadsheet can keep that `'` when it saves or drop
 /// it, and both read the same.
-pub(crate) fn read_cell(cell: &str) -> &str {
+fn read_cell(cell: &str) -> &str {
     match cell.strip_prefix(TEXT_MARK) {
         Some(rest)
             if rest
@@ -767,6 +767,95 @@ pub async fn load(
     let counts = apply(&mut tx, account_id, &snapshot, &file, mode).await?;
     tx.commit().await?;
     Ok(counts)
+}
+
+/// The address book `csv_text` with each new contact it lists given the id of
+/// the Unknown that holds one of its identities, as a person who exported the
+/// address book after an import and typed the names onto the Unknowns' rows
+/// would write it. Loaded back, the file names those Unknowns in place, where
+/// a new contact would take their identities and leave them to be deleted.
+///
+/// The file is read as [`load`] reads it, so the identities are matched by
+/// the key the load would give them. A new contact stays new when no Unknown
+/// holds its identities, when the Unknown also holds an identity the
+/// contact's rows do not list (an Append load would then leave the named
+/// contact holding it), or when an earlier contact of the file already took
+/// that Unknown. A file the load would refuse comes back as it was, so the
+/// load reports the refusal.
+///
+/// # Errors
+///
+/// Returns an error when reading the account fails.
+pub(crate) async fn assign_unknowns_to_new_contacts(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    csv_text: &str,
+) -> Result<String> {
+    let Ok(rows) = read_rows(csv_text) else {
+        return Ok(csv_text.to_string());
+    };
+    let snapshot = Snapshot::read(conn, account_id).await?;
+    let Ok(file) = plan(&rows, &snapshot) else {
+        return Ok(csv_text.to_string());
+    };
+
+    let mut held: HashMap<i64, HashSet<&IdentityKey>> = HashMap::new();
+    for (key, &(_, holder)) in &snapshot.handles {
+        if let Some(holder) = holder {
+            held.entry(holder).or_default().insert(key);
+        }
+    }
+    let is_unknown = |id: i64| snapshot.contacts.get(&id).is_some_and(String::is_empty);
+
+    // The Unknown each new contact takes: by its `contact_id` text, or by its
+    // only row when that text is blank.
+    let mut by_text: HashMap<&str, i64> = HashMap::new();
+    let mut by_row: HashMap<usize, i64> = HashMap::new();
+    let mut taken: HashSet<i64> = HashSet::new();
+    for contact in file.iter().filter(|c| c.target == Target::New) {
+        let listed: HashSet<&IdentityKey> = contact.identities.iter().map(|i| &i.key).collect();
+        let unknown = contact.identities.iter().find_map(|identity| {
+            let &(_, Some(holder)) = snapshot.handles.get(&identity.key)? else {
+                return None;
+            };
+            let holds_only_listed = held
+                .get(&holder)
+                .is_some_and(|keys| keys.iter().all(|key| listed.contains(key)));
+            (is_unknown(holder) && !taken.contains(&holder) && holds_only_listed).then_some(holder)
+        });
+        let Some(unknown) = unknown else { continue };
+        taken.insert(unknown);
+        if contact.id_text.is_empty() {
+            by_row.insert(contact.first_row, unknown);
+        } else {
+            by_text.insert(contact.id_text.as_str(), unknown);
+        }
+    }
+
+    let mut writer = csv::Writer::from_writer(Vec::new());
+    writer.write_record(COLUMNS)?;
+    for row in &rows {
+        let unknown = if row.contact_id.is_empty() {
+            by_row.get(&row.number)
+        } else {
+            by_text.get(row.contact_id.as_str())
+        };
+        let contact_id = unknown.map_or_else(|| row.contact_id.clone(), i64::to_string);
+        let cells = [
+            contact_id.as_str(),
+            row.display_name.as_str(),
+            row.groups.as_str(),
+            row.service.as_str(),
+            row.handle_type.as_str(),
+            row.identity.as_str(),
+        ]
+        .map(written_cell);
+        writer.write_record(cells.iter().map(|cell| cell.as_bytes()))?;
+    }
+    let bytes = writer
+        .into_inner()
+        .map_err(|e| anyhow::anyhow!("finish the address book: {e}"))?;
+    String::from_utf8(bytes).context("the address book is not UTF-8")
 }
 
 /// Write a checked file. Nothing here refuses: [`plan`] already has.

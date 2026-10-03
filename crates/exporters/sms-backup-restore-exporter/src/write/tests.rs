@@ -426,22 +426,6 @@ fn restored_mms_parts_get_back_their_own_attachment_bytes() {
     assert_eq!(part_payloads(&read[0].messages[0]), payloads(None));
 }
 
-/// A WhatsApp conversation: the SMS fixture with every message's service
-/// set to WhatsApp.
-fn whatsapp_document(text: &str) -> ConversationDocument {
-    let mut doc = message_ir::testutil::sample_document(text);
-    doc.export.source = "whatsapp".into();
-    doc.conversation.chat_identifier = "+15555550102".into();
-    doc.conversation.participants[0].handle = Some("+15555550102".into());
-    for msg in &mut doc.messages {
-        msg.sender_handle = Some("+15555550102".into());
-        msg.service = message_ir::IrService::Whatsapp;
-        msg.message_kind = IrMessageKind::Unknown;
-        msg.source = None;
-    }
-    doc
-}
-
 /// SMS Backup & Restore can describe only SMS and MMS. An iMessage or a
 /// WhatsApp message written as `<sms>` would come back from a re-import as
 /// an SMS under a new id, so the archive leaves it out and counts it (ADR 0021).
@@ -456,10 +440,18 @@ fn the_archive_writes_only_sms_and_mms_and_counts_the_rest() {
     fallback.imessage = None;
     fallback.text = "hello fallback".into();
     imessage.messages.push(fallback);
+    // A Mac `chat.db` row with no service is read as an SMS by its kind.
+    let mut no_service = imessage.messages[0].clone();
+    no_service.guid = "NO-SERVICE-0001".into();
+    no_service.service = message_ir::IrService::Unknown;
+    no_service.message_kind = IrMessageKind::Sms;
+    no_service.imessage = None;
+    no_service.text = "hello no service".into();
+    imessage.messages.push(no_service);
     let docs = [
         message_ir::testutil::sample_document("hello ir"),
         imessage,
-        whatsapp_document("hello whatsapp"),
+        message_ir::testutil::sample_whatsapp_document("hello whatsapp"),
     ];
 
     let tmp = tempfile::tempdir().unwrap();
@@ -467,9 +459,10 @@ fn the_archive_writes_only_sms_and_mms_and_counts_the_rest() {
     let path = SbrArchive.write(tmp.path(), &docs, &mut report).unwrap();
     assert_eq!(path.file_name().unwrap(), "smses.xml");
     let text = fs::read_to_string(&path).unwrap();
-    assert!(text.contains(r#"count="2""#), "{text}");
+    assert!(text.contains(r#"count="3""#), "{text}");
     assert!(text.contains("hello ir"));
     assert!(text.contains("hello fallback"));
+    assert!(text.contains("hello no service"), "{text}");
     assert!(!text.contains("hello imessage"), "{text}");
     assert!(!text.contains("Loved a message"), "{text}");
     assert!(!text.contains("hello whatsapp"), "{text}");

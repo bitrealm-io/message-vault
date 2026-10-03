@@ -14,7 +14,9 @@ use message_ir_format::{
     read_conversation_mbox,
 };
 use message_staging::AttachmentSpool;
-use sms_backup_restore_exporter::{ReadOptions, SbrArchive, not_sms_or_mms_line, read_backup};
+use sms_backup_restore_exporter::{
+    ReadOptions, SbrArchive, not_sms_or_mms_line, read_backup, sbr_holds,
+};
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
@@ -55,6 +57,7 @@ impl ReexportReport {
             format!("Detected input format: {}", self.detected_format),
             format!("Conversations: {}", self.report.conversations),
         ];
+        lines.extend(not_sms_or_mms_line(&self.report));
         if self.report.attachments_saved > 0 {
             lines.push(format!(
                 "  saved {} attachments",
@@ -62,7 +65,6 @@ impl ReexportReport {
             ));
         }
         lines.extend(self.report.media_lines());
-        lines.extend(not_sms_or_mms_line(&self.report));
         lines
     }
 }
@@ -105,7 +107,16 @@ fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportR
         report.attachments_saved += apply_reexport_convert(&mut documents, config, &transforms)?;
     }
 
-    report.conversations = documents.len() as u64;
+    // `smses.xml` holds only SMS and MMS, so a conversation with none of
+    // them is not written and not counted.
+    report.conversations = if config.output_format == OutputFormat::Xml {
+        documents
+            .iter()
+            .filter(|doc| doc.messages.iter().any(sbr_holds))
+            .count() as u64
+    } else {
+        documents.len() as u64
+    };
     let mut sink = FormatSink::open(&config.output, config.output_format, transforms)?;
     if config.output_format == OutputFormat::Xml {
         sink = sink.with_archive(Box::new(SbrArchive));

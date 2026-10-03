@@ -139,17 +139,6 @@ fn convert_json_to_xml() {
 fn xml_writes_only_sms_and_mms_and_the_log_names_what_was_left_out() {
     let source = tempfile::tempdir().unwrap();
     clean_previous_ir_output(source.path()).unwrap();
-    let mut whatsapp = message_ir::testutil::sample_document("hello whatsapp");
-    whatsapp.export.source = "whatsapp".into();
-    whatsapp.conversation.chat_identifier = "+15555550102".into();
-    whatsapp.conversation.participants[0].handle = Some("+15555550102".into());
-    for msg in &mut whatsapp.messages {
-        msg.guid = "ffeeddccbbaa99887766554433221100".into();
-        msg.service = message_ir::IrService::Whatsapp;
-        msg.message_kind = message_ir::IrMessageKind::Unknown;
-        msg.sender_handle = Some("+15555550102".into());
-        msg.source = None;
-    }
     let mut imessage = message_ir::testutil::sample_imessage_document();
     imessage.conversation.chat_identifier = "+15555550103".into();
     imessage.conversation.participants[0].handle = Some("+15555550103".into());
@@ -158,7 +147,7 @@ fn xml_writes_only_sms_and_mms_and_the_log_names_what_was_left_out() {
     for doc in [
         message_ir::testutil::sample_document("hello sms"),
         imessage,
-        whatsapp,
+        message_ir::testutil::sample_whatsapp_document("hello whatsapp"),
     ] {
         sink.write_document(doc).unwrap();
     }
@@ -177,6 +166,11 @@ fn xml_writes_only_sms_and_mms_and_the_log_names_what_was_left_out() {
     assert!(text.contains("hello sms"), "{text}");
     assert!(!text.contains("hello imessage"), "{text}");
     assert!(!text.contains("hello whatsapp"), "{text}");
+    assert!(
+        result.messages.contains(&"Conversations: 1".to_string()),
+        "{:?}",
+        result.messages
+    );
     assert!(
         result.messages.contains(
             &"Left out 3 message(s) that are not SMS or MMS, because SMS Backup & Restore \

@@ -28,7 +28,21 @@ pub(crate) const CHARACTERS_LEFT_OUT: &str = "control_characters_left_out";
 /// their service is neither SMS nor MMS. SMS Backup & Restore can describe
 /// only those two, and an iMessage or a WhatsApp message written as `<sms>`
 /// would come back from a re-import as an SMS under a new id (ADR 0021).
-pub const NOT_SMS_OR_MMS_LEFT_OUT: &str = "messages_not_sms_or_mms_left_out";
+pub(crate) const NOT_SMS_OR_MMS_LEFT_OUT: &str = "messages_not_sms_or_mms_left_out";
+
+/// Whether `smses.xml` can hold `msg`: an SMS or MMS from any source,
+/// iMessage's SMS fallback included. An MMS carries the `Sms` service with
+/// the `Mms` kind. A message whose service is unknown (a Mac `chat.db` row
+/// with no service, or one pulled back from the server as `unknown`) is
+/// held when its kind says SMS or MMS, as every other layer reads it. RCS
+/// and every other service are left out.
+pub fn sbr_holds(msg: &IrMessage) -> bool {
+    match msg.service {
+        IrService::Sms => true,
+        IrService::Unknown => matches!(msg.message_kind, IrMessageKind::Sms | IrMessageKind::Mms),
+        _ => false,
+    }
+}
 
 /// The run's log line for [`NOT_SMS_OR_MMS_LEFT_OUT`]: how many messages
 /// were left out and why. `None` when the run left none out.
@@ -70,9 +84,8 @@ impl SbrBackupSession {
     /// elements, and count every other message as left out. A conversation
     /// with no SMS or MMS writes nothing.
     pub fn append_document(&mut self, doc: &ConversationDocument) -> Result<()> {
-        let written = document_to_sbr_messages(doc, &self.output_dir)?;
-        self.not_sms_or_mms += (doc.messages.len() - written.len()) as u64;
-        for msg in written {
+        self.not_sms_or_mms += doc.messages.iter().filter(|m| !sbr_holds(m)).count() as u64;
+        for msg in document_to_sbr_messages(doc, &self.output_dir)? {
             self.writer.write_message(&msg)?;
         }
         Ok(())
@@ -107,9 +120,7 @@ pub(crate) fn document_to_sbr_messages(
         .and_then(nonempty)
         .unwrap_or_default();
     let mut out = Vec::with_capacity(doc.messages.len());
-    // An MMS carries the `Sms` service with the `Mms` kind, so the service
-    // alone decides. iMessage's SMS fallback carries it too.
-    for msg in doc.messages.iter().filter(|m| m.service == IrService::Sms) {
+    for msg in doc.messages.iter().filter(|m| sbr_holds(m)) {
         out.push(ir_message_to_sbr(doc, msg, &owner, output_dir)?);
     }
     Ok(out)

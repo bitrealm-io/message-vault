@@ -41,6 +41,13 @@ fn stored_size_bytes(assets_dir: &Path, assets_path: Option<&str>) -> Option<i64
     Some(meta.len() as i64)
 }
 
+/// The file an attachment path names inside `export_dir`, refusing a path
+/// that could leave it, for the message on `line`.
+fn safe_source(export_dir: &Path, rel: &str, line: usize) -> Result<PathBuf> {
+    Ok(message_ir::safe_attachment_path(export_dir, rel)
+        .map_err(|refusal| ImportFailure::UnsafeAttachmentPath { refusal, line })?)
+}
+
 /// Convert/compress when requested; `None` means fall through to claimed-sha / path store.
 fn try_store_converted(
     att: &mut AttachmentRecord,
@@ -57,8 +64,7 @@ fn try_store_converted(
     let Some(rel) = att.path.as_deref().and_then(trimmed) else {
         return Ok(None);
     };
-    let source = message_ir::safe_attachment_path(export_dir, rel)
-        .map_err(|refusal| ImportFailure::UnsafeAttachmentPath { refusal, line })?;
+    let source = safe_source(export_dir, rel, line)?;
     if !source.is_file() {
         return Ok(None);
     }
@@ -78,6 +84,11 @@ fn try_store_converted(
     )
 }
 
+/// An attachment's path as the export sent it, for a refusal to name.
+fn path_as_sent(att: &AttachmentRecord) -> String {
+    att.path.clone().unwrap_or_default()
+}
+
 /// Store an attachment by the sha256 the export claims (reusing an existing blob) or by
 /// hashing its file, counting the ones whose file is missing.
 fn store_claimed_or_path(
@@ -94,9 +105,8 @@ fn store_claimed_or_path(
         .path
         .as_deref()
         .and_then(trimmed)
-        .map(|rel| message_ir::safe_attachment_path(export_dir, rel))
-        .transpose()
-        .map_err(|refusal| ImportFailure::UnsafeAttachmentPath { refusal, line })?;
+        .map(|rel| safe_source(export_dir, rel, line))
+        .transpose()?;
     if let Some(sha) = att.sha256.as_deref().and_then(trimmed) {
         let claimed = assets_api::Sha256::parse(sha);
         if let Ok(claimed) = &claimed
@@ -136,7 +146,7 @@ fn store_claimed_or_path(
                 // naming the line and the path as sent.
                 Err(AssetError::Mismatch { claimed, actual }) => {
                     Err(ImportFailure::AttachmentMismatch {
-                        path: att.path.clone().unwrap_or_default(),
+                        path: path_as_sent(att),
                         stated: claimed,
                         actual,
                         line,
@@ -144,7 +154,7 @@ fn store_claimed_or_path(
                     .into())
                 }
                 Err(AssetError::Invalid(_)) => Err(ImportFailure::AttachmentSha256Invalid {
-                    path: att.path.clone().unwrap_or_default(),
+                    path: path_as_sent(att),
                     stated: sha.to_string(),
                     line,
                 }
@@ -157,8 +167,7 @@ fn store_claimed_or_path(
     }
 
     if let Some(rel) = att.path.as_deref() {
-        let source = message_ir::safe_attachment_path(export_dir, rel)
-            .map_err(|refusal| ImportFailure::UnsafeAttachmentPath { refusal, line })?;
+        let source = safe_source(export_dir, rel, line)?;
         return assets_api::hash_and_store(
             &source,
             assets_dir,

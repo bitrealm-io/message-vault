@@ -254,11 +254,32 @@ pub fn session_part_size(
 /// upload's completion, by an abort, or by the sweep of stale uploads. A
 /// failure to read or write its files after that is an upload that is gone,
 /// not a server that cannot store the file.
+///
+/// A removal deletes the folder's files one by one before the folder, so the
+/// folder can outlive the upload. The manifest is in every live upload, so
+/// its absence is what says the upload is gone.
 fn gone_if_removed(session: &Path, err: AssetError) -> AssetError {
     match err {
-        AssetError::Internal(_) if !session.is_dir() => AssetError::UploadNotFound,
+        AssetError::Internal(_) if !manifest_path(session).is_file() => AssetError::UploadNotFound,
         err => err,
     }
+}
+
+/// [`gone_if_removed`] for work that reads and writes only the upload's own
+/// files. A file it does not find is one a removal took, even while the
+/// removal has not reached the manifest yet.
+fn gone_if_session_file_removed(session: &Path, err: AssetError) -> AssetError {
+    match err {
+        AssetError::Internal(e) if is_not_found(&e) => AssetError::UploadNotFound,
+        err => gone_if_removed(session, err),
+    }
+}
+
+/// Whether an I/O error somewhere in `err` is a file or folder not found.
+fn is_not_found(err: &anyhow::Error) -> bool {
+    err.chain()
+        .filter_map(|cause| cause.downcast_ref::<std::io::Error>())
+        .any(|io| io.kind() == std::io::ErrorKind::NotFound)
 }
 
 /// The folder of an upload in progress.
@@ -287,11 +308,17 @@ pub fn put_part(
         return Err(AssetError::Invalid("part number must be >= 1".into()));
     }
     let session = existing_session(assets_root, sha, upload_id)?;
-    write_part(&session, sha, part, body).map_err(|e| gone_if_removed(&session, e))
+    write_part(&session, sha, part, body)
 }
 
-/// [`put_part`] on a session folder that existed when the request arrived.
+/// [`put_part`] on a session folder that existed when the request arrived,
+/// and may be removed while it runs.
 fn write_part(session: &Path, sha: &Sha256, part: u32, body: &[u8]) -> Result<u64, AssetError> {
+    write_part_in(session, sha, part, body).map_err(|e| gone_if_session_file_removed(session, e))
+}
+
+/// [`write_part`], before a failure is checked against a removed folder.
+fn write_part_in(session: &Path, sha: &Sha256, part: u32, body: &[u8]) -> Result<u64, AssetError> {
     let _lock = lock_session(session)?;
     let mut manifest = read_manifest(session)?;
     if manifest.sha256 != sha.as_str() {
@@ -342,9 +369,22 @@ pub fn complete_upload(
     upload_id: &str,
 ) -> Result<(StoredAsset, bool), AssetError> {
     let session = existing_session(assets_root, sha, upload_id)?;
-    let _lock = lock_session(&session).map_err(|e| gone_if_removed(&session, e))?;
-    let (manifest, assembled) =
-        assemble(&session, sha).map_err(|e| gone_if_removed(&session, e))?;
+    complete_session(assets_root, &session, sha)
+}
+
+/// [`complete_upload`] on a session folder that existed when the request
+/// arrived, and may be removed while it runs. Every failure is checked
+/// against a removed folder before this completion removes it. Storing the
+/// file also writes to the asset store, where a file not found is a fault of
+/// the server, so only a missing manifest says the upload is gone there.
+fn complete_session(
+    assets_root: &Path,
+    session: &Path,
+    sha: &Sha256,
+) -> Result<(StoredAsset, bool), AssetError> {
+    let gone = |e| gone_if_session_file_removed(session, e);
+    let _lock = lock_session(session).map_err(gone)?;
+    let (manifest, assembled) = assemble(session, sha).map_err(gone)?;
     let result = assets_api::store_verified(
         &assembled,
         sha,
@@ -352,10 +392,11 @@ pub fn complete_upload(
         manifest.mime.as_deref(),
         true,
         false,
-    );
+    )
+    .map_err(|e| gone_if_removed(session, e));
     // Always drop the session directory after complete attempt.
     drop(_lock);
-    let _ = fs::remove_dir_all(&session);
+    let _ = fs::remove_dir_all(session);
     result
 }
 
@@ -659,13 +700,35 @@ mod tests {
         let session = session_dir(root, &sha, &start.unwrap().upload_id);
         fs::remove_dir_all(&session).unwrap();
 
-        let err = write_part(&session, &sha, 1, b"hello")
-            .map_err(|e| gone_if_removed(&session, e))
-            .unwrap_err();
+        // `put_part` and `complete_upload` check the folder before they get
+        // here, so the removal between that check and the work is staged by
+        // calling the part after the check directly.
+        let err = write_part(&session, &sha, 1, b"hello").unwrap_err();
         assert!(matches!(err, AssetError::UploadNotFound), "{err}");
-        let err = assemble(&session, &sha)
-            .map_err(|e| gone_if_removed(&session, e))
-            .unwrap_err();
+        let err = complete_session(root, &session, &sha).unwrap_err();
+        assert!(matches!(err, AssetError::UploadNotFound), "{err}");
+    }
+
+    /// A removal deletes an upload's files before its folder. A request that
+    /// arrives while the manifest is gone and the folder is not finds the
+    /// upload gone too.
+    #[test]
+    fn a_request_to_an_upload_part_way_through_its_removal_finds_no_upload() {
+        let dir = tempdir().unwrap();
+        let root = dir.path();
+        let sha = Sha256::of_bytes(b"hello");
+        let limits = UploadLimits {
+            part_size: 1024,
+            max_bytes: 2048,
+        };
+        let (_, start) = start_upload(root, &sha, 5, None, limits).unwrap();
+        let upload_id = start.unwrap().upload_id;
+        let session = session_dir(root, &sha, &upload_id);
+        fs::remove_file(manifest_path(&session)).unwrap();
+
+        let err = put_part(root, &sha, &upload_id, 1, b"hello").unwrap_err();
+        assert!(matches!(err, AssetError::UploadNotFound), "{err}");
+        let err = complete_upload(root, &sha, &upload_id).unwrap_err();
         assert!(matches!(err, AssetError::UploadNotFound), "{err}");
     }
 

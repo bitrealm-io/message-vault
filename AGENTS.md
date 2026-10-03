@@ -55,6 +55,13 @@ so the marker is how their threads are told apart. A thread whose first
 comment carries it is an agent thread. Any other thread is a user thread, and
 only the user resolves it.
 
+GitHub limits how fast one account creates content (reviews, comments,
+replies, pull requests), apart from its hourly limit, and every session posts
+from the same account. So make those calls one at a time, at least a second
+apart. When GitHub refuses one ("submitted too quickly", or a 403 or 422 that
+names a secondary rate limit), check that it did not land, wait a minute (or
+the `retry-after` it gives), and send the same call again.
+
 1. **Read the pull request**: its head, base, draft state, the issues it
    closes, and the diff.
 

@@ -296,6 +296,12 @@ pub async fn delete_account(
 /// them, through `ON DELETE CASCADE` and the search triggers. Returns the
 /// number of messages deleted; fewer than `limit` means none are left.
 ///
+/// Duplicates go before the messages they duplicate. `duplicate_of` is
+/// `ON DELETE SET NULL`, so deleting an original first would show its
+/// duplicates, which dedupe had hidden, to a reader between two batches.
+/// No index serves that order, so each batch sorts the account's message
+/// ids; the sort is a small part of a batch next to the deletes it feeds.
+///
 /// Messages are nearly all of an account's rows (54,241 of the Demo
 /// Account's medium set, beside 106 conversations and 99 contacts), so
 /// deleting them this way before [`delete_account`] leaves that one
@@ -308,7 +314,8 @@ pub async fn delete_account_messages_batch(
     let mut tx = begin_write(conn).await?;
     let deleted = sqlx::query(
         "DELETE FROM messages WHERE id IN
-         (SELECT id FROM messages WHERE account_id = $1 LIMIT $2)",
+         (SELECT id FROM messages WHERE account_id = $1
+          ORDER BY duplicate_of IS NULL LIMIT $2)",
     )
     .bind(account_id)
     .bind(limit)

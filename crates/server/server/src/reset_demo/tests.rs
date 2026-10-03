@@ -2516,3 +2516,86 @@ async fn the_reset_demo_command_runs_vacuum() {
         "VACUUM left no free page"
     );
 }
+
+/// The wipe deletes a duplicate before the message it duplicates. Deleting
+/// the original first sets the duplicate's `duplicate_of` to NULL, so
+/// between two batches the Demo Account would show the duplicate that
+/// dedupe had hidden (#1404).
+#[tokio::test]
+async fn the_wipe_deletes_duplicates_before_the_messages_they_duplicate() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let cfg = crate::open_db::fresh_config(temp.path());
+    fs::create_dir_all(cfg.paths.db.parent().expect("database parent"))
+        .expect("create database parent");
+    let (pool, mut conn) = test_db(&cfg.paths.db).await;
+    account_profile::ensure_account_row(&mut conn, DEMO_ACCOUNT_ID)
+        .await
+        .expect("seed the demo account");
+    let handle_id: i64 = sqlx::query_scalar(
+        "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
+         VALUES ($1, '+15555550100', '+15555550100', 'phone', 'phone')
+         RETURNING id",
+    )
+    .bind(DEMO_ACCOUNT_ID)
+    .fetch_one(&mut *conn)
+    .await
+    .expect("insert a handle");
+    let conversation_id: i64 = sqlx::query_scalar(
+        "INSERT INTO conversations (account_id, chat_handle_id, conversation_type, source_file)
+         VALUES ($1, $2, 'individual', 'a.jsonl')
+         RETURNING id",
+    )
+    .bind(DEMO_ACCOUNT_ID)
+    .bind(handle_id)
+    .fetch_one(&mut *conn)
+    .await
+    .expect("insert a conversation");
+    let mut insert_message = async |guid: &str, duplicate_of: Option<i64>| -> i64 {
+        sqlx::query_scalar(
+            "INSERT INTO messages (
+                conversation_id, account_id, source, guid, timestamp,
+                is_from_me, body, sort_order, duplicate_of
+             ) VALUES ($1, $2, 'sms', $3, '2026-01-01T00:00:00Z', 0, 'hello', 0, $4)
+             RETURNING id",
+        )
+        .bind(conversation_id)
+        .bind(DEMO_ACCOUNT_ID)
+        .bind(guid)
+        .bind(duplicate_of)
+        .fetch_one(&mut *conn)
+        .await
+        .expect("insert a message")
+    };
+    let original = insert_message("original", None).await;
+    let duplicate = insert_message("duplicate", Some(original)).await;
+    close_test_db(pool, conn).await;
+
+    let build = build_pool(&cfg.paths.db).await;
+    let mut left_after_batches: Vec<Vec<(i64, Option<i64>)>> = Vec::new();
+    wipe_demo_account_with(
+        &cfg,
+        &build,
+        DEMO_ACCOUNT_ID,
+        AuditActor::Server,
+        1,
+        async || {
+            let left = sqlx::query_as(
+                "SELECT id, duplicate_of FROM messages WHERE account_id = $1 ORDER BY id",
+            )
+            .bind(DEMO_ACCOUNT_ID)
+            .fetch_all(&build)
+            .await?;
+            left_after_batches.push(left);
+            Ok(())
+        },
+    )
+    .await
+    .expect("wipe the demo account");
+    build.close().await;
+
+    assert_eq!(
+        left_after_batches.first(),
+        Some(&vec![(original, None)]),
+        "the first batch deletes the duplicate {duplicate} and leaves the original"
+    );
+}

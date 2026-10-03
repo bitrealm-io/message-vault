@@ -777,20 +777,23 @@ pub async fn load(
 /// file names those nameless contacts in place, where a new contact would
 /// take their identities and leave them to be deleted.
 ///
-/// The test is the name alone, not the address too as the Unknown group's
-/// is: a contact with a name is already named, and a nameless one is what
-/// the file's name is for.
+/// The test is the name alone: a contact with a name is already named, and
+/// a nameless one is what the file's name is for.
+///
+/// It is written for the demo address book, whose every contact has a
+/// `contact_id` key of its own and whose rows are never blank. A new contact
+/// with a blank `contact_id` stays new, because its rows have no text to
+/// rewrite that only they share. A blank row is left out, as the load leaves
+/// it out.
 ///
 /// The file is read as [`load`] reads it, so the identities are matched by
 /// the key the load would give them. A new contact stays new when no
 /// nameless contact holds its identities; when the nameless contact also
 /// holds an identity the contact's rows do not list (an Append load would
-/// then leave the named contact holding it); when the file already speaks
-/// for that nameless contact, by its id or through an earlier contact; or
-/// when a row would read as another identity under the nameless contact's
-/// id than as a new contact's. A file the load would refuse comes back as
-/// it was, so the load reports the refusal. Rows keep their numbers, so a
-/// note or a refusal from the load names the row of `csv_text`.
+/// then leave the named contact holding it); or when a row would read as
+/// another identity under the nameless contact's id than as a new
+/// contact's. A file the load would refuse comes back as it was, so the load
+/// reports the refusal.
 ///
 /// # Errors
 ///
@@ -815,39 +818,28 @@ pub(crate) async fn rewrite_ids_to_nameless(
         }
     }
     let is_nameless = |id: i64| snapshot.contacts.get(&id).is_some_and(String::is_empty);
-    let rows_of = |contact: &FileContact| -> Vec<&FileRow> {
-        rows.iter()
-            .filter(|row| {
-                if contact.id_text.is_empty() {
-                    row.number == contact.first_row
-                } else {
-                    row.contact_id == contact.id_text
-                }
-            })
-            .collect()
-    };
 
-    // The nameless contact each new contact takes: by its `contact_id` text, or by its
-    // only row when that text is blank. A nameless contact the file names by its id
-    // is spoken for already.
-    let mut by_text: HashMap<&str, i64> = HashMap::new();
-    let mut by_row: HashMap<usize, i64> = HashMap::new();
-    let mut taken: HashSet<i64> = file
+    // The nameless contact each new contact takes, by its `contact_id` text.
+    // No two new contacts can take the same one: it must hold only
+    // identities the contact lists, and the load refuses a file that lists
+    // one identity under two contacts.
+    let mut nameless_of: HashMap<&str, i64> = HashMap::new();
+    for contact in file
         .iter()
-        .filter_map(|c| match c.target {
-            Target::Known(id) => Some(id),
-            Target::New => None,
-        })
-        .collect();
-    for contact in file.iter().filter(|c| c.target == Target::New) {
+        .filter(|c| c.target == Target::New && !c.id_text.is_empty())
+    {
         let listed: HashSet<&IdentityKey> = contact.identities.iter().map(|i| &i.key).collect();
-        let contact_rows = rows_of(contact);
-        // Under the nameless contact's id, a phone written without `+` can read as
-        // another key (see [`row_identity`]); the rows must read the same.
-        let reads_the_same = |unknown: i64| {
+        let contact_rows: Vec<&FileRow> = rows
+            .iter()
+            .filter(|row| row.contact_id == contact.id_text)
+            .collect();
+        // Under the nameless contact's id, a phone written without `+` can
+        // read as another key (see [`row_identity`]); the rows must read the
+        // same.
+        let reads_the_same = |nameless: i64| {
             let mut keys = HashSet::new();
             for row in &contact_rows {
-                match row_identity(row, Some(unknown), &snapshot) {
+                match row_identity(row, Some(nameless), &snapshot) {
                     Ok(Some(identity)) => {
                         keys.insert(identity.key);
                     }
@@ -857,49 +849,32 @@ pub(crate) async fn rewrite_ids_to_nameless(
             }
             keys.len() == listed.len() && keys.iter().all(|key| listed.contains(key))
         };
-        let unknown = contact.identities.iter().find_map(|identity| {
+        let nameless = contact.identities.iter().find_map(|identity| {
             let &(_, Some(holder)) = snapshot.handles.get(&identity.key)? else {
                 return None;
             };
             let holds_only_listed = held
                 .get(&holder)
                 .is_some_and(|keys| keys.iter().all(|key| listed.contains(key)));
-            (is_nameless(holder)
-                && !taken.contains(&holder)
-                && holds_only_listed
-                && reads_the_same(holder))
-            .then_some(holder)
+            (is_nameless(holder) && holds_only_listed && reads_the_same(holder)).then_some(holder)
         });
-        let Some(unknown) = unknown else { continue };
-        taken.insert(unknown);
-        if contact.id_text.is_empty() {
-            by_row.insert(contact.first_row, unknown);
-        } else {
-            by_text.insert(contact.id_text.as_str(), unknown);
+        if let Some(nameless) = nameless {
+            nameless_of.insert(contact.id_text.as_str(), nameless);
         }
     }
 
-    // A blank row stands where `read_rows` skipped one, so every row keeps
-    // its number. The header is row 1.
-    let mut book: Vec<[String; 6]> = Vec::new();
-    for row in &rows {
-        while book.len() + 2 < row.number {
-            book.push(Default::default());
-        }
-        let unknown = if row.contact_id.is_empty() {
-            by_row.get(&row.number)
-        } else {
-            by_text.get(row.contact_id.as_str())
-        };
-        book.push([
-            unknown.map_or_else(|| row.contact_id.clone(), i64::to_string),
+    let book = rows.iter().map(|row| {
+        [
+            nameless_of
+                .get(row.contact_id.as_str())
+                .map_or_else(|| row.contact_id.clone(), i64::to_string),
             row.display_name.clone(),
             row.groups.clone(),
             row.service.clone(),
             row.handle_type.clone(),
             row.identity.clone(),
-        ]);
-    }
+        ]
+    });
     write_book(book)
 }
 

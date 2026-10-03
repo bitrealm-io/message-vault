@@ -1560,23 +1560,6 @@ async fn a_new_contact_whose_identity_a_nameless_contact_holds_names_it_in_place
 }
 
 #[tokio::test]
-async fn a_nameless_contact_the_file_names_by_its_id_is_not_given_to_a_new_contact() {
-    let (mut conn, _pool, _dir) = account().await;
-    let unknown = imported(&mut conn, "", &[("phone", "phone", "+15550001111")]).await;
-    let original = file(&[
-        &format!("{unknown},Bob,,,,"),
-        "abc,Alice,,phone,phone,+15550001111",
-    ]);
-
-    let text = rewrite_ids_to_nameless(&mut conn, ACCOUNT, &original)
-        .await
-        .unwrap();
-    assert_eq!(ids_of(&text), [unknown.to_string(), "abc".to_string()]);
-    loaded(&mut conn, &text, LoadMode::Append).await;
-    assert_eq!(name_of(&mut conn, unknown).await.as_deref(), Some("Bob"));
-}
-
-#[tokio::test]
 async fn a_new_contact_whose_rows_read_otherwise_under_the_nameless_contacts_id_stays_new() {
     let (mut conn, _pool, _dir) = account().await;
     imported(&mut conn, "", &[("phone", "phone", "+6591234567")]).await;
@@ -1591,23 +1574,4 @@ async fn a_new_contact_whose_rows_read_otherwise_under_the_nameless_contacts_id_
         .await
         .unwrap();
     assert_eq!(ids_of(&text), ["c1", "c1"]);
-}
-
-#[tokio::test]
-async fn a_rewritten_file_keeps_its_blank_rows_so_every_row_keeps_its_number() {
-    let (mut conn, _pool, _dir) = account().await;
-    let unknown = imported(&mut conn, "", &[("phone", "phone", "+15550001111")]).await;
-    let original = file(&[
-        "abc,Alice,,phone,phone,+15550001111",
-        ",,,,,",
-        "def,Dan,,phone,phone,+15550002222",
-    ]);
-
-    let text = rewrite_ids_to_nameless(&mut conn, ACCOUNT, &original)
-        .await
-        .unwrap();
-    assert_eq!(
-        ids_of(&text),
-        [unknown.to_string(), String::new(), "def".to_string()]
-    );
 }

@@ -1,10 +1,11 @@
-import { useCallback, useState } from "react";
+import { type UIEvent, useCallback, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import Button from "../components/Button";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ContactLabel from "../components/ContactLabel";
 import { apiErrorMessage } from "../lib/apiErrorMessage";
 import { contactLabelText } from "../lib/contactLabel";
+import { NEAR_END_PX } from "../lib/listPaging";
 import { keys } from "../lib/queryKeys";
 import { type PagedFetchPage, useRoutePagedList, useRouteQuery } from "../lib/routeQuery";
 import { unsupportedFieldWords, useSearchFields } from "../lib/searchFields";
@@ -49,7 +50,7 @@ import { useAccountProfile } from "../lib/useAccountProfile";
  * neither list is asked.
  */
 
-/** How many trashed contacts this pane reads at a time; Show more reads the next page. */
+/** How many trashed contacts this pane reads at a time; scrolling near the end reads the next page. */
 const CONTACT_PAGE_SIZE = 100;
 
 /** One trashed contact as the contact list answers it. */
@@ -369,7 +370,16 @@ export default function TrashScreen() {
                   {searching ? " matching this search" : ""} in Trash
                   {moreContacts ? `, ${contacts.length} shown` : ""}.
                 </div>
-                <ul className="m-0 list-none rounded border border-border bg-elevated p-0">
+                <ul
+                  aria-label="Contacts in Trash"
+                  className="m-0 max-h-[32rem] list-none overflow-y-auto rounded border border-border bg-elevated p-0"
+                  onScroll={(e: UIEvent<HTMLUListElement>) => {
+                    const el = e.currentTarget;
+                    if (el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR_END_PX) {
+                      loadMoreContacts();
+                    }
+                  }}
+                >
                   {contacts.map((contact) => {
                     const restoring =
                       restoreContact.isPending && restoreContact.variables === contact.id;
@@ -419,18 +429,11 @@ export default function TrashScreen() {
                     );
                   })}
                 </ul>
-                {moreContacts && (
-                  <div className="mt-3">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={contactsFilling}
-                      onClick={loadMoreContacts}
-                    >
-                      {contactsFilling ? "Loading…" : "Show more contacts"}
-                    </Button>
-                  </div>
-                )}
+                {contactsFilling ? (
+                  <p className="mt-2 text-[0.813rem] text-muted">Loading more contacts…</p>
+                ) : moreContacts ? (
+                  <p className="mt-2 text-[0.813rem] text-muted">Scroll for more.</p>
+                ) : null}
               </>
             )}
           </section>

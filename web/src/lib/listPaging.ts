@@ -15,6 +15,9 @@ export const PAGE_SIZE_CONTACTS_FIRST = 500;
 /** The largest page any list route answers (`MAX_LIST_LIMIT` in the server's `paging.rs`). */
 export const PAGE_SIZE_MAX = 500;
 
+/** How close to the end of a list, in pixels, scrolling asks for the next page. */
+export const NEAR_END_PX = 48;
+
 /** Status suffix appended to a visible-range label. */
 export function listActivitySuffix(refreshing: boolean, filling: boolean): string {
   if (refreshing) return " · updating…";

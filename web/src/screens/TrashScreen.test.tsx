@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -532,7 +532,9 @@ describe("TrashScreen", () => {
       renderAt("/trash");
       await screen.findByText("Person 1");
       expect(screen.queryByText("Person 150")).toBeNull();
-      await userEvent.click(screen.getByRole("button", { name: "Show more contacts" }));
+      // Scrolled to the end of the contacts loaded: jsdom has no layout, so
+      // every height reads 0 and the list is at its end.
+      fireEvent.scroll(screen.getByRole("list", { name: "Contacts in Trash" }));
       await screen.findByText("Person 150");
       expect(screen.getByRole("button", { name: "Restore Person 150" })).not.toBeDisabled();
     });

@@ -263,8 +263,12 @@ the `main` it lands on, so two pull requests that are green on their own can
 squash-merge into a `main` that does not compile. The ruleset required the
 merge queue for a time (#1514), which ran `ci.yml` again on each pull request
 merged onto the latest `main`, and no longer does: a pull request merges
-directly once its own checks are green. The run on the push to `main` is
-where such a break shows, and it is fixed forward. `ci.yml` cancels an
+directly once its own checks are green. The queue made every merge wait for a
+second full CI run, and with many agent sessions merging in parallel that
+wait held up more work than an occasional red `main` costs. The run on the
+push to `main` is where such a break shows, and it is fixed forward: a pull
+request whose review finds `main` red on the same job stops and says so
+(AGENTS.md, "Review on the pull request", step 6). `ci.yml` cancels an
 in-progress run only for a `pull_request` event, never for a push to `main` or
 a tag, so every commit on `main` keeps its own verdict. Before this, a burst of squash
 merges cancelled every `main` run but the last — twelve merges on 2026-09-05

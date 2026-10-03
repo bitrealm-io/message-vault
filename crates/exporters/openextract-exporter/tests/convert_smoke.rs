@@ -232,3 +232,110 @@ fn an_attachments_csv_is_not_read_as_a_conversation() {
         "{err}"
     );
 }
+
+/// The sender handle of each message in a conversation, in order; `None` for
+/// a sent message.
+fn senders(doc: &message_ir::ConversationDocument) -> Vec<Option<&str>> {
+    doc.messages
+        .iter()
+        .map(|m| m.sender_handle.as_deref().filter(|h| !h.is_empty()))
+        .collect()
+}
+
+/// A per-chat file is one conversation whoever wrote each row. Three people
+/// wrote in this one, so it is one group with all three in it, keyed by the
+/// file, and every message is credited to the person who sent it. Before,
+/// each sender's rows became that person's one-to-one conversation.
+#[test]
+fn a_per_chat_file_with_three_senders_is_one_group() {
+    let (report, documents) = convert_to_documents(&[(
+        "conversation_7.csv",
+        "Date,Sender,Text,Is From Me,Has Attachments\n\
+2020-01-01T12:00:00+00:00,+15555550122,Who is in,False,False\n\
+2020-01-01T12:01:00+00:00,+15555550133,Me,False,False\n\
+2020-01-01T12:02:00+00:00,Cathy Arp,And me,False,False\n\
+2020-01-01T12:03:00+00:00,Me,Great,True,False\n",
+    )]);
+    let keys: Vec<_> = documents.keys().map(String::as_str).collect();
+    assert_eq!(keys, vec!["group:conversation_7.csv"]);
+    assert_eq!(report.conversations, 1);
+    let doc = &documents["group:conversation_7.csv"];
+    assert_eq!(
+        doc.conversation.conversation_type,
+        message_ir::IrConversationType::Group
+    );
+    assert_eq!(roster(doc), vec!["+15555550122", "+15555550133"]);
+    let named: Vec<_> = doc
+        .conversation
+        .participants
+        .iter()
+        .filter_map(|p| p.display_name.as_deref())
+        .collect();
+    assert_eq!(named, vec!["Cathy Arp"]);
+    assert_eq!(
+        senders(doc),
+        vec![Some("+15555550122"), Some("+15555550133"), None, None]
+    );
+    assert_eq!(
+        doc.messages[2].sender_display_name.as_deref(),
+        Some("Cathy Arp")
+    );
+}
+
+/// Two per-chat files in which the owner only sent are two conversations.
+/// The same text sent to both in the same second is two messages: before,
+/// both files went into one `unknown` conversation and one copy was dropped
+/// as a duplicate.
+#[test]
+fn two_files_of_only_sent_messages_are_two_conversations() {
+    let sent_only = "Date,Sender,Text,Is From Me,Has Attachments\n\
+2020-01-01T00:00:00+00:00,Me,Happy new year,True,False\n";
+    let (report, documents) = convert_to_documents(&[
+        ("conversation_1.csv", sent_only),
+        ("conversation_2.csv", sent_only),
+    ]);
+    let keys: Vec<_> = documents.keys().map(String::as_str).collect();
+    assert_eq!(
+        keys,
+        vec!["group:conversation_1.csv", "group:conversation_2.csv"]
+    );
+    assert_eq!(report.duplicates_dropped, 0);
+    assert_eq!(report.messages, 2);
+    for doc in documents.values() {
+        assert!(doc.conversation.participants.is_empty());
+    }
+}
+
+/// In the all-conversations CSV a `Conversation` value two people wrote in
+/// is one group, apart from either one's one-to-one conversation, and each
+/// message is credited to its own sender. Before, the group was filed under
+/// its first sender's number, merged into that person's one-to-one
+/// conversation, and every message in it was credited to them.
+#[test]
+fn an_all_conversations_group_is_apart_from_its_senders() {
+    let (_, documents) = convert_to_documents(&[(
+        "all_conversations.csv",
+        "Date,Conversation,Direction,Sender,Text,Is From Me,Has Attachments\n\
+2020-01-01T17:00:00+00:00,Trip,Received,+15555550122,Packed?,False,False\n\
+2020-01-01T17:01:00+00:00,Trip,Received,+15555550133,Almost,False,False\n\
+2020-01-01T17:02:00+00:00,Trip,Sent,me,Leaving now,True,False\n\
+2020-01-01T18:00:00+00:00,Sam Example,Received,+15555550122,Just us,False,False\n",
+    )]);
+    let keys: Vec<_> = documents.keys().map(String::as_str).collect();
+    assert_eq!(keys, vec!["+15555550122", "group:Trip"]);
+
+    let trip = &documents["group:Trip"];
+    assert_eq!(
+        trip.conversation.conversation_type,
+        message_ir::IrConversationType::Group
+    );
+    assert_eq!(roster(trip), vec!["+15555550122", "+15555550133"]);
+    assert_eq!(
+        senders(trip),
+        vec![Some("+15555550122"), Some("+15555550133"), None]
+    );
+
+    let sam = &documents["+15555550122"];
+    assert_eq!(sam.messages.len(), 1);
+    assert_eq!(roster(sam), vec!["+15555550122"]);
+}

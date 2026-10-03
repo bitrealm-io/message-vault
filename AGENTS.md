@@ -47,7 +47,7 @@ account, and GitHub does not let an author approve their own pull request.
 Why: `docs/adr/0007-ci-is-the-only-gate.md`.
 
 Review a pull request with the `pr-review` skill (`.claude/skills/pr-review/`).
-It runs the steps below, fixes what it finds, and queues the pull request.
+It runs the steps below, fixes what it finds, and merges the pull request.
 
 ##### The marker
 
@@ -116,18 +116,19 @@ only the user resolves it.
    Never resolve a thread without a reply in it.
 5. **Merge the base into the pull request** before the review, whenever the
    base has commits the pull request lacks, so the review and the pull
-   request's checks see the code as it would land. Before queueing, merge it
-   again only on `CONFLICTING`: the merge queue drops a pull request it
-   cannot merge onto the base, and tests one that is only behind on the
-   latest base itself. Merge rather than rebase: a rebase needs a force-push,
-   and the queue squashes the merge commit away. GitHub reports `UNKNOWN`
+   request's checks see the code as it would land. Before merging, merge it
+   again only on `CONFLICTING`: GitHub cannot merge a pull request that
+   conflicts with the base, and merges one that is only behind as it is,
+   untested on the new base (ADR 0007 says why that is accepted).
+   Merge rather than rebase: a rebase needs a force-push, and the squash
+   merge drops the merge commit. GitHub reports `UNKNOWN`
    for a few seconds after a push, so wait for a settled answer:
 
    ```bash
    git fetch origin <baseRefName>
    git merge-base --is-ancestor origin/<baseRefName> HEAD || echo behind
    until m=$(gh pr view <N> --json mergeable -q .mergeable) && [ "$m" != UNKNOWN ]; do sleep 10; done
-   echo "$m"                      # before queueing, CONFLICTING means merge the base
+   echo "$m"                      # before merging, CONFLICTING means merge the base
    git merge origin/<baseRefName> # stops at each conflict, with nothing committed
    # resolve every conflict, git add the files, git commit, run the local checks
    git show --remerge-diff HEAD   # the conflict resolution alone, for review
@@ -154,14 +155,18 @@ only the user resolves it.
    push, another session pushed commits nobody reviewed: stop before marking
    the pull request ready, so it stays a draft, and report it.
 
-   Watch only the head you mean to queue: a new push to the pull request
+   Watch only the head you mean to merge: a new push to the pull request
    cancels the run on the head before it (`ci.yml`'s concurrency group), so
    push a fix as soon as a job fails because of the pull request, rather
    than waiting for the rest. When the first failure is outside the pull
    request, let the run finish, because GitHub reruns the failed jobs of a
    finished run only. Then sort every failed job: any that failed because of
    the pull request is fixed and pushed, which replaces the rerun; only when
-   every failure is outside does the run get its rerun. The run is green only
+   every failure is outside does the run get its rerun. Before the rerun,
+   look at the last finished run on `main`: a rerun cannot pass while `main`
+   fails the same job, so the review stops there and reports the pull request
+   as blocked on `main`. A job that fails outside the pull request again after
+   its rerun also stops the review, with a report. The run is green only
    when its conclusion is `success`. A `cancelled` run means something pushed
    over it, so check the head. Green counts only while the pull request's
    head is still the commit you pushed: a push from another session moves it,
@@ -191,7 +196,10 @@ only the user resolves it.
    do sleep 30; done                    # stops at the first failed job
    gh run view "$run" --json conclusion,jobs -q '.conclusion, (.jobs[] | select(.conclusion == "failure") | .name)'
    gh run watch "$run"                  # an outside failure: wait for the run to finish
-   gh run rerun "$run" --failed
+   main_run=$(gh run list --branch main --workflow ci.yml --event push --status completed -L 1 \
+                --json databaseId -q '.[0].databaseId')   # the last finished run on main
+   gh run view "$main_run" --json url,jobs -q '.url, (.jobs[] | select(.conclusion == "failure") | .name)'
+   gh run rerun "$run" --failed         # only when main is not red on the same job
    [ "$(gh pr view <N> --json headRefOid -q .headRefOid)" = "$sha" ] || echo moved
    ```
 
@@ -206,15 +214,12 @@ the `retry-after` it gives), and send the same call again.
 
 #### Merging
 
-`main` requires the merge queue. `gh pr merge <N> --match-head-commit <sha>`
-adds a green pull request to the queue only while its head is still `<sha>`,
-the commit that was reviewed and checked, or turns on auto-merge when its
-checks are still running. It takes no `--squash`, because the queue's merge
-method is fixed. The queue runs `ci.yml` again on the pull request merged onto
-the latest `main`, and lands it only when that run is green. Never pass
-`--admin`: it merges past the queue.
+`gh pr merge <N> --squash --match-head-commit <sha>` squash-merges a green
+pull request only while its head is still `<sha>`, the commit that was
+reviewed and checked. Never pass `--admin`: it merges past the required
+checks and open conversations.
 
-A pull request that `pr-review` has reviewed is queued without asking, once
+A pull request that `pr-review` has reviewed is merged without asking, once
 every thread on it is resolved, its required checks are green, and it is not a
 draft. Any other merge waits for the user to ask for it.
 

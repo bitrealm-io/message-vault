@@ -1,15 +1,15 @@
 ---
 name: pr-review
-description: "Review a pull request on GitHub, fix what the review finds, and queue it for merging. Use to review a PR, or a branch that has one."
+description: "Review a pull request on GitHub, fix what the review finds, and merge it. Use to review a PR, or a branch that has one."
 ---
 
-Review pull request `<N>` and take it to the merge queue. The PR is the record:
+Review pull request `<N>` and merge it. The PR is the record:
 every **finding** is posted on it and answered there.
 
 Read `AGENTS.md`, "Submitting Work" → "Review on the pull request" and
 "Merging", before step 1. They hold the marker that every comment you post
 starts with, the difference between an agent thread and a user thread, the
-command for each step, and when a PR is queued. The steps below name the
+command for each step, and when a PR is merged. The steps below name the
 AGENTS.md step they run.
 
 ## Closing a finding
@@ -48,11 +48,11 @@ that later commits shifted. A finding whose line can't be found there, or is
 outside the PR diff at that commit, goes in a marked top-level comment
 (AGENTS.md step 2).
 
-**Another session's commits.** The PR is queued only while every commit on it
+**Another session's commits.** The PR is merged only while every commit on it
 was reviewed by this run. When another session pushes to the branch, whether
 your push is rejected or the PR head moves past your push, keep its commits:
 merge them in (AGENTS.md step 5), never force over them. Then finish closing
-the findings, and stop before queueing: report the PR and those commits to
+the findings, and stop before merging: report the PR and those commits to
 the user.
 
 **Merge review.** Every merge commit you make that resolves a conflict, in
@@ -168,20 +168,20 @@ Watch the CI run that marking the PR ready started, stopping at its first
 failed job (AGENTS.md step 6). A job that fails because of the PR is a
 finding: fix it, run the local checks, push, and watch the new run.
 
-A check that fails for a reason outside the PR (a red `main`, a runner fault,
-a network fetch) gets one rerun of its failed jobs. If it fails again, stop
-and report it without changing the code for it.
-
-A failed check is sorted, and the run rerun, as AGENTS.md step 6 says.
+A check that fails for a reason outside the PR (a runner fault, a network
+fetch) gets one rerun of its failed jobs. If it fails again, or `main` fails
+the same job, stop and report it without changing the code for it. AGENTS.md
+step 6 says how a failed check is sorted, how a red `main` is found, and when
+the run is rerun.
 
 Done when the CI run on the commit you pushed ended in `success`, and it is
 still the PR head (_Another session's commits_).
 
-### 7. Summarise and queue
+### 7. Summarise and merge
 
 Check the PR against its base once more (AGENTS.md step 5). On `CONFLICTING`,
 merge the base (with the merge review), push, and return to step 6. A PR that
-is only behind is queued as it is: the queue tests it on the latest base.
+is only behind is merged as it is, for the reason AGENTS.md step 5 gives.
 
 Post one top-level comment, starting with the marker:
 
@@ -191,8 +191,9 @@ Post one top-level comment, starting with the marker:
   whose conflicts it resolved.
 - Any Spec skip, and any user thread still open.
 
-Queue the PR on the commit you pushed when "Merging" says it is ready. Otherwise, say in the summary and to the user
-what it waits on, such as an open user thread.
+Merge the PR on the commit you pushed when "Merging" says it is ready.
+Otherwise, say in the summary and to the user what it waits on, such as an
+open user thread.
 
 Remove the worktree. Report to the user: the PR, the counts, and whether it is
-queued.
+merged.

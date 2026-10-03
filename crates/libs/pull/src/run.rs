@@ -867,9 +867,7 @@ mod out_dir_tests {
     }
 
     #[test]
-    fn refuses_a_folder_of_the_users_own_files() {
-        // A marked folder may be cleaned by a later export, so marking a
-        // person's folder would let that export delete their files.
+    fn refuses_a_folder_of_the_persons_own_files() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("budget.csv"), "mine").unwrap();
 

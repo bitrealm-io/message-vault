@@ -81,7 +81,7 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
 
         message_crate_core::check_cancel(config.cancel.as_ref())?;
         let bin = resolve_wtsexporter()?;
-        let work = scratch_dir_in_output(config)?;
+        let work = mark_output_and_make_scratch_dir(config)?;
         let json_out = work.path().join("result.json");
 
         // Cooperative only: cancel is checked before and after the external process.
@@ -173,24 +173,25 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
     Ok(result)
 }
 
-/// The scratch folder wtsexporter runs in (its working folder, the extract,
-/// and `result.json`), created inside the output folder. It is kept until
-/// after convert so media copy can read the extracted files.
+/// Mark the output folder as an export folder, then create the scratch
+/// folder wtsexporter runs in (its working folder, the extract, and
+/// `result.json`) inside it. The scratch folder is kept until after convert so
+/// media copy can read the extracted files.
 ///
-/// The output is cleaned first. The writer cleans the output again when it
-/// opens, and a folder with no sentinel must then be empty, so a new folder
-/// that already held this scratch folder and `wtsexporter_result.json` would
-/// be refused. Cleaning here marks a new or empty folder before anything is
-/// written into it. A resumed run keeps its earlier output, so it is not
-/// cleaned.
+/// The writer cleans the output when it opens, and refuses a folder with no
+/// sentinel that is not empty, so a new folder must be marked before this
+/// run writes into it. It is only marked here, not cleaned: an earlier export
+/// in the folder stays until the writer opens, after the new JSON has loaded,
+/// so a failed wtsexporter run leaves it in place. A resumed run's folder is
+/// already marked.
 ///
 /// # Errors
 ///
-/// Returns an error when the output cannot be cleaned or marked, or the
+/// Returns an error when the output holds files and no sentinel, or the
 /// scratch folder cannot be created.
-fn scratch_dir_in_output(config: &ExporterConfig) -> Result<tempfile::TempDir> {
+fn mark_output_and_make_scratch_dir(config: &ExporterConfig) -> Result<tempfile::TempDir> {
     if !config.resume {
-        message_ir_format::clean_previous_ir_output(&config.output)?;
+        message_ir_format::mark_export_folder(&config.output)?;
     }
     tempfile::Builder::new()
         .prefix("wtsexporter-")
@@ -271,10 +272,30 @@ mod tests {
             SourceConfig::Whatsapp(WhatsappConfig::default()),
         );
 
-        let work = super::scratch_dir_in_output(&config).unwrap();
+        let work = super::mark_output_and_make_scratch_dir(&config).unwrap();
         fs::write(output.join("wtsexporter_result.json"), "{}").unwrap();
 
         message_ir_format::clean_previous_ir_output(&output).unwrap();
         assert!(work.path().is_dir(), "the scratch folder is kept");
+    }
+
+    /// Making the scratch folder leaves an earlier export in place, so a
+    /// wtsexporter run that fails afterwards has not deleted it.
+    #[test]
+    fn making_the_scratch_folder_keeps_an_earlier_export() {
+        let tmp = tempfile::tempdir().unwrap();
+        let output = tmp.path().join("out");
+        fs::create_dir_all(&output).unwrap();
+        message_ir_format::mark_export_folder(&output).unwrap();
+        fs::write(output.join("earlier.jsonl"), "{}").unwrap();
+        let config = jsonl_run_config(
+            &[],
+            &output,
+            SourceConfig::Whatsapp(WhatsappConfig::default()),
+        );
+
+        let _work = super::mark_output_and_make_scratch_dir(&config).unwrap();
+
+        assert!(output.join("earlier.jsonl").is_file());
     }
 }

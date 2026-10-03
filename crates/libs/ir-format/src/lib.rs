@@ -18,9 +18,7 @@ mod read_mail;
 mod util;
 mod write;
 
-pub use clean::{
-    EXPORT_SENTINEL, clean_previous_ir_output, mark_export_folder, write_export_sentinel,
-};
+pub use clean::{EXPORT_SENTINEL, clean_previous_ir_output, mark_export_folder};
 pub use export_transforms::clear_attachments_when_disabled;
 pub use format_sink::{FormatSink, MergedArchive, write_documents_through_sink};
 pub use read_csv::read_conversation_csv;

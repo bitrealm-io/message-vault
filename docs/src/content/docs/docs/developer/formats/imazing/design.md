@@ -28,8 +28,9 @@ Discovery walks the selected path recursively without following directory symbol
   string is a display title.
 - `participants_json` is always written (unified header).
 - The shared dedupe step (`message_ir::one_copy_per_message`) compares attachments by content digest, or by path when the file was not found, so rows with one time and text and different media are kept.
-- When the Import form's **Attachments** choice copies media (and always for mail / Xml), attachments are resolved by basename or
-  suffix-match against files beside the source CSV and copied under `output/attachments/`.
+- When the Import form's **Attachments** choice copies media (and always for mail / Xml), each row's file is found in its own
+  chat folder by the naming rules in [input](/docs/developer/formats/imazing/input/#export-tree) and copied under
+  `output/attachments/`. A row with no such file, or whose file can't be told apart from another row's, is marked `file_missing`, so no file goes to two rows.
 - When media is copied, the files beside a CSV that no row names are sorted after every CSV is read.
   A Live Photo's video (`.mov` beside a `.jpg` or `.jpeg` an Image row names) becomes the second
   attachment of that row's message, named as the row's picture with the video's extension. When two

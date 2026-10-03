@@ -279,7 +279,7 @@ Bob,2026-03-08 02:30:00,SMS,Incoming,+15555550100,Bob,Read,,,Gap,,,\n",
 }
 
 #[test]
-fn copies_attachment_by_suffix_match() {
+fn copies_the_file_imazing_named_for_the_row() {
     let dir = tempfile::tempdir().unwrap();
     let chat = dir.path().join("chat");
     fs::create_dir_all(&chat).unwrap();
@@ -290,7 +290,11 @@ fn copies_attachment_by_suffix_match() {
 Bob McRoy,2020-01-01 12:00:00,,,,,SMS,Incoming,+15555550100,Bob,Read,,,Hi,,image000000.jpg,Image\n",
     )
     .unwrap();
-    fs::write(chat.join("ABC123_image000000.jpg"), b"fake-jpeg-bytes").unwrap();
+    fs::write(
+        chat.join("2020-01-01 12 00 00 - Bob McRoy - image000000.jpg"),
+        b"fake-jpeg-bytes",
+    )
+    .unwrap();
     let out = dir.path().join("out");
     let report = convert(&chat, &out).unwrap();
     assert_eq!(report.attachments_saved, 1);
@@ -639,7 +643,11 @@ fn a_same_named_file_in_two_chat_folders_goes_to_its_own_chat() {
             ),
         )
         .unwrap();
-        fs::write(chat.join("IMG_0001.jpg"), bytes).unwrap();
+        fs::write(
+            chat.join(format!("2020-01-01 12 00 00 - {folder} - IMG_0001.jpg")),
+            bytes,
+        )
+        .unwrap();
     }
     let out = dir.path().join("out");
     convert_export(ConvertExportArgs {
@@ -836,13 +844,20 @@ Bob,2020-01-01 12:02:00,iMessage,Incoming,+15555550100,Bob,Read,,,See https://ex
 }
 
 /// When two rows name one picture, its Live Photo video goes to the first of
-/// them in CSV order, and the report names the picture.
+/// them in CSV order, and the report names the picture. Within one CSV each
+/// row has a file of its own, so only rows of two CSVs in one chat folder
+/// name one picture.
 #[test]
 fn a_live_photo_video_of_a_picture_two_rows_name_goes_to_the_first_row() {
     let export = convert_chat_folder(
-        "Bob,2020-01-01 12:05:00,iMessage,Incoming,+15555550100,Bob,Read,,,first,,IMG_0002.jpg,Image\n\
-Bob,2020-01-01 12:00:00,iMessage,Incoming,+15555550100,Bob,Read,,,second,,IMG_0002.jpg,Image\n",
+        "Bob,2020-01-01 12:05:00,iMessage,Incoming,+15555550100,Bob,Read,,,first,,IMG_0002.jpg,Image\n",
         &[
+            (
+                "Messages_2.csv",
+                &format!(
+                    "{MESSAGES_HEADER}Bob,2020-01-01 12:05:00,iMessage,Incoming,+15555550100,Bob,Read,,,second,,IMG_0002.jpg,Image\n"
+                ),
+            ),
             ("2020-01-01 12 05 00 - Bob - IMG_0002.jpg", "picture"),
             ("2020-01-01 12 05 00 - Bob - IMG_0002.MOV", "video"),
         ],
@@ -1246,4 +1261,87 @@ fn two_quiet_groups_with_the_same_one_row_stay_two_conversations() {
         documents[0].conversation.chat_identifier,
         documents[1].conversation.chat_identifier
     );
+}
+
+/// iMazing writes a row's file into the row's own chat folder as
+/// `{Message Date} - {label} - {name}`, where the name is the row's
+/// `Attachment` with the extension converted, non-ASCII characters removed
+/// and the stem cut to 40 characters, and ` 2`, ` 3` added when rows of one
+/// second share the name iMazing writes, ignoring case. Each row gets the
+/// file of its own second, or none when its folder holds no such file or two
+/// of them, when a row of its number group has no file, or when another row
+/// would take the same file.
+#[test]
+fn each_row_gets_the_file_imazing_wrote_for_it_in_its_own_folder() {
+    let input = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/attachment_match");
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("out");
+    convert_export(ConvertExportArgs {
+        input: &input,
+        output: &out,
+        timezone: Some("UTC"),
+        transforms: ExportTransforms::none(),
+        output_format: OutputFormat::Json,
+        cancel: None,
+        resume: false,
+    })
+    .unwrap();
+    let doc = message_ir_format::read_conversation_json(&out.join("+15555550101.json")).unwrap();
+    let file_of = |text: &str| {
+        let message = doc
+            .messages
+            .iter()
+            .find(|m| m.text == text)
+            .unwrap_or_else(|| panic!("no message {text:?}"));
+        let attachment = &message.attachments[0];
+        match attachment.path.as_deref() {
+            Some(path) => fs::read_to_string(out.join(path)).unwrap(),
+            None => attachment.missing_reason.clone().unwrap_or_default(),
+        }
+    };
+    for (text, file) in [
+        // Two voice notes with one name: each gets the file of its second,
+        // which iMazing converted from caf to mp3.
+        ("voice 1", "voice 1"),
+        ("voice 2", "voice 2"),
+        ("heic picture", "heic picture"),
+        ("long name", "long name"),
+        ("narrow space", "narrow space"),
+        ("first of the second", "first of the second"),
+        ("second of the second", "second of the second"),
+        ("picture 3 at 12:07", "picture 3 at 12:07"),
+        ("picture 3 at 12:08", "picture 3 at 12:08"),
+        // The file is only in Carol's folder, which is not this row's.
+        ("file in another chat", "file_missing"),
+        // Two files of this second end with the row's name.
+        ("two files", "file_missing"),
+        // Two rows of one second, one name the end of the other: the
+        // shorter one leaves the longer one's file to it.
+        ("short of two names", "short of two names"),
+        ("long of two names", "long of two names"),
+        // Two names that cut to one 40-character stem are numbered together.
+        ("first long name", "first long name"),
+        ("second long name", "second long name"),
+        // A Location row names a `.vcf`; its file is a `.url` of another stem.
+        ("location", "file_missing"),
+        // A `Message Date` without seconds still finds its file.
+        ("date without seconds", "date without seconds"),
+        // The second `photo.jpg` and the `photo 2.jpg` of one second would
+        // both take `photo 2.jpg`, so neither gets it.
+        ("photo first", "photo first"),
+        ("photo second", "file_missing"),
+        ("photo 2 named", "file_missing"),
+        // `snap.JPG` and `snap.jpg` are one name on a file system that
+        // ignores case, so iMazing numbers them together.
+        ("upper-case extension", "upper-case extension"),
+        ("lower-case extension", "lower-case extension"),
+        // Two rows of one name, and the folder holds one of their files:
+        // nothing tells whose it is.
+        ("first of a pair", "file_missing"),
+        ("second of a pair", "file_missing"),
+        // The label ends with ` -`, so the file name holds ` - - `.
+        ("label ends with a dash", "label ends with a dash"),
+    ] {
+        assert_eq!(file_of(text), file, "{text}");
+    }
 }

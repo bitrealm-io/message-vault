@@ -1,16 +1,14 @@
 //! Convert iMazing Messages / WhatsApp rows into the shared conversation
 //! structure, then write the chosen output format via [`ExportWriter`].
 
-use crate::attachments::{
-    AttachmentIndex, ResolveAttachmentArgs, mime_hint, resolve_attachment_cell,
-};
+use crate::attachments::{FolderFiles, attachment_cell, file_name_second, mime_hint, row_sources};
 use crate::attachments_emit::{attachment_digests, pending_attachment_to_ir};
 use crate::parse::{DiscoveredCsv, RawRow, SourceKind, discover_csv_files, parse_csv_file};
 use crate::parse_emit::{
     Session, group_vendor_id, group_vendor_id_with_name, handle_type_for, is_notification,
     is_outgoing, parse_message_date, resolve_sender, session_key,
 };
-use crate::unnamed_files::{FolderRows, UnnamedFile, file_name_second, unnamed_files};
+use crate::unnamed_files::{FolderRows, UnnamedFile, unnamed_files};
 use anyhow::Result;
 use message_crate_core::{
     CancelFlag, ExportReport, ExportTransforms, OutputFormat, prepare_outputs, project_conversation,
@@ -77,8 +75,6 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
 
     let mut ingest = Ingest {
         tz,
-        // Walk the input tree once; per-attachment lookups hit this index.
-        attachment_index: copy_attachments.then(|| AttachmentIndex::build(input)),
         copy_attachments,
         conversations: BTreeMap::new(),
         claims: Vec::new(),
@@ -294,7 +290,6 @@ fn merge_group_into(into: &mut Conversation, other: Conversation) {
 /// Parse-time state shared across every CSV file in one export.
 struct Ingest {
     tz: Zone,
-    attachment_index: Option<AttachmentIndex>,
     copy_attachments: bool,
     conversations: BTreeMap<ConvoKey, Conversation>,
     /// Every row matched to a file, in the order the rows were read.
@@ -345,14 +340,29 @@ impl Ingest {
             }
         };
         let folder = csv_folder(discovered).to_path_buf();
+        // Each row's second as iMazing writes it into a file name, worked
+        // out once for both uses below.
+        let seconds: Vec<Option<String>> = rows
+            .iter()
+            .map(|row| file_name_second(&row.message_date))
+            .collect();
+        // Only a run that copies attachments looks for a row's file.
+        let sources = if self.copy_attachments {
+            row_sources(&rows, &seconds, &FolderFiles::read(&folder))
+        } else {
+            vec![None; rows.len()]
+        };
         let texts = self.folder_texts.entry(folder).or_default();
         let mut by_session: BTreeMap<String, Vec<(usize, &RawRow)>> = BTreeMap::new();
         for (row_index, row) in rows.iter().enumerate() {
             // Only a run that copies attachments looks at the folder's files
             // (`attach_unnamed_files`), so only it needs the texts.
-            if self.copy_attachments && !row.text.is_empty() {
+            if let Some(second) = &seconds[row_index]
+                && self.copy_attachments
+                && !row.text.is_empty()
+            {
                 texts
-                    .entry(file_name_second(&row.message_date))
+                    .entry(second.clone())
                     .or_default()
                     .push(row.text.clone());
             }
@@ -361,8 +371,12 @@ impl Ingest {
                 .or_default()
                 .push((row_index, row));
         }
+        let csv = CsvContext {
+            index: csv_index,
+            sources: &sources,
+        };
         for (session, session_rows) in by_session {
-            self.ingest_session(csv_index, discovered, &session, &session_rows);
+            self.ingest_session(&csv, discovered, &session, &session_rows);
         }
     }
 
@@ -372,7 +386,7 @@ impl Ingest {
     /// export writes one session to each CSV.
     fn ingest_session(
         &mut self,
-        csv_index: usize,
+        csv: &CsvContext<'_>,
         discovered: &DiscoveredCsv,
         session_name: &str,
         rows: &[(usize, &RawRow)],
@@ -391,7 +405,7 @@ impl Ingest {
             family: TransportFamily::from_kind(discovered.kind),
             chat_id: chat_id.clone(),
             group_session: session.key.is_group().then(|| GroupSession {
-                csv_index,
+                csv_index: csv.index,
                 session_name: session_name.to_string(),
             }),
         };
@@ -420,7 +434,8 @@ impl Ingest {
                 }
             });
         for &(row_index, row) in rows {
-            let Some(message) = self.message_from_row(discovered, row, &session) else {
+            let Some(message) = self.message_from_row(discovered, row, &session, csv, row_index)
+            else {
                 continue;
             };
             let messages = &mut self
@@ -435,7 +450,7 @@ impl Ingest {
                     source: PathBuf::from(source),
                     is_image: row.attachment_type.trim().eq_ignore_ascii_case("image"),
                     csv_name: row.attachment.clone(),
-                    order: (csv_index, row_index),
+                    order: (csv.index, row_index),
                     convo_key: convo_key.clone(),
                     message: messages.len(),
                 });
@@ -451,6 +466,8 @@ impl Ingest {
         discovered: &DiscoveredCsv,
         row: &RawRow,
         session: &Session,
+        csv: &CsvContext<'_>,
+        row_index: usize,
     ) -> Option<PendingMessage> {
         let Some(secs) = parse_message_date(&row.message_date, self.tz) else {
             self.report.skipped_invalid_date += 1;
@@ -460,7 +477,8 @@ impl Ingest {
         let is_from_me = !is_notification && is_outgoing(&row.msg_type);
         let (sender_handle, sender_display_name) =
             resolve_sender(row, is_from_me, is_notification, session);
-        let (attachments, attachment_extra) = self.attachment_for_row(discovered, row);
+        let (attachments, attachment_extra) =
+            attachment_for_row(row, csv.sources[row_index].as_deref());
         let service = if row.service.trim().is_empty() {
             match discovered.kind {
                 SourceKind::WhatsApp => "WhatsApp".to_string(),
@@ -500,49 +518,6 @@ impl Ingest {
             attachments,
             extra,
         })
-    }
-
-    /// The attachment a row names (iMazing rows carry at most one), plus the
-    /// sticker and transcription metadata that rides on the message.
-    fn attachment_for_row(
-        &self,
-        discovered: &DiscoveredCsv,
-        row: &RawRow,
-    ) -> (Vec<PendingAttachment>, BTreeMap<String, String>) {
-        if row.attachment.is_empty() {
-            return (Vec::new(), BTreeMap::new());
-        }
-        let csv_parent = csv_folder(discovered);
-        let (cell, source) = resolve_attachment_cell(ResolveAttachmentArgs {
-            csv_name: &row.attachment,
-            attachment_type: &row.attachment_type,
-            csv_parent,
-            index: self.attachment_index.as_ref(),
-            copy_attachments: self.copy_attachments,
-        });
-        let attachment = PendingAttachment {
-            rel_path: row.attachment.clone(),
-            content_type: cell.meta.mime_type.clone().unwrap_or_default(),
-            digest_sha256: None,
-            name_hint: cell.meta.original_name.clone(),
-        };
-        let mut extra = BTreeMap::new();
-        extra.insert(
-            "is_sticker".into(),
-            if cell.is_sticker { "true" } else { "false" }.into(),
-        );
-        extra.insert(
-            "transcription".into(),
-            cell.transcription.unwrap_or_default(),
-        );
-        extra.insert(
-            "sticker_effect".into(),
-            cell.sticker_effect.unwrap_or_default(),
-        );
-        if let Some(src) = source {
-            extra.insert(attachment_source_key(0), src.to_string_lossy().into_owned());
-        }
-        (vec![attachment], extra)
     }
 
     /// Deal with the files in each chat folder that no row names: attach a
@@ -635,6 +610,53 @@ impl Ingest {
 /// The chat folder a CSV sits in: the folder iMazing wrote its media into.
 fn csv_folder(discovered: &DiscoveredCsv) -> &Path {
     discovered.path.parent().unwrap_or_else(|| Path::new("."))
+}
+
+/// The attachment a row names (iMazing rows carry at most one), plus the
+/// sticker and transcription metadata that rides on the message.
+///
+/// `source` is the file iMazing wrote for the row ([`row_sources`]).
+fn attachment_for_row(
+    row: &RawRow,
+    source: Option<&Path>,
+) -> (Vec<PendingAttachment>, BTreeMap<String, String>) {
+    if row.attachment.is_empty() {
+        return (Vec::new(), BTreeMap::new());
+    }
+    let cell = attachment_cell(&row.attachment, &row.attachment_type);
+    let attachment = PendingAttachment {
+        rel_path: row.attachment.clone(),
+        content_type: cell.meta.mime_type.clone().unwrap_or_default(),
+        digest_sha256: None,
+        name_hint: cell.meta.original_name.clone(),
+    };
+    let mut extra = BTreeMap::new();
+    extra.insert(
+        "is_sticker".into(),
+        if cell.is_sticker { "true" } else { "false" }.into(),
+    );
+    extra.insert(
+        "transcription".into(),
+        cell.transcription.unwrap_or_default(),
+    );
+    extra.insert(
+        "sticker_effect".into(),
+        cell.sticker_effect.unwrap_or_default(),
+    );
+    if let Some(src) = source {
+        extra.insert(attachment_source_key(0), src.to_string_lossy().into_owned());
+    }
+    (vec![attachment], extra)
+}
+
+/// What the rows read from one CSV share: its place in the export and the
+/// file iMazing wrote for each row.
+struct CsvContext<'a> {
+    /// The CSV's place in discovery order.
+    index: usize,
+    /// Each row's file ([`row_sources`]), in the CSV's order. All `None`
+    /// when the run does not copy attachments.
+    sources: &'a [Option<PathBuf>],
 }
 
 fn collect_attachment_sources(convo: &PendingConversation, out: &mut Vec<Option<PathBuf>>) {

@@ -76,9 +76,10 @@ pub async fn attachment_count(conn: &mut SqliteConnection, scope: Scope) -> Resu
 
 /// Bytes of storage the attachments use, by their original `size_bytes`.
 ///
-/// An account stores an attachment file once for each source and SHA-256,
-/// however many messages name it, so each such file counts once: one video
-/// forwarded into ten messages counts as one video. An attachment row with no
+/// An account stores an attachment file once for each SHA-256, whatever the
+/// source and however many messages name it, so each such file counts once:
+/// one video forwarded into ten messages, or imported from two backups,
+/// counts as one video. An attachment row with no
 /// SHA-256 has no file of its own to share, so it counts by itself.
 pub async fn attachment_bytes(conn: &mut SqliteConnection, scope: Scope) -> Result<i64> {
     let filter = match scope {
@@ -88,7 +89,7 @@ pub async fn attachment_bytes(conn: &mut SqliteConnection, scope: Scope) -> Resu
     let sql = format!(
         "SELECT COALESCE(SUM(size_bytes), 0) FROM ( \
            SELECT MAX(a.size_bytes) AS size_bytes FROM {ATTACHMENTS_FROM} {filter} \
-           GROUP BY m.account_id, m.source, NULLIF(a.sha256, ''), \
+           GROUP BY m.account_id, NULLIF(a.sha256, ''), \
                     CASE WHEN NULLIF(a.sha256, '') IS NULL THEN a.id END)"
     );
     let mut query = sqlx::query_scalar(&sql);

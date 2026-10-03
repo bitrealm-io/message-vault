@@ -598,3 +598,31 @@ async fn deleting_one_sources_messages_for_good_keeps_the_file_the_other_names()
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body.as_bytes(), bytes);
 }
+
+/// #1174: the storage figure counts each file the account stores once. One
+/// file imported from two sources is one file on disk, so its size counts
+/// once.
+#[tokio::test]
+async fn a_file_imported_from_two_sources_counts_once_in_storage() {
+    let (fixture, alice) = fixture_with_account().await;
+    let bytes = b"one photo, two backups";
+    import_file_from(&fixture, &alice, "imessage", "+15555550140", bytes).await;
+    import_file_from(
+        &fixture,
+        &alice,
+        "sms-backup-restore",
+        "+15555550141",
+        bytes,
+    )
+    .await;
+
+    let mut conn = fixture.conn().await;
+    let stored = crate::db::storage::attachment_bytes(
+        &mut conn,
+        crate::db::storage::Scope::Account(alice.account_id),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(stored, i64::try_from(bytes.len()).unwrap());
+}

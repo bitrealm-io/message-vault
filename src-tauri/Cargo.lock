@@ -2294,6 +2294,7 @@ version = "0.10.0"
 dependencies = [
  "anyhow",
  "build-version",
+ "chrono",
  "dirs 7.0.0",
  "go-sms-pro-exporter",
  "httpmock",

@@ -136,12 +136,12 @@ fn next_offset(offset: usize, limit: usize, total: u64) -> Option<usize> {
 /// `attachments/` child.
 ///
 /// The sentinel names this folder as one an export wrote. The desktop app
-/// refuses to clean or transcode a folder without it
-/// (`resolve_staging_child` in `src-tauri/src/commands/staging.rs`), which is
-/// what stands between a path bug and a recursive delete somewhere else on
-/// disk. A pulled folder that skipped the sentinel could not be used as
-/// export staging. Because a marked folder may be cleaned by a later export,
-/// a folder of the person's own files is refused rather than marked
+/// refuses to act on a staging folder without it
+/// (`StagingFolders::folder` in `src-tauri/src/staging_folders.rs`), which is
+/// part of what stands between a path bug and a recursive delete somewhere
+/// else on disk. A pulled folder that skipped the sentinel could not be used
+/// as export staging. Because a marked folder may be cleaned by a later
+/// export, a folder of the person's own files is refused rather than marked
 /// ([`mark_export_folder`]). The folder is marked before `attachments/` is
 /// created, so a new folder is still empty when it is checked.
 ///

@@ -10,7 +10,7 @@ const invokePull = vi.hoisted(() => vi.fn());
 const invokeFormat = vi.hoisted(() => vi.fn());
 const invokeDeleteStaging = vi.hoisted(() => vi.fn());
 const invokeCancel = vi.hoisted(() => vi.fn());
-const resolveExportStagingDir = vi.hoisted(() => vi.fn());
+const invokeCreateStagingDir = vi.hoisted(() => vi.fn());
 const awaitTauriJob = vi.hoisted(() => vi.fn());
 
 vi.mock("../lib/tauri-check", () => ({
@@ -24,18 +24,11 @@ vi.mock("../lib/tauri", async (importOriginal) => {
     invokePull: (...args: unknown[]) => invokePull(...args),
     invokeFormat: (...args: unknown[]) => invokeFormat(...args),
     invokeDeleteStaging: (...args: unknown[]) => invokeDeleteStaging(...args),
+    invokeCreateStagingDir: (...args: unknown[]) => invokeCreateStagingDir(...args),
     invokeCancel: (...args: unknown[]) => invokeCancel(...args),
     // The job's name comes first; the mocks below take what follows it.
     awaitTauriJob: (_job: string, ...args: unknown[]) => awaitTauriJob(...args),
     onExtractEvents: vi.fn(async () => () => {}),
-  };
-});
-
-vi.mock("../lib/system-settings", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/system-settings")>();
-  return {
-    ...actual,
-    resolveExportStagingDir: (...args: unknown[]) => resolveExportStagingDir(...args),
   };
 });
 
@@ -57,9 +50,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
-  resolveExportStagingDir.mockResolvedValue(
-    "/home/demo/message-crate/staging-export-260831-120000",
-  );
+  invokeCreateStagingDir.mockResolvedValue("/home/demo/message-crate/staging-export-260831-120000");
   // The hook's `run` goes through awaitTauriJob: call the invoke and resolve.
   awaitTauriJob.mockImplementation(async (invokeFn: () => Promise<void>) => {
     await invokeFn();
@@ -111,7 +102,7 @@ describe("ExportScreen", () => {
     expect(invokePull.mock.calls[0][0]).toMatchObject({ out_dir: "/home/demo/out", query: "" });
     // JSONL is what pull already writes, so there is nothing to convert and
     // no staging folder to make or remove.
-    expect(resolveExportStagingDir).not.toHaveBeenCalled();
+    expect(invokeCreateStagingDir).not.toHaveBeenCalled();
     expect(invokeFormat).not.toHaveBeenCalled();
     expect(invokeDeleteStaging).not.toHaveBeenCalled();
   });
@@ -189,7 +180,7 @@ describe("ExportScreen", () => {
     const pullStarted = new Promise<void>((resolve) => {
       releasePull = resolve;
     });
-    resolveExportStagingDir.mockImplementation(async () => {
+    invokeCreateStagingDir.mockImplementation(async () => {
       await pullStarted;
       return "/home/demo/message-crate/staging-export-260831-120000";
     });
@@ -208,7 +199,7 @@ describe("ExportScreen", () => {
 
     await waitFor(() => expect(invokeFormat).toHaveBeenCalledTimes(1));
     expect(invokePull).toHaveBeenCalledTimes(1);
-    expect(resolveExportStagingDir).toHaveBeenCalledTimes(1);
+    expect(invokeCreateStagingDir).toHaveBeenCalledTimes(1);
   });
 
   it("opens in Everything with no query box, and offers the box under Search", async () => {
@@ -338,12 +329,12 @@ describe("ExportScreen", () => {
     // job starts; the earlier message must not stay up through that wait.
     const user = await exportTo("/a");
     await screen.findByText(/Export complete/);
-    resolveExportStagingDir.mockImplementation(() => new Promise<string>(() => {}));
+    invokeCreateStagingDir.mockImplementation(() => new Promise<string>(() => {}));
     await user.click(screen.getByRole("button", { name: /Format/ }));
     await user.click(await screen.findByRole("option", { name: "CSV (.csv)" }));
     await user.click(screen.getByRole("button", { name: "Export" }));
 
-    await waitFor(() => expect(resolveExportStagingDir).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(invokeCreateStagingDir).toHaveBeenCalledTimes(1));
     expect(screen.queryByText(/Export complete/)).toBeNull();
   });
 });

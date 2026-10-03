@@ -45,10 +45,12 @@ export default function ConversationList({
   const { tags: allTags } = useMessageTags();
   const setRightToolbar = useSetRightToolbar();
 
-  useEffect(() => {
-    void query;
+  // A new query unticks every row, so a tick never applies to a row the list no longer shows.
+  const [checkedForQuery, setCheckedForQuery] = useState(query);
+  if (checkedForQuery !== query) {
+    setCheckedForQuery(query);
     setCheckedIds(new Set());
-  }, [query]);
+  }
 
   useEffect(() => {
     // A query that names a word applies at once, so the list does not flash empty.

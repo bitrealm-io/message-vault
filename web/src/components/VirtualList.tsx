@@ -1,5 +1,5 @@
 import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
-import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useReducer, useRef } from "react";
 import { resizeHandleGutter } from "../lib/tw";
 import { useColumnResizing } from "./columnResizeState";
 
@@ -86,7 +86,7 @@ export default function VirtualList({
   const throttleTimerRef = useRef<number | null>(null);
   const lastScrollHeightRef = useRef<number | null>(null);
   // After layout or resize, re-read scroll size once the DOM has a height.
-  const [layoutTick, setLayoutTick] = useState(0);
+  const [, rerender] = useReducer((n: number) => n + 1, 0);
 
   // While the user drags the column width, skip per-row measurement so the list does not jump.
   const columnResizing = useColumnResizing();
@@ -113,7 +113,7 @@ export default function VirtualList({
     const raf1 = requestAnimationFrame(() => {
       raf2 = requestAnimationFrame(() => {
         virtualizer.measure();
-        setLayoutTick((n) => n + 1);
+        rerender();
       });
     });
     return () => {
@@ -132,7 +132,6 @@ export default function VirtualList({
     count,
     visibleBottomInset,
   );
-  void layoutTick;
   const nextRangeStart = nextRange.start;
   const nextRangeEnd = nextRange.end;
 
@@ -202,12 +201,12 @@ export default function VirtualList({
       lastScrollHeightRef.current = nextH;
       if (columnResizing) return;
       virtualizer.measure();
-      setLayoutTick((n) => n + 1);
+      rerender();
     });
     ro.observe(el);
     // First paint often has height 0 until flex layout finishes.
     lastScrollHeightRef.current = el.clientHeight;
-    setLayoutTick((n) => n + 1);
+    rerender();
     return () => ro.disconnect();
     // `count` is deliberately not a dependency: the observed element does not
     // change when rows are appended, and re-running this called

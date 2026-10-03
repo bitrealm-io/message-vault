@@ -276,6 +276,8 @@ function OneContactDrawer({
       style={panelStyle}
     >
       <ContactDrawerHandles
+        // A new contact starts with its dialogs closed and no error left from the last one.
+        key={contactId}
         contactId={contactId}
         handleRows={handleRows}
         conversations={

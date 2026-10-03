@@ -244,15 +244,13 @@ function activeSeeds(
     : { header: seeds.lightHeader, accent: seeds.lightAccent };
 }
 
-/** Write the chosen mode and colors onto `<html>` as `data-theme` and CSS variables. */
-export function applyTheme(mode: ThemeMode, seeds: ThemeSeeds): ResolvedTheme {
-  const resolved = resolveMode(mode);
+/** Write the resolved theme and its colors onto `<html>` as `data-theme` and CSS variables. */
+export function applyTheme(resolved: ResolvedTheme, seeds: ThemeSeeds): void {
   const { header, accent } = activeSeeds(seeds, resolved);
   const root = document.documentElement;
   root.setAttribute("data-theme", resolved);
   root.style.setProperty("--header", header);
   root.style.setProperty("--accent", accent);
-  return resolved;
 }
 
 /** Read the saved appearance mode, or the default when nothing is stored or storage is blocked. */

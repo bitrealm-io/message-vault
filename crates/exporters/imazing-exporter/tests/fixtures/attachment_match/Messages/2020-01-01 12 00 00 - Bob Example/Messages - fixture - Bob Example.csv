@@ -23,3 +23,4 @@ Bob Example,2020-01-01 12:15:00,iMessage,Incoming,+15555550101,Bob Example,Read,
 Bob Example,2020-01-01 12:15:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,lower-case extension,,snap.jpg,Image
 Bob Example,2020-01-01 12:16:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,first of a pair,,image0.jpg,Image
 Bob Example,2020-01-01 12:16:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,second of a pair,,image0.jpg,Image
+Bob Example,2020-01-01 12:17:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,label ends with a dash,,dash.jpg,Image

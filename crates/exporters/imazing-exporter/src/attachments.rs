@@ -94,10 +94,12 @@ impl FolderFiles {
             }
             // Every ` - ` at or after the label's start can begin the name
             // part, because the label may be empty and the name may hold
-            // ` - ` itself.
-            let ends: Vec<String> = name[label_start..]
-                .match_indices(SEPARATOR)
-                .map(|(at, _)| name[label_start + at + SEPARATOR.len()..].to_string())
+            // ` - ` itself. Two of them can overlap, as in ` - - ` when the
+            // label ends with ` -`, so each byte is a possible start. The
+            // separator is ASCII, so the name after it starts on a character.
+            let ends: Vec<String> = (label_start..name.len())
+                .filter(|&at| name.as_bytes()[at..].starts_with(SEPARATOR.as_bytes()))
+                .map(|at| name[at + SEPARATOR.len()..].to_string())
                 .collect();
             let second_files = by_second.entry(second.to_string()).or_default();
             let index = second_files.files.len();

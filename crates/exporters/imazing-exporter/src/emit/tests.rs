@@ -1339,6 +1339,8 @@ fn each_row_gets_the_file_imazing_wrote_for_it_in_its_own_folder() {
         // nothing tells whose it is.
         ("first of a pair", "file_missing"),
         ("second of a pair", "file_missing"),
+        // The label ends with ` -`, so the file name holds ` - - `.
+        ("label ends with a dash", "label ends with a dash"),
     ] {
         assert_eq!(file_of(text), file, "{text}");
     }

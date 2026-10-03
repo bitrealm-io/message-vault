@@ -6,10 +6,6 @@ import type { MessageAttachment } from "../lib/types";
 import { Z_MODAL } from "../lib/zLayers";
 import PlainButton from "./PlainButton";
 
-export type LightboxItem = {
-  attachment: MessageAttachment;
-};
-
 export default function AttachmentLightbox({
   items,
   currentIndex,
@@ -17,14 +13,13 @@ export default function AttachmentLightbox({
   onPrev,
   onNext,
 }: {
-  items: LightboxItem[];
+  items: MessageAttachment[];
   currentIndex: number;
   onClose: () => void;
   onPrev: () => void;
   onNext: () => void;
 }) {
-  const item = items[currentIndex];
-  const attachment = item?.attachment;
+  const attachment = items[currentIndex];
   // Opening an attachment gives the original. When the browser cannot draw
   // those bytes and the attachment has a preview, the viewer shows the preview.
   const [undrawable, setUndrawable] = useState<string | null>(null);

@@ -4,32 +4,29 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchAssetObjectUrl } from "../lib/serverApi";
-import AttachmentLightbox, { type LightboxItem } from "./AttachmentLightbox";
+import type { MessageAttachment } from "../lib/types";
+import AttachmentLightbox from "./AttachmentLightbox";
 
 vi.mock("../lib/serverApi", () => ({
   fetchAssetObjectUrl: vi.fn().mockResolvedValue("blob:mock-url"),
 }));
 
-const items: LightboxItem[] = [
+const items: MessageAttachment[] = [
   {
-    attachment: {
-      path: "first.png",
-      original_name: "first.png",
-      mime_type: "image/png",
-      sha256: "aaa",
-      is_sticker: false,
-      transcription: null,
-    },
+    path: "first.png",
+    original_name: "first.png",
+    mime_type: "image/png",
+    sha256: "aaa",
+    is_sticker: false,
+    transcription: null,
   },
   {
-    attachment: {
-      path: "second.png",
-      original_name: "second.png",
-      mime_type: "image/png",
-      sha256: "bbb",
-      is_sticker: false,
-      transcription: null,
-    },
+    path: "second.png",
+    original_name: "second.png",
+    mime_type: "image/png",
+    sha256: "bbb",
+    is_sticker: false,
+    transcription: null,
   },
 ];
 
@@ -42,7 +39,7 @@ afterEach(() => {
 });
 
 /** Render the viewer over `items`, with a spy on each callback. */
-function open(currentIndex = 0, over: LightboxItem[] = items) {
+function open(currentIndex = 0, over: MessageAttachment[] = items) {
   const spies = { onClose: vi.fn(), onPrev: vi.fn(), onNext: vi.fn() };
   render(<AttachmentLightbox items={over} currentIndex={currentIndex} {...spies} />);
   return spies;
@@ -155,13 +152,11 @@ describe("AttachmentLightbox buttons", () => {
  * back to the preview, so a HEIC photo does not open as a broken image.
  */
 describe("AttachmentLightbox and previews", () => {
-  const heic: LightboxItem = {
-    attachment: {
-      original_name: "IMG_0001.heic",
-      mime_type: "image/heic",
-      sha256: "ccc",
-      preview_mime_type: "image/jpeg",
-    },
+  const heic: MessageAttachment = {
+    original_name: "IMG_0001.heic",
+    mime_type: "image/heic",
+    sha256: "ccc",
+    preview_mime_type: "image/jpeg",
   };
 
   it("opens the original of an attachment that has a preview", async () => {

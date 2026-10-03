@@ -1,5 +1,5 @@
 import { useCallback, useDeferredValue, useMemo, useState } from "react";
-import AttachmentLightbox, { type LightboxItem } from "../components/AttachmentLightbox";
+import AttachmentLightbox from "../components/AttachmentLightbox";
 import {
   type ContactPreview,
   contactPreviewFromThreadParticipants,
@@ -31,7 +31,7 @@ export default function MessageView({
   const thread = useConversationMessages(conversation.id, openAt);
   const { messages, find } = thread;
 
-  const [lightboxItems, setLightboxItems] = useState<LightboxItem[] | null>(null);
+  const [lightboxItems, setLightboxItems] = useState<MessageAttachment[] | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [showSources, setShowSources] = useState(false);
 
@@ -45,12 +45,10 @@ export default function MessageView({
   const handleAttachmentClick = useCallback(
     (att: MessageAttachment) => {
       const images = messages.flatMap((m) =>
-        (m.attachments || [])
-          .filter((a) => a.sha256 && shownMimeType(a)?.startsWith("image/"))
-          .map((a) => ({ attachment: a })),
+        (m.attachments || []).filter((a) => a.sha256 && shownMimeType(a)?.startsWith("image/")),
       );
-      const idx = images.findIndex((item) => item.attachment.sha256 === att.sha256);
-      setLightboxItems(images.length > 0 ? images : [{ attachment: att }]);
+      const idx = images.findIndex((a) => a.sha256 === att.sha256);
+      setLightboxItems(images.length > 0 ? images : [att]);
       setLightboxIndex(idx >= 0 ? idx : 0);
     },
     [messages],

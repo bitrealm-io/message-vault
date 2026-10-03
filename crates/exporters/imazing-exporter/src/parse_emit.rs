@@ -116,9 +116,10 @@ pub(super) fn collect_peer_info(kind: SourceKind, session: &str, rows: &[&RawRow
 }
 
 /// Parse an iMazing date string (`YYYY-MM-DD HH:MM[:SS]`, no zone) in `zone`
-/// into `(unix_secs, date_ms)`. [`Zone::instant`] settles a wall clock that a
-/// daylight-saving change repeats or skips, so every parsable row is kept.
-pub(super) fn parse_message_date(raw: &str, zone: Zone) -> Option<(i64, String)> {
+/// into Unix seconds. iMazing records whole seconds only. [`Zone::instant`]
+/// settles a wall clock that a daylight-saving change repeats or skips, so
+/// every parsable row is kept.
+pub(super) fn parse_message_date(raw: &str, zone: Zone) -> Option<i64> {
     let raw = raw.trim();
     if raw.is_empty() {
         return None;
@@ -126,8 +127,7 @@ pub(super) fn parse_message_date(raw: &str, zone: Zone) -> Option<(i64, String)>
     let naive = NaiveDateTime::parse_from_str(raw, "%Y-%m-%d %H:%M:%S")
         .or_else(|_| NaiveDateTime::parse_from_str(raw, "%Y-%m-%d %H:%M"))
         .ok()?;
-    let secs = zone.instant(naive)?.timestamp();
-    Some((secs, (secs * 1000).to_string()))
+    Some(zone.instant(naive)?.timestamp())
 }
 
 /// True for rows the exporter treats as sent (`outgoing`/`sent` types).

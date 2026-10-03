@@ -57,8 +57,6 @@ pub(crate) struct AssetUpload<'a> {
 pub(crate) struct ImportOutcome<'a> {
     /// `completed`, `completed_with_issues`, or `failed`.
     pub status: &'a str,
-    pub message_count: u64,
-    pub attachment_count: u64,
     pub bytes_uploaded: u64,
 }
 
@@ -338,8 +336,6 @@ impl Session {
     ) -> Result<()> {
         let body = serde_json::json!({
             "status": outcome.status,
-            "message_count": outcome.message_count,
-            "attachment_count": outcome.attachment_count,
             "bytes_uploaded": outcome.bytes_uploaded,
         });
         let response = self

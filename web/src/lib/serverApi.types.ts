@@ -90,12 +90,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List the account's named API tokens with their permissions and masked secrets. */
+        /**
+         * List the account's named API tokens with their permissions and masked secrets.
+         * @description Each token's permissions are capped by the account's as they are now.
+         */
         get: operations["list_api_tokens"];
         put?: never;
         /**
          * Create a named API token.
-         * @description Returns the plaintext secret once, at creation; it is never returned again.
+         * @description Returns the plaintext secret once, at creation; it is never returned again. The token's permissions are those the request asks for and the account holds.
          */
         post: operations["create_api_token"];
         delete?: never;
@@ -1511,11 +1514,11 @@ export interface components {
         };
         /**
          * @description Final stats and issues for a running Import Run. The outcome is stated
-         *     once, as `status`.
+         *     once, as `status`. The run's message and attachment counts are not part
+         *     of it: the server counts what the run holds, since a resumed Upload's
+         *     client knows only what the resume sent.
          */
         CompleteImportRequest: {
-            /** Format: int64 */
-            attachment_count?: number | null;
             /** Format: int64 */
             attachments_ms?: number | null;
             /** Format: int64 */
@@ -1523,8 +1526,6 @@ export interface components {
             /** Format: int64 */
             duration_ms?: number | null;
             issues?: components["schemas"]["CompleteImportIssueRequest"][];
-            /** Format: int64 */
-            message_count?: number | null;
             /** Format: int64 */
             parse_ms?: number | null;
             /** Format: int64 */

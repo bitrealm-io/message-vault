@@ -17,8 +17,7 @@
 # builds the optimized binary for seeding and serving. Restart this process
 # after Rust changes.
 #
-# Does not overwrite an existing config/config.toml except after reset-demo,
-# which replaces that file with a demo config that has no [server] section.
+# Writes config/config.toml from the example only when the file is missing.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -188,7 +187,6 @@ if [[ "${DEMO}" -eq 1 ]]; then
   require_cmd ffprobe
   echo "Seeding demo data (${SIZE})…"
   server_cli reset-demo --size "${SIZE}" --config "${CONFIG}"
-  write_host_dev_config
   echo "Converting demo media…"
   server_cli process-assets --config "${CONFIG}" \
     || echo "warning: process-assets failed; UI still works"

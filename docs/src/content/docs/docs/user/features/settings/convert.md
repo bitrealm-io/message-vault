@@ -58,6 +58,10 @@ A folder must hold exactly one format.
 A folder that holds more than one is refused with `unsupported input: mixed formats`, followed by the formats and files found, because Convert can't tell which export to read.
 A folder that holds none is refused with `unsupported input: no Message Crate IR export found`.
 
+A `.json` or `.jsonl` export of another schema version, such as an export written before version 4, is refused with "This file is schema version 3; Message Crate reads version 4" and the file's name.
+Nothing is upgraded: export the conversations again with the current app.
+Convert reads every file before it writes, so a refused file stops the whole run and the output folder is left as it was.
+
 ## What it writes
 
 | **Output format** | Shape | Media |
@@ -75,11 +79,11 @@ The folder layout is described in [Export structure](/docs/developer/reference/e
 
 Convert clears an earlier export out of the output folder before it writes.
 A second run into the same output folder therefore replaces the first instead of mixing with it.
-Writing into the input folder would delete the files being read.
+Writing into the input folder, or into a folder that holds it, would delete the files being read.
 
 Two checks prevent that.
 The screen keeps **Convert** disabled while both fields name the same folder, and says "Choose a different output folder."
-The conversion itself refuses two paths that resolve to one folder, with `input and output directories must be different`.
+The conversion itself refuses an output folder that resolves to the input folder or to a folder above it, with `output <folder> must not be the same as, or contain, the input <folder>`.
 The second check also catches a symbolic link that points at the input folder.
 
 ## What the output folder may hold

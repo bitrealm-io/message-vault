@@ -17,17 +17,29 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 Bullets under the version still in development carry the date they landed;
 released versions carry their date on the heading.
 
-## [0.10.0] - 2026-10-01
+## [0.10.0] — in development
 
 ### Features
 
-- **WhatsApp imports from an encrypted iPhone backup.** WhatsApp → iPhone
-  on the Import form now has an **Encryption password** field, the same one
-  iMessage has. The app sees that a backup is encrypted and asks for the
-  password before the import starts. The encrypted backup you made for your
-  iPhone messages now serves for WhatsApp too; a second, unencrypted backup
-  is no longer needed.
-- **A WhatsApp import knows which number is yours.** Every
+- 2026-09-22 **One identity table, on the contact drawer and on an account's
+  Profile.** An account's identities now show what a contact's do: the
+  service, the address, when it was first and last heard from, and how many
+  conversations, direct messages and group messages it takes part in. The
+  columns line up under their headers, the sort arrow sits next to the
+  label, and every row ends with a visible Remove. Adding an identity opens
+  a small dialog instead of a permanent row under the table, and the dialog
+  offers Email everywhere, so a contact can be given an email address by
+  hand.
+- 2026-09-22 **The Dashboard shows where a Message Crate's disk space goes.**
+  Owner Home's Dashboard is now three sections. Contents is the card it
+  had. Database shows the size of the database on disk, how much of it the
+  messages take and how much the full-text search index adds, all measured
+  by the server. Messages by account lists every account with its message
+  count, its text and an estimated size on disk, split from the messages
+  figure by each account's share of text, with a totals row so the split
+  visibly adds up. Attachment files are counted under Contents, not in
+  the database size.
+- 2026-09-24 **A WhatsApp import knows which number is yours.** Every
   imported WhatsApp message now records the phone number your WhatsApp
   account is registered to, so its conversations count toward that identity
   in Settings. An iPhone backup carries the number, and Import reads it from
@@ -36,53 +48,122 @@ released versions carry their date on the heading.
   iPhone the same field sits under Processing Options as a fallback for a
   backup without the number. The number is recorded on the messages and is
   not added to your profile.
-- **Search contacts by what they sent you.** On Contacts, every
-  word that counts or dates messages now counts only the messages the
-  contact sent you, in a direct or a group conversation. `messages:0` is
-  everyone who never messaged you, which is what the Advanced Search form's
-  Never messaged always said; `date:2019` is everyone who wrote to you in
-  2019; and `first-message:` and `last-message:` are the first and last
-  message a contact sent, so `-last-message:>=2022` lists everyone you have
-  not heard from since 2022, including people who never messaged you. Your
-  own messages and other people's messages in a shared group chat no longer
-  count towards a contact. On Conversations and Messages the same words
-  still mean the conversation's messages. The contact drawer's message
-  count follows the same rule. The Advanced Search contacts form's date
-  fields are First message and Last message, and Trash's form has them too.
-- **One identity table, on the contact drawer and on an account's
-  Profile.** An account's identities now show what a contact's do: the
-  service, the address, when it was first and last seen, and how many
-  conversations, direct messages and group messages it takes part in. The
-  columns line up under their headers, the sort arrow sits next to the
-  label, and every row ends with a visible Remove. Adding an identity opens
-  a small dialog instead of a permanent row under the table, and the dialog
-  offers Email everywhere, so a contact can be given an email address by
-  hand.
-- **The Dashboard shows where the vault's disk space goes.**
-  Owner Home's Dashboard is now three sections. Vault contents is the card it
-  had. Database shows the size of the database on disk, how much of it the
-  messages take and how much the full-text search index adds, all measured
-  by the vault. Messages by account lists every account with its message
-  count, its text and an estimated size on disk, split from the messages
-  figure by each account's share of text, with a totals row so the split
-  visibly adds up. Attachment files are counted under Vault contents, not in
-  the database size.
+- 2026-09-24 **Search contacts by what they sent you.** On Contacts, every
+  word that counts or dates messages now counts only the messages the contact
+  sent you, in a direct or a group conversation. `messages:0` is everyone who
+  never messaged you, which is what the Advanced Search form's Never messaged
+  always said; `date:2019` is everyone who wrote to you in 2019; and
+  `first-message:` and `last-message:` are the first and last message a
+  contact sent, so `-last-message:>=2022` lists everyone you have not heard
+  from since 2022, including people who never messaged you. Your own messages
+  and other people's messages in a shared group conversation no longer count
+  towards a contact. On Conversations and Messages the same words still mean
+  the conversation's messages. The contact drawer's message count follows the
+  same rule. The Advanced Search contacts form's date fields are First message
+  and Last message, and Trash's form has them too.
+- 2026-10-01 **The desktop app is a Message Crate on its own.** The
+  installer now carries the server and the website. When you open the app
+  and nothing answers on this computer at its usual address, the app starts
+  its own Message Crate, keeps its data in your system's app-data folder,
+  and stops it when the app closes. A Message Crate already running there,
+  such as one in Docker, is used as it is. Settings → System has an **Open
+  data folder** button. Trying Message Crate no longer needs Docker.
+- 2026-10-01 **Every new Message Crate starts with the Demo Account.** A
+  Message Crate with no database creates one holding the Demo Account and
+  its Demo Data, about 54,000 messages, before it opens its doors, whether
+  Docker or the desktop app started it. The login card has an **Explore Demo
+  Account** button, so nobody has to look up a username. No owner is made
+  for you any more, so a Message Crate never has a published owner password:
+  you claim it by creating the Owner. The Demo Account's limits are fixed
+  rather than settings: it can export, it can't import or delete messages
+  for good, and nobody can change its password, status, permissions or
+  identities. Its photos, videos and audio show and play on a computer with
+  no ffmpeg.
+- 2026-10-01 **The Owner adds or resets the Demo Account from Owner Home.**
+  Server Settings has a Demo Account card that adds it back after it was
+  deleted, or puts it back the way it started, with a choice of the medium
+  set or the large one of about 613,000 messages. No restart and no command
+  line are needed. The Demo Account's page under User Accounts is read-only
+  apart from Delete.
+- 2026-10-01 **The Owner sets the attachment size limit.** The largest
+  attachment the server accepts is now one number under Owner Home → Server
+  Settings, 512 MiB until the Owner changes it. The desktop app reads it
+  before Staging, so the Staging Review, Media and the Upload measure every
+  file against the limit that is really in force. Before, the desktop app
+  left out any file over 50 MiB of its own accord, whatever the server would
+  take.
+- 2026-10-01 **A conversation shows an attachment's Preview.** A HEIC photo
+  or an HEVC video imported with Attachments → Copy now shows in any
+  browser, once the server has made its Preview. Opening the attachment
+  still gives the original.
+- 2026-10-01 **The Address Book is a spreadsheet you export, edit, and load
+  back.** Contacts arrive with your messages, so the Address Book is no
+  longer where they come from. It is how you fix many of them at once.
+  **Export** on the Contacts screen writes the contacts you are looking at
+  (a search, a Contact Group such as Unknown, or the rows you checked) to a
+  CSV file with one row for each identity. Fill in names, Contact Groups,
+  and identities in a spreadsheet, then load the file under Settings, on the
+  Profile tab. **Append** adds and renames and removes nothing. **Edit**
+  also makes each contact in the file match its rows, so deleting a row
+  takes that identity off the contact. Contacts the file does not mention
+  are left alone. A file with a mistake in it is refused whole, and each row
+  at fault is listed with its reason, so nothing is half loaded. Message
+  Crate no longer reads a phone's vCard file, which put every number on a
+  card into your contacts whether or not a message ever used it.
+- 2026-10-01 **The Demo Account has Contact Groups.** Demo Data is now built
+  the way your own Message Crate is: its messages are imported first, and an
+  Address Book then names the people in them and puts them in Family, Work,
+  College, and Inactive.
+- 2026-10-01 **The header names the account you are logged in as.** The
+  username sits beside the account button for every account, the Owner
+  included, so on a Message Crate several people share you can see whose
+  messages are on screen.
+- 2026-10-01 **Import and Export say when your account may not use them.**
+  In the desktop app, an account the Owner has not allowed to import or
+  export sees a message saying so in place of the form, instead of filling
+  it in and being refused partway through. The Demo Account's Import screen
+  says importing needs a personal account and offers **Log out**.
+- 2026-10-02 **WhatsApp imports from an encrypted iPhone backup.** WhatsApp
+  → iPhone on the Import form now has an **Encryption password** field, the
+  same one iMessage has. The app sees that a backup is encrypted and asks
+  for the password before the import starts. The encrypted backup you made
+  for your iPhone messages now serves for WhatsApp too; a second,
+  unencrypted backup is no longer needed.
 
 ### Design
 
-- **The project moved.** The repository is now
+- 2026-09-22 **An account identity means ownership.** The Profile tab now
+  says what the identities are for: your phone numbers and emails, which
+  Import uses to determine which messages belong to you. The glossary and
+  the architecture notes record the same distinction: a contact's identity
+  means the person took part, an account's means the messages are theirs.
+- 2026-09-22 **Profile Setup shows the identities already on your account
+  in their own fields.** Phone numbers and emails the Owner added
+  now fill the rows, where you can change or remove them before going on,
+  instead of sitting in a line of text above them.
+- 2026-09-22 **Shorter wording on two screens.** The screen that creates
+  the Owner now opens with "An owner is required to create and manage
+  users.", and
+  the Display Name button in Settings reads Save without changing to Saved.
+- 2026-09-23 **A contact's identities read the same as an account's.** The
+  contact drawer now shows each identity in the form Message Crate stores it,
+  a phone number in international form, and names an email address as
+  Email, just as the Profile tab does. Message Crate counts both tables the
+  same way. Under the surface, the server's interface and code were renamed
+  to use the words the product uses, with nothing else to see.
+- 2026-09-30 **The project moved.** The repository is now
   `messagecrate/message-crate`, the documentation is at
   <https://messagecrate.app/docs/>, the hosted product answers at
   <https://my.messagecrate.app>, and the Docker image is
   `bitrealm/message-crate`. Every error response's `type` URL now points at
   the new documentation host.
-- **Message Vault is now Message Crate.** Every screen, every page
+- 2026-09-30 **Message Vault is now Message Crate.** Every screen, every page
   of the documentation, every error message and the HTTP API reference use
   the new name, and the word "vault" is gone from all of them. One
   installation is "a Message Crate", the account that runs it is the
   "Owner", and the owner's installation-wide settings are "Server Settings".
   The desktop app's window and installers carry the new name.
-- **Everything that was named after the old product has a new
+- 2026-09-30 **Everything that was named after the old product has a new
   name, and nothing old still works.** The owner's routes are under
   `/v1/server`. Session and API tokens start `mc-user-` and `mc-api-`, so
   every existing token stops working and everyone logs in again. The
@@ -91,106 +172,50 @@ released versions carry their date on the heading.
   staging folder defaults to `~/message-crate`. The Docker environment
   variables are `MC_DB` and `MC_DATA_DIR`, the compose service is `server`,
   and the desktop app installs as a new application beside any older copy.
-
-- **An account identity means ownership.** The Profile tab now
-  says what the identities are for: your phone numbers and emails, which
-  Import uses to determine which messages belong to you. The glossary and
-  the architecture notes record the same distinction: a contact's identity
-  means the person took part, an account's means the messages are theirs.
-- **Profile Setup shows the identities already on your account
-  in their own fields.** Phone numbers and emails the vault owner added
-  now fill the rows, where you can change or remove them before going on,
-  instead of sitting in a line of text above them.
-- **Shorter wording on two screens.** Create Vault Owner now
-  opens with "A vault owner is required to create and manage users.", and
-  the Display Name button in Settings reads Save without changing to Saved.
-- **A contact's identities read the same as an account's.** The
-  contact drawer now shows each identity in the form the vault stores it,
-  a phone number in international form, and names an email address as
-  Email, just as the Profile tab does. The vault counts both tables the
-  same way. Under the surface, the vault's interface and code were renamed
-  to use the words the product uses, with nothing else to see.
-- **The server runs on SQLite only.** A Message Crate could also
+- 2026-10-01 **The user guide starts with the desktop app.** It is now in
+  two parts. Try Message Crate installs the desktop app and looks around the
+  Demo Account. Your own messages creates the Owner and an account, backs up
+  a phone, and imports it, all on the same Message Crate. Docker is no
+  longer the first step.
+- 2026-10-01 **The server runs on SQLite only.** A Message Crate could also
   keep its database on a Postgres server, which existed for a hosted service
   that is not built yet. That option is removed, so the server is simpler to
   run and to change. Postgres support comes back with the hosted service.
-- **The Address Book is a spreadsheet you export, edit, and load back.**
-  Contacts arrive with your messages, so the Address Book is no longer where
-  they come from. It is how you fix many of them at once. **Export** on the
-  Contacts screen writes the contacts you are looking at (a search, a
-  Contact Group such as Unknown, or the rows you checked) to a CSV file with
-  one row for each identity. Fill in names, Contact Groups, and identities in
-  a spreadsheet, then load the file under Settings, on the Profile tab.
-  **Append** adds and renames and removes nothing. **Edit** also makes each
-  contact in the file match its rows, so deleting a row takes that identity
-  off the contact. Contacts the file does not mention are left alone. A file
-  with a mistake in it is refused whole, and each row at fault is listed with
-  its reason, so nothing is half loaded. Message Crate no longer reads a
-  phone's vCard file, which put every number on a card into your contacts
-  whether or not a message ever used it.
-- **The Demo Account has Contact Groups.** Demo Data is now built the way
-  your own Message Crate is: its messages are imported first, and an Address
-  Book then names the people in them and puts them in Family, Work, College,
-  and Inactive.
+- 2026-10-01 **Force reprocessing is gone from the Import form.** It changed
+  nothing on a new Import Run, and on a resumed Upload it only sent
+  everything again, which made the resume slower and the Duplicate counts
+  higher.
+- 2026-10-01 **The server refuses a configuration file it doesn't
+  understand.** A section or key the server does not use, a misspelt one
+  included, stops it at startup with the name and section of each, instead
+  of being ignored.
+- 2026-10-02 **A stopped Upload is paused, not finished.** Pressing the
+  Upload's button now pauses the Import Run and keeps what it staged, and
+  the next visit to Import offers to resume it, sending only the
+  conversations not yet sent. Before, the run was recorded as completed, the
+  staged folder was deleted, and the conversations it had not reached were
+  never imported. The run's report now puts every conversation in exactly
+  one count, and names the ones the stop left unsent.
+- 2026-10-02 **One desktop job runs at a time.** An export won't start while
+  an Import Run's job runs, and the reverse, and the screen says why. Before,
+  the two jobs mixed up each other's progress, and one Cancel stopped both.
+- 2026-10-02 **Every phone number in Demo Data is one reserved for
+  fiction.** No Demo Data number can be dialled or belong to a real person.
+  Demo Data messages also fall in the daytime, between 08:00 and 23:00,
+  where most of them used to fall overnight.
 
 ### Fixes
 
-- **A contact's identities and selected contacts count what the
-  contact sent.** The identity table on the contact drawer, and the summary
-  shown when you select contacts, counted every message in the contact's
-  conversations, your own replies and everyone else in a group chat
-  included. So a friend who sent 40 of the 100 messages in your chat showed
-  100 there and 40 on the drawer's message count. First seen, last seen,
-  direct messages and group messages now count only the messages the contact
-  sent, the same way a search and the drawer's message count do, and a
-  conversation in the Trash is left out. The conversation count still counts
-  every conversation the contact is in. Your own identities on Profile still
-  count every message sent from or received at them.
-- **GO SMS Pro picture messages import whole, and the ones you
-  sent import at all.** An import read only the picture messages you received
-  and, for most of them, mistook bytes inside the picture for phone numbers,
-  so a photo from one friend could land in a group chat with hundreds of made-up
-  members. Every picture message now lands with the people who were actually
-  on it, the ones you sent are included, and a voicemail notice from Google
-  Voice stays in the Google Voice conversation instead of being moved under
-  the caller.
-- **iMazing message times are read in your account's time zone.**
-  An iMazing export writes each message time without a zone, and the desktop
-  app used to read them in whatever zone the computer running the import was
-  set to, so the same folder gave different times on different machines. The
-  import now reads them in the time zone on your profile. If the phone lived
-  in another zone at the time, Processing Options on the Import screen has a
-  Time zone of the messages picker for the iMazing source.
-- **An iMessage you sent is always yours, however the phone
-  recorded your number.** Some iPhone databases store the sending number on
-  an outgoing message as `tel:+1…`, and the import kept that prefix, so those
-  messages carried a sender that did not match the number on your profile.
-  The prefix is now removed the same way for every message and for the list
-  of addresses the backup sent from.
-- **The Trash stays out of a search everywhere the search looks.**
-  A contact whose only group chat was in the Trash still matched `kind:group`,
-  a conversation whose only Family member was in the Trash still matched
-  `group:Family`, and `conversations:` counted trashed conversations. A
-  search now leaves the Trash out on both sides until it uses `trashed:`,
-  and then the Trash counts on both sides, which is what searching the Trash
-  screen already did. The contact list's Last heard from date and its
-  ordering leave trashed conversations out too, so they agree with
-  `last-message:`.
-- **Excluding something from a search no longer hides the rows
-  that have nothing to compare.** A search with `-` in front of a word left
-  out every row with no value for that word, so those rows appeared under
-  neither the word nor its negation. `-import:last` found no messages at all
-  before the first import, and a negated date word on Contacts left out
-  every contact with no messages. A search and its negation now always
-  divide the list between them.
-- **A group text from an SMS Backup & Restore backup is no longer
+#### Importing
+
+- 2026-09-23 **A group text from an SMS Backup & Restore backup is no longer
   credited to the wrong person when the backup names no sender.** A group
   MMS without a sender address was shown as sent by whichever member the
   backup happened to list first. Such a message now shows no sender, as a
   message with no recorded sender does from any other source. A message that
   does name its sender was already credited correctly, whichever position the
   sender holds in the group.
-- **An iMazing message sent in the hour the clocks spring forward
+- 2026-09-23 **An iMazing message sent in the hour the clocks spring forward
   is kept.** iMazing writes each message's date as a wall-clock time with no
   zone. A time that never showed on the clock, such as 02:30 on the March
   morning when 02:00 became 03:00, was dropped as an invalid date; it is
@@ -199,38 +224,421 @@ released versions carry their date on the heading.
   November morning the clocks fall back is the earlier of the two. The
   zone an iMazing export is read in can now be given by name, such as
   `America/New_York`, as well as by offset.
+- 2026-09-24 **GO SMS Pro picture messages import whole, and the ones you sent
+  import at all.** An import read only the picture messages you received and,
+  for most of them, mistook bytes inside the picture for phone numbers, so a
+  photo from one friend could land in a group conversation with hundreds of
+  made-up members. Every picture message now lands with the people who were
+  actually on it, the ones you sent are included, and a voicemail notice from
+  Google Voice stays in the Google Voice conversation instead of being moved
+  under the caller.
+- 2026-09-24 **iMazing message times are read in your account's time zone.**
+  An iMazing export writes each message time without a zone, and the desktop
+  app used to read them in whatever zone the computer running the import was
+  set to, so the same folder gave different times on different machines. The
+  import now reads them in the time zone on your profile. If the phone lived
+  in another zone at the time, Processing Options on the Import screen has a
+  Time zone of the messages picker for the iMazing source.
+- 2026-09-24 **An iMessage you sent is always yours, however the phone
+  recorded your number.** Some iPhone databases store the sending number on
+  an outgoing message as `tel:+1…`, and the import kept that prefix, so those
+  messages carried a sender that did not match the number on your profile.
+  The prefix is now removed the same way for every message and for the list
+  of addresses the backup sent from.
+- 2026-10-01 **Resuming an Import Run asks again for the backup password or
+  WhatsApp key.** A resumed run read the backup with an empty password and
+  failed, with nowhere to type it.
+- 2026-10-01 **The Import form marks every field it needs.** With **SMS
+  Backup+**, **Backup Device Email Addresses** had no asterisk, and with
+  **iMazing** and **OpenExtract**, **Backup path** had none, though the
+  Import button stays disabled until each is filled. The Android SMS form's
+  **Backup Directory** and **Backup Device Phone Numbers** lacked one too.
+  All now carry the asterisk, and **Backup Directory** describes the chosen
+  source's own backup files.
+- 2026-10-01 **Max FPS is a ceiling.** Compress & Convert re-encoded every
+  video at exactly Max FPS, so a 24 fps video came out at 30. A video at or
+  below the limit now keeps its frame rate.
+- 2026-10-01 **The Saved Search and Contact Group an Import Run adds work.**
+  Opening the Saved Search an import added showed an error instead of that
+  run's messages. Two runs from one source on the same day shared one
+  Contact Group, and an import could take over a Contact Group you had made
+  with the same name. Each run now gets a Contact Group of its own, and a
+  Saved Search you create while an import finishes no longer costs the run
+  its own.
+- 2026-10-02 **One attachment no longer stops a whole import.** An
+  attachment whose file name the computer refuses, such as one with a
+  240-character extension, ended the Staging and nothing was imported. It
+  is now recorded as missing and everything else is staged. A run with media
+  turned off is no longer refused for lack of disk space it would never
+  use, and a staged attachment whose name ends `.jsonl` no longer turns a
+  successful Staging into a failed run.
+- 2026-10-02 **Large SMS backups no longer run out of memory.** The SMS
+  Backup & Restore, GO SMS Pro and SMS Backup+ readers kept every attachment
+  in memory until the end of the run, so a backup of several gigabytes of
+  video could get the desktop app stopped by the operating system. They now
+  hold one attachment at a time.
+- 2026-10-02 **An Upload interrupted at the wrong moment no longer stores
+  messages twice.** When the connection dropped while the server's answer to
+  a batch was arriving, the batch was sent again and messages without their
+  own id were stored twice.
+- 2026-10-02 **Empty attachments and lowered size limits no longer fail a
+  conversation.** A 0-byte attachment was refused, and the whole conversation
+  that held it failed. Lowering the attachment size limit during an Upload
+  broke an attachment already uploading in parts. The limit also capped
+  every request, not only attachments, so a very low limit stopped anyone
+  logging in or raising it again; it now holds attachments alone. A small
+  video in Compress mode is forecast at its own size, so the Staging Review
+  warns when it won't fit.
+- 2026-10-02 **An Import Run stops when the server can't record its stage.**
+  A lost stage write left the run behind, so the next visit offered only
+  Start over, or read the whole backup again, instead of showing the Review.
+- 2026-10-02 **Cancel pressed just before a job starts stops it.** A Cancel
+  in the moment between two steps of an import or an export was lost, and
+  the next step ran to the end.
+- 2026-10-02 **Two conversations with one person in one batch become one.**
+  Two conversations whose addresses are the same once written the same way,
+  such as `+15551234567` and `5551234567`, or an iMessage and an SMS
+  conversation with one number, failed the whole batch when they arrived
+  together. They now merge, as they did when they arrived apart.
+- 2026-10-02 **Messages sent in the same second keep their order.** When an
+  Upload split a conversation inside one second, the conversation and every
+  export showed those messages out of order.
+- 2026-10-02 **A message sent twice is shown twice.** When two sources each
+  held a message sent twice in one second, matching the sources against
+  each other hid all but one copy.
+- 2026-10-02 **An import no longer matches a name to a contact in the
+  Trash.** A participant the backup names without an address was bound to a
+  trashed contact of that name, which failed the import or made a third
+  contact beside a live one.
+- 2026-10-02 **Upload errors name the real cause.** An attachment check the
+  server refused said "username does not match API key" or "invalid API
+  key", causes that no longer exist. It now says the account is disabled or
+  may neither import nor export, or that the login was not accepted.
+- 2026-10-02 **Apple Messages addresses arrive as themselves.** A phone number
+  and an email address on one contact card arrived as a single address made of
+  both, stored as an email identity. A received message with no sender became
+  a contact called "Me". A conversation with no members lost its name, an
+  unnamed group with one member left was filed as one-to-one, and your own
+  address was listed among a group's participants. Each is fixed.
+- 2026-10-02 **No decrypted copy of your iPhone messages is left behind.**
+  Entering an encrypted backup's password made a plain copy of the Messages
+  and Contacts databases in the system's temporary folder, which stayed
+  there when the app or the reader was stopped. The copy now lives in the
+  run's own folder and is always removed.
+- 2026-10-02 **WhatsApp imports keep what they could not find.** A message
+  whose photo file was missing lost the attachment with no trace, and a later
+  import with the file in place added the message a second time. It now
+  keeps the attachment marked missing. WhatsApp Status no longer
+  becomes a contact, and WhatsApp ids that are not phone numbers are no
+  longer stored as email identities. A WhatsApp import from an iPhone backup
+  no longer fails over leftovers from an earlier run in the backup folder.
+- 2026-10-02 **Phone numbers from Android SMS backups keep their country.**
+  The SMS Backup & Restore, GO SMS Pro and SMS Backup+ readers read every
+  number by US rules, so `+6591234567` became a US number and a UK number
+  matched nobody. An email address became a phone number made of its
+  digits, and a message from a sender name such as `AMAZON` was dropped. Your
+  own number written without its country code is now recognised as yours,
+  so a received picture message is no longer filed as a group with you in
+  it.
+- 2026-10-02 **SMS Backup & Restore messages read back as written.** Line
+  breaks in a message survive, an emoji written as a character reference
+  shows as the emoji, and a broken reference costs one character instead of
+  the message, or, in GO SMS Pro, the whole file. The names "null" and
+  "(Unknown)" no longer name a contact, and the sender of a group picture
+  message is no longer named after the whole group.
+- 2026-10-02 **GO SMS Pro picture messages with newer headers import.** A
+  picture message using a header from a later version of the MMS standard was
+  dropped whole.
+- 2026-10-02 **SMS Backup+ imports only text messages, and reads every
+  folder you give it.** A call-log mail is now skipped and counted, instead
+  of imported as a text holding the call's length. A backup folder that sits
+  inside a folder named Duplicate, Exclude or `.git` is no longer skipped
+  whole. Two people known only by names that differ outside plain English
+  letters, such as "张伟" and "李娜", no longer share one conversation.
+- 2026-10-02 **iMazing imports attach Live Photo videos.** A Live Photo's
+  video is imported with its picture, and link previews and any other file
+  no row names are counted in the report. A message no longer picks up
+  another message's file whose name merely ends the same way, and a group
+  known only by names no longer gets its own id as a member.
+- 2026-10-02 **An attachment too large after conversion says so in every
+  conversation.** When two conversations shared one attachment that came
+  out of Media over the size limit, the second recorded it as missing
+  instead of too large. Opening the link to a staging folder not made yet
+  says nothing is there yet, instead of calling it outside the Staging
+  Directory when that directory is reached through a link.
 
-- **Searching for a word with punctuation in it works on every
-  vault.** A search such as `a&b`, `o'bri*`, or text pasted with a hidden
-  NUL character failed with an error, or on a Postgres vault found messages
-  that had the words in any order. Punctuation inside a word now always means
-  the words next to each other in that order, and a NUL is read as a space.
+#### Exporting and converting
 
-- **Changing a password checks things in a sensible order and
-  says so in full sentences.** The vault now checks the current password
+- 2026-10-01 **An export from the Conversations list holds those
+  conversations.** Export opened from a filtered Conversations list wrote
+  only the matching messages, or refused a search such as `messages:>100`.
+  It now writes every message of the conversations the list showed.
+- 2026-10-02 **Converting to CSV, EML or MBOX and back loses nothing the
+  server reads.** Each message keeps whose number it was sent from, an
+  attachment keeps its size and the reason it is missing, and a text or HTML
+  attachment comes back with its own bytes instead of the next attachment's.
+- 2026-10-02 **An export stays inside its folder.** An attachment is never
+  written outside the output folder, whatever path it was stored under. An
+  export, or Convert, whose output folder is the backup or a folder above it
+  is refused before anything is written. An obfuscated export that can't
+  remove a real attachment fails and names the file, instead of reporting
+  success with the file still there.
+- 2026-10-02 **Exported attachments are checked.** A download that answers
+  with something other than the attachment, such as a sign-in page from a
+  proxy, is refused, instead of being saved as the attachment and skipped
+  by every later export into the same folder.
+- 2026-10-02 **Export and Convert name the folder they wrote to.** The
+  success message followed whatever the form showed afterwards, and the
+  folder could be changed while the job ran.
+- 2026-10-02 **Convert names a file from an older format.** A file in the
+  version-3 format is refused by name, where a folder of them failed with
+  a message that said nothing useful and a folder mixing them with current
+  files left those conversations out without a word. A refused file now
+  stops the run before the previous output is removed.
+
+#### Search
+
+- 2026-09-23 **Excluding something from a search no longer hides the rows
+  that have nothing to compare.** A search with `-` in front of a word left
+  out every row with no value for that word, so those rows appeared under
+  neither the word nor its negation. `-import:last` found no messages at all
+  before the first import, and a negated date word on Contacts left out
+  every contact with no messages. A search and its negation now always
+  divide the list between them.
+- 2026-09-23 **Searching for a word with punctuation in it works.** A
+  search such as `a&b`, `o'bri*`, or text pasted with a hidden NUL
+  character failed with an error. Punctuation inside a word now always
+  means the words next to each other in that order, and a NUL is read as
+  a space.
+- 2026-09-24 **The Trash stays out of a search everywhere the search looks.**
+  A contact whose only group conversation was in the Trash still matched
+  `kind:group`, a conversation whose only Family member was in the Trash still
+  matched `group:Family`, and `conversations:` counted trashed conversations.
+  A search now leaves the Trash out on both sides until it uses `trashed:`,
+  and then the Trash counts on both sides, which is what searching the Trash
+  screen already did. The contact list's Last heard from date and its ordering
+  leave trashed conversations out too, so they agree with `last-message:`.
+- 2026-10-01 **Search forgets a deleted message's attachment name.** After
+  a message was deleted, a search for its attachment's file name found the
+  next message imported.
+- 2026-10-02 **The search box sends the search you typed.** Picking a
+  suggestion after a `-` dropped the minus and reversed the search. A Contact
+  Group or Message Tag whose name holds a comma, a leading `#` or a trailing
+  `*` is quoted. "Between" with only an end date includes that day. Text
+  typed on Trash or a tag page stays inside that page, so `or` no longer
+  brings in conversations from outside it. A second Enter runs the text the
+  box shows.
+- 2026-10-02 **Searches that failed now answer.** A date the account's time
+  zone skipped, such as 30 December 2011 in Samoa, dropped the connection. A
+  date beyond year 9999 compared the wrong way round. A long comma list
+  failed with a server error instead of being refused as too complex. An
+  empty quoted phrase, `""`, matched everything; it is now refused.
+- 2026-10-02 **Search finds Greek and Turkish names.** `name:ΚΩΣ*` now
+  finds "ΚΩΣΤΑΣ", and `name:istanbul` finds "İstanbul Office".
+- 2026-10-02 **An attachment added to a stored message is searchable.** An
+  import that added a missing attachment to a message already in Message
+  Crate left its name out of search.
+- 2026-10-02 **`service:` on Contacts reads the whole conversation.** A
+  contact you texted over SMS who never replied is now found by
+  `service:sms`.
+- 2026-10-02 **Each account sees only its own recent searches.** The next
+  account to log in on the same browser was offered the last one's.
+- 2026-10-02 **Searches and filters stay put.** Opening a conversation from a
+  searched or filtered list kept the list filtered only until the first
+  click. A Saved Search click no longer rewrites the Contacts or Trash search
+  you go Back to. Trash names an unknown search word once, and says when
+  its requests fail instead of saying "Trash is empty."
+
+#### Contacts and identities
+
+- 2026-09-22 **International phone numbers keep their country.** A number
+  written with a country code, such as `+65 9123 4567` in an address book or
+  `+44 7700 900123` as your own number, is now matched as that number. Before,
+  some were read as a US number with the same digits and named the wrong
+  person, and some matched nobody.
+- 2026-09-24 **A contact's identities and selected contacts count what the
+  contact sent.** The identity table on the contact drawer, and the summary
+  shown when you select contacts, counted every message in the contact's
+  conversations, your own replies and everyone else in a group conversation
+  included. So a friend who sent 40 of the 100 messages in your conversation
+  showed 100 there and 40 on the drawer's message count. First heard from,
+  last heard from, direct messages and group messages now count only the
+  messages the contact sent, the same way a search and the drawer's message
+  count do, and a conversation in the Trash is left out. The conversation
+  count still counts every conversation the contact is in. Your own identities
+  on Profile still count every message sent from or received at them.
+- 2026-10-01 **Unknown and No group list the right contacts.** Once the
+  whole Contacts list had loaded, Unknown listed every contact and No group
+  included Unknown ones.
+- 2026-10-01 **The Demo Account's email is one of its identities.** My
+  Identities showed the email until the list loaded, then dropped it.
+- 2026-10-02 **Contact Group and Message Tag names stay usable.** "Unknown"
+  and "none" can no longer be taken by a Contact Group, nor "none" by a
+  Message Tag, and a Contact Group name can't hold `;`, which the Address
+  Book separates names with. A link to a Contact Group or Message Tag opens
+  that one, whatever characters its name holds, and a link to one that no
+  longer exists says so instead of listing everything. The contact tables
+  use the same column names.
+- 2026-10-02 **The Address Book load reads a file the way you meant it.** A
+  number whose `+` a spreadsheet dropped keeps the identity the contact
+  already has, instead of becoming a new US number. A row with a stray extra
+  comma refuses the load instead of shifting every cell after it. A refusal
+  over a contact in the Trash says to restore it or delete it for good.
+- 2026-10-02 **A conversation no longer names a contact in the Trash.** A
+  participant whose contact was trashed showed that contact's name and
+  linked to a contact that could not be opened. A group with no recorded
+  members no longer lists its own id as a member.
+- 2026-10-02 **Identities count and date the way the rest of the app does.**
+  A conversation two identities of one contact share counts once in the
+  contact's total. First and last dates are days in your account's time
+  zone, not UTC.
+- 2026-10-02 **WhatsApp identities stay WhatsApp.** Removing a WhatsApp
+  identity in Settings removed the Text message identity with the same
+  number, and the WhatsApp one could not be removed at all. Changing a
+  WhatsApp contact's number moved it onto Text message. Profile Setup showed
+  a number on both services as two Text message rows and would not continue.
+- 2026-10-02 **A contact that fails to load says so.** The contact drawer
+  and the selected-contacts figures offer Try again, instead of "Loading…"
+  for good or a row of dashes.
+- 2026-10-02 **A number's messages stay with its contact, whatever service
+  carried them.** A message from a contact's number over a service Message
+  Crate doesn't know, such as an iPhone message sent by satellite, was filed
+  under a new contact with no name and left out of the named contact's
+  counts.
+
+#### Accounts, Settings and screens
+
+- 2026-09-22 **Changing a password checks things in a sensible order and
+  says so in full sentences.** Message Crate now checks the current password
   first, then that the new password was typed the same way twice, then that
   it differs from the current one, and tells you only the first thing that
   went wrong. The messages read as sentences ("Current password is
   incorrect.") and the Change password button no longer sits tight against
   the last field.
+- 2026-10-01 **Attachments show for an account without Export.** An account
+  whose Export permission was off saw no photos, videos or audio in its own
+  conversations.
+- 2026-10-01 **A refused save says why.** Renaming a contact, and creating,
+  editing or deleting a Saved Search, now show the server's reason and keep
+  the form open. Deleting a Message Tag or Contact Group asks first.
+- 2026-10-01 **Profile Setup and Copy work over plain HTTP.** In a browser
+  reaching a Message Crate on another machine without HTTPS, Profile Setup
+  stopped with an error, and Copy buttons did nothing.
+- 2026-10-02 **Settings → Storage shows every run as it is.** Import and
+  Export history page through every run, not only the newest 40. A cancelled
+  run reads as cancelled, not failed, and "Cancelled" is spelt one way on
+  every screen and in the user guide. A run that has not finished no longer
+  shows its start time as its finish. The Import badge goes as soon as a
+  waiting run is discarded.
+- 2026-10-02 **The API Tokens section says what a token can do.** It
+  promised that a token could delete messages, which no token can, and now
+  shows when each token expires. The secret of a new token stays on screen
+  until you close its dialog, through a stray click, Escape, or leaving
+  Settings before it arrives.
+- 2026-10-02 **Delete account asks for what it needs.** An account with no
+  password confirms with its username alone, the dialog says username, a
+  refusal such as a wrong password shows inside the dialog, and the typed
+  password is cleared when it closes.
+- 2026-10-02 **Permissions and passwords hold.** An account the Owner does
+  not allow to delete can no longer delete itself, and with it every
+  message; Settings says to ask the Owner. Password guesses count per
+  account however the username is capitalised, and wrong current passwords
+  on a password change or account deletion count too. The username `demo`
+  stays the Demo Account's after it is deleted, so it can always be added
+  back. A deleted account's number is never given to a new one.
+- 2026-10-02 **A username counts characters, not bytes.** A 70-letter
+  Cyrillic username is accepted.
+- 2026-10-02 **Every change shows on every screen.** After a password change,
+  a rename, deleting messages, or emptying the Trash, other screens showed
+  the old state for up to 30 seconds or until the window was focused. A
+  password change now also says the account's API Tokens were revoked.
+- 2026-10-02 **An ended session goes to the login screen.** After a session
+  expired or ended in another tab, every screen showed an error. A profile
+  that fails to load now says so with a retry, instead of opening screens
+  the account should not see.
+- 2026-10-02 **Lists show every row once, and one click opens it.** A list
+  loaded page by page no longer repeats or skips a row when something
+  changes between pages. In the desktop app, one click opens a contact in a
+  search result or a list sorted by Last heard, the range shows at once, and a
+  first page that fits the window still loads the next.
+- 2026-10-02 **An action stays with its conversation or contact.** A banner,
+  an error or a pending Move to trash on one conversation or contact no
+  longer shows on, or closes, the next one you open.
+- 2026-10-02 **Settings fields keep what you typed and show what is in
+  use.** A display name typed but not saved survives a time zone or identity
+  change. The time zone field stores the zone you picked, not another one
+  with the same rules today. A Staging Directory that can't be used says why,
+  and the attachment size limit no longer offers to save a rounded value.
+- 2026-10-02 **The connection screen keeps track of where it is.** Applying
+  an address that does not answer says so and says whether you are still
+  connected. In the desktop app, "Use the Message Crate on this computer"
+  starts the app's own one.
+- 2026-10-02 **The desktop app follows its Message Crate.** The app's own
+  server listens where "Let other devices on this network connect" says,
+  and changing the box no longer restarts it during an import or starts a
+  second Message Crate while the app uses another one. When a Message Crate
+  the app found stops, the app notices and starts its own. A slow Message
+  Crate is no longer mistaken for another program on the port.
+- 2026-10-02 **The website opens with browser storage blocked.** It stayed
+  blank; it now opens with the default theme.
+- 2026-10-02 **Small fixes in conversations and dialogs.** A video with no
+  stored file shows a file chip instead of nothing. The Sources panel shows
+  each share beside the count it measures. A Contact Group or Message Tag
+  dialog can't be dismissed while it saves, a second click closes the sort
+  menu, the list column's resize handle moves from the width you see, and
+  Browse says when the file dialog can't open.
 
-- **International phone numbers keep their country.** A number
-  written with a country code, such as `+65 9123 4567` in an address book or
-  `+44 7700 900123` as your own number, is now matched as that number. Before,
-  some were read as a US number with the same digits and named the wrong
-  person, and some matched nobody.
-- **Cancelled is spelt one way.** An import you cancelled read "Import
-  canceled" on the Import screen and "Canceled" in Settings → Storage, while
-  a cancelled export read "Cancelled". Every screen and the user guide now
-  say "Cancelled" and "Import cancelled".
+#### The server
 
-- **The Import form marks every field it needs.** With **SMS Backup+**,
-  **Backup Device Email Addresses** had no asterisk, and with **iMazing** and
-  **OpenExtract**, **Backup path** had none, though the Import button stays
-  disabled until each is filled. Both now carry the asterisk.
+- 2026-10-01 **Docker Compose runs as a real user when UID and GID aren't
+  set.** It ran the container with an empty user and printed warnings.
+- 2026-10-02 **Long conversations can be read to the end.** Messages past
+  the 50,000th of a conversation could not be loaded.
+- 2026-10-02 **Storage counts a shared attachment once.** One video attached
+  to ten messages counted ten times in an account's storage and the Owner's
+  totals.
+- 2026-10-02 **A busy server no longer fails requests that only read.**
+  While an import held the database, recording when a token was last used
+  could fail the request itself.
+- 2026-10-02 **`docker stop` lets requests finish.** The server finished
+  requests in flight on Ctrl-C only, so stopping the container cut off an
+  Upload or a Demo Account build.
+- 2026-10-02 **The Demo Account is whole or absent.** A Demo Account build
+  that was stopped part-way read as ready with part of its conversations; it
+  is now removed and reported failed, so the next build starts clean. A build
+  from Owner Home touches the Demo Account alone: it no longer converts other
+  accounts' attachments or holds up their requests, and nobody can enter the
+  Demo Account until it is complete. A reset that fails leaves the database
+  as it was and usable, a Demo Data settings file with a key it does not
+  use is refused, and the first group's opening line names its real title.
+- 2026-10-02 **Media conversion finishes and reports failures.** A long
+  conversion could hang for good, and a failure now says what ffmpeg said.
+  A GIF whose type was written with capitals or extra detail is left
+  animated instead of turned into a still picture. A Preview cut short by
+  an interrupted run is written again, an attachment still uploading is
+  left alone, and the server's `process-assets` command reports failure
+  when a conversion failed. The server's `import` command fails when it
+  can't read an entry in the folder, instead of leaving that conversation
+  out.
+- 2026-10-02 **Programs using the HTTP API get the answers its reference
+  describes.** The Bearer scheme is read in any case, the health check
+  answers a probe that accepts only text, a message is found by its id
+  wherever it is, oversized and out-of-range requests are refused with the
+  documented error, and the API reference pages carry the same headers as
+  everything else.
 
 ### Upgrading
 
+- The database format changed. **An existing Message Crate is rebuilt
+  empty on first start and its messages must be imported again.**
+- If your configuration file sets `asset_max_bytes` under `[server]`, delete
+  the line, because the server refuses to start with it. Set the limit under
+  Owner Home → Server Settings instead. Any other key the server does not
+  use, a misspelt one included, now stops it at startup too.
+- `DEMO_DATA` is no longer read, because every new Message Crate starts with
+  the Demo Account. The `admin` owner Demo Data used to create is gone:
+  create the Owner on the login card, and delete the Demo Account from
+  Owner Home if you don't want it.
 - A Message Crate that ran on Postgres has to move to SQLite: export its
   messages first, start the new server, and import them again.
 - If your configuration file has a `[database]` section, delete it. The
@@ -244,8 +652,6 @@ released versions carry their date on the heading.
 - If you load contacts from the command line, the server's `import-contacts`
   command and the `--contacts` and `--overwrite-contacts` options of `import`
   are gone. Load the Address Book in the app instead.
-- The database format changed. **An existing Message Crate is rebuilt empty
-  on first start and its messages must be imported again.**
 
 ## [0.9.0] - 2026-09-22
 

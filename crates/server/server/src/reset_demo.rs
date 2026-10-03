@@ -20,6 +20,7 @@ use sqlx::{Row, SqlitePool};
 use crate::config::Config;
 use crate::db::account_profile;
 use crate::db::address_book::{self, LoadCounts, LoadMode};
+use crate::db::demo_account_build;
 use crate::db::dialect;
 use crate::db::engine;
 use crate::db::schema;
@@ -222,20 +223,21 @@ fn reset_account_work_dir(data_dir: &Path) -> Result<tempfile::TempDir> {
         })
 }
 
-/// Generate the Demo Data set of `size` and rebuild the demo account from it,
-/// writing the active config to `config_dest`.
+/// Generate the Demo Data set of `size` and rebuild the demo account from it
+/// in the database `cfg` names. The config file is the operator's: the caller
+/// reads it, and nothing here writes it (#1216).
 ///
 /// # Errors
 ///
 /// Returns an error when generation fails, the database cannot be replaced,
 /// or import / media processing fails.
-pub async fn run_reset_demo(size: DemoSize, config_dest: &Path) -> Result<ResetDemoStats> {
+pub async fn run_reset_demo(size: DemoSize, cfg: &Config) -> Result<ResetDemoStats> {
     let work = tempfile::tempdir().context("create temporary demo bundle directory")?;
     let bundle = work.path().join("bundle");
     println!("Reset demo — generating the {size} data set");
     let seed_stats =
         demo_seed::generate_size_to(size, &bundle).context("generate demo bundle (demo-seed)")?;
-    let reset_stats = prepare_config_and_reset(&bundle, config_dest, DEMO_ACCOUNT_ID).await?;
+    let reset_stats = reset_prepared_bundle(cfg, &bundle, DEMO_ACCOUNT_ID).await?;
 
     Ok(ResetDemoStats {
         seed: seed_stats,
@@ -268,11 +270,14 @@ pub async fn database_is_new(cfg: &Config) -> Result<bool> {
 }
 
 /// Add the Demo Account, with the medium data set, to a database that does
-/// not exist yet. `serve` calls this before it listens.
+/// not exist yet. `serve` calls this before it listens. The database is
+/// written beside the configured path and moved into place once it is whole
+/// ([`seed_into_place`]).
 ///
-/// A failure is reported and not returned: the partly written Demo Account is
-/// removed and the Message Crate starts without one, since a person can still
-/// claim it and import, and the owner can add the Demo Account later.
+/// A failure is reported and not returned: the unfinished database is
+/// removed and `serve` creates an empty one, so the Message Crate starts
+/// without the Demo Account, since a person can still claim it and import,
+/// and the owner can add the Demo Account later.
 pub async fn seed_new_database(cfg: &Config) {
     let size = DemoSize::Medium;
     eprintln!("New database: adding the Demo Account ({size} data set)…");
@@ -297,14 +302,10 @@ async fn seed_new_database_with<G>(cfg: &Config, generate: G) -> Option<u64>
 where
     G: FnOnce(&Path) -> Result<()>,
 {
-    let built = match OpenDb::open(cfg.clone()).await {
-        Ok(opened) => {
-            let built = build_demo_account_with(cfg, &opened.db, generate).await;
-            opened.close().await;
-            built
-        }
-        Err(error) => Err(error),
-    };
+    let built = seed_into_place(cfg, async |seeding: &Config, db: &SqlitePool| {
+        build_demo_account_with(seeding, db, generate).await
+    })
+    .await;
     match built {
         Ok(messages) => Some(messages),
         Err(error) => {
@@ -315,6 +316,129 @@ where
             None
         }
     }
+}
+
+/// Where `serve` writes a new database until seeding is complete:
+/// `<database>.seeding`, beside the configured file, so the rename into
+/// place stays on one file system.
+fn seeding_path(db: &Path) -> PathBuf {
+    sqlite_sidecar(db, ".seeding")
+}
+
+/// Remove the `-wal` and `-shm` sidecars of the database file `db`; one that
+/// is not there is not an error.
+fn remove_sidecars(db: &Path) -> Result<()> {
+    remove_any_if_exists(&sqlite_sidecar(db, "-wal"))?;
+    remove_any_if_exists(&sqlite_sidecar(db, "-shm"))
+}
+
+/// Create a new database with `build` at [`seeding_path`] and rename it to
+/// the path `cfg` names once `build` has finished, so a database file at the
+/// configured path is always fully seeded. A start that is stopped while
+/// seeding, the way the desktop app kills a server that is still starting,
+/// leaves only the seeding file, and the next start removes it and seeds
+/// again (#1215).
+///
+/// When `build` fails the seeding file is removed and nothing is renamed,
+/// so `serve` goes on to create an empty database at the configured path.
+async fn seed_into_place<B>(cfg: &Config, build: B) -> Result<u64>
+where
+    B: AsyncFnOnce(&Config, &SqlitePool) -> Result<u64>,
+{
+    let seeding = seeding_path(&cfg.paths.db);
+    remove_any_if_exists(&seeding)?;
+    remove_sidecars(&seeding)?;
+    let mut seeding_cfg = cfg.clone();
+    seeding_cfg.paths.db = seeding.clone();
+    let seeded = async {
+        let opened = OpenDb::open(seeding_cfg.clone()).await?;
+        let built = build(&seeding_cfg, &opened.db).await;
+        // Closed before the file is checkpointed and renamed.
+        opened.close().await;
+        let messages = built?;
+        checkpoint_and_clean_sidecars(&seeding, "before moving the new database into place")
+            .await?;
+        // A configured file can be there only with no `accounts` table
+        // ([`database_is_new`]); its sidecars must not attach to the new one.
+        remove_sidecars(&cfg.paths.db)?;
+        fs::rename(&seeding, &cfg.paths.db).with_context(|| {
+            format!(
+                "move the new database {} to {}",
+                seeding.display(),
+                cfg.paths.db.display()
+            )
+        })?;
+        Ok(messages)
+    }
+    .await;
+    if seeded.is_err()
+        && let Err(error) = remove_any_if_exists(&seeding).and_then(|()| remove_sidecars(&seeding))
+    {
+        eprintln!("warning: could not remove the unfinished new database: {error:#}");
+    }
+    seeded
+}
+
+/// Record in `db` that a Demo Account build has started, before the build
+/// writes anything else. The record stays until the build has finished or
+/// what it wrote has been removed.
+async fn begin_demo_build(db: &SqlitePool) -> Result<()> {
+    let mut conn = db.acquire().await?;
+    demo_account_build::begin(&mut conn)
+        .await
+        .context("record that the Demo Account build has started")
+}
+
+/// Remove what a failed build wrote: the Demo Account, then the build's
+/// record. The record stays when the account cannot be removed, so the next
+/// start tries again.
+///
+/// # Errors
+///
+/// Returns an error when the account or the record cannot be removed.
+pub async fn remove_failed_demo_build(cfg: &Config, db: &SqlitePool) -> Result<()> {
+    wipe_demo_account(cfg, db, DEMO_ACCOUNT_ID).await?;
+    let mut conn = db.acquire().await?;
+    demo_account_build::end(&mut conn).await
+}
+
+/// Remove the Demo Account a build left when the server stops during it, and
+/// keep the build's record, so the next start reports the build as failed.
+/// A build that has already finished has no record, and its Demo Account
+/// is kept. Returns whether there was a build to stop.
+///
+/// # Errors
+///
+/// Returns an error when the record cannot be read or the account cannot be
+/// removed.
+pub async fn remove_part_built_demo_account(cfg: &Config, db: &SqlitePool) -> Result<bool> {
+    let unfinished = {
+        let mut conn = db.acquire().await?;
+        demo_account_build::is_unfinished(&mut conn).await?
+    };
+    if unfinished {
+        wipe_demo_account(cfg, db, DEMO_ACCOUNT_ID).await?;
+    }
+    Ok(unfinished)
+}
+
+/// On start: when the database holds the record of a Demo Account build that
+/// did not finish, because the server stopped during it, remove the Demo
+/// Account the build left and the record. Returns whether there was one.
+///
+/// # Errors
+///
+/// Returns an error when the record cannot be read or the account or the
+/// record cannot be removed.
+pub async fn remove_stopped_demo_build(cfg: &Config, db: &SqlitePool) -> Result<bool> {
+    let unfinished = {
+        let mut conn = db.acquire().await?;
+        demo_account_build::is_unfinished(&mut conn).await?
+    };
+    if unfinished {
+        remove_failed_demo_build(cfg, db).await?;
+    }
+    Ok(unfinished)
 }
 
 /// Writes a demo bundle of the given size into the given folder. The server
@@ -344,6 +468,9 @@ pub async fn build_demo_account(
     generate: BundleGenerator,
 ) -> Result<u64> {
     let outcome = async {
+        // Recorded before generating, so a server stopped at any point of
+        // the build removes the Demo Account it was replacing.
+        begin_demo_build(&db).await?;
         let work = tempfile::tempdir().context("create temporary demo bundle directory")?;
         let bundle = work.path().join("bundle");
         // Generating is CPU work with no await in it, so it runs off the
@@ -386,7 +513,7 @@ async fn whole_demo_account_or_none(
     match outcome {
         Ok(stats) => Ok(stats.import.messages),
         Err(error) => {
-            if let Err(error) = wipe_demo_account(cfg, db, DEMO_ACCOUNT_ID).await {
+            if let Err(error) = remove_failed_demo_build(cfg, db).await {
                 eprintln!("warning: could not remove the partly added Demo Account: {error:#}");
             }
             Err(error)
@@ -396,8 +523,7 @@ async fn whole_demo_account_or_none(
 
 /// Build the Demo Account in the database `db`, the one `cfg` names, from
 /// the bundle at `bundle`. There is nothing to snapshot or swap: this writes
-/// to the database directly, touching the Demo Account alone, and leaves the
-/// config file as it is.
+/// to the database directly, touching the Demo Account alone.
 async fn build_from_bundle(
     cfg: &Config,
     db: &SqlitePool,
@@ -407,55 +533,12 @@ async fn build_from_bundle(
     rebuild_demo_account(cfg, db, &prepared, DEMO_ACCOUNT_ID).await
 }
 
-/// Copy the bundle's config into place and reset the account by the
-/// snapshot-and-swap path.
-async fn prepare_config_and_reset(
-    bundle: &Path,
-    config_dest: &Path,
-    account_id: i64,
-) -> Result<ResetPreparedStats> {
-    validate_prepared_bundle(bundle)?;
-    let demo_config = bundle.join("config/config.toml");
-    if !demo_config.is_file() {
-        bail!(
-            "incomplete demo bundle under {} (need config/config.toml)",
-            bundle.display()
-        );
-    }
-    let config_parent = parent_dir_or_cwd(config_dest);
-    fs::create_dir_all(config_parent)
-        .with_context(|| format!("create config directory {}", config_parent.display()))?;
-    let temporary_config = tempfile::Builder::new()
-        .prefix(".reset-demo-config-")
-        .tempfile_in(config_parent)
-        .context("create temporary demo config")?;
-    fs::copy(&demo_config, temporary_config.path()).with_context(|| {
-        format!(
-            "copy prepared config {} to {}",
-            demo_config.display(),
-            temporary_config.path().display()
-        )
-    })?;
-    let cfg = Config::load(temporary_config.path())?;
-    let temporary_config = temporary_config.into_temp_path();
-    reset_prepared_bundle(
-        &cfg,
-        bundle,
-        account_id,
-        config_dest,
-        temporary_config.as_ref(),
-    )
-    .await
-}
-
 /// Build the new state in a prepared database next to the active one, prove
 /// nothing outside the demo account changed, then swap it in.
 async fn reset_prepared_bundle(
     cfg: &Config,
     bundle: &Path,
     account_id: i64,
-    config_dest: &Path,
-    prepared_config: &Path,
 ) -> Result<ResetPreparedStats> {
     let prepared = validate_prepared_bundle(bundle)?;
     let _operation_lock = crate::operation_lock::acquire_for_reset(&cfg.paths.db)?;
@@ -492,8 +575,6 @@ async fn reset_prepared_bundle(
         prepared_db: &prepared_db,
         active_account: &active_account,
         prepared_account: &prepared_account,
-        active_config: config_dest,
-        prepared_config,
     };
     install_reset_state_or_keep_work(&paths, db_work, data_work, &mut ready).await?;
     ready.mark_ready()?;
@@ -514,10 +595,8 @@ async fn install_reset_state_or_keep_work(
     let Err(error) = install_reset_state(paths).await else {
         return Ok(());
     };
-    let config_backup = sqlite_sidecar(paths.prepared_config, ".previous-active");
     let previous_state_still_in_work = db_work.path().join("previous-messagecrate.db").exists()
-        || data_work.path().join("previous-account").exists()
-        || config_backup.exists();
+        || data_work.path().join("previous-account").exists();
     if previous_state_still_in_work {
         ready.keep_cleared();
         let db_work = db_work.keep();
@@ -536,13 +615,16 @@ async fn install_reset_state_or_keep_work(
 /// database, a reset and a build on a running server all run exactly this;
 /// what differs is what the caller does around it (a reset snapshots the
 /// database first and swaps it in after). Every step uses `db`, so on a
-/// running server the build shares the server's pool.
+/// running server the build shares the server's pool. The build's record in
+/// `demo_account_build` is written first and removed last, so a database
+/// that still holds it after a stop has a part-built Demo Account (#1215).
 async fn rebuild_demo_account(
     cfg: &Config,
     db: &SqlitePool,
     prepared: &PreparedBundle,
     account_id: i64,
 ) -> Result<ResetPreparedStats> {
+    begin_demo_build(db).await?;
     wipe_demo_account(cfg, db, account_id).await?;
     print_reset_header(account_id, prepared, &cfg.paths.db.display());
     seed_demo_account(db, account_id, &prepared.seed).await?;
@@ -550,6 +632,11 @@ async fn rebuild_demo_account(
     let address_book = load_demo_address_book(db, prepared, account_id).await?;
     let (dedupe_stats, process_stats) = dedupe_and_process_assets(cfg, db, account_id).await?;
     vacuum_after_demo(db).await;
+    let mut conn = db.acquire().await?;
+    demo_account_build::end(&mut conn)
+        .await
+        .context("record that the Demo Account build has finished")?;
+    drop(conn);
     Ok(ResetPreparedStats {
         import,
         address_book,
@@ -927,11 +1014,9 @@ struct ResetPaths<'a> {
     prepared_db: &'a Path,
     active_account: &'a Path,
     prepared_account: &'a Path,
-    active_config: &'a Path,
-    prepared_config: &'a Path,
 }
 
-/// Swap the prepared database, account folder, and config into their active paths.
+/// Swap the prepared database and account folder into their active paths.
 async fn install_reset_state(paths: &ResetPaths<'_>) -> Result<()> {
     install_reset_state_with(paths, demo_seed::move_path).await
 }
@@ -951,12 +1036,11 @@ where
     replace_reset_state_with(paths, rename)
 }
 
-/// One of the three things a reset swaps: the database file, the account
-/// folder, or the config file. Each has an active path, a prepared
-/// replacement, and a backup path the active one is moved to first so the
-/// swap can be undone.
+/// One of the two things a reset swaps: the database file or the account
+/// folder. Each has an active path, a prepared replacement, and a backup path
+/// the active one is moved to first so the swap can be undone.
 struct Swap<'a> {
-    /// What the paths hold, for messages: "database", "account directory", "config".
+    /// What the paths hold, for messages: "database" or "account directory".
     what: &'static str,
     active: &'a Path,
     prepared: &'a Path,
@@ -1036,8 +1120,8 @@ impl<'a> Swap<'a> {
 }
 
 impl<'a> ResetPaths<'a> {
-    /// The three swaps in install order: database, account folder, config.
-    fn swaps(&self) -> Result<[Swap<'a>; 3]> {
+    /// The two swaps in install order: database, then account folder.
+    fn swaps(&self) -> Result<[Swap<'a>; 2]> {
         let db_backup = self
             .prepared_db
             .parent()
@@ -1048,7 +1132,6 @@ impl<'a> ResetPaths<'a> {
             .parent()
             .context("prepared account has no parent")?
             .join("previous-account");
-        let config_backup = sqlite_sidecar(self.prepared_config, ".previous-active");
         Ok([
             Swap::new("database", self.active_db, self.prepared_db, db_backup),
             Swap::new(
@@ -1056,12 +1139,6 @@ impl<'a> ResetPaths<'a> {
                 self.active_account,
                 self.prepared_account,
                 account_backup,
-            ),
-            Swap::new(
-                "config",
-                self.active_config,
-                self.prepared_config,
-                config_backup,
             ),
         ])
     }
@@ -1073,10 +1150,7 @@ fn replace_reset_state_with<F>(paths: &ResetPaths<'_>, mut rename: F) -> Result<
 where
     F: FnMut(&Path, &Path) -> Result<()>,
 {
-    if !paths.prepared_db.is_file()
-        || !paths.prepared_account.is_dir()
-        || !paths.prepared_config.is_file()
-    {
+    if !paths.prepared_db.is_file() || !paths.prepared_account.is_dir() {
         bail!("prepared reset state is incomplete");
     }
     if let Some(parent) = paths.active_account.parent() {

@@ -299,9 +299,9 @@ async fn import_reactions_and_flags(fixture: &TestFixture, account_id: i64) {
             "is_deleted": false,
             "tapbacks": [
                 {"kind": "liked", "emoji": null, "part_index": 0,
-                 "is_from_me": false, "sender": "+15555550999"},
+                 "is_from_me": false, "reactor_handle": "+15555550999"},
                 {"kind": "emoji", "emoji": "🎉", "part_index": 1,
-                 "is_from_me": false, "sender": "+15555550888"}
+                 "is_from_me": false, "reactor_handle": "+15555550888"}
             ]
         }),
     );
@@ -315,7 +315,7 @@ async fn import_reactions_and_flags(fixture: &TestFixture, account_id: i64) {
             "is_deleted": false,
             "announcement": "named the conversation Reactions",
             "tapbacks": {"kind": "loved", "emoji": null, "part_index": 2,
-                         "is_from_me": false, "sender": "+15555550999"}
+                         "is_from_me": false, "reactor_handle": "+15555550999"}
         }),
     );
     let plain = ir_message(

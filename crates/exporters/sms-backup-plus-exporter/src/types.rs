@@ -21,6 +21,10 @@ pub(crate) struct ParsedMessage {
     pub group_title: Option<String>,
     pub participants: Vec<Handle>,
     pub timestamp_secs: f64,
+    /// Whether [`Self::timestamp_secs`] carries the milliseconds the phone
+    /// stored (`X-smssync-date` in milliseconds). `false` when the time came
+    /// in whole seconds: from the `Date` header, or `X-smssync-date` in seconds.
+    pub has_milliseconds: bool,
     pub is_from_me: bool,
     pub sender: Option<Handle>,
     pub text: String,

@@ -4,12 +4,16 @@
 use anyhow::Result;
 use media::MediaMode;
 use message_crate_core::{ExportTransforms, emit_log};
-use message_ir::{ConversationDocument, IrAttachment, IrDirection, IrImessage, IrParticipant};
+use message_ir::{
+    ConversationDocument, IrAttachment, IrDirection, IrImessage, IrParticipant, MessageGuid,
+    MessageIdentity,
+};
 use obfuscate::{
     Obfuscator, classify_attachment, materialize_placeholders, placeholder_rel_path,
     resolve_obfuscator_with_log,
 };
 use serde_json::{Map, Value};
+use std::collections::HashMap;
 use std::path::Path;
 
 /// Drop attachment paths and bytes when the media mode is disabled, keeping the metadata.
@@ -72,6 +76,54 @@ pub(crate) fn obfuscate_document(doc: &mut ConversationDocument, anon: &mut Obfu
         // goes with it: `direction` already says sent or received.
         msg.source = None;
     }
+    obfuscate_guids(doc, anon);
+}
+
+/// Give every message a new `guid` made from its obfuscated content, and
+/// point each reply and tapback at its target's new `guid`.
+///
+/// For a source without ids of its own the `guid` is a hash of the chat, the
+/// time, the direction, the sender, the text and the attachments, and the
+/// obfuscated output keeps the time and the direction, so a kept `guid` would
+/// check a guess at the original text. The new one is the [`MessageGuid`] of
+/// the obfuscated message, with a keyed stand-in for the old `guid` as its
+/// vendor key: two messages the original told apart stay apart, and nobody
+/// without the obfuscation seed can work back to the original.
+fn obfuscate_guids(doc: &mut ConversationDocument, anon: &Obfuscator) {
+    let chat = doc.conversation.chat_identifier.clone();
+    let mut renamed: HashMap<String, String> = HashMap::new();
+    for msg in &mut doc.messages {
+        let stand_in = anon.obfuscate_id(&msg.guid);
+        let digests: Vec<String> = msg
+            .attachments
+            .iter()
+            .filter_map(|a| a.digest_sha256.clone())
+            .collect();
+        let guid = MessageGuid::new(&MessageIdentity {
+            chat: &chat,
+            is_from_me: msg.direction == IrDirection::Outgoing,
+            sender: msg.sender_handle.as_deref(),
+            timestamp_unix_ms: msg.timestamp_unix_ms,
+            text: &msg.text,
+            attachment_digests: &digests,
+            vendor_key: Some(&stand_in),
+        })
+        .into_string();
+        renamed.insert(std::mem::replace(&mut msg.guid, guid.clone()), guid);
+    }
+    // A target outside this document gets the keyed stand-in, so its
+    // original id does not survive either.
+    for im in doc.messages.iter_mut().filter_map(|m| m.imessage.as_mut()) {
+        for target in [&mut im.in_reply_to_guid, &mut im.associated_guid]
+            .into_iter()
+            .flatten()
+        {
+            *target = renamed
+                .get(target.as_str())
+                .cloned()
+                .unwrap_or_else(|| anon.obfuscate_id(target));
+        }
+    }
 }
 
 /// Obfuscate the iMessage extension's announcement and tapback reactors.
@@ -108,7 +160,7 @@ fn obfuscate_tapback(fields: &mut Map<String, Value>, anon: &mut Obfuscator) {
     fields.retain(|key, value| {
         match (key.as_str(), value) {
             ("part_index" | "kind" | "emoji" | "is_from_me", _) => {}
-            ("reactor_handle" | "sender", Value::String(h)) => *h = anon.obfuscate_handle(h),
+            ("reactor_handle", Value::String(h)) => *h = anon.obfuscate_handle(h),
             ("reactor_display_name", Value::String(n)) if n != "Me" => {
                 *n = anon.obfuscate_display_name(n);
             }

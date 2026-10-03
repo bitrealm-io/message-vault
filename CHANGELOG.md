@@ -216,6 +216,9 @@ released versions carry their date on the heading.
   fiction.** No Demo Data number can be dialled or belong to a real person.
   Demo Data messages also fall in the daytime, between 08:00 and 23:00,
   where most of them used to fall overnight.
+- 2026-10-03 **Convert reads JSON Lines files only when they end in
+  `.jsonl`,** the name Message Crate gives them. A file ending in `.ndjson`
+  is no longer taken for one.
 
 ### Fixes
 

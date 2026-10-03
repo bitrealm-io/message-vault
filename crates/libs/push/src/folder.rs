@@ -67,14 +67,31 @@ fn is_conversation_jsonl(path: &Path, exclude: &[&Path]) -> bool {
 ///
 /// # Errors
 ///
-/// Returns an error when `dir` cannot be read.
+/// Returns an error when `dir` cannot be read, or when one of its entries
+/// cannot be read (see [`conversation_paths`]).
 pub(crate) fn list_jsonl_files(dir: &Path, exclude: &[&Path]) -> Result<Vec<PathBuf>> {
+    let entries = fs::read_dir(dir).with_context(|| format!("read {}", dir.display()))?;
+    conversation_paths(dir, entries.map(|entry| entry.map(|e| e.path())), exclude)
+}
+
+/// The conversation files among `entries`, the paths of `dir`, sorted.
+///
+/// An entry that cannot be read fails the listing, with `dir` named. Skipping
+/// it would leave a conversation file uncounted and unsent, and the Upload
+/// would report success for a folder it read only in part. The server's
+/// `import` command fails the same way.
+///
+/// # Errors
+///
+/// Returns an error for the first entry that cannot be read.
+fn conversation_paths(
+    dir: &Path,
+    entries: impl IntoIterator<Item = std::io::Result<PathBuf>>,
+    exclude: &[&Path],
+) -> Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
-    for entry in fs::read_dir(dir).with_context(|| format!("read {}", dir.display()))? {
-        let Ok(entry) = entry else {
-            continue;
-        };
-        let path = entry.path();
+    for entry in entries {
+        let path = entry.with_context(|| format!("read an entry of {}", dir.display()))?;
         if is_conversation_jsonl(&path, exclude) {
             paths.push(path);
         }
@@ -160,6 +177,23 @@ mod tests {
         let files = list_jsonl_files(dir.path(), &[]).unwrap();
         let names: Vec<String> = files.iter().map(|p| file_label(p)).collect();
         assert_eq!(names, ["a.jsonl", "b.jsonl"]);
+    }
+
+    /// An entry the folder listing cannot read fails the Upload with the
+    /// folder named, rather than leaving a conversation file unsent (#1403).
+    #[test]
+    fn an_entry_that_cannot_be_read_fails_the_listing_and_names_the_folder() {
+        let dir = Path::new("/staging/run-1");
+        let entries = vec![
+            Ok(dir.join("a.jsonl")),
+            Err(std::io::Error::other("stale file handle")),
+        ];
+
+        let error = conversation_paths(dir, entries, &[]).unwrap_err();
+
+        let message = format!("{error:#}");
+        assert!(message.contains("/staging/run-1"), "{message}");
+        assert!(message.contains("stale file handle"), "{message}");
     }
 
     /// A conversation header whose `export.source` is `source`.

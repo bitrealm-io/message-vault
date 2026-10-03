@@ -289,11 +289,14 @@ identity is linked under, so a Text Message identity also drops the number from
 a WhatsApp group. It loads the identities once per run and makes no handle,
 contact or participant row for a matching member (`imports_api/staging.rs`,
 `insert_participant`), and no contact for a message or tapback sent from one
-(`resolve_incoming_sender_handle`); an import never adds an identity. A group's
-dedupe key leaves the account's identities out too, so a group imported before
-an identity was linked still pairs with the same group imported after. Why: the two know
-different addresses. The backup may list the holder under an old number the
-exporter cannot know is theirs.
+(`resolve_incoming_sender_handle`); an import never adds an identity. Why: the
+exporter and the server know different addresses. The backup may list the
+holder under an old number the exporter cannot know is theirs.
+
+A group's dedupe key leaves the account's identities out too (`dedupe.rs`,
+`ContentKeyInputs`, through `is_account_identity_sql`). Why: a group imported
+before an identity was linked still lists the holder, and the same group
+imported after does not; without this their messages would not pair.
 
 **A conversation with yourself has no participants.** Notes the holder sends to
 their own address are a conversation whose chat handle is one of the holder's

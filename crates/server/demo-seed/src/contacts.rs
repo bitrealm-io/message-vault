@@ -61,35 +61,10 @@ fn csv_field(value: &str) -> String {
     }
 }
 
-/// Write `config.toml` with the database and asset folder paths used after a demo reset.
-///
-/// # Errors
-///
-/// Returns an error if the file cannot be written.
-pub fn write_config_toml(config_dir: &Path) -> Result<()> {
-    let path = config_dir.join("config.toml");
-    let body = r#"# Instance config restored by `reset-demo`.
-# Demo account identity lives in crates/server/demo-seed/config/seed.toml.
-
-[paths]
-db = "data/messagecrate.db"
-data_dir = "data"
-assets_dir = "assets"
-assets_converted_dir = "assets_converted"
-
-# Optional HTTP import API for local development.
-# [server]
-# bind = "127.0.0.1:8080"
-"#;
-    fs::write(&path, body).with_context(|| format!("write {}", path.display()))?;
-    Ok(())
-}
-
 /// Write `seed.toml` with the demo account name, phone, and username.
 ///
 /// The server reads this file only when it builds the Demo Account:
-/// `reset-demo`, `serve` on a new database, and the Owner Home action. It is
-/// not copied into the running server config.
+/// `reset-demo`, `serve` on a new database, and the Owner Home action.
 ///
 /// # Errors
 ///
@@ -99,7 +74,6 @@ pub fn write_seed_toml(config_dir: &Path) -> Result<()> {
     let body = format!(
         r#"# Demo account identity, read only when the server builds the Demo Account
 # (`reset-demo`, `serve` on a new database, the Owner Home action).
-# Not copied into the runtime config.toml.
 
 [owner]
 display_name = "Demo User"

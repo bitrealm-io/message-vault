@@ -208,7 +208,7 @@ pub struct ResetDemoArgs {
     #[arg(long, value_enum, default_value_t = DemoSize::Medium)]
     pub size: DemoSize,
 
-    /// Active config path; overwritten (default config/config.toml)
+    /// Path to config.toml; the Demo Account is rebuilt in the database it names
     #[arg(long, default_value = "config/config.toml")]
     pub config: PathBuf,
 }
@@ -524,7 +524,8 @@ async fn run_dedupe(args: DedupeArgs) -> Result<()> {
 
 /// Rebuild the demo account from the bundle and print what landed.
 async fn run_reset_demo(args: ResetDemoArgs) -> Result<()> {
-    let stats = crate::reset_demo::run_reset_demo(args.size, &args.config).await?;
+    let cfg = Config::load(&args.config)?;
+    let stats = crate::reset_demo::run_reset_demo(args.size, &cfg).await?;
     println!();
     println!("Demo reset complete");
     if stats.seed.messages > 0 {

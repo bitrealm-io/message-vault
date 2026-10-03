@@ -144,7 +144,7 @@ Rebuild the Demo Account: generate Demo Data, clear the account, import, and pro
   - `large`:
     About 613,000 messages
 
-* `--config <CONFIG>` — Active config path; overwritten (default config/config.toml)
+* `--config <CONFIG>` — Path to config.toml; the Demo Account is rebuilt in the database it names
 
   Default value: `config/config.toml`
 

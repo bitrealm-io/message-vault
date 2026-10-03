@@ -146,7 +146,7 @@ describe("ConversationHeader", () => {
     createContactGroupMock.mockReset();
     updateContactGroupMembersMock.mockReset();
     getAccountProfileMock.mockResolvedValue(PROFILE);
-    listContactGroupsMock.mockResolvedValue({ items: [], total: 0, limit: 40, offset: 0 });
+    listContactGroupsMock.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -171,12 +171,7 @@ describe("ConversationHeader", () => {
       // The server, modelled: once created, the group is in the list the
       // members call looks the id up in.
       let groups: { id: number; name: string }[] = [];
-      listContactGroupsMock.mockImplementation(async () => ({
-        items: groups,
-        total: groups.length,
-        limit: 40,
-        offset: 0,
-      }));
+      listContactGroupsMock.mockImplementation(async () => groups);
       createContactGroupMock.mockImplementation(async ({ name }) => {
         const set = { id: 9, name };
         groups = [set];
@@ -206,12 +201,7 @@ describe("ConversationHeader", () => {
     });
 
     it("adds to an existing group of that name instead of creating a second one", async () => {
-      listContactGroupsMock.mockResolvedValue({
-        items: [{ id: 4, name: "Readers" }],
-        total: 1,
-        limit: 40,
-        offset: 0,
-      });
+      listContactGroupsMock.mockResolvedValue([{ id: 4, name: "Readers" }]);
       updateContactGroupMembersMock.mockResolvedValue({ added: 2, removed: 0 });
       const user = userEvent.setup();
       renderHeader(groupChat());

@@ -2,17 +2,19 @@
 //! then write the chosen output format via [`ExportWriter`].
 
 use crate::attachments_emit::queue_attachments;
+use crate::flat_eml::Owner;
 use crate::identity::{chat_id_for, name_only_key, timestamp_ms};
 use crate::parse_emit::{ParsedEmlKind, collect_eml_paths, parse_one_eml};
 use crate::types::ParsedMessage;
 use anyhow::{Result, bail};
 use message_crate_core::{
-    CancelFlag, ExportReport, ExportTransforms, LogSink, OutputFormat, emit_log, prepare_outputs,
-    project_conversation,
+    CancelFlag, ExportReport, ExportTransforms, LogSink, OutputFormat, RunIssue, emit_log,
+    prepare_outputs, project_conversation,
 };
 use message_ir::{
-    ExportMeta, IrAttachment, IrParticipant, IrService, IrSource, PendingAttachment,
-    PendingConversation, PendingMessage, ProjectionHooks, default_participants, parse_android_type,
+    ConversationDocument, ExportMeta, IrAttachment, IrConversationType, IrDirection, IrParticipant,
+    IrService, IrSource, PendingAttachment, PendingConversation, PendingMessage, ProjectionHooks,
+    default_participants, parse_android_type,
 };
 use message_staging::{AttachmentSource, AttachmentSpool, ExportWriter};
 use phone::{Handle, OwnerHandleSet};
@@ -23,6 +25,17 @@ use std::path::{Path, PathBuf};
 const EXPORT_SOURCE: &str = "sms-backup-plus";
 const EXPORT_TOOL: &str = "SMS Backup+";
 const EXPORT_TOOL_VERSION: &str = "1.5.11";
+
+/// Report counter: received group messages whose `From` names nobody in the
+/// group, kept with no sender. Counted after copies are reduced to one, and
+/// each one is also an issue in the Import Run.
+const GROUP_MESSAGES_WITHOUT_SENDER: &str = "group_messages_without_sender";
+
+/// Report counter: received MMS whose `To` names a group but none of the
+/// owner's numbers or email addresses, filed one-to-one under `From` instead,
+/// or under `X-smssync-address` when `From` gives no address. Counted after
+/// copies are reduced to one.
+const GROUP_MESSAGES_OWNER_NOT_NAMED: &str = "group_messages_owner_not_named";
 
 /// The EML's path relative to the input root it was found under, for the vendor `source` bag.
 ///
@@ -129,7 +142,7 @@ fn add_message(
     let convo = ensure_convo(
         conversations,
         &chat_id,
-        msg.conversation_type == "group",
+        msg.is_group(),
         msg.group_title.clone(),
         peers,
     );
@@ -219,6 +232,41 @@ impl ProjectionHooks for SbpProjection {
             fields,
         }
     }
+}
+
+/// Project one conversation, then count the messages it kept that did not
+/// name the owner, and the group messages it kept with no sender, from the
+/// messages written: copies dropped by the projection are not counted.
+fn project_and_count(
+    chat_id: &str,
+    convo: &mut PendingConversation,
+    hooks: &SbpProjection,
+    owner_not_named: &HashSet<String>,
+    report: &mut ExportReport,
+) -> Option<ConversationDocument> {
+    let doc = project_conversation(chat_id, convo, hooks, report)?;
+    let is_group = doc.conversation.conversation_type == IrConversationType::Group;
+    for msg in &doc.messages {
+        let eml_path = msg
+            .source
+            .as_ref()
+            .and_then(|s| s.fields.get("eml_path"))
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
+        if owner_not_named.contains(eml_path) {
+            report.bump(GROUP_MESSAGES_OWNER_NOT_NAMED, 1);
+        }
+        if is_group && msg.direction == IrDirection::Incoming && msg.sender_handle.is_none() {
+            report.bump(GROUP_MESSAGES_WITHOUT_SENDER, 1);
+            report.issues.push(RunIssue {
+                kind: "skip".into(),
+                step: "parse".into(),
+                item: format!("{eml_path} (sender)"),
+                reason: "The sender of this group message could not be read and was left out. The message itself is kept.".into(),
+            });
+        }
+    }
+    Some(doc)
 }
 
 const EML_PROGRESS_EVERY: u64 = 5000;
@@ -319,17 +367,12 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
         enabled: verbose,
         log,
     };
-    let owners = OwnerHandleSet::from_phones(owner_phones)?;
-    let owner_handle = owners
-        .primary_owner_handle()
+    let owner = Owner::new(OwnerHandleSet::from_phones(owner_phones)?, owner_emails);
+    let owner_handle = owner
+        .primary_handle()
         .expect("from_phones guarantees a phone owner handle");
-    let owner_emails_lc: Vec<String> = owner_emails
-        .iter()
-        .map(|e| e.trim().to_ascii_lowercase())
-        .filter(|e| !e.is_empty())
-        .collect();
     verbose.line(format!("owner phones: {}", owner_phones.len()));
-    verbose.line(format!("owner emails: {}", owner_emails_lc.len()));
+    verbose.line(format!("owner emails: {}", owner.email_count()));
     verbose.line(format!("output: {}", output_dir.display()));
 
     let input_paths: Vec<PathBuf> = inputs.iter().map(|p| p.as_ref().to_path_buf()).collect();
@@ -346,8 +389,7 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
     let parse = ParseInputs {
         file_inputs: inputs.iter().filter(|p| p.is_file()).cloned().collect(),
         input_roots: inputs,
-        owners,
-        owner_emails_lc,
+        owner,
     };
     let spool = writer.copies_attachments().then(|| writer.spool());
     let mut ingest = EmlIngest::new(spool, eml_paths.len());
@@ -356,6 +398,7 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
     let EmlIngest {
         conversations,
         mut report,
+        owner_not_named,
         ..
     } = ingest;
 
@@ -371,7 +414,9 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
     let mut documents = Vec::new();
     for (chat_id, mut convo) in conversations {
         message_crate_core::check_cancel(cancel)?;
-        if let Some(doc) = project_conversation(&chat_id, &mut convo, &hooks, &mut report) {
+        if let Some(doc) =
+            project_and_count(&chat_id, &mut convo, &hooks, &owner_not_named, &mut report)
+        {
             documents.push(doc);
         }
     }
@@ -391,8 +436,13 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
     )?;
 
     verbose.line(format!(
-        "done: conversations={} messages={} duplicates_dropped={} attachments={}",
-        report.conversations, report.messages, report.duplicates_dropped, report.attachments_saved
+        "done: conversations={} messages={} duplicates_dropped={} attachments={} group_without_sender={} group_owner_not_named={}",
+        report.conversations,
+        report.messages,
+        report.duplicates_dropped,
+        report.attachments_saved,
+        report.extra(GROUP_MESSAGES_WITHOUT_SENDER),
+        report.extra(GROUP_MESSAGES_OWNER_NOT_NAMED),
     ));
     verbose.errors(&report);
     Ok(report)
@@ -405,8 +455,7 @@ struct ParseInputs {
     input_roots: Vec<PathBuf>,
     /// The subset of `input_roots` that are single files rather than folders.
     file_inputs: HashSet<PathBuf>,
-    owners: OwnerHandleSet,
-    owner_emails_lc: Vec<String>,
+    owner: Owner,
 }
 
 /// How many EMLs one parallel batch parses before its results are folded in.
@@ -455,7 +504,7 @@ fn parse_eml_path(
         return ParsedEmlKind::Cancelled;
     }
     let rel_path = relative_eml_path(eml_path, &inputs.input_roots, &inputs.file_inputs);
-    parse_one_eml(eml_path, rel_path, &inputs.owners, &inputs.owner_emails_lc)
+    parse_one_eml(eml_path, rel_path, &inputs.owner)
 }
 
 /// Everything the scan accumulates: conversations and the counts that end
@@ -466,6 +515,9 @@ struct EmlIngest<'a> {
     spool: Option<&'a AttachmentSpool>,
     conversations: HashMap<String, PendingConversation>,
     report: ExportReport,
+    /// EML paths of received MMS whose `To` named none of the owner's
+    /// addresses, counted once the copies are reduced to one.
+    owner_not_named: HashSet<String>,
 }
 
 impl<'a> EmlIngest<'a> {
@@ -475,6 +527,7 @@ impl<'a> EmlIngest<'a> {
             spool,
             conversations: HashMap::with_capacity((eml_count / 4).min(50_000)),
             report: ExportReport::default(),
+            owner_not_named: HashSet::new(),
         }
     }
 
@@ -516,6 +569,9 @@ impl<'a> EmlIngest<'a> {
         if msg.chat_key.is_empty() {
             self.report.bump("unknown_chat_messages", 1);
         }
+        if msg.owner_not_named {
+            self.owner_not_named.insert(msg.eml_path.clone());
+        }
         let atts = queue_attachments(&msg.attachments, self.spool)?;
         add_message(&mut self.conversations, msg, atts, &mut self.report);
         Ok(())
@@ -540,8 +596,7 @@ mod tests {
     use super::*;
     use crate::types::AttachmentBlob;
     use message_ir::{
-        ConversationDocument, ConversationMeta, ConversationStats, IrConversationType, IrDirection,
-        IrMessage, IrMessageKind, SCHEMA_VERSION,
+        ConversationMeta, ConversationStats, IrMessage, IrMessageKind, SCHEMA_VERSION,
     };
 
     /// An EML given as an input is recorded under its own file name. An EML
@@ -673,12 +728,13 @@ mod tests {
             ),
         };
         let mut report = ingest.report;
+        let owner_not_named = ingest.owner_not_named;
         let mut messages = Vec::new();
         let mut conversations: Vec<_> = ingest.conversations.into_iter().collect();
         conversations.sort_by(|a, b| a.0.cmp(&b.0));
         for (chat_id, mut convo) in conversations {
             if let Some(doc) =
-                message_crate_core::project_conversation(&chat_id, &mut convo, &hooks, &mut report)
+                project_and_count(&chat_id, &mut convo, &hooks, &owner_not_named, &mut report)
             {
                 messages.extend(doc.messages);
             }
@@ -690,7 +746,7 @@ mod tests {
     fn parsed(timestamp_secs: f64, has_milliseconds: bool, eml_path: &str) -> ParsedMessage {
         ParsedMessage {
             chat_key: "+15555550101".into(),
-            conversation_type: "individual".into(),
+            conversation_type: IrConversationType::Individual,
             group_title: None,
             participants: Handle::parse("+15555550101").into_iter().collect(),
             timestamp_secs,
@@ -704,6 +760,7 @@ mod tests {
             smssync_id: None,
             android_type: "1".into(),
             eml_path: eml_path.into(),
+            owner_not_named: false,
         }
     }
 
@@ -727,7 +784,7 @@ mod tests {
     fn verify_e3_1_two_group_senders_in_one_second_are_two_messages() {
         let group = |sender: &str, timestamp_secs: f64| ParsedMessage {
             chat_key: "+15555550111_+15555550122".into(),
-            conversation_type: "group".into(),
+            conversation_type: IrConversationType::Group,
             sender: Handle::parse(sender),
             text: "Happy birthday!".into(),
             ..parsed(timestamp_secs, true, "")

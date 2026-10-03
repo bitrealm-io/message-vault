@@ -602,9 +602,9 @@ mod export_scope_tests {
 /// reading the failure and the operator reading the log are looking at the
 /// same request.
 ///
-/// The extension members belong to one type each: `word` and `did_you_mean`
-/// to `search-query-invalid`, `retry_after` to `rate-limited`, `line` to
-/// `malformed-body`.
+/// The extension members belong to the types named here: `word` and
+/// `did_you_mean` to `search-query-invalid`, `retry_after` to `rate-limited`,
+/// `line` to `malformed-body` and `validation-failed` from an import batch.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(utoipa::ToSchema))]
 pub struct Problem {

@@ -18,7 +18,11 @@ vocabulary. Read it before writing any of those.
 
 ### Submitting Work
 
-Open the pull request with `gh pr create`.
+Open the pull request as a draft, with `gh pr create --draft`. A draft's run
+of `ci.yml` skips every job, and marking it ready starts a run that does the
+work. `pr-review` marks it ready after the review's last push. A draft's checks are skipped, and a
+skipped check reads as passed, so they say nothing. Why:
+`docs/adr/0007-ci-is-the-only-gate.md`, "Consequences".
 **Write the description to one of the templates in `.github/PULL_REQUEST_TEMPLATE/`.**
 They exist for whoever opens the pull request to fill in — an agent included —
 not as options offered to a reviewer:
@@ -43,7 +47,7 @@ account, and GitHub does not let an author approve their own pull request.
 Why: `docs/adr/0007-ci-is-the-only-gate.md`.
 
 Review a pull request with the `pr-review` skill (`.claude/skills/pr-review/`).
-It runs the steps below, fixes what it finds, and queues the pull request.
+It runs the steps below, fixes what it finds, and merges the pull request.
 
 ##### The marker
 
@@ -60,6 +64,7 @@ only the user resolves it.
    gh api graphql -f query='{ repository(owner: "messagecrate", name: "message-crate") {
      pullRequest(number: <N>) { closingIssuesReferences(first: 20) { nodes { number } } } } }'
    gh pr diff <N>
+   gh pr ready <N> --undo   # a pull request that is not a draft becomes one
    ```
 
 2. **Post each finding on its line**, all in one review, pinned to the head
@@ -95,7 +100,7 @@ only the user resolves it.
    ```
 
    If the push is rejected because the branch moved, step 5 says how to
-   bring it in.
+   bring it in. A draft stays a draft until a push lands.
 4. **Answer every thread**, with the commit that fixes it or the reason it
    stays as it is. Then resolve it if it is an agent thread:
 
@@ -111,18 +116,19 @@ only the user resolves it.
    Never resolve a thread without a reply in it.
 5. **Merge the base into the pull request** before the review, whenever the
    base has commits the pull request lacks, so the review and the pull
-   request's checks see the code as it would land. Before queueing, merge it
-   again only on `CONFLICTING`: the merge queue drops a pull request it
-   cannot merge onto the base, and tests one that is only behind on the
-   latest base itself. Merge rather than rebase: a rebase needs a force-push,
-   and the queue squashes the merge commit away. GitHub reports `UNKNOWN`
+   request's checks see the code as it would land. Before merging, merge it
+   again only on `CONFLICTING`: GitHub cannot merge a pull request that
+   conflicts with the base, and merges one that is only behind as it is,
+   untested on the new base (ADR 0007 says why that is accepted).
+   Merge rather than rebase: a rebase needs a force-push, and the squash
+   merge drops the merge commit. GitHub reports `UNKNOWN`
    for a few seconds after a push, so wait for a settled answer:
 
    ```bash
    git fetch origin <baseRefName>
    git merge-base --is-ancestor origin/<baseRefName> HEAD || echo behind
    until m=$(gh pr view <N> --json mergeable -q .mergeable) && [ "$m" != UNKNOWN ]; do sleep 10; done
-   echo "$m"                      # before queueing, CONFLICTING means merge the base
+   echo "$m"                      # before merging, CONFLICTING means merge the base
    git merge origin/<baseRefName> # stops at each conflict, with nothing committed
    # resolve every conflict, git add the files, git commit, run the local checks
    git show --remerge-diff HEAD   # the conflict resolution alone, for review
@@ -136,51 +142,86 @@ only the user resolves it.
    commit, run the local checks, and review its remerge diff like the
    first one. Then push again.
 
-6. **Wait for the required checks.** GitHub moves the pull request's head to
-   a pushed commit a few seconds after the push, and starts its checks after
-   that. Until both happen, `gh pr checks` reports the previous head, or exits
-   with "no required checks reported". So wait until the head is the pushed
-   commit and it has check runs, then watch, stopping at the first failure.
-   Watch only the head you mean to queue: a new push to the pull request
+6. **Push, mark the pull request ready, then watch its run.** Push to the
+   draft first, and wait for that push's own run of `ci.yml`, whose jobs all
+   skip. Then mark the pull request ready, which starts the real run, and
+   watch that run by its id: `gh pr checks` can still show the draft's
+   skipped checks on the same commit, which read as passed. With nothing left
+   to push, mark it ready and watch the run that starts. A later push to a
+   pull request that is already ready, such as a fix for a failed job, starts
+   its run itself, and the snippet's `isDraft` branch skips straight to it.
+
+   A rejected push is handled as step 3 says. If the head moved past your
+   push, another session pushed commits nobody reviewed: stop before marking
+   the pull request ready, so it stays a draft, and report it.
+
+   Watch only the head you mean to merge: a new push to the pull request
    cancels the run on the head before it (`ci.yml`'s concurrency group), so
-   push a fix as soon as a check fails because of the pull request, rather
+   push a fix as soon as a job fails because of the pull request, rather
    than waiting for the rest. When the first failure is outside the pull
    request, let the run finish, because GitHub reruns the failed jobs of a
    finished run only. Then sort every failed job: any that failed because of
    the pull request is fixed and pushed, which replaces the rerun; only when
-   every failure is outside does the run get its rerun. Green counts only
-   while the pull request's head is still the commit you pushed: a push from
-   another session moves it, and its commits have not been reviewed.
+   every failure is outside does the run get its rerun. Before the rerun,
+   look at the last finished run on `main`: a rerun cannot pass while `main`
+   fails the same job, so the review stops there and reports the pull request
+   as blocked on `main`. A job that fails outside the pull request again after
+   its rerun also stops the review, with a report. The run is green only
+   when its conclusion is `success`. A `cancelled` run means something pushed
+   over it, so check the head. Green counts only while the pull request's
+   head is still the commit you pushed: a push from another session moves it,
+   and its commits have not been reviewed.
 
    ```bash
-   before=$(gh pr view <N> --json headRefOid -q .headRefOid)   # just before the push
+   before=$(gh pr view <N> --json headRefOid -q .headRefOid)
+   git push origin HEAD:<headRefName> || exit 1   # rejected: see step 3
    sha=$(git rev-parse HEAD)
-   until h=$(gh pr view <N> --json headRefOid -q .headRefOid) && [ "$h" != "$before" ]; do sleep 10; done
-   [ "$h" = "$sha" ] || echo moved   # another session pushed on top
-   until [ "$(gh api repos/messagecrate/message-crate/commits/$sha/check-runs -q .total_count)" -gt 0 ]
-   do sleep 30; done
-   gh pr checks <N> --watch --required --fail-fast
-   run=$(gh run list --commit "$sha" --workflow ci.yml --json databaseId -q '.[0].databaseId')
-   gh run watch "$run"               # an outside failure: wait for the run to finish
-   gh run view "$run" --json jobs -q '.jobs[] | select(.conclusion == "failure") | .name'
-   gh run rerun "$run" --failed
+   until h=$(gh pr view <N> --json headRefOid -q .headRefOid) && [ "$h" != "$before" ] || [ "$sha" = "$before" ]
+   do sleep 10; done
+   [ "$h" = "$sha" ] || { echo moved; exit 1; }   # another session pushed on top
+   if [ "$(gh pr view <N> --json isDraft -q .isDraft)" = true ]; then
+     until last=$(gh run list --commit "$sha" --workflow ci.yml --json databaseId -q 'map(.databaseId) | max // empty') &&
+           [ -n "$last" ]
+     do sleep 10; done                  # the draft's own run, all skipped
+     gh pr ready <N>
+   else
+     last=0                             # already ready: the push started the run
+   fi
+   until run=$(gh run list --commit "$sha" --workflow ci.yml --json databaseId \
+                 -q "map(select(.databaseId > $last)) | .[0].databaseId // empty") && [ -n "$run" ]
+   do sleep 10; done
+   until s=$(gh run view "$run" --json status,jobs \
+               -q 'if any(.jobs[]; .conclusion == "failure") then "failed" else .status end') &&
+         { [ "$s" = failed ] || [ "$s" = completed ]; }
+   do sleep 30; done                    # stops at the first failed job
+   gh run view "$run" --json conclusion,jobs -q '.conclusion, (.jobs[] | select(.conclusion == "failure") | .name)'
+   gh run watch "$run"                  # an outside failure: wait for the run to finish
+   main_run=$(gh run list --branch main --workflow ci.yml --event push --status completed -L 1 \
+                --json databaseId -q '.[0].databaseId')   # the last finished run on main
+   gh run view "$main_run" --json url,jobs -q '.url, (.jobs[] | select(.conclusion == "failure") | .name)'
+   gh run rerun "$run" --failed         # only when main is not red on the same job
    [ "$(gh pr view <N> --json headRefOid -q .headRefOid)" = "$sha" ] || echo moved
    ```
 
+##### Posting pace
+
+GitHub limits how fast one account creates content (reviews, comments,
+replies, pull requests), apart from its hourly limit, and every session posts
+from the same account. So make those calls one at a time, at least a second
+apart. When GitHub refuses one ("submitted too quickly", or a 403 or 422 that
+names a secondary rate limit), check that it did not land, wait a minute (or
+the `retry-after` it gives), and send the same call again.
+
 #### Merging
 
-`main` requires the merge queue. `gh pr merge <N> --match-head-commit <sha>`
-adds a green pull request to the queue only while its head is still `<sha>`,
-the commit that was reviewed and checked, or turns on auto-merge when its checks are still running. It
-takes no `--squash`, because the queue's merge method is fixed. The queue
-runs `ci.yml` again on the pull request merged onto the latest `main`, and
-lands it only when that run is green. Never pass `--admin`: it merges past the
-queue.
+`gh pr merge <N> --squash --match-head-commit <sha>` squash-merges a green
+pull request only while its head is still `<sha>`, the commit that was
+reviewed and checked. Never pass `--admin`: it merges past the required
+checks and open conversations.
 
-A pull request that `pr-review` has reviewed is queued without asking, once
+A pull request that `pr-review` has reviewed is merged without asking, once
 every thread on it is resolved, its required checks are green, and it is not a
-draft. Any other
-merge waits for the user to ask for it.
+draft. Any other merge waits for the user to ask for it.
 
 ## Tools
 

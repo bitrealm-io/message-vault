@@ -33,6 +33,10 @@ export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: 
   }
 
   const name = nameDraft ?? profile.preferred_name ?? "";
+  // Every visitor shares the Demo Account, so the server refuses a new name,
+  // a new zone and an address book load for it, from the owner as well
+  // (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`).
+  const fixed = profile.is_demo === true;
 
   const handleSaveName = async () => {
     setNameError("");
@@ -66,12 +70,19 @@ export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: 
           type="text"
           aria-label="Display name"
           value={name}
+          readOnly={fixed}
           onChange={(e) => setNameDraft(e.target.value)}
-          className={`${inputClassName} flex-1`}
+          className={`${inputClassName} flex-1${fixed ? " !text-muted" : ""}`}
         />
-        <Button variant="primary" onClick={handleSaveName} className="!px-[0.85rem] !py-[0.35rem]">
-          Save
-        </Button>
+        {fixed ? null : (
+          <Button
+            variant="primary"
+            onClick={handleSaveName}
+            className="!px-[0.85rem] !py-[0.35rem]"
+          >
+            Save
+          </Button>
+        )}
       </div>
       {nameError && <div className="mb-6 text-[0.813rem] text-danger">{nameError}</div>}
       {!nameError && <div className="mb-6" />}
@@ -80,10 +91,14 @@ export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: 
       <TimeZoneField
         value={profile.time_zone}
         onChange={(zone) => void handleChangeZone(zone)}
-        isDisabled={updateProfile.isPending}
+        isDisabled={fixed || updateProfile.isPending}
         className="mb-[0.35rem] max-w-[28rem]"
       />
-      <div className="text-[0.813rem] text-muted">Message times are shown in this zone.</div>
+      <div className="text-[0.813rem] text-muted">
+        {fixed
+          ? "Message times are shown in this zone. The Demo Account's display name and time zone are fixed."
+          : "Message times are shown in this zone."}
+      </div>
       {zoneError && <div className="mb-6 text-[0.813rem] text-danger">{zoneError}</div>}
       {!zoneError && <div className="mb-6" />}
 
@@ -92,7 +107,8 @@ export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: 
       {profile.is_owner ? null : (
         <>
           <IdentitiesSection profile={profile} managedAccountId={managedAccountId} />
-          {managed ? <AccountActivitySection profile={profile} /> : <AddressBookSection />}
+          {managed && <AccountActivitySection profile={profile} />}
+          {!managed && !fixed && <AddressBookSection />}
         </>
       )}
     </div>

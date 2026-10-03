@@ -246,6 +246,20 @@ pub async fn delete_account(conn: &mut SqliteConnection, account_id: i64) -> Res
 /// Stable id for the seeded demo account (`reset-demo`).
 pub const DEMO_ACCOUNT_ID: i64 = 2;
 
+/// What the Demo Account may do, known from its id and never read from its
+/// row: export, and neither import nor delete for good
+/// (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`).
+/// [`load_account_auth`] answers it for the Demo Account, so the profile and
+/// the owner's account list report what the guards, which refuse the Demo
+/// Account by its id, enforce: a row changed by hand cannot make a screen
+/// offer what the server refuses.
+pub const DEMO_ACCOUNT_PERMISSIONS: crate::db::permissions::Permissions =
+    crate::db::permissions::Permissions {
+        import: false,
+        export: true,
+        delete: false,
+    };
+
 /// The Demo Account's username. It stays reserved while the Demo Account is
 /// absent, so no other account can take it and block the next build.
 pub const DEMO_USERNAME: &str = "demo";
@@ -305,7 +319,11 @@ pub async fn load_account_auth(
         |(disabled, must_set_up, import, export, delete)| AccountAuth {
             disabled: disabled != 0,
             must_set_up_profile: must_set_up != 0,
-            permissions: crate::db::permissions::Permissions::from_ints(import, export, delete),
+            permissions: if is_demo_account(account_id) {
+                DEMO_ACCOUNT_PERMISSIONS
+            } else {
+                crate::db::permissions::Permissions::from_ints(import, export, delete)
+            },
         },
     ))
 }

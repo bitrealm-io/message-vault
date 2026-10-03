@@ -18,6 +18,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 
 mod attachment_path;
+mod conversation_key;
 mod durable;
 mod identity;
 mod projection;
@@ -26,6 +27,7 @@ mod schema_version;
 pub mod testutil;
 
 pub use attachment_path::{UNSAFE_ATTACHMENT_PATH, UnsafeAttachmentPath, safe_attachment_path};
+pub use conversation_key::{ConversationKey, GROUP_CHAT_ID_PREFIX, name_stem};
 pub use durable::{rename_into_place, write_atomic, write_atomic_via};
 pub use identity::{
     MessageCopy, MessageGuid, MessageIdentity, TimePrecision, collapse_whitespace,

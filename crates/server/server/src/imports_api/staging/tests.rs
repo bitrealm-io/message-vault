@@ -45,7 +45,7 @@ async fn import_one(
         fill_content_keys: false,
         import_id: None,
     });
-    import_jsonl_files_on_conn(conn, &[path], &opts, ImportSchemaMode::Ensure).await
+    Ok(import_jsonl_files_on_conn(conn, &[path], &opts, ImportSchemaMode::Ensure).await?)
 }
 
 /// The reason an import was refused: its error text after the file's temp
@@ -96,6 +96,7 @@ fn a_reused_blob_takes_the_export_mime_type_when_the_record_has_one() {
         &export_dir,
         &assets_dir,
         &mut stats,
+        2,
     )
     .unwrap()
     .expect("the stored blob is reused");
@@ -107,6 +108,7 @@ fn a_reused_blob_takes_the_export_mime_type_when_the_record_has_one() {
         &export_dir,
         &assets_dir,
         &mut stats,
+        2,
     )
     .unwrap()
     .expect("the stored blob is reused");
@@ -139,12 +141,15 @@ fn a_path_that_leaves_the_export_folder_is_refused_whether_or_not_its_fingerprin
         };
         let mut stats = AssetStats::default();
 
-        let err = store_claimed_or_path(&att, &export_dir, &assets_dir, &mut stats)
+        let err = store_claimed_or_path(&att, &export_dir, &assets_dir, &mut stats, 2)
             .expect_err("the path is refused");
 
         assert_eq!(
             err.to_string(),
-            format!("{}: ../escape.txt", message_ir::UNSAFE_ATTACHMENT_PATH)
+            format!(
+                "Line 2 of the file: {}: ../escape.txt.",
+                message_ir::UNSAFE_ATTACHMENT_PATH
+            )
         );
         assert_eq!(stats.deduped, 0);
     }
@@ -183,7 +188,7 @@ async fn a_file_that_does_not_match_its_claimed_sha256_fails_the_import_and_is_n
         .expect_err("a mismatched file fails the import");
 
     assert!(
-        format!("{err:#}").contains("sha256 mismatch"),
+        format!("{err:#}").contains("photo.bin hash to"),
         "the refusal says why: {err:#}"
     );
     for sha in [
@@ -263,7 +268,7 @@ async fn a_file_with_messages_and_no_header_is_refused() {
         let result = import_one(&mut conn, name, &incoming("g1", "+15555550100")).await;
         assert_eq!(
             refusal(result),
-            "Could not read line 1 of the file: a message appears before the conversation header.",
+            "Line 1 of the file: a message appears before the conversation header.",
             "{name}"
         );
     }
@@ -276,7 +281,7 @@ async fn a_file_with_neither_header_nor_messages_is_refused() {
     let result = import_one(&mut conn, "+15555550100.jsonl", "\n").await;
     assert_eq!(
         refusal(result),
-        "Could not read line 1 of the file: the file has no conversation header."
+        "Line 1 of the file: the file has no conversation header."
     );
 }
 

@@ -7,13 +7,13 @@ fast pre-flight that catches the mistakes not worth a round trip, and
 `check-all.sh` runs the whole set locally for anyone who wants it before
 pushing.
 
-`ci.yml` holds eleven jobs on a pull request. A `changes` job diffs the branch
-against its base and publishes four booleans — `rust`, `web`, `docs`, `docker`
-— and the heavy jobs read them:
+`ci.yml` holds eleven jobs on a ready pull request. On a draft, all of them
+skip. A `changes` job diffs the branch against its base and publishes four
+booleans — `rust`, `web`, `docs`, `docker` — and the heavy jobs read them:
 
 | Job | Runs when | What it does |
 | --- | --- | --- |
-| `changes` | always | Diffs against the base and outputs `rust`, `web`, `docs`, `docker` |
+| `changes` | always, except on a draft | Diffs against the base and outputs `rust`, `web`, `docs`, `docker` |
 | `fmt` | `rust` | `cargo fmt --check` on the workspace and on `src-tauri` |
 | `clippy` | `rust` | `cargo clippy --workspace --all-targets -- -D warnings` |
 | `test` | `rust` | `cargo build --workspace` and `cargo test --workspace` |
@@ -224,6 +224,17 @@ paragraphs are only advice without it — the path logic moved inside the
 workflow, into the `changes` job.
 
 ## Consequences
+
+A draft pull request's run of `ci.yml` skips every job. `changes` skips on a
+draft, and every other job needs it, so they skip too. Marking the pull
+request ready starts a run that does the work.
+Pushes before a review, and a review's own pushes before its last one, were
+building heads that the next push replaced, so they now cost no runners.
+The price: a skipped job counts as passed, so a draft's required checks read
+green while nothing ran. They mean nothing until the pull request is ready,
+and `pr-review` watches the run started by marking it ready rather than the
+check list (AGENTS.md, "Review on the pull request", step 6). A draft cannot
+enter the merge queue, so a green draft cannot merge.
 
 `check-pr.sh` checks rather than rewrites. It no longer calls `format-all.sh`,
 so it can now fail on formatting, which it never could before. `format-all.sh`

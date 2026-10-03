@@ -1,11 +1,15 @@
 name: CI
 
-# Every job runs on every pull request and reports a result, so all of them
-# can be required by the ruleset on main. Path filtering happens inside the
-# workflow (the `changes` job), not on the trigger: a workflow that never
+# Every job runs on every ready pull request and reports a result, so all of
+# them can be required by the ruleset on main. Path filtering happens inside
+# the workflow (the `changes` job), not on the trigger: a workflow that never
 # starts reports nothing, and a required check that never reports holds the
 # pull request pending forever. A job skipped by its `if:` counts as passed.
 # Why: docs/adr/0007-ci-is-the-only-gate.md.
+#
+# A draft's run skips every job: `changes` skips on a draft, so every job skips
+# with it. Marking the pull request ready starts a run that does the work. Why, and what a draft's
+# green checks mean: docs/adr/0007-ci-is-the-only-gate.md, "Consequences".
 
 on:
   push:
@@ -13,6 +17,7 @@ on:
     tags: ['v*']
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   # The merge queue runs every required job again on the pull request merged
   # onto the main it will land on, so two pull requests that are green on
   # their own cannot merge into a red main. Without this trigger the queue
@@ -40,8 +45,10 @@ jobs:
   # A pull request diffs against its base branch, and a merge queue run
   # against the main it merges onto. On anything else there is no base to
   # diff against, so every output is true and everything runs.
+  # A draft skips this job, so every job that needs it skips too.
   changes:
     name: Classify changes
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:

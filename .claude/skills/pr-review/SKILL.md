@@ -25,7 +25,7 @@ Every finding closes one of three ways, with a reply in its thread saying which:
 Then resolve the thread if it is an agent thread. A user thread gets the same
 reply and the fix, and stays open for the user.
 
-A judgement call is closed the same way as a hard violation. A small finding is
+A `judgement` finding is closed the same way as any other. A small finding is
 fixed, never declined for being small.
 
 ## Pushing and posting
@@ -101,29 +101,30 @@ context. Give each the PR number, how to get the diff, and its brief. Every
 brief ends with the same output rule:
 
 > Return a list of findings. Each finding: `path`, `line` (a line number in
-> the file on the new side of the diff, or `none`), `kind` (`hard` or
-> `judgement`), and the text: what is wrong, why it matters, and the fix.
+> the file on the new side of the diff, or `none`), `kind` (`rule`, `spec`,
+> `bug`, or `judgement`), and the text: what is wrong, why it matters, and the fix.
 > Return an empty list if you find nothing. Under 400 words.
 
 - **Standards**: the standards files from step 1, and
   `.claude/skills/pr-review/smells.md`. "Report every place the diff breaks a
-  documented repo rule, citing the file and the rule (`hard`), and every smell
+  documented repo rule, citing the file and the rule (`rule`), and every smell
   from the baseline you see, quoting the hunk (`judgement`). A repo rule
   overrides the baseline. Skip what tooling enforces."
 - **Spec**: the issue text. "Report requirements the spec asked for that are
   missing or partial, behaviour the spec did not ask for, and requirements that
-  look implemented but wrong. Quote the spec line for each."
+  look implemented but wrong. Quote the spec line for each." Spec findings are
+  `spec`.
 - **Correctness**: "Find inputs or states that make this change produce a wrong
   result, crash, or lose data. Each finding names the concrete failing scenario:
   the input or state, and the wrong outcome. A worry with no scenario is not a
-  finding." Correctness findings are `hard`.
+  finding." Correctness findings are `bug`.
 
 Keep the axes separate, and post each axis's findings as its sub-agent
 returned them, so one axis cannot mask another.
 
 Post all findings in one review pinned to the reviewed head (AGENTS.md
 step 2). Each line comment starts with the marker, then
-`**<Axis> · <hard|judgement>**`, then the finding. A finding with `line: none`,
+`**<Axis> · <kind>**`, then the finding. A finding with `line: none`,
 or whose line is outside the diff, goes in one top-level comment instead.
 
 Done when every finding is on the PR.

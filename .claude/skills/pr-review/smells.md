@@ -5,8 +5,8 @@ even where the repo documents nothing. Two rules bind them:
 
 - **The repo overrides.** Where a repo document endorses something a smell
   would flag, the smell is not a finding.
-- **Always a judgement call.** Report each as "possible <smell>", never as a
-  hard violation. Skip anything tooling already enforces.
+- **Always a judgement call.** Report each as "possible <smell>", kind
+  `judgement`. Skip anything tooling already enforces.
 
 Each smell reads _what it is_ → _how to fix_:
 

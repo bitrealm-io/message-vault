@@ -28,8 +28,8 @@ pub async fn load_account_profile(
     Ok(AccountProfile { emails, phones })
 }
 
-/// The addresses of the account's identities of `handle_type`, A to Z, from
-/// `account_handles`, the one store of them.
+/// The normalized addresses of the account's handles of `handle_type`, A to
+/// Z, from `account_handles`.
 async fn account_handle_addresses(
     conn: &mut SqliteConnection,
     account_id: i64,

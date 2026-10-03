@@ -1821,6 +1821,57 @@ async fn a_batch_into_a_run_that_is_not_running_is_a_state_conflict() {
     );
 }
 
+/// A run discarded while a batch uploads: the batch passed the check before
+/// its body, and its messages were then stored under a cancelled run. The
+/// run is checked again inside the import's write transaction, and the batch
+/// is refused the same way.
+#[tokio::test]
+async fn a_batch_into_a_run_discarded_while_it_uploads_is_a_state_conflict() {
+    let (state, fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+    let id: i64 = path
+        .trim_start_matches("/v1/imports/")
+        .trim_end_matches("/batches")
+        .parse()
+        .unwrap();
+
+    let mut other_conn = fixture.conn().await;
+    let mut other = crate::db::begin_write(&mut other_conn).await.unwrap();
+    sqlx::query("UPDATE imports SET status = 'cancelled', stage = NULL WHERE id = $1")
+        .bind(id)
+        .execute(&mut *other)
+        .await
+        .unwrap();
+    let (status, text) = crate::db::write_tx::commit_during(
+        other,
+        crate::test_support::post_raw(
+            &state,
+            &path,
+            &token,
+            "application/jsonl",
+            replace_run_batch("+15550000002", &["g1"]),
+        ),
+    )
+    .await;
+
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::StateConflict,
+    );
+    assert_eq!(
+        problem.detail.as_deref(),
+        Some(format!("import {id} is not running (status=cancelled)").as_str())
+    );
+    let mut conn = fixture.conn().await;
+    let stored: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE import_id = $1")
+        .bind(id)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(stored, 0);
+}
+
 /// One conversation with `chat`, holding one message per guid, as a
 /// replace run's batch.
 fn replace_run_batch(chat: &str, guids: &[&str]) -> String {

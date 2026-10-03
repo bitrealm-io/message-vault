@@ -13,7 +13,9 @@ use std::future::Future;
 use std::pin::Pin;
 
 use anyhow::Result as AnyResult;
-use sqlx::{Connection, SqliteConnection};
+use sqlx::SqliteConnection;
+
+use crate::db::begin_write;
 
 /// Longest allowed name for either kind of set (characters).
 pub const MAX_NAME_LEN: usize = 80;
@@ -484,22 +486,17 @@ pub async fn create_set(
     name: &str,
 ) -> Result<(i64, String), MembershipError> {
     let name = normalize_name(spec, name)?;
-    if find_id(spec, conn, account_id, &name).await?.is_some() {
-        return Err(MembershipError::Conflict(format!(
+    // One statement checks the name and inserts the row, so a set created
+    // under the name meanwhile, in any letter case, makes this a conflict.
+    match crate::db::free_name::insert_if_name_free(conn, spec.table, account_id, &name, &[])
+        .await?
+    {
+        Some(id) => Ok((id, name)),
+        None => Err(MembershipError::Conflict(format!(
             "{} already exists",
             spec.label
-        )));
+        ))),
     }
-    let sql = format!(
-        "INSERT INTO {table} (account_id, name) VALUES ($1, $2) RETURNING id",
-        table = spec.table
-    );
-    let id: i64 = sqlx::query_scalar(&sql)
-        .bind(account_id)
-        .bind(&name)
-        .fetch_one(&mut *conn)
-        .await?;
-    Ok((id, name))
 }
 
 /// Rename a set by id. A case-only change of its own name is allowed; another
@@ -511,12 +508,15 @@ pub async fn rename_set(
     id: i64,
     name: &str,
 ) -> Result<String, MembershipError> {
-    let (_, old_name) = get_set(spec, conn, account_id, id).await?;
     let new_name = normalize_name(spec, name)?;
+    // The checks and the update are one write transaction, so the name
+    // cannot be taken, nor the set deleted, between them.
+    let mut tx = begin_write(conn).await?;
+    let (_, old_name) = get_set(spec, &mut tx, account_id, id).await?;
     if old_name == new_name {
         return Ok(new_name);
     }
-    if let Some(other) = find_id(spec, conn, account_id, &new_name).await?
+    if let Some(other) = find_id(spec, &mut tx, account_id, &new_name).await?
         && other != id
     {
         return Err(MembershipError::Conflict(format!(
@@ -532,8 +532,9 @@ pub async fn rename_set(
         .bind(&new_name)
         .bind(id)
         .bind(account_id)
-        .execute(&mut *conn)
+        .execute(&mut *tx)
         .await?;
+    tx.commit().await?;
     Ok(new_name)
 }
 
@@ -546,8 +547,8 @@ pub async fn delete_set(
     account_id: i64,
     id: i64,
 ) -> Result<(), MembershipError> {
-    get_set(spec, conn, account_id, id).await?;
-    let mut tx = conn.begin().await?;
+    let mut tx = begin_write(conn).await?;
+    get_set(spec, &mut tx, account_id, id).await?;
     let members_sql = format!(
         "DELETE FROM {mt} WHERE {nc} = $1 RETURNING {mc}",
         mt = spec.members_table,
@@ -616,6 +617,11 @@ pub async fn patch_members(
     add: &[i64],
     remove: &[i64],
 ) -> Result<(u64, u64), MembershipError> {
+    // The checks and the writes are one write transaction: the set and every
+    // id to add are as they were checked when the rows go in, and a failure
+    // part-way leaves the set as it was.
+    let mut tx = begin_write(conn).await?;
+    let conn: &mut SqliteConnection = &mut tx;
     get_set(spec, conn, account_id, id).await?;
     let remove = clean_ids(remove);
     let add: Vec<i64> = clean_ids(add)
@@ -683,6 +689,7 @@ pub async fn patch_members(
             }
         }
     }
+    tx.commit().await?;
     Ok((added, removed))
 }
 

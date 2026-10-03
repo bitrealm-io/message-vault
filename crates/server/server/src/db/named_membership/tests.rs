@@ -112,6 +112,42 @@ async fn reserved_names_rejected_with_exact_messages() {
     }
 }
 
+/// Two requests create one name at once, and the second reads the name free
+/// before the first has committed. The same spelling broke the `UNIQUE`
+/// constraint and answered `500`; another letter case got past it and both
+/// were stored. Either way the second must be refused as taken.
+#[tokio::test]
+async fn a_name_created_meanwhile_is_taken_in_any_letter_case() {
+    for second in ["Work", "work"] {
+        let fixture = crate::test_support::test_fixture().await;
+        let account = fixture.account_with_id(101, "alice").await;
+        let mut other_conn = fixture.conn().await;
+        let mut other = crate::db::begin_write(&mut other_conn).await.unwrap();
+        create_set(tag_spec(), &mut other, account, "Work")
+            .await
+            .unwrap();
+        let mut conn = fixture.conn().await;
+        let err = crate::db::write_tx::commit_during(
+            other,
+            create_set(tag_spec(), &mut conn, account, second),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(
+            matches!(err, MembershipError::Conflict(_)),
+            "{second}: {err:?}"
+        );
+        let names: Vec<String> = list_sets(tag_spec(), &mut conn, account)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|(_, name)| name)
+            .collect();
+        assert_eq!(names, ["Work"], "{second}");
+    }
+}
+
 // Unknown and No group are computed from contact state and searched as
 // `group:unknown` and `group:none`. A stored Contact Group under either name
 // would put two things with one name in the left panel.

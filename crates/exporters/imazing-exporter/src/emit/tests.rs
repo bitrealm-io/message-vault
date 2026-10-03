@@ -1035,7 +1035,7 @@ fn a_groups_chat_id_does_not_depend_on_row_order() {
 /// A one-to-one chat keeps its address when the person later writes from a
 /// second one, even an address that sorts first.
 #[test]
-fn a_direct_chat_keeps_its_address_when_a_second_one_writes() {
+fn a_one_to_one_conversation_keeps_its_address_when_a_second_one_writes() {
     let email =
         "Alice,2020-01-01 12:00:00,iMessage,Incoming,alice@example.com,Alice,Read,,,One,,,\n";
     let phone = "Alice,2020-02-01 12:00:00,iMessage,Incoming,+15555550111,Alice,Read,,,Two,,,\n";
@@ -1218,5 +1218,32 @@ Climbing,2020-01-01 12:08:00,iMessage,Incoming,+15555550144,Dan,Read,,,Cheers,,,
     assert!(
         message_counts.contains(&1) && message_counts.contains(&3),
         "{message_counts:?}"
+    );
+}
+
+/// Two groups with different names can hold the same rows: the account
+/// holder sends one message to two new groups and nobody answers. No number
+/// of rows tells them apart, so their names do, and the export finishes.
+#[test]
+fn two_quiet_groups_with_the_same_one_row_stay_two_conversations() {
+    let only = |session: &str| {
+        format!(
+            "{MESSAGES_HEADER}{session},2020-01-01 12:00:00,iMessage,Outgoing,,,Sent,,,Happy new year,,,\n"
+        )
+    };
+    let documents = convert_files(&[
+        (
+            "a - Alice Example & Bob Example/Messages.csv",
+            &only("Alice Example & Bob Example"),
+        ),
+        (
+            "b - Carol Example & Dan Example/Messages.csv",
+            &only("Carol Example & Dan Example"),
+        ),
+    ]);
+    assert_eq!(documents.len(), 2, "{documents:?}");
+    assert_ne!(
+        documents[0].conversation.chat_identifier,
+        documents[1].conversation.chat_identifier
     );
 }

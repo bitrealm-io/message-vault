@@ -7,8 +7,8 @@ use crate::attachments::{
 use crate::attachments_emit::{attachment_digests, pending_attachment_to_ir};
 use crate::parse::{DiscoveredCsv, RawRow, SourceKind, discover_csv_files, parse_csv_file};
 use crate::parse_emit::{
-    Session, group_vendor_id, handle_type_for, is_notification, is_outgoing, parse_message_date,
-    resolve_sender, session_key,
+    Session, group_vendor_id, group_vendor_id_with_name, handle_type_for, is_notification,
+    is_outgoing, parse_message_date, resolve_sender, session_key,
 };
 use crate::unnamed_files::{FolderRows, UnnamedFile, file_name_second, unnamed_files};
 use anyhow::Result;
@@ -241,8 +241,14 @@ fn separate_groups_with_one_earliest_row(conversations: &mut BTreeMap<ConvoKey, 
                     })
                     .max()
                     .unwrap_or(0);
-                // One row past the longest shared run is one of its own, or
-                // all its rows when they are the first rows of another.
+                let same_rows = kept
+                    .iter()
+                    .any(|other| other != key && conversations[other].row_digests == *digests);
+                if same_rows {
+                    return group_vendor_id_with_name(digests, session_name(key).unwrap_or(""));
+                }
+                // One row past the longest shared run is one of its own.
+                // `group_vendor_id` takes all the rows when there are fewer.
                 group_vendor_id(digests, shared + 1)
             })
             .collect();
@@ -689,8 +695,9 @@ impl ProjectionHooks for ImazingProjection<'_> {
     }
 
     /// A group's members come from its key, never from its chat id. A
-    /// one-to-one chat's one participant is the person it is with: their
-    /// address, or for a chat keyed by a name, the name and no address.
+    /// one-to-one conversation's one participant is the person it is with:
+    /// their address, or for a conversation keyed by a name, the name and no
+    /// address.
     fn participants(&self, _chat_id: &str, convo: &PendingConversation) -> Vec<IrParticipant> {
         match self.key {
             ConversationKey::Group { members, .. } => members.clone(),

@@ -73,9 +73,13 @@ The folder name carries the time of the latest message, the file name carries th
 A group's `chat_identifier` is `group:` and the SHA-256 of its earliest row: `Message Date` as written, `Type`, `Sender ID`, `Text` and `Attachment`.
 Where rows share the earliest time, the smallest of them is taken, so the order of the rows does not change the key.
 Two groups can start with the same row, when the account holder sends one message to two new groups in the same second.
-Of the groups that share an earliest row, those with one session name are the same group read from two exports in the same input folder, and are one conversation. Groups with different session names are never merged, even when the rows of one are the first rows of the other. Two different groups with one name that start with the same row in the same second are merged; the export cannot tell them apart.
+Of the groups that share an earliest row, those with one session name are the same group read from two exports in the same input folder, and are one conversation.
+Groups with different session names are never merged, even when the rows of one are the first rows of the other.
+Two different groups with one name that start with the same row in the same second are merged.
+The export cannot tell them apart.
 Each other one's key hashes its earliest rows, as few as tell it apart from every one of the others.
-That key changes when a group it was told apart from is gone from the phone, or a new group shares more of its earliest rows.
+When every row of a group is among the first rows of another, its key hashes all its rows, and when two groups hold the same rows, their session names too.
+That key changes when a group it was told apart from is gone from the phone, a new group shares more of its earliest rows, or a group whose rows were all among another's first rows gets a row of its own.
 The key does not change when someone new writes, and it never equals a person's address.
 Its limit is in [input format](/docs/developer/formats/imazing/input/#source-limitations).
 

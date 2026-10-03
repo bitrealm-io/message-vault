@@ -63,7 +63,7 @@ pub(super) fn session_key(kind: SourceKind, session: &str, rows: &[&RawRow]) -> 
     }
     let session = session.trim();
     let named_by_address = session.contains('@') || sanitize_phone_shaped(session).is_some();
-    let key = match direct_handle(session, rows) {
+    let key = match one_to_one_handle(session, rows) {
         Some(handle) => ConversationKey::OneToOne(handle),
         None => ConversationKey::NameOnly(session.to_string()),
     };
@@ -190,7 +190,7 @@ impl<'a> RowOrder<'a> {
 /// the address of the earliest received row that has one. New messages do
 /// not change it; it changes only when the oldest messages are gone from the
 /// export. `None` when the source records no address for the person.
-fn direct_handle(session: &str, rows: &[&RawRow]) -> Option<String> {
+fn one_to_one_handle(session: &str, rows: &[&RawRow]) -> Option<String> {
     if let Some(phone) = phones_in_text(session).into_iter().next() {
         return Some(phone);
     }
@@ -379,6 +379,19 @@ pub(super) fn group_vendor_id(row_digests: &[[u8; 32]], depth: usize) -> String 
     for digest in row_digests.iter().take(depth) {
         hasher.update(digest);
     }
+    hex::encode(hasher.finalize())
+}
+
+/// The vendor id of a group whose rows are the same as another group's,
+/// which no number of rows tells apart: every row's digest, then the session
+/// name. It changes when the group gets a row of its own or is renamed.
+pub(super) fn group_vendor_id_with_name(row_digests: &[[u8; 32]], session_name: &str) -> String {
+    let mut hasher = Sha256::new();
+    for digest in row_digests {
+        hasher.update(digest);
+    }
+    hasher.update([0x1f]);
+    hasher.update(session_name.as_bytes());
     hex::encode(hasher.finalize())
 }
 

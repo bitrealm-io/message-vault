@@ -56,7 +56,9 @@ only the user resolves it.
    closes, and the diff.
 
    ```bash
-   gh pr view <N> --json headRefName,headRefOid,baseRefName,isDraft,closingIssuesReferences,body
+   gh pr view <N> --json headRefName,headRefOid,baseRefName,isDraft,body
+   gh api graphql -f query='{ repository(owner: "messagecrate", name: "message-crate") {
+     pullRequest(number: <N>) { closingIssuesReferences(first: 20) { nodes { number } } } } }'
    gh pr diff <N>
    ```
 
@@ -76,22 +78,24 @@ only the user resolves it.
    with no line in the diff goes in a top-level comment instead
    (`gh pr comment <N>`), with the marker on its first line. It has no thread,
    so it is answered by a new marked `gh pr comment <N>` that quotes it.
-3. **Fix on a detached worktree** at the reviewed head. The branch may be
-   checked out in another worktree, and a detached one works either way.
-   Push without force, because the branch may carry another session's
-   commits:
+3. **Work on a detached worktree** made at the pull request's head, before
+   the review. The branch may be checked out in another worktree, and a
+   detached one works either way. Before every push, run the **local
+   checks**: `./scripts/check-pr.sh`, then the tests for each area the
+   unpushed commits change, as "Build, format, and test" gives them
+   (`cargo test -p <crate>` for a workspace crate, the `src-tauri` tests,
+   Vitest for `web/`). CI runs everything else. Push without force, because
+   the branch may carry another session's commits:
 
    ```bash
    git fetch origin <headRefName>
    git worktree add --detach .worktrees/review-<N> <headRefOid>
+   git diff --name-only <last pushed SHA>..HEAD   # the areas to test
    git push origin HEAD:<headRefName>
    ```
 
-   If the push is rejected because the branch moved, rebase the fix commits
-   onto it (`git fetch origin <headRefName> && git rebase origin/<headRefName>`),
-   rerun the checks, and push again. The rebase applies only while HEAD has
-   no merge commit from step 5. Step 5 says how to handle a rejected push
-   after that.
+   If the push is rejected because the branch moved, step 5 says how to
+   bring it in.
 4. **Answer every thread**, with the commit that fixes it or the reason it
    stays as it is. Then resolve it if it is an agent thread:
 
@@ -105,49 +109,69 @@ only the user resolves it.
    ```
 
    Never resolve a thread without a reply in it.
-5. **Merge the base into a conflicting pull request.** The merge queue drops
-   a pull request it cannot merge onto the base, so resolve the conflict on
-   the branch first. Merge rather than rebase: a rebase needs a force-push,
+5. **Merge the base into the pull request** before the review, whenever the
+   base has commits the pull request lacks, so the review and the pull
+   request's checks see the code as it would land. Before queueing, merge it
+   again only on `CONFLICTING`: the merge queue drops a pull request it
+   cannot merge onto the base, and tests one that is only behind on the
+   latest base itself. Merge rather than rebase: a rebase needs a force-push,
    and the queue squashes the merge commit away. GitHub reports `UNKNOWN`
    for a few seconds after a push, so wait for a settled answer:
 
    ```bash
-   until m=$(gh pr view <N> --json mergeable -q .mergeable) && [ "$m" != UNKNOWN ]; do sleep 10; done
-   echo "$m"                      # CONFLICTING means merge the base
    git fetch origin <baseRefName>
+   git merge-base --is-ancestor origin/<baseRefName> HEAD || echo behind
+   until m=$(gh pr view <N> --json mergeable -q .mergeable) && [ "$m" != UNKNOWN ]; do sleep 10; done
+   echo "$m"                      # before queueing, CONFLICTING means merge the base
    git merge origin/<baseRefName> # stops at each conflict, with nothing committed
-   # resolve every conflict, git add the files, git commit, ./scripts/check-pr.sh
+   # resolve every conflict, git add the files, git commit, run the local checks
    git show --remerge-diff HEAD   # the conflict resolution alone, for review
    git push origin HEAD:<headRefName>
    ```
 
-   If this push is rejected because the branch moved, fetch it and merge
+   If a push is rejected because the branch moved, fetch it and merge
    `origin/<headRefName>` in (`git merge origin/<headRefName>`). A rebase
    would drop the merge commit and replay the base's commits one by one,
    which brings the conflict back. If that merge conflicts too, resolve it,
-   commit, run `./scripts/check-pr.sh`, and review its remerge diff like the
+   commit, run the local checks, and review its remerge diff like the
    first one. Then push again.
 
 6. **Wait for the required checks.** GitHub moves the pull request's head to
    a pushed commit a few seconds after the push, and starts its checks after
    that. Until both happen, `gh pr checks` reports the previous head, or exits
    with "no required checks reported". So wait until the head is the pushed
-   commit and it has check runs, then watch. Rerun only the failed jobs of a
-   run that failed for a reason outside the pull request:
+   commit and it has check runs, then watch, stopping at the first failure.
+   Watch only the head you mean to queue: a new push to the pull request
+   cancels the run on the head before it (`ci.yml`'s concurrency group), so
+   push a fix as soon as a check fails because of the pull request, rather
+   than waiting for the rest. When the first failure is outside the pull
+   request, let the run finish, because GitHub reruns the failed jobs of a
+   finished run only. Then sort every failed job: any that failed because of
+   the pull request is fixed and pushed, which replaces the rerun; only when
+   every failure is outside does the run get its rerun. Green counts only
+   while the pull request's head is still the commit you pushed: a push from
+   another session moves it, and its commits have not been reviewed.
 
    ```bash
+   before=$(gh pr view <N> --json headRefOid -q .headRefOid)   # just before the push
    sha=$(git rev-parse HEAD)
-   until [ "$(gh pr view <N> --json headRefOid -q .headRefOid)" = "$sha" ] &&
-         [ "$(gh api repos/messagecrate/message-crate/commits/$sha/check-runs -q .total_count)" -gt 0 ]
+   until h=$(gh pr view <N> --json headRefOid -q .headRefOid) && [ "$h" != "$before" ]; do sleep 10; done
+   [ "$h" = "$sha" ] || echo moved   # another session pushed on top
+   until [ "$(gh api repos/messagecrate/message-crate/commits/$sha/check-runs -q .total_count)" -gt 0 ]
    do sleep 30; done
-   gh pr checks <N> --watch --required
-   gh run rerun <run-id> --failed
+   gh pr checks <N> --watch --required --fail-fast
+   run=$(gh run list --commit "$sha" --workflow ci.yml --json databaseId -q '.[0].databaseId')
+   gh run watch "$run"               # an outside failure: wait for the run to finish
+   gh run view "$run" --json jobs -q '.jobs[] | select(.conclusion == "failure") | .name'
+   gh run rerun "$run" --failed
+   [ "$(gh pr view <N> --json headRefOid -q .headRefOid)" = "$sha" ] || echo moved
    ```
 
 #### Merging
 
-`main` requires the merge queue. `gh pr merge <N>` adds a green pull request
-to the queue, or turns on auto-merge when its checks are still running. It
+`main` requires the merge queue. `gh pr merge <N> --match-head-commit <sha>`
+adds a green pull request to the queue only while its head is still `<sha>`,
+the commit that was reviewed and checked, or turns on auto-merge when its checks are still running. It
 takes no `--squash`, because the queue's merge method is fixed. The queue
 runs `ci.yml` again on the pull request merged onto the latest `main`, and
 lands it only when that run is green. Never pass `--admin`: it merges past the

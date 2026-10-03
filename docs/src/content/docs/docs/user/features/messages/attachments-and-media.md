@@ -6,6 +6,7 @@ description: What the Attachments setting on the Import form does with photos, v
 The **Attachments** setting on the **Import** form decides what an Import Run does with the photos, videos, audio, and other files in a backup.
 The form offers it for **iMessage**, **WhatsApp**, **SMS Backup & Restore**, **GO SMS Pro**, and **SMS Backup+**.
 **iMazing** and **OpenExtract** have no **Attachments** setting.
+An Import Run from either copies every file as it is, whatever the setting held when another source was chosen.
 
 ## The four choices
 
@@ -53,6 +54,10 @@ They apply to video only.
 | **Target resolution** | `720`, `1080`, `4k` | `720` | Caps the longer side of the picture at 1280, 1920, or 3840 pixels. A smaller video is not enlarged. |
 | **Max FPS** | A number | `30` | Caps the frame rate of the re-encoded video. A video at or below it keeps its frame rate. |
 | **Minimum Video File Size (Megabytes)** | A number | `20` | A video smaller than this is not re-encoded. |
+
+An Import Run checks the three settings when it starts, before Staging reads the backup.
+A **Max FPS** that is empty, or is not a number above 0, fails the run there, and the run's issue names the field.
+The Staging Review and the **Media** stage work to the settings the run started with, so a later change to the form doesn't reach a run already under way.
 
 A video is re-encoded to H.265.
 H.264 is used when the installed ffmpeg can't write H.265.

@@ -17,16 +17,18 @@ describe("formatAttachmentProgress", () => {
     expect(line.startsWith("Copied")).toBe(true);
   });
 
-  it("uses Converted for convert and Skipped for skip", () => {
-    expect(
-      formatAttachmentProgress({
-        mode: "convert",
-        done: 1,
-        total: 1,
-        bytesDone: 0,
-        bytesTotal: 0,
-      }),
-    ).toMatch(/^Converted attachments: 1\/1 /);
+  it("uses Copied for convert and compress, whose Staging copies originals, and Skipped for skip", () => {
+    for (const mode of ["convert", "compress"] as const) {
+      expect(
+        formatAttachmentProgress({
+          mode,
+          done: 1,
+          total: 1,
+          bytesDone: 0,
+          bytesTotal: 0,
+        }),
+      ).toMatch(/^Copied attachments: 1\/1 /);
+    }
     expect(
       formatAttachmentProgress({
         mode: "skip",

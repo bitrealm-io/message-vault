@@ -104,7 +104,12 @@ const TOO_LARGE_SUFFIX: &str = ".too_large";
 pub(crate) const COMMITTED_SUFFIX: &str = "-mv";
 
 /// What the media pass should do.
-#[derive(Debug, Clone)]
+///
+/// Staging records these in the staging folder
+/// ([`write_media_settings`](crate::write_media_settings)), and the summary
+/// and the pass read them back from there, so the whole Import Run works to
+/// one set of values.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TranscodeOptions {
     /// Convert or Compress. Clone and Disabled make the pass a no-op.
     pub mode: MediaMode,

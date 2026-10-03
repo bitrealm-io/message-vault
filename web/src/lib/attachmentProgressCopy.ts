@@ -14,6 +14,11 @@ export function formatBytes(bytes: number): string {
   return `${value.toFixed(digits)} ${units[unit]}`;
 }
 
+/**
+ * Staging's attachments line for the run's attachment mode. Staging copies
+ * the originals under Convert and Compress too; the Media stage converts
+ * them afterwards, so only Skip reads differently here.
+ */
 export function formatAttachmentProgress(input: {
   mode: AttachmentMediaMode;
   done: number;
@@ -21,12 +26,7 @@ export function formatAttachmentProgress(input: {
   bytesDone: number;
   bytesTotal: number;
 }): string {
-  const verb =
-    input.mode === "convert" || input.mode === "compress"
-      ? "Converted"
-      : input.mode === "skip"
-        ? "Skipped"
-        : "Copied";
+  const verb = input.mode === "skip" ? "Skipped" : "Copied";
   const counts = `${input.done.toLocaleString()}/${input.total.toLocaleString()}`;
   return `${verb} attachments: ${counts} (${formatBytes(input.bytesDone)} / ${formatBytes(input.bytesTotal)})`;
 }

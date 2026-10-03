@@ -27,6 +27,7 @@ import {
   imessageVisiblePlatforms,
   isImessageMethod,
 } from "../../lib/imessageImport";
+import { showsAttachmentOptions } from "../../lib/importSource";
 import { ownerPhonesNeedMismatchAck } from "../../lib/phoneTokens";
 import { parseSelectKey } from "../../lib/selectKey";
 import type { AttachmentMediaMode } from "../../lib/types";
@@ -276,9 +277,7 @@ export default function ImportFormFields(props: ImportFormFieldsProps) {
   const whatsappKeyRequired = whatsappMethod
     ? whatsappCryptRequired(props.whatsappStats.hasMsgstoreDb, props.whatsappStats.cryptName)
     : false;
-  const showCompress =
-    (imessageMethod !== null || whatsappMethod !== null || isAndroidSms) &&
-    props.attachmentMedia === "compress";
+  const showCompress = showsAttachmentOptions(props.source) && props.attachmentMedia === "compress";
   const phoneFieldRef = useRef<PhoneTokenFieldHandle>(null);
   const [phoneDraft, setPhoneDraft] = useState("");
   const [mismatchAck, setMismatchAck] = useState(false);

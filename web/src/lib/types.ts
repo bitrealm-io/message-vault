@@ -66,6 +66,9 @@ export interface ExtractConfig {
   /** Continue an interrupted export in the same folder: previous output is
    * kept and conversations already written are skipped. */
   resume?: boolean;
+  /** The server's attachment size limit, in bytes, as stored with the Import
+   * Run. Staging records it in the folder with the run's media settings. */
+  asset_max_bytes: number;
 }
 
 export interface ExtractErrorEvent {

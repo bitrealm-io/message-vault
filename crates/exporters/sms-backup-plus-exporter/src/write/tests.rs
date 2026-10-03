@@ -270,3 +270,28 @@ fn only_sms_and_mms_are_written_and_the_rest_are_counted() {
     );
     assert_eq!(left_out_line(&ExportReport::default()), None);
 }
+
+/// A message whose service is unknown but whose kind says SMS, as a Mac
+/// `chat.db` row with no service or one pulled back from the server as
+/// `unknown` is, is written like any SMS, as the XML export writes it.
+#[test]
+fn a_message_of_unknown_service_and_sms_kind_is_written() {
+    let mut doc = sample_document("an sms of unknown service");
+    doc.messages[0].service = message_ir::IrService::Unknown;
+    doc.messages[0].message_kind = message_ir::IrMessageKind::Sms;
+    let tmp = tempfile::tempdir().unwrap();
+    let mut report = ExportReport::default();
+
+    archive().write(tmp.path(), &[doc], &mut report).unwrap();
+
+    assert_eq!(report.extra(LEFT_OUT), 0);
+    let folder = tmp.path().join("+15555550101");
+    let mail = fs::read_dir(&folder)
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let mail = fs::read_to_string(mail).unwrap();
+    assert!(mail.contains("an sms of unknown service"), "{mail}");
+}

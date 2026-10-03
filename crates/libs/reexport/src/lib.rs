@@ -7,17 +7,15 @@ use message_crate_core::{
     ExportReport, ExportTransforms, ExporterConfig, MediaConfig, OutputFormat, document_messages,
     prepare_outputs, stage_conversation_attachments,
 };
-use message_ir::ConversationDocument;
+use message_ir::{ConversationDocument, IrMessage};
 use message_ir_format::{
     CSV_HEADERS, FormatSink, clean_previous_ir_output, read_conversation_csv,
     read_conversation_eml_dir, read_conversation_json, read_conversation_jsonl,
     read_conversation_mbox,
 };
 use message_staging::AttachmentSpool;
-use sms_backup_plus_exporter::{SmsBackupPlusArchive, left_out_line, writes_message};
-use sms_backup_restore_exporter::{
-    ReadOptions, SbrArchive, is_sms_or_mms, not_sms_or_mms_line, read_backup,
-};
+use sms_backup_plus_exporter::{SmsBackupPlusArchive, left_out_line};
+use sms_backup_restore_exporter::{ReadOptions, SbrArchive, not_sms_or_mms_line, read_backup};
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
@@ -131,21 +129,20 @@ fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportR
     // Each archive below writes only SMS and MMS, and nothing for a
     // conversation with none, so only the others are counted.
     match config.output_format {
-        OutputFormat::Xml => {
-            sink = sink.with_archive(Box::new(SbrArchive));
-            report.conversations = documents
-                .iter()
-                .filter(|doc| doc.messages.iter().any(is_sms_or_mms))
-                .count() as u64;
-        }
+        OutputFormat::Xml => sink = sink.with_archive(Box::new(SbrArchive)),
         OutputFormat::SmsBackupPlus => {
             sink = sink.with_archive(Box::new(SmsBackupPlusArchive::new(started)));
-            report.conversations = documents
-                .iter()
-                .filter(|doc| doc.messages.iter().any(writes_message))
-                .count() as u64;
         }
         _ => {}
+    }
+    if matches!(
+        config.output_format,
+        OutputFormat::Xml | OutputFormat::SmsBackupPlus
+    ) {
+        report.conversations = documents
+            .iter()
+            .filter(|doc| doc.messages.iter().any(IrMessage::is_sms_or_mms))
+            .count() as u64;
     }
     for document in documents {
         sink.write_document(document)?;

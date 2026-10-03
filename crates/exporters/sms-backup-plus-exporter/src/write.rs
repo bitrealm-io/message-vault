@@ -18,7 +18,7 @@ use mail_builder::headers::text::Text;
 use mail_builder::mime::MimePart;
 use message_crate_core::ExportReport;
 use message_ir::{
-    ConversationDocument, IrConversationType, IrDirection, IrMessage, IrMessageKind, IrService,
+    ConversationDocument, IrConversationType, IrDirection, IrMessage, IrMessageKind,
     give_each_document_its_own_file, trimmed,
 };
 use message_ir_format::{MergedArchive, load_attachment_bytes};
@@ -56,12 +56,6 @@ impl SmsBackupPlusArchive {
     }
 }
 
-/// Whether SMS Backup+ mail holds `message`: an SMS, or an MMS, which has
-/// the SMS service with the `mms` kind. Every other message is left out.
-pub fn writes_message(message: &IrMessage) -> bool {
-    message.service == IrService::Sms
-}
-
 /// The log line saying how many messages the archive left out and why, or
 /// `None` when it left out none.
 #[must_use]
@@ -91,7 +85,7 @@ impl MergedArchive for SmsBackupPlusArchive {
             let messages: Vec<IrMessage> = doc
                 .messages
                 .iter()
-                .filter(|message| writes_message(message))
+                .filter(|message| message.is_sms_or_mms())
                 .cloned()
                 .collect();
             let left_out = doc.messages.len() - messages.len();

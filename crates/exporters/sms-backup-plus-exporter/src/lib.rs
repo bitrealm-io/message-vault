@@ -18,7 +18,7 @@ mod types;
 mod write;
 
 pub use run::run;
-pub use write::{SmsBackupPlusArchive, left_out_line, writes_message};
+pub use write::{SmsBackupPlusArchive, left_out_line};
 
 #[cfg(test)]
 #[path = "../tests/convert_smoke.rs"]

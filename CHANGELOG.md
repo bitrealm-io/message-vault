@@ -554,6 +554,10 @@ released versions carry their date on the heading.
 
 #### Contacts and identities
 
+- 2026-10-03 **Adding a WhatsApp identity checks that it was added.** When
+  a number was already a Text Message identity, adding it on WhatsApp
+  closed the dialog even if the server added nothing. The dialog now stays
+  open and says "The server did not add that identity."
 - 2026-09-22 **International phone numbers keep their country.** A number
   written with a country code, such as `+65 9555 0100` in an address book or
   `+44 7700 900123` as your own number, is now matched as that number. Before,
@@ -618,10 +622,6 @@ released versions carry their date on the heading.
 
 #### Accounts, Settings and screens
 
-- 2026-10-03 **Adding a WhatsApp identity checks that it was added.** When
-  a number was already a Text Message identity, adding it on WhatsApp
-  closed the dialog even if the server added nothing. The dialog now stays
-  open and says "The server did not add that identity."
 - 2026-10-03 **An expired session says to log in again.** When your
   session had expired, or was ended from another window, an Upload or an
   Export said "invalid API key", though the app sends no API key. It now

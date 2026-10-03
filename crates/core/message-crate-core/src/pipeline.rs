@@ -67,17 +67,34 @@ pub struct RunResult {
     pub conversations: u64,
     /// Messages exported, as [`ExportReport::messages`] counted them.
     pub message_count: u64,
+    /// Items the run could not finish, as [`ExportReport::issues`] listed them.
+    pub issues: Vec<RunIssue>,
 }
 
 impl RunResult {
-    /// The log lines `messages` with the counts of `report`.
+    /// The log lines `messages` with the counts and issues of `report`.
     pub fn new(messages: Vec<String>, report: &ExportReport) -> Self {
         Self {
             messages,
             conversations: report.conversations,
             message_count: report.messages,
+            issues: report.issues.clone(),
         }
     }
+}
+
+/// One item a run could not finish, for the Import Run's list of issues.
+/// The fields are the ones the upload reports its own issues with.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunIssue {
+    /// `skip` when the item was left out, `error` when it failed.
+    pub kind: String,
+    /// The step that raised it, such as `attachments`.
+    pub step: String,
+    /// What was affected, such as an attachment's path in the backup.
+    pub item: String,
+    /// Why, in one sentence.
+    pub reason: String,
 }
 
 /// Export run statistics: what was counted while parsing and what the
@@ -111,6 +128,9 @@ pub struct ExportReport {
     pub obfuscated_docs: u64,
     /// Human-readable error/warning lines (capped by each exporter).
     pub errors: Vec<String>,
+    /// Items the run could not finish, one row each, for the Import Run's
+    /// list of issues. Unlike `errors`, not capped: the list counts them.
+    pub issues: Vec<RunIssue>,
     /// Per-exporter extension counters keyed by name.
     pub extra: std::collections::BTreeMap<String, u64>,
 }
@@ -219,6 +239,7 @@ impl ExportReport {
         self.messages += tally.messages;
         self.sent += tally.sent;
         self.received += tally.received;
+        self.duplicates_dropped += tally.duplicates;
         if tally.notifications > 0 {
             self.bump("notifications", tally.notifications);
         }
@@ -510,12 +531,14 @@ mod tests {
             sent: 2,
             received: 3,
             notifications: 3,
+            duplicates: 4,
         });
 
         assert_eq!(report.messages, 15);
         assert_eq!(report.sent, 6);
         assert_eq!(report.received, 9);
         assert_eq!(report.extra("notifications"), 5);
+        assert_eq!(report.duplicates_dropped, 4);
     }
 
     #[test]
@@ -526,6 +549,7 @@ mod tests {
             sent: 1,
             received: 0,
             notifications: 0,
+            duplicates: 0,
         });
         assert!(report.extra.is_empty());
     }

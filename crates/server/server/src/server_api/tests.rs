@@ -894,6 +894,131 @@ async fn a_failed_demo_build_reports_why_and_leaves_no_account() {
     assert_eq!(demo.status, DemoAccountStatus::Ready, "{:?}", demo.error);
 }
 
+/// Whether the database holds the record of a Demo Account build that has
+/// not finished.
+async fn demo_build_is_unfinished(fixture: &crate::test_support::TestFixture) -> bool {
+    let mut conn = fixture.conn().await;
+    crate::db::demo_account_build::is_unfinished(&mut conn)
+        .await
+        .unwrap()
+}
+
+/// Whether the Demo Account's row is in the database.
+async fn demo_account_exists(fixture: &crate::test_support::TestFixture) -> bool {
+    let mut conn = fixture.conn().await;
+    account_profile::username_for_account(&mut conn, account_profile::DEMO_ACCOUNT_ID)
+        .await
+        .unwrap()
+        .is_some()
+}
+
+/// The server stopped during a build from Owner Home: the next start finds
+/// the build's record beside the Demo Account it left, removes the account,
+/// and reports the build as failed, so a part-built Demo Account is never
+/// `ready`. The next build starts as usual (#1215).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_demo_build_the_server_stopped_is_removed_and_failed_on_the_next_start() {
+    let fixture = test_fixture().await;
+    let mut state = fixture.state.clone();
+    state.demo_bundle_generator = tiny_bundle;
+    fixture
+        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
+        .await;
+    {
+        let mut conn = fixture.conn().await;
+        crate::db::demo_account_build::begin(&mut conn)
+            .await
+            .unwrap();
+    }
+
+    crate::server_api::recover_stopped_demo_build(&state)
+        .await
+        .expect("the next start removes the stopped build");
+
+    let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let demo: DemoAccount = get_json(&state, "/v1/server/demo-account", &owner.token).await;
+    assert_eq!(demo.status, DemoAccountStatus::Failed);
+    assert!(
+        demo.error
+            .as_deref()
+            .is_some_and(|error| error.contains("stopped")),
+        "{:?}",
+        demo.error
+    );
+    let info: ServerInfo = get_json(&state, "/v1/server", "").await;
+    assert!(!info.demo_account);
+    assert!(!demo_build_is_unfinished(&fixture).await);
+
+    let (status, body) = start_demo_build(&state, &owner.token).await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+    let demo = demo_account_after_build(&state, &owner.token).await;
+    assert_eq!(demo.status, DemoAccountStatus::Ready, "{:?}", demo.error);
+}
+
+/// Stopping the server waits for a running build to stop and remove the
+/// Demo Account it was replacing. The build's record stays, so the next
+/// start reports the build as failed (#1215).
+#[tokio::test(flavor = "multi_thread")]
+async fn stopping_the_server_during_a_demo_build_leaves_no_demo_account() {
+    let fixture = test_fixture().await;
+    let mut state = fixture.state.clone();
+    state.demo_bundle_generator = slow_tiny_bundle;
+    fixture
+        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
+        .await;
+    let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+
+    let (status, body) = start_demo_build(&state, &owner.token).await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+    let mut waited = 0;
+    while !demo_build_is_unfinished(&fixture).await {
+        waited += 1;
+        assert!(waited < 200, "the build never wrote its record");
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+
+    state.demo_build.stop().await;
+
+    assert!(!demo_account_exists(&fixture).await);
+    assert!(demo_build_is_unfinished(&fixture).await);
+
+    // The next start: a new server over the same database.
+    let mut next = state.clone();
+    next.demo_build = DemoBuild::default();
+    crate::server_api::recover_stopped_demo_build(&next)
+        .await
+        .expect("the next start removes the stopped build");
+    let demo: DemoAccount = get_json(&next, "/v1/server/demo-account", &owner.token).await;
+    assert_eq!(demo.status, DemoAccountStatus::Failed);
+    assert!(!demo_build_is_unfinished(&fixture).await);
+}
+
+/// A build task that panics ends the build as failed, and the next build
+/// starts. Otherwise the Demo Account would stay `building`, and every build
+/// and every delete of it would answer `409 Conflict` until a restart
+/// (#1215).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_demo_build_that_panics_fails_and_the_next_build_starts() {
+    let fixture = test_fixture().await;
+    let mut state = fixture.state.clone();
+    state.demo_bundle_generator = tiny_bundle;
+    let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+
+    assert!(state.demo_build.start(DemoDataSize::Medium));
+    state
+        .demo_build
+        .run(state.cfg.clone(), state.db.clone(), async {
+            panic!("the build broke")
+        });
+
+    let demo = demo_account_after_build(&state, &owner.token).await;
+    assert_eq!(demo.status, DemoAccountStatus::Failed);
+    let (status, body) = start_demo_build(&state, &owner.token).await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+    let demo = demo_account_after_build(&state, &owner.token).await;
+    assert_eq!(demo.status, DemoAccountStatus::Ready, "{:?}", demo.error);
+}
+
 /// While the Demo Account is built it cannot be entered: the login card
 /// does not offer it, a login as `demo` is refused, and a Session made
 /// before the build ended when the build started. Otherwise a visitor would

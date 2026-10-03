@@ -107,6 +107,7 @@ It holds two actions.
 **Delete all messages** permanently deletes the account's conversations, messages, and attachments, after one confirmation.
 The account, its contacts, and its settings remain.
 The server refuses the action when the account lacks the **Delete** permission.
+While an import into the account is running, the attachment files stay on the server's disk, because the import may still need them.
 
 **Delete account** permanently deletes the account with its messages, contacts, and attachments.
 The dialog asks for the username, typed exactly.

@@ -28,7 +28,7 @@ In CSV form: one file per conversation (header + one row per message after dedup
 | `conversation_type` | `individual` / `group` from address list |
 | `group_title` | Derived for groups (empty for 1:1) |
 | `participants_json` | Peer handles for the conversation |
-| `guid` | Deterministic SHA-256 fingerprint |
+| `guid` | SHA-256 of the message identity (`MessageGuid`): chat id, direction, sender, UTC milliseconds, collapsed text, sorted attachment digests |
 | `timestamp` / `timestamp_utc` / `timestamp_display` / `timestamp_unix_ms` | Flat: `X-smssync-date` / `Date`; archive: body timestamp |
 | `direction` | `incoming` / `outgoing` from `X-smssync-type` or archive sender |
 | `service` | Always `sms` |
@@ -52,10 +52,16 @@ Apple-only columns stay empty.
 
 ## Deduplication
 
-Duplicates are collapsed **while scanning** with a cover key (`cover_identity`):
+Every parsed mail is kept until the conversation is projected.
+The shared dedupe step (`message_ir::one_copy_per_message`) then keeps one copy of each message.
+Two copies are one message when the chat, the direction, the sender, the collapsed text and the attachment digests agree and the times are compatible.
+Times are compatible when they are equal to the millisecond, or when one copy has whole seconds only and falls in the same second as the other.
 
-`{chat_id}|{timestamp_ms_floored_to_second}|{0|1}|{normalized_text}`
+A mail timed by `X-smssync-date` in milliseconds has milliseconds.
+A mail timed by `Date`, or by `X-smssync-date` in seconds, has whole seconds only.
+A whole-second copy yields to a millisecond copy, so the message keeps the millisecond time and one `guid` whichever file is read first.
+Two millisecond copies with different times are two messages, such as the same text sent twice 300 ms apart.
 
-That ignores sub-second time and `X-smssync-id`, so two exports of one message meet even where their timestamps disagree below the second and only one kept the id. When two copies collide, the one carrying `X-smssync-id` wins, because only some export routes preserve it; attachments are merged by content digest so MMS media is not dropped. Otherwise the earlier timestamp wins. Rows are sorted by time before writing.
-
-Text normalization collapses whitespace.
+`X-smssync-id` never decides whether two copies are one message, because one copy of a message can carry it and another lack it, and Android reuses the id after a wipe.
+Between two copies nothing else tells apart, the one that carries `X-smssync-id` is kept, then the one whose `.eml` path sorts first.
+Rows are sorted by time before writing.

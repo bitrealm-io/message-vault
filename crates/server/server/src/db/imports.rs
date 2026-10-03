@@ -918,6 +918,16 @@ pub async fn has_messages(conn: &mut SqliteConnection, import_id: i64) -> Result
     Ok(row.is_some())
 }
 
+/// Whether the account has a running Import Run. Such a run may have
+/// uploaded files that no row names yet, for a batch it has not sent.
+pub async fn has_running_import(conn: &mut SqliteConnection, account_id: i64) -> Result<bool> {
+    let row = sqlx::query("SELECT 1 FROM imports WHERE account_id = $1 AND status = 'running'")
+        .bind(account_id)
+        .fetch_optional(&mut *conn)
+        .await?;
+    Ok(row.is_some())
+}
+
 /// One of an account's largest attachments by byte size.
 #[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
 pub struct TopAttachment {

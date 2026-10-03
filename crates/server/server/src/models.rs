@@ -4,9 +4,9 @@ use anyhow::{Context, Result};
 use chrono::{TimeZone, Utc};
 use message_ir::{
     ConversationHeader, HandleService, HandleType, IrAttachment, IrDirection, IrImessage,
-    IrMessage, IrMessageKind, IrService, check_schema_version_in_json,
+    IrMessage, IrMessageKind, check_schema_version_in_json,
 };
-use phone::sanitize_number;
+use phone::Handle;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -61,7 +61,9 @@ pub struct MessageRecord {
     pub is_from_me: bool,
     /// Sender handle for incoming messages.
     pub sender: Option<String>,
-    /// Sender handle type (phone, email, or username).
+    /// The sender's identity type read from the address alone (phone, email
+    /// or other). Staging prefers the type the header gives a participant
+    /// with the same address.
     pub sender_handle_type: Option<HandleType>,
     /// The account holder's own address on this message, sent from or
     /// received at: the message's owner handle, else the header's.
@@ -189,6 +191,15 @@ pub fn parse_ir_lines(
                     line: line_no,
                     detail: format!("the message is not valid: {e}"),
                 })?;
+            // A reaction row is not a message. The reaction reaches the
+            // message it reacts to through that message's `tapbacks` list,
+            // which already leaves removed reactions out.
+            if matches!(
+                msg.message_kind,
+                IrMessageKind::Tapback | IrMessageKind::StickerTapback
+            ) {
+                continue;
+            }
             let record = message_from_ir(&msg, header_owner.as_deref()).map_err(|e| {
                 ImportFailure::Parse {
                     line: line_no,
@@ -273,24 +284,7 @@ fn message_from_ir(msg: &IrMessage, header_owner: Option<&str>) -> Result<Messag
             Some(msg.text.clone())
         }
     };
-    let mut tapbacks = tapbacks_from_im(im, is_from_me, msg.sender_handle.as_deref());
-    if tapbacks.is_empty()
-        && let Some(kind) = im
-            .and_then(|i| i.tapback_kind.as_ref())
-            .filter(|s| !s.is_empty())
-    {
-        tapbacks.push(TapbackRecord {
-            part_index: i64::from(im.and_then(|i| i.associated_part).unwrap_or(0)),
-            kind: kind.clone(),
-            emoji: im.and_then(|i| i.tapback_emoji.clone()),
-            is_from_me,
-            sender: if is_from_me {
-                None
-            } else {
-                msg.sender_handle.clone()
-            },
-        });
-    }
+    let tapbacks = tapbacks_from_im(im);
 
     Ok(MessageRecord {
         guid: if msg.guid.trim().is_empty() {
@@ -308,7 +302,7 @@ fn message_from_ir(msg: &IrMessage, header_owner: Option<&str>) -> Result<Messag
         sender_handle_type: if is_from_me {
             None
         } else {
-            infer_sender_handle_type(msg.sender_handle.as_deref(), msg.service)
+            sender_handle_type(msg.sender_handle.as_deref())
         },
         owner: msg
             .owner_handle
@@ -330,29 +324,17 @@ fn message_from_ir(msg: &IrMessage, header_owner: Option<&str>) -> Result<Messag
     })
 }
 
-/// Infer the sender's handle type for import records.
+/// The type of a sender's identity, read from the address alone.
 ///
-/// IR participants carry an explicit `handle_type` when the source knows it;
-/// message rows only carry a raw sender handle, so the type is inferred here
-/// from the handle shape plus the service. Handles containing `@` are emails;
-/// SMS/iMessage/WhatsApp/RCS handles that sanitize as phone numbers are
-/// phones; anything else is `Other`.
-fn infer_sender_handle_type(sender_handle: Option<&str>, service: IrService) -> Option<HandleType> {
-    let handle = sender_handle?.trim();
-    if handle.is_empty() {
-        return None;
-    }
-    if handle.contains('@') {
-        return Some(HandleType::Email);
-    }
-    if matches!(
-        service,
-        IrService::Sms | IrService::IMessage | IrService::Whatsapp | IrService::Rcs
-    ) && sanitize_number(handle).is_some()
-    {
-        return Some(HandleType::Phone);
-    }
-    Some(HandleType::Other)
+/// A message carries only the sender's address, never its type. Staging uses
+/// the type the header gives the participant with the same address, and this
+/// one only when the header lists no such participant. It is
+/// [`Handle::parse`], the one rule for what an address is, and it does not
+/// read the message's service: a contact's number is a phone number on a
+/// service the model does not know too, such as a message Apple Messages sent
+/// by satellite (#1144).
+fn sender_handle_type(sender_handle: Option<&str>) -> Option<HandleType> {
+    sender_handle.and_then(Handle::parse).map(|h| h.kind())
 }
 
 /// Map one IR attachment onto the server's attachment record.
@@ -369,16 +351,12 @@ fn attachment_from_ir(a: &IrAttachment) -> AttachmentRecord {
     }
 }
 
-/// Tapback rows from the iMessage extension, falling back to the message's own sender and direction.
-fn tapbacks_from_im(
-    im: Option<&IrImessage>,
-    fallback_from_me: bool,
-    fallback_sender: Option<&str>,
-) -> Vec<TapbackRecord> {
-    let Some(im) = im else {
-        return Vec::new();
-    };
-    let Some(raw) = im.tapbacks.as_ref() else {
+/// Tapback rows from the iMessage extension. Each entry names its own
+/// reactor: `is_from_me` when the owner reacted, `reactor_handle` otherwise.
+/// An entry is never given the author or the direction of the message it
+/// reacts to, because the reactor is rarely the author.
+fn tapbacks_from_im(im: Option<&IrImessage>) -> Vec<TapbackRecord> {
+    let Some(raw) = im.and_then(|im| im.tapbacks.as_ref()) else {
         return Vec::new();
     };
     let items = match raw {
@@ -394,13 +372,15 @@ fn tapbacks_from_im(
                 part_index: t.part_index,
                 kind: t.kind,
                 emoji: t.emoji,
-                is_from_me: t.is_from_me.unwrap_or(fallback_from_me),
-                sender: t.sender.or_else(|| fallback_sender.map(|s| s.to_string())),
+                is_from_me: t.is_from_me,
+                sender: if t.is_from_me { None } else { t.reactor_handle },
             })
         })
         .collect()
 }
 
+/// One entry of an `imessage.tapbacks` list, as the Apple Messages reader
+/// writes it.
 #[derive(Debug, Deserialize)]
 struct WireTapback {
     #[serde(default)]
@@ -409,9 +389,9 @@ struct WireTapback {
     #[serde(default)]
     emoji: Option<String>,
     #[serde(default)]
-    is_from_me: Option<bool>,
+    is_from_me: bool,
     #[serde(default)]
-    sender: Option<String>,
+    reactor_handle: Option<String>,
 }
 
 /// The UTC RFC 3339 string (`Z` suffix) for a Unix timestamp, or `None` when
@@ -477,28 +457,74 @@ mod tests {
         assert_eq!(message_with("null", "null").subject, None);
     }
 
-    /// An export that names a tapback only by `tapback_kind`, with no
-    /// `tapbacks` list, still imports that one tapback.
+    /// A reaction the Apple Messages reader writes names its reactor in
+    /// `reactor_handle` and says in `is_from_me` whether the owner reacted.
+    /// Neither is taken from the message reacted to (#1213).
     #[test]
-    fn a_tapback_kind_without_a_tapbacks_list_is_one_tapback() {
-        let imessage = |kind: &str| {
-            serde_json::to_string(&message_ir::IrImessage {
-                tapback_kind: Some(kind.to_string()),
-                associated_part: Some(2),
-                ..Default::default()
-            })
-            .unwrap()
+    fn a_reaction_keeps_the_reactor_the_reader_wrote() {
+        let im = message_ir::IrImessage {
+            tapbacks: Some(serde_json::json!([
+                {"part_index": 0, "kind": "loved", "is_from_me": false,
+                 "reactor_handle": "+15550001111", "reactor_display_name": "Sam"},
+                {"part_index": 0, "kind": "liked", "is_from_me": true,
+                 "reactor_display_name": "Me"}
+            ])),
+            ..Default::default()
         };
-        let loved = message_with("null", &imessage("loved"));
-        assert_eq!(loved.tapbacks.len(), 1);
-        let tapback = &loved.tapbacks[0];
-        assert_eq!(tapback.kind, "loved");
-        assert_eq!(tapback.part_index, 2);
-        assert!(!tapback.is_from_me);
-        assert_eq!(tapback.sender.as_deref(), Some("+15555550101"));
+        // The owner's own message, reacted to by Sam, then by the owner.
+        let rows = tapbacks_from_im(Some(&im));
+        assert_eq!(
+            rows[0].sender.as_deref(),
+            Some("+15550001111"),
+            "Sam's reaction"
+        );
+        assert!(!rows[0].is_from_me, "Sam's reaction read as the owner's");
+        assert_eq!(rows[1].sender, None, "the owner's reaction");
+        assert!(rows[1].is_from_me, "the owner's reaction read as Sam's");
 
-        let empty = message_with("null", &imessage(""));
-        assert!(empty.tapbacks.is_empty());
+        // Sam's message, with the same two reactions.
+        let on_sams = message_with("null", &serde_json::to_string(&im).unwrap());
+        assert_eq!(on_sams.tapbacks[0].sender.as_deref(), Some("+15550001111"));
+        assert!(!on_sams.tapbacks[0].is_from_me);
+        assert_eq!(on_sams.tapbacks[1].sender, None);
+        assert!(on_sams.tapbacks[1].is_from_me);
+    }
+
+    /// The Apple Messages reader writes each reaction as a row of its own as
+    /// well as in the `tapbacks` list of the message reacted to. The row is
+    /// not a message, and it carries no reaction of its own (#1213).
+    #[test]
+    fn a_reaction_row_is_not_a_message() {
+        let header = r#"{"schema_version":4,"export":{"source":"imessage","tool":"t","tool_version":"1","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550101","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550101","display_name":"Sam"}],"stats":{"message_count":3,"attachment_count":0,"first_timestamp_unix_ms":1400773261000,"last_timestamp_unix_ms":1400773263000}}}"#.to_string();
+        let target = r#"{"guid":"g-hi","timestamp_unix_ms":1400773261000,"direction":"outgoing","service":"imessage","message_kind":"imessage","sender_handle":null,"sender_display_name":null,"subject":null,"text":"hi","attachments":[],"imessage":null,"source":null}"#.to_string();
+        let row = |guid: &str, kind: &str, text: &str, action: &str| {
+            format!(
+                r#"{{"guid":"{guid}","timestamp_unix_ms":1400773262000,"direction":"incoming","service":"imessage","message_kind":"{kind}","sender_handle":"+15555550101","sender_display_name":"Sam","subject":null,"text":"{text}","attachments":[],"imessage":{{"is_reply":false,"is_deleted":false,"associated_guid":"g-hi","associated_part":0,"tapback_kind":"loved","tapback_action":"{action}"}},"source":null}}"#
+            )
+        };
+        let records = parse_ir_lines([
+            header,
+            target,
+            row("g-love", "tapback", "Loved a message", "add"),
+            row("g-unlove", "tapback", "Removed Heart", "remove"),
+            row(
+                "g-sticker",
+                "sticker_tapback",
+                "Reacted with a sticker",
+                "add",
+            ),
+        ])
+        .unwrap();
+        let messages: Vec<_> = records
+            .iter()
+            .filter_map(|r| match r {
+                ExportRecord::Message(m) => Some(m),
+                ExportRecord::Conversation(_) => None,
+            })
+            .collect();
+        assert_eq!(messages.len(), 1, "{messages:?}");
+        assert_eq!(messages[0].guid.as_deref(), Some("g-hi"));
+        assert!(messages[0].tapbacks.is_empty());
     }
 
     #[test]
@@ -532,24 +558,18 @@ mod tests {
     }
 
     #[test]
-    fn infers_sender_handle_type_from_handle_and_service() {
+    fn types_a_sender_by_the_address_alone() {
         assert_eq!(
-            infer_sender_handle_type(Some("alice@example.com"), IrService::Unknown),
+            sender_handle_type(Some("alice@example.com")),
             Some(HandleType::Email)
         );
         assert_eq!(
-            infer_sender_handle_type(Some("+15555550101"), IrService::Sms),
+            sender_handle_type(Some("+1 (555) 555-0101")),
             Some(HandleType::Phone)
         );
-        assert_eq!(
-            infer_sender_handle_type(Some("+15555550101"), IrService::Signal),
-            Some(HandleType::Other)
-        );
-        assert_eq!(
-            infer_sender_handle_type(Some("alice_discord"), IrService::Discord),
-            Some(HandleType::Other)
-        );
-        assert_eq!(infer_sender_handle_type(None, IrService::Sms), None);
+        assert_eq!(sender_handle_type(Some("AMAZON")), Some(HandleType::Other));
+        assert_eq!(sender_handle_type(Some("  ")), None);
+        assert_eq!(sender_handle_type(None), None);
     }
 
     #[test]

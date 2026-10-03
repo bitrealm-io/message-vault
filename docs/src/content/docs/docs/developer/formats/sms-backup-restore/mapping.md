@@ -22,7 +22,7 @@ In CSV form: one file per conversation. Decoded MMS media under `attachments/` w
 | `conversation_type` | `individual` / `group` |
 | `group_title` | Derived for groups; empty for 1:1 |
 | `participants_json` | Peer handles from SMS address / MMS `<addr>` list |
-| `guid` | Deterministic SHA-256 fingerprint |
+| `guid` | SHA-256 of the message identity (`MessageGuid`): chat id, direction, sender, UTC milliseconds, collapsed text, sorted attachment digests |
 | `timestamp` / `timestamp_utc` / `timestamp_display` / `timestamp_unix_ms` | From `date` (Unix epoch milliseconds, UTC) |
 | `direction` | `incoming` / `outgoing` from SMS `type` or MMS `msg_box` / From addr |
 | `service` | Always `sms` |

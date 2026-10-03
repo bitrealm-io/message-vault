@@ -340,6 +340,7 @@ fn build_parent_tapbacks(session: &MailSession, message: &Message) -> Option<Val
                     part_index,
                     kind,
                     emoji,
+                    is_from_me: tapback.is_from_me(),
                     reactor_handle,
                     reactor_display_name,
                 },
@@ -1309,7 +1310,8 @@ mod tests {
     }
 
     /// Tapbacks on a parent are listed in part, date and rowid order, with
-    /// the reactor named; a removed tapback is left out.
+    /// the reactor named and whether the owner reacted; a removed tapback is
+    /// left out.
     #[test]
     fn parent_tapbacks_are_listed_in_order_and_named() {
         let fixture = FixtureDb::write();
@@ -1341,8 +1343,10 @@ mod tests {
         assert_eq!(cells[0]["kind"], "emoji");
         assert_eq!(cells[0]["emoji"], "🔥");
         assert_eq!(cells[0]["reactor_display_name"], OWNER);
+        assert_eq!(cells[0]["is_from_me"], true);
         assert_eq!(cells[1]["kind"], "loved");
         assert_eq!(cells[1]["reactor_handle"], FRIEND_PHONE);
+        assert_eq!(cells[1]["is_from_me"], false);
         assert_eq!(cells[1]["reactor_display_name"], "Sam Example");
 
         assert_eq!(build_parent_tapbacks(&session, &messages[0]), None);

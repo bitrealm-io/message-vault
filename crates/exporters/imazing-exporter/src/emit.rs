@@ -4,7 +4,7 @@
 use crate::attachments::{
     AttachmentIndex, ResolveAttachmentArgs, mime_hint, resolve_attachment_cell,
 };
-use crate::attachments_emit::{attachment_guid_materials, pending_attachment_to_ir};
+use crate::attachments_emit::{attachment_digests, pending_attachment_to_ir};
 use crate::parse::{DiscoveredCsv, RawRow, SourceKind, discover_csv_files, parse_csv_file};
 use crate::parse_emit::{
     PeerInfo, collect_peer_info, is_notification, is_outgoing, parse_message_date, resolve_sender,
@@ -90,7 +90,6 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
         attachment_index: copy_attachments.then(|| AttachmentIndex::build(input)),
         copy_attachments,
         conversations: BTreeMap::new(),
-        seen_keys: BTreeMap::new(),
         claims: Vec::new(),
         folder_texts: BTreeMap::new(),
         report: ExportReport::default(),
@@ -157,9 +156,6 @@ struct Ingest {
     /// Keyed by `<family>|<chat id>` so a Messages chat and a WhatsApp chat
     /// with the same peer stay separate conversations.
     conversations: BTreeMap<String, PendingConversation>,
-    /// Parse-time dedupe state keyed by conversation key (the shared
-    /// `PendingConversation` carries document data only).
-    seen_keys: BTreeMap<String, HashSet<String>>,
     /// Every row matched to a file, in the order the rows were read.
     claims: Vec<FileClaim>,
     /// Each chat folder's row texts, keyed by the row's `Message Date` as
@@ -268,7 +264,7 @@ impl Ingest {
                 convo
             });
         for &(row_index, row) in rows {
-            let Some(message) = self.message_from_row(discovered, row, &peer, &convo_key) else {
+            let Some(message) = self.message_from_row(discovered, row, &peer) else {
                 continue;
             };
             let messages = &mut self
@@ -298,9 +294,8 @@ impl Ingest {
         discovered: &DiscoveredCsv,
         row: &RawRow,
         peer: &PeerInfo,
-        convo_key: &str,
     ) -> Option<PendingMessage> {
-        let Some((secs, date_ms)) = parse_message_date(&row.message_date, self.tz) else {
+        let Some(secs) = parse_message_date(&row.message_date, self.tz) else {
             self.report.skipped_invalid_date += 1;
             return None;
         };
@@ -313,26 +308,6 @@ impl Ingest {
             &peer.chat_id,
             &peer.contact_name,
         );
-        // sender_id distinguishes same-second same-text rows from
-        // different senders in group chats.
-        let dedupe_key = format!(
-            "{}|{}|{}|{}|{}|{}",
-            peer.chat_id,
-            secs,
-            if is_from_me { "1" } else { "0" },
-            row.sender_id,
-            row.text,
-            row.attachment
-        );
-        if !self
-            .seen_keys
-            .entry(convo_key.to_string())
-            .or_default()
-            .insert(dedupe_key)
-        {
-            self.report.duplicates_dropped += 1;
-            return None;
-        }
         let (attachments, attachment_extra) = self.attachment_for_row(discovered, row);
         let service = if row.service.trim().is_empty() {
             match discovered.kind {
@@ -350,7 +325,6 @@ impl Ingest {
         );
         extra.insert("subject".into(), row.subject.clone());
         extra.insert("contact_name".into(), peer.contact_name.clone());
-        extra.insert("date_ms".into(), date_ms);
         extra.insert("service".into(), service);
         extra.insert("imazing_status".into(), row.status.clone());
         extra.insert("imazing_type".into(), row.msg_type.clone());
@@ -604,8 +578,8 @@ impl ProjectionHooks for ImazingProjection {
         msg.extra_opt("subject")
     }
 
-    fn guid_materials(&self, msg: &PendingMessage) -> Vec<String> {
-        attachment_guid_materials(&msg.attachments)
+    fn attachment_digests(&self, msg: &PendingMessage) -> Vec<String> {
+        attachment_digests(&msg.attachments)
     }
 
     fn attachment_to_ir(&self, att: &PendingAttachment, msg: &PendingMessage) -> IrAttachment {

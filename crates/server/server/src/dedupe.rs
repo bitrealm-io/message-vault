@@ -7,7 +7,6 @@ use std::time::Instant;
 
 use anyhow::{Context, Result};
 use rayon::prelude::*;
-use sha2::{Digest, Sha256};
 use sqlx::Connection;
 use sqlx::SqliteConnection;
 
@@ -36,10 +35,7 @@ type ContentKeyRow = (
 
 /// Collapse whitespace so minor text differences do not split the same SMS.
 pub fn normalize_body(body: Option<&str>) -> String {
-    body.unwrap_or("")
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
+    message_ir::collapse_whitespace(body.unwrap_or(""))
 }
 
 /// Stable chat identity for content keys.
@@ -67,9 +63,14 @@ pub fn chat_identity_for_content_key(
     }
 }
 
-/// Build a content key from chat + direction + sender + UTC epoch + body + attachment hashes.
+/// Build a content key from chat + direction + sender + UTC second + body + attachment hashes.
 ///
-/// `timestamp` is the stored UTC instant; a value that does not parse is hashed as text.
+/// The key is the message's [`message_ir::MessageIdentity`] at whole seconds,
+/// made by the same function as an exported message's `guid` (which is made at
+/// milliseconds): it matches one message across sources, and iMazing,
+/// OpenExtract and GO SMS Pro's PDU files record whole seconds only.
+///
+/// `timestamp` is the stored UTC instant; `None` when it does not parse.
 /// For groups, pass the sorted-participant identity from [`chat_identity_for_content_key`].
 /// Incoming group messages include the normalized sender so two peers sending the same
 /// text at the same second do not collide; outgoing (`is_from_me`) uses an empty sender.
@@ -80,47 +81,28 @@ pub fn compute_content_key(
     timestamp: &str,
     body: Option<&str>,
     attachment_shas: &[String],
-) -> String {
-    let epoch = parse_rfc3339_utc_secs(timestamp.trim())
-        .map_or_else(|| timestamp.trim().to_string(), |s| s.to_string());
-
-    let mut shas: Vec<&str> = attachment_shas
-        .iter()
-        .map(|s| s.as_str())
-        .filter(|s| !s.is_empty())
-        .collect();
-    shas.sort_unstable();
-    shas.dedup();
-
-    let sender = if is_from_me {
-        ""
-    } else {
-        sender_normalized.map_or("", str::trim)
+) -> Option<String> {
+    let secs = parse_rfc3339_utc_secs(timestamp.trim())?;
+    let identity = message_ir::MessageIdentity {
+        chat: chat_identifier,
+        is_from_me,
+        sender: sender_normalized,
+        timestamp_unix_ms: secs.saturating_mul(1000),
+        text: body.unwrap_or(""),
+        attachment_digests: attachment_shas,
+        vendor_key: None,
     };
-
-    let mut hasher = Sha256::new();
-    hasher.update(chat_identifier.as_bytes());
-    hasher.update(b"|");
-    hasher.update(if is_from_me { b"1" } else { b"0" });
-    hasher.update(b"|");
-    hasher.update(sender.as_bytes());
-    hasher.update(b"|");
-    hasher.update(epoch.as_bytes());
-    hasher.update(b"|");
-    hasher.update(normalize_body(body).as_bytes());
-    for sha in shas {
-        hasher.update(b"|");
-        hasher.update(sha.as_bytes());
-    }
-    crate::assets_api::hex_encode(&hasher.finalize())
+    Some(identity.key(message_ir::TimePrecision::Seconds))
 }
 
 /// Fingerprint one message row from its chat identity, direction, sender, time, body, and attachment hashes.
+///
+/// `None` when the row's time does not parse; such a row keeps no content key.
 fn content_key_for_row(
     row: &ContentKeyRow,
     group_handles: &HashMap<i64, Vec<String>>,
     shas_by_msg: &HashMap<i64, Vec<String>>,
-) -> (i64, String) {
+) -> Option<(i64, String)> {
     let (id, conversation_id, chat_id, conversation_type, is_from_me, ts, body, sender_norm) = row;
     let empty: &[String] = &[];
     let shas = shas_by_msg.get(id).map_or(empty, Vec::as_slice);
@@ -140,8 +122,8 @@ fn content_key_for_row(
         ts,
         body.as_deref(),
         shas,
-    );
-    (*id, key)
+    )?;
+    Some((*id, key))
 }
 
 /// Fingerprint every row in parallel.
@@ -151,7 +133,7 @@ fn hash_content_keys(
     shas_by_msg: &HashMap<i64, Vec<String>>,
 ) -> Vec<(i64, String)> {
     rows.par_iter()
-        .map(|row| content_key_for_row(row, group_handles, shas_by_msg))
+        .filter_map(|row| content_key_for_row(row, group_handles, shas_by_msg))
         .collect()
 }
 

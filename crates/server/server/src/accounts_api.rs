@@ -1021,7 +1021,8 @@ pub struct DeleteMessagesRequest {
 pub struct DeleteMessagesResponse {
     /// Conversations deleted.
     pub conversations: u64,
-    /// Attachment rows deleted (on-disk files are removed too).
+    /// Attachment rows deleted. Their files are removed too, unless the
+    /// account has a running Import Run.
     pub attachments: u64,
 }
 
@@ -1057,6 +1058,11 @@ fn remove_account_asset_trees(
 
 /// Destroy one account's conversations, messages, and attachments. The
 /// account itself, its contacts, and its login survive.
+///
+/// The rows go in one transaction, between two batches of a running Import
+/// Run and never inside one. The attachment files go after it, unless the
+/// account has a running Import Run: that run may have uploaded files for a
+/// batch it has not sent yet, so every file stays on disk.
 ///
 /// The owner may, on any account. The account itself may with a
 /// session that carries the `delete` permission, and confirms in the body.
@@ -1095,13 +1101,23 @@ pub async fn delete_account_messages(
         }
     }
 
+    // The account's import lock, as each batch takes it, so the delete runs
+    // between two batches and never inside one. The lock order is account
+    // lock, then pool, so the connection is given back first.
+    drop(conn);
+    let _batch_lock = state.account_import_locks.lock(target.to_string()).await;
+    let mut conn = state.db.acquire().await?;
     let stats = account_profile::delete_all_messages_for_account(&mut conn, target).await?;
-    remove_account_asset_trees(
-        &state.cfg.paths.data_dir,
-        target,
-        &state.cfg.paths.assets_dir,
-        &state.cfg.paths.assets_converted_dir,
-    )?;
+    // A running Import Run may have uploaded files for a batch it has not
+    // sent yet, and no row names them, so its account's files stay on disk.
+    if !stats.import_running {
+        remove_account_asset_trees(
+            &state.cfg.paths.data_dir,
+            target,
+            &state.cfg.paths.assets_dir,
+            &state.cfg.paths.assets_converted_dir,
+        )?;
+    }
 
     Ok(Json(DeleteMessagesResponse {
         conversations: stats.conversations,

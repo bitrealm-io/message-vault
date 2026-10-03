@@ -121,21 +121,21 @@ fn end_dedupe_collapses_duplicate_flats() {
     assert_eq!(report.conversations, 1);
 }
 
-/// Two exports of one message, disagreeing below the second, still collapse.
+/// Two exports of one message, one timed to the millisecond by
+/// `X-smssync-date` and one to the whole second by `Date`, are one message.
 ///
-/// `cover_identity` floors the timestamp to the whole second, so a mailbox
-/// backed up twice by routes that rounded `X-smssync-date` differently yields
-/// one message rather than two. The copy carrying `X-smssync-id` is the one
-/// kept, because only some export routes preserve it.
+/// The millisecond copy is kept, with its time, and two millisecond copies
+/// with different times stay two messages: the same text sent twice 488 ms
+/// apart.
 #[test]
-fn dedupe_collapses_two_exports_that_disagree_below_the_second() {
+fn a_whole_second_export_and_a_millisecond_export_of_one_message_collapse() {
     let tmp = tempfile::tempdir().unwrap();
     let input_dir = tmp.path().join("in");
     fs::create_dir_all(&input_dir).unwrap();
 
     let base_ms: i64 = 1_577_880_000_000;
 
-    let write = |name: &str, ms: i64, id: Option<&str>| {
+    let write = |name: &str, date_line: &str, id: Option<&str>| {
         let id_line = id.map_or(String::new(), |v| format!("X-smssync-id: {v}\r\n"));
         fs::write(
             input_dir.join(name),
@@ -145,7 +145,7 @@ To: 4075551234@sms-backup-plus.local\r\n\
 Subject: SMS with Alice\r\n\
 X-smssync-type: 2\r\n\
 X-smssync-address: 4075551234\r\n\
-X-smssync-date: {ms}\r\n\
+{date_line}\r\n\
 {id_line}\
 Content-Type: text/plain; charset=utf-8\r\n\
 \r\n\
@@ -155,23 +155,37 @@ Will do\r\n"
         .unwrap();
     };
 
-    // The same message, 488 ms apart, and only one copy kept the Android id.
-    write("without_id.eml", base_ms, None);
-    write("with_id.eml", base_ms + 488, Some("999"));
+    // One message: a copy timed by `Date` alone, and a copy timed to the
+    // millisecond that also kept the Android id.
+    write(
+        "whole_second.eml",
+        "Date: Wed, 01 Jan 2020 12:00:00 +0000",
+        None,
+    );
+    write(
+        "millisecond.eml",
+        &format!("X-smssync-date: {}", base_ms + 488),
+        Some("999"),
+    );
+    // The same text again 488 ms later is another message.
+    write(
+        "again.eml",
+        &format!("X-smssync-date: {}", base_ms + 976),
+        None,
+    );
 
     let out = tmp.path().join("out");
     let report = convert(&[input_dir.as_path()], &out).unwrap();
 
-    assert_eq!(report.extra("messages_before_dedupe"), 2);
-    assert_eq!(report.messages, 1, "the two copies are one message");
+    assert_eq!(report.extra("messages_before_dedupe"), 3);
+    assert_eq!(report.messages, 2, "the first two copies are one message");
     assert_eq!(report.duplicates_dropped, 1);
 
     let csv = fs::read_to_string(out.join("+14075551234.csv")).unwrap();
     assert!(csv.contains("Will do"));
-    // The surviving copy is the one that carried the id.
     assert!(
         csv.contains("999"),
-        "the copy with X-smssync-id is the one kept"
+        "the millisecond copy, which carried the id, is the one kept"
     );
 }
 
@@ -231,14 +245,13 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
 /// SMS Backup+ takes that header from the Android message id, which is unique
 /// only within one device's database and is reused after a wipe or a restore,
 /// so a mailbox holding two backups easily carries the same id on unrelated
-/// messages. `identity::cover_identity` ignores the header for exactly that
-/// reason, and `identity.rs` unit-tests the key it builds — but nothing put
-/// two colliding files through the exporter, so a change that started keying
-/// on the id would drop one of every colliding pair with the whole suite
-/// green. `flat_smssync_276_alex.eml` and `flat_smssync_276_sam.eml` were
+/// messages. The shared dedupe step (`message_ir::one_copy_per_message`)
+/// never reads the header for exactly that reason, and this test puts two
+/// colliding files through the exporter, so a change that started keying on
+/// the id would fail here rather than drop one of every colliding pair. `flat_smssync_276_alex.eml` and `flat_smssync_276_sam.eml` were
 /// committed for this test and had none.
 ///
-/// The two committed fixtures are in different chats, and the dedupe map is
+/// The two committed fixtures are in different chats, and the dedupe step is
 /// per chat, so they cover the parse and the split but cannot themselves
 /// collide. The same-chat pair written here is the case that can: two
 /// messages one minute apart in one conversation, sharing id 276. Keying on

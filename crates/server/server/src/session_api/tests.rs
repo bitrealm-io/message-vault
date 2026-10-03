@@ -487,7 +487,7 @@ async fn a_login_whose_session_row_appears_meanwhile_still_signs_in() {
     let mut conn = fixture.conn().await;
     let created = crate::db::write_tx::commit_during(
         other,
-        CreateSessionResponse::for_existing_account(&mut conn, account),
+        CreateSessionResponse::for_existing_account(&mut conn, account, None),
     )
     .await
     .expect("the second login signs in");

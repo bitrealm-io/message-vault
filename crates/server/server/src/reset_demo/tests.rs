@@ -1703,7 +1703,7 @@ async fn the_wipe_removes_the_demo_rows_and_folder_and_leaves_other_accounts() {
     };
 
     let build = build_pool(&db).await;
-    wipe_demo_account(&cfg, &build, DEMO_ACCOUNT_ID)
+    wipe_demo_account(&cfg, &build, DEMO_ACCOUNT_ID, AuditActor::CommandLine)
         .await
         .expect("wipe the demo account");
     build.close().await;

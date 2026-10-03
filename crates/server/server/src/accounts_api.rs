@@ -25,7 +25,9 @@ use crate::credentials::{
     hash_user_password, password_bucket, passwords_match, refuse_when_rate_limited,
     require_username_free, require_valid_username,
 };
+use crate::db::audit_trail::{self, AuditAction, AuditActor, Details, NewEntry};
 use crate::db::handles::{self, Identity};
+use crate::db::permissions::Permission;
 use crate::db::storage::{self, Scope};
 use crate::db::{WriteTx, begin_write};
 use crate::db::{account_profile, imports, server_settings, session_tokens};
@@ -176,6 +178,15 @@ impl Reach {
     /// True when the row is the caller's own, the owner's included.
     pub(crate) fn is_own(self) -> bool {
         matches!(self, Self::Own | Self::OwnersOwn)
+    }
+
+    /// Who the Audit Trail says acted: the owner, on any account, or the
+    /// holder on their own.
+    pub(crate) fn actor(self) -> AuditActor {
+        match self {
+            Self::Owner | Self::OwnersOwn => AuditActor::Owner,
+            Self::Own => AuditActor::Holder,
+        }
     }
 }
 
@@ -328,6 +339,7 @@ pub struct CreateAccountResponse {
 pub async fn create_account(
     State(state): State<AppState>,
     auth: Option<AuthIdentity>,
+    headers: axum::http::HeaderMap,
     Json(req): Json<CreateAccountRequest>,
 ) -> Result<Created<CreateAccountResponse>, ApiError> {
     let username = require_valid_username(&req.username)?;
@@ -384,11 +396,22 @@ pub async fn create_account(
     if preferred_name.is_none() && phone.is_none() {
         account_profile::set_must_set_up_profile(&mut tx, account_id, true).await?;
     }
+    let actor = if by_owner {
+        AuditActor::Owner
+    } else {
+        AuditActor::Anonymous
+    };
+    audit_trail::record(
+        &mut tx,
+        &NewEntry::about(AuditAction::AccountCreated, actor, (account_id, &username)),
+    )
+    .await?;
     let token = if by_owner {
         None
     } else {
         // Registering opens a Session, so it is the account's first login.
-        let token = session_tokens::insert_account_session_token(&mut tx, account_id)
+        let app = crate::server::connecting_app(&headers);
+        let token = session_tokens::open_session(&mut tx, account_id, &username, app.as_ref())
             .await
             .map_err(ApiError::Internal)?;
         account_profile::record_login(&mut tx, account_id).await?;
@@ -672,11 +695,20 @@ async fn update_profile_in(
 /// account has already issued, because a token's permissions are intersected
 /// with its account's on every request. The owner restrains the account and
 /// the tokens follow, without ever seeing one.
+///
+/// What changed goes in the Audit Trail as the owner's act: disabling or
+/// re-enabling, and which permissions were turned on and off. A flag sent
+/// with the value it already had changes nothing and records nothing. The
+/// caller holds the write transaction, so the change and its record land
+/// together.
 async fn apply_flags(
     conn: &mut SqliteConnection,
     account_id: i64,
     req: &UpdateAccountRequest,
 ) -> Result<(), ApiError> {
+    let before = account_profile::load_account_auth(conn, account_id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound(format!("account {account_id} not found")))?;
     let flags = account_profile::AccountFlags {
         disabled: req.disabled,
         can_import: req.can_import,
@@ -684,6 +716,51 @@ async fn apply_flags(
         can_delete: req.can_delete,
     };
     account_profile::set_account_flags(conn, account_id, flags).await?;
+    if let Some(disabled) = req.disabled.filter(|d| *d != before.disabled) {
+        let action = if disabled {
+            AuditAction::AccountDisabled
+        } else {
+            AuditAction::AccountEnabled
+        };
+        audit_trail::record_about(
+            conn,
+            action,
+            AuditActor::Owner,
+            account_id,
+            Details::default(),
+        )
+        .await?;
+    }
+    let was = before.permissions;
+    let changes = [
+        (Permission::Import, was.import, req.can_import),
+        (Permission::Export, was.export, req.can_export),
+        (Permission::Delete, was.delete, req.can_delete),
+    ];
+    let mut added = Vec::new();
+    let mut removed = Vec::new();
+    for (name, was, asked) in changes {
+        match asked {
+            Some(true) if !was => added.push(name),
+            Some(false) if was => removed.push(name),
+            _ => {}
+        }
+    }
+    if !added.is_empty() || !removed.is_empty() {
+        let details = Details {
+            permissions_added: Some(added),
+            permissions_removed: Some(removed),
+            ..Details::default()
+        };
+        audit_trail::record_about(
+            conn,
+            AuditAction::PermissionsChanged,
+            AuditActor::Owner,
+            account_id,
+            details,
+        )
+        .await?;
+    }
     Ok(())
 }
 
@@ -857,7 +934,7 @@ pub async fn delete_account(
         }
     }
 
-    account_profile::delete_account(&mut conn, target).await?;
+    account_profile::delete_account(&mut conn, target, reach.actor()).await?;
     // The account is gone once its row is, so a folder that cannot be removed
     // (a permission error, a busy file) is logged with its path rather than
     // answered as a failure. No later account takes this id, so the folder
@@ -1007,7 +1084,17 @@ pub async fn replace_account_password(
             Ok(Json(ReplaceAccountPasswordResponse { token }).into_response())
         }
         Reach::Owner => {
-            account_profile::update_password_hash(&mut conn, target, new_hash).await?;
+            let mut tx = begin_write(&mut conn).await?;
+            account_profile::update_password_hash(&mut tx, target, new_hash).await?;
+            audit_trail::record_about(
+                &mut tx,
+                AuditAction::PasswordSet,
+                AuditActor::Owner,
+                target,
+                Details::default(),
+            )
+            .await?;
+            tx.commit().await?;
             Ok(StatusCode::NO_CONTENT.into_response())
         }
     }
@@ -1087,7 +1174,8 @@ pub async fn delete_account_messages(
     drop(conn);
     let _batch_lock = state.account_import_locks.lock(target.to_string()).await;
     let mut conn = state.db.acquire().await?;
-    let stats = account_profile::delete_all_messages_for_account(&mut conn, target).await?;
+    let stats =
+        account_profile::delete_all_messages_for_account(&mut conn, target, reach.actor()).await?;
     drop(conn);
     crate::asset_store::remove_all_attachment_files(
         &state.db,
@@ -1368,6 +1456,52 @@ pub(crate) async fn list_account_exports(
         })));
     }
     Ok(Json(AccountExportRuns::Own(page)))
+}
+
+/// An account's Audit Trail, newest first: every entry about the account,
+/// whoever acted, the owner's changes to it and the logins refused for its
+/// username included, with its Import and Export Runs. The owner reads any
+/// account's; an account reads its own.
+#[utoipa::path(
+    get,
+    path = "/v1/accounts/{id}/audit-trail",
+    tag = "Audit Trail",
+    security(("session" = [])),
+    params(
+        ("id" = i64, Path, description = "Account id"),
+        ("limit" = Option<usize>, Query, description = "Page size, default 40, at most 500"),
+        ("offset" = Option<usize>, Query, description = "Rows to skip, at most 50000")
+    ),
+    responses(
+        (status = 200, body = Page<crate::db::audit_trail::AuditEntry>),
+        crate::problem::openapi::NotTheOwner
+    )
+)]
+pub(crate) async fn list_account_audit_trail(
+    State(state): State<AppState>,
+    Path(target): Path<i64>,
+    LoggedIn(auth): LoggedIn,
+    Query(query): Query<crate::audit_trail_api::ListAuditTrailQuery>,
+) -> Result<Json<Page<crate::db::audit_trail::AuditEntry>>, ApiError> {
+    require_reach(&state, &auth, target).await?;
+    crate::audit_trail_api::audit_trail_page(
+        &state,
+        crate::db::audit_trail::Scope::Account(target),
+        auth.account_id,
+        query,
+    )
+    .await
+}
+
+/// [`require_account_reach`], admitting the owner, on a connection of its
+/// own, for a handler whose work then runs on another.
+async fn require_reach(
+    state: &AppState,
+    auth: &AuthIdentity,
+    target: i64,
+) -> Result<Reach, ApiError> {
+    let mut conn = state.db.acquire().await?;
+    require_account_reach(&mut conn, auth, target, Admits::Owner).await
 }
 
 #[cfg(test)]

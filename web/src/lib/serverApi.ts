@@ -339,6 +339,32 @@ export function listAccountExports(
   );
 }
 
+/** Which page of an Audit Trail to read. Absent values are left off the URL. */
+export type AuditTrailParams = { limit?: number; offset?: number };
+
+/** Every account's Audit Trail, newest first. The owner's alone. */
+export function listAuditTrail(
+  params: AuditTrailParams,
+  opts?: RequestOptions,
+): Promise<Schema["Page_AuditEntry"]> {
+  return apiClient.get<Schema["Page_AuditEntry"]>(
+    withQuery("/v1/audit-trail", query(params)),
+    opts,
+  );
+}
+
+/** One account's Audit Trail, newest first: the logged-in one, or as the owner the one named. */
+export function listAccountAuditTrail(
+  params: AuditTrailParams,
+  opts?: RequestOptions,
+  accountId?: number,
+): Promise<Schema["Page_AuditEntry"]> {
+  return apiClient.get<Schema["Page_AuditEntry"]>(
+    withQuery(`${accountBase(accountId)}/audit-trail`, query(params)),
+    opts,
+  );
+}
+
 /** Destroy the logged-in account's messages and attachments. Contacts and the login survive. */
 export function deleteAllMessages(
   body: Schema["DeleteMessagesRequest"],

@@ -21,6 +21,14 @@ released versions carry their date on the heading.
 
 ### Features
 
+- 2026-10-03 **An Audit Trail of what each user did, and when.** Owner Home's
+  Activity panel is now the Audit Trail: every login, session ending and
+  refused login, every import and export, and every change to an account,
+  newest first, with who did it and from which app. The owner reads every
+  account's and can narrow it to one. Each person reads what concerns their
+  own account under Settings, including what the owner changed. Nobody can
+  edit or remove an entry, and an account's entries stay, under its old
+  username, after the account is deleted.
 - 2026-09-22 **One identity table, on the contact drawer and on an account's
   Profile.** An account's identities now show what a contact's do: the
   service, the address, when it was first and last heard from, and how many

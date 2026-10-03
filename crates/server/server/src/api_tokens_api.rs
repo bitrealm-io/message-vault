@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::accounts_api::{Admits, Reach, require_account_reach};
 use crate::db::api_tokens;
+use crate::db::audit_trail::{self, AuditAction, Details};
 use crate::db::permissions::Permissions;
 use crate::db::{account_profile, schema};
 use crate::server::{ApiError, AppState, Created, FullAccess, LoggedIn};
@@ -265,7 +266,7 @@ pub async fn create_api_token(
     Json(req): Json<CreateApiTokenRequest>,
 ) -> Result<Created<CreateApiTokenResponse>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    require_account_reach(&mut conn, &auth, account_id, HOLDER_ONLY).await?;
+    let reach = require_account_reach(&mut conn, &auth, account_id, HOLDER_ONLY).await?;
     let label = req.label;
     // A token can narrow its account's permissions, never widen them, so
     // what it stores is what the request asked and the account holds.
@@ -278,6 +279,19 @@ pub async fn create_api_token(
         api_tokens::create_api_token(&mut conn, account_id, &label, permissions, expires_in_days)
             .await
             .map_err(map_label_error)?;
+    let token_hint = api_tokens::mask_api_token(&created.token);
+    audit_trail::record_about(
+        &mut conn,
+        AuditAction::ApiTokenCreated,
+        reach.actor(),
+        account_id,
+        Details {
+            api_token_label: Some(created.label.clone()),
+            api_token_hint: Some(token_hint.clone()),
+            ..Details::default()
+        },
+    )
+    .await?;
 
     Ok(Created {
         location: format!("/v1/accounts/{account_id}/api-tokens/{}", created.id),
@@ -288,7 +302,7 @@ pub async fn create_api_token(
             can_export: created.permissions.export,
             created_at: created.created_at,
             expires_at: created.expires_at,
-            token_hint: api_tokens::mask_api_token(&created.token),
+            token_hint,
             token: created.token,
         },
     })
@@ -317,13 +331,29 @@ pub async fn delete_api_token(
     LoggedIn(auth): LoggedIn,
 ) -> Result<axum::http::StatusCode, ApiError> {
     let mut conn = state.db.acquire().await?;
-    require_account_reach(&mut conn, &auth, account_id, Admits::Owner).await?;
+    let reach = require_account_reach(&mut conn, &auth, account_id, Admits::Owner).await?;
     schema::ensure_accounts_schema(&mut conn).await?;
+    let token = api_tokens::list_api_tokens(&mut conn, account_id)
+        .await?
+        .into_iter()
+        .find(|token| token.id == id);
     let deleted = api_tokens::delete_api_token(&mut conn, account_id, id).await?;
 
-    if !deleted {
+    let Some(token) = token.filter(|_| deleted) else {
         return Err(ApiError::NotFound("API token not found".into()));
-    }
+    };
+    audit_trail::record_about(
+        &mut conn,
+        AuditAction::ApiTokenDeleted,
+        reach.actor(),
+        account_id,
+        Details {
+            api_token_label: Some(token.label),
+            api_token_hint: Some(token.token_hint),
+            ..Details::default()
+        },
+    )
+    .await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 

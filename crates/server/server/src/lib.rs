@@ -14,6 +14,7 @@ pub(crate) mod api_tokens_api;
 pub(crate) mod asset_store;
 pub(crate) mod asset_uploads;
 pub(crate) mod assets_api;
+pub(crate) mod audit_trail_api;
 pub(crate) mod contacts_api;
 pub(crate) mod conversations_api;
 pub(crate) mod credentials;

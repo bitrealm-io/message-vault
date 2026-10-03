@@ -48,6 +48,7 @@
 
 use sqlx::SqliteConnection;
 
+use crate::db::audit_trail::{self, AuditAction, AuditActor, Details};
 use crate::db::contacts;
 use crate::db::ownership::{owns_contact, owns_conversation};
 use crate::db::sql::{SQLITE_IN_CHUNK, in_placeholders};
@@ -291,7 +292,8 @@ pub async fn delete_trashed(
     conn: &mut SqliteConnection,
     account_id: i64,
     target: Trashable,
-) -> Result<DeleteOutcome, sqlx::Error> {
+    actor: AuditActor,
+) -> anyhow::Result<DeleteOutcome> {
     // The checks run inside the write transaction, so a restore cannot commit
     // between the check of the Trash marker and the delete it allows.
     let mut tx = begin_write(conn).await?;
@@ -302,7 +304,21 @@ pub async fn delete_trashed(
         return Ok(DeleteOutcome::NotTrashed);
     }
     let orphaned = match target {
-        Trashable::Conversation(id) => delete_conversations(&mut tx, account_id, &[id]).await?,
+        Trashable::Conversation(id) => {
+            let orphaned = delete_conversations(&mut tx, account_id, &[id]).await?;
+            // Which conversation it was is the holder's; the trail says only
+            // that one was deleted for good. Recorded in the delete's own
+            // transaction, so the two land together or not at all.
+            audit_trail::record_about(
+                &mut tx,
+                AuditAction::ConversationDeleted,
+                actor,
+                account_id,
+                Details::default(),
+            )
+            .await?;
+            orphaned
+        }
         Trashable::Contact(id) => {
             forget_contacts(&mut tx, account_id, &[id]).await?;
             Vec::new()
@@ -323,7 +339,8 @@ pub async fn delete_trashed(
 pub async fn empty_trash(
     conn: &mut SqliteConnection,
     account_id: i64,
-) -> Result<Vec<OrphanedFile>, sqlx::Error> {
+    actor: AuditActor,
+) -> anyhow::Result<EmptiedTrash> {
     let mut tx = begin_write(conn).await?;
     let conversation_ids: Vec<i64> = sqlx::query_scalar(
         "SELECT t.conversation_id
@@ -351,8 +368,36 @@ pub async fn empty_trash(
     // also drops any marker whose row is already gone, which the marker
     // tables allow because neither carries a foreign key to its target.
     purge_account(&mut tx, account_id).await?;
+    let count = |n: usize| Some(i64::try_from(n).unwrap_or(i64::MAX));
+    audit_trail::record_about(
+        &mut tx,
+        AuditAction::TrashEmptied,
+        actor,
+        account_id,
+        Details {
+            conversations: count(conversation_ids.len()),
+            contacts: count(contact_ids.len()),
+            ..Details::default()
+        },
+    )
+    .await?;
     tx.commit().await?;
-    Ok(orphaned)
+    Ok(EmptiedTrash {
+        orphaned,
+        conversations: conversation_ids.len(),
+        contacts: contact_ids.len(),
+    })
+}
+
+/// What emptying the trash did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmptiedTrash {
+    /// Attachment files no remaining message references.
+    pub orphaned: Vec<OrphanedFile>,
+    /// Conversations deleted for good.
+    pub conversations: usize,
+    /// Contacts made Unknown again.
+    pub contacts: usize,
 }
 
 /// One attachment's stored files, read before its message is deleted so the

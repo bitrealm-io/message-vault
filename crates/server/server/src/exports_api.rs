@@ -17,7 +17,8 @@ use crate::db::conversation_messages::{
     DEFAULT_MESSAGE_SORT, MESSAGE_SORT_KEYS, Message, selection_where,
 };
 use crate::db::exports::{
-    self, DEFAULT_EXPORT_SORT, EXPORT_SORT_KEYS, ExportPageOpts, StartExportArgs, export_messages,
+    self, DEFAULT_EXPORT_SORT, EXPORT_SORT_KEYS, ExportPageOpts, ExportScopeKind, StartExportArgs,
+    export_messages,
 };
 use crate::db::ownership::{OwnedTable, missing_ids};
 use crate::messages_api::message_filter;
@@ -28,19 +29,6 @@ use crate::server::{ApiError, AppState, Created, ExportAccess};
 /// stays under SQLite's variable cap; the same figure `POST /v1/contacts/summaries`
 /// uses.
 pub const MAX_SELECTION_IDS: usize = 500;
-
-/// Which of the three forms an Export Run's scope took, without what it
-/// asked for.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, utoipa::ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum ExportScopeKind {
-    /// Everything the account holds.
-    Everything,
-    /// A query in the search language.
-    Query,
-    /// Conversations and messages picked by hand.
-    Selection,
-}
 
 /// An Export Run as the owner reads it under another account: the form of
 /// its scope, its tool, times, outcome and counts
@@ -76,11 +64,7 @@ pub(crate) struct OwnerExportRun {
 
 impl From<ExportRun> for OwnerExportRun {
     fn from(run: ExportRun) -> Self {
-        let scope_kind = match run.scope {
-            ExportScope::Everything => ExportScopeKind::Everything,
-            ExportScope::Query { .. } => ExportScopeKind::Query,
-            ExportScope::Selection { .. } => ExportScopeKind::Selection,
-        };
+        let scope_kind = ExportScopeKind::of(&run.scope);
         Self {
             id: run.id,
             scope_kind,
@@ -98,9 +82,10 @@ impl From<ExportRun> for OwnerExportRun {
 }
 
 /// Start an Export Run over `scope`: compile the scope, list the ids of the
-/// messages it matches now, count them, and record the run as `running`, all
-/// in one transaction. The run's pages read that list, never the scope again,
-/// so what a run hands over is fixed when it is created.
+/// messages it matches now, count them, and record the run as `running` with
+/// the credential that started it, all in one transaction. The run's pages
+/// read that list, never the scope again, so what a run hands over is fixed
+/// when it is created.
 ///
 /// # Errors
 ///
@@ -112,6 +97,7 @@ pub async fn start_export_run(
     scope: &ExportScope,
     tool: Option<&str>,
     clock: (chrono_tz::Tz, chrono::NaiveDate),
+    credential: &crate::db::audit_trail::CredentialUsed,
 ) -> Result<ExportRun, ApiError> {
     let mut tx = crate::db::begin_write(conn).await?;
     let filter = scope_filter(&mut tx, account_id, scope, clock).await?;
@@ -125,6 +111,7 @@ pub async fn start_export_run(
         },
     )
     .await?;
+    exports::record_credential(&mut tx, export_id, credential).await?;
 
     exports::list_run_messages(&mut tx, export_id, &filter).await?;
     let counts = exports::export_counts(&mut tx, export_id).await?;
@@ -349,7 +336,15 @@ pub(crate) async fn create_export(
     let tool = body.tool.as_deref().and_then(message_ir::trimmed);
     let mut conn = state.db.acquire().await?;
     let clock = crate::db::account_profile::account_clock(&mut conn, account).await?;
-    let run = start_export_run(&mut conn, account, &body.scope, tool, clock).await?;
+    let run = start_export_run(
+        &mut conn,
+        account,
+        &body.scope,
+        tool,
+        clock,
+        &auth.credential,
+    )
+    .await?;
     Ok(Created {
         location: format!("/v1/exports/{}", run.id),
         body: run,

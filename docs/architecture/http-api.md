@@ -420,6 +420,14 @@ What each reaches:
   them. Each pair answers from one function, so the two lists cannot differ.
   Which contacts a run created is content, so `/v1/imports/{id}/contacts` has
   no twin under the account.
+- The Audit Trail is read at `GET /v1/audit-trail`, every account's entries,
+  which is the owner's alone, and at `GET /v1/accounts/{id}/audit-trail`, the
+  entries about one account, which the owner and that account read. Both answer
+  from one function, so the two lists cannot differ. No route writes, changes
+  or deletes an entry: the server writes one as part of the act it records.
+  Why: an account holder reads what the owner did to their account, and a
+  record its subject or the owner could edit would be no check on either
+  (`docs/adr/0020-the-audit-trail-outlives-the-account.md`).
 - The account reads its own runs in full. The owner reads each run as an
   `OwnerImportRun` or `OwnerExportRun`: the source, mode, tool, times,
   outcome and counts, with the counts an import's summary reported and how
@@ -481,7 +489,10 @@ takes a handful of registrations, so a server-wide count never stops a person.
 ## Runs
 
 An Import Run and an Export Run are recorded permanently, whether they
-completed, failed or were cancelled, and the client closes them: a run's
+completed, failed or were cancelled, and outlive the account that ran them, as
+the rest of the Audit Trail does. Each run records what started it: a Session
+with the app it named, or an API token by its label and hint as they were
+then. The client closes a run: a run's
 settings are stated once on creation, never per batch or per page, and
 `complete`, `discard` (imports) and `cancel` (exports) are the only ways out.
 There is no sessionless import and no unrecorded export.

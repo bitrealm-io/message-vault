@@ -189,6 +189,15 @@ impl ExportQueryList {
             Self::Messages => "messages",
         }
     }
+
+    /// The list `value` spells, or `None` for any other word.
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "conversations" => Some(Self::Conversations),
+            "messages" => Some(Self::Messages),
+            _ => None,
+        }
+    }
 }
 
 /// What an Export Run asked for, stored as given (`docs/architecture/http-api.md`,

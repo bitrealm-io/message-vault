@@ -82,6 +82,7 @@ const userGuideItems = [
         items: [
           'docs/user/features/settings/account-and-profile',
           'docs/user/features/settings/storage',
+          'docs/user/features/settings/audit-trail',
           'docs/user/features/settings/system',
           'docs/user/features/settings/convert',
           'docs/user/features/settings/appearance',

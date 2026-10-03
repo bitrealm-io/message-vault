@@ -113,6 +113,13 @@ export const keys = {
     /** The contacts one Import Run created or changed, as a paged list. */
     contacts: (id: number) => ["imports", String(id), "contacts"] as const,
   },
+  /**
+   * Pages of an Audit Trail: every account's (`"all"`, the owner's), the
+   * logged-in account's own (`"own"`), or one account the owner has opened.
+   */
+  auditTrail: {
+    page: (whose: number | "all" | "own", page: number) => ["audit-trail", whose, page] as const,
+  },
   serverSettings: { all: ["server-settings"] as const },
   /** Where the Demo Account stands, from `GET /v1/server/demo-account`. */
   demoAccount: { all: ["demo-account"] as const },

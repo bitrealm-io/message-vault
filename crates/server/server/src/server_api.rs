@@ -133,6 +133,7 @@ pub async fn get_server(State(state): State<AppState>) -> Result<Json<ServerInfo
 )]
 pub async fn claim_server(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Json(req): Json<ClaimRequest>,
 ) -> Result<Created<crate::session_api::CreateSessionResponse>, ApiError> {
     let username = crate::credentials::require_valid_username(&req.username)?;
@@ -159,9 +160,20 @@ pub async fn claim_server(
     )
     .await
     .map_err(ApiError::Internal)?;
-    let token = crate::db::session_tokens::insert_account_session_token(
+    crate::db::audit_trail::record(
+        &mut tx,
+        &crate::db::audit_trail::NewEntry::about(
+            crate::db::audit_trail::AuditAction::AccountCreated,
+            crate::db::audit_trail::AuditActor::Owner,
+            (account_profile::OWNER_ACCOUNT_ID, &username),
+        ),
+    )
+    .await?;
+    let token = crate::db::session_tokens::open_session(
         &mut tx,
         account_profile::OWNER_ACCOUNT_ID,
+        &username,
+        crate::server::connecting_app(&headers).as_ref(),
     )
     .await
     .map_err(ApiError::Internal)?;
@@ -269,7 +281,18 @@ pub async fn update_server_settings(
     }
     let mut conn = state.db.acquire().await?;
     if let Some(enabled) = req.public_registration {
+        let was = server_settings::load(&mut conn).await?.public_registration;
         server_settings::set_public_registration(&mut conn, enabled).await?;
+        if enabled != was {
+            use crate::db::audit_trail::{AuditAction, AuditActor, NewEntry};
+            let action = if enabled {
+                AuditAction::RegistrationOpened
+            } else {
+                AuditAction::RegistrationClosed
+            };
+            let entry = NewEntry::about_no_account(action, AuditActor::Owner);
+            crate::db::audit_trail::record(&mut conn, &entry).await?;
+        }
     }
     if let Some(bytes) = req.asset_max_bytes {
         server_settings::set_asset_max_bytes(&mut conn, bytes).await?;
@@ -703,9 +726,16 @@ pub async fn replace_demo_account(
 /// is removed and built again.
 async fn end_demo_sessions(state: &AppState) -> Result<(), ApiError> {
     let mut conn = state.db.acquire().await?;
-    crate::db::session_tokens::revoke_account_sessions(&mut conn, account_profile::DEMO_ACCOUNT_ID)
-        .await
-        .map_err(ApiError::Internal)
+    let mut tx = crate::db::begin_write(&mut conn).await?;
+    crate::db::session_tokens::revoke_account_sessions(
+        &mut tx,
+        account_profile::DEMO_ACCOUNT_ID,
+        crate::db::audit_trail::AuditActor::Owner,
+    )
+    .await
+    .map_err(ApiError::Internal)?;
+    tx.commit().await?;
+    Ok(())
 }
 
 #[cfg(test)]

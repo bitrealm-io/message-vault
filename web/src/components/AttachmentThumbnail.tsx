@@ -6,11 +6,9 @@ import PlainButton from "./PlainButton";
 
 export default function AttachmentThumbnail({
   attachment,
-  source,
   onClick,
 }: {
   attachment: MessageAttachment;
-  source: string;
   onClick: () => void;
 }) {
   const isMissing = Boolean(attachment.missing_reason);
@@ -19,7 +17,6 @@ export default function AttachmentThumbnail({
   const wantsMedia = Boolean(!isMissing && attachment.sha256 && isImage);
   const { url, loading, error } = useAssetObjectUrl(
     wantsMedia ? attachment.sha256 : null,
-    wantsMedia ? source : null,
     hasPreview(attachment),
   );
 

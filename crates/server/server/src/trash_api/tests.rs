@@ -217,7 +217,7 @@ async fn a_file_head_reported_present_survives_an_empty_trash_before_the_batch()
         .state
         .cfg
         .paths
-        .assets_dir_for_account(alice.account_id, "imessage")
+        .assets_dir_for_account(alice.account_id)
         .join(crate::assets_api::shard_rel_path(&sha, ""));
     std::fs::create_dir_all(blob.parent().unwrap()).unwrap();
     std::fs::write(&blob, bytes).unwrap();
@@ -242,7 +242,7 @@ async fn a_file_head_reported_present_survives_an_empty_trash_before_the_batch()
     let run = start_run(&fixture, &alice).await;
     let server = crate::test_support::serve(&fixture.state).await;
     let head = reqwest::Client::new()
-        .head(format!("{}/v1/assets/{sha}?source=imessage", server.base()))
+        .head(format!("{}/v1/assets/{sha}", server.base()))
         .bearer_auth(&alice.token)
         .send()
         .await
@@ -413,4 +413,216 @@ async fn a_short_stored_fingerprint_does_not_stop_empty_trash() {
 
     let status = delete_status(&fixture.state, "/v1/trash", &alice.token).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
+}
+
+/// One batch of one incoming message from `source`, on `handle`, whose
+/// attachment is the file `sha`.
+fn batch_from_source(source: &str, handle: &str, sha: &str) -> String {
+    let header = format!(
+        r#"{{"schema_version":4,"export":{{"source":"{source}","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null}},"conversation":{{"chat_identifier":"{handle}","conversation_type":"individual","group_title":null,"participants":[{{"handle":"{handle}","display_name":null}}],"stats":{{"message_count":1,"attachment_count":1,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}}}}"#
+    );
+    let message = format!(
+        r#"{{"guid":"g-{source}","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"{handle}","sender_display_name":null,"subject":null,"text":"from {source}","attachments":[{{"path":"attachments/photo.jpg","original_name":"photo.jpg","mime_type":"image/jpeg","digest_sha256":"{sha}","is_sticker":false,"transcription":null,"sticker_effect":null}}],"imessage":null,"source":null}}"#
+    );
+    format!("{header}\n{message}\n")
+}
+
+/// Import `bytes` as the attachment of one message from `source`, the way
+/// an Upload does: start the Import Run, store the file at
+/// `/v1/assets/{sha256}`, send the batch that names it, end the run.
+/// Returns the status the file's `PUT` answered.
+async fn import_file_from(
+    fixture: &TestFixture,
+    account: &RegisteredAccount,
+    source: &str,
+    handle: &str,
+    bytes: &[u8],
+) -> StatusCode {
+    let sha = crate::assets_api::Sha256::of_bytes(bytes);
+    let (_, run): (String, serde_json::Value) = crate::test_support::post_created_json(
+        &fixture.state,
+        "/v1/imports",
+        &account.token,
+        serde_json::json!({ "source": source }),
+    )
+    .await;
+    let run = run["id"].as_i64().unwrap();
+    let (put, text) = crate::test_support::put_raw(
+        &fixture.state,
+        &format!("/v1/assets/{sha}"),
+        &account.token,
+        "image/jpeg",
+        bytes.to_vec(),
+    )
+    .await;
+    assert!(put.is_success(), "{put} {text}");
+    let (status, text) = crate::test_support::post_raw(
+        &fixture.state,
+        &format!("/v1/imports/{run}/batches"),
+        &account.token,
+        "application/jsonl",
+        batch_from_source(source, handle, sha.as_str()),
+    )
+    .await;
+    assert!(status.is_success(), "{status} {text}");
+    complete_run(fixture, account, run).await;
+    put
+}
+
+/// Every file under `dir`, at any depth, whose name starts with `sha`: the
+/// stored copies of one file, not counting its `.<sha>.mime` sidecar.
+fn stored_copies(dir: &std::path::Path, sha: &str) -> Vec<std::path::PathBuf> {
+    let mut found = Vec::new();
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return found;
+    };
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+        if path.is_dir() {
+            found.extend(stored_copies(&path, sha));
+        } else if entry.file_name().to_string_lossy().starts_with(sha) {
+            found.push(path);
+        }
+    }
+    found
+}
+
+/// The one conversation of `account` whose messages come from `source`.
+async fn conversation_of_source(
+    fixture: &TestFixture,
+    account: &RegisteredAccount,
+    source: &str,
+) -> i64 {
+    let mut conn = fixture.conn().await;
+    sqlx::query_scalar(
+        "SELECT DISTINCT conversation_id FROM messages WHERE account_id = $1 AND source = $2",
+    )
+    .bind(account.account_id)
+    .bind(source)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap()
+}
+
+/// #1101: an attachment is the account's, addressed by its SHA-256 alone.
+/// One file imported from two sources is stored once, and
+/// `GET /v1/assets/{sha256}` answers it with no query.
+#[tokio::test]
+async fn a_file_imported_from_two_sources_is_stored_once() {
+    let (fixture, alice) = fixture_with_account().await;
+    let bytes = b"one photo, two backups";
+    let sha = crate::assets_api::sha256_hex(bytes);
+
+    let first = import_file_from(&fixture, &alice, "imessage", "+15555550140", bytes).await;
+    let second = import_file_from(
+        &fixture,
+        &alice,
+        "sms-backup-restore",
+        "+15555550141",
+        bytes,
+    )
+    .await;
+
+    assert_eq!(first, StatusCode::CREATED);
+    assert_eq!(
+        second,
+        StatusCode::OK,
+        "the second source's upload finds the file the first one stored"
+    );
+    let account_dir = fixture
+        .state
+        .cfg
+        .paths
+        .data_dir
+        .join(alice.account_id.to_string());
+    assert_eq!(
+        stored_copies(&account_dir, &sha),
+        [fixture
+            .state
+            .cfg
+            .paths
+            .assets_dir_for_account(alice.account_id)
+            .join(format!("{}/{sha}", &sha[..2]))],
+        "one copy, in the account's one assets folder"
+    );
+    let (status, body) =
+        crate::test_support::get_raw(&fixture.state, &format!("/v1/assets/{sha}"), &alice.token)
+            .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.as_bytes(), bytes);
+}
+
+/// #1101: a file is removed only when no message of any source still names
+/// it. Deleting one source's conversation for good leaves the file served
+/// for the other source's message.
+#[tokio::test]
+async fn deleting_one_sources_messages_for_good_keeps_the_file_the_other_names() {
+    let (fixture, alice) = fixture_with_account().await;
+    let bytes = b"one photo, two backups";
+    let sha = crate::assets_api::sha256_hex(bytes);
+    import_file_from(&fixture, &alice, "imessage", "+15555550140", bytes).await;
+    import_file_from(
+        &fixture,
+        &alice,
+        "sms-backup-restore",
+        "+15555550141",
+        bytes,
+    )
+    .await;
+    let doomed = conversation_of_source(&fixture, &alice, "sms-backup-restore").await;
+
+    trash(&fixture, &alice, Trashable::Conversation(doomed)).await;
+    let status = delete_status(
+        &fixture.state,
+        &format!("/v1/conversations/{doomed}"),
+        &alice.token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let mut conn = fixture.conn().await;
+    let left: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM attachments a JOIN messages m ON m.id = a.message_id
+         WHERE m.account_id = $1 AND m.source = 'imessage' AND a.sha256 = $2",
+    )
+    .bind(alice.account_id)
+    .bind(&sha)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    drop(conn);
+    assert_eq!(left, 1, "the other source's message still names the file");
+    let (status, body) =
+        crate::test_support::get_raw(&fixture.state, &format!("/v1/assets/{sha}"), &alice.token)
+            .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.as_bytes(), bytes);
+}
+
+/// #1174: the storage figure counts each file the account stores once. One
+/// file imported from two sources is one file on disk, so its size counts
+/// once.
+#[tokio::test]
+async fn a_file_imported_from_two_sources_counts_once_in_storage() {
+    let (fixture, alice) = fixture_with_account().await;
+    let bytes = b"one photo, two backups";
+    import_file_from(&fixture, &alice, "imessage", "+15555550140", bytes).await;
+    import_file_from(
+        &fixture,
+        &alice,
+        "sms-backup-restore",
+        "+15555550141",
+        bytes,
+    )
+    .await;
+
+    let mut conn = fixture.conn().await;
+    let stored = crate::db::storage::attachment_bytes(
+        &mut conn,
+        crate::db::storage::Scope::Account(alice.account_id),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(stored, i64::try_from(bytes.len()).unwrap());
 }

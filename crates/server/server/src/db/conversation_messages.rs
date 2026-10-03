@@ -437,28 +437,27 @@ async fn load_attachments(
 }
 
 /// Where the preview of one of the account's assets is stored, and its MIME
-/// type: the path under the source's converted-assets directory. `None` when
-/// the account holds no attachment with that fingerprint in `source`, or
-/// `process-assets` wrote no preview for it.
+/// type: the path under the account's converted-assets directory. `None` when
+/// the account holds no attachment with that fingerprint, or `process-assets`
+/// wrote no preview for it.
 pub async fn attachment_preview(
     conn: &mut SqliteConnection,
     account_id: i64,
-    source: &str,
     sha256: &str,
 ) -> Result<Option<(String, Option<String>)>, ApiError> {
-    // Every attachment row that shares a fingerprint in one source carries
-    // the same preview, so any one of them answers.
+    // The account stores one file per fingerprint, whatever the source, and
+    // every attachment row that names it carries the same preview, so any
+    // one of them answers.
     let row = sqlx::query_as::<_, (String, Option<String>)>(
         "SELECT a.derived_assets_path, a.derived_mime_type
          FROM attachments a
          JOIN messages m ON m.id = a.message_id
          JOIN conversations c ON c.id = m.conversation_id
-         WHERE c.account_id = $1 AND m.source = $2 AND a.sha256 = $3
+         WHERE c.account_id = $1 AND a.sha256 = $2
            AND a.derived_assets_path IS NOT NULL AND a.derived_assets_path != ''
          LIMIT 1",
     )
     .bind(account_id)
-    .bind(source)
     .bind(sha256)
     .fetch_optional(&mut *conn)
     .await?;

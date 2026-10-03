@@ -47,9 +47,9 @@ function message(attachments: MessageAttachment[]): Message {
 }
 
 /** Which bytes the last fetch asked for: the preview or the original. */
-function fetched(): { sha256: string; source: string; preview: boolean | undefined } {
-  const [sha256, source, options] = vi.mocked(fetchAssetObjectUrl).mock.calls.at(-1) ?? [];
-  return { sha256: sha256 ?? "", source: source ?? "", preview: options?.preview };
+function fetched(): { sha256: string; preview: boolean | undefined } {
+  const [sha256, options] = vi.mocked(fetchAssetObjectUrl).mock.calls.at(-1) ?? [];
+  return { sha256: sha256 ?? "", preview: options?.preview };
 }
 
 /**
@@ -77,7 +77,7 @@ describe("MessageAttachments and previews", () => {
       "src",
       "blob:mock-url",
     );
-    expect(fetched()).toEqual({ sha256: "aaa", source: "imessage", preview: true });
+    expect(fetched()).toEqual({ sha256: "aaa", preview: true });
   });
 
   it("shows a photo's original when it has no preview", async () => {
@@ -88,7 +88,7 @@ describe("MessageAttachments and previews", () => {
     );
 
     await screen.findByRole("img", { name: "cat.png" });
-    expect(fetched()).toEqual({ sha256: "bbb", source: "imessage", preview: false });
+    expect(fetched()).toEqual({ sha256: "bbb", preview: false });
   });
 
   it("plays a video's preview, in the preview's type, when it has one", async () => {
@@ -107,7 +107,7 @@ describe("MessageAttachments and previews", () => {
 
     const video = await screen.findByLabelText("clip.mov");
     expect(video.querySelector("source")).toHaveAttribute("type", "video/mp4");
-    expect(fetched()).toEqual({ sha256: "ccc", source: "imessage", preview: true });
+    expect(fetched()).toEqual({ sha256: "ccc", preview: true });
   });
 
   it("plays a video's original when it has no preview", async () => {
@@ -119,7 +119,7 @@ describe("MessageAttachments and previews", () => {
 
     const video = await screen.findByLabelText("clip.mp4");
     expect(video.querySelector("source")).toHaveAttribute("type", "video/mp4");
-    expect(fetched()).toEqual({ sha256: "ddd", source: "imessage", preview: false });
+    expect(fetched()).toEqual({ sha256: "ddd", preview: false });
   });
 
   it("shows a preview for a photo whose own type is not known", async () => {
@@ -132,7 +132,7 @@ describe("MessageAttachments and previews", () => {
     );
 
     await screen.findByRole("img", { name: "IMG_0002" });
-    expect(fetched()).toEqual({ sha256: "eee", source: "imessage", preview: true });
+    expect(fetched()).toEqual({ sha256: "eee", preview: true });
   });
 });
 

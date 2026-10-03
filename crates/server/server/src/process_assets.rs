@@ -36,8 +36,6 @@ pub struct ProcessAssetsOptions {
     pub skip_video: bool,
     /// Skip audio conversion.
     pub skip_audio: bool,
-    /// Only process this source id.
-    pub source: Option<String>,
     /// Only process this account. `None` processes every account, which is
     /// what the `process-assets` command does. A Demo Account build names
     /// the Demo Account, so it converts nothing of any other account and
@@ -65,12 +63,18 @@ struct DerivedBlob {
     mime_type: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, sqlx::FromRow)]
 struct AssetRow {
     sha256: String,
     assets_path: String,
     mime_type: Option<String>,
     derived_assets_path: Option<String>,
+    /// The Preview's fingerprint and type, as the rows that name it say.
+    derived_sha256: Option<String>,
+    derived_mime_type: Option<String>,
+    /// Rows of the blob that name no Preview yet, such as the rows of a
+    /// source imported after the Preview was made.
+    rows_without_preview: i64,
     /// Attachment file name from the export (`attachments.original_name`).
     original_name: Option<String>,
     /// Attachment path inside the export (`attachments.path`).
@@ -84,14 +88,17 @@ impl AssetRow {
     }
 }
 
-/// Run derived-media conversion for every source of the account `opts`
-/// names, or of every account in the database when it names none.
+/// Run derived-media conversion for the account `opts` names, or for every
+/// account in the database when it names none. An account's attachments from
+/// every source share one originals folder and one Preview folder, so each
+/// account is one pass.
 ///
 /// # Errors
 ///
-/// Returns an error when no account is named and the database has none, a query fails, or a
-/// source's asset folders cannot be prepared. A conversion that fails for one
-/// attachment is counted in `errors` and printed, and the run goes on.
+/// Returns an error when no account is named and the database has none, a
+/// query fails, or an account's asset folders cannot be prepared. A
+/// conversion that fails for one attachment is counted in `errors` and
+/// printed, and the run goes on.
 pub async fn run(opened: &OpenDb, opts: &ProcessAssetsOptions) -> Result<ProcessAssetsStats> {
     let cfg = &opened.cfg;
     let mut conn = opened.conn().await?;
@@ -108,26 +115,18 @@ pub async fn run(opened: &OpenDb, opts: &ProcessAssetsOptions) -> Result<Process
     let mut stats = ProcessAssetsStats::default();
 
     for &account_id in &account_ids {
-        let source_ids = sources_to_process(&mut conn, cfg, opts, account_id).await?;
-        if source_ids.is_empty() {
-            eprintln!("account {account_id}: no sources found — skip");
+        let Some(pass) = AccountPass::open(cfg, opts, work.path(), account_id)? else {
             continue;
-        }
-        for source_id in source_ids {
-            let Some(pass) = SourcePass::open(cfg, opts, work.path(), account_id, &source_id)?
-            else {
-                continue;
-            };
-            let rows = list_attachments(&mut conn, account_id, &source_id).await?;
-            for row in rows {
-                stats.scanned += 1;
-                match pass.process(&mut conn, &row).await {
-                    Ok(Outcome::Derived) => stats.derived += 1,
-                    Ok(Outcome::Skipped) => stats.skipped += 1,
-                    Err(err) => {
-                        stats.errors += 1;
-                        eprintln!("failed {}: {err:#}", pass.label(&row));
-                    }
+        };
+        let rows = list_attachments(&mut conn, account_id).await?;
+        for row in rows {
+            stats.scanned += 1;
+            match pass.process(&mut conn, &row).await {
+                Ok(Outcome::Derived) => stats.derived += 1,
+                Ok(Outcome::Skipped) => stats.skipped += 1,
+                Err(err) => {
+                    stats.errors += 1;
+                    eprintln!("failed {}: {err:#}", pass.label(&row));
                 }
             }
         }
@@ -149,36 +148,12 @@ enum Outcome {
     Skipped,
 }
 
-/// The account's source ids, narrowed to `--source` when one was given.
-///
-/// # Errors
-///
-/// Returns an error when the requested source is not one of the account's.
-async fn sources_to_process(
-    conn: &mut SqliteConnection,
-    cfg: &Config,
-    opts: &ProcessAssetsOptions,
-    account_id: i64,
-) -> Result<Vec<String>> {
-    let mut source_ids =
-        discover_source_ids(conn, account_id, &cfg.paths.data_dir, &cfg.paths.assets_dir).await?;
-    if let Some(filter) = opts.source.as_deref() {
-        let filter = filter.trim();
-        source_ids.retain(|id| id == filter);
-        if source_ids.is_empty() {
-            bail!("unknown source '{filter}' for account {account_id}");
-        }
-    }
-    Ok(source_ids)
-}
-
-/// One account's source folder being processed: where its originals are,
+/// One account's asset folders being processed: where its originals are,
 /// where the derived files go, and the options every attachment shares.
-struct SourcePass<'a> {
+struct AccountPass<'a> {
     opts: &'a ProcessAssetsOptions,
     work_dir: &'a Path,
     account_id: i64,
-    source_id: &'a str,
     assets_dir: PathBuf,
     converted_dir: PathBuf,
 }
@@ -193,9 +168,9 @@ enum Derived {
     Stored(DerivedBlob),
 }
 
-impl<'a> SourcePass<'a> {
+impl<'a> AccountPass<'a> {
     /// Find the folders, remove abandoned upload temps, and make the
-    /// converted folder. `None` when the source has no assets folder to
+    /// converted folder. `None` when the account has no assets folder to
     /// process.
     ///
     /// # Errors
@@ -207,16 +182,10 @@ impl<'a> SourcePass<'a> {
         opts: &'a ProcessAssetsOptions,
         work_dir: &'a Path,
         account_id: i64,
-        source_id: &'a str,
     ) -> Result<Option<Self>> {
-        let assets_dir = cfg.paths.assets_dir_for_account(account_id, source_id);
-        let converted_dir = cfg
-            .paths
-            .assets_converted_dir_for_account(account_id, source_id);
-        println!(
-            "account {account_id} source {source_id}: assets={}",
-            assets_dir.display()
-        );
+        let assets_dir = cfg.paths.assets_dir_for_account(account_id);
+        let converted_dir = cfg.paths.assets_converted_dir_for_account(account_id);
+        println!("account {account_id}: assets={}", assets_dir.display());
         if !assets_dir.is_dir() {
             eprintln!("  skip — assets dir missing");
             return Ok(None);
@@ -231,15 +200,14 @@ impl<'a> SourcePass<'a> {
             opts,
             work_dir,
             account_id,
-            source_id,
             assets_dir,
             converted_dir,
         }))
     }
 
-    /// `account/source/path`: how log lines name an attachment.
+    /// `account/path`: how log lines name an attachment.
     fn label(&self, row: &AssetRow) -> String {
-        format!("{}/{}/{}", self.account_id, self.source_id, row.assets_path)
+        format!("{}/{}", self.account_id, row.assets_path)
     }
 
     /// Derive a browser preview for one stored blob and record it, or report why it was left as-is.
@@ -262,6 +230,10 @@ impl<'a> SourcePass<'a> {
         };
         let kind = match plan(row, self.opts, on_disk)? {
             Plan::RemoveIncomplete => return self.remove_incomplete(row, &source_path),
+            Plan::Skip(SkipReason::AlreadyDerived) => {
+                self.share_existing_preview(conn, row).await?;
+                return Ok(Outcome::Skipped);
+            }
             Plan::Skip(_) => return Ok(Outcome::Skipped),
             Plan::Derive(kind) => kind,
         };
@@ -270,9 +242,54 @@ impl<'a> SourcePass<'a> {
             Derived::DryRun => return Ok(Outcome::Derived),
             Derived::Stored(blob) => blob,
         };
-        update_derived(conn, self.account_id, self.source_id, &row.sha256, &blob).await?;
+        update_derived(conn, self.account_id, &row.sha256, &blob).await?;
         println!("{} -> {}", self.label(row), blob.assets_path);
         Ok(Outcome::Derived)
+    }
+
+    /// Point the rows of `row`'s blob that name no Preview at the Preview
+    /// the other rows already name. A file imported from a second source
+    /// after its Preview was made has such rows; without this they would
+    /// never say a Preview exists, because the blob is not converted again.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the rows cannot be updated.
+    async fn share_existing_preview(
+        &self,
+        conn: &mut SqliteConnection,
+        row: &AssetRow,
+    ) -> Result<()> {
+        if row.rows_without_preview == 0 {
+            return Ok(());
+        }
+        let (Some(sha256), Some(assets_path), Some(mime_type)) = (
+            row.derived_sha256.clone(),
+            row.derived_assets_path.clone(),
+            row.derived_mime_type.clone(),
+        ) else {
+            return Ok(());
+        };
+        let blob = DerivedBlob {
+            sha256,
+            assets_path,
+            mime_type,
+        };
+        if self.opts.dry_run {
+            println!(
+                "[dry-run] would point {} at {} (existing preview)",
+                self.label(row),
+                blob.assets_path
+            );
+            return Ok(());
+        }
+        update_derived(conn, self.account_id, &row.sha256, &blob).await?;
+        println!(
+            "{} -> {} (existing preview)",
+            self.label(row),
+            blob.assets_path
+        );
+        Ok(())
     }
 
     /// Delete a `.part` left by an interrupted upload, or say so in a dry
@@ -363,117 +380,47 @@ async fn list_account_ids(conn: &mut SqliteConnection, data_dir: &Path) -> Resul
     Ok(ids)
 }
 
-/// Source ids for one account: those with messages in the database plus any folder under the account's data dir.
-async fn discover_source_ids(
-    conn: &mut SqliteConnection,
-    account_id: i64,
-    data_dir: &Path,
-    assets_name: &str,
-) -> Result<Vec<String>> {
-    let mut ids = std::collections::BTreeSet::new();
-    let rows = sqlx::query_scalar::<_, String>(
-        r"
-        SELECT DISTINCT m.source
-        FROM messages m
-        JOIN conversations c ON c.id = m.conversation_id
-        WHERE c.account_id = $1
-          AND m.source IS NOT NULL
-          AND TRIM(m.source) != ''
-        ORDER BY m.source
-        ",
-    )
-    .bind(account_id)
-    .fetch_all(&mut *conn)
-    .await?;
-    for s in rows {
-        let t = s.trim();
-        if !t.is_empty() {
-            ids.insert(t.to_string());
-        }
-    }
-
-    let account_root = data_dir.join(account_id.to_string());
-    if account_root.is_dir() {
-        for entry in fs::read_dir(&account_root)? {
-            let entry = entry?;
-            if !entry.file_type()?.is_dir() {
-                continue;
-            }
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if account_root.join(&name).join(assets_name).is_dir() {
-                ids.insert(name);
-            }
-        }
-    }
-    Ok(ids.into_iter().collect())
-}
-
-/// One row per stored blob for this account and source, with the names that could hint at its media type.
-async fn list_attachments(
-    conn: &mut SqliteConnection,
-    account_id: i64,
-    source_id: &str,
-) -> Result<Vec<AssetRow>> {
-    // One row per stored blob. Several messages can share a blob under different
-    // names, and only one derived file per blob is ever produced, so collapse
-    // those rows and keep any name that could identify the media type.
-    let rows = sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-        ),
-    >(
+/// One row per stored blob of this account, from every source, with the
+/// names that could hint at its media type.
+async fn list_attachments(conn: &mut SqliteConnection, account_id: i64) -> Result<Vec<AssetRow>> {
+    // One row per stored blob. Several messages, from one source or several,
+    // can share a blob under different names, and only one derived file per
+    // blob is ever produced, so collapse those rows and keep any name that
+    // could identify the media type.
+    let rows = sqlx::query_as::<_, AssetRow>(
         r"
         SELECT
-            a.sha256,
-            a.assets_path,
-            MAX(a.mime_type),
-            MAX(a.derived_assets_path),
-            MAX(a.original_name),
-            MAX(a.path)
+            a.sha256 AS sha256,
+            a.assets_path AS assets_path,
+            MAX(a.mime_type) AS mime_type,
+            MAX(a.derived_assets_path) AS derived_assets_path,
+            MAX(a.derived_sha256) AS derived_sha256,
+            MAX(a.derived_mime_type) AS derived_mime_type,
+            SUM(CASE WHEN COALESCE(a.derived_assets_path, '') = '' THEN 1 ELSE 0 END)
+                AS rows_without_preview,
+            MAX(a.original_name) AS original_name,
+            MAX(a.path) AS source_path
         FROM attachments a
         JOIN messages m ON m.id = a.message_id
         JOIN conversations c ON c.id = m.conversation_id
-        WHERE m.source = $1
-          AND c.account_id = $2
+        WHERE c.account_id = $1
           AND a.sha256 IS NOT NULL AND a.sha256 != ''
           AND a.assets_path IS NOT NULL AND a.assets_path != ''
         GROUP BY a.sha256, a.assets_path
         ORDER BY a.sha256
         ",
     )
-    .bind(source_id)
     .bind(account_id)
     .fetch_all(&mut *conn)
     .await?;
-    let out = rows
-        .into_iter()
-        .map(
-            |(sha256, assets_path, mime_type, derived_assets_path, original_name, source_path)| {
-                AssetRow {
-                    sha256,
-                    assets_path,
-                    mime_type,
-                    derived_assets_path,
-                    original_name,
-                    source_path,
-                }
-            },
-        )
-        .collect();
-    Ok(out)
+    Ok(rows)
 }
 
-/// Point every attachment row for `original_sha` at its new derived blob.
+/// Point every attachment row of the account for `original_sha`, from every
+/// source, at its new derived blob.
 async fn update_derived(
     conn: &mut SqliteConnection,
     account_id: i64,
-    source_id: &str,
     original_sha: &str,
     blob: &DerivedBlob,
 ) -> Result<()> {
@@ -485,7 +432,7 @@ async fn update_derived(
           AND message_id IN (
             SELECT m.id FROM messages m
             JOIN conversations c ON c.id = m.conversation_id
-            WHERE m.source = $5 AND c.account_id = $6
+            WHERE c.account_id = $5
           )
         ",
     )
@@ -493,7 +440,6 @@ async fn update_derived(
     .bind(&blob.assets_path)
     .bind(&blob.mime_type)
     .bind(original_sha)
-    .bind(source_id)
     .bind(account_id)
     .execute(&mut *conn)
     .await?;

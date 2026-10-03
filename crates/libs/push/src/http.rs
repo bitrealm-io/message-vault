@@ -45,7 +45,6 @@ pub struct CreateImportBatchResponse {
 /// One attachment to upload: where it is on disk, what it is, and the size
 /// above which it goes up in parts.
 pub(crate) struct AssetUpload<'a> {
-    pub source: &'a str,
     pub sha256: &'a str,
     pub file: &'a Path,
     pub mime: Option<&'a str>,
@@ -106,10 +105,10 @@ fn payload_too_large_message(kind: &str, bytes: Option<usize>) -> String {
     )
 }
 
-/// Build `{base}/v1/assets/...` with extra path segments (percent-encoded)
-/// and the `source=` query every asset route takes. The account is not a
+/// Build `{base}/v1/assets/...` with extra path segments (percent-encoded).
+/// An attachment is addressed by its SHA-256 alone; the account is not a
 /// parameter: the API key names it.
-fn asset_url(base_url: &str, segments: &[&str], source: &str) -> Result<reqwest::Url> {
+fn asset_url(base_url: &str, segments: &[&str]) -> Result<reqwest::Url> {
     let base = trim_base_url(base_url);
     let mut url =
         reqwest::Url::parse(base).with_context(|| format!("invalid server address {base}"))?;
@@ -117,14 +116,13 @@ fn asset_url(base_url: &str, segments: &[&str], source: &str) -> Result<reqwest:
         .map_err(|()| anyhow!("invalid server address {base}"))?
         .pop_if_empty()
         .extend(["v1", "assets"].into_iter().chain(segments.iter().copied()));
-    url.query_pairs_mut().append_pair("source", source);
     Ok(url)
 }
 
 impl Session {
     /// `/v1/assets/...` URL under this session's account.
-    fn asset_url(&self, source: &str, segments: &[&str]) -> Result<reqwest::Url> {
-        asset_url(&self.url, segments, source)
+    fn asset_url(&self, segments: &[&str]) -> Result<reqwest::Url> {
+        asset_url(&self.url, segments)
     }
 
     /// Whether the server already holds the attachment with this digest:
@@ -139,8 +137,8 @@ impl Session {
     /// (`401 Unauthorized`: unknown or expired), refuses the account
     /// (`403 Forbidden`: disabled, or neither import nor export), or the
     /// request fails in any other way.
-    pub(crate) fn head_asset(&self, source: &str, sha256: &str) -> Result<bool> {
-        let url = self.asset_url(source, &[sha256])?;
+    pub(crate) fn head_asset(&self, sha256: &str) -> Result<bool> {
+        let url = self.asset_url(&[sha256])?;
         let response = self
             .http
             .request_url(Method::HEAD, url.clone(), &self.key)
@@ -197,7 +195,7 @@ impl Session {
             return self.put_asset_multipart(asset, file_len);
         }
 
-        let url = self.asset_url(asset.source, &[asset.sha256])?;
+        let url = self.asset_url(&[asset.sha256])?;
         let bytes =
             std::fs::read(asset.file).with_context(|| format!("read {}", asset.file.display()))?;
         let content_type = asset
@@ -366,7 +364,6 @@ impl Session {
 /// A multipart upload the server has opened for one attachment.
 struct MultipartUpload<'a> {
     session: &'a Session,
-    source: &'a str,
     sha256: &'a str,
     upload_id: String,
     /// Bytes per part, as the server asked.
@@ -381,7 +378,7 @@ impl<'a> MultipartUpload<'a> {
     /// Returns an error when the server refuses or its reply lacks an upload
     /// id or part size.
     fn start(session: &'a Session, asset: &AssetUpload<'a>, file_len: u64) -> Result<Option<Self>> {
-        let start_url = session.asset_url(asset.source, &[asset.sha256, "uploads"])?;
+        let start_url = session.asset_url(&[asset.sha256, "uploads"])?;
         let mut start_body = serde_json::json!({ "bytes": file_len });
         if let Some(mime) = asset.mime.filter(|m| !m.is_empty()) {
             start_body["mime"] = serde_json::Value::String(mime.to_string());
@@ -414,7 +411,6 @@ impl<'a> MultipartUpload<'a> {
             .ok_or_else(|| anyhow!("upload start missing part_size"))?;
         Ok(Some(Self {
             session,
-            source: asset.source,
             sha256: asset.sha256,
             upload_id,
             part_size,
@@ -425,7 +421,7 @@ impl<'a> MultipartUpload<'a> {
     fn url(&self, tail: &[&str]) -> Result<reqwest::Url> {
         let mut segments = vec![self.sha256, "uploads", self.upload_id.as_str()];
         segments.extend_from_slice(tail);
-        self.session.asset_url(self.source, &segments)
+        self.session.asset_url(&segments)
     }
 
     /// PUT one part.
@@ -525,7 +521,7 @@ mod tests {
             then.status(status);
         });
         session(server.base_url())
-            .head_asset("sms-backup-restore", DIGEST)
+            .head_asset(DIGEST)
             .unwrap_err()
             .to_string()
     }
@@ -560,16 +556,11 @@ mod tests {
     }
 
     #[test]
-    fn asset_url_encodes_segments_and_query() {
-        let url = asset_url(
-            "http://127.0.0.1:8080/",
-            &["abc123", "uploads", "up 1"],
-            "sms backup",
-        )
-        .unwrap();
+    fn asset_url_encodes_segments_and_names_no_source() {
+        let url = asset_url("http://127.0.0.1:8080/", &["abc123", "uploads", "up 1"]).unwrap();
         assert_eq!(
             url.as_str(),
-            "http://127.0.0.1:8080/v1/assets/abc123/uploads/up%201?source=sms+backup"
+            "http://127.0.0.1:8080/v1/assets/abc123/uploads/up%201"
         );
     }
 }

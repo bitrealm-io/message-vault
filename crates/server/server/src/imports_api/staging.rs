@@ -1,10 +1,9 @@
 //! Stage message-ir JSONL rows into the temporary import tables.
 
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use message_ir::{HandleService, HandleType, nonempty, trimmed};
 use sqlx::SqliteConnection;
 
@@ -282,20 +281,6 @@ fn resolve_conversation_source(
     }
 }
 
-/// The asset store folder for this source, created when sources come from the files.
-fn assets_dir_for_source(opts: &ImportOptions<'_>, source: &str) -> Result<PathBuf> {
-    if opts.source_from_jsonl {
-        let paths = opts
-            .paths
-            .ok_or_else(|| anyhow::anyhow!("source_from_jsonl requires config paths"))?;
-        let dir = paths.assets_dir_for_account(opts.account_id, source);
-        fs::create_dir_all(&dir).with_context(|| format!("failed to create {}", dir.display()))?;
-        Ok(dir)
-    } else {
-        Ok(opts.assets_dir.to_path_buf())
-    }
-}
-
 /// Messages with no conversation of their own live in `orphaned.jsonl`
 /// (older bundles used `orphaned.json`). Its header's chat id names the
 /// file's conversation, not a person.
@@ -419,7 +404,6 @@ impl FileStaging<'_> {
         conversation: StagedConversation,
         messages: Vec<MessageRecord>,
     ) -> Result<()> {
-        let assets_dir = assets_dir_for_source(self.opts, &conversation.source)?;
         let mut stats = ImportStats::default();
         let platform = platform_for(
             conversation.platform_service.as_deref(),
@@ -430,7 +414,7 @@ impl FileStaging<'_> {
         // here leaves nothing half-written.
         let prepared_messages = prepare_message_attachments(
             self.opts,
-            &assets_dir,
+            self.opts.assets_dir,
             messages,
             self.asset_stats,
             self.media_work,
@@ -534,7 +518,7 @@ impl FileStaging<'_> {
                 &mut stats,
                 conversation_id,
                 &conversation.source,
-                &assets_dir,
+                self.opts.assets_dir,
                 chunk,
             )
             .await?;

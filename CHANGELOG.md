@@ -237,6 +237,11 @@ released versions carry their date on the heading.
 
 #### Importing
 
+- 2026-10-03 **A photo or file imported from two places is stored once, not
+  once for each.** The same picture from an Apple Messages backup and from
+  an SMS Backup & Restore file used to be saved twice. It is now saved once
+  for your account, and it stays as long as a message from either place
+  still has it.
 - 2026-10-03 **You are no longer listed among the people in your own group
   conversations.** When a backup named one of your own phone numbers or email
   addresses among a group's members, an import added you to the group as
@@ -788,6 +793,16 @@ released versions carry their date on the heading.
   it again: use **Delete all messages** in Settings first, then import it.
 - A Saved Search that uses `source:sms` is refused. Edit it to
   `source:sms-backup-restore`.
+- Photos and files imported by an earlier 0.10.0 build are not shown.
+  Each account now keeps them in one folder, `data/<account_id>/assets/`,
+  and the server no longer reads the folder an earlier build made for each
+  source, such as `data/1/imessage/`. **Delete all messages** leaves those
+  old folders on disk. To bring the photos back:
+  1. Use **Delete all messages** in Settings.
+  2. Delete each `data/<account_id>/<source>/` folder.
+  3. Import those backups again.
+- The server's `process-assets` command no longer takes `--source`: it
+  makes previews for every attachment of each account.
 - An Import Run left waiting at a Staging Review or at its Media stage by an
   earlier build can't go on, and says its Staging did not finish. Discard it
   and start the import again. Do the same with a paused Apple Messages run

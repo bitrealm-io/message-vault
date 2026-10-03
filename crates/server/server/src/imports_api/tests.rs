@@ -1036,7 +1036,7 @@ async fn source_from_jsonl_stamps_export_source_and_assets() {
         assets_dir: "assets".into(),
         assets_converted_dir: "assets_converted".into(),
     };
-    let placeholder = tmp.path().join("unused-assets");
+    let assets_dir = paths.assets_dir_for_account(TEST_ACCOUNT);
     fs::create_dir_all(tmp.path().join("media")).unwrap();
     fs::write(tmp.path().join("media/photo.jpg"), b"jpeg-bytes").unwrap();
 
@@ -1051,7 +1051,7 @@ async fn source_from_jsonl_stamps_export_source_and_assets() {
         &db,
         &[path],
         &ImportOptions {
-            assets_dir: &placeholder,
+            assets_dir: &assets_dir,
             asset_root: tmp.path(),
             mode: ImportMode::Replace,
             source: "",
@@ -1059,7 +1059,6 @@ async fn source_from_jsonl_stamps_export_source_and_assets() {
             fill_content_keys: true,
             import_id: None,
             source_from_jsonl: true,
-            paths: Some(&paths),
             media: MediaMode::Clone,
             wipe_sources: Some(vec!["go-sms-pro".into()]),
         },
@@ -1075,7 +1074,7 @@ async fn source_from_jsonl_stamps_export_source_and_assets() {
         .await
         .unwrap();
     assert_eq!(source, "go-sms-pro");
-    let assets_root = paths.assets_dir_for_account(TEST_ACCOUNT, "go-sms-pro");
+    let assets_root = paths.assets_dir_for_account(TEST_ACCOUNT);
     assert!(assets_root.is_dir());
 }
 
@@ -1093,7 +1092,7 @@ async fn media_none_skips_attachment_copy() {
         assets_dir: "assets".into(),
         assets_converted_dir: "assets_converted".into(),
     };
-    let placeholder = tmp.path().join("unused-assets");
+    let assets_dir = paths.assets_dir_for_account(TEST_ACCOUNT);
     fs::create_dir_all(tmp.path().join("media")).unwrap();
     fs::write(tmp.path().join("media/photo.jpg"), b"jpeg-bytes").unwrap();
 
@@ -1108,7 +1107,7 @@ async fn media_none_skips_attachment_copy() {
         &db,
         &[path],
         &ImportOptions {
-            assets_dir: &placeholder,
+            assets_dir: &assets_dir,
             asset_root: tmp.path(),
             mode: ImportMode::Replace,
             source: "",
@@ -1116,7 +1115,6 @@ async fn media_none_skips_attachment_copy() {
             fill_content_keys: false,
             import_id: None,
             source_from_jsonl: true,
-            paths: Some(&paths),
             media: MediaMode::Disabled,
             wipe_sources: Some(vec!["sms".into()]),
         },
@@ -1159,7 +1157,7 @@ fn media_convert_stores_the_converted_file_not_the_original() {
             assets_dir: "assets".into(),
             assets_converted_dir: "assets_converted".into(),
         };
-        let placeholder = tmp.path().join("unused-assets");
+        let assets_dir = paths.assets_dir_for_account(TEST_ACCOUNT);
         fs::create_dir_all(tmp.path().join("attachments")).unwrap();
         fs::write(tmp.path().join("attachments/photo.png"), PNG_1X1_RGB).unwrap();
         let path = write_jsonl(
@@ -1173,7 +1171,7 @@ fn media_convert_stores_the_converted_file_not_the_original() {
             &db,
             &[path],
             &ImportOptions {
-                assets_dir: &placeholder,
+                assets_dir: &assets_dir,
                 asset_root: tmp.path(),
                 mode: ImportMode::Replace,
                 source: "",
@@ -1181,7 +1179,6 @@ fn media_convert_stores_the_converted_file_not_the_original() {
                 fill_content_keys: false,
                 import_id: None,
                 source_from_jsonl: true,
-                paths: Some(&paths),
                 media: MediaMode::Convert,
                 wipe_sources: Some(vec!["imessage".into()]),
             },
@@ -1197,7 +1194,7 @@ fn media_convert_stores_the_converted_file_not_the_original() {
                 .unwrap();
         assert_eq!(mime_type.as_deref(), Some("image/jpeg"));
         let stored = paths
-            .assets_dir_for_account(TEST_ACCOUNT, "imessage")
+            .assets_dir_for_account(TEST_ACCOUNT)
             .join(assets_path.expect("the attachment is stored"));
         let bytes = fs::read(&stored).unwrap();
         assert_eq!(&bytes[..2], [0xff, 0xd8], "a JPEG starts with SOI");
@@ -2014,10 +2011,7 @@ async fn a_batch_whose_file_does_not_match_its_sha256_is_a_422_naming_the_file()
     let (fixture, account) = fixture_with_account().await;
     let state = fixture.state.clone();
     let path = batches_path(&state, &account.token, "whatsapp").await;
-    let assets_dir = state
-        .cfg
-        .paths
-        .assets_dir_for_account(account.account_id, "whatsapp");
+    let assets_dir = state.cfg.paths.assets_dir_for_account(account.account_id);
     fs::create_dir_all(&assets_dir).unwrap();
     fs::write(assets_dir.join("photo.bin"), b"the bytes on disk").unwrap();
     let stated = assets_api::sha256_hex(b"the bytes the export saw");
@@ -2041,10 +2035,7 @@ async fn a_batch_whose_stated_sha256_is_not_one_is_a_422_naming_the_file() {
     let (fixture, account) = fixture_with_account().await;
     let state = fixture.state.clone();
     let path = batches_path(&state, &account.token, "whatsapp").await;
-    let assets_dir = state
-        .cfg
-        .paths
-        .assets_dir_for_account(account.account_id, "whatsapp");
+    let assets_dir = state.cfg.paths.assets_dir_for_account(account.account_id);
     fs::create_dir_all(&assets_dir).unwrap();
     fs::write(assets_dir.join("photo.bin"), b"the bytes on disk").unwrap();
     let body = one_attachment_batch("photo.bin", Some("not-a-fingerprint"));

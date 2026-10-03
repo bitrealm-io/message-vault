@@ -14,6 +14,9 @@ fn row(assets_path: &str) -> AssetRow {
         assets_path: assets_path.to_string(),
         mime_type: None,
         derived_assets_path: None,
+        derived_sha256: None,
+        derived_mime_type: None,
+        rows_without_preview: 1,
         original_name: None,
         source_path: None,
     }
@@ -25,18 +28,17 @@ const FRESH: OnDisk = OnDisk {
     derived_exists: false,
 };
 
-/// A pass over `assets_dir` for account 7, source `imessage`.
+/// A pass over `assets_dir` for account 7.
 fn pass<'a>(
     opts: &'a ProcessAssetsOptions,
     work_dir: &'a Path,
     assets_dir: &Path,
     converted_dir: &Path,
-) -> SourcePass<'a> {
-    SourcePass {
+) -> AccountPass<'a> {
+    AccountPass {
         opts,
         work_dir,
         account_id: 7,
-        source_id: "imessage",
         assets_dir: assets_dir.to_path_buf(),
         converted_dir: converted_dir.to_path_buf(),
     }
@@ -279,11 +281,11 @@ fn part_paths_are_recognised_in_any_case() {
 }
 
 #[test]
-fn a_label_names_the_account_the_source_and_the_stored_path() {
+fn a_label_names_the_account_and_the_stored_path() {
     let opts = ProcessAssetsOptions::default();
     let dir = tempfile::tempdir().unwrap();
     let pass = pass(&opts, dir.path(), dir.path(), dir.path());
-    assert_eq!(pass.label(&row("aa/photo.jpg")), "7/imessage/aa/photo.jpg");
+    assert_eq!(pass.label(&row("aa/photo.jpg")), "7/aa/photo.jpg");
 }
 
 #[test]
@@ -477,25 +479,19 @@ pub(crate) async fn seed_message(conn: &mut SqliteConnection, source: &str) -> i
     .unwrap()
 }
 
-/// Store `bytes` as the original for an attachment of `message_id` under
-/// `source`, the way an import leaves it: the blob at `<aa>/<sha><ext>`
-/// in the source's assets folder and a row pointing at it. Returns the
-/// attachment id.
+/// Store `bytes` as the original for an attachment of `message_id`, the way
+/// an import leaves it: the blob at `<aa>/<sha><ext>` in the account's
+/// assets folder and a row pointing at it. Returns the attachment id.
 pub(crate) async fn attach_stored_blob(
     opened: &OpenDb,
     conn: &mut SqliteConnection,
-    source: &str,
     message_id: i64,
     sha: &str,
     ext: &str,
     bytes: &[u8],
 ) -> i64 {
     let rel = format!("{}/{sha}{ext}", &sha[..2]);
-    let path = opened
-        .cfg
-        .paths
-        .assets_dir_for_account(ACCOUNT, source)
-        .join(&rel);
+    let path = opened.cfg.paths.assets_dir_for_account(ACCOUNT).join(&rel);
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(&path, bytes).unwrap();
     sqlx::query_scalar(
@@ -509,22 +505,15 @@ pub(crate) async fn attach_stored_blob(
     .unwrap()
 }
 
-/// A database with one account whose `source` holds one PNG attachment.
+/// A database with one account and one PNG attachment on a message of
+/// `source`.
 async fn fixture_with_png(source: &str) -> (OpenDb, tempfile::TempDir, i64) {
     let (opened, dir) = open_db().await;
     let mut conn = opened.conn().await.unwrap();
     seed_account(&mut conn, ACCOUNT).await;
     let message_id = seed_message(&mut conn, source).await;
-    let attachment_id = attach_stored_blob(
-        &opened,
-        &mut conn,
-        source,
-        message_id,
-        SHA,
-        ".png",
-        PNG_1X1_RGB,
-    )
-    .await;
+    let attachment_id =
+        attach_stored_blob(&opened, &mut conn, message_id, SHA, ".png", PNG_1X1_RGB).await;
     (opened, dir, attachment_id)
 }
 
@@ -573,17 +562,14 @@ async fn store_and_update_derived_db() {
     let mut conn = opened.conn().await.unwrap();
     seed_account(&mut conn, ACCOUNT).await;
     let message_id = seed_message(&mut conn, "imessage").await;
-    let attachment_id = attach_stored_blob(
-        &opened, &mut conn, "imessage", message_id, SHA, ".jpg", b"x",
-    )
-    .await;
+    let attachment_id = attach_stored_blob(&opened, &mut conn, message_id, SHA, ".jpg", b"x").await;
 
     let converted = dir.path().join("converted");
     fs::create_dir_all(&converted).unwrap();
     let blob = store_derived_bytes(&converted, b"jpeg-bytes", ".jpg").unwrap();
     assert!(converted.join(&blob.assets_path).is_file());
 
-    update_derived(&mut conn, ACCOUNT, "imessage", SHA, &blob)
+    update_derived(&mut conn, ACCOUNT, SHA, &blob)
         .await
         .unwrap();
 
@@ -610,9 +596,7 @@ async fn listed_attachments_carry_name_hints_for_extensionless_blobs() {
     .await
     .unwrap();
 
-    let rows = list_attachments(&mut conn, ACCOUNT, "imessage")
-        .await
-        .unwrap();
+    let rows = list_attachments(&mut conn, ACCOUNT).await.unwrap();
     assert_eq!(rows.len(), 1);
     assert_eq!(
         plan(&rows[0], &ProcessAssetsOptions::default(), FRESH).unwrap(),
@@ -637,7 +621,7 @@ fn a_run_writes_a_jpeg_preview_under_the_converted_folder_and_records_it() {
         let preview = opened
             .cfg
             .paths
-            .assets_converted_dir_for_account(ACCOUNT, "imessage")
+            .assets_converted_dir_for_account(ACCOUNT)
             .join(&rel);
         let bytes = fs::read(&preview).expect("the preview is under assets_converted/");
         assert_eq!(&bytes[..2], [0xff, 0xd8], "a JPEG starts with SOI");
@@ -669,79 +653,60 @@ fn a_dry_run_counts_the_preview_it_would_write_and_writes_nothing() {
 
         assert_eq!(run(&opened, &opts).await.unwrap(), stats(1, 1, 0, 0));
 
-        let converted = opened
-            .cfg
-            .paths
-            .assets_converted_dir_for_account(ACCOUNT, "imessage");
+        let converted = opened.cfg.paths.assets_converted_dir_for_account(ACCOUNT);
         assert_eq!(fs::read_dir(&converted).unwrap().count(), 0);
         let mut conn = opened.conn().await.unwrap();
         assert_eq!(derived_of(&mut conn, attachment_id).await, None);
     });
 }
 
+/// A file imported again from a second source after its Preview was made:
+/// the new rows name no Preview yet. The next run finds the Preview on disk
+/// and does not convert again, but it points the new rows at that Preview,
+/// so the web app asks for it for both sources.
 #[test]
-fn source_limits_the_run_to_that_source() {
+fn a_second_source_imported_after_the_preview_was_made_gets_the_preview() {
+    with_real_ffmpeg(async {
+        let (opened, _dir, imessage_attachment) = fixture_with_png("imessage").await;
+        let opts = ProcessAssetsOptions::default();
+        assert_eq!(run(&opened, &opts).await.unwrap(), stats(1, 1, 0, 0));
+        let mut conn = opened.conn().await.unwrap();
+        let message_id = seed_message(&mut conn, "whatsapp").await;
+        let whatsapp_attachment =
+            attach_stored_blob(&opened, &mut conn, message_id, SHA, ".png", PNG_1X1_RGB).await;
+        assert_eq!(derived_of(&mut conn, whatsapp_attachment).await, None);
+
+        assert_eq!(run(&opened, &opts).await.unwrap(), stats(1, 0, 1, 0));
+
+        let preview = derived_of(&mut conn, imessage_attachment).await;
+        assert!(preview.is_some());
+        assert_eq!(derived_of(&mut conn, whatsapp_attachment).await, preview);
+    });
+}
+
+/// One file named by messages of two sources is stored once in the
+/// account's folder, converted once, and every row that names it, from
+/// either source, points at the one preview.
+#[test]
+fn a_file_two_sources_share_is_converted_once_for_both() {
     with_real_ffmpeg(async {
         let (opened, _dir, imessage_attachment) = fixture_with_png("imessage").await;
         let mut conn = opened.conn().await.unwrap();
         let message_id = seed_message(&mut conn, "sms").await;
-        let sms_attachment = attach_stored_blob(
-            &opened,
-            &mut conn,
-            "sms",
-            message_id,
-            &"b".repeat(64),
-            ".png",
-            PNG_1X1_RGB,
-        )
-        .await;
-        let opts = ProcessAssetsOptions {
-            source: Some("sms".into()),
-            ..Default::default()
-        };
+        let sms_attachment =
+            attach_stored_blob(&opened, &mut conn, message_id, SHA, ".png", PNG_1X1_RGB).await;
 
-        assert_eq!(run(&opened, &opts).await.unwrap(), stats(1, 1, 0, 0));
-
-        assert!(derived_of(&mut conn, sms_attachment).await.is_some());
-        assert_eq!(derived_of(&mut conn, imessage_attachment).await, None);
-        assert!(
-            !opened
-                .cfg
-                .paths
-                .assets_converted_dir_for_account(ACCOUNT, "imessage")
-                .exists(),
-            "a source outside the filter is not opened"
+        assert_eq!(
+            run(&opened, &ProcessAssetsOptions::default())
+                .await
+                .unwrap(),
+            stats(1, 1, 0, 0)
         );
+
+        let preview = derived_of(&mut conn, imessage_attachment).await;
+        assert!(preview.is_some());
+        assert_eq!(derived_of(&mut conn, sms_attachment).await, preview);
     });
-}
-
-#[tokio::test]
-async fn an_unknown_source_is_an_error() {
-    let (opened, _dir, _attachment) = fixture_with_png("imessage").await;
-    let opts = ProcessAssetsOptions {
-        source: Some("nope".into()),
-        ..Default::default()
-    };
-
-    let err = run(&opened, &opts).await.unwrap_err();
-
-    assert_eq!(err.to_string(), "unknown source 'nope' for account 7");
-}
-
-#[tokio::test]
-async fn the_source_filter_is_trimmed_before_it_is_matched() {
-    let (opened, _dir, _attachment) = fixture_with_png("imessage").await;
-    let mut conn = opened.conn().await.unwrap();
-    let opts = ProcessAssetsOptions {
-        source: Some(" imessage ".into()),
-        ..Default::default()
-    };
-
-    let sources = sources_to_process(&mut conn, &opened.cfg, &opts, ACCOUNT)
-        .await
-        .unwrap();
-
-    assert_eq!(sources, ["imessage"]);
 }
 
 #[tokio::test]
@@ -759,7 +724,7 @@ async fn a_database_without_accounts_is_an_error() {
 }
 
 #[tokio::test]
-async fn an_account_without_sources_is_passed_over() {
+async fn an_account_without_an_assets_folder_is_passed_over() {
     let (opened, _dir) = open_db().await;
     let mut conn = opened.conn().await.unwrap();
     seed_account(&mut conn, ACCOUNT).await;
@@ -778,10 +743,8 @@ async fn a_blob_that_is_not_media_is_left_as_is_by_the_run() {
     let mut conn = opened.conn().await.unwrap();
     seed_account(&mut conn, ACCOUNT).await;
     let message_id = seed_message(&mut conn, "imessage").await;
-    let attachment_id = attach_stored_blob(
-        &opened, &mut conn, "imessage", message_id, SHA, ".txt", b"notes",
-    )
-    .await;
+    let attachment_id =
+        attach_stored_blob(&opened, &mut conn, message_id, SHA, ".txt", b"notes").await;
 
     assert_eq!(
         run(&opened, &ProcessAssetsOptions::default())
@@ -799,14 +762,13 @@ async fn a_missing_original_is_counted_as_a_failure_and_the_run_goes_on() {
     let original = opened
         .cfg
         .paths
-        .assets_dir_for_account(ACCOUNT, "imessage")
+        .assets_dir_for_account(ACCOUNT)
         .join(format!("ab/{SHA}.png"));
     fs::remove_file(&original).unwrap();
     let message_id = seed_message(&mut conn, "sms").await;
     attach_stored_blob(
         &opened,
         &mut conn,
-        "sms",
         message_id,
         &"b".repeat(64),
         ".txt",
@@ -852,50 +814,30 @@ async fn account_ids_come_from_the_table_or_else_from_the_data_folders() {
 }
 
 #[tokio::test]
-async fn source_ids_come_from_messages_and_from_folders_that_hold_assets() {
-    let (opened, _dir) = open_db().await;
-    let mut conn = opened.conn().await.unwrap();
-    seed_account(&mut conn, ACCOUNT).await;
-    seed_message(&mut conn, "imessage").await;
-    seed_message(&mut conn, " sms ").await;
-    seed_message(&mut conn, " ").await;
-    let account_root = opened.cfg.paths.data_dir.join(ACCOUNT.to_string());
-    fs::create_dir_all(account_root.join("whatsapp/assets")).unwrap();
-    fs::create_dir_all(account_root.join("stray")).unwrap();
-    fs::write(account_root.join("file"), b"").unwrap();
-
-    let ids = discover_source_ids(&mut conn, ACCOUNT, &opened.cfg.paths.data_dir, "assets")
-        .await
-        .unwrap();
-
-    assert_eq!(ids, ["imessage", "sms", "whatsapp"]);
-}
-
-#[tokio::test]
-async fn opening_a_source_without_an_assets_folder_gives_nothing_to_process() {
+async fn opening_an_account_without_an_assets_folder_gives_nothing_to_process() {
     let (opened, _dir) = open_db().await;
     let opts = ProcessAssetsOptions::default();
     let work = tempfile::tempdir().unwrap();
 
-    let pass = SourcePass::open(&opened.cfg, &opts, work.path(), ACCOUNT, "imessage").unwrap();
+    let pass = AccountPass::open(&opened.cfg, &opts, work.path(), ACCOUNT).unwrap();
 
     assert!(pass.is_none());
     assert!(
         !opened
             .cfg
             .paths
-            .assets_converted_dir_for_account(ACCOUNT, "imessage")
+            .assets_converted_dir_for_account(ACCOUNT)
             .exists(),
-        "no converted folder is made for a source with nothing in it"
+        "no converted folder is made for an account with nothing in it"
     );
 }
 
 #[tokio::test]
-async fn opening_a_source_makes_its_converted_folder_and_cleans_its_incoming_temps() {
+async fn opening_an_account_makes_its_converted_folder_and_cleans_its_incoming_temps() {
     let (opened, _dir) = open_db().await;
     let opts = ProcessAssetsOptions::default();
     let work = tempfile::tempdir().unwrap();
-    let assets = opened.cfg.paths.assets_dir_for_account(ACCOUNT, "imessage");
+    let assets = opened.cfg.paths.assets_dir_for_account(ACCOUNT);
     let part = assets.join(".incoming").join(format!("{SHA}-1.part"));
     fs::create_dir_all(part.parent().unwrap()).unwrap();
     fs::write(&part, b"half").unwrap();
@@ -903,18 +845,14 @@ async fn opening_a_source_makes_its_converted_folder_and_cleans_its_incoming_tem
     let live_part = assets.join(".incoming").join(format!("{SHA}-2.part"));
     fs::write(&live_part, b"an upload in progress").unwrap();
 
-    let pass = SourcePass::open(&opened.cfg, &opts, work.path(), ACCOUNT, "imessage")
+    let pass = AccountPass::open(&opened.cfg, &opts, work.path(), ACCOUNT)
         .unwrap()
-        .expect("a source with an assets folder is processed");
+        .expect("an account with an assets folder is processed");
 
-    let converted = opened
-        .cfg
-        .paths
-        .assets_converted_dir_for_account(ACCOUNT, "imessage");
+    let converted = opened.cfg.paths.assets_converted_dir_for_account(ACCOUNT);
     assert_eq!(pass.assets_dir, assets);
     assert_eq!(pass.converted_dir, converted);
     assert_eq!(pass.account_id, ACCOUNT);
-    assert_eq!(pass.source_id, "imessage");
     assert!(converted.is_dir());
     assert!(
         !part.exists(),

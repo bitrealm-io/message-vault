@@ -1,7 +1,7 @@
 import fs from "fs";
 
 import { resetDb } from "./dbCore";
-import { loadSources } from "./paths";
+import { accountAssetDirs } from "./paths";
 import { openWritableVaultDb } from "./vaultSchema";
 
 export type DeletedMessagesResult = {
@@ -14,7 +14,7 @@ export type DeletedMessagesResult = {
  * Contacts, labels, login details, and import token are retained.
  */
 export function deleteAllMessagesForAccount(accountId: string): DeletedMessagesResult {
-  const sourcePaths = loadSources(accountId);
+  const assetDirs = accountAssetDirs(accountId);
   const db = openWritableVaultDb();
   try {
     const deleteAll = db.transaction(() => {
@@ -41,10 +41,8 @@ export function deleteAllMessagesForAccount(accountId: string): DeletedMessagesR
     });
 
     const deleted = deleteAll();
-    for (const source of sourcePaths) {
-      fs.rmSync(source.assetsDir, { recursive: true, force: true });
-      fs.rmSync(source.assetsConvertedDir, { recursive: true, force: true });
-    }
+    fs.rmSync(assetDirs.assetsDir, { recursive: true, force: true });
+    fs.rmSync(assetDirs.assetsConvertedDir, { recursive: true, force: true });
     return deleted;
   } finally {
     db.close();

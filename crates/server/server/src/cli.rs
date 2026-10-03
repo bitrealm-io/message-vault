@@ -123,7 +123,7 @@ pub struct ImportArgs {
     #[arg(long)]
     pub db: Option<PathBuf>,
 
-    /// Originals asset store directory (overrides account/source default; fixed-source only)
+    /// Originals asset store directory (overrides the account's default)
     #[arg(long)]
     pub assets_dir: Option<PathBuf>,
 
@@ -288,10 +288,6 @@ pub struct ProcessAssetsArgs {
     /// Override SQLite database path from config
     #[arg(long)]
     pub db: Option<PathBuf>,
-
-    /// Only process this source id
-    #[arg(long)]
-    pub source: Option<String>,
 }
 
 /// Build the clap [`Command`] definition for `message-crate-server`.
@@ -642,9 +638,6 @@ fn serve_config(args: ServeArgs) -> Result<Config> {
 /// cron job or script that runs the command sees a non-zero exit status.
 async fn run_process_assets(args: ProcessAssetsArgs) -> Result<()> {
     let cfg = Config::load_with_db(&args.config, args.db)?;
-    if let Some(ref source) = args.source {
-        validate_source_id(source)?;
-    }
     let opened = OpenDb::open(cfg).await?;
     let stats = crate::process_assets::run(
         &opened,
@@ -654,7 +647,6 @@ async fn run_process_assets(args: ProcessAssetsArgs) -> Result<()> {
             skip_image: args.skip_image,
             skip_video: args.skip_video,
             skip_audio: args.skip_audio,
-            source: args.source,
             account: None,
         },
     )

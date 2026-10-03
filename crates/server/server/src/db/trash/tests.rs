@@ -641,12 +641,10 @@ async fn delete_reports_only_the_files_no_remaining_message_uses() {
         outcome,
         DeleteOutcome::Deleted(vec![
             OrphanedFile::Original {
-                source: "imessage".into(),
                 sha256: only_here.clone(),
                 assets_path: format!("bb/{only_here}.jpg"),
             },
             OrphanedFile::Derived {
-                source: "imessage".into(),
                 assets_path: format!("cc/{derived}.jpg"),
             },
         ]),
@@ -663,6 +661,44 @@ async fn delete_reports_only_the_files_no_remaining_message_uses() {
         1,
         "the other conversation's attachment row survives"
     );
+}
+
+/// The account stores one file for every source, so a file a message of
+/// another source still names is not reported, and its Preview stays too.
+#[tokio::test]
+async fn delete_keeps_a_file_a_message_of_another_source_still_names() {
+    let fixture = crate::test_support::test_fixture().await;
+    fixture.account_with_id(ACCOUNT_A, "a").await;
+    let mut conn = fixture.conn().await;
+    let shared = sha('a');
+    let derived = sha('c');
+
+    let doomed = insert_conversation_on(&mut conn, ACCOUNT_A, "+15550001").await;
+    let m1 = insert_message(&mut conn, ACCOUNT_A, doomed, 0).await;
+    insert_attachment(&mut conn, m1, &shared, Some(&derived)).await;
+
+    let kept = insert_conversation_on(&mut conn, ACCOUNT_A, "+15550002").await;
+    let k1 = insert_message(&mut conn, ACCOUNT_A, kept, 0).await;
+    insert_attachment(&mut conn, k1, &shared, Some(&derived)).await;
+    sqlx::query("UPDATE messages SET source = 'sms' WHERE id = $1")
+        .bind(k1)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+
+    move_to_trash(&mut conn, ACCOUNT_A, Trashable::Conversation(doomed))
+        .await
+        .unwrap();
+    let outcome = delete_trashed(
+        &mut conn,
+        ACCOUNT_A,
+        Trashable::Conversation(doomed),
+        AuditActor::Holder,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(outcome, DeleteOutcome::Deleted(Vec::new()));
 }
 
 /// A contact named by the person, in a Contact Group, with one conversation
@@ -846,7 +882,6 @@ async fn empty_trash_takes_everything_trashed_and_only_that() {
     assert_eq!(
         orphaned,
         vec![OrphanedFile::Original {
-            source: "imessage".into(),
             sha256: sha('a'),
             assets_path: format!("aa/{}.jpg", sha('a')),
         }]

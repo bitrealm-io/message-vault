@@ -16,7 +16,7 @@ export type MessageBubbleProps = {
    * left out, every received message in a group is named.
    */
   showSender?: boolean;
-  onAttachmentClick?: (attachment: MessageAttachment, source: string) => void;
+  onAttachmentClick?: (attachment: MessageAttachment) => void;
 };
 
 /**

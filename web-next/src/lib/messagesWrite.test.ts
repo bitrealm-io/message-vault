@@ -85,9 +85,9 @@ describe("deleteAllMessagesForAccount", () => {
       db.close();
     }
 
-    const sourceRoot = path.join(accountDataDir(accountId), "imessage");
-    const assetsDir = path.join(sourceRoot, "assets");
-    const convertedDir = path.join(sourceRoot, "assets_converted");
+    const accountRoot = accountDataDir(accountId);
+    const assetsDir = path.join(accountRoot, "assets");
+    const convertedDir = path.join(accountRoot, "assets_converted");
     fs.mkdirSync(assetsDir, { recursive: true });
     fs.mkdirSync(convertedDir, { recursive: true });
     fs.writeFileSync(path.join(assetsDir, "photo.jpg"), "original");

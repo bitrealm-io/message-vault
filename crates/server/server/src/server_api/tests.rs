@@ -1151,7 +1151,7 @@ fn a_demo_build_converts_no_other_accounts_attachments() {
             let other = fixture.account("someone").await;
             crate::test_support::seed_one_message(&state, other).await;
 
-            let assets = state.cfg.paths.assets_dir_for_account(other, "imessage");
+            let assets = state.cfg.paths.assets_dir_for_account(other);
             let sha = crate::test_support::fake_sha256('c');
             let blob = assets.join(&sha[..2]).join(format!("{sha}.png"));
             std::fs::create_dir_all(blob.parent().unwrap()).unwrap();
@@ -1195,7 +1195,7 @@ fn a_demo_build_converts_no_other_accounts_attachments() {
                 !state
                     .cfg
                     .paths
-                    .assets_converted_dir_for_account(other, "imessage")
+                    .assets_converted_dir_for_account(other)
                     .exists(),
                 "the pass never opened the other account's source"
             );

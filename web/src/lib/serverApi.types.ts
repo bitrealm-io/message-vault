@@ -5963,9 +5963,7 @@ export interface operations {
     };
     get_asset: {
         parameters: {
-            query: {
-                source: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 /** @description Content SHA-256 hex */
@@ -6028,9 +6026,7 @@ export interface operations {
     };
     replace_asset: {
         parameters: {
-            query: {
-                source: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 /** @description Content SHA-256 hex */
@@ -6151,9 +6147,7 @@ export interface operations {
     };
     head_asset: {
         parameters: {
-            query: {
-                source: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 /** @description Content SHA-256 hex */
@@ -6223,9 +6217,7 @@ export interface operations {
     };
     get_asset_preview: {
         parameters: {
-            query: {
-                source: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 /** @description Content SHA-256 hex of the original */
@@ -6288,9 +6280,7 @@ export interface operations {
     };
     create_asset_upload: {
         parameters: {
-            query: {
-                source: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 /** @description Content SHA-256 hex */
@@ -6410,9 +6400,7 @@ export interface operations {
     };
     get_asset_upload: {
         parameters: {
-            query: {
-                source: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 /** @description Content SHA-256 hex */
@@ -6491,9 +6479,7 @@ export interface operations {
     };
     delete_asset_upload: {
         parameters: {
-            query: {
-                source: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 /** @description Content SHA-256 hex */
@@ -6579,9 +6565,7 @@ export interface operations {
     };
     complete_asset_upload: {
         parameters: {
-            query: {
-                source: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 /** @description Content SHA-256 hex */
@@ -6680,9 +6664,7 @@ export interface operations {
     };
     replace_asset_upload_part: {
         parameters: {
-            query: {
-                source: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 /** @description Content SHA-256 hex */

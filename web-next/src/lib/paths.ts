@@ -1,4 +1,3 @@
-import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
 import { parse } from "smol-toml";
@@ -36,10 +35,7 @@ function resolveConfiguredPath(
   return path.join(repoRoot(), rel);
 }
 
-export type SourcePaths = {
-  id: string;
-  /** Staging is no longer configured; kept for callers that expect a path. */
-  exportDir: string;
+export type AccountAssetDirs = {
   assetsDir: string;
   assetsConvertedDir: string;
 };
@@ -107,73 +103,16 @@ export function assetsConvertedDirName(): string {
   );
 }
 
-function sourceIdsForAccount(accountId: string): string[] {
-  const ids = new Set<string>();
-  const dbFile = dbPath();
-  if (fs.existsSync(dbFile)) {
-    try {
-      const db = new Database(dbFile, { readonly: true });
-      try {
-        const rows = db
-          .prepare(
-            `SELECT DISTINCT m.source AS source
-             FROM messages m
-             JOIN conversations c ON c.id = m.conversation_id
-             WHERE c.account_id = ?
-               AND m.source IS NOT NULL
-               AND TRIM(m.source) != ''
-             ORDER BY m.source`,
-          )
-          .all(accountId) as Array<{ source: string }>;
-        for (const row of rows) {
-          if (row.source?.trim()) ids.add(row.source.trim());
-        }
-      } finally {
-        db.close();
-      }
-    } catch {
-      // Fall through to filesystem discovery.
-    }
-  }
-
-  const accountRoot = accountDataDir(accountId);
-  if (fs.existsSync(accountRoot)) {
-    for (const entry of fs.readdirSync(accountRoot, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const id = entry.name;
-      if (id === "." || id === ".." || id.includes("/") || id.includes("\\")) {
-        continue;
-      }
-      const assets = path.join(accountRoot, id, assetsDirName());
-      if (fs.existsSync(assets)) {
-        ids.add(id);
-      }
-    }
-  }
-
-  return [...ids].sort();
-}
-
 /**
- * Per-account import sources with resolved asset roots (from DB + on-disk folders).
- *
- * Layout matches the Rust vault server:
- *   data/<account_id>/<source_id>/<assets_dir>
- *   data/<account_id>/<source_id>/<assets_converted_dir>
+ * One account's attachment folders. The server keeps one folder of originals
+ * and one of previews per account, shared by every import source:
+ *   data/<account_id>/<assets_dir>
+ *   data/<account_id>/<assets_converted_dir>
  */
-export function loadSources(accountId = currentAccountId()): SourcePaths[] {
-  const data = dataDir();
-  const assetsName = assetsDirName();
-  const convertedName = assetsConvertedDirName();
-
-  return sourceIdsForAccount(accountId).map((id) => ({
-    id,
-    exportDir: path.join(data, accountId, id, "staging"),
-    assetsDir: path.join(data, accountId, id, assetsName),
-    assetsConvertedDir: path.join(data, accountId, id, convertedName),
-  }));
-}
-
-export function sourceById(id: string): SourcePaths | undefined {
-  return loadSources().find((s) => s.id === id);
+export function accountAssetDirs(accountId = currentAccountId()): AccountAssetDirs {
+  const account = accountDataDir(accountId);
+  return {
+    assetsDir: path.join(account, assetsDirName()),
+    assetsConvertedDir: path.join(account, assetsConvertedDirName()),
+  };
 }

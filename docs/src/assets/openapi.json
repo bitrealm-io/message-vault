@@ -2542,14 +2542,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "source",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -2636,14 +2628,6 @@
             "name": "sha256",
             "in": "path",
             "description": "Content SHA-256 hex",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "source",
-            "in": "query",
             "required": true,
             "schema": {
               "type": "string"
@@ -2822,14 +2806,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "source",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -2944,14 +2920,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "source",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -3039,14 +3007,6 @@
             "name": "sha256",
             "in": "path",
             "description": "Content SHA-256 hex",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "source",
-            "in": "query",
             "required": true,
             "schema": {
               "type": "string"
@@ -3238,14 +3198,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "source",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -3360,14 +3312,6 @@
           {
             "name": "upload_id",
             "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "source",
-            "in": "query",
             "required": true,
             "schema": {
               "type": "string"
@@ -3494,14 +3438,6 @@
           {
             "name": "upload_id",
             "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "source",
-            "in": "query",
             "required": true,
             "schema": {
               "type": "string"
@@ -3666,14 +3602,6 @@
               "type": "integer",
               "format": "int32",
               "minimum": 0
-            }
-          },
-          {
-            "name": "source",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
             }
           }
         ],

@@ -58,7 +58,7 @@ export default function MessageThread({
   landing: Landing;
   /** The messages on screen are the last place's, while a jump loads. */
   jumping?: boolean;
-  onAttachmentClick: (att: MessageAttachment, source: string) => void;
+  onAttachmentClick: (att: MessageAttachment) => void;
 }) {
   const zone = useTimeZone();
   const rows = useMemo(() => threadRows(messages, zone), [messages, zone]);

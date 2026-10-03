@@ -414,10 +414,9 @@ export function deleteApiToken(id: number, accountId?: number): Promise<void> {
  */
 export async function fetchAssetObjectUrl(
   sha256: string,
-  source: string,
   { preview = false, signal }: { preview?: boolean; signal?: AbortSignal } = {},
 ): Promise<string> {
-  const path = preview ? buildAssetPreviewPath(sha256, source) : buildAssetPath(sha256, source);
+  const path = preview ? buildAssetPreviewPath(sha256) : buildAssetPath(sha256);
   const headers: Record<string, string> = {};
   const token = getToken();
   if (token) {

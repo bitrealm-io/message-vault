@@ -64,7 +64,7 @@ Import a message-ir JSONL folder, one Import Run per source (source from export.
   Default value: `config/config.toml`
 * `--input <INPUT>` [aliases: `dir`, `staging-dir`, `export-dir`] — Folder of `*.jsonl` conversation files (+ attachments)
 * `--db <DB>` — Output SQLite database path (overrides config)
-* `--assets-dir <ASSETS_DIR>` — Originals asset store directory (overrides account/source default; fixed-source only)
+* `--assets-dir <ASSETS_DIR>` — Originals asset store directory (overrides the account's default)
 * `--media <MEDIA>` — Attachment handling: copy (default), none, convert, compress
 
   Default value: `copy`
@@ -235,7 +235,6 @@ Convert media under assets/ into browser previews under `assets_converted/`
 * `--skip-video` — Skip video conversion
 * `--skip-audio` — Skip audio conversion
 * `--db <DB>` — Override SQLite database path from config
-* `--source <SOURCE>` — Only process this source id
 
 
 

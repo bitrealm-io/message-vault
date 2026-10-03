@@ -1,6 +1,8 @@
 //! The Assets and Previews on disk, and the code that removes them.
 //!
-//! An account's files sit under `data_dir/<account>/<source>/`:
+//! An account's files sit under `data_dir/<account>/`, in one set of
+//! folders for all of the account's sources, so one file imported from two
+//! sources is stored once:
 //!
 //! - `<assets_dir>/<aa>/<sha256><ext>` is an original, named by its
 //!   SHA-256 and sharded by the fingerprint's first two characters.
@@ -10,16 +12,17 @@
 //!   files and multipart folders `{sha256}/{upload_id}/`.
 //! - `<assets_converted_dir>/<aa>/<sha256><ext>` is a Preview.
 //!
-//! An Asset is unused when no attachment row, promoted or in staging, names
-//! it. That test alone is not enough while the account has a running Import
-//! Run: `HEAD /v1/assets/{sha256}` may have told the run a file exists, or
-//! the run may have uploaded it, and the batch that names it has not arrived
-//! yet. So an original is removed only while a connection holds the
-//! database write lock and no run is running. Starting a run writes its row,
-//! so no run can start between that check and the last removal. While a run
-//! is running the original stays, and [`sweep_unreferenced`] removes it when
-//! the run ends. A Preview is never kept for a run, because an import never
-//! names one: the server makes Previews from originals after the fact.
+//! An Asset is unused when no attachment row of the account, from any
+//! source, promoted or in staging, names it. That test alone is not enough
+//! while the account has a running Import Run: `HEAD /v1/assets/{sha256}`
+//! may have told the run a file exists, or the run may have uploaded it,
+//! and the batch that names it has not arrived yet. So an original is
+//! removed only while a connection holds the database write lock and no run
+//! is running. Starting a run writes its row, so no run can start between
+//! that check and the last removal. While a run is running the original
+//! stays, and [`sweep_unreferenced`] removes it when the run ends. A
+//! Preview is never kept for a run, because an import never names one: the
+//! server makes Previews from originals after the fact.
 //!
 //! A removal that fails is logged and the rest go on. The database rows are
 //! the record, so a request answers for what the database did, and a file
@@ -171,19 +174,15 @@ fn remove_each(account_id: i64, paths: &[PathBuf]) {
 fn paths_of(paths: &PathsConfig, account_id: i64, file: &OrphanedFile) -> Vec<PathBuf> {
     let (dir, assets_path, sidecar) = match file {
         OrphanedFile::Original {
-            source,
             sha256,
             assets_path,
         } => {
-            let dir = paths.assets_dir_for_account(account_id, source);
+            let dir = paths.assets_dir_for_account(account_id);
             let sidecar = stored_sidecar_path(&dir, sha256);
             (dir, assets_path, sidecar)
         }
-        OrphanedFile::Derived {
-            source,
-            assets_path,
-        } => (
-            paths.assets_converted_dir_for_account(account_id, source),
+        OrphanedFile::Derived { assets_path } => (
+            paths.assets_converted_dir_for_account(account_id),
             assets_path,
             None,
         ),
@@ -200,40 +199,35 @@ fn paths_of(paths: &PathsConfig, account_id: i64, file: &OrphanedFile) -> Vec<Pa
 }
 
 /// Remove every Asset and Preview of `account_id` after its messages were
-/// deleted: every Preview folder, and every originals folder unless the
-/// account has a running Import Run (see the module notes). A folder that
-/// cannot be removed is logged and the others still go.
+/// deleted: the account's Preview folder, and its originals folder unless
+/// the account has a running Import Run (see the module notes). A folder
+/// that cannot be removed is logged.
 pub(crate) async fn remove_all_attachment_files(
     pool: &SqlitePool,
     cfg: Arc<Config>,
     account_id: i64,
 ) {
-    let remove_kind_dirs = |kind: String| {
-        let cfg = Arc::clone(&cfg);
+    let remove_dir = |dir: PathBuf| {
         move || {
-            let paths = &cfg.paths;
-            for source in source_dirs(account_id, &account_dir(paths, account_id)) {
-                let dir = source.join(&kind);
-                if let Err(error) = remove_tree(&dir) {
-                    tracing::warn!(
-                        account_id,
-                        path = %dir.display(),
-                        %error,
-                        "a folder could not be removed"
-                    );
-                }
+            if let Err(error) = remove_tree(&dir) {
+                tracing::warn!(
+                    account_id,
+                    path = %dir.display(),
+                    %error,
+                    "a folder could not be removed"
+                );
             }
         }
     };
     run_blocking_logged(
         account_id,
-        remove_kind_dirs(cfg.paths.assets_converted_dir.clone()),
+        remove_dir(cfg.paths.assets_converted_dir_for_account(account_id)),
     )
     .await;
     unless_import_running(
         pool,
         account_id,
-        remove_kind_dirs(cfg.paths.assets_dir.clone()),
+        remove_dir(cfg.paths.assets_dir_for_account(account_id)),
     )
     .await;
 }
@@ -303,29 +297,6 @@ pub(crate) fn remove_account_dir(paths: &PathsConfig, account_id: i64) -> io::Re
     remove_tree(&account_dir(paths, account_id))
 }
 
-/// The source folders under `account_root`. A folder that cannot be read is
-/// logged and yields none.
-fn source_dirs(account_id: i64, account_root: &Path) -> Vec<PathBuf> {
-    let entries = match std::fs::read_dir(account_root) {
-        Ok(entries) => entries,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Vec::new(),
-        Err(error) => {
-            tracing::warn!(
-                account_id,
-                path = %account_root.display(),
-                %error,
-                "an account folder could not be read"
-            );
-            return Vec::new();
-        }
-    };
-    entries
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().is_ok_and(|t| t.is_dir()))
-        .map(|entry| entry.path())
-        .collect()
-}
-
 /// Remove every original, sidecar and Preview of `account_id` that no
 /// attachment row names, and return how many files went. Does nothing while
 /// the account has a running Import Run, because that run may hold files it
@@ -381,17 +352,17 @@ async fn sweep_holding_lock(
     }
     let named = named_fingerprints(&mut tx, account_id).await?;
     let removed = tokio::task::spawn_blocking(move || {
-        let mut removed = 0u64;
-        for source in source_dirs(account_id, &account_dir(&paths, account_id)) {
-            removed += sweep_store_dir(account_id, &source.join(&paths.assets_dir), &named, 0);
-            removed += sweep_store_dir(
-                account_id,
-                &source.join(&paths.assets_converted_dir),
-                &named,
-                PREVIEW_GRACE_SECS,
-            );
-        }
-        removed
+        sweep_store_dir(
+            account_id,
+            &paths.assets_dir_for_account(account_id),
+            &named,
+            0,
+        ) + sweep_store_dir(
+            account_id,
+            &paths.assets_converted_dir_for_account(account_id),
+            &named,
+            PREVIEW_GRACE_SECS,
+        )
     })
     .await
     .context("sweep of unreferenced files")?;

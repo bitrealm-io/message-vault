@@ -33,7 +33,6 @@ pub enum JournalEvent {
     AssetOk {
         url: String,
         username: String,
-        source: String,
         sha256: String,
     },
     MessageBatchOk {
@@ -183,7 +182,6 @@ pub fn compact(path: &Path, url: &str, username: &str, state: &JournalState) -> 
             events.push(JournalEvent::AssetOk {
                 url: url.to_string(),
                 username: username.to_string(),
-                source: String::new(),
                 sha256: sha.clone(),
             });
         }
@@ -268,14 +266,13 @@ impl RunJournal {
     /// # Errors
     ///
     /// Returns an error when the journal file cannot be appended to.
-    pub fn asset_ok(&mut self, source: &str, sha256: &str) -> Result<()> {
+    pub fn asset_ok(&mut self, sha256: &str) -> Result<()> {
         self.state.assets.insert(sha256.to_string());
         append(
             &self.path,
             &JournalEvent::AssetOk {
                 url: self.url.clone(),
                 username: self.username.clone(),
-                source: source.to_string(),
                 sha256: sha256.to_string(),
             },
         )
@@ -405,7 +402,6 @@ mod tests {
             JournalEvent::AssetOk {
                 url: url.into(),
                 username: username.into(),
-                source: "sms".into(),
                 sha256: format!("sha-{tag}"),
             },
             JournalEvent::MessageBatchOk {
@@ -456,7 +452,7 @@ mod tests {
         let path = dir.path().join(JOURNAL_NAME);
         let mut journal = RunJournal::open(path.clone(), "http://server", "alice", false).unwrap();
         assert!(!journal.has_asset("sha-1"));
-        journal.asset_ok("sms", "sha-1").unwrap();
+        journal.asset_ok("sha-1").unwrap();
         drop(journal);
 
         let reopened = RunJournal::open(path, "http://server", "alice", false).unwrap();
@@ -471,7 +467,7 @@ mod tests {
         fs::write(
             &path,
             concat!(
-                r#"{"event":"asset_ok","url":"http://a","username":"alice","source":"sms","sha256":"aaa"}"#,
+                r#"{"event":"asset_ok","url":"http://a","username":"alice","sha256":"aaa"}"#,
                 "\n",
                 r#"{"event":"file_ok","url":"http://b","username":"bob","source":"sms","file":"chat.jsonl"}"#,
                 "\n",

@@ -173,7 +173,6 @@ async fn import_records_the_conversation_then_dedupe_and_process_assets_run_on_i
             skip_video: false,
             skip_audio: false,
             db: None,
-            source: None,
         }),
     })
     .await
@@ -196,20 +195,11 @@ async fn process_assets_fails_when_a_conversion_failed_and_names_the_count() {
         let mut conn = opened.conn().await.unwrap();
         let message_id = seed_message(&mut conn, "imessage").await;
         let sha = "c".repeat(64);
-        attach_stored_blob(
-            &opened,
-            &mut conn,
-            "imessage",
-            message_id,
-            &sha,
-            ".png",
-            PNG_1X1_RGB,
-        )
-        .await;
+        attach_stored_blob(&opened, &mut conn, message_id, &sha, ".png", PNG_1X1_RGB).await;
         let original = opened
             .cfg
             .paths
-            .assets_dir_for_account(ALICE, "imessage")
+            .assets_dir_for_account(ALICE)
             .join(format!("cc/{sha}.png"));
         fs::remove_file(original).unwrap();
     }
@@ -223,7 +213,6 @@ async fn process_assets_fails_when_a_conversion_failed_and_names_the_count() {
             skip_video: false,
             skip_audio: false,
             db: None,
-            source: None,
         }),
     })
     .await
@@ -253,7 +242,6 @@ async fn process_assets_with_a_mistyped_db_fails_and_creates_no_file() {
             skip_video: false,
             skip_audio: false,
             db: Some(PathBuf::from("data/messagecrate.db")),
-            source: None,
         }),
     })
     .await

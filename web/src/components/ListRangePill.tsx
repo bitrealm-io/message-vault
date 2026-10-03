@@ -4,13 +4,15 @@ import { Z_RANGE_PILL } from "../lib/zLayers";
 /*
   Room under the last row so the floating range pill does not cover a row:
   3.5rem (56px), as a list box's bottom padding or as a spacer after the rows.
-  Change both together.
+  `styleTokens.test.ts` checks that the two are the same size.
 */
 export const RANGE_PILL_SCROLL_PAD_CLASS = "pb-14";
+/** The same room as a height, for the spacer after a list's rows. */
+export const RANGE_PILL_SPACER_CLASS = "h-14";
 
-/** The spacer after a list's rows, `RANGE_PILL_SCROLL_PAD_CLASS` high. */
+/** The spacer after a list's rows, `RANGE_PILL_SPACER_CLASS` high. */
 export function RangePillSpacer() {
-  return <div aria-hidden className="h-14 shrink-0" />;
+  return <div aria-hidden className={`shrink-0 ${RANGE_PILL_SPACER_CLASS}`} />;
 }
 
 /** Viewport pixels the pill covers (`bottom-3` + pill). Range math ignores this band. */

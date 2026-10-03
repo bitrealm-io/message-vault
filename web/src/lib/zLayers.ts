@@ -36,7 +36,7 @@ export const Z_CONTACT_DRAWER = "z-[35]";
 /** Backdrop behind a modal drawer. */
 export const Z_DRAWER_SCRIM = "z-40";
 
-/** A modal drawer panel (the Sources drawer), above its scrim. */
+/** A modal drawer panel (the Sources panel), above its scrim. */
 export const Z_DRAWER = "z-50";
 
 /** Advanced-search panel and similar inline overlays; must clear the resize handle. */

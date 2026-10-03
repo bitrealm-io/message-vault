@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { RANGE_PILL_SCROLL_PAD_CLASS, RANGE_PILL_SPACER_CLASS } from "./components/ListRangePill";
 import { AVATAR_COLOR_CLASSES } from "./lib/contactInitials";
 import { Z_CONTACT_DRAWER, Z_DRAWER_SCRIM, Z_MODAL, Z_RESIZE_HANDLE } from "./lib/zLayers";
 
@@ -76,5 +77,15 @@ describe("z-index values come from the ladder", () => {
     expect(rung(Z_CONTACT_DRAWER)).toBeGreaterThan(rung(Z_RESIZE_HANDLE));
     expect(rung(Z_CONTACT_DRAWER)).toBeLessThan(rung(Z_DRAWER_SCRIM));
     expect(rung(Z_CONTACT_DRAWER)).toBeLessThan(rung(Z_MODAL));
+  });
+});
+
+describe("the range pill's room", () => {
+  // A list leaves room under its last row either as padding or as a spacer;
+  // the two must match, or one kind of list hides its last row under the pill.
+  it("is the same size as padding and as a spacer", () => {
+    expect(RANGE_PILL_SCROLL_PAD_CLASS.replace(/^pb-/, "")).toBe(
+      RANGE_PILL_SPACER_CLASS.replace(/^h-/, ""),
+    );
   });
 });

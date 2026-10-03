@@ -108,8 +108,11 @@ pub struct Contact {
 /// Body for `POST /v1/contacts/summaries`.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct SummarizeContactsRequest {
-    /// Contact ids to summarize: at least one, and at most 500. Every
+    /// Contact ids to summarize, within `minItems` and `maxItems`. Every
     /// contact is listed by `GET /v1/contacts`.
+    // `max_items` takes only a literal; a test holds it to
+    // `MAX_CONTACT_SUMMARY_IDS`.
+    #[schema(min_items = 1, max_items = 500)]
     pub ids: Vec<i64>,
 }
 

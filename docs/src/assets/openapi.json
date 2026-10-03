@@ -15987,7 +15987,9 @@
               "type": "integer",
               "format": "int64"
             },
-            "description": "Contact ids to summarize: at least one, and at most 500. Every\ncontact is listed by `GET /v1/contacts`."
+            "description": "Contact ids to summarize, within `minItems` and `maxItems`. Every\ncontact is listed by `GET /v1/contacts`.",
+            "maxItems": 500,
+            "minItems": 1
           }
         }
       },

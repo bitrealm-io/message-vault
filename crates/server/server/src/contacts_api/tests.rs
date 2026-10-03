@@ -2695,6 +2695,18 @@ async fn summaries_of_no_contacts_are_refused() {
         &text,
         crate::problem::ProblemType::ValidationFailed,
     );
+
+    // The reference states the same bounds the handler keeps, so a client
+    // built from it knows an empty list is refused.
+    let doc: serde_json::Value =
+        serde_json::from_str(&crate::openapi::dump_openapi_json()).unwrap();
+    let ids = &doc["components"]["schemas"]["SummarizeContactsRequest"]["properties"]["ids"];
+    assert_eq!(ids["minItems"], 1, "{ids}");
+    assert_eq!(
+        ids["maxItems"],
+        crate::paging::MAX_CONTACT_SUMMARY_IDS,
+        "{ids}"
+    );
 }
 
 async fn trashed_contact_row_count(conn: &mut SqliteConnection, account_id: i64, id: i64) -> i64 {

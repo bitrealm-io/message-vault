@@ -1162,7 +1162,10 @@ pub async fn export_csv(
         .filter(|(id, ..)| only.is_none_or(|only| only.contains(id)))
         .collect();
     let contacts: HashSet<i64> = rows.iter().map(|(id, ..)| *id).collect();
-    let identities = rows.iter().filter(|row| row.4.is_some()).count();
+    let identities = rows
+        .iter()
+        .filter(|(.., normalized)| normalized.is_some())
+        .count();
     let book = rows
         .into_iter()
         .map(|(id, name, service, handle_type, normalized)| {

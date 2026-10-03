@@ -31,6 +31,18 @@ fn config(input: &Path, output: &Path, output_format: OutputFormat) -> ExporterC
     }
 }
 
+/// The names of the conversation JSON files in `dir`, sorted, skipping
+/// `.meta.json` sidecars.
+fn json_names(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .filter(|name| name.ends_with(".json") && !name.ends_with(".meta.json"))
+        .collect();
+    names.sort();
+    names
+}
+
 /// The first file in `dir` with `extension`, skipping `.meta.json` sidecars.
 fn find_file(dir: &Path, extension: &str) -> PathBuf {
     fs::read_dir(dir)
@@ -961,15 +973,6 @@ fn convert_keeps_the_names_two_groups_with_one_title_were_given() {
         sink.write_document(doc).unwrap();
     }
     sink.finish(&mut ExportReport::default()).unwrap();
-    let json_names = |dir: &Path| {
-        let mut names: Vec<String> = fs::read_dir(dir)
-            .unwrap()
-            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
-            .filter(|name| name.ends_with(".json") && !name.ends_with(".meta.json"))
-            .collect();
-        names.sort();
-        names
-    };
     let written = json_names(source.path());
     assert_eq!(written.len(), 2, "{written:?}");
 

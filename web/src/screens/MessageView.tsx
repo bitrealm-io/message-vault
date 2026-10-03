@@ -5,7 +5,7 @@ import {
   contactPreviewFromThreadParticipants,
 } from "../components/contactDrawer/contactDrawerTypes";
 import SourcesPanel from "../components/SourcesPanel";
-import { shownMimeType } from "../lib/attachmentPreview";
+import { lightboxImages } from "../lib/lightboxImages";
 import { useTimeZone } from "../lib/timeZone";
 import type { Conversation, MessageAttachment } from "../lib/types";
 import ConversationHeader from "./message/ConversationHeader";
@@ -44,12 +44,9 @@ export default function MessageView({
   // Open the image viewer at the clicked photo. Previous/next walks the loaded messages' images.
   const handleAttachmentClick = useCallback(
     (att: MessageAttachment) => {
-      const images = messages.flatMap((m) =>
-        (m.attachments || []).filter((a) => a.sha256 && shownMimeType(a)?.startsWith("image/")),
-      );
-      const idx = images.findIndex((a) => a.sha256 === att.sha256);
-      setLightboxItems(images.length > 0 ? images : [att]);
-      setLightboxIndex(idx >= 0 ? idx : 0);
+      const { items, index } = lightboxImages(messages, att);
+      setLightboxItems(items);
+      setLightboxIndex(index);
     },
     [messages],
   );

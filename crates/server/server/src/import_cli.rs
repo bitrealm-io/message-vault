@@ -285,7 +285,7 @@ mod tests {
     /// A database with account alice and an export folder holding one
     /// conversation with `PHONE`.
     async fn fixture_with_export(dir: &Path) -> (OpenDb, CliImportOptions) {
-        let opened = OpenDb::open(fresh_config(dir)).await.unwrap();
+        let opened = OpenDb::create_or_open(fresh_config(dir)).await.unwrap();
         let mut conn = opened.conn().await.unwrap();
         account_profile::insert_account_at(&mut conn, ALICE, "alice", None, None)
             .await

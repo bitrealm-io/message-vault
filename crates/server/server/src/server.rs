@@ -1074,7 +1074,7 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
         crate::operation_lock::clear_ready(&cfg.paths.db)?;
         crate::reset_demo::seed_new_database(&cfg).await;
     }
-    let opened = OpenDb::open(cfg).await?;
+    let opened = OpenDb::create_or_open(cfg).await?;
     crate::operation_lock::mark_ready(&opened.cfg.paths.db)?;
     let mode: String = sqlx::query_scalar("PRAGMA journal_mode")
         .fetch_one(&opened.db)

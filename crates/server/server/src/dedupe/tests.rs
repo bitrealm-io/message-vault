@@ -782,6 +782,79 @@ async fn a_near_duplicate_across_three_sources_keeps_one() {
     assert_eq!(duplicate_of(&mut conn, ids[2]).await, Some(ids[0]));
 }
 
+/// One source holding a near-time message twice holds two messages, so a
+/// near-time cluster stays shown twice, as an exact group does (#1398). Both
+/// of A's rows are twins of B's earlier row and are never compared with each
+/// other, so the pass must count by source, not hide every row but one.
+#[tokio::test]
+async fn a_near_time_message_one_source_holds_twice_stays_shown_twice() {
+    let (pool, _dir) = engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    setup_db(&mut conn).await;
+    let ids = insert_incoming_oks(
+        &mut conn,
+        &[
+            ("b1", "sms-backup-plus", "2015-03-12T18:04:22Z"),
+            ("a1", "go-sms-pro", "2015-03-12T18:04:23Z"),
+            ("a2", "go-sms-pro", "2015-03-12T18:04:24Z"),
+        ],
+    )
+    .await;
+
+    let stats = dedupe_cross_source(&mut conn, TEST_ACCOUNT_ID, None, 2)
+        .await
+        .unwrap();
+
+    assert_eq!(stats.near_flagged, 1, "only one of the three is a copy");
+    assert_eq!(shown_ids(&mut conn).await.len(), 2, "{ids:?}");
+}
+
+/// Two sources that each hold a near-time message twice show it twice. A
+/// cluster is a star around its first row, and that row's own source counts
+/// once in it, so a copy the first cluster kept must stay free to pair with
+/// the other source's second copy. Checked with B's second copy past the
+/// first row's window, and with all four copies inside it.
+#[tokio::test]
+async fn two_sources_that_each_hold_a_near_time_message_twice_show_it_twice() {
+    let b_first = [
+        ("b1", "sms-backup-plus", "2015-03-12T18:04:22Z"),
+        ("a1", "go-sms-pro", "2015-03-12T18:04:23Z"),
+        ("a2", "go-sms-pro", "2015-03-12T18:04:24Z"),
+        ("b2", "sms-backup-plus", "2015-03-12T18:04:25Z"),
+    ];
+    let a_first = [
+        ("a1", "go-sms-pro", "2015-03-12T18:04:22Z"),
+        ("b1", "sms-backup-plus", "2015-03-12T18:04:23Z"),
+        ("a2", "go-sms-pro", "2015-03-12T18:04:24Z"),
+        ("b2", "sms-backup-plus", "2015-03-12T18:04:25Z"),
+    ];
+    for (rows, window_secs) in [(b_first, 2), (a_first, 3)] {
+        let (pool, _dir) = engine::test_pool().await;
+        let mut conn = pool.acquire().await.unwrap();
+        setup_db(&mut conn).await;
+        let ids = insert_incoming_oks(&mut conn, &rows).await;
+
+        let stats = dedupe_cross_source(&mut conn, TEST_ACCOUNT_ID, None, window_secs)
+            .await
+            .unwrap();
+
+        let shown = shown_ids(&mut conn).await;
+        assert_eq!(
+            (stats.exact_flagged, stats.near_flagged, shown.len()),
+            (0, 2, 2),
+            "{rows:?}, window {window_secs}"
+        );
+        for &id in &ids {
+            if let Some(target) = duplicate_of(&mut conn, id).await {
+                assert!(
+                    shown.contains(&target),
+                    "{id} points at a hidden row: {rows:?}"
+                );
+            }
+        }
+    }
+}
+
 /// Two group members sending the same words a second apart, in copies from
 /// two sources, are two messages. The near pass pairs only rows with the
 /// same sender, so neither is hidden.
@@ -1673,18 +1746,37 @@ async fn dedupe_invariants_hold_over_generated_databases() {
 
 /// Inserts one "ok" sent from me at 18:04:22 for each `(guid, source)`.
 async fn insert_oks(conn: &mut SqliteConnection, copies: &[(&str, &str)]) -> Vec<i64> {
+    let rows: Vec<_> = copies
+        .iter()
+        .map(|&(guid, source)| (guid, source, "2015-03-12T18:04:22Z"))
+        .collect();
+    insert_ok_rows(conn, &rows, true).await
+}
+
+/// Inserts one incoming "ok" for each `(guid, source, timestamp)`, in the
+/// order given.
+async fn insert_incoming_oks(conn: &mut SqliteConnection, rows: &[(&str, &str, &str)]) -> Vec<i64> {
+    insert_ok_rows(conn, rows, false).await
+}
+
+/// Inserts one "ok" for each `(guid, source, timestamp)`, in the order given.
+async fn insert_ok_rows(
+    conn: &mut SqliteConnection,
+    rows: &[(&str, &str, &str)],
+    from_me: bool,
+) -> Vec<i64> {
     let mut ids = Vec::new();
-    for &(guid, source) in copies {
+    for (sort_order, &(guid, source, timestamp)) in (0..).zip(rows) {
         ids.push(
             insert_msg(
                 conn,
                 InsertMsgArgs {
                     source,
                     guid,
-                    timestamp: "2015-03-12T18:04:22Z",
-                    from_me: 1,
+                    timestamp,
+                    from_me: i64::from(from_me),
                     body: "ok",
-                    sort_order: 0,
+                    sort_order,
                 },
             )
             .await,

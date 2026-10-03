@@ -574,8 +574,9 @@ async fn flag_exact_content_key_dupes(
     Ok((groups, flagged))
 }
 
-/// The `(loser, winner)` pairs of one content key that two or more sources
-/// hold.
+/// The `(loser, winner)` pairs of one group of copies that two or more
+/// sources hold: the messages of one content key in the exact pass, or one
+/// cluster of the near-time pass ([`cluster_near_dupes`]).
 ///
 /// One source that holds a message twice holds two messages, so the group
 /// stays shown as many times as the source that holds it most often. The
@@ -782,21 +783,31 @@ async fn load_near_rows(
 }
 
 /// Walk each conversation in time order, gather each message's twins within
-/// the window, and pick one winner per cluster. A cluster counts only when
-/// it spans two sources: same-source near-duplicates are left alone.
-/// Returns `(loser, winner)` pairs.
+/// the window, and flag each cluster by the rule of the exact pass
+/// ([`exact_group_flags`]): the cluster stays shown as many times as the
+/// source that holds it most often. A cluster counts only when it spans two
+/// sources: same-source near-duplicates are left alone. Returns
+/// `(loser, winner)` pairs.
+///
+/// A cluster is a star around its first row, and a row from the first row's
+/// own source is never its twin, so the first row's source counts once in
+/// it however often that source holds the message. A row the cluster kept,
+/// other than the winner, therefore stays free to start or join a later
+/// cluster, where it can pair with that source's next copy. The winner and
+/// the hidden rows join no other cluster: every hidden row points at a
+/// winner, and a winner hidden later would leave a chain.
 fn cluster_near_dupes(
     by_conversation: HashMap<i64, Vec<NearRow>>,
     prio: &HashMap<&str, usize>,
     window_secs: i64,
 ) -> Vec<(i64, i64)> {
-    let mut flagged_ids: HashSet<i64> = HashSet::new();
+    let mut clustered: HashSet<i64> = HashSet::new();
     let mut flags: Vec<(i64, i64)> = Vec::new();
     for mut rows in by_conversation.into_values() {
         rows.sort_by(|a, b| a.secs.cmp(&b.secs).then(a.id.cmp(&b.id)));
         for i in 0..rows.len() {
             let first = &rows[i];
-            if flagged_ids.contains(&first.id) {
+            if clustered.contains(&first.id) {
                 continue;
             }
             let cluster: Vec<Cand> = std::iter::once(first)
@@ -804,7 +815,7 @@ fn cluster_near_dupes(
                     rows[i + 1..]
                         .iter()
                         .take_while(|row| row.secs - first.secs <= window_secs)
-                        .filter(|row| first.is_twin_of(row) && !flagged_ids.contains(&row.id)),
+                        .filter(|row| first.is_twin_of(row) && !clustered.contains(&row.id)),
                 )
                 .map(NearRow::candidate)
                 .collect();
@@ -812,13 +823,13 @@ fn cluster_near_dupes(
             if sources.len() < 2 {
                 continue;
             }
-            let winner = pick_winner(&cluster, prio);
-            for cand in &cluster {
-                if cand.id != winner {
-                    flagged_ids.insert(cand.id);
-                    flags.push((cand.id, winner));
-                }
-            }
+            let cluster_flags = exact_group_flags(&cluster, prio);
+            clustered.extend(
+                cluster_flags
+                    .iter()
+                    .flat_map(|&(loser, winner)| [loser, winner]),
+            );
+            flags.extend(cluster_flags);
         }
     }
     flags

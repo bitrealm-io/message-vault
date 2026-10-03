@@ -6,7 +6,9 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use message_crate_api_types::{ExportQueryList, ExportRun, ExportScope, ExportStatus};
 use sqlx::sqlite::SqliteRow;
-use sqlx::{Connection, Executor, Row, SqliteConnection};
+use sqlx::{Executor, Row, SqliteConnection};
+
+use crate::db::begin_write;
 
 use crate::db::conversation_messages::{
     Message, MessageSort, conversation_join_sql, load_messages_from, messages_from_sql,
@@ -214,7 +216,7 @@ pub async fn finish_export(
     export_id: i64,
     status: ExportStatus,
 ) -> Result<bool> {
-    let mut tx = conn.begin().await?;
+    let mut tx = begin_write(conn).await?;
     let done = sqlx::query(
         "UPDATE exports SET status = $1, finished_at = $2
          WHERE id = $3 AND account_id = $4 AND status = 'running'",
@@ -236,9 +238,12 @@ pub async fn finish_export(
     Ok(true)
 }
 
-/// Raise `messages_delivered` to `delivered` when that is higher. A page read
-/// again does not count twice, and a page read out of order does not lower
-/// the mark.
+/// Raise `messages_delivered` to `delivered` when that is higher, on a run
+/// that is still running. A page read again does not count twice, and a page
+/// read out of order does not lower the mark. Returns `false` when the run
+/// was not running, which is the caller's `409`: the page was read from a
+/// run that closed meanwhile, and the status check and the write are one
+/// statement, so a finished run's record is never changed.
 ///
 /// # Errors
 ///
@@ -248,19 +253,19 @@ pub async fn record_delivered(
     account_id: i64,
     export_id: i64,
     delivered: i64,
-) -> Result<()> {
-    sqlx::query(
+) -> Result<bool> {
+    let updated = sqlx::query(
         "UPDATE exports
          SET messages_delivered = CASE
              WHEN messages_delivered < $1 THEN $1 ELSE messages_delivered END
-         WHERE id = $2 AND account_id = $3",
+         WHERE id = $2 AND account_id = $3 AND status = 'running'",
     )
     .bind(delivered)
     .bind(export_id)
     .bind(account_id)
     .execute(&mut *conn)
     .await?;
-    Ok(())
+    Ok(updated.rows_affected() == 1)
 }
 
 /// One page of an account's Export Runs, narrowed to one `status` when

@@ -27,14 +27,14 @@ export default function TagsMenu({
       onCreate={onCreate}
       onClearAll={onClearAll}
       disabled={disabled}
-      ariaLabel="Tags"
-      title="Tags"
-      searchPlaceholder="Search tags…"
-      emptyText="No tags"
-      noMatchText="No matching tags"
-      createButtonLabel="Create tag"
-      createTitle="Create message tag"
-      createPlaceholder="Tag name"
+      ariaLabel="Message Tags"
+      title="Message Tags"
+      searchPlaceholder="Search Message Tags…"
+      emptyText="No Message Tags"
+      noMatchText="No matching Message Tags"
+      createButtonLabel="Create Message Tag"
+      createTitle="Create Message Tag"
+      createPlaceholder="Message Tag name"
       isReserved={isReservedTagName}
       reservedError={reservedTagError}
       icon={<TagIcon size={16} />}

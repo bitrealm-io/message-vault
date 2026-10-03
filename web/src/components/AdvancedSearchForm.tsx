@@ -45,6 +45,7 @@ export default function AdvancedSearchForm({
   const [noHandle, setNoHandle] = useState(false);
   const [handleSaved, setHandleSaved] = useState("");
   const [services, setServices] = useState<Key[]>([]);
+  const [sources, setSources] = useState<Key[]>([]);
   /** Snapshot restored when unchecking No handle (handle-dependent filters). */
   const [lockedByNoHandle, setLockedByNoHandle] = useState<{
     services: Key[];
@@ -55,7 +56,7 @@ export default function AdvancedSearchForm({
 
   const canSubmit =
     mode === "messages"
-      ? canSubmitMessages({ nameOrHandle, handle, msgType, participants })
+      ? canSubmitMessages({ nameOrHandle, handle, msgType, participants, sources })
       : canSubmitContacts({
           contactName,
           handle,
@@ -79,6 +80,7 @@ export default function AdvancedSearchForm({
           handle: handle.trim(),
           msgType,
           participants,
+          sources,
         }),
       );
     } else {
@@ -120,6 +122,8 @@ export default function AdvancedSearchForm({
           onMsgTypeChange={setMsgType}
           participants={participants}
           onParticipantsChange={setParticipants}
+          sources={sources}
+          onSourcesChange={setSources}
         />
       ) : (
         <ContactsSearchFields

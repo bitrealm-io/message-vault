@@ -6,7 +6,13 @@ import type {
   StagingSummary,
 } from "../../lib/tauri";
 
-export type ImportOutcome = "completed" | "completed_with_issues" | "failed" | "cancelled";
+/**
+ * How an Upload ended. `paused` is an Upload that did not send every
+ * conversation: the run stays open at its Upload with its staged folder,
+ * and the next visit to Import offers Resume or Discard (CONTEXT.md,
+ * "Pause").
+ */
+export type ImportOutcome = "completed" | "completed_with_issues" | "paused";
 
 /**
  * The stable identity of a staged attachment across Media.
@@ -72,21 +78,25 @@ function isApprovedOmission(
 }
 
 /**
- * Verdict for a finished push, read from the push report rather than from
- * whether the push call returned (spec decisions 21–22).
+ * Verdict for an Upload, read from the push report rather than from whether
+ * the push call returned (spec decisions 21–22).
  *
- * `cancelled` is a push the cancel flag stopped: the caller pauses the run
- * rather than ending it.
+ * An Upload finishes only when every conversation was sent or was already
+ * sent: anything else is `paused`, never failed (#1233). That covers a push
+ * the cancel flag stopped, one that threw or left no report, a conversation
+ * the server did not take (a server that stops answering part-way fails
+ * every later conversation and the push moves on), a conversation left
+ * unsent, and an Upload that sent nothing at all. The push journal leaves
+ * every such conversation for the next push, so resuming sends only what is
+ * missing. Pausing on a failure keeps those conversations reachable: a run
+ * recorded as finished would delete the folder they are staged in.
  *
- * `failed` has a zero floor: interrupted, threw, or nothing landed at all.
- * A re-push where every conversation dedupes to a skip is a no-op, not a
- * failure. Item-level problems make it `completed_with_issues` — unless
- * `approved` already told the user about them: the plan the user approved
- * at their last gate (spec decision 15 — Gate 2's plan when there was a
- * media pass, Gate 1's otherwise) is diffed against the issues the push
- * actually reported, and a skip the plan already forecast is not news.
- * `approved` is optional and its absence behaves exactly as before this
- * task — a resumed push has no stored plan to diff against.
+ * A finished Upload with item-level problems is `completed_with_issues` —
+ * unless `approved` already told the user about them: the plan the user
+ * approved at their last gate (spec decision 15 — Gate 2's plan when there
+ * was a media pass, Gate 1's otherwise) is diffed against the issues the
+ * run reported, and a skip the plan already forecast is not news. Without
+ * `approved` every issue counts.
  */
 export function importOutcome(args: {
   report: PushFinishedReport | undefined;
@@ -95,20 +105,14 @@ export function importOutcome(args: {
   approved?: StagingSummary;
 }): ImportOutcome {
   const { report, threw, issues, approved } = args;
-  if (threw || !report) return "failed";
-  // A push the cancel flag stopped did not reach every conversation, and a
-  // push that is not ok with no failed conversation stopped short some other
-  // way. Neither is a finished import.
-  if (report.cancelled) return "cancelled";
-  if (!report.ok && report.conversations_failed === 0) return "failed";
-  const nothingLanded =
-    report.conversations_total > 0 &&
-    report.conversations_ok === 0 &&
-    report.conversations_skipped === 0;
-  if (nothingLanded) return "failed";
+  if (threw || !report) return "paused";
+  const everyConversationSent =
+    !report.cancelled &&
+    report.conversations_failed === 0 &&
+    report.conversations_cancelled === 0 &&
+    report.conversations_ok + report.conversations_skipped === report.conversations_total;
+  if (!everyConversationSent) return "paused";
   const unexplained = issues.filter((issue) => !isApprovedOmission(issue, approved));
-  if (report.conversations_failed > 0 || report.messages_failed > 0 || unexplained.length > 0) {
-    return "completed_with_issues";
-  }
+  if (report.messages_failed > 0 || unexplained.length > 0) return "completed_with_issues";
   return "completed";
 }

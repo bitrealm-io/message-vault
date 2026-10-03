@@ -178,9 +178,9 @@ export function forTag(name: string): string {
   return `tag:${quote(name)}`;
 }
 
-/** A handle term, e.g. `handle:ann@example.com` or `handle:"Ann Lee"`. */
+/** An identity term, e.g. `identity:ann@example.com` or `identity:"Ann Lee"`. */
 export function forHandle(handle: string): string {
-  return `handle:${quote(handle.trim())}`;
+  return `identity:${quote(handle.trim())}`;
 }
 
 /**
@@ -245,6 +245,8 @@ export type MessagesQueryInput = {
   handle: string;
   msgType: ConversationKind;
   participants: CountFilterInput;
+  /** Source ids, as an import writes them: `imessage`, `sms-backup-restore`, … */
+  sources: readonly (string | number)[];
 };
 
 export type ContactsQueryInput = {
@@ -289,6 +291,19 @@ function pushDateBoundTokens(
   }
 }
 
+/**
+ * Push one Choice word for the ticked values. Several go in one word, comma
+ * separated, which the language reads as "any of these".
+ */
+function pushChoices(
+  push: (s: string) => void,
+  word: "service" | "source",
+  ids: readonly (string | number)[],
+): void {
+  const values = ids.map((id) => String(id).trim()).filter(Boolean);
+  if (values.length > 0) push(`${word}:${values.join(",")}`);
+}
+
 /** The Advanced Search messages form, as one search query. */
 export function advancedMessages(input: MessagesQueryInput): string {
   const parts: string[] = [];
@@ -301,6 +316,7 @@ export function advancedMessages(input: MessagesQueryInput): string {
   if (input.msgType === "group") push("kind:group");
   const participantCmp = composeCountComparison(input.participants);
   if (participantCmp) push(`participants:${participantCmp}`);
+  pushChoices(push, "source", input.sources);
   return parts.join(" ");
 }
 
@@ -317,10 +333,7 @@ export function advancedContacts(input: ContactsQueryInput): string {
   if (input.activity === "messages") push("messages:>0");
   if (input.activity === "no-messages") push("messages:0");
   if (input.noPreferredName) push("name:none");
-  if (input.noHandle) push("handle:none");
-  // Several ticked transports go in one word, comma separated, which the
-  // language reads as "any of these".
-  const services = input.services.map((id) => String(id).trim()).filter(Boolean);
-  if (services.length > 0) push(`service:${services.join(",")}`);
+  if (input.noHandle) push("identity:none");
+  pushChoices(push, "service", input.services);
   return parts.join(" ");
 }

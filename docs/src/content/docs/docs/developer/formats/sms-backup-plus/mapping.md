@@ -33,8 +33,8 @@ In CSV form: one file per conversation (header + one row per message after dedup
 | `direction` | `incoming` / `outgoing` from `X-smssync-type` or archive sender |
 | `service` | Always `sms` |
 | `sender_handle` / `sender_display_name` | Outgoing uses export owner. Incoming one-to-one: the other participant. Incoming group: the address inside `<…>` of `From` (the part before `@unknown.email`, or the whole email address) when it is one of the participants, else no sender, counted as `group_messages_without_sender` in the run summary. The display name may come from Subject |
-| `text` | The first `text/plain` part |
-| `attachments_json` | Non-text MIME parts under `attachments/` |
+| `text` | Every `text/plain` part, joined with a newline, in the order of the parts (the SMIL's order when the mail carries one) |
+| `attachments_json` | Every other MIME part with content, a contact card (`text/x-vcard`) included, under `attachments/`. A part that cannot be decoded is dropped and counted as `skipped_unreadable_part` |
 | `message_kind` | `sms` or `mms` |
 | `export_source` / `export_tool` / `export_tool_version` | `sms-backup-plus` / `SMS Backup+` / `1.5.11` |
 | `owner_handle` / `owner_display_name` | Export owner |

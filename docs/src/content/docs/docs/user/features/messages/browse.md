@@ -35,12 +35,12 @@ The username of the logged-in account is always shown beside that button, on eve
 ## The conversation list
 
 Each row is one Conversation.
-A group chat and a one-to-one Conversation appear in the same list.
+A group Conversation and a one-to-one Conversation appear in the same list.
 
 A row shows four things:
 
-- The title. A Conversation without a title shows the other person's name, or every participant's name for a group chat.
-- The number of participants, for a group chat.
+- The title. A Conversation without a title shows the other person's name, or every participant's name for a group Conversation.
+- The number of participants, for a group Conversation.
 - How the messages travelled. iMessage, SMS, and MMS all read **Text Message**, and WhatsApp keeps its own name.
 - The days of the first and the last message.
 
@@ -53,7 +53,7 @@ The count at the bottom of the list reads like `1–12 of 382`: the rows on scre
 More rows load as the list scrolls.
 
 The search box at the top narrows the list.
-`kind:group` leaves only group chats, and `source:whatsapp` leaves only Conversations with messages from a WhatsApp backup.
+`kind:group` leaves only group Conversations, and `source:whatsapp` leaves only Conversations with messages from a WhatsApp backup.
 [Search](/docs/user/features/messages/search/) lists every search word.
 
 Each row has a checkbox, and the checkbox above the list ticks every row loaded so far.
@@ -62,24 +62,28 @@ The tag button acts on the ticked rows.
 
 ## The open conversation
 
-The header shows the title, or the number of participants for an untitled group chat.
-Selecting the title folds the participant names away and back.
-A participant's name opens that Contact.
+The header is one line: the title, or the number of participants for an untitled group Conversation; how many people are in a group Conversation; the kind of messages, such as "Text Message", as the list names it; the months of the first and the last message; and the number of messages.
+Three buttons follow: **Find**, **Jump to**, and **⋯**.
 
-Below the names, the header shows the kind of backup the messages came from, the months of the first and the last message, and the number of messages.
-Up to three buttons follow:
+**⋯** holds:
 
+- The people in the Conversation. A person who is a Contact opens that Contact.
 - **Sources** lists each backup the Conversation's messages were imported from, with a message count for each.
 - **Move to trash** moves the Conversation to the Trash and returns to the list.
-- **Make a Contact Group** makes a Contact Group from the people in a group chat. It appears only when the group chat has two or more participants who are Contacts, because a Contact Group holds Contacts.
+- **Make a Contact Group** makes a Contact Group from the people in a group Conversation. It appears only when the group Conversation has two or more participants who are Contacts, because a Contact Group holds Contacts.
 
-Messages appear 50 to a page.
-**Previous** and **Next** turn the page, and the label between them reads like `Messages 1–50 of 1395`.
+A Conversation opens at its newest message, at the bottom, the way a phone shows it.
+Scrolling up loads older messages, and scrolling down loads newer ones, so every message of a long Conversation can be reached by scrolling.
+A line with the day, such as `Thu, Jul 2`, separates the days; outside the current year it carries the year too, such as `Mon, Nov 29, 2021`.
+Every message has its time under it.
+In a group Conversation, the sender's name is above the first message of each run: a run ends at a new day, a new sender, or a gap of an hour or more.
+A photo is shown at most 280 pixels on its long side, and selecting it opens it full size.
 
-The year buttons in the header narrow the Conversation to one year.
-**All** shows every year again, and so does selecting the active year a second time.
+**Jump to** lists **Newest** and every year of the Conversation.
+A year jumps to its first message, and scrolling either way keeps loading from there.
 
-**Find in conversation…** searches the text of this one Conversation.
-The page then shows only the matching messages, and the label beside the box reads like `1 of 14 in this conversation`.
-The arrow buttons and the Enter key step through the matches.
-With a year selected, the find covers that year only.
+**Find** opens a box under the header that searches the text of this one Conversation.
+Typing jumps to the newest match, highlighted, with the messages around it, and the label beside the box reads like `1 of 14`.
+▲ moves to the older match and ▼ to the newer one; Enter does the same as ▲, and Shift+Enter as ▼.
+Nothing is hidden: the whole Conversation stays in view around each match.
+✕ closes Find and leaves the Conversation where it is.

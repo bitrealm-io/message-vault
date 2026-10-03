@@ -4,6 +4,8 @@ import type { PushFinishedReport } from "./tauri";
 import {
   awaitTauriJob,
   invokeDeleteStaging,
+  invokeReadImportRunRecord,
+  invokeSaveImportRunRecord,
   invokeSummarizeStaging,
   invokeTranscodeStaging,
   parseTauriJobResult,
@@ -44,6 +46,7 @@ function reportJson(overrides: Partial<PushFinishedReport> = {}): string {
     conversations_total: 5,
     conversations_failed: 0,
     conversations_skipped: 0,
+    conversations_cancelled: 0,
     results: [],
     ...overrides,
   };
@@ -73,6 +76,15 @@ describe("parseTauriJobResult", () => {
   it("does not attach a report missing conversations_skipped", () => {
     const parsed: Record<string, unknown> = JSON.parse(reportJson());
     delete parsed.conversations_skipped;
+    const result = parseTauriJobResult(JSON.stringify(parsed));
+    expect(result.report).toBeUndefined();
+  });
+
+  // Without `conversations_cancelled`, an Upload that left conversations
+  // unsent could read as finished.
+  it("does not attach a report missing conversations_cancelled", () => {
+    const parsed: Record<string, unknown> = JSON.parse(reportJson());
+    delete parsed.conversations_cancelled;
     const result = parseTauriJobResult(JSON.stringify(parsed));
     expect(result.report).toBeUndefined();
   });
@@ -164,37 +176,27 @@ describe("staging command wrappers resolve their own staging root", () => {
   });
 
   it("invokeSummarizeStaging resolves the root itself rather than taking one from the caller", async () => {
-    await invokeSummarizeStaging({
-      staging_dir: "/home/sam/message-crate/staging-run",
-      asset_max_bytes: 104857600,
-    });
+    await invokeSummarizeStaging({ staging_dir: "/home/sam/message-crate/staging-run" });
 
     expect(resolveStagingParent).toHaveBeenCalledTimes(1);
+    // Only the folder: the command reads the run's media settings from it.
     expect(invoke).toHaveBeenCalledWith("summarize_staging", {
-      args: expect.objectContaining({
+      args: {
         stagingDir: "/home/sam/message-crate/staging-run",
         stagingRoot: "/home/sam/message-crate",
-        // The command takes the run's limit; it has no number of its own.
-        assetMaxBytes: 104857600,
-      }),
+      },
     });
   });
 
   it("invokeTranscodeStaging resolves the root itself rather than taking one from the caller", async () => {
-    await invokeTranscodeStaging({
-      staging_dir: "/home/sam/message-crate/staging-run",
-      attachment_media: "convert",
-      asset_max_bytes: 104857600,
-    });
+    await invokeTranscodeStaging({ staging_dir: "/home/sam/message-crate/staging-run" });
 
     expect(resolveStagingParent).toHaveBeenCalledTimes(1);
     expect(invoke).toHaveBeenCalledWith("transcode_staging", {
-      args: expect.objectContaining({
+      args: {
         stagingDir: "/home/sam/message-crate/staging-run",
         stagingRoot: "/home/sam/message-crate",
-        attachmentMedia: "convert",
-        assetMaxBytes: 104857600,
-      }),
+      },
     });
   });
 
@@ -210,14 +212,33 @@ describe("staging command wrappers resolve their own staging root", () => {
     });
   });
 
+  it("reads and saves the Import Run record under the root it resolves itself", async () => {
+    await invokeReadImportRunRecord({ staging_dir: "/home/sam/message-crate/staging-run" });
+    await invokeSaveImportRunRecord({
+      staging_dir: "/home/sam/message-crate/staging-run",
+      record: { issues: [] },
+    });
+
+    expect(invoke).toHaveBeenCalledWith("read_import_run_record", {
+      args: {
+        stagingDir: "/home/sam/message-crate/staging-run",
+        stagingRoot: "/home/sam/message-crate",
+      },
+    });
+    expect(invoke).toHaveBeenCalledWith("save_import_run_record", {
+      args: {
+        stagingDir: "/home/sam/message-crate/staging-run",
+        stagingRoot: "/home/sam/message-crate",
+        record: { issues: [] },
+      },
+    });
+  });
+
   it("rejects rather than calling through when the staging root cannot be resolved", async () => {
     resolveStagingParent.mockResolvedValue("");
 
     await expect(
-      invokeSummarizeStaging({
-        staging_dir: "/home/sam/message-crate/staging-run",
-        asset_max_bytes: 104857600,
-      }),
+      invokeSummarizeStaging({ staging_dir: "/home/sam/message-crate/staging-run" }),
     ).rejects.toThrow(/staging directory/i);
     expect(invoke).not.toHaveBeenCalled();
   });

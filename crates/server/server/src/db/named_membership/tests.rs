@@ -91,7 +91,7 @@ async fn reserved_names_rejected_with_exact_messages() {
         .await
         .unwrap_err();
     match err {
-        MembershipError::BadRequest(msg) => assert_eq!(msg, "\"Trash\" is a reserved tag"),
+        MembershipError::BadRequest(msg) => assert_eq!(msg, "\"Trash\" is a reserved Message Tag"),
         other => panic!("expected BadRequest, got {other:?}"),
     }
     let err = create_set(group_spec(), &mut conn, account, "Trash")
@@ -106,9 +106,45 @@ async fn reserved_names_rejected_with_exact_messages() {
         .unwrap_err();
     match err {
         MembershipError::BadRequest(msg) => {
-            assert_eq!(msg, "Group Messages is a reserved name");
+            assert_eq!(msg, "\"Group Chats\" is a reserved Contact Group");
         }
         other => panic!("expected BadRequest, got {other:?}"),
+    }
+}
+
+/// Two requests create one name at once, and the second reads the name free
+/// before the first has committed. The same spelling broke the `UNIQUE`
+/// constraint and answered `500`; another letter case got past it and both
+/// were stored. Either way the second must be refused as taken.
+#[tokio::test]
+async fn a_name_created_meanwhile_is_taken_in_any_letter_case() {
+    for second in ["Work", "work"] {
+        let fixture = crate::test_support::test_fixture().await;
+        let account = fixture.account_with_id(101, "alice").await;
+        let mut other_conn = fixture.conn().await;
+        let mut other = crate::db::begin_write(&mut other_conn).await.unwrap();
+        create_set(tag_spec(), &mut other, account, "Work")
+            .await
+            .unwrap();
+        let mut conn = fixture.conn().await;
+        let err = crate::db::write_tx::commit_during(
+            other,
+            create_set(tag_spec(), &mut conn, account, second),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(
+            matches!(err, MembershipError::Conflict(_)),
+            "{second}: {err:?}"
+        );
+        let names: Vec<String> = list_sets(tag_spec(), &mut conn, account)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|(_, name)| name)
+            .collect();
+        assert_eq!(names, ["Work"], "{second}");
     }
 }
 
@@ -157,7 +193,7 @@ async fn a_message_tag_cannot_be_named_none() {
         .await
         .unwrap();
     for name in ["none", "None", "NONE"] {
-        let expected = format!("\"{name}\" is a reserved tag");
+        let expected = format!("\"{name}\" is a reserved Message Tag");
         match create_set(tag_spec(), &mut conn, account, name)
             .await
             .unwrap_err()

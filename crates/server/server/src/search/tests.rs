@@ -138,35 +138,39 @@ pub(crate) async fn conversation(
     .await
     .unwrap();
     for h in participants {
-        let contact_id: Option<i64> = sqlx::query_scalar(
-            "SELECT contact_id FROM contact_handles WHERE account_id = $1 AND handle_id = $2",
-        )
-        .bind(account)
-        .bind(h)
-        .fetch_optional(&mut *conn)
-        .await
-        .unwrap();
-        sqlx::query(
-            "INSERT INTO participants (conversation_id, handle_id, contact_id) VALUES ($1, $2, $3)",
-        )
-        .bind(id)
-        .bind(h)
-        .bind(contact_id)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
+        sqlx::query("INSERT INTO participants (conversation_id, handle_id) VALUES ($1, $2)")
+            .bind(id)
+            .bind(h)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
     }
     id
 }
 
-/// A participant the source named but gave no address for: `handle_id` is
-/// NULL and `name_alias` carries who they are.
+/// A participant the source named but gave no address for: their identity
+/// is of type `other` and holds the name, and `name_alias` carries the name
+/// too.
 pub(crate) async fn named_participant(conn: &mut SqliteConnection, conversation: i64, alias: &str) {
+    let account: i64 = sqlx::query_scalar("SELECT account_id FROM conversations WHERE id = $1")
+        .bind(conversation)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    let (handle_id, _) = crate::db::handles::upsert_handle_row(
+        conn,
+        account,
+        alias,
+        message_ir::HandleType::Other,
+        Some("phone"),
+    )
+    .await
+    .unwrap();
     sqlx::query(
-        "INSERT INTO participants (conversation_id, handle_id, contact_id, name_alias)
-         VALUES ($1, NULL, NULL, $2)",
+        "INSERT INTO participants (conversation_id, handle_id, name_alias) VALUES ($1, $2, $3)",
     )
     .bind(conversation)
+    .bind(handle_id)
     .bind(alias)
     .execute(&mut *conn)
     .await
@@ -1073,17 +1077,17 @@ mod text_words {
             sorted(vec![f.ana, f.bo, f.cy, f.jane, f.sam])
         );
         assert_eq!(
-            run(&mut conn, ListKind::Contacts, "handle:gmail").await,
+            run(&mut conn, ListKind::Contacts, "identity:gmail").await,
             vec![f.jane]
         );
         assert_eq!(
-            run(&mut conn, ListKind::Contacts, "handle:+1555*")
+            run(&mut conn, ListKind::Contacts, "identity:+1555*")
                 .await
                 .len(),
             4
         );
         assert_eq!(
-            run(&mut conn, ListKind::Contacts, "handle:none").await,
+            run(&mut conn, ListKind::Contacts, "identity:none").await,
             Vec::<i64>::new()
         );
     }
@@ -1097,7 +1101,7 @@ mod text_words {
             sorted(vec![f.jane_direct, f.big_group])
         );
         assert_eq!(
-            run(&mut conn, ListKind::Conversations, "handle:icloud").await,
+            run(&mut conn, ListKind::Conversations, "identity:icloud").await,
             sorted(vec![f.sam_direct, f.archive_group, f.big_group])
         );
         assert_eq!(
@@ -1217,8 +1221,8 @@ mod unicode_case {
             "name:ÉLODIE",
             "name:\"élodie ünal\"",
             "name:élod*",
-            "handle:élodie.ünal",
-            "handle:ÉLODIE*",
+            "identity:élodie.ünal",
+            "identity:ÉLODIE*",
             "élodie",
             "ÜNAL",
             "élod*",
@@ -1299,7 +1303,7 @@ mod unicode_case {
             "title:ålesund",
             "title:ÅLESUND",
             "name:øystein",
-            "handle:ØYSTEIN",
+            "identity:ØYSTEIN",
             "with:øystein",
             "ålesund",
             "øystein",
@@ -1931,12 +1935,140 @@ mod kind_words {
             run(&mut conn, ListKind::Messages, "source:whatsapp").await,
             vec![f.archive_msg]
         );
+        // `source:` lifts the duplicate default, so the conversation whose
+        // only message is a duplicate counts with the five others.
         assert_eq!(
             run(&mut conn, ListKind::Conversations, "source:imessage")
                 .await
                 .len(),
-            5
+            6
         );
+    }
+
+    /// The source id each exporter writes into `export.source`, which push
+    /// sends as the Import Run's source and the import stamps on every
+    /// message.
+    const IMPORT_SOURCES: [&str; 7] = [
+        "imessage",
+        "whatsapp",
+        "sms-backup-restore",
+        "imazing",
+        "openextract",
+        "go-sms-pro",
+        "sms-backup-plus",
+    ];
+
+    /// Import, through the whole pipeline, one direct conversation with one
+    /// message from `source`, and return the conversation's and the
+    /// message's ids.
+    async fn import_from(
+        conn: &mut SqliteConnection,
+        dir: &std::path::Path,
+        source: &str,
+        chat: &str,
+    ) -> (i64, i64) {
+        let path = dir.join(format!("{chat}.jsonl"));
+        let header = serde_json::json!({
+            "schema_version": 4,
+            "export": {"source": source, "tool": "test", "tool_version": "0",
+                       "owner_handle": null, "owner_display_name": null},
+            "conversation": {
+                "chat_identifier": chat, "conversation_type": "individual", "group_title": null,
+                "participants": [{"handle": chat, "display_name": null}],
+                "stats": {"message_count": 1, "attachment_count": 0,
+                          "first_timestamp_unix_ms": 1_426_183_462_000_i64,
+                          "last_timestamp_unix_ms": 1_426_183_462_000_i64}
+            }
+        });
+        let line = serde_json::json!({
+            "guid": format!("{source}-{chat}"), "timestamp_unix_ms": 1_426_183_462_000_i64,
+            "direction": "incoming", "service": "sms", "message_kind": "sms",
+            "sender_handle": chat, "sender_display_name": null, "subject": null,
+            "text": format!("hello from {source}"), "attachments": [],
+            "imessage": null, "source": null
+        });
+        std::fs::write(&path, format!("{header}\n{line}\n")).unwrap();
+        let assets = dir.join("assets");
+        let stats = crate::imports_api::import_jsonl_files_on_conn(
+            conn,
+            &[path],
+            &crate::imports_api::ImportOptions::fixed(crate::imports_api::FixedImportArgs {
+                assets_dir: &assets,
+                asset_root: dir,
+                mode: crate::imports_api::ImportMode::Append,
+                source,
+                account_id: ACCOUNT,
+                fill_content_keys: false,
+                import_id: None,
+            }),
+            crate::imports_api::ImportSchemaMode::Ensure,
+        )
+        .await
+        .unwrap();
+        assert_eq!(stats.messages, 1, "{source}");
+        sqlx::query_as(
+            "SELECT m.conversation_id, m.id FROM messages m
+             JOIN handles h ON h.id = (SELECT chat_handle_id FROM conversations WHERE id = m.conversation_id)
+             WHERE h.raw = $1",
+        )
+        .bind(chat)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap()
+    }
+
+    /// `source:` takes each id an import writes, as written, and finds that
+    /// source's messages and conversations and nothing else, duplicates
+    /// included (#1116). Each source has one conversation whose message was
+    /// kept, and one whose only message a later import marked as a copy of
+    /// another source's kept message.
+    #[tokio::test]
+    async fn source_takes_every_id_an_import_writes() {
+        let (pool, dir) = crate::db::engine::test_pool().await;
+        let mut conn = pool.acquire().await.unwrap();
+        let mut kept = Vec::new();
+        let mut copies = Vec::new();
+        for (i, source) in IMPORT_SOURCES.iter().enumerate() {
+            kept.push(import_from(&mut conn, dir.path(), source, &format!("+1555010{i}")).await);
+            copies.push(import_from(&mut conn, dir.path(), source, &format!("+1555020{i}")).await);
+        }
+        for (i, (_, copy)) in copies.iter().enumerate() {
+            let (_, original) = kept[(i + 1) % kept.len()];
+            sqlx::query("UPDATE messages SET duplicate_of = $1 WHERE id = $2")
+                .bind(original)
+                .bind(copy)
+                .execute(&mut *conn)
+                .await
+                .unwrap();
+        }
+        for (i, source) in IMPORT_SOURCES.iter().enumerate() {
+            let q = format!("source:{source}");
+            assert_eq!(
+                run(&mut conn, ListKind::Messages, &q).await,
+                sorted(vec![kept[i].1, copies[i].1]),
+                "{q} on Messages"
+            );
+            assert_eq!(
+                run(&mut conn, ListKind::Conversations, &q).await,
+                sorted(vec![kept[i].0, copies[i].0]),
+                "{q} on Conversations"
+            );
+        }
+    }
+
+    /// `sms` was the SMS Backup & Restore importer's old value; the source is
+    /// now named by its own id, and `sms` is no source at all.
+    #[test]
+    fn source_sms_is_an_unknown_value() {
+        for list in [ListKind::Messages, ListKind::Conversations] {
+            let e = err(list, "source:sms");
+            assert_eq!(
+                e.kind,
+                crate::search::error::QueryErrorKind::BadValue,
+                "{list:?}"
+            );
+            assert!(e.message.contains("sms-backup-restore"), "{}", e.message);
+        }
     }
 
     /// `service:` on Contacts asks about the messages of the contact's
@@ -2179,15 +2311,12 @@ mod trash_across_lists {
         let a = ACCOUNT;
         let binned_h = handle(&mut conn, a, "+15550201", "sms").await;
         let binned = contact(&mut conn, a, "Binned", &[binned_h]).await;
-        sqlx::query(
-            "INSERT INTO participants (conversation_id, handle_id, contact_id) VALUES ($1, $2, $3)",
-        )
-        .bind(f.trashed_conv)
-        .bind(binned_h)
-        .bind(binned)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
+        sqlx::query("INSERT INTO participants (conversation_id, handle_id) VALUES ($1, $2)")
+            .bind(f.trashed_conv)
+            .bind(binned_h)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
         message(
             &mut conn,
             a,
@@ -2490,7 +2619,7 @@ mod measure_words {
             run(
                 &mut conn,
                 ListKind::Contacts,
-                "first-message:<2020 last-message:>=2024-01-01 handle:@gmail.com"
+                "first-message:<2020 last-message:>=2024-01-01 identity:@gmail.com"
             )
             .await,
             vec![f.jane]
@@ -2855,8 +2984,7 @@ mod coverage {
     fn lifts_a_default(word: &str, list: ListKind) -> bool {
         match word {
             "trashed" => true,
-            "source" => list == ListKind::Messages,
-            "import" => list != ListKind::Contacts,
+            "source" | "import" => list != ListKind::Contacts,
             _ => false,
         }
     }
@@ -3421,6 +3549,23 @@ mod refusals {
                 assert_eq!(e.kind, QueryErrorKind::EmptyValue, "{list:?} {query}");
                 assert_eq!(e.span, span, "{list:?} {query}");
                 assert_eq!(e.field, None, "{list:?} {query}");
+            }
+        }
+    }
+
+    /// Issue #1109: the word for a phone number, email, or username is
+    /// `identity:`, the name a person reads. `handle:`, the code's name for
+    /// the same thing, is refused on every list like any unknown word.
+    #[test]
+    fn handle_is_not_a_search_word() {
+        for list in [
+            ListKind::Contacts,
+            ListKind::Conversations,
+            ListKind::Messages,
+        ] {
+            for query in ["handle:gmail", "handle:none"] {
+                let e = err(list, query);
+                assert_eq!(e.kind, QueryErrorKind::UnknownWord, "{list:?} {query}");
             }
         }
     }

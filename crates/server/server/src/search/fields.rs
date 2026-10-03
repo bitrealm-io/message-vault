@@ -76,12 +76,12 @@ pub(crate) static FIELDS: &[FieldSpec] = &[
         example: "title:\"book club\"",
     },
     FieldSpec {
-        word: "handle",
+        word: "identity",
         value_type: ValueType::Text,
         lists: &[C, V, M],
         values: NONE_ANY,
         help: "a phone number, email, or username",
-        example: "handle:@gmail.com",
+        example: "identity:@gmail.com",
     },
     FieldSpec {
         word: "with",
@@ -151,8 +151,19 @@ pub(crate) static FIELDS: &[FieldSpec] = &[
         word: "source",
         value_type: ValueType::Choice,
         lists: &[V, M],
-        values: &["imessage", "whatsapp", "sms"],
-        help: "the backup family it was imported from",
+        // The id each exporter writes into `export.source`, as written, which
+        // the import stamps on every message it writes. A new exporter adds
+        // its id here and nothing else.
+        values: &[
+            "imessage",
+            "whatsapp",
+            "sms-backup-restore",
+            "imazing",
+            "openextract",
+            "go-sms-pro",
+            "sms-backup-plus",
+        ],
+        help: "the kind of backup it was imported from",
         example: "source:whatsapp",
     },
     FieldSpec {

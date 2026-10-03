@@ -1392,6 +1392,7 @@ name = "go-sms-mms"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "mms-parts",
  "phone",
  "regex",
 ]
@@ -1891,11 +1892,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "imessage-reader-protocol",
+ "ios-backup",
  "message-crate-core",
  "message-ir",
  "message-ir-format",
  "message-staging",
- "plist",
  "serde_json",
  "tempfile",
 ]
@@ -1938,6 +1939,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a588916bfdfd92e71cacef98a63d9b1f0d74d6599980d11894290e7ddefffcf7"
 dependencies = [
  "cfb",
+]
+
+[[package]]
+name = "ios-backup"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "imessage-reader-protocol",
+ "message-crate-core",
+ "plist",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -2043,6 +2056,7 @@ name = "journal"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "message-ir",
  "serde",
  "serde_json",
 ]
@@ -2283,6 +2297,7 @@ dependencies = [
  "httpmock",
  "imazing-exporter",
  "imessage-ir-exporter",
+ "ios-backup",
  "media",
  "message-crate-core",
  "message-crate-http",
@@ -2374,6 +2389,7 @@ dependencies = [
 name = "message-ir"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "chrono",
  "hex",
  "serde",
@@ -2423,6 +2439,7 @@ dependencies = [
  "message-ir",
  "message-ir-format",
  "serde",
+ "serde_json",
  "sha2 0.11.0",
 ]
 
@@ -2451,6 +2468,13 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "mms-parts"
+version = "0.1.0"
+dependencies = [
+ "regex",
 ]
 
 [[package]]
@@ -3503,9 +3527,9 @@ dependencies = [
  "hex",
  "html-escape",
  "message-ir",
+ "mms-parts",
  "phone",
  "quick-xml",
- "regex",
  "serde",
  "sha2 0.11.0",
 ]
@@ -3901,6 +3925,7 @@ dependencies = [
  "message-ir",
  "message-ir-format",
  "message-staging",
+ "mms-parts",
  "phone",
  "rayon",
  "regex",
@@ -3919,6 +3944,7 @@ dependencies = [
  "message-ir",
  "message-ir-format",
  "message-staging",
+ "mms-parts",
  "phone",
  "sbr",
  "serde_json",
@@ -5238,7 +5264,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "hex",
- "imessage-ir-exporter",
+ "ios-backup",
  "media",
  "message-crate-core",
  "message-csv",

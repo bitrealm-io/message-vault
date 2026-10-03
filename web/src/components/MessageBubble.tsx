@@ -40,14 +40,17 @@ function MessageBubble({
   message,
   highlight,
   isActive,
+  showSender,
   onAttachmentClick,
 }: {
   message: Message;
   highlight?: string;
   isActive?: boolean;
+  /** Whether a received message carries its sender's name; by default, in a group. */
+  showSender?: boolean;
   onAttachmentClick?: AttachmentClickHandler;
 }) {
-  const props = { message, highlight, isActive, onAttachmentClick };
+  const props = { message, highlight, isActive, showSender, onAttachmentClick };
 
   switch (resolveBubbleKind(message)) {
     case "imessage":

@@ -170,7 +170,9 @@ current one, because that account reaches every other.
   token without the needed scope and a disabled account, answers
   `403 Forbidden`.
 - A `Content-Type` that is absent or unaccepted answers
-  `415 Unsupported Media Type`, on every route that takes a body.
+  `415 Unsupported Media Type`, on every route that takes a body. On a route
+  whose body is optional, a request with no body is read as no body, and a
+  body sent without a `Content-Type` is still `415`.
 - A request that cannot be read is `400 Bad Request` (`malformed-body`): JSON
   that does not parse, or a body of the wrong type. Nothing else is `400`.
 - A request that was read and broke a rule is `422 Unprocessable Entity`,
@@ -232,9 +234,23 @@ that counts something else is a second shape.
 Export Run's messages. `offset` is at most 50 000 on the browse lists. A value
 outside the range is `validation-failed`, never a silent clamp. One
 conversation's messages, `GET /v1/conversations/{id}/messages`, is not a browse
-list and has no `offset` cap. Why: the conversation page reads a thread by
-stepping `offset` forward, and a cap would leave the rest of a long thread out
-of reach.
+list and has no `offset` cap. Why: every message of a long conversation must
+be reachable, and a cap would leave the rest of a long thread out of reach.
+
+One conversation's messages can also be read beside one message, in place of
+`offset`: `around={message_id}` answers the page with that message in the
+middle, and `before={message_id}` and `after={message_id}` the page just
+before or just after it in the page's order, without it. The answer is the
+same page, and its `offset` says where the page sits, so `total` and the
+position stay known. A request sends at most one of `offset`, `around`,
+`before` and `after`, and a message the conversation does not show (another
+conversation's, a duplicate, or none) is `validation-failed`. Why: a jump to a
+message (a search result, a Find match, the first message of a year) does not
+know the message's offset, and a screen that scrolls from there reads the next
+page from the message at its edge rather than from a number that an import
+or a deletion in between would shift. This is not the cursor paging rejected
+below: the page keeps `total` and `offset`, and the parameters name a message,
+not an opaque token.
 
 Sorting is `sort=-field,field`: comma-separated keys, a leading `-` for
 descending. Each list declares the keys it accepts, and an unlisted key is
@@ -303,8 +319,10 @@ the drift the one-shape rule exists to stop.
 ## Content negotiation
 
 `406 Not Acceptable` is answered only when an `Accept` header is present and no
-member of it matches `application/json`, `application/problem+json`, or `*/*`.
-A missing `Accept` is a request for JSON. The check runs on every `/v1` route
+member of it matches `application/json`, `application/problem+json`,
+`application/*`, or `*/*`. `application/*` is a media range that matches
+`application/json` (RFC 9110), so refusing it would refuse a client that asks
+for JSON. A missing `Accept` is a request for JSON. The check runs on every `/v1` route
 but the three that answer bytes: `GET /v1/assets/{sha256}`, which streams the
 asset's own contents, `GET /v1/assets/{sha256}/preview`, which streams its
 Preview, and `POST /v1/contacts/address-book`, which answers the address book
@@ -331,8 +349,8 @@ scheme with its scopes, so every route says which it accepts.
   owner turns off later shows as off. A token never carries `delete`: permanent deletion is a
   person's act, and a leaked or faulty program must not be able to empty an
   archive. A token never signs in and never browses. It is ended by the person
-  revoking it (`DELETE /v1/accounts/{id}/api-tokens/{token_id}`, with a
-  session) or by its expiry, never by the program holding it.
+  or the owner revoking it (`DELETE /v1/accounts/{id}/api-tokens/{token_id}`,
+  with a session) or by its expiry, never by the program holding it.
 - `GET /v1/session` answers whose credential the caller holds — the account's
   id and username — for a session or a token. Why: a program holding a token
   needs to know which account it writes to before it starts, and push and pull
@@ -377,6 +395,15 @@ What each reaches:
 - `/v1/accounts/{id}` and everything under it is read and written by the owner
   or by that account; a `Location` handed to a newly registered account names a
   row it may read.
+- An account's API tokens are listed and revoked by the account and by the
+  owner, and made and renamed by the account alone. The owner's list holds
+  each token's id, label, permissions, creation, last use, expiry and state,
+  and leaves out `token_hint`. Why: the owner must be able to end a
+  credential that has leaked, and a token's label and permissions are not
+  message content (`docs/adr/0008-the-owner-holds-no-messages.md`). The
+  masked hint is part of the secret, and the owner never reads a secret.
+  Making a token answers with its secret, so the owner makes none, and a
+  token is the account's own name for its program, so the owner renames none.
 - An account's history is read under the account:
   `GET /v1/accounts/{id}/imports`, `GET /v1/accounts/{id}/imports/{import_id}`
   and `GET /v1/accounts/{id}/exports`, beside `GET /v1/accounts/{id}/storage`.
@@ -387,6 +414,16 @@ What each reaches:
   them. Each pair answers from one function, so the two lists cannot differ.
   Which contacts a run created is content, so `/v1/imports/{id}/contacts` has
   no twin under the account.
+- The account reads its own runs in full. The owner reads each run as an
+  `OwnerImportRun` or `OwnerExportRun`: the source, mode, tool, times,
+  outcome and counts, with the counts an import's summary reported and how
+  many issues it recorded, and for an export only which form its scope took.
+  Why: a staging summary lists the addresses of everyone in the backup, an
+  issue names its conversation's file, and an export's query is a search over
+  the account's messages, all content under
+  `docs/adr/0008-the-owner-holds-no-messages.md`. The owner's view is a type
+  of its own rather than the account's with fields removed, so a field added
+  to a run reaches the owner only when someone adds it to that type.
 - `GET /v1/server` and `POST /v1/server/claim` take no credential.
   `/v1/server/settings` and `GET /v1/server/storage` are the owner's: the
   storage totals sum every account, and no account holds more than its own.

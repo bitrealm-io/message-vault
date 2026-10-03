@@ -486,6 +486,10 @@ impl<'a> EmlIngest<'a> {
             ParsedEmlKind::Cancelled => bail!("cancelled"),
             ParsedEmlKind::Flat { msg } => {
                 self.report.bump("flat_eml", 1);
+                if msg.unreadable_parts > 0 {
+                    self.report
+                        .bump("skipped_unreadable_part", msg.unreadable_parts);
+                }
                 self.add_parsed(*msg)?;
             }
             ParsedEmlKind::FlatNone => self.report.bump("skipped_parse_error", 1),
@@ -700,12 +704,29 @@ mod tests {
             sender: Handle::parse("+15555550101"),
             text: "hello".into(),
             attachments: Vec::new(),
+            unreadable_parts: 0,
             name_alias: None,
             smssync_id: None,
             android_type: "1".into(),
             eml_path: eml_path.into(),
             owner_not_named: false,
         }
+    }
+
+    /// A MIME part that could not be decoded reaches the run's report by name.
+    #[test]
+    fn unreadable_parts_are_counted_in_the_report() {
+        let mut ingest = EmlIngest::new(None, 2);
+        for unreadable_parts in [2, 1] {
+            let msg = ParsedMessage {
+                unreadable_parts,
+                ..parsed(1.0 + unreadable_parts as f64, true, "")
+            };
+            ingest
+                .absorb(ParsedEmlKind::Flat { msg: Box::new(msg) })
+                .unwrap();
+        }
+        assert_eq!(ingest.report.extra("skipped_unreadable_part"), 3);
     }
 
     #[test]

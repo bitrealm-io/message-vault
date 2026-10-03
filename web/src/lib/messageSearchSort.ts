@@ -23,22 +23,25 @@ export function effectiveMessageSort(
 /** A `sort` value `GET /v1/messages` takes. */
 export type MessageSortParam = NonNullable<MessagesListParams["sort"]>;
 
-/** Each `sort` value and the choice it stands for, read both ways. */
-const SORT_PARAMS: ReadonlyArray<readonly [MessageSortParam, MessageSearchSort]> = [
-  ["relevance", { sort: "relevance", order: "desc" }],
-  ["date", { sort: "date", order: "asc" }],
-  ["-date", { sort: "date", order: "desc" }],
-];
+/**
+ * The `sort` value for each choice, read both ways: Relevance has one order,
+ * and Date one value per order.
+ */
+const SORT_PARAMS: Readonly<Record<"relevance" | SortOrder, MessageSortParam>> = {
+  relevance: "relevance",
+  asc: "date",
+  desc: "-date",
+};
 
-/** The `sort` parameter `GET /v1/messages` takes for `s`. Relevance has one order. */
+/** The `sort` parameter `GET /v1/messages` takes for `s`. */
 export function messageSortParam(s: MessageSearchSort): MessageSortParam {
-  const found = SORT_PARAMS.find(
-    ([, choice]) => choice.sort === s.sort && (s.sort === "relevance" || choice.order === s.order),
-  );
-  return found ? found[0] : "-date";
+  return SORT_PARAMS[s.sort === "relevance" ? "relevance" : s.order];
 }
 
 /** The choice a `sort` value stands for, or null for a value it is not. */
 export function messageSortFromParam(param: string | null): MessageSearchSort | null {
-  return SORT_PARAMS.find(([value]) => value === param)?.[1] ?? null;
+  if (param === SORT_PARAMS.relevance) return { sort: "relevance", order: "desc" };
+  if (param === SORT_PARAMS.asc) return { sort: "date", order: "asc" };
+  if (param === SORT_PARAMS.desc) return { sort: "date", order: "desc" };
+  return null;
 }

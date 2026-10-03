@@ -341,8 +341,9 @@ pub(crate) struct ConvertExportArgs<'a, P: AsRef<Path>> {
 ///
 /// # Errors
 ///
-/// Returns an error when no `.eml` files are found, output overlaps an input,
-/// a file cannot be read or written, or the user cancels.
+/// Returns an error when no input is given, no `.eml` files are found,
+/// output overlaps an input, a file cannot be read or written, or the user
+/// cancels.
 pub(crate) fn convert_export<P: AsRef<Path>>(
     args: ConvertExportArgs<'_, P>,
 ) -> Result<ExportReport> {
@@ -358,6 +359,10 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
         log,
         resume,
     } = args;
+    // Checked before the output folder is cleaned, so a refused run leaves it.
+    if inputs.is_empty() {
+        bail!("SMS Backup+ needs a backup directory");
+    }
     let verbose = Verbose {
         enabled: verbose,
         log,

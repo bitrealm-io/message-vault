@@ -98,7 +98,9 @@ The message names the folder and ends "Choose an empty folder or one an earlier 
 
 An export leaves a hidden file named `.message-crate-export` in its output folder, which marks the folder as one Convert may clear on a later run.
 Only a folder with that file is cleaned.
-The clean-up removes earlier export files and the whole `attachments` folder, and leaves every other file in place.
+When Convert writes an SMS Backup & Restore file, that hidden file lists `smses.xml` and its two temporary files.
+The clean-up removes earlier export files, the whole `attachments` folder, and the files that hidden file lists.
+Every other file stays, other XML files included.
 
 ## Limits
 

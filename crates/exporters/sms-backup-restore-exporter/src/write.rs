@@ -551,6 +551,10 @@ impl MergedArchive for SbrArchive {
         }
         session.finish()
     }
+
+    fn file_names(&self) -> Vec<String> {
+        sbr::backup_file_names()
+    }
 }
 
 #[cfg(test)]

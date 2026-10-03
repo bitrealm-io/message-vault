@@ -9,6 +9,8 @@
 mod emit;
 mod read;
 mod run;
+#[cfg(any(test, feature = "testutil"))]
+pub mod testutil;
 mod write;
 
 pub use read::{ReadOptions, ReadReport, read_backup};

@@ -6,8 +6,10 @@
 //! compared. The name is the row's `Attachment` cell as iMazing changed it
 //! when it wrote the file ([`names_on_disk`]).
 
+use crate::parse::RawRow;
 use chrono::NaiveDateTime;
 use message_csv::AttachmentCell;
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -76,7 +78,7 @@ impl FolderFiles {
     /// not take `Holiday - photo.jpg`. `None` when no file has that shape, or
     /// when two or more do, because then nothing tells which file is the
     /// row's.
-    pub(crate) fn find(&self, row: &RowAttachment<'_>) -> Option<PathBuf> {
+    fn find(&self, row: &RowAttachment<'_>) -> Option<&Path> {
         let start = format!("{} - ", row.second);
         let others: Vec<String> = row
             .same_second
@@ -97,46 +99,121 @@ impl FolderFiles {
                         .any(|other| other.len() > end.len() && fits(file, other))
             });
             if let Some((_, path)) = matches.next() {
-                return matches.next().is_none().then(|| path.clone());
+                return matches.next().is_none().then_some(path.as_path());
             }
         }
         None
     }
 }
 
+/// The file iMazing wrote for each row of one CSV, in the CSV's order, from
+/// the files of the CSV's chat folder. `None` for a row that names no file,
+/// and for a row whose file can't be told apart from another row's:
+///
+/// - rows of one second and one numbering name ([`numbering_name`]) whose
+///   files are not all in the folder get none, because a missing file moves
+///   the ` 2`, ` 3` numbers and nothing tells which row's file is gone;
+/// - a file that two or more rows would take goes to none of them, because
+///   one file is never two rows' attachment.
+pub(crate) fn row_sources(rows: &[RawRow], files: &FolderFiles) -> Vec<Option<PathBuf>> {
+    let seconds: Vec<String> = rows
+        .iter()
+        .map(|row| file_name_second(&row.message_date))
+        .collect();
+    // Each row's numbering group and its place in it, counting from 1.
+    let mut groups: HashMap<(&str, String), Vec<usize>> = HashMap::new();
+    let mut names: Vec<Option<NumberedName<'_>>> = Vec::with_capacity(rows.len());
+    for (index, (row, second)) in rows.iter().zip(&seconds).enumerate() {
+        if row.attachment.is_empty() {
+            names.push(None);
+            continue;
+        }
+        let group = groups
+            .entry((second.as_str(), numbering_name(&row.attachment)))
+            .or_default();
+        group.push(index);
+        names.push(Some(NumberedName {
+            csv_name: &row.attachment,
+            ordinal: group.len(),
+        }));
+    }
+    let mut by_second: HashMap<&str, Vec<NumberedName<'_>>> = HashMap::new();
+    for (name, second) in names.iter().zip(&seconds) {
+        if let Some(name) = name {
+            by_second.entry(second.as_str()).or_default().push(*name);
+        }
+    }
+    let mut sources: Vec<Option<&Path>> = names
+        .iter()
+        .zip(&seconds)
+        .map(|(name, second)| {
+            files.find(&RowAttachment {
+                name: (*name)?,
+                second,
+                same_second: &by_second[second.as_str()],
+            })
+        })
+        .collect();
+    for group in groups.values() {
+        if group.iter().any(|&index| sources[index].is_none()) {
+            for &index in group {
+                sources[index] = None;
+            }
+        }
+    }
+    let mut takers: HashMap<&Path, usize> = HashMap::new();
+    for source in sources.iter().flatten() {
+        *takers.entry(source).or_default() += 1;
+    }
+    sources
+        .iter()
+        .map(|source| {
+            source
+                .filter(|source| takers[source] == 1)
+                .map(Path::to_path_buf)
+        })
+        .collect()
+}
+
 /// What a row tells about the file iMazing wrote for its attachment.
-pub(crate) struct RowAttachment<'a> {
+struct RowAttachment<'a> {
     /// The row's `Attachment` cell and its number.
-    pub name: NumberedName<'a>,
+    name: NumberedName<'a>,
     /// The row's `Message Date` as iMazing writes it into a file name
     /// ([`file_name_second`]).
-    pub second: &'a str,
+    second: &'a str,
     /// The [`NumberedName`] of every row of the CSV at this row's second,
     /// this row's among them.
-    pub same_second: &'a [NumberedName<'a>],
+    same_second: &'a [NumberedName<'a>],
 }
 
 /// A row's `Attachment` cell and its place among the rows of its CSV that
-/// share its second and [`written_name`].
+/// share its second and [`numbering_name`].
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) struct NumberedName<'a> {
+struct NumberedName<'a> {
     /// The row's `Attachment` cell, a bare basename.
-    pub csv_name: &'a str,
+    csv_name: &'a str,
     /// Which of those rows this row is, counting from 1 in CSV order.
-    pub ordinal: usize,
+    ordinal: usize,
 }
 
-/// The name iMazing writes for a file whose `Attachment` cell is `csv_name`:
-/// the stem with every non-ASCII character removed and cut to 40
-/// characters, and the extension converted ([`CONVERTED_EXTENSIONS`]).
-///
-/// Rows of one second whose cells give one written name are numbered
-/// together (` 2`, ` 3`), because one folder can't hold two files of one
-/// name.
-pub(crate) fn written_name(csv_name: &str) -> String {
+/// The stem and extension iMazing writes for a file whose `Attachment` cell
+/// is `csv_name`: the stem with every non-ASCII character removed and cut to
+/// 40 characters, and the extension converted ([`CONVERTED_EXTENSIONS`]).
+fn written_parts(csv_name: &str) -> (String, Option<&str>) {
     let (stem, extension) = split_name(csv_name);
     let extension = extension.map(|extension| converted_extension(extension).unwrap_or(extension));
-    with_ordinal(&short_stem(stem), extension, 1)
+    (short_stem(stem), extension)
+}
+
+/// The name by which rows of one second are numbered together (` 2`, ` 3`):
+/// the name iMazing writes ([`written_parts`]) in lower case. iMazing
+/// numbers two names that differ only in case, because a file system that
+/// ignores case, as macOS and Windows do by default, can't hold both in one
+/// folder.
+fn numbering_name(csv_name: &str) -> String {
+    let (stem, extension) = written_parts(csv_name);
+    with_ordinal(&stem, extension, 1).to_lowercase()
 }
 
 /// The names iMazing may have given the file of a row whose `Attachment`
@@ -147,23 +224,16 @@ pub(crate) fn written_name(csv_name: &str) -> String {
 /// 3. either of these with every non-ASCII character removed from the stem
 ///    and the stem cut to its first 40 characters.
 ///
-/// When rows of one CSV share a second and a [`written_name`], iMazing writes
-/// `X.ext` for the first and `X 2.ext`, `X 3.ext`, … for the rest, so the
-/// `ordinal`-th row's stem ends with ` {ordinal}` from the second on.
+/// When rows of one CSV share a second and a [`numbering_name`], iMazing
+/// writes `X.ext` for the first and `X 2.ext`, `X 3.ext`, … for the rest, so
+/// the `ordinal`-th row's stem ends with ` {ordinal}` from the second on.
 fn names_on_disk(name: &NumberedName<'_>) -> Vec<String> {
     let NumberedName { csv_name, ordinal } = *name;
     let (stem, extension) = split_name(csv_name);
-    let extensions = match extension {
-        None => vec![None],
-        Some(extension) => [Some(extension), converted_extension(extension)]
-            .into_iter()
-            .filter(Option::is_some)
-            .collect(),
-    };
-    let short = short_stem(stem);
+    let (short, converted) = written_parts(csv_name);
     let mut names: Vec<String> = Vec::new();
     for stem in [stem, short.as_str()] {
-        for &extension in &extensions {
+        for extension in [extension, converted] {
             let name = with_ordinal(stem, extension, ordinal);
             if !names.contains(&name) {
                 names.push(name);
@@ -214,33 +284,17 @@ fn with_ordinal(stem: &str, extension: Option<&str>, ordinal: usize) -> String {
     name
 }
 
-/// Inputs for [`resolve_attachment_cell`].
-pub(crate) struct ResolveAttachmentArgs<'a> {
-    pub row: RowAttachment<'a>,
-    pub attachment_type: &'a str,
-    /// The files of the row's chat folder. `None` when the run does not copy
-    /// attachments, so no file is looked for.
-    pub files: Option<&'a FolderFiles>,
-}
-
-/// Resolve a CSV attachment name into an [`AttachmentCell`] and the file
-/// iMazing wrote for the row, when the row's chat folder holds it.
+/// The [`AttachmentCell`] of a row whose `Attachment` cell is `csv_name`.
 ///
-/// Does not copy files. A row with no file keeps the CSV name, and the
-/// writer marks its attachment `file_missing`.
-pub(crate) fn resolve_attachment_cell(
-    args: ResolveAttachmentArgs<'_>,
-) -> (AttachmentCell, Option<PathBuf>) {
-    let ResolveAttachmentArgs {
-        row,
-        attachment_type,
-        files,
-    } = args;
-    let cell = AttachmentCell {
+/// Does not look for or copy a file ([`row_sources`] finds it). A row with
+/// no file keeps the CSV name, and the writer marks its attachment
+/// `file_missing`.
+pub(crate) fn attachment_cell(csv_name: &str, attachment_type: &str) -> AttachmentCell {
+    AttachmentCell {
         meta: message_ir::AttachmentMeta {
             path: None,
-            original_name: Some(row.name.csv_name.to_string()),
-            mime_type: mime_hint(attachment_type, row.name.csv_name),
+            original_name: Some(csv_name.to_string()),
+            mime_type: mime_hint(attachment_type, csv_name),
             digest_sha256: None,
             size_bytes: None,
             missing_reason: None,
@@ -248,9 +302,7 @@ pub(crate) fn resolve_attachment_cell(
         is_sticker: attachment_type.eq_ignore_ascii_case("sticker"),
         transcription: None,
         sticker_effect: None,
-    };
-    let source = files.and_then(|files| files.find(&row));
-    (cell, source)
+    }
 }
 
 /// The MIME type of an attachment, from its `Attachment type` cell or, when
@@ -348,11 +400,8 @@ mod tests {
         )
         .unwrap();
         let files = FolderFiles::read(&chat);
-        let (cell, source) = resolve_attachment_cell(ResolveAttachmentArgs {
-            row: row("photo.jpg"),
-            attachment_type: "image",
-            files: Some(&files),
-        });
+        let cell = attachment_cell("photo.jpg", "image");
+        let source = files.find(&row("photo.jpg"));
         assert!(
             cell.meta.digest_sha256.is_none(),
             "resolve must not hash or write"
@@ -384,7 +433,7 @@ mod tests {
             &mut jobs,
             &attachments,
             &MediaConfig::default(),
-            |_| fs::read(&source).map(Some).or(Ok(None)),
+            |_| fs::read(source).map(Some).or(Ok(None)),
             |_| {},
             None,
             None,
@@ -450,16 +499,17 @@ mod tests {
         );
     }
 
-    /// Two cells that iMazing writes as one name are numbered together.
+    /// Two cells that iMazing writes as one name, ignoring case, are
+    /// numbered together.
     #[test]
-    fn the_written_name_is_the_name_after_every_change() {
-        assert_eq!(written_name("IMG_0001.heic"), "IMG_0001.jpg");
-        assert_eq!(written_name("IMG_0001.jpg"), "IMG_0001.jpg");
-        assert_eq!(written_name("Caf\u{e9}.pdf"), "Caf.pdf");
-        assert_eq!(written_name("sticker_0001"), "sticker_0001");
+    fn the_numbering_name_is_the_name_after_every_change_in_lower_case() {
+        assert_eq!(numbering_name("IMG_0001.heic"), "img_0001.jpg");
+        assert_eq!(numbering_name("IMG_0001.JPG"), "img_0001.jpg");
+        assert_eq!(numbering_name("Caf\u{e9}.pdf"), "caf.pdf");
+        assert_eq!(numbering_name("sticker_0001"), "sticker_0001");
         assert_eq!(
-            written_name("Minutes of the neighbourhood garden committee meeting.pdf"),
-            "Minutes of the neighbourhood garden comm.pdf"
+            numbering_name("Minutes of the neighbourhood garden committee meeting.pdf"),
+            "minutes of the neighbourhood garden comm.pdf"
         );
     }
 

@@ -1267,8 +1267,10 @@ fn two_quiet_groups_with_the_same_one_row_stay_two_conversations() {
 /// `{Message Date} - {label} - {name}`, where the name is the row's
 /// `Attachment` with the extension converted, non-ASCII characters removed
 /// and the stem cut to 40 characters, and ` 2`, ` 3` added when rows of one
-/// second share the name iMazing writes. Each row gets the file of its own
-/// second, or none when its folder holds no such file or two of them.
+/// second share the name iMazing writes, ignoring case. Each row gets the
+/// file of its own second, or none when its folder holds no such file or two
+/// of them, when a row of its number group has no file, or when another row
+/// would take the same file.
 #[test]
 fn each_row_gets_the_file_imazing_wrote_for_it_in_its_own_folder() {
     let input = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/attachment_match");
@@ -1324,6 +1326,19 @@ fn each_row_gets_the_file_imazing_wrote_for_it_in_its_own_folder() {
         ("location", "file_missing"),
         // A `Message Date` without seconds still finds its file.
         ("date without seconds", "date without seconds"),
+        // The second `photo.jpg` and the `photo 2.jpg` of one second would
+        // both take `photo 2.jpg`, so neither gets it.
+        ("photo first", "photo first"),
+        ("photo second", "file_missing"),
+        ("photo 2 named", "file_missing"),
+        // `snap.JPG` and `snap.jpg` are one name on a file system that
+        // ignores case, so iMazing numbers them together.
+        ("upper-case extension", "upper-case extension"),
+        ("lower-case extension", "lower-case extension"),
+        // Two rows of one name, and the folder holds one of their files:
+        // nothing tells whose it is.
+        ("first of a pair", "file_missing"),
+        ("second of a pair", "file_missing"),
     ] {
         assert_eq!(file_of(text), file, "{text}");
     }

@@ -1797,6 +1797,28 @@ async fn http_import_of_a_line_that_is_not_json_is_a_400_naming_the_line_of_the_
     );
 }
 
+/// A line that is not UTF-8 cannot be read as text, let alone as JSON, so
+/// it is 400 naming the line, not a 500.
+#[tokio::test]
+async fn http_import_of_a_line_that_is_not_utf8_is_a_400_naming_the_line() {
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+    let mut body = replace_run_batch("+15550100002", &["g-1"]).into_bytes();
+    body.extend_from_slice(b"{\"guid\":\"\xff\xfe\"}\n");
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &token, "application/jsonl", body).await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::MalformedBody,
+    );
+    let message = problem.detail.unwrap();
+    assert!(
+        message.starts_with("Could not read line 3 of the batch:"),
+        "{message}"
+    );
+}
+
 /// C1-7: a header that is JSON with the wrong fields was read and broke a
 /// rule, as the same mistake in a JSON body does, so it answers 422.
 #[tokio::test]

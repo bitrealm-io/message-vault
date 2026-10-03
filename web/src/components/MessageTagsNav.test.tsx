@@ -31,12 +31,12 @@ describe("MessageTagsNav", () => {
   it("titles the section Message Tags", () => {
     renderNav("/");
     expect(screen.getByRole("button", { name: "Message Tags" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Create message tag" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Create Message Tag" })).toBeTruthy();
   });
 
   it("keeps the No tag active fill from navGlyphRowClass", () => {
     renderNav("/no-tag");
-    const btn = screen.getByRole("button", { name: "No tag" });
+    const btn = screen.getByRole("button", { name: "No Message Tag" });
     const tokens = classTokens(btn);
     expect(tokens).toContain("bg-hover");
     expect(tokens).toContain("font-semibold");
@@ -47,7 +47,7 @@ describe("MessageTagsNav", () => {
   it("puts tag and No tag icons in the shared 15px leading slot", () => {
     renderNav("/");
     const work = screen.getByRole("button", { name: "Work" });
-    const noTag = screen.getByRole("button", { name: "No tag" });
+    const noTag = screen.getByRole("button", { name: "No Message Tag" });
     expect(work.querySelector('[class*="size-[15px]"]')).not.toBeNull();
     expect(noTag.querySelector('[class*="size-[15px]"]')).not.toBeNull();
   });
@@ -58,7 +58,7 @@ describe("MessageTagsNav", () => {
     expect(work.className).toContain("pl-[calc(15px+0.5rem)]");
     expect(work.className).toContain("self-stretch");
     const noTagInner = screen
-      .getByRole("button", { name: "No tag" })
+      .getByRole("button", { name: "No Message Tag" })
       .querySelector('[class*="pl-[calc(15px+0.5rem)]"]');
     expect(noTagInner).not.toBeNull();
     expect(noTagInner?.className).toContain("self-stretch");
@@ -67,7 +67,7 @@ describe("MessageTagsNav", () => {
   it("closes the tag options menu on Escape", async () => {
     const user = userEvent.setup();
     renderNav("/");
-    await user.click(screen.getByRole("button", { name: "Tag options for Work" }));
+    await user.click(screen.getByRole("button", { name: "Message Tag options for Work" }));
     expect(screen.getByRole("menuitem", { name: "Rename…" })).toBeTruthy();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("menuitem", { name: "Rename…" })).toBeNull();

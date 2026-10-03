@@ -8,7 +8,6 @@ mod emit;
 mod parse;
 mod run;
 
-pub use message_crate_core::RunResult;
 pub use run::run;
 
 #[cfg(test)]

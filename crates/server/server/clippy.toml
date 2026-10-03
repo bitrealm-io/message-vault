@@ -1,0 +1,9 @@
+# A deferred transaction that reads and then writes fails at its first write
+# when another connection committed in between (SQLITE_BUSY_SNAPSHOT under
+# WAL, which the busy timeout does not retry). Every transaction is a write
+# transaction from crate::db::begin_write, which begins with BEGIN IMMEDIATE.
+disallowed-methods = [
+    { path = "sqlx::Connection::begin", reason = "a deferred transaction fails when another write lands between its read and its write; use crate::db::begin_write" },
+    { path = "sqlx::Acquire::begin", reason = "a deferred transaction fails when another write lands between its read and its write; use crate::db::begin_write" },
+    { path = "sqlx::Pool::begin", reason = "a deferred transaction fails when another write lands between its read and its write; use crate::db::begin_write" },
+]

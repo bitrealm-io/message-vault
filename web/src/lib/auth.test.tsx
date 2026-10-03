@@ -461,6 +461,36 @@ describe("AuthProvider when the server says the session has ended", () => {
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
+  it("pauses a running Upload without asking when the server has ended the session", async () => {
+    seedSession();
+    const { ApiError } = await import("./api");
+    const { useAuth } = await import("./auth");
+    const { useRouteQuery } = await import("./routeQuery");
+    const { registerRunningUpload } = await import("./runningUpload");
+    const pause = vi.fn(async () => {});
+    const ended = registerRunningUpload(pause);
+    const refused = vi.fn(async (): Promise<string[]> => {
+      throw new ApiError(401, "expired session token");
+    });
+
+    try {
+      const { result } = renderHook(
+        () => {
+          const auth = useAuth();
+          useRouteQuery(["contact-groups"], refused, { enabled: auth.isAuthenticated });
+          return auth;
+        },
+        { wrapper: await wrapper() },
+      );
+
+      await waitFor(() => expect(result.current.isAuthenticated).toBe(false));
+      expect(pause).toHaveBeenCalledTimes(1);
+      expect(document.body.textContent).not.toContain("An Upload is running");
+    } finally {
+      ended();
+    }
+  });
+
   it("logs out when a mutation fails with 401 Unauthorized", async () => {
     seedSession();
     const { ApiError } = await import("./api");

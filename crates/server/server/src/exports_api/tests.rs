@@ -1123,6 +1123,87 @@ async fn a_finished_run_refuses_pages_and_a_second_close() {
     expect_problem(status, &text, ProblemType::StateConflict);
 }
 
+/// Open a write on `other` that completes run `id` the way `complete` does,
+/// still uncommitted.
+async fn complete_elsewhere(other: &mut crate::db::WriteTx<'_>, id: i64) {
+    sqlx::query(
+        "UPDATE exports SET status = 'completed', finished_at = '2026-10-02T12:00:00+00:00'
+         WHERE id = $1",
+    )
+    .bind(id)
+    .execute(&mut **other)
+    .await
+    .unwrap();
+    sqlx::query("DELETE FROM export_messages WHERE export_id = $1")
+        .bind(id)
+        .execute(&mut **other)
+        .await
+        .unwrap();
+}
+
+/// `complete` and `cancel` sent at once: the loser read the run as running,
+/// lost the write, and answered "is not running (status=running)". It names
+/// the status the run ended with.
+#[tokio::test]
+async fn a_close_that_loses_a_race_names_how_the_run_ended() {
+    let (fixture, alice, _dinner, _menu) = fixture_with_two_conversations().await;
+    let run = create_run(&fixture, &alice.token, json!({ "kind": "everything" })).await;
+    let id = run["id"].as_i64().unwrap();
+
+    let mut other_conn = fixture.conn().await;
+    let mut other = crate::db::begin_write(&mut other_conn).await.unwrap();
+    complete_elsewhere(&mut other, id).await;
+    let (status, text) = crate::db::write_tx::commit_during(
+        other,
+        post_raw(
+            &fixture.state,
+            &format!("/v1/exports/{id}/cancel"),
+            &alice.token,
+            "application/json",
+            "{}",
+        ),
+    )
+    .await;
+
+    let problem = expect_problem(status, &text, ProblemType::StateConflict);
+    assert_eq!(
+        problem.detail.as_deref(),
+        Some(format!("export {id} is not running (status=completed)").as_str())
+    );
+}
+
+/// A page read while another call completes the run answered `200 OK` with
+/// an empty or stale page and raised `messages_delivered` on the finished
+/// run. The page answers `409` and the finished run's record stays as it was.
+#[tokio::test]
+async fn a_page_read_while_the_run_completes_is_refused() {
+    let (fixture, alice, _dinner, _menu) = fixture_with_two_conversations().await;
+    let run = create_run(&fixture, &alice.token, json!({ "kind": "everything" })).await;
+    let id = run["id"].as_i64().unwrap();
+
+    let mut other_conn = fixture.conn().await;
+    let mut other = crate::db::begin_write(&mut other_conn).await.unwrap();
+    complete_elsewhere(&mut other, id).await;
+    let (status, text) = crate::db::write_tx::commit_during(
+        other,
+        get_raw(
+            &fixture.state,
+            &format!("/v1/exports/{id}/messages"),
+            &alice.token,
+        ),
+    )
+    .await;
+
+    expect_problem(status, &text, ProblemType::StateConflict);
+    let mut conn = fixture.conn().await;
+    let delivered: i64 = sqlx::query_scalar("SELECT messages_delivered FROM exports WHERE id = $1")
+        .bind(id)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(delivered, 0);
+}
+
 #[tokio::test]
 async fn an_export_token_reads_messages_only_through_a_run() {
     let (fixture, alice, _dinner, _menu) = fixture_with_two_conversations().await;
@@ -1185,6 +1266,55 @@ async fn an_export_token_reads_messages_only_through_a_run() {
 /// Insert one message into `conversation` for `account`, tied to an Import
 /// Run when `import_id` is given, and return its id. Stands in for an import
 /// landing while a run is being read.
+/// Each message of a run carries the account holder's own address the server
+/// stores for it (`messages.owner_handle_id`), and none when it stores none.
+/// Without it a pull writes no owner, and an import of that export files no
+/// message under the holder's addresses (#1098).
+#[tokio::test]
+async fn a_run_returns_the_owner_address_of_each_message() {
+    let (fixture, alice, dinner, _menu) = fixture_with_two_conversations().await;
+    let mut conn = fixture.conn().await;
+    let owner: i64 = sqlx::query_scalar(
+        "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
+         VALUES ($1, 'me@example.com', 'me@example.com', 'email', 'phone') RETURNING id",
+    )
+    .bind(alice.account_id)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE messages SET owner_handle_id = $1 WHERE conversation_id = $2")
+        .bind(owner)
+        .bind(dinner)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    drop(conn);
+    let run = create_run(&fixture, &alice.token, json!({ "kind": "everything" })).await;
+    let id = run["id"].as_i64().unwrap();
+
+    let page: Value = get_json(
+        &fixture.state,
+        &format!("/v1/exports/{id}/messages"),
+        &alice.token,
+    )
+    .await;
+
+    let owners: Vec<(&str, Option<&str>)> = page["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| (m["text"].as_str().unwrap(), m["owner"].as_str()))
+        .collect();
+    assert_eq!(
+        owners,
+        [
+            ("pizza tonight", Some("me@example.com")),
+            ("salad tomorrow", Some("me@example.com")),
+            ("the menu", None),
+        ]
+    );
+}
+
 async fn insert_message(
     fixture: &TestFixture,
     account: i64,

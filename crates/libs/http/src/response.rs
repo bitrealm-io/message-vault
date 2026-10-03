@@ -68,7 +68,8 @@ pub fn read_body(
 ///
 /// A 2xx status is a success and the body is `T`. Anything else is a
 /// [`HttpError`] carrying the status, so the retry rules can classify it,
-/// and a sentence naming `what` was being asked for — "import batch",
+/// the problem document when the body is one, so a caller can read a member
+/// such as `line`, and a sentence naming `what` was being asked for — "import batch",
 /// "export messages" — because a status alone does not tell the person which
 /// part of a long run stopped.
 ///
@@ -91,10 +92,14 @@ pub fn ok_json<T: DeserializeOwned>(
             .into()
         });
     }
-    Err(HttpError::new(
+    let error = HttpError::new(
         status.as_u16(),
         format!("{what} failed (HTTP {status}): {}", error_sentence(body)),
-    )
+    );
+    Err(match serde_json::from_str::<Problem>(body) {
+        Ok(problem) => error.with_problem(problem),
+        Err(_) => error,
+    }
     .into())
 }
 

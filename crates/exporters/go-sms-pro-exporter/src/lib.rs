@@ -9,7 +9,6 @@ mod emit;
 mod run;
 mod xml;
 
-pub use message_crate_core::RunResult;
 pub use run::run;
 
 #[cfg(test)]

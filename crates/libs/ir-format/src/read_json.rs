@@ -43,6 +43,22 @@ pub fn read_conversation_json(path: &Path) -> Result<ConversationDocument> {
 /// current schema (checked before the header is parsed, so an old file is
 /// refused by its version), or a line cannot be parsed.
 pub fn read_conversation_jsonl(path: &Path) -> Result<ConversationDocument> {
+    read_conversation_jsonl_with_lines(path).map(|(doc, _)| doc)
+}
+
+/// Read a conversation JSON Lines file as [`read_conversation_jsonl`] does,
+/// along with the line of the file each message is on, counted from 1 with
+/// blank lines included. The header is line 1.
+///
+/// A caller that re-encodes the messages (Upload packs them into batches)
+/// needs the lines to name a place in the file the person has.
+///
+/// # Errors
+///
+/// The same as [`read_conversation_jsonl`].
+pub fn read_conversation_jsonl_with_lines(
+    path: &Path,
+) -> Result<(ConversationDocument, Vec<usize>)> {
     let file = File::open(path).with_context(|| format!("open {}", path.display()))?;
     let mut lines = BufReader::new(file).lines();
     let header_line = lines
@@ -55,15 +71,18 @@ pub fn read_conversation_jsonl(path: &Path) -> Result<ConversationDocument> {
         .with_context(|| format!("parse JSONL header {}", path.display()))?;
 
     let mut messages = Vec::new();
+    let mut message_lines = Vec::new();
     for (i, line) in lines.enumerate() {
+        let line_no = i + 2;
         let line =
-            line.with_context(|| format!("read JSONL line {} in {}", i + 2, path.display()))?;
+            line.with_context(|| format!("read JSONL line {line_no} in {}", path.display()))?;
         if line.trim().is_empty() {
             continue;
         }
         let msg: IrMessage = serde_json::from_str(&line)
-            .with_context(|| format!("parse JSONL message line {} in {}", i + 2, path.display()))?;
+            .with_context(|| format!("parse JSONL message line {line_no} in {}", path.display()))?;
         messages.push(msg);
+        message_lines.push(line_no);
     }
     if messages.is_empty() {
         bail!("JSONL has no message lines: {}", path.display());
@@ -74,5 +93,8 @@ pub fn read_conversation_jsonl(path: &Path) -> Result<ConversationDocument> {
         .and_then(|n| n.to_str())
         .and_then(crate::util::packaging_suffix_from_stem);
 
-    Ok(header.into_document(messages, packaging_stem_suffix))
+    Ok((
+        header.into_document(messages, packaging_stem_suffix),
+        message_lines,
+    ))
 }

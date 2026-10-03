@@ -26,14 +26,25 @@ cors_origins = [
 ]
 ```
 
-- Paths resolve relative to the repo root (parent of `config/`).
+- A relative path resolves against the folder above the config file's folder: the repository root for `config/config.toml`. The rule holds for every path in the file (`db`, `data_dir`, `static_dir`) and for the flags that replace one of them (`--db`, `--static-dir`), so `--db data/messagecrate.db` names the same file as `db = "data/messagecrate.db"` whatever directory the command runs in. `serve --data-dir` reads no config file, so there `--data-dir` and `--static-dir` resolve against the directory the server is started in.
 - `[server]` is required for `serve`.
 - `reset-demo` rebuilds the Demo Account in the database `db` names and never writes the config file.
 - `cors_origins` lists origins allowed on top of the three the packaged desktop app runs from (`tauri://localhost`, `http://tauri.localhost`, `https://tauri.localhost`), which the server allows whether or not you name them. The website the server serves is same-origin and needs no entry either, so an empty list is the right setting for most installs. Add the Vite origins (`http://localhost:5173`, `http://127.0.0.1:5173`) when running the dev UI against this server.
-- `static_dir` is the folder holding the built website, served at `/`. It defaults to `static`, relative to the directory the server is started in.
+- `static_dir` is the folder holding the built website, served at `/`. It defaults to `static`.
 - `serve` runs without a config file when given `--data-dir <folder>`: the database is `messagecrate.db` in that folder, the accounts' files sit beside it, and every `[server]` key has its default. `--bind` and `--static-dir` override `bind` and `static_dir`, with or without a config file. The desktop app starts the server this way.
 - Source names are **not** listed in TOML — each import registers its own
   source slug for that account under `data/<account_id>/<source_id>/`.
+
+### Which file is the database
+
+The server opens only a Message Crate database, and it changes no other file.
+A Message Crate database carries SQLite's `application_id` set to `0x4d734372` (the bytes `MsCr`), which the server writes into every database it builds.
+A file without that mark, such as Apple's `chat.db` or another program's backup, is refused by name before any statement changes it, because rebuilding it would drop that program's tables.
+
+Only `serve`, `create-database` and `reset-demo` make a new database, at a path where no file exists or in an empty file.
+Every other command (`import`, `imports discard`, `dedupe-cross-source`, `process-assets`, `create-owner`, `reset-owner-password`) stops with an error naming the path when no database is there, so a mistyped `--db` creates nothing.
+
+A Message Crate database stamped with another Schema Fingerprint is still rebuilt empty on open, as after any schema change.
 
 ### Server asset limits
 

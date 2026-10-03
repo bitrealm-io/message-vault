@@ -59,6 +59,8 @@ fn main() {
             commands::staging::summarize_staging,
             commands::staging::transcode_staging,
             commands::staging::delete_staging,
+            commands::staging::read_import_run_record,
+            commands::staging::save_import_run_record,
         ]);
 
     builder

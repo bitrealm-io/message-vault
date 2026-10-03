@@ -6,6 +6,8 @@ export default function ConfirmDialog({
   title,
   body,
   confirmLabel = "OK",
+  cancelLabel = "Cancel",
+  busyLabel = "Working…",
   danger = false,
   busy = false,
   error = "",
@@ -16,6 +18,9 @@ export default function ConfirmDialog({
   title: string;
   body: React.ReactNode;
   confirmLabel?: string;
+  cancelLabel?: string;
+  /** The confirm button's label while `busy`. */
+  busyLabel?: string;
   danger?: boolean;
   busy?: boolean;
   /** Why the last confirm failed. The dialog stays open so it can be retried. */
@@ -44,10 +49,10 @@ export default function ConfirmDialog({
       <DialogError message={error} />
       <DialogFooter>
         <Button onPress={onClose} isDisabled={busy}>
-          Cancel
+          {cancelLabel}
         </Button>
         <Button variant={danger ? "danger" : "primary"} onPress={onConfirm} isDisabled={busy}>
-          {busy ? "Working…" : confirmLabel}
+          {busy ? busyLabel : confirmLabel}
         </Button>
       </DialogFooter>
     </ModalShell>

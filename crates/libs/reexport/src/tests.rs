@@ -560,9 +560,16 @@ fn apply_reexport_convert_restages_attachments_and_marks_missing_files() {
     };
 
     let config = config(output.path(), output.path(), OutputFormat::Jsonl);
-    let saved =
-        apply_reexport_convert(std::slice::from_mut(&mut document), &config, &transforms).unwrap();
-    assert_eq!(saved, 1, "one file was on disk to stage");
+    let mut report = ExportReport::default();
+    apply_reexport_convert(
+        std::slice::from_mut(&mut document),
+        &config,
+        &transforms,
+        &mut report,
+    )
+    .unwrap();
+    assert_eq!(report.attachments_saved, 1, "one file was on disk to stage");
+    assert_eq!(report.extra("attachments_missing"), 2);
 
     let staged = &document.messages[0].attachments[0];
     assert_eq!(
@@ -966,5 +973,158 @@ fn a_version_3_file_among_version_4_files_stops_the_run_and_writes_nothing() {
     assert!(
         previous.is_file(),
         "the previous export in the output is left as it was"
+    );
+}
+
+/// Write one conversation whose first message carries `note.txt` (and, when
+/// `with_unsent` is set, a second attachment the source never held) as a
+/// mail export of `format` into `dir`. The mail export embeds the bytes,
+/// so `dir` ends with no `attachments/` folder.
+fn write_mail_fixture(dir: &Path, format: OutputFormat, with_unsent: bool) {
+    fs::create_dir_all(dir.join("attachments")).unwrap();
+    fs::write(dir.join("attachments/note.txt"), b"hello attachment").unwrap();
+    let mut document = message_ir::testutil::sample_document("with a note");
+    document.messages[0].attachments = vec![attachment("note.txt", Some("attachments/note.txt"))];
+    if with_unsent {
+        let mut unsent = attachment("unsent.txt", None);
+        unsent.missing_reason = Some("too_large".to_string());
+        document.messages[0].attachments.push(unsent);
+    }
+    let mut sink = FormatSink::open(dir, format, ExportTransforms::none()).unwrap();
+    sink.write_document(document).unwrap();
+    sink.finish(&mut ExportReport::default()).unwrap();
+    assert!(
+        !dir.join("attachments").exists(),
+        "the mail export holds the bytes itself"
+    );
+}
+
+/// Read the one conversation of `format` in `dir`.
+fn read_output(dir: &Path, format: OutputFormat) -> ConversationDocument {
+    match format {
+        OutputFormat::Json => read_conversation_json(&find_file(dir, "json")).unwrap(),
+        OutputFormat::Jsonl => read_conversation_jsonl(&find_file(dir, "jsonl")).unwrap(),
+        OutputFormat::Csv => read_conversation_csv(&find_file(dir, "csv")).unwrap(),
+        other => panic!("not a metadata format: {other:?}"),
+    }
+}
+
+/// Convert the mail export in `source` to `format` with `media` and check
+/// that the attachment the mail carried is a file the output names.
+fn assert_mail_attachment_survives(source: &Path, format: OutputFormat, media: MediaMode) {
+    let destination = tempfile::tempdir().unwrap();
+    let mut config = config(source, destination.path(), format);
+    config.media.mode = media;
+
+    convert_export(source, &config).unwrap();
+
+    let out = read_output(destination.path(), format);
+    let note = &out.messages[0].attachments[0];
+    let path = note.path.as_deref().unwrap_or_else(|| {
+        panic!(
+            "{format:?} {media:?}: no path, missing_reason={:?}",
+            note.missing_reason
+        )
+    });
+    assert_eq!(
+        fs::read(destination.path().join(path)).unwrap(),
+        b"hello attachment",
+        "{format:?} {media:?}"
+    );
+    assert_eq!(note.missing_reason, None, "{format:?} {media:?}");
+    assert_eq!(
+        note.digest_sha256.as_deref(),
+        Some("7fa36b95d5c98859ed72b4787f3c28b29eaa103970786755c9711cbb19be631c"),
+        "{format:?} {media:?}"
+    );
+}
+
+/// An MBOX or EML export carries its attachment bytes inside the mail, and
+/// has no `attachments/` folder to copy. Converting it to a format that
+/// holds only metadata must write each attachment under `attachments/` and
+/// name it, or the attachment is lost with nothing to say so (#1072).
+#[test]
+fn converting_a_mail_export_writes_its_attachments() {
+    for mail in [OutputFormat::Mbox, OutputFormat::Eml] {
+        let source = tempfile::tempdir().unwrap();
+        write_mail_fixture(source.path(), mail, false);
+        for format in [OutputFormat::Json, OutputFormat::Jsonl, OutputFormat::Csv] {
+            assert_mail_attachment_survives(source.path(), format, MediaMode::Clone);
+        }
+    }
+}
+
+/// Convert and Compress stage the attachments again before the media pass.
+/// The bytes a mail export holds in memory must reach that pass too, and
+/// not come out `file_missing` because there was no file to read (#1072).
+#[test]
+fn converting_a_mail_export_with_a_media_pass_writes_its_attachments() {
+    // The media pass refuses to start without ffmpeg.
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
+        return;
+    };
+    let source = tempfile::tempdir().unwrap();
+    write_mail_fixture(source.path(), OutputFormat::Mbox, false);
+    for media in [MediaMode::Convert, MediaMode::Compress] {
+        for format in [OutputFormat::Json, OutputFormat::Jsonl, OutputFormat::Csv] {
+            assert_mail_attachment_survives(source.path(), format, media);
+        }
+    }
+}
+
+/// An attachment the mail export never held keeps the reason its source
+/// gave, and the run counts it, so no blank attachment goes by unreported.
+#[test]
+fn a_mail_attachment_without_bytes_keeps_its_reason_and_is_counted() {
+    let source = tempfile::tempdir().unwrap();
+    write_mail_fixture(source.path(), OutputFormat::Mbox, true);
+    let destination = tempfile::tempdir().unwrap();
+
+    let report = convert_export(
+        source.path(),
+        &config(source.path(), destination.path(), OutputFormat::Jsonl),
+    )
+    .unwrap();
+
+    let out = read_output(destination.path(), OutputFormat::Jsonl);
+    let unsent = &out.messages[0].attachments[1];
+    assert_eq!(unsent.path, None);
+    assert_eq!(unsent.missing_reason.as_deref(), Some("too_large"));
+    assert_eq!(report.report.attachments_saved, 1);
+    assert_eq!(report.report.extra("attachments_missing"), 1);
+    assert!(
+        report
+            .log_lines()
+            .contains(&"  1 attachments missing".to_string()),
+        "{:?}",
+        report.log_lines()
+    );
+}
+
+/// A mail export converted to another mail format still embeds the bytes,
+/// now read from the staged file, and leaves no `attachments/` behind.
+#[test]
+fn converting_a_mail_export_to_mail_keeps_its_attachments_embedded() {
+    let source = tempfile::tempdir().unwrap();
+    write_mail_fixture(source.path(), OutputFormat::Mbox, false);
+    let destination = tempfile::tempdir().unwrap();
+
+    convert_export(
+        source.path(),
+        &config(source.path(), destination.path(), OutputFormat::Eml),
+    )
+    .unwrap();
+
+    assert!(!destination.path().join("attachments").exists());
+    let folder = fs::read_dir(destination.path())
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .find(|path| path.is_dir())
+        .expect("an EML folder");
+    let out = read_conversation_eml_dir(&folder).unwrap();
+    assert_eq!(
+        out.messages[0].attachments[0].bytes.as_deref(),
+        Some(&b"hello attachment"[..])
     );
 }

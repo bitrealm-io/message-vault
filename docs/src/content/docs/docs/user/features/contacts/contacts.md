@@ -36,7 +36,7 @@ The search bar at the top narrows the list as text is typed.
 Plain text matches a contact's name or any of its identities.
 When the match is an identity, that identity appears under the name in the row.
 
-The list also takes search words such as `name:`, `handle:`, `group:`, `messages:`, and `last-message:`.
+The list also takes search words such as `name:`, `identity:`, `group:`, `messages:`, and `last-message:`.
 [Search](/docs/user/features/messages/search/) lists every word and the lists it works on.
 
 ## One contact
@@ -88,11 +88,13 @@ An Address Book load replaces it only when the file gives the contact a differen
 - An email address must have the form `name@example.com`.
 - The same number on **Text message** and on **WhatsApp** is two identities, so both can be added.
 - An identity the contact already has is refused with **This identity is already in the list.**
-- An identity that belongs to another contact is refused, because an identity belongs to at most one contact. It must be removed from the other contact first.
+- An identity that belongs to another contact with a name is refused, because an identity belongs to at most one contact. It must be removed from the other contact first. An identity on a contact with no name moves to this one, and a contact with no name left with no identity goes.
 
 The trash icon at the end of an identity's row removes it, after the **Remove identity from contact?** dialog is confirmed with **Remove identity**.
-Removing an identity unlinks it from the contact and deletes no messages.
-A contact left with no identity is [Unknown](/docs/user/features/contacts/unknown/).
+Removing an identity takes it off the contact and deletes no messages.
+An identity that is in a conversation goes to a new contact with no name, which is [Unknown](/docs/user/features/contacts/unknown/), so the person can still be found and named.
+An identity in no conversation is deleted.
+A contact left with no identity is Unknown too.
 
 Message Crate has no command that merges two contacts.
 Two contacts that are one person are joined by removing the identities from one and adding them to the other.
@@ -199,13 +201,19 @@ A contact with no identity is one row with the last three columns blank.
 
 ```csv title="address-book.csv"
 contact_id,display_name,groups,service,handle_type,identity
-12,Ada Lovelace,Family;Work,phone,phone,+15555550100
-12,Ada Lovelace,Family;Work,whatsapp,phone,+15555550100
+12,Ada Lovelace,Family;Work,phone,phone,'+15555550100
+12,Ada Lovelace,Family;Work,whatsapp,phone,'+15555550100
 12,Ada Lovelace,Family;Work,phone,email,ada@example.com
-31,,,phone,phone,+15555550142
+31,,,phone,phone,'+15555550142
 ```
 
 Contact 31 above is Unknown: it has an identity and no name.
+
+A cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return is written with a `'` in front, in every column.
+A spreadsheet runs such a cell as a formula otherwise, and a name can come from a backup or, on WhatsApp, from the other person.
+The `'` keeps the cell as text, so a phone number keeps its `+`.
+Loading the file takes that `'` off again, whether the spreadsheet kept it or dropped it when it saved.
+LibreOffice Calc shows the `'` in the cell, and it can stay there: the load reads the cell the same with it or without it.
 
 ### Edit the file
 

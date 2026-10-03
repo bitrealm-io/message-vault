@@ -23,22 +23,26 @@ fn files_named_with_sha(root: &Path, sha: &str) -> Vec<std::fs::DirEntry> {
 /// The fingerprint names a file under the assets directory, so anything that
 /// is not exactly 64 hex digits is refused: 64 characters that are not hex
 /// could be a path, and a wrong length names no file the server wrote.
+/// Surrounding whitespace is refused, not trimmed, so the checked value is
+/// the value that was sent.
 #[test]
-fn normalize_sha256_takes_only_64_hex_digits() {
+fn a_fingerprint_is_exactly_64_hex_digits() {
     let sha = "a".repeat(64);
-    assert_eq!(normalize_sha256(&sha), Some(sha.clone()));
+    assert_eq!(Sha256::parse(&sha).unwrap().as_str(), sha);
     assert_eq!(
-        normalize_sha256(&format!(" {} ", "AB".repeat(32))),
-        Some("ab".repeat(32))
+        Sha256::parse(&"AB".repeat(32)).unwrap().as_str(),
+        "ab".repeat(32)
     );
 
     let traversal = format!("../{}", "a".repeat(61));
     assert_eq!(traversal.len(), 64);
-    assert_eq!(normalize_sha256(&traversal), None);
-    assert_eq!(normalize_sha256(&"g".repeat(64)), None);
-    assert_eq!(normalize_sha256(&"a".repeat(63)), None);
-    assert_eq!(normalize_sha256(&"a".repeat(65)), None);
-    assert_eq!(normalize_sha256(""), None);
+    assert!(Sha256::parse(&traversal).is_err());
+    assert!(Sha256::parse(&format!(" {} ", "a".repeat(64))).is_err());
+    assert!(Sha256::parse(&format!("\n{}", "a".repeat(64))).is_err());
+    assert!(Sha256::parse(&"g".repeat(64)).is_err());
+    assert!(Sha256::parse(&"a".repeat(63)).is_err());
+    assert!(Sha256::parse(&"a".repeat(65)).is_err());
+    assert!(Sha256::parse("").is_err());
 }
 
 #[test]
@@ -47,7 +51,7 @@ fn store_verified_replaces_corrupt_destination() {
     let root = dir.path();
     let source = root.join("source.bin");
     fs::write(&source, b"valid-asset").unwrap();
-    let sha = hash_file(&source).unwrap();
+    let sha = Sha256::parse(&hash_file(&source).unwrap()).unwrap();
     let destination = root.join(shard_rel_path(&sha, ""));
     fs::create_dir_all(destination.parent().unwrap()).unwrap();
     fs::write(&destination, b"corrupt").unwrap();
@@ -70,7 +74,7 @@ fn store_verified_concurrent_installers_leave_valid_destination() {
     let source_b = root.join("source-b.dat");
     fs::write(&source_a, b"shared-asset").unwrap();
     fs::write(&source_b, b"shared-asset").unwrap();
-    let sha = hash_file(&source_a).unwrap();
+    let sha = Sha256::parse(&hash_file(&source_a).unwrap()).unwrap();
     let barrier = Arc::new(Barrier::new(2));
 
     let desired_path = root.join(shard_rel_path(&sha, ""));
@@ -115,7 +119,7 @@ fn store_verified_concurrent_installers_leave_valid_destination() {
     let newly_stored = results.iter().filter(|(_, present)| !present).count();
     assert_eq!(newly_stored, 1);
     assert_eq!(results[0].0.assets_path, results[1].0.assets_path);
-    let installed = files_named_with_sha(root.as_path(), &sha);
+    let installed = files_named_with_sha(root.as_path(), sha.as_str());
     assert_eq!(installed.len(), 1);
     assert_eq!(
         fs::read(root.join(&results[0].0.assets_path)).unwrap(),
@@ -131,7 +135,7 @@ fn store_verified_processes_share_one_path() {
     let source_b = root.join("process-b.dat");
     fs::write(&source_a, b"cross-process-asset").unwrap();
     fs::write(&source_b, b"cross-process-asset").unwrap();
-    let sha = hash_file(&source_a).unwrap();
+    let sha = Sha256::parse(&hash_file(&source_a).unwrap()).unwrap();
     let test_binary = std::env::current_exe().unwrap();
 
     let children: Vec<_> = [("a", source_a), ("b", source_b)]
@@ -146,7 +150,7 @@ fn store_verified_processes_share_one_path() {
                 ])
                 .env("ASSET_TEST_ROOT", root)
                 .env("ASSET_TEST_SOURCE", source)
-                .env("ASSET_TEST_SHA", &sha)
+                .env("ASSET_TEST_SHA", sha.as_str())
                 .env("ASSET_TEST_WORKER", worker)
                 .spawn()
                 .unwrap()
@@ -161,7 +165,7 @@ fn store_verified_processes_share_one_path() {
     let result_b = fs::read_to_string(root.join("result-b")).unwrap();
     assert_eq!(result_a, result_b);
     assert!(Path::new(&result_a).extension().is_none());
-    let installed = files_named_with_sha(root, &sha);
+    let installed = files_named_with_sha(root, sha.as_str());
     assert_eq!(installed.len(), 1);
     assert_eq!(
         fs::read(root.join(result_a)).unwrap(),
@@ -204,7 +208,7 @@ fn store_verified_records_mime_for_extensionless_media_blobs() {
     ] {
         let source = dir.path().join(name);
         fs::write(&source, name.as_bytes()).unwrap();
-        let sha = sha256_hex(name.as_bytes());
+        let sha = Sha256::of_bytes(name.as_bytes());
 
         let (stored, _) = store_verified(&source, &sha, dir.path(), None, false, false).unwrap();
 
@@ -234,7 +238,7 @@ fn lookup_by_sha256_preserves_mime_for_extensionless_assets() {
     let dir = tempdir().unwrap();
     let source = dir.path().join("source.jpg");
     fs::write(&source, b"new-jpeg").unwrap();
-    let sha = sha256_hex(b"new-jpeg");
+    let sha = Sha256::of_bytes(b"new-jpeg");
 
     let (stored, _) = store_verified(&source, &sha, dir.path(), None, false, false).unwrap();
     let looked_up = lookup_by_sha256(dir.path(), &sha).unwrap();
@@ -248,7 +252,7 @@ fn lookup_by_sha256_preserves_mime_for_extensionless_assets() {
 fn filesystem_install_worker() {
     let root = PathBuf::from(std::env::var_os("ASSET_TEST_ROOT").unwrap());
     let source = PathBuf::from(std::env::var_os("ASSET_TEST_SOURCE").unwrap());
-    let sha = std::env::var("ASSET_TEST_SHA").unwrap();
+    let sha = Sha256::parse(&std::env::var("ASSET_TEST_SHA").unwrap()).unwrap();
     let worker = std::env::var("ASSET_TEST_WORKER").unwrap();
 
     let (stored, _) = store_verified_inner(
@@ -280,7 +284,7 @@ fn store_verified_skips_temp_copy_on_valid_dedup() {
     let root = dir.path();
     let source = root.join("dedup.bin");
     fs::write(&source, b"dedup-asset").unwrap();
-    let sha = sha256_hex(b"dedup-asset");
+    let sha = Sha256::of_bytes(b"dedup-asset");
 
     let (first, present) = store_verified(&source, &sha, root, None, false, false).unwrap();
     assert!(!present);
@@ -300,7 +304,7 @@ fn store_verified_skips_temp_copy_on_valid_dedup() {
 #[test]
 fn unverified_lookup_reads_no_content_while_verified_lookup_rejects_corruption() {
     let dir = tempdir().unwrap();
-    let sha = sha256_hex(b"expected-bytes");
+    let sha = Sha256::of_bytes(b"expected-bytes");
     let stored_path = dir.path().join(shard_rel_path(&sha, ""));
     fs::create_dir_all(stored_path.parent().unwrap()).unwrap();
     fs::write(&stored_path, b"corrupt-bytes").unwrap();
@@ -322,11 +326,11 @@ fn store_verified_hashes_source_before_deduplication() {
     src.write_all(b"hello-asset").unwrap();
     src.flush().unwrap();
 
-    let sha = hash_file(src.path()).unwrap();
+    let sha = Sha256::parse(&hash_file(src.path()).unwrap()).unwrap();
     let (first, present) =
         store_verified(src.path(), &sha, root, Some("text/plain"), false, false).unwrap();
     assert!(!present);
-    assert_eq!(first.sha256, sha);
+    assert_eq!(first.sha256, sha.as_str());
     assert!(src.path().is_file(), "non-consuming store must keep source");
 
     // A duplicate claim with different bytes must fail even when the valid
@@ -350,7 +354,7 @@ fn store_verified_persists_the_bytes_that_were_hashed() {
     let root = dir.path();
     let source = root.join("mutable.bin");
     fs::write(&source, b"verified-bytes").unwrap();
-    let sha = sha256_hex(b"verified-bytes");
+    let sha = Sha256::of_bytes(b"verified-bytes");
 
     let (stored, present) = store_verified_inner(
         &source,
@@ -379,7 +383,7 @@ fn store_verified_renames_same_filesystem_temp() {
     fs::create_dir_all(&incoming).unwrap();
     let tmp = incoming.join("upload.part");
     fs::write(&tmp, b"rename-me").unwrap();
-    let sha = hash_file(&tmp).unwrap();
+    let sha = Sha256::parse(&hash_file(&tmp).unwrap()).unwrap();
 
     let (stored, present) = store_verified(
         &tmp,
@@ -409,7 +413,7 @@ fn store_verified_rejects_symlink_source() {
     #[cfg(unix)]
     {
         std::os::unix::fs::symlink(&real, &link).unwrap();
-        let sha = hash_file(&real).unwrap();
+        let sha = Sha256::parse(&hash_file(&real).unwrap()).unwrap();
         let err = store_verified(&link, &sha, root, None, false, false).unwrap_err();
         assert!(
             err.to_string().contains("symlink"),
@@ -437,7 +441,7 @@ async fn an_asset_put_then_get_returns_the_same_bytes() {
     // Arbitrary non-UTF-8 bytes, to prove the round trip preserves the
     // raw content rather than only text that happens to decode.
     let bytes: Vec<u8> = vec![0xff, 0x00, 0xde, 0xad, 0xbe, 0xef, b'\n', b'x'];
-    let sha = sha256_hex(&bytes);
+    let sha = Sha256::of_bytes(&bytes);
     let path = format!("/v1/assets/{sha}?source=sms-backup-restore");
     let server = crate::test_support::serve(&fixture.state).await;
     let put = |content_type: Option<&str>| {
@@ -501,7 +505,7 @@ async fn a_session_reads_an_attachment_without_export_and_a_token_needs_it() {
         crate::test_support::register_via_api(&state, "asset-read-user", "hunter2hunter2").await;
 
     let bytes: Vec<u8> = b"a photo".to_vec();
-    let sha = sha256_hex(&bytes);
+    let sha = Sha256::of_bytes(&bytes);
     let path = format!("/v1/assets/{sha}?source=imessage");
     let server = crate::test_support::serve(&state).await;
     let response = reqwest::Client::new()
@@ -637,7 +641,7 @@ async fn an_upload_over_the_limit_the_owner_just_set_is_refused() {
     state.asset_part_size = 16;
     let owner = crate::test_support::claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let bytes: Vec<u8> = (0u8..40).collect();
-    let sha = sha256_hex(&bytes);
+    let sha = Sha256::of_bytes(&bytes);
     let start = format!("/v1/assets/{sha}/uploads?source=imessage");
     let declared = serde_json::json!({ "bytes": bytes.len(), "mime": "image/png" });
 
@@ -710,7 +714,7 @@ async fn a_multipart_upload_works_under_a_limit_below_the_configured_part_size()
     .await;
 
     let bytes: Vec<u8> = (0u8..40).collect();
-    let sha = sha256_hex(&bytes);
+    let sha = Sha256::of_bytes(&bytes);
     let server = crate::test_support::serve(&state).await;
     let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}?source=imessage", server.base());
     let client = reqwest::Client::new();
@@ -783,7 +787,7 @@ async fn a_multipart_upload_keeps_its_part_size_when_the_limit_is_lowered() {
     state.asset_part_size = 16;
     let owner = crate::test_support::claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let bytes: Vec<u8> = (0u8..40).collect();
-    let sha = sha256_hex(&bytes);
+    let sha = Sha256::of_bytes(&bytes);
     let server = crate::test_support::serve(&state).await;
     let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}?source=imessage", server.base());
     let client = reqwest::Client::new();
@@ -863,7 +867,7 @@ async fn a_multipart_upload_completes_end_to_end_over_http() {
     let mut state = fixture.state.clone();
     state.asset_part_size = 16;
     let bytes: Vec<u8> = (0u8..40).collect();
-    let sha = sha256_hex(&bytes);
+    let sha = Sha256::of_bytes(&bytes);
     let server = crate::test_support::serve(&state).await;
     let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}?source=imessage", server.base());
     let client = reqwest::Client::new();
@@ -937,7 +941,7 @@ async fn a_multipart_upload_completes_end_to_end_over_http() {
 fn mime_for_a_stored_blob_is_the_claim_then_the_source_name() {
     let dir = tempdir().unwrap();
     let root = dir.path();
-    let sha = sha256_hex(b"stored-blob");
+    let sha = Sha256::of_bytes(b"stored-blob");
     let dest = root.join(shard_rel_path(&sha, ""));
     fs::create_dir_all(dest.parent().unwrap()).unwrap();
     fs::write(&dest, b"stored-blob").unwrap();
@@ -967,7 +971,7 @@ fn mime_for_a_stored_blob_is_the_claim_then_the_source_name() {
 fn lookup_ignores_a_file_named_with_an_extension() {
     let dir = tempdir().unwrap();
     let root = dir.path();
-    let sha = sha256_hex(b"named-with-extension");
+    let sha = Sha256::of_bytes(b"named-with-extension");
     let named = root.join(shard_rel_path(&sha, ".jpg"));
     fs::create_dir_all(named.parent().unwrap()).unwrap();
     fs::write(&named, b"named-with-extension").unwrap();
@@ -995,15 +999,15 @@ async fn an_asset_put_keeps_its_media_type_but_not_octet_stream() {
     let url = |sha: &str| format!("{}/v1/assets/{sha}?source=imessage", server.base());
 
     let jpeg = b"jpeg-bytes".to_vec();
-    let jpeg_sha = sha256_hex(&jpeg);
+    let jpeg_sha = Sha256::of_bytes(&jpeg);
     let blob = b"blob-bytes".to_vec();
-    let blob_sha = sha256_hex(&blob);
+    let blob_sha = Sha256::of_bytes(&blob);
     for (sha, bytes, content_type) in [
         (&jpeg_sha, jpeg.clone(), "image/jpeg; charset=binary"),
         (&blob_sha, blob.clone(), "application/octet-stream"),
     ] {
         let response = client
-            .put(url(sha))
+            .put(url(sha.as_str()))
             .bearer_auth(&user.token)
             .header(reqwest::header::CONTENT_TYPE, content_type)
             .body(bytes)
@@ -1025,9 +1029,12 @@ async fn an_asset_put_keeps_its_media_type_but_not_octet_stream() {
                 .map(str::to_owned)
         }
     };
-    assert_eq!(served_type(&jpeg_sha).await.as_deref(), Some("image/jpeg"));
     assert_eq!(
-        served_type(&blob_sha).await.as_deref(),
+        served_type(jpeg_sha.as_str()).await.as_deref(),
+        Some("image/jpeg")
+    );
+    assert_eq!(
+        served_type(blob_sha.as_str()).await.as_deref(),
         Some("application/octet-stream")
     );
 
@@ -1055,7 +1062,7 @@ async fn starting_an_upload_for_a_stored_blob_answers_200_already_present() {
     let server = crate::test_support::serve(&fixture.state).await;
     let client = reqwest::Client::new();
     let bytes = b"already-stored".to_vec();
-    let sha = sha256_hex(&bytes);
+    let sha = Sha256::of_bytes(&bytes);
     let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}?source=imessage", server.base());
 
     let response = client
@@ -1091,7 +1098,7 @@ async fn starting_an_upload_for_a_stored_blob_answers_200_already_present() {
         .paths
         .assets_dir_for_account(user.account_id, "imessage")
         .join(".incoming")
-        .join(&sha);
+        .join(sha.as_str());
     assert!(!incoming.exists(), "no upload session may be opened");
 }
 
@@ -1105,7 +1112,7 @@ async fn deleting_an_upload_answers_204_and_removes_its_files() {
     let server = crate::test_support::serve(&state).await;
     let client = reqwest::Client::new();
     let bytes: Vec<u8> = (0u8..40).collect();
-    let sha = sha256_hex(&bytes);
+    let sha = Sha256::of_bytes(&bytes);
     let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}?source=imessage", server.base());
 
     let response = client
@@ -1165,7 +1172,7 @@ async fn deleting_an_upload_answers_204_and_removes_its_files() {
 async fn an_asset_put_of_the_empty_file_is_stored() {
     let (fixture, user) = crate::test_support::fixture_with_account().await;
     let server = crate::test_support::serve(&fixture.state).await;
-    let sha = sha256_hex(b"");
+    let sha = Sha256::of_bytes(b"");
     let url = format!("{}/v1/assets/{sha}?source=imessage", server.base());
     let client = reqwest::Client::new();
     let response = client
@@ -1203,7 +1210,7 @@ async fn an_asset_put_of_the_empty_file_is_stored() {
 async fn a_multipart_upload_of_the_empty_file_completes_with_no_parts() {
     let (fixture, user) = crate::test_support::fixture_with_account().await;
     let server = crate::test_support::serve(&fixture.state).await;
-    let sha = sha256_hex(b"");
+    let sha = Sha256::of_bytes(b"");
     let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}?source=imessage", server.base());
     let client = reqwest::Client::new();
 
@@ -1247,7 +1254,7 @@ async fn a_multipart_upload_of_the_empty_file_completes_with_no_parts() {
 async fn an_asset_put_with_an_empty_body_answers_422() {
     let (fixture, user) = crate::test_support::fixture_with_account().await;
     let server = crate::test_support::serve(&fixture.state).await;
-    let sha = sha256_hex(b"never-sent");
+    let sha = Sha256::of_bytes(b"never-sent");
     let response = reqwest::Client::new()
         .put(format!("{}/v1/assets/{sha}?source=imessage", server.base()))
         .bearer_auth(&user.token)
@@ -1283,7 +1290,7 @@ async fn completing_an_upload_for_a_blob_a_put_stored_first_answers_200() {
     let server = crate::test_support::serve(&state).await;
     let client = reqwest::Client::new();
     let bytes: Vec<u8> = (0u8..40).collect();
-    let sha = sha256_hex(&bytes);
+    let sha = Sha256::of_bytes(&bytes);
     let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}?source=imessage", server.base());
 
     let response = client
@@ -1380,8 +1387,8 @@ async fn seed_attachment_with_preview(state: &AppState, account_id: i64) -> Prev
         .unwrap();
 
     let paths = &state.cfg.paths;
-    let with_preview = sha256_hex(ORIGINAL_BYTES);
-    let without_preview = sha256_hex(UNCONVERTED_BYTES);
+    let with_preview = Sha256::of_bytes(ORIGINAL_BYTES);
+    let without_preview = Sha256::of_bytes(UNCONVERTED_BYTES);
     let assets_dir = paths.assets_dir_for_account(account_id, "imessage");
     for (sha, bytes) in [
         (&with_preview, ORIGINAL_BYTES),
@@ -1391,7 +1398,7 @@ async fn seed_attachment_with_preview(state: &AppState, account_id: i64) -> Prev
         fs::create_dir_all(stored.parent().unwrap()).unwrap();
         fs::write(stored, bytes).unwrap();
     }
-    let preview_sha = sha256_hex(PREVIEW_BYTES);
+    let preview_sha = Sha256::of_bytes(PREVIEW_BYTES);
     let preview_path = shard_rel_path(&preview_sha, ".jpg");
     let preview = paths
         .assets_converted_dir_for_account(account_id, "imessage")
@@ -1418,8 +1425,8 @@ async fn seed_attachment_with_preview(state: &AppState, account_id: i64) -> Prev
     }
     PreviewFixture {
         conversation_id,
-        with_preview,
-        without_preview,
+        with_preview: with_preview.to_string(),
+        without_preview: without_preview.to_string(),
     }
 }
 
@@ -1603,5 +1610,148 @@ async fn a_preview_is_read_under_the_same_rule_as_the_original() {
     assert_eq!(
         crate::test_support::get_status(&state, &path, &user.token).await,
         StatusCode::OK
+    );
+}
+
+/// S2-1: the fingerprint segment must not name a path outside the account's
+/// own `.incoming` folder before it is checked.
+#[tokio::test]
+async fn a_put_with_a_path_in_the_fingerprint_writes_nothing_outside_the_store() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let server = crate::test_support::serve(&fixture.state).await;
+    let response = reqwest::Client::new()
+        .put(format!(
+            "{}/v1/assets/..%2F..%2F..%2F..%2Fescaped%2Fjunk?source=imessage",
+            server.base()
+        ))
+        .bearer_auth(&user.token)
+        .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+        .body(b"planted bytes".to_vec())
+        .send()
+        .await
+        .unwrap();
+    let status = response.status();
+    let escaped = fixture.state.cfg.paths.data_dir.join("escaped");
+    let planted: Vec<_> = std::fs::read_dir(&escaped)
+        .map(|it| it.filter_map(Result::ok).map(|e| e.path()).collect())
+        .unwrap_or_default();
+    assert!(
+        planted.is_empty(),
+        "status {status}; files written outside the account store: {planted:?}"
+    );
+    let text = response.text().await.unwrap();
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+}
+
+/// Every file under `dir`, at any depth.
+fn files_under(dir: &Path) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    let Ok(entries) = fs::read_dir(dir) else {
+        return found;
+    };
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+        if path.is_dir() {
+            found.extend(files_under(&path));
+        } else {
+            found.push(path);
+        }
+    }
+    found
+}
+
+/// S2-6: a PUT whose bytes do not hash to the fingerprint it is addressed by
+/// is refused, and the upload file it was written to is removed. Otherwise
+/// each attempt of a client with a stale fingerprint leaves the whole body
+/// on disk.
+#[tokio::test]
+async fn a_put_whose_bytes_do_not_match_leaves_no_file() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let server = crate::test_support::serve(&fixture.state).await;
+    let sha = Sha256::of_bytes(b"the bytes the client hashed");
+    let response = reqwest::Client::new()
+        .put(format!("{}/v1/assets/{sha}?source=imessage", server.base()))
+        .bearer_auth(&user.token)
+        .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+        .body(b"the bytes the client sent".to_vec())
+        .send()
+        .await
+        .unwrap();
+    let status = response.status();
+    let text = response.text().await.unwrap();
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::AssetUploadInvalid,
+    );
+
+    let assets_dir = fixture
+        .state
+        .cfg
+        .paths
+        .assets_dir_for_account(user.account_id, "imessage");
+    let left = files_under(&assets_dir.join(".incoming"));
+    assert!(left.is_empty(), "upload files left behind: {left:?}");
+}
+
+/// S2-12: a fingerprint with a newline in front is not 64 hex digits, so it
+/// is refused as a path segment that breaks a rule. It used to be trimmed and
+/// stored, and then the `Location` header built from the raw segment was
+/// invalid and the answer was a 500.
+#[tokio::test]
+async fn a_fingerprint_with_surrounding_whitespace_is_refused_not_a_500() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let server = crate::test_support::serve(&fixture.state).await;
+    let bytes = b"bytes under a padded fingerprint";
+    let sha = Sha256::of_bytes(bytes);
+    let response = reqwest::Client::new()
+        .put(format!(
+            "{}/v1/assets/%0A{sha}?source=imessage",
+            server.base()
+        ))
+        .bearer_auth(&user.token)
+        .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+        .body(bytes.to_vec())
+        .send()
+        .await
+        .unwrap();
+    let status = response.status();
+    let text = response.text().await.unwrap();
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+}
+
+/// A fingerprint in capitals names the same asset, and the `Location` of the
+/// stored asset is built from the checked, lower-cased fingerprint rather
+/// than the segment as sent.
+#[tokio::test]
+async fn a_fingerprint_in_capitals_is_stored_under_its_lower_case_name() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let server = crate::test_support::serve(&fixture.state).await;
+    let bytes = b"bytes under a capital fingerprint";
+    let sha = Sha256::of_bytes(bytes);
+    let response = reqwest::Client::new()
+        .put(format!(
+            "{}/v1/assets/{}?source=imessage",
+            server.base(),
+            sha.as_str().to_ascii_uppercase()
+        ))
+        .bearer_auth(&user.token)
+        .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+        .body(bytes.to_vec())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    assert_eq!(
+        response.headers()[header::LOCATION],
+        format!("/v1/assets/{sha}?source=imessage").as_str()
     );
 }

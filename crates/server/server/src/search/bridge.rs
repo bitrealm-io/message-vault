@@ -3,7 +3,6 @@
 //! each list's base row. Every emitter is written once against the alias it
 //! needs and asks the context to wrap it.
 
-use crate::db::dialect::like_ci;
 use crate::db::sql::SqlParam;
 
 use super::ListKind;
@@ -33,36 +32,34 @@ impl Sql {
         self.params.push(SqlParam::Int(v));
     }
 
-    /// Bind a text value for a `?` a dialect helper already wrote into
-    /// `text` (for example `db::dialect::name_eq_ci`'s own placeholder).
-    /// Unlike `bind_text`, this does not write the `?` itself — the helper
-    /// already did — so call it immediately after pushing that helper's SQL.
-    pub fn param_text(&mut self, v: impl Into<String>) {
-        self.params.push(SqlParam::Text(v.into()));
-    }
-
-    /// `column LIKE ?` case-insensitively
-    /// ([`db::dialect::like_ci`](crate::db::dialect::like_ci)), binding
-    /// `pattern` as it is. In the pattern `%` and `_` are wildcards and `\`
-    /// escapes, so text a person typed reaches here only through
-    /// `emit::like_contains`, which escapes it.
+    /// `column LIKE ?` case-insensitively, binding `pattern` as it is. Both
+    /// sides go through `lower()`, so a non-ASCII capital folds the same way
+    /// an ASCII one does. SQLite's own `lower()` folds only ASCII, so the
+    /// server registers a Unicode one on every connection
+    /// ([`crate::db::sqlite_functions`]). `COLLATE NOCASE` is not used,
+    /// because it folds only ASCII.
+    ///
+    /// In the pattern `%` and `_` are wildcards and `\` escapes. SQLite has
+    /// no escape character unless told, so the clause names it. Text a
+    /// person typed reaches here only through `emit::like_contains`, which
+    /// escapes it.
     pub fn like(&mut self, column: &str, pattern: &str) {
-        self.text.push_str(&like_ci(column));
+        self.text
+            .push_str(&format!(r"lower({column}) LIKE lower(?) ESCAPE '\'"));
         self.params.push(SqlParam::Text(pattern.to_string()));
     }
 }
 
 /// Conversation `conv` involves the contact `contact_expr`: one of the
-/// contact's handles is the chat handle or a participant's handle, or the
-/// contact is linked directly to a participant row that has no handle of
-/// its own (the source named that person and recorded no address for them).
+/// contact's handles is the chat handle or a participant's handle. Every
+/// participant has a handle, and its contact is the one the handle is on now,
+/// so a handle moved to another contact takes its conversations with it.
 pub(crate) fn conversation_involves(conv: &str, contact_expr: &str) -> String {
     format!(
-        "(EXISTS (SELECT 1 FROM contact_handles chi \
+        "EXISTS (SELECT 1 FROM contact_handles chi \
            WHERE chi.account_id = {conv}.account_id AND chi.contact_id = {contact_expr} \
              AND (chi.handle_id = {conv}.chat_handle_id \
-                  OR EXISTS (SELECT 1 FROM participants pi WHERE pi.conversation_id = {conv}.id AND pi.handle_id = chi.handle_id))) \
-         OR EXISTS (SELECT 1 FROM participants pi2 WHERE pi2.conversation_id = {conv}.id AND pi2.contact_id = {contact_expr}))"
+                  OR EXISTS (SELECT 1 FROM participants pi WHERE pi.conversation_id = {conv}.id AND pi.handle_id = chi.handle_id)))"
     )
 }
 

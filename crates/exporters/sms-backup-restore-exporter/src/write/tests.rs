@@ -388,7 +388,11 @@ fn restored_mms_parts_get_back_their_own_attachment_bytes() {
     .unwrap();
     let owners = [OWNER.to_string()];
     let (docs, _) = read_with_bytes(&input, &owners);
-    assert_eq!(docs[0].messages[0].attachments.len(), 2, "a.jpg, c.jpg");
+    assert_eq!(
+        docs[0].messages[0].attachments.len(),
+        3,
+        "a.jpg, c.jpg, a-copy.jpg"
+    );
     let payloads = |a_copy: Option<&[u8]>| {
         vec![
             ("smil.xml".to_string(), None),
@@ -417,8 +421,10 @@ fn restored_mms_parts_get_back_their_own_attachment_bytes() {
         payloads(Some(b"first"))
     );
 
-    // Neither has a digest: they go to the payload parts in order, and
-    // the last part, with nothing left to take, gets no data.
+    // No attachment has a digest: they go to the payload parts in order,
+    // and with the third attachment gone the last part, with nothing left
+    // to take, gets no data.
+    transformed[0].messages[0].attachments.truncate(2);
     for att in &mut transformed[0].messages[0].attachments {
         att.digest_sha256 = None;
     }

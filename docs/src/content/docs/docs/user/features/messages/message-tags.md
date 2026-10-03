@@ -22,7 +22,7 @@ A tag name has three rules.
 
 - It holds 80 characters at most.
 - Two tags in one Account can't share a name, and letter case does not make a name different, so **Work** and **work** are one name.
-- It can't be one of the names Message Crate keeps for itself: `home`, `contacts`, `threads`, `thread`, `all`, `excluded`, `unassigned`, `trash`, `tags`, `tag`, `no-tag`, `no tag`, `groups`, `group`, `labels`, `label`, or `none`. `none` is kept because `tag:none` searches for Conversations with no tag. Such a name is refused with a message like "trash" is a reserved tag.
+- It can't be one of the names Message Crate keeps for itself: `home`, `contacts`, `threads`, `thread`, `all`, `excluded`, `unassigned`, `trash`, `tags`, `tag`, `no-tag`, `no tag`, `groups`, `group`, `labels`, `label`, or `none`. `none` is kept because `tag:none` searches for Conversations with no tag. Such a name is refused with a message like "trash" is a reserved Message Tag.
 
 ## Putting a tag on Conversations
 

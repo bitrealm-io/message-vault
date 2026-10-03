@@ -266,17 +266,15 @@ impl Promote<'_> {
     }
 
     /// Append mode: rows production already has are skipped by the guid
-    /// index (`staging::promote_guid_messages_in_range`). Rows without a
-    /// guid are outside that index and are always inserted, then zipped
-    /// onto their staged ids; guid rows are mapped by the guid join in
-    /// `staging::write_message_map`.
+    /// index (`staging::promote_guid_messages_in_range`), so a batch sent
+    /// again adds nothing. The map stays empty: every row, new or skipped,
+    /// is mapped by the guid join in `staging::write_message_map`.
     async fn insert_messages_append(
         &mut self,
         min_id: i64,
         max_id: i64,
         total: i64,
     ) -> Result<HashMap<i64, i64>> {
-        let mut msg_map = HashMap::new();
         let mut inserted_total = 0u64;
         for (chunk, lo, hi) in message_chunks(min_id, max_id) {
             let phase = Self::begin(format_args!(
@@ -292,25 +290,10 @@ impl Promote<'_> {
             );
         }
 
-        let phase = Self::begin("inserting messages with empty guids…");
-        let max_before = staging::max_message_id(self.tx).await?;
-        let inserted_empty =
-            staging::promote_messages_without_guid(self.tx, self.account_id).await?;
-        inserted_total += inserted_empty;
-        let staged = staging::staged_message_ids_without_guid(self.tx, self.account_id).await?;
-        self.zip_new_message_ids(&mut msg_map, staged, max_before, |n, p| {
-            format!("promote append empty-guid id map mismatch: staging={n} new_prod={p}")
-        })
-        .await?;
-        self.done(
-            phase,
-            format!("empty-guid messages inserted={inserted_empty}"),
-        );
-
         self.stats.messages = inserted_total;
         self.stats.messages_appended = inserted_total;
         self.stats.messages_deduped = (total as u64).saturating_sub(inserted_total);
-        Ok(msg_map)
+        Ok(HashMap::new())
     }
 
     /// Pair the staged ids just promoted with the production ids that appeared

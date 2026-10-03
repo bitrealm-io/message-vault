@@ -20,8 +20,8 @@ use crate::server::{ApiError, AppState, FullAccess, content_type_base, read_body
 /// A row is under a hundred bytes, so a few megabytes is already tens of
 /// thousands of identities, and the whole file is read into memory before
 /// parsing. The route reads the body itself against this cap, as the asset
-/// routes do: Axum's `Bytes` extractor would stop at its own 2 MiB default
-/// first, and a cap that never answers is no cap.
+/// routes do, and not through `crate::extract::Json`, whose cap is
+/// [`crate::server::MAX_JSON_BODY_BYTES`].
 pub(crate) const MAX_ADDRESS_BOOK_BYTES: usize = 8 * 1024 * 1024;
 
 /// The file name Export gives the address book.
@@ -61,6 +61,10 @@ impl From<LoadError> for ApiError {
 /// contact holds that key. Otherwise it is keyed as written: ten digits as a
 /// US number, any other count as bare digits. `notes` names each row read
 /// with its `+` back, and each such number that became a new identity.
+///
+/// One `'` before a cell that starts with `=`, `+`, `-`, `@`, a tab or a
+/// carriage return is taken off, in any column, which undoes the `'` the
+/// export writes there.
 ///
 /// The load is one transaction. A file that breaks a rule is refused whole
 /// with `422 Unprocessable Entity`, and `errors` holds one sentence for each
@@ -129,7 +133,11 @@ pub(crate) struct ExportAddressBookRequest {
 /// by `;`, repeat on each of its rows. A contact with no name has a blank
 /// `display_name`, and a contact with no identity is one row with the last
 /// three columns blank. Contacts in the trash are left out.
-/// `POST /v1/contacts` loads the file back.
+///
+/// A cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return
+/// is written with a `'` in front, in every column, because a spreadsheet
+/// runs such a cell as a formula and drops the `+` of a phone number.
+/// `POST /v1/contacts` loads the file back and takes that `'` off.
 #[utoipa::path(
     post,
     path = "/v1/contacts/address-book",

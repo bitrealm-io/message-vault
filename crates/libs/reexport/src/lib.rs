@@ -64,6 +64,10 @@ impl ReexportReport {
                 self.report.attachments_saved
             ));
         }
+        let missing = self.report.extra("attachments_missing");
+        if missing > 0 {
+            lines.push(format!("  {missing} attachments missing"));
+        }
         lines.extend(self.report.media_lines());
         lines
     }
@@ -103,8 +107,13 @@ fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportR
         bail!("no conversations loaded from {}", input_dir.display());
     }
     let mut report = ExportReport::default();
-    if matches!(transforms.media, MediaMode::Convert | MediaMode::Compress) {
-        report.attachments_saved += apply_reexport_convert(&mut documents, config, &transforms)?;
+    // A mail export's reader holds the attachments in memory, and the
+    // export has no `attachments/` folder to copy, so its attachments are
+    // staged even when the media is only cloned.
+    if matches!(transforms.media, MediaMode::Convert | MediaMode::Compress)
+        || (copy_attachments && detected.format.is_mail_archive())
+    {
+        apply_reexport_convert(&mut documents, config, &transforms, &mut report)?;
     }
 
     let mut sink = FormatSink::open(&config.output, config.output_format, transforms)?;
@@ -129,43 +138,88 @@ fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportR
     })
 }
 
-/// Stage the copied attachments again through the shared step, so a
-/// convert or compress pass rewrites each document's paths, hashes and MIME
-/// types. Returns how many distinct attachment files were written.
+/// Where one attachment's bytes come from when it is staged again.
+enum Source {
+    /// Held in memory, as a mail export's reader hands them over.
+    Bytes(Vec<u8>),
+    /// A file copied into the output from the input's `attachments/`.
+    File(PathBuf),
+    /// Nothing to stage.
+    None,
+}
+
+/// Stage the attachments again through the shared step: the files copied
+/// from the input, and the bytes a mail export held in memory. A convert or
+/// compress pass then rewrites each document's paths, hashes and MIME
+/// types. Adds the distinct files written to `report.attachments_saved`
+/// and the attachments left without a file to `attachments_missing`.
+///
+/// An attachment the input already gave a `missing_reason` keeps that
+/// reason when there is still nothing to stage, rather than becoming
+/// `file_missing`.
 fn apply_reexport_convert(
     documents: &mut [ConversationDocument],
     config: &ExporterConfig,
     transforms: &ExportTransforms,
-) -> Result<u64> {
+    report: &mut ExportReport,
+) -> Result<()> {
     let output_dir = &config.output;
-    let sources: Vec<Option<PathBuf>> = documents
-        .iter()
-        .flat_map(|doc| doc.messages.iter())
-        .flat_map(|msg| msg.attachments.iter())
-        .map(|att| {
-            att.path
-                .as_deref()
-                .map(|rel| output_dir.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR)))
-        })
-        .collect();
-    stage_conversation_attachments(
+    let mut sources: Vec<Source> = Vec::new();
+    let mut reasons: Vec<Option<String>> = Vec::new();
+    for att in documents
+        .iter_mut()
+        .flat_map(|doc| doc.messages.iter_mut())
+        .flat_map(|msg| msg.attachments.iter_mut())
+    {
+        reasons.push(att.missing_reason.clone());
+        sources.push(match (att.bytes.take(), att.path.as_deref()) {
+            (Some(bytes), _) => Source::Bytes(bytes),
+            (None, Some(rel)) => {
+                Source::File(output_dir.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR)))
+            }
+            (None, None) => Source::None,
+        });
+    }
+    let saved = stage_conversation_attachments(
         document_messages(documents),
         &output_dir.join("attachments"),
         &MediaConfig {
             mode: transforms.media,
             compress: transforms.compress.clone(),
         },
-        |i| {
-            let Some(path) = sources.get(i).and_then(|p| p.as_ref()) else {
-                return Ok(None);
-            };
-            fs::read(path).map(Some).or(Ok(None))
+        |i| match sources
+            .get_mut(i)
+            .map(|s| std::mem::replace(s, Source::None))
+        {
+            Some(Source::Bytes(bytes)) => Ok(Some(bytes)),
+            Some(Source::File(path)) => Ok(fs::read(path).ok()),
+            Some(Source::None) | None => Ok(None),
         },
         config.log.as_ref(),
         config.progress.as_ref(),
         config.cancel.as_ref(),
     )
-    .map_err(anyhow::Error::msg)
+    .map_err(anyhow::Error::msg)?;
+    report.attachments_saved += saved;
+
+    let mut missing = 0;
+    for (att, reason) in documents
+        .iter_mut()
+        .flat_map(|doc| doc.messages.iter_mut())
+        .flat_map(|msg| msg.attachments.iter_mut())
+        .zip(reasons)
+    {
+        if att.missing_reason.as_deref() == Some("file_missing") {
+            missing += 1;
+            if reason.is_some() {
+                att.missing_reason = reason;
+            }
+        }
+    }
+    if missing > 0 {
+        report.bump("attachments_missing", missing);
+    }
+    Ok(())
 }
 
 /// Read every conversation in an SMS Backup & Restore export, staging its

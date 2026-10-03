@@ -193,8 +193,8 @@ Post one top-level comment, starting with the marker:
 - Any Spec skip, and any user thread still open.
 
 Merge the PR on the commit you pushed when "Merging" says it is ready.
-Otherwise, say in the summary and to the user
-what it waits on, such as an open user thread.
+Otherwise, say in the summary and to the user what it waits on, such as an
+open user thread.
 
 Remove the worktree. Report to the user: the PR, the counts, and whether it is
 merged.

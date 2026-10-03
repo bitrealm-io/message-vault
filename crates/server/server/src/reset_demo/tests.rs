@@ -88,6 +88,19 @@ fn a_seed_toml_with_an_unknown_key_or_section_is_refused_naming_it() {
     assert!(text.contains("`acount`"), "{text}");
 }
 
+/// The config of a test build: its database at `db`, its data in `data_dir`.
+fn test_config(db: &Path, data_dir: &Path) -> Config {
+    Config {
+        paths: PathsConfig {
+            db: db.to_path_buf(),
+            data_dir: data_dir.to_path_buf(),
+            assets_dir: "assets".into(),
+            assets_converted_dir: "assets_converted".into(),
+        },
+        server: None,
+    }
+}
+
 /// Open `db` with the schema applied and one connection checked out.
 async fn test_db_conn(db: &Path) -> sqlx::pool::PoolConnection<sqlx::Sqlite> {
     let (_pool, conn) = test_db(db).await;
@@ -219,15 +232,7 @@ async fn failed_reset_preserves_existing_demo_account() {
         "not a conversation\n",
     )
     .expect("write unreadable jsonl");
-    let cfg = Config {
-        paths: PathsConfig {
-            db: db.clone(),
-            data_dir,
-            assets_dir: "assets".into(),
-            assets_converted_dir: "assets_converted".into(),
-        },
-        server: None,
-    };
+    let cfg = test_config(&db, &data_dir);
 
     let result = reset_prepared_bundle(&cfg, &bundle, DEMO_ACCOUNT_ID).await;
 
@@ -278,15 +283,7 @@ async fn a_reset_whose_rebuild_fails_leaves_the_database_and_server_ready_in_pla
         "not a conversation\n",
     )
     .expect("write unreadable jsonl");
-    let cfg = Config {
-        paths: PathsConfig {
-            db: db.clone(),
-            data_dir: temp.path().join("data"),
-            assets_dir: "assets".into(),
-            assets_converted_dir: "assets_converted".into(),
-        },
-        server: None,
-    };
+    let cfg = test_config(&db, &temp.path().join("data"));
 
     let result = reset_prepared_bundle(&cfg, &bundle, DEMO_ACCOUNT_ID).await;
 
@@ -478,15 +475,7 @@ async fn a_reset_that_renames_another_accounts_contact_is_refused() {
     seed_reset_test_database(&db).await;
     let bundle = temp.path().join("bundle");
     write_tiny_reset_bundle(&bundle);
-    let cfg = Config {
-        paths: PathsConfig {
-            db: db.clone(),
-            data_dir: temp.path().join("data"),
-            assets_dir: "assets".into(),
-            assets_converted_dir: "assets_converted".into(),
-        },
-        server: None,
-    };
+    let cfg = test_config(&db, &temp.path().join("data"));
 
     let result = reset_prepared_bundle_with(&cfg, &bundle, DEMO_ACCOUNT_ID, async |db| {
         sqlx::query("UPDATE contacts SET preferred_name = 'Renamed' WHERE account_id = 9")
@@ -526,15 +515,7 @@ async fn reset_refuses_while_server_holds_database_lock() {
     fs::write(&demo_file, b"keep").expect("write demo file");
     let bundle = temp.path().join("bundle");
     write_tiny_reset_bundle(&bundle);
-    let cfg = Config {
-        paths: PathsConfig {
-            db: db.clone(),
-            data_dir,
-            assets_dir: "assets".into(),
-            assets_converted_dir: "assets_converted".into(),
-        },
-        server: None,
-    };
+    let cfg = test_config(&db, &data_dir);
     let _serve_lock = crate::operation_lock::acquire_for_serve(&db).expect("acquire server lock");
 
     let result = reset_prepared_bundle(&cfg, &bundle, DEMO_ACCOUNT_ID).await;
@@ -1248,15 +1229,7 @@ async fn a_generated_demo_bundle_imports_whole_and_its_overlap_dedupes() {
 
     let db_path = temp.path().join("messagecrate.db");
     let target = db_path.as_path();
-    let cfg = Config {
-        paths: PathsConfig {
-            db: db_path.clone(),
-            data_dir: temp.path().join("data"),
-            assets_dir: "assets".into(),
-            assets_converted_dir: "assets_converted".into(),
-        },
-        server: None,
-    };
+    let cfg = test_config(&db_path, &temp.path().join("data"));
 
     let prepared = validate_prepared_bundle(bundle).expect("the generator wrote a complete bundle");
     let build = build_pool(target).await;
@@ -1474,15 +1447,7 @@ async fn the_demo_address_book_names_the_unknowns_the_imports_made() {
 
     let db_path = temp.path().join("messagecrate.db");
     let target = db_path.as_path();
-    let cfg = Config {
-        paths: PathsConfig {
-            db: db_path.clone(),
-            data_dir: temp.path().join("data"),
-            assets_dir: "assets".into(),
-            assets_converted_dir: "assets_converted".into(),
-        },
-        server: None,
-    };
+    let cfg = test_config(&db_path, &temp.path().join("data"));
     let prepared = validate_prepared_bundle(bundle).expect("the generator wrote a complete bundle");
     let build = build_pool(target).await;
     seed_demo_account(&build, DEMO_ACCOUNT_ID, &prepared.seed)
@@ -1527,6 +1492,11 @@ async fn the_demo_address_book_names_the_unknowns_the_imports_made() {
         counts.contacts_updated > 0,
         "the book names the Unknowns in place: {counts:?}"
     );
+    // A book contact that took an Unknown's identities instead of naming it
+    // would leave it empty, and the load would delete it and its place in
+    // every import Contact Group (#1511).
+    assert_eq!(counts.identities_moved, 0, "{counts:?}");
+    assert_eq!(counts.contacts_deleted, 0, "{counts:?}");
     assert_eq!(counts.identities_removed, 0, "{counts:?}");
     assert_eq!(
         unknowns_holding(&mut conn, &wanted).await,
@@ -1693,15 +1663,7 @@ async fn the_wipe_removes_the_demo_rows_and_folder_and_leaves_other_accounts() {
     let other_folder = data_dir.join("9");
     fs::create_dir_all(&other_folder).expect("create other account folder");
     fs::write(other_folder.join("keep.bin"), b"keep").expect("write other attachment");
-    let cfg = Config {
-        paths: PathsConfig {
-            db: db.clone(),
-            data_dir: data_dir.clone(),
-            assets_dir: "assets".into(),
-            assets_converted_dir: "assets_converted".into(),
-        },
-        server: None,
-    };
+    let cfg = test_config(&db, &data_dir);
 
     let build = build_pool(&db).await;
     wipe_demo_account(&cfg, &build, DEMO_ACCOUNT_ID)
@@ -1750,15 +1712,7 @@ async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
     let bundle = temp.path().join("bundle");
     write_tiny_reset_bundle(&bundle);
     write_overlap_conversation(&bundle);
-    let cfg = Config {
-        paths: PathsConfig {
-            db: db.clone(),
-            data_dir: data_dir.clone(),
-            assets_dir: "assets".into(),
-            assets_converted_dir: "assets_converted".into(),
-        },
-        server: None,
-    };
+    let cfg = test_config(&db, &data_dir);
     {
         let (pool, mut conn) = test_db(&db).await;
         assert!(
@@ -2253,15 +2207,7 @@ async fn every_import_contact_group_of_a_built_demo_has_members() {
     demo_seed::generate(&seed_cfg).expect("generate the small bundle");
     let bundle = Path::new(&seed_cfg.out);
     let db_path = temp.path().join("messagecrate.db");
-    let cfg = Config {
-        paths: PathsConfig {
-            db: db_path.clone(),
-            data_dir: temp.path().join("data"),
-            assets_dir: "assets".into(),
-            assets_converted_dir: "assets_converted".into(),
-        },
-        server: None,
-    };
+    let cfg = test_config(&db_path, &temp.path().join("data"));
     let prepared = validate_prepared_bundle(bundle).expect("the generator wrote a complete bundle");
     let build = build_pool(&db_path).await;
     rebuild_demo_account(&cfg, &build, &prepared, DEMO_ACCOUNT_ID)

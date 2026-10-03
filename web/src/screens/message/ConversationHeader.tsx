@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import PlainButton from "../../components/PlainButton";
 import { apiErrorMessage } from "../../lib/apiErrorMessage";
 import { formatMonthYear } from "../../lib/formatDate";
 import { useTimeZone } from "../../lib/timeZone";
@@ -44,11 +45,10 @@ export default function ConversationHeader({
 
   return (
     <div className="border-b border-border bg-elevated px-6 py-3">
-      <button
-        type="button"
+      <PlainButton
         aria-expanded={participantsOpen}
-        onClick={onToggleParticipants}
-        disabled={displayParticipants.length === 0}
+        onPress={onToggleParticipants}
+        isDisabled={displayParticipants.length === 0}
         className={`m-0 flex w-full items-center gap-2 border-none bg-transparent p-0 text-left text-[1rem] font-semibold text-text ${
           displayParticipants.length > 0 ? "cursor-pointer" : "cursor-default"
         }`}
@@ -69,7 +69,7 @@ export default function ConversationHeader({
               ? `${conversation.participants.length} participants`
               : conversation.participants[0]?.name)}
         </span>
-      </button>
+      </PlainButton>
 
       {participantsOpen && displayParticipants.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -83,15 +83,14 @@ export default function ConversationHeader({
               const key = n === 0 ? base : `${base}#${n}`;
               if (contactId) {
                 return (
-                  <button
+                  <PlainButton
                     key={key}
-                    type="button"
-                    onClick={() => onOpenContact?.(contactId)}
+                    onPress={() => onOpenContact?.(contactId)}
                     title={`Open contact for ${p.label}`}
                     className="cursor-pointer rounded-full border border-border bg-panel px-2 py-0.5 text-[0.75rem] text-accent"
                   >
                     {p.label}
-                  </button>
+                  </PlainButton>
                 );
               }
               return (
@@ -118,21 +117,19 @@ export default function ConversationHeader({
           </span>
         )}
         <span>{conversation.message_count} messages</span>
-        <button
-          type="button"
-          onClick={onShowSources}
+        <PlainButton
+          onPress={onShowSources}
           className="cursor-pointer rounded-full border border-border bg-panel px-2 py-0.5 text-[0.75rem] text-accent"
         >
           Sources
-        </button>
-        <button
-          type="button"
-          onClick={handleMoveToTrash}
-          disabled={trashConversation.isPending}
+        </PlainButton>
+        <PlainButton
+          onPress={handleMoveToTrash}
+          isDisabled={trashConversation.isPending}
           className="cursor-pointer rounded-full border border-border bg-panel px-2 py-0.5 text-[0.75rem] text-accent disabled:cursor-not-allowed disabled:opacity-60"
         >
           {trashConversation.isPending ? "Moving to trash…" : "Move to trash"}
-        </button>
+        </PlainButton>
         <ContactGroupFromConversation conversation={conversation} />
       </div>
 

@@ -1,3 +1,5 @@
+import PlainButton from "../../components/PlainButton";
+
 export default function YearChipBar({
   years,
   activeYear,
@@ -20,24 +22,22 @@ export default function YearChipBar({
 
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-      <button
-        type="button"
-        onClick={onSelectAll}
+      <PlainButton
+        onPress={onSelectAll}
         title="Show all years (paged)"
         className={chipClass(activeYear === null)}
       >
         All
-      </button>
+      </PlainButton>
       {years.map((year) => (
-        <button
+        <PlainButton
           key={year}
-          type="button"
-          onClick={() => onSelectYear(year)}
+          onPress={() => onSelectYear(year)}
           title={activeYear === year ? `Clear ${year} filter` : `Load all messages from ${year}`}
           className={chipClass(activeYear === year)}
         >
           {year}
-        </button>
+        </PlainButton>
       ))}
     </div>
   );

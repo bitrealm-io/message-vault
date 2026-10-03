@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Column, ColumnResizer, Group } from "react-aria-components";
+import PlainButton from "../PlainButton";
 import {
   columnResizerClass,
   linkClass,
@@ -90,14 +91,9 @@ export function CountCell({
   const text = value.toLocaleString();
   if (value > 0 && onClick) {
     return (
-      <button
-        type="button"
-        className={linkClass}
-        onClick={onClick}
-        aria-label={`Open ${text} threads`}
-      >
+      <PlainButton className={linkClass} onPress={onClick} aria-label={`Open ${text} threads`}>
         {text}
-      </button>
+      </PlainButton>
     );
   }
   return <span className={value === 0 ? mutedClass : undefined}>{text}</span>;

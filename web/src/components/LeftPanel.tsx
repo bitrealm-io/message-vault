@@ -30,6 +30,7 @@ import {
   NAV_NESTED_ROW_CLASS,
   navGlyphRowClass,
 } from "./navSectionLayout";
+import PlainButton from "./PlainButton";
 import PopupMenu from "./PopupMenu";
 import SavedSearchForm from "./SavedSearchForm";
 import { useColumnResize } from "./useColumnResize";
@@ -208,36 +209,30 @@ export default function LeftPanel({
       <div className={`min-h-0 flex-1 overflow-auto ${resizeHandleGutter}`}>
         {/* Browse */}
         <div className="px-3 py-2">
-          <button
-            type="button"
-            className={browseLinkClass(isActive("/"))}
-            onClick={() => navigate("/")}
-          >
+          <PlainButton className={browseLinkClass(isActive("/"))} onPress={() => navigate("/")}>
             <span className={NAV_LEADING_GLYPH_CLASS}>
               <ConversationsIcon />
             </span>
             Messages
-          </button>
-          <button
-            type="button"
+          </PlainButton>
+          <PlainButton
             className={browseLinkClass(isActive("/contacts"))}
-            onClick={() => navigate("/contacts")}
+            onPress={() => navigate("/contacts")}
           >
             <span className={NAV_LEADING_GLYPH_CLASS}>
               <ContactsIcon />
             </span>
             Contacts
-          </button>
-          <button
-            type="button"
+          </PlainButton>
+          <PlainButton
             className={browseLinkClass(isActive("/trash"))}
-            onClick={() => navigate("/trash")}
+            onPress={() => navigate("/trash")}
           >
             <span className={NAV_LEADING_GLYPH_CLASS}>
               <TrashIcon size={15} />
             </span>
             Trash
-          </button>
+          </PlainButton>
         </div>
 
         {/* Import/Export — desktop app only */}
@@ -247,9 +242,8 @@ export default function LeftPanel({
             title="Messages"
             headingActive={isActive("/import") || isActive("/export")}
           >
-            <button
-              type="button"
-              onClick={() => navigate("/import")}
+            <PlainButton
+              onPress={() => navigate("/import")}
               className={`${navGlyphRowClass(isActive("/import"))} cursor-pointer`}
             >
               <span className={NAV_NESTED_ROW_CLASS}>
@@ -270,10 +264,9 @@ export default function LeftPanel({
                   </span>
                 ) : null}
               </span>
-            </button>
-            <button
-              type="button"
-              onClick={() =>
+            </PlainButton>
+            <PlainButton
+              onPress={() =>
                 navigate(
                   browseQuery
                     ? `/export?q=${encodeURIComponent(browseQuery)}&list=conversations`
@@ -288,7 +281,7 @@ export default function LeftPanel({
                 </span>
                 <span className="truncate">Export</span>
               </span>
-            </button>
+            </PlainButton>
           </NavCollapsibleSection>
         )}
 
@@ -319,16 +312,15 @@ export default function LeftPanel({
               return (
                 <div key={g.id} className="relative w-full">
                   <div className={navGlyphRowClass(active)}>
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/?q=${encodeURIComponent(g.query)}`)}
+                    <PlainButton
+                      onPress={() => navigate(`/?q=${encodeURIComponent(g.query)}`)}
                       className={`${NAV_NESTED_ROW_CLASS} cursor-pointer border-none bg-transparent p-0 text-left text-inherit`}
                     >
                       <span className={NAV_LEADING_GLYPH_CLASS}>
                         <SearchIcon size={15} />
                       </span>
                       <span className="min-w-0 truncate">{g.name}</span>
-                    </button>
+                    </PlainButton>
                     <PopupMenu
                       trigger={
                         <NavGlyphButton

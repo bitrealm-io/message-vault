@@ -13,6 +13,7 @@ import {
   NAV_NESTED_ROW_CLASS,
   navGlyphRowClass,
 } from "./navSectionLayout";
+import PlainButton from "./PlainButton";
 import PopupMenu from "./PopupMenu";
 
 /**
@@ -139,16 +140,15 @@ export default function NavEntityList({
         }}
       >
         {copy.permanentRoute && copy.permanentLabel ? (
-          <button
-            type="button"
-            onClick={() => navigate(copy.permanentRoute as string)}
+          <PlainButton
+            onPress={() => navigate(copy.permanentRoute as string)}
             className={`${navGlyphRowClass(location.pathname === copy.permanentRoute)} cursor-pointer`}
           >
             <span className={NAV_NESTED_ROW_CLASS}>
               <span className={NAV_LEADING_GLYPH_CLASS}>{emptyIcon}</span>
               <span className="truncate">{copy.permanentLabel}</span>
             </span>
-          </button>
+          </PlainButton>
         ) : null}
         {names.map((name) => {
           const href = slugPath(copy.routeBase, slug(name));
@@ -156,14 +156,13 @@ export default function NavEntityList({
           return (
             <div key={name} className="relative w-full">
               <div className={navGlyphRowClass(active)}>
-                <button
-                  type="button"
-                  onClick={() => navigate(href)}
+                <PlainButton
+                  onPress={() => navigate(href)}
                   className={`${NAV_NESTED_ROW_CLASS} cursor-pointer border-none bg-transparent p-0 text-left text-inherit`}
                 >
                   <span className={NAV_LEADING_GLYPH_CLASS}>{icon}</span>
                   <span className="min-w-0 truncate">{name}</span>
-                </button>
+                </PlainButton>
                 <PopupMenu
                   trigger={
                     <NavGlyphButton
@@ -202,16 +201,15 @@ export default function NavEntityList({
           );
         })}
 
-        <button
-          type="button"
-          onClick={() => navigate(copy.emptyRoute)}
+        <PlainButton
+          onPress={() => navigate(copy.emptyRoute)}
           className={`${navGlyphRowClass(location.pathname === copy.emptyRoute)} cursor-pointer`}
         >
           <span className={NAV_NESTED_ROW_CLASS}>
             <span className={NAV_LEADING_GLYPH_CLASS}>{emptyIcon}</span>
             <span className="truncate">{copy.emptyLabel}</span>
           </span>
-        </button>
+        </PlainButton>
       </NavCollapsibleSection>
 
       {createOpen ? (

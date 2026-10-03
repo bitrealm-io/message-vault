@@ -4,6 +4,7 @@ import { useAssetObjectUrl } from "../hooks/useAssetObjectUrl";
 import { hasPreview } from "../lib/attachmentPreview";
 import type { MessageAttachment } from "../lib/types";
 import { Z_MODAL } from "../lib/zLayers";
+import PlainButton from "./PlainButton";
 
 export type LightboxItem = {
   attachment: MessageAttachment;
@@ -77,41 +78,38 @@ export default function AttachmentLightbox({
         >
           <div className="flex items-center justify-center outline-none">
             {items.length > 1 && (
-              <button
-                type="button"
-                onClick={onPrev}
+              <PlainButton
+                onPress={onPrev}
                 aria-label="Previous attachment"
                 className="absolute left-4 top-1/2 flex h-12 w-12 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border-none bg-[rgba(255,255,255,0.2)] text-[2rem] text-white"
               >
                 ‹
-              </button>
+              </PlainButton>
             )}
 
             {media}
 
             {items.length > 1 && (
-              <button
-                type="button"
-                onClick={onNext}
+              <PlainButton
+                onPress={onNext}
                 aria-label="Next attachment"
                 className="absolute right-4 top-1/2 flex h-12 w-12 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border-none bg-[rgba(255,255,255,0.2)] text-[2rem] text-white"
               >
                 ›
-              </button>
+              </PlainButton>
             )}
 
             <div className="absolute right-4 top-4 flex items-center gap-4">
               <span className="text-[0.875rem] text-white">
                 {currentIndex + 1} / {items.length}
               </span>
-              <button
-                type="button"
-                onClick={onClose}
+              <PlainButton
+                onPress={onClose}
                 aria-label="Close attachment viewer"
                 className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border-none bg-[rgba(255,255,255,0.2)] text-[1.5rem] text-white"
               >
                 ×
-              </button>
+              </PlainButton>
             </div>
           </div>
         </Dialog>

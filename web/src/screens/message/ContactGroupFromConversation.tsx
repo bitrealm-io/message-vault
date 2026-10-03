@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import GroupNameDialog from "../../components/GroupNameDialog";
+import PlainButton from "../../components/PlainButton";
 import { contactGroups, useContactGroupActions } from "../../lib/contactGroups";
 import { useNameCollection } from "../../lib/nameCollection";
 import { phonesMatch } from "../../lib/phoneTokens";
@@ -44,13 +45,12 @@ export default function ContactGroupFromConversation({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
+      <PlainButton
+        onPress={() => setOpen(true)}
         className="cursor-pointer rounded-full border border-border bg-panel px-2 py-0.5 text-[0.75rem] text-accent"
       >
         Make a Contact Group
-      </button>
+      </PlainButton>
       {done ? (
         <span role="status" className="text-[0.75rem] text-muted">
           Added {done.count} people to {done.name}.

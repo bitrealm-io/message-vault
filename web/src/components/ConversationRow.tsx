@@ -5,6 +5,7 @@ import { listRowDivider } from "../lib/tw";
 import type { Conversation } from "../lib/types";
 import Checkbox from "./Checkbox";
 import { useColumnResizing } from "./columnResizeState";
+import PlainButton from "./PlainButton";
 
 /**
  * Short service label for a row.
@@ -155,9 +156,9 @@ export default function ConversationRow({
 
   if (!onCheckChange) {
     return (
-      <button type="button" onClick={onClick} className={`cursor-pointer ${rowClass}`}>
+      <PlainButton onPress={onClick} className={`cursor-pointer ${rowClass}`}>
         {body}
-      </button>
+      </PlainButton>
     );
   }
 
@@ -178,13 +179,12 @@ export default function ConversationRow({
         onChange={() => onCheckChange(conversation.id)}
         labelClassName="-my-[0.7rem] -mr-2 -ml-[0.85rem] shrink-0 items-center self-stretch pr-2 pl-[0.85rem]"
       />
-      <button
-        type="button"
-        onClick={onClick}
+      <PlainButton
+        onPress={onClick}
         className="flex min-w-0 flex-1 cursor-pointer items-start border-none bg-transparent p-0 text-left"
       >
         {body}
-      </button>
+      </PlainButton>
     </div>
   );
 }

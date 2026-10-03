@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Checkbox from "../../components/Checkbox";
 import { CheckIcon, XIcon } from "../../components/icons";
 import PathPicker from "../../components/PathPicker";
+import PlainButton from "../../components/PlainButton";
 import { getBaseUrl } from "../../lib/api";
 import { APP_BUILD } from "../../lib/build";
 import { FFMPEG_TOOLS_STORAGE_KEY } from "../../lib/ffmpeg-tools";
@@ -157,10 +158,9 @@ function DataFolder() {
         The Message Crate this app starts keeps its database and attachments in one folder. A copy
         of that folder is a backup.
       </p>
-      <button
-        type="button"
+      <PlainButton
         className="mt-2 rounded border border-border px-3 py-1.5 text-[0.875rem] text-text hover:bg-elevated"
-        onClick={() => {
+        onPress={() => {
           setError(null);
           openDataFolder().catch((caught: unknown) => {
             setError(caught instanceof Error ? caught.message : String(caught));
@@ -168,7 +168,7 @@ function DataFolder() {
         }}
       >
         Open data folder
-      </button>
+      </PlainButton>
       {error ? (
         <p className="m-0 mt-1 text-[0.75rem] text-danger" role="alert">
           {error}

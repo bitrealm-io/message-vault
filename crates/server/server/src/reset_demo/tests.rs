@@ -2306,7 +2306,7 @@ async fn another_account_writes_between_the_demo_wipes_delete_batches() {
         &build.db,
         DEMO_ACCOUNT_ID,
         AuditActor::Owner,
-        1,
+        NonZeroU32::MIN,
         async || {
             let mut conn = others.acquire().await?;
             sqlx::query("PRAGMA busy_timeout = 0")
@@ -2577,7 +2577,7 @@ async fn the_wipe_deletes_duplicates_before_the_messages_they_duplicate() {
         &build,
         DEMO_ACCOUNT_ID,
         AuditActor::Server,
-        1,
+        NonZeroU32::MIN,
         async || {
             let left = sqlx::query_as(
                 "SELECT id, duplicate_of FROM messages WHERE account_id = $1 ORDER BY id",

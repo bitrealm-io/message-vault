@@ -293,8 +293,9 @@ pub async fn delete_account(
 
 /// Delete up to `limit` of `account_id`'s messages in one write transaction
 /// of its own. Their attachments, tapbacks and search-index rows go with
-/// them, through `ON DELETE CASCADE` and the search triggers. Returns the
-/// number of messages deleted; fewer than `limit` means none are left.
+/// them, through `ON DELETE CASCADE` and the search triggers. Returns
+/// whether messages may be left: a batch that deleted fewer than `limit`
+/// found none after it.
 ///
 /// Duplicates go before the messages they duplicate. `duplicate_of` is
 /// `ON DELETE SET NULL`, so deleting an original first would show its
@@ -302,15 +303,13 @@ pub async fn delete_account(
 /// No index serves that order, so each batch sorts the account's message
 /// ids; the sort is a small part of a batch next to the deletes it feeds.
 ///
-/// Messages are nearly all of an account's rows (54,241 of the Demo
-/// Account's medium set, beside 106 conversations and 99 contacts), so
-/// deleting them this way before [`delete_account`] leaves that one
-/// statement little to do.
+/// Messages are nearly all of an account's rows, so deleting them this way
+/// before [`delete_account`] leaves that one statement little to do.
 pub async fn delete_account_messages_batch(
     conn: &mut SqliteConnection,
     account_id: i64,
-    limit: i64,
-) -> Result<u64> {
+    limit: std::num::NonZeroU32,
+) -> Result<bool> {
     let mut tx = begin_write(conn).await?;
     let deleted = sqlx::query(
         "DELETE FROM messages WHERE id IN
@@ -318,13 +317,13 @@ pub async fn delete_account_messages_batch(
           ORDER BY duplicate_of IS NULL LIMIT $2)",
     )
     .bind(account_id)
-    .bind(limit)
+    .bind(i64::from(limit.get()))
     .execute(&mut *tx)
     .await
     .with_context(|| format!("delete a batch of account {account_id}'s messages"))?
     .rows_affected();
     tx.commit().await?;
-    Ok(deleted)
+    Ok(deleted == u64::from(limit.get()))
 }
 
 /// Stable id for the seeded demo account (`reset-demo`).

@@ -27,10 +27,9 @@ the format.
 
 The dependencies run in one direction: `message-crate-core` at the bottom,
 then `ir-format`, then `message-staging`, with the vendor exporters on top.
-`sbr` sits under `sms-backup-restore-exporter`, outside that chain, and
-depends on none of its crates. No crate in the pipeline names a vendor format
-except the exporter that owns it and, for SMS Backup & Restore, the `sbr`
-crate beneath that exporter.
+`sbr` depends on none of the crates in that chain. No crate in that chain
+parses or writes a vendor's wire format; only an exporter does, or for SMS
+Backup & Restore, `sbr` on its exporter's behalf.
 
 This decision covers the path from a phone backup to files on disk. Export,
 which reads the server rather than a phone backup, starts on a different
@@ -45,9 +44,10 @@ output folder (`.message-crate-pull-state.jsonl`,
 `crates/libs/pull/src/journal.rs`) that records each attachment already
 downloaded, so a later run skips it. A run that finishes appends
 `backup_complete` and then rewrites the journal for the server and username
-of that run: one line per attachment, plus one `backup_complete` line with
-its counts set to zero. That rewrite drops the lines another server or
-account wrote into the same output folder.
+of that run. The rewritten journal holds one line per attachment and one
+`backup_complete` line. That line's counts are zero, because a later run reads
+it only as "the last run finished" and never reads the counts. The rewrite
+drops the lines another server or account wrote into the same output folder.
 
 ## Why
 

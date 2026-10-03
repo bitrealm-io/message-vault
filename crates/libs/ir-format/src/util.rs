@@ -2,6 +2,7 @@
 
 use anyhow::{Context, Result};
 use message_ir::{ConversationDocument, HandleType, IrAttachment};
+use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
@@ -40,11 +41,11 @@ pub(crate) fn infer_handle_type(handle: &str) -> HandleType {
 /// without one, when that starts with `__`. This crate knows no suffix by
 /// name. A document that already has a suffix, or a file renamed so its
 /// stem no longer starts with the document's own, is left as it is.
-pub(crate) fn recover_stem_suffix(doc: &mut ConversationDocument, file_stem: Option<&str>) {
+pub(crate) fn recover_stem_suffix(doc: &mut ConversationDocument, file_stem: Option<&OsStr>) {
     if doc.packaging_stem_suffix.is_some() {
         return;
     }
-    let Some(file_stem) = file_stem else {
+    let Some(file_stem) = file_stem.and_then(OsStr::to_str) else {
         return;
     };
     let base = doc.filename_stem();

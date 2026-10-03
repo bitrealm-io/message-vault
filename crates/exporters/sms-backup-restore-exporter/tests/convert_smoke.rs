@@ -442,8 +442,8 @@ fn attachments_are_staged_from_the_spool_on_both_write_arms() {
     }
 }
 
-/// The backup and its two temporary files are this crate's to name, so a
-/// second export into the same folder removes them whatever it writes.
+/// The shared cleaning removes the XML an earlier export wrote, and the two
+/// temporary files beside it, whatever the second export writes.
 #[test]
 fn a_second_export_removes_the_backup_an_earlier_one_wrote() {
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sample.xml");

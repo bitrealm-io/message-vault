@@ -27,9 +27,6 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
     if source.owner_emails.is_empty() {
         bail!("SMS Backup+ needs the backup device's email address");
     }
-    if config.inputs.is_empty() {
-        bail!("SMS Backup+ needs a backup folder");
-    }
 
     let transforms = ExportTransforms::from_config(config);
     let report = convert_export(ConvertExportArgs {

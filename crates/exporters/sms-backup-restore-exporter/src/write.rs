@@ -470,18 +470,6 @@ fn inject_attachment_data(
     Ok(())
 }
 
-/// Remove the `smses.xml` an earlier export or conversion wrote into
-/// `output_dir`, with its temporary files. The shared cleaning of an output
-/// folder names no vendor format, so whatever writes into a folder this
-/// crate may have written calls this after it.
-///
-/// # Errors
-///
-/// Returns an error when one of the files exists and cannot be removed.
-pub fn remove_previous_backup(output_dir: &Path) -> Result<()> {
-    sbr::remove_backup(output_dir)
-}
-
 /// The SMS Backup & Restore backup as a [`MergedArchive`]: every
 /// conversation into one `smses.xml`, attachment bytes inside it.
 #[derive(Debug, Clone, Copy, Default)]

@@ -893,17 +893,14 @@ impl ConversationHeader {
 
     /// The document a reader builds from a header and the messages that
     /// followed it, at the current schema version, with its stats computed.
-    pub fn into_document(
-        self,
-        messages: Vec<IrMessage>,
-        packaging_stem_suffix: Option<String>,
-    ) -> ConversationDocument {
+    /// It has no stem suffix: a reader recovers that from the file name.
+    pub fn into_document(self, messages: Vec<IrMessage>) -> ConversationDocument {
         let mut doc = ConversationDocument {
             schema_version: SCHEMA_VERSION,
             export: self.export,
             conversation: self.conversation,
             messages,
-            packaging_stem_suffix,
+            packaging_stem_suffix: None,
         };
         doc.finalize_stats();
         doc

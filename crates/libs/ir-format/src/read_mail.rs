@@ -41,7 +41,7 @@ pub fn read_conversation_eml_dir(dir: &Path) -> Result<ConversationDocument> {
     mail_messages.sort_by(cmp_mail_messages);
 
     let mut doc = document_from_mail_messages(&mail_messages)?;
-    crate::util::recover_stem_suffix(&mut doc, dir.file_name().and_then(|n| n.to_str()));
+    crate::util::recover_stem_suffix(&mut doc, dir.file_name());
     Ok(doc)
 }
 
@@ -57,7 +57,7 @@ pub fn read_conversation_mbox(path: &Path) -> Result<ConversationDocument> {
     }
     mail_messages.sort_by(cmp_mail_messages);
     let mut doc = document_from_mail_messages(&mail_messages)?;
-    crate::util::recover_stem_suffix(&mut doc, path.file_stem().and_then(|n| n.to_str()));
+    crate::util::recover_stem_suffix(&mut doc, path.file_stem());
     Ok(doc)
 }
 

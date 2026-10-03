@@ -22,8 +22,10 @@ pub fn write_export_sentinel(output_dir: &Path) -> Result<()> {
 }
 
 /// Delete previous CSV, JSON, JSON Lines, meta, temps, staged attachments,
-/// and mail archives. A crate that writes a merged archive removes its own
-/// files, since this crate knows no archive by name.
+/// and mail archives. In a folder carrying the sentinel, also delete every
+/// XML file and the partial files beside one (`<name>.xml.<anything>`): a
+/// merged archive writes XML under a name its own crate chooses, so this
+/// crate removes the format rather than one file it knows by name.
 ///
 /// Only directories that contain the sentinel file `.message-crate-export`,
 /// are empty, or already contain recognizable export files are cleaned. This
@@ -73,7 +75,7 @@ pub fn clean_previous_ir_output(output_dir: &Path) -> Result<()> {
         if !path.is_file() {
             continue;
         }
-        if is_export_artifact(name) {
+        if is_export_artifact(name) || (has_sentinel && is_xml_output(name)) {
             fs::remove_file(&path)
                 .with_context(|| format!("remove previous {}", path.display()))?;
         }
@@ -106,6 +108,14 @@ fn is_export_artifact(name: &str) -> bool {
         || name.ends_with(".json.tmp")
         || name.ends_with(".jsonl")
         || name.ends_with(".jsonl.tmp")
+}
+
+/// Returns true for an XML file or a partial file a writer leaves beside one.
+/// XML does not count as evidence that a folder holds an export, since a
+/// person's own backups are XML files too, so only a marked folder loses them.
+fn is_xml_output(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower.ends_with(".xml") || lower.contains(".xml.")
 }
 
 #[cfg(test)]
@@ -177,6 +187,42 @@ mod tests {
         clean_previous_ir_output(tmp.path()).unwrap();
 
         assert_eq!(names(tmp.path()), [EXPORT_SENTINEL, "notes.txt"]);
+    }
+
+    /// Every exporter cleans through here, so an XML archive an earlier run
+    /// wrote, and what a stopped run left beside it, goes whatever the next
+    /// run writes.
+    #[test]
+    fn removes_xml_and_its_partial_files_from_a_marked_folder() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        write_export_sentinel(dir).unwrap();
+        for name in [
+            "archive.xml",
+            "archive.xml.tmp",
+            "archive.xml.body",
+            "notes.txt",
+        ] {
+            fs::write(dir.join(name), "x").unwrap();
+        }
+
+        clean_previous_ir_output(dir).unwrap();
+
+        assert_eq!(names(dir), [EXPORT_SENTINEL, "notes.txt"]);
+    }
+
+    /// XML alone does not mark a folder as an export, and an unmarked folder
+    /// keeps its XML files, since they may be a person's own backups.
+    #[test]
+    fn keeps_xml_in_an_unmarked_folder() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(tmp.path().join("backup.xml"), "mine").unwrap();
+        let err = clean_previous_ir_output(tmp.path()).unwrap_err();
+        assert!(err.to_string().contains("Refusing to clean"), "{err}");
+
+        fs::write(tmp.path().join("a.jsonl"), "x").unwrap();
+        clean_previous_ir_output(tmp.path()).unwrap();
+        assert_eq!(names(tmp.path()), [EXPORT_SENTINEL, "backup.xml"]);
     }
 
     #[test]

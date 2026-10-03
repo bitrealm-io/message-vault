@@ -20,10 +20,6 @@ pub(super) fn collect_eml_paths<P: AsRef<Path>>(
     inputs: &[P],
     cancel: Option<&CancelFlag>,
 ) -> Result<Vec<PathBuf>> {
-    if inputs.is_empty() {
-        bail!("SMS Backup+ needs a backup folder");
-    }
-
     let mut paths = Vec::new();
     for input in inputs {
         message_crate_core::check_cancel(cancel)?;

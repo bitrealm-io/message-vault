@@ -56,8 +56,8 @@ pub fn read_conversation_csv(path: &Path) -> Result<ConversationDocument> {
         );
     }
 
-    let mut doc = header.into_document(messages, None);
-    crate::util::recover_stem_suffix(&mut doc, path.file_stem().and_then(|n| n.to_str()));
+    let mut doc = header.into_document(messages);
+    crate::util::recover_stem_suffix(&mut doc, path.file_stem());
     Ok(doc)
 }
 

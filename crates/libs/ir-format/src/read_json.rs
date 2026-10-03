@@ -23,7 +23,7 @@ pub fn read_conversation_json(path: &Path) -> Result<ConversationDocument> {
     check_schema_version_in_json(&raw).with_context(|| format!("read {}", path.display()))?;
     let mut doc: ConversationDocument = serde_json::from_str(&raw)
         .with_context(|| format!("parse ConversationDocument {}", path.display()))?;
-    crate::util::recover_stem_suffix(&mut doc, path.file_stem().and_then(|n| n.to_str()));
+    crate::util::recover_stem_suffix(&mut doc, path.file_stem());
     doc.finalize_stats();
     Ok(doc)
 }
@@ -64,7 +64,7 @@ pub fn read_conversation_jsonl(path: &Path) -> Result<ConversationDocument> {
         bail!("JSONL has no message lines: {}", path.display());
     }
 
-    let mut doc = header.into_document(messages, None);
-    crate::util::recover_stem_suffix(&mut doc, path.file_stem().and_then(|n| n.to_str()));
+    let mut doc = header.into_document(messages);
+    crate::util::recover_stem_suffix(&mut doc, path.file_stem());
     Ok(doc)
 }

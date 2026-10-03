@@ -943,3 +943,42 @@ fn convert_removes_the_backup_an_earlier_conversion_wrote() {
         );
     }
 }
+
+/// Two groups with one title are written with a digest suffix each, so
+/// neither replaces the other. Convert reads the suffix back from each name
+/// and writes both files under the names they had.
+#[test]
+fn convert_keeps_the_names_two_groups_with_one_title_were_given() {
+    let source = tempfile::tempdir().unwrap();
+    clean_previous_ir_output(source.path()).unwrap();
+    let mut sink =
+        FormatSink::open(source.path(), OutputFormat::Json, ExportTransforms::none()).unwrap();
+    for chat in ["chat-one", "chat-two"] {
+        let mut doc = message_ir::testutil::sample_document("hello group");
+        doc.conversation.conversation_type = message_ir::IrConversationType::Group;
+        doc.conversation.group_title = Some("Family".into());
+        doc.conversation.chat_identifier = chat.into();
+        sink.write_document(doc).unwrap();
+    }
+    sink.finish(&mut ExportReport::default()).unwrap();
+    let json_names = |dir: &Path| {
+        let mut names: Vec<String> = fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .filter(|name| name.ends_with(".json") && !name.ends_with(".meta.json"))
+            .collect();
+        names.sort();
+        names
+    };
+    let written = json_names(source.path());
+    assert_eq!(written.len(), 2, "{written:?}");
+
+    let destination = tempfile::tempdir().unwrap();
+    convert_export(
+        source.path(),
+        &config(source.path(), destination.path(), OutputFormat::Json),
+    )
+    .unwrap();
+
+    assert_eq!(json_names(destination.path()), written);
+}

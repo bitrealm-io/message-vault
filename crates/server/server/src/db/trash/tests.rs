@@ -408,10 +408,7 @@ async fn delete_trashed_conversation_removes_it_and_its_messages() {
         .await
         .unwrap();
 
-    assert_eq!(
-        outcome,
-        DeleteOutcome::Deleted(UnreferencedFiles::default())
-    );
+    assert_eq!(outcome, DeleteOutcome::Deleted(Vec::new()));
     assert_eq!(
         count(
             &mut conn,
@@ -616,20 +613,17 @@ async fn delete_reports_only_the_files_no_remaining_message_uses() {
 
     assert_eq!(
         outcome,
-        DeleteOutcome::Deleted(UnreferencedFiles {
-            files: vec![
-                OrphanedFile::Original {
-                    source: "imessage".into(),
-                    sha256: only_here.clone(),
-                    assets_path: format!("bb/{only_here}.jpg"),
-                },
-                OrphanedFile::Derived {
-                    source: "imessage".into(),
-                    assets_path: format!("cc/{derived}.jpg"),
-                },
-            ],
-            import_running: false,
-        }),
+        DeleteOutcome::Deleted(vec![
+            OrphanedFile::Original {
+                source: "imessage".into(),
+                sha256: only_here.clone(),
+                assets_path: format!("bb/{only_here}.jpg"),
+            },
+            OrphanedFile::Derived {
+                source: "imessage".into(),
+                assets_path: format!("cc/{derived}.jpg"),
+            },
+        ]),
         "the shared file and the staged file must not be reported"
     );
     assert_eq!(
@@ -718,10 +712,7 @@ async fn delete_trashed_contact_makes_it_unknown_and_leaves_its_conversations() 
         .await
         .unwrap();
 
-    assert_eq!(
-        outcome,
-        DeleteOutcome::Deleted(UnreferencedFiles::default())
-    );
+    assert_eq!(outcome, DeleteOutcome::Deleted(Vec::new()));
     assert_eq!(
         contact_row(&mut conn, contact_id).await,
         Some((String::new(), "import".into())),
@@ -814,7 +805,7 @@ async fn empty_trash_takes_everything_trashed_and_only_that() {
     let orphaned = empty_trash(&mut conn, ACCOUNT_A).await.unwrap();
 
     assert_eq!(
-        orphaned.files,
+        orphaned,
         vec![OrphanedFile::Original {
             source: "imessage".into(),
             sha256: sha('a'),
@@ -861,10 +852,7 @@ async fn empty_trash_on_an_empty_trash_is_a_noop() {
     let mut conn = fixture.conn().await;
     let id = insert_conversation_on(&mut conn, ACCOUNT_A, "+15550001").await;
 
-    assert_eq!(
-        empty_trash(&mut conn, ACCOUNT_A).await.unwrap(),
-        UnreferencedFiles::default()
-    );
+    assert_eq!(empty_trash(&mut conn, ACCOUNT_A).await.unwrap(), Vec::new());
     assert_eq!(
         count(
             &mut conn,
@@ -953,10 +941,7 @@ async fn deleting_the_second_contact_leaves_the_first_as_it_was() {
         .await
         .unwrap();
 
-    assert_eq!(
-        outcome,
-        DeleteOutcome::Deleted(UnreferencedFiles::default())
-    );
+    assert_eq!(outcome, DeleteOutcome::Deleted(Vec::new()));
     assert_eq!(
         contact_row(&mut conn, second).await,
         Some((String::new(), "import".into()))

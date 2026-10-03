@@ -29,17 +29,17 @@ fn removing_a_file_that_is_already_gone_is_not_an_error() {
     assert!(!present.exists());
 }
 
-/// A fingerprint too short to name a shard folder has no sidecar, rather
-/// than a panic on the slice.
+/// A stored value that is not a fingerprint has no sidecar, rather than a
+/// panic on the slice or a path outside the shard.
 #[test]
-fn a_sidecar_needs_a_fingerprint_that_names_a_shard() {
+fn a_stored_sidecar_needs_a_fingerprint() {
     let dir = Path::new("/srv/assets");
     assert_eq!(
-        sidecar_path(dir, SHA),
+        stored_sidecar_path(dir, SHA),
         Some(dir.join("ab").join(format!(".{SHA}.mime")))
     );
     for bad in ["", "a", "é", "../x"] {
-        assert_eq!(sidecar_path(dir, bad), None, "{bad:?}");
+        assert_eq!(stored_sidecar_path(dir, bad), None, "{bad:?}");
     }
 }
 
@@ -106,6 +106,29 @@ pub(crate) fn make_abandoned(path: &Path) {
         .unwrap()
         .set_modified(two_days_ago)
         .unwrap();
+}
+
+/// `process-assets` writes a Preview before the row that names it. The
+/// sweep leaves an unnamed Preview younger than the grace period alone and
+/// removes an older one.
+#[test]
+fn the_sweep_leaves_a_fresh_unnamed_preview_for_its_row() {
+    let dir = tempfile::tempdir().unwrap();
+    let shard = dir.path().join("ab");
+    fs::create_dir_all(&shard).unwrap();
+    let fresh = shard.join(format!("{SHA}.jpg"));
+    let old_sha = format!("ab{}", "1".repeat(62));
+    let old = shard.join(format!("{old_sha}.jpg"));
+    for file in [&fresh, &old] {
+        fs::write(file, b"preview").unwrap();
+    }
+    make_abandoned(&old);
+
+    let removed = sweep_store_dir(1, dir.path(), &HashSet::new(), PREVIEW_GRACE_SECS);
+
+    assert_eq!(removed, 1);
+    assert!(fresh.is_file(), "a Preview its row may not name yet stays");
+    assert!(!old.exists(), "an old unnamed Preview goes");
 }
 
 /// An assets folder whose `.incoming/` holds one of each thing the sweep

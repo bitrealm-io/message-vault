@@ -309,18 +309,17 @@ pub(crate) async fn delete_conversation(
     FullDeleteAccess(auth): FullDeleteAccess,
     AxumPath(conversation_id): AxumPath<i64>,
 ) -> Result<StatusCode, ApiError> {
-    let outcome = {
-        let mut conn = state.db.acquire().await?;
-        delete_trashed(
-            &mut conn,
-            auth.account_id,
-            Trashable::Conversation(conversation_id),
-        )
-        .await?
-    };
+    let mut conn = state.db.acquire().await?;
+    let outcome = delete_trashed(
+        &mut conn,
+        auth.account_id,
+        Trashable::Conversation(conversation_id),
+    )
+    .await?;
     match outcome {
         DeleteOutcome::Deleted(unreferenced) => {
             crate::asset_store::remove_unreferenced(
+                &mut conn,
                 Arc::clone(&state.cfg),
                 auth.account_id,
                 unreferenced,

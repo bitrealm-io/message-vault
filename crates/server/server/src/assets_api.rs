@@ -90,7 +90,7 @@ impl Sha256 {
     }
 
     /// The first two hex digits: the folder the file is stored in.
-    fn shard(&self) -> &str {
+    pub(crate) fn shard(&self) -> &str {
         &self.0[..2]
     }
 }
@@ -413,13 +413,13 @@ pub(crate) fn hash_file(path: &Path) -> Result<String> {
 }
 
 /// Path of the hidden `.<sha>.mime` sidecar that records a blob's MIME type, since the blob's name carries none.
-fn mime_metadata_path(assets_root: &Path, sha: &Sha256) -> Option<PathBuf> {
-    crate::asset_store::sidecar_path(assets_root, sha.as_str())
+fn mime_metadata_path(assets_root: &Path, sha: &Sha256) -> PathBuf {
+    crate::asset_store::sidecar_path(assets_root, sha)
 }
 
 /// Read the MIME sidecar for `sha`, if present and non-empty.
 fn read_mime_metadata(assets_root: &Path, sha: &Sha256) -> Option<String> {
-    let file = open_nofollow_read(&mime_metadata_path(assets_root, sha)?).ok()?;
+    let file = open_nofollow_read(&mime_metadata_path(assets_root, sha)).ok()?;
     let mut mime = String::new();
     file.take(1024).read_to_string(&mut mime).ok()?;
     let mime = mime.trim();
@@ -436,8 +436,7 @@ fn store_mime_metadata(assets_root: &Path, sha: &Sha256, mime: &str) -> Result<(
     if mime.is_empty() {
         return Ok(());
     }
-    let path = mime_metadata_path(assets_root, sha)
-        .ok_or_else(|| anyhow::anyhow!("invalid sha256 {sha:?} has no MIME sidecar"))?;
+    let path = mime_metadata_path(assets_root, sha);
     if read_mime_metadata(assets_root, sha).is_some() {
         return Ok(());
     }

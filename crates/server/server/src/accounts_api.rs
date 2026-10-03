@@ -1093,9 +1093,9 @@ pub async fn delete_account_messages(
     let mut conn = state.db.acquire().await?;
     let stats = account_profile::delete_all_messages_for_account(&mut conn, target).await?;
     crate::asset_store::remove_all_attachment_files(
+        &mut conn,
         std::sync::Arc::clone(&state.cfg),
         target,
-        stats.import_running,
     )
     .await;
 

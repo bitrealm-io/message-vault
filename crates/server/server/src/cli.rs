@@ -408,6 +408,9 @@ async fn run_imports_discard(args: ImportsDiscardArgs) -> Result<()> {
     let account = opened.account_id(&args.account).await?;
     let mut conn = opened.conn().await?;
     let discarded = crate::db::imports::discard_running_import(&mut conn, account).await?;
+    if discarded.is_some() {
+        crate::asset_store::sweep_after_run(&mut conn, &opened.cfg.paths, account).await;
+    }
     drop(conn);
     opened.close().await;
     print!(

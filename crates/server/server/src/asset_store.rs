@@ -1,4 +1,4 @@
-//! The attachment files on disk, and the only code that removes one.
+//! The Assets and Previews on disk, and the code that removes them.
 //!
 //! An account's files sit under `data_dir/<account>/<source>/`:
 //!
@@ -10,18 +10,34 @@
 //!   files and multipart folders `{sha256}/{upload_id}/`.
 //! - `<assets_converted_dir>/<aa>/<sha256><ext>` is a Preview.
 //!
-//! A file is unused when no attachment row, promoted or in staging, names
+//! An Asset is unused when no attachment row, promoted or in staging, names
 //! it. That test alone is not enough while the account has a running Import
 //! Run: `HEAD /v1/assets/{sha256}` may have told the run a file exists, or
 //! the run may have uploaded it, and the batch that names it has not arrived
-//! yet. So while a run is running, an original stays on disk, and
-//! [`sweep_unreferenced`] removes it when the run ends. A Preview is never
-//! kept for a run, because an import never names one: the server makes
-//! Previews from originals after the fact.
+//! yet. So an original is removed only while this connection holds the
+//! database write lock and no run is running. Starting a run writes its row,
+//! so no run can start between that check and the last removal. While a run
+//! is running the original stays, and [`sweep_unreferenced`] removes it when
+//! the run ends. A Preview is never kept for a run, because an import never
+//! names one: the server makes Previews from originals after the fact.
 //!
 //! A removal that fails is logged and the rest go on. The database rows are
 //! the record, so a request answers for what the database did, and a file
 //! left behind is the sweep's to try again.
+//!
+//! Each remover has its own case:
+//!
+//! - [`remove_unreferenced`]: the Assets one delete left unnamed.
+//! - [`remove_all_attachment_files`]: every Asset of an account whose
+//!   messages were all deleted.
+//! - [`remove_account_dir`]: everything of an account whose row is gone. No
+//!   run can belong to a missing account, so it needs no run check.
+//! - [`sweep_unreferenced`]: every unnamed Asset of an account, when a run
+//!   ends.
+//! - [`sweep_incoming`]: abandoned upload temps, by age.
+//!
+//! Upload and `process-assets` still remove their own temporary and
+//! replaced files; those are never an Asset a row names.
 
 use std::collections::HashSet;
 use std::io;
@@ -30,27 +46,34 @@ use std::sync::Arc;
 use std::time::SystemTime;
 
 use anyhow::Context;
-use sqlx::{Connection, SqliteConnection};
+use sqlx::SqliteConnection;
 
+use crate::assets_api::Sha256;
 use crate::config::{Config, PathsConfig};
-use crate::db::engine::BEGIN_IMMEDIATE_SQL;
-use crate::db::trash::{OrphanedFile, UnreferencedFiles};
+use crate::db::imports::has_running_import;
+use crate::db::trash::OrphanedFile;
+use crate::db::write_tx::begin_write;
 
 /// The folder that holds everything on disk for `account_id`.
 pub(crate) fn account_dir(paths: &PathsConfig, account_id: i64) -> PathBuf {
     paths.data_dir.join(account_id.to_string())
 }
 
-/// The MIME sidecar of the original `sha256` under `originals_dir`, or
-/// `None` when the fingerprint is too short or too odd to name a shard
-/// folder. The server only stores 64-hex fingerprints, so `None` means a
-/// damaged row, which has no sidecar to remove.
-pub(crate) fn sidecar_path(originals_dir: &Path, sha256: &str) -> Option<PathBuf> {
-    let shard = sha256.get(..2)?;
-    if !shard.chars().all(|c| c.is_ascii_alphanumeric()) {
-        return None;
-    }
-    Some(originals_dir.join(shard).join(format!(".{sha256}.mime")))
+/// The MIME sidecar of the original `sha256` under `originals_dir`.
+pub(crate) fn sidecar_path(originals_dir: &Path, sha256: &Sha256) -> PathBuf {
+    originals_dir
+        .join(sha256.shard())
+        .join(format!(".{sha256}.mime"))
+}
+
+/// The MIME sidecar of an original whose fingerprint was read from an
+/// attachment row, or `None` when the stored value is not a fingerprint.
+/// The server only stores 64-hex fingerprints, so `None` means a damaged
+/// row, which has no sidecar to remove.
+pub(crate) fn stored_sidecar_path(originals_dir: &Path, sha256: &str) -> Option<PathBuf> {
+    Sha256::parse(sha256)
+        .ok()
+        .map(|sha| sidecar_path(originals_dir, &sha))
 }
 
 /// `dir/relative`, or `None` for a stored path that is empty, absolute, or
@@ -70,7 +93,17 @@ pub(crate) fn join_under(dir: &Path, relative: &str) -> Option<PathBuf> {
 ///
 /// Returns the error of a file that exists and cannot be removed.
 pub(crate) fn remove_file(path: &Path) -> io::Result<()> {
-    match std::fs::remove_file(path) {
+    gone_is_ok(std::fs::remove_file(path))
+}
+
+/// Remove the folder tree at `path`; a missing folder is not an error.
+fn remove_tree(path: &Path) -> io::Result<()> {
+    gone_is_ok(std::fs::remove_dir_all(path))
+}
+
+/// `result`, with a path that was not there counted as removed.
+fn gone_is_ok(result: io::Result<()>) -> io::Result<()> {
+    match result {
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
         other => other,
     }
@@ -86,57 +119,63 @@ fn remove_logged(account_id: i64, path: &Path) -> bool {
                 account_id,
                 path = %path.display(),
                 %error,
-                "an attachment file could not be removed"
+                "an Asset could not be removed"
             );
             false
         }
     }
 }
 
-/// Remove the files a delete reported as unreferenced: each original with
-/// its MIME sidecar, and each Preview. While the account had a running
-/// Import Run when the delete committed, the originals stay for
-/// [`sweep_unreferenced`]. Runs on the blocking pool, and never fails: a
-/// file that cannot be removed is logged and the others still go.
+/// Remove the files a delete reported as unreferenced: each Preview, and
+/// each original with its MIME sidecar unless the account has a running
+/// Import Run (see the module notes). Call it after the delete committed.
+/// Never fails: a file that cannot be removed, or a lock that cannot be
+/// taken, is logged and the originals stay for [`sweep_unreferenced`].
 pub(crate) async fn remove_unreferenced(
+    conn: &mut SqliteConnection,
     cfg: Arc<Config>,
     account_id: i64,
-    unreferenced: UnreferencedFiles,
+    files: Vec<OrphanedFile>,
 ) {
-    if unreferenced.files.is_empty() {
+    let (originals, previews): (Vec<_>, Vec<_>) = files
+        .into_iter()
+        .partition(|file| matches!(file, OrphanedFile::Original { .. }));
+    if !previews.is_empty() {
+        let paths: Vec<PathBuf> = previews
+            .iter()
+            .flat_map(|file| paths_of(&cfg.paths, account_id, file))
+            .collect();
+        run_blocking_logged(account_id, move || remove_each(account_id, &paths)).await;
+    }
+    if originals.is_empty() {
         return;
     }
-    let removed = tokio::task::spawn_blocking(move || {
-        for file in &unreferenced.files {
-            for path in paths_of(&cfg.paths, account_id, file, unreferenced.import_running) {
-                remove_logged(account_id, &path);
-            }
-        }
-    })
-    .await;
-    if let Err(error) = removed {
-        tracing::warn!(account_id, %error, "removing attachment files stopped");
+    let paths: Vec<PathBuf> = originals
+        .iter()
+        .flat_map(|file| paths_of(&cfg.paths, account_id, file))
+        .collect();
+    unless_import_running(conn, account_id, move || remove_each(account_id, &paths)).await;
+}
+
+/// Remove each of `paths`, logging any that cannot be removed.
+fn remove_each(account_id: i64, paths: &[PathBuf]) {
+    for path in paths {
+        remove_logged(account_id, path);
     }
 }
 
-/// The paths `file` occupies on disk that may go now. An original is kept
-/// while `import_running`. A stored path that would leave its folder is
-/// logged and passed over.
-fn paths_of(
-    paths: &PathsConfig,
-    account_id: i64,
-    file: &OrphanedFile,
-    import_running: bool,
-) -> Vec<PathBuf> {
+/// The paths `file` occupies on disk: the file and, for an original, its
+/// MIME sidecar. A stored path that would leave its folder is logged and
+/// passed over.
+fn paths_of(paths: &PathsConfig, account_id: i64, file: &OrphanedFile) -> Vec<PathBuf> {
     let (dir, assets_path, sidecar) = match file {
-        OrphanedFile::Original { .. } if import_running => return Vec::new(),
         OrphanedFile::Original {
             source,
             sha256,
             assets_path,
         } => {
             let dir = paths.assets_dir_for_account(account_id, source);
-            let sidecar = sidecar_path(&dir, sha256);
+            let sidecar = stored_sidecar_path(&dir, sha256);
             (dir, assets_path, sidecar)
         }
         OrphanedFile::Derived {
@@ -159,38 +198,75 @@ fn paths_of(
     std::iter::once(path).chain(sidecar).collect()
 }
 
-/// Remove the files of every attachment of `account_id` after its messages
-/// were deleted: every Preview, and every original unless the account had a
-/// running Import Run when the delete committed. A folder that cannot be
-/// removed is logged and the others still go.
+/// Remove every Asset and Preview of `account_id` after its messages were
+/// deleted: every Preview folder, and every originals folder unless the
+/// account has a running Import Run (see the module notes). A folder that
+/// cannot be removed is logged and the others still go.
 pub(crate) async fn remove_all_attachment_files(
+    conn: &mut SqliteConnection,
     cfg: Arc<Config>,
     account_id: i64,
-    import_running: bool,
 ) {
-    let removed = tokio::task::spawn_blocking(move || {
-        let paths = &cfg.paths;
-        let mut kinds = vec![paths.assets_converted_dir.as_str()];
-        if !import_running {
-            kinds.push(paths.assets_dir.as_str());
-        }
-        for source in source_dirs(account_id, &account_dir(paths, account_id)) {
-            for kind in &kinds {
-                let dir = source.join(kind);
+    let dirs_of = |kind: String| {
+        let cfg = Arc::clone(&cfg);
+        move || {
+            let paths = &cfg.paths;
+            for source in source_dirs(account_id, &account_dir(paths, account_id)) {
+                let dir = source.join(&kind);
                 if let Err(error) = remove_tree(&dir) {
                     tracing::warn!(
                         account_id,
                         path = %dir.display(),
                         %error,
-                        "an attachment folder could not be removed"
+                        "a folder of Assets could not be removed"
                     );
                 }
             }
         }
-    })
+    };
+    run_blocking_logged(account_id, dirs_of(cfg.paths.assets_converted_dir.clone())).await;
+    unless_import_running(conn, account_id, dirs_of(cfg.paths.assets_dir.clone())).await;
+}
+
+/// Run `remove` on the blocking pool while `conn` holds the database write
+/// lock, unless `account_id` has a running Import Run. Starting a run
+/// writes its row, so no run can start until `remove` has finished. Every
+/// other writer waits for `remove` too, which is the price of that
+/// guarantee. A run that is running, a lock that cannot be taken, or a
+/// stopped task leaves the originals for [`sweep_unreferenced`], and the
+/// last two are logged.
+async fn unless_import_running<F>(conn: &mut SqliteConnection, account_id: i64, remove: F)
+where
+    F: FnOnce() + Send + 'static,
+{
+    let result: anyhow::Result<()> = async {
+        let mut tx = begin_write(conn).await?;
+        if has_running_import(&mut tx, account_id).await? {
+            return Ok(());
+        }
+        tokio::task::spawn_blocking(remove)
+            .await
+            .context("removing Assets stopped")?;
+        tx.commit().await?;
+        Ok(())
+    }
     .await;
-    if let Err(error) = removed {
-        tracing::warn!(account_id, %error, "removing attachment files stopped");
+    if let Err(error) = result {
+        tracing::warn!(
+            account_id,
+            error = format!("{error:#}"),
+            "Assets were not removed; the sweep at the next Import Run's end will try again"
+        );
+    }
+}
+
+/// Run `work` on the blocking pool, and log it if the task stops.
+async fn run_blocking_logged<F>(account_id: i64, work: F)
+where
+    F: FnOnce() + Send + 'static,
+{
+    if let Err(error) = tokio::task::spawn_blocking(work).await {
+        tracing::warn!(account_id, %error, "removing Assets stopped");
     }
 }
 
@@ -202,14 +278,6 @@ pub(crate) async fn remove_all_attachment_files(
 /// Returns the error of a folder that exists and cannot be removed.
 pub(crate) fn remove_account_dir(paths: &PathsConfig, account_id: i64) -> io::Result<()> {
     remove_tree(&account_dir(paths, account_id))
-}
-
-/// Remove the folder tree at `path`; a missing folder is not an error.
-fn remove_tree(path: &Path) -> io::Result<()> {
-    match std::fs::remove_dir_all(path) {
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
-        other => other,
-    }
 }
 
 /// The source folders under `account_root`. A folder that cannot be read is
@@ -242,7 +310,14 @@ fn source_dirs(account_id: i64, account_root: &Path) -> Vec<PathBuf> {
 ///
 /// The check and the removal happen inside one write transaction, so no run
 /// can start and no batch can name a file between them. The transaction
-/// writes nothing.
+/// writes nothing, but it holds the database write lock for the whole walk
+/// of the account's store, so every writer on the server waits for the
+/// walk. The walk reads folders and removes files and nothing else, so it
+/// is short next to an import.
+///
+/// A Preview written in the last [`PREVIEW_GRACE_SECS`] is left alone:
+/// `process-assets` writes a Preview before the row that names it, and a
+/// sweep between the two would remove it.
 ///
 /// A file is named when its fingerprint, the part of its name before the
 /// first dot, is the `sha256` or `derived_sha256` of an attachment of the
@@ -259,8 +334,8 @@ pub(crate) async fn sweep_unreferenced(
     paths: &PathsConfig,
     account_id: i64,
 ) -> anyhow::Result<u64> {
-    let mut tx = conn.begin_with(BEGIN_IMMEDIATE_SQL).await?;
-    if crate::db::imports::has_running_import(&mut tx, account_id).await? {
+    let mut tx = begin_write(conn).await?;
+    if has_running_import(&mut tx, account_id).await? {
         return Ok(0);
     }
     let named = named_fingerprints(&mut tx, account_id).await?;
@@ -268,14 +343,18 @@ pub(crate) async fn sweep_unreferenced(
     let removed = tokio::task::spawn_blocking(move || {
         let mut removed = 0u64;
         for source in source_dirs(account_id, &account_dir(&paths, account_id)) {
-            for kind in [&paths.assets_dir, &paths.assets_converted_dir] {
-                removed += sweep_store_dir(account_id, &source.join(kind), &named);
-            }
+            removed += sweep_store_dir(account_id, &source.join(&paths.assets_dir), &named, 0);
+            removed += sweep_store_dir(
+                account_id,
+                &source.join(&paths.assets_converted_dir),
+                &named,
+                PREVIEW_GRACE_SECS,
+            );
         }
         removed
     })
     .await
-    .context("sweep of unreferenced attachment files")?;
+    .context("sweep of unreferenced Assets")?;
     tx.commit().await?;
     Ok(removed)
 }
@@ -292,19 +371,23 @@ pub(crate) async fn sweep_after_run(
         tracing::warn!(
             account_id,
             error = format!("{error:#}"),
-            "unreferenced attachment files could not be swept after an Import Run"
+            "unreferenced Assets could not be swept after an Import Run"
         );
     }
 }
 
-/// What one attachment row says about the files it names: `sha256`,
-/// `assets_path`, `derived_sha256`, `derived_assets_path`.
-type NamingRow = (
-    Option<String>,
-    Option<String>,
-    Option<String>,
-    Option<String>,
-);
+/// Age under which the sweep leaves a Preview alone, because
+/// `process-assets` may not have written the row that names it yet.
+pub(crate) const PREVIEW_GRACE_SECS: u64 = 60 * 60;
+
+/// What one attachment row says about the files it names.
+#[derive(sqlx::FromRow)]
+struct NamingRow {
+    sha256: Option<String>,
+    assets_path: Option<String>,
+    derived_sha256: Option<String>,
+    derived_assets_path: Option<String>,
+}
 
 /// Every fingerprint an attachment of `account_id` names, promoted or in
 /// staging, lowercased.
@@ -327,10 +410,14 @@ async fn named_fingerprints(
     .fetch_all(&mut *conn)
     .await?;
     let mut named = HashSet::new();
-    for (sha, path, derived_sha, derived_path) in rows {
-        named.extend(sha.into_iter().map(|s| s.to_ascii_lowercase()));
-        named.extend(derived_sha.into_iter().map(|s| s.to_ascii_lowercase()));
-        for path in [path, derived_path].into_iter().flatten() {
+    for row in rows {
+        for sha in [row.sha256, row.derived_sha256].into_iter().flatten() {
+            named.insert(sha.to_ascii_lowercase());
+        }
+        for path in [row.assets_path, row.derived_assets_path]
+            .into_iter()
+            .flatten()
+        {
             if let Some(fingerprint) = Path::new(&path)
                 .file_name()
                 .and_then(|n| n.to_str())
@@ -356,9 +443,16 @@ fn fingerprint_of(name: &str) -> Option<String> {
 }
 
 /// Remove each file in the shard folders of `store_dir` whose fingerprint
-/// `named` lacks, and return how many went. Folders starting with a dot,
-/// `.incoming/` among them, are not shards and are left alone.
-fn sweep_store_dir(account_id: i64, store_dir: &Path, named: &HashSet<String>) -> u64 {
+/// `named` lacks and that is at least `grace_secs` old, and return how many
+/// went. Folders starting with a dot, `.incoming/` among them, are not
+/// shards and are left alone.
+fn sweep_store_dir(
+    account_id: i64,
+    store_dir: &Path,
+    named: &HashSet<String>,
+    grace_secs: u64,
+) -> u64 {
+    let now = SystemTime::now();
     let Ok(shards) = std::fs::read_dir(store_dir) else {
         return 0;
     };
@@ -380,7 +474,14 @@ fn sweep_store_dir(account_id: i64, store_dir: &Path, named: &HashSet<String>) -
             let Some(fingerprint) = name.to_str().and_then(fingerprint_of) else {
                 continue;
             };
-            if !named.contains(&fingerprint) && remove_logged(account_id, &file.path()) {
+            if named.contains(&fingerprint) {
+                continue;
+            }
+            let path = file.path();
+            if grace_secs > 0 && !modified_at_least(&path, now, grace_secs).unwrap_or(false) {
+                continue;
+            }
+            if remove_logged(account_id, &path) {
                 removed += 1;
             }
         }
@@ -459,7 +560,7 @@ fn remove_stale_parts(parts: &[PathBuf], now: SystemTime, dry_run: bool) -> u64 
             removed += 1;
             continue;
         }
-        match std::fs::remove_file(part) {
+        match remove_file(part) {
             Ok(()) => removed += 1,
             Err(err) => log_sweep_error("remove leftover", part, &err),
         }
@@ -507,7 +608,7 @@ fn remove_stale_sessions(sha_dir: &Path, now: SystemTime, dry_run: bool) -> u64 
             removed += 1;
             continue;
         }
-        match std::fs::remove_dir_all(&session) {
+        match remove_tree(&session) {
             Ok(()) => removed += 1,
             Err(err) => log_sweep_error("remove stale upload session", &session, &err),
         }
@@ -538,11 +639,16 @@ fn upload_session_is_stale(session: &Path, now: SystemTime) -> io::Result<bool> 
 
 /// True when `path` was last modified [`STALE_UPLOAD_SECS`] or more before `now`.
 fn modified_before_limit(path: &Path, now: SystemTime) -> io::Result<bool> {
+    modified_at_least(path, now, STALE_UPLOAD_SECS)
+}
+
+/// True when `path` was last modified `secs` or more before `now`.
+fn modified_at_least(path: &Path, now: SystemTime, secs: u64) -> io::Result<bool> {
     let modified = std::fs::metadata(path)?
         .modified()
         .unwrap_or(std::time::UNIX_EPOCH);
     let age = now.duration_since(modified).unwrap_or_default();
-    Ok(age.as_secs() >= STALE_UPLOAD_SECS)
+    Ok(age.as_secs() >= secs)
 }
 
 /// Log a failed step of the `.incoming/` sweep. A path that no longer

@@ -323,6 +323,38 @@ async fn a_file_kept_for_a_running_import_goes_when_the_run_ends() {
     );
 }
 
+/// An Import Run that starts after Empty Trash committed, but before its
+/// files are removed, can be told by `HEAD` that a file exists. The
+/// removal checks for a running run again under the write lock, so that
+/// file stays for the batch that names it.
+#[tokio::test]
+async fn a_run_started_after_the_delete_commits_keeps_its_original() {
+    let (fixture, alice) = fixture_with_account().await;
+    let sha = fake_sha256('e');
+    let doomed = seed(&fixture, &alice, "+15555550182").await;
+    let blob = attach_stored_file(&fixture.state, alice.account_id, doomed, &sha).await;
+    trash(&fixture, &alice, Trashable::Conversation(doomed)).await;
+    let mut conn = fixture.conn().await;
+    let files = crate::db::trash::empty_trash(&mut conn, alice.account_id)
+        .await
+        .unwrap();
+    assert_eq!(files.len(), 1, "the delete reports the file unnamed");
+
+    start_run(&fixture, &alice).await;
+    crate::asset_store::remove_unreferenced(
+        &mut conn,
+        std::sync::Arc::clone(&fixture.state.cfg),
+        alice.account_id,
+        files,
+    )
+    .await;
+
+    assert!(
+        blob.is_file(),
+        "a run that started after the commit may still need the file"
+    );
+}
+
 /// S5-3: a file that cannot be removed is logged, the other files are still
 /// removed, and Empty Trash answers for what the database did.
 #[tokio::test]

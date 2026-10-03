@@ -70,6 +70,13 @@ export const accentLink =
 /** Floating panels / menus (advanced search, selects, date pickers, recent searches). */
 export const popupShadow = "shadow-popup";
 
+/**
+ * The keyboard focus ring of an element that takes DOM focus itself, such as
+ * a button or a list row (`web/STYLE_GUIDE.md`, "Focus").
+ */
+export const focusRing =
+  "outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1";
+
 /** A menu item without its text colour. The focused one (arrow keys or hover) takes the hover background. */
 export const menuItemClass =
   "box-border flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[0.813rem] outline-none data-focused:bg-hover data-disabled:cursor-not-allowed data-disabled:opacity-40";

@@ -6,6 +6,7 @@ import { messageConversationName, messageRowText, messageSenderName } from "../l
 import { useTimeZone } from "../lib/timeZone";
 import { listRowDivider } from "../lib/tw";
 import type { Message } from "../lib/types";
+import { focusRing } from "../lib/uiStyles";
 import PlainButton from "./PlainButton";
 
 /** `text` with each range in bold. */
@@ -51,7 +52,7 @@ export default function MessageSearchRow({
     <PlainButton
       onPress={onClick}
       aria-current={isSelected ? "true" : undefined}
-      className={`box-border flex w-full cursor-pointer flex-col gap-[0.3rem] border-none px-[0.85rem] py-[0.7rem] text-left outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 ${listRowDivider} ${
+      className={`box-border flex w-full cursor-pointer flex-col gap-[0.3rem] border-none px-[0.85rem] py-[0.7rem] text-left ${focusRing} ${listRowDivider} ${
         isSelected ? "bg-hover" : "bg-transparent"
       }`}
     >

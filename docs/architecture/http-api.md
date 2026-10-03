@@ -170,7 +170,9 @@ current one, because that account reaches every other.
   token without the needed scope and a disabled account, answers
   `403 Forbidden`.
 - A `Content-Type` that is absent or unaccepted answers
-  `415 Unsupported Media Type`, on every route that takes a body.
+  `415 Unsupported Media Type`, on every route that takes a body. On a route
+  whose body is optional, a request with no body is read as no body, and a
+  body sent without a `Content-Type` is still `415`.
 - A request that cannot be read is `400 Bad Request` (`malformed-body`): JSON
   that does not parse, or a body of the wrong type. Nothing else is `400`.
 - A request that was read and broke a rule is `422 Unprocessable Entity`,
@@ -303,8 +305,10 @@ the drift the one-shape rule exists to stop.
 ## Content negotiation
 
 `406 Not Acceptable` is answered only when an `Accept` header is present and no
-member of it matches `application/json`, `application/problem+json`, or `*/*`.
-A missing `Accept` is a request for JSON. The check runs on every `/v1` route
+member of it matches `application/json`, `application/problem+json`,
+`application/*`, or `*/*`. `application/*` is a media range that matches
+`application/json` (RFC 9110), so refusing it would refuse a client that asks
+for JSON. A missing `Accept` is a request for JSON. The check runs on every `/v1` route
 but the three that answer bytes: `GET /v1/assets/{sha256}`, which streams the
 asset's own contents, `GET /v1/assets/{sha256}/preview`, which streams its
 Preview, and `POST /v1/contacts/address-book`, which answers the address book

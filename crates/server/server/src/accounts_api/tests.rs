@@ -1307,6 +1307,30 @@ async fn deleting_own_messages_needs_the_delete_permission_and_a_confirmation() 
     );
 }
 
+/// A confirmation sent without a `Content-Type` is a body of no named type,
+/// `415 Unsupported Media Type`, not a missing body: the answer must not say
+/// "confirmation flag must be true" about a body the account did send (#1100).
+#[tokio::test]
+async fn a_delete_body_without_a_content_type_is_a_415() {
+    let (fixture, alice) = fixture_with_account().await;
+    let state = fixture.state.clone();
+    let path = format!("{}/messages", member(alice.account_id));
+    seed_one_message(&state, alice.account_id).await;
+    let server = crate::test_support::serve(&state).await;
+
+    let response = reqwest::Client::new()
+        .delete(format!("{}{path}", server.base()))
+        .bearer_auth(&alice.token)
+        .body(r#"{"confirm": true}"#)
+        .send()
+        .await
+        .unwrap();
+    let status = response.status();
+    let text = response.text().await.unwrap();
+
+    expect_problem(status, &text, ProblemType::UnsupportedMediaType);
+}
+
 /// A batch that names a file uploaded for the running Import Run before the
 /// account's messages were deleted is stored with that file. The delete
 /// leaves the account's files alone while a run is running, because it

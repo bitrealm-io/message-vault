@@ -10,6 +10,13 @@
 export const PAGE_SIZE_FIRST = 40;
 /** Rows in each page loaded as the person scrolls. */
 export const PAGE_SIZE_FILL = 100;
+/**
+ * The largest `offset` a browse list accepts (`docs/architecture/http-api.md`,
+ * "Lists"). A list that pages past it ends there. It mirrors the server's
+ * `MAX_LIST_OFFSET` in `crates/server/server/src/paging.rs`, which the
+ * OpenAPI reference states only in prose, so change the two together.
+ */
+export const MAX_LIST_OFFSET = 50_000;
 /** Contacts catalog first page — large enough for typical accounts in one request. */
 export const PAGE_SIZE_CONTACTS_FIRST = 500;
 /** The largest page any list route answers (`MAX_LIST_LIMIT` in the server's `paging.rs`). */

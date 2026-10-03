@@ -29,6 +29,7 @@ export default function SortMenu<Id extends string>({
   itemNoun,
   ascLabel = "Ascending",
   descLabel = "Descending",
+  unordered = [],
 }: {
   fields: ReadonlyArray<SortField<Id>>;
   sort: Id;
@@ -38,15 +39,19 @@ export default function SortMenu<Id extends string>({
   itemNoun: string;
   ascLabel?: string;
   descLabel?: string;
+  /** Fields that have one order of their own, such as Relevance: no Order choice is shown for them. */
+  unordered?: ReadonlyArray<Id>;
 }) {
   const sortLabel = fields.find((f) => f.id === sort)?.label ?? fields[0]?.label ?? "";
+  const ordered = !unordered.includes(sort);
   const orderLabel = order === "asc" ? ascLabel : descLabel;
+  const sortedBy = ordered ? `${sortLabel}, ${orderLabel}` : sortLabel;
 
   return (
     <MenuTrigger>
       <PlainButton
-        aria-label={`Sort ${itemNoun} by ${sortLabel}, ${orderLabel}`}
-        title={`Sorted by ${sortLabel}, ${orderLabel}`}
+        aria-label={`Sort ${itemNoun} by ${sortedBy}`}
+        title={`Sorted by ${sortedBy}`}
         className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-border bg-elevated text-muted outline-none hover:text-text focus-visible:ring-2 focus-visible:ring-accent aria-expanded:text-text"
       >
         <SortIcon />
@@ -72,21 +77,23 @@ export default function SortMenu<Id extends string>({
               <SortOption key={field.id} id={field.id} label={field.label} />
             ))}
           </MenuSection>
-          <MenuSection
-            selectionMode="single"
-            disallowEmptySelection
-            selectedKeys={[order]}
-            onSelectionChange={(keys) => {
-              if (keys === "all") return;
-              if (keys.has("asc")) onChange({ sort, order: "asc" });
-              else if (keys.has("desc")) onChange({ sort, order: "desc" });
-            }}
-            className="mt-1.5 block border-t border-border pt-1.5"
-          >
-            <Header className={sectionHeaderClass}>Order</Header>
-            <SortOption id="asc" label={ascLabel} />
-            <SortOption id="desc" label={descLabel} />
-          </MenuSection>
+          {ordered ? (
+            <MenuSection
+              selectionMode="single"
+              disallowEmptySelection
+              selectedKeys={[order]}
+              onSelectionChange={(keys) => {
+                if (keys === "all") return;
+                if (keys.has("asc")) onChange({ sort, order: "asc" });
+                else if (keys.has("desc")) onChange({ sort, order: "desc" });
+              }}
+              className="mt-1.5 block border-t border-border pt-1.5"
+            >
+              <Header className={sectionHeaderClass}>Order</Header>
+              <SortOption id="asc" label={ascLabel} />
+              <SortOption id="desc" label={descLabel} />
+            </MenuSection>
+          ) : null}
         </Menu>
       </Popover>
     </MenuTrigger>

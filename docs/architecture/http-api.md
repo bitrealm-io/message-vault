@@ -91,8 +91,9 @@ what it returns, never for the verb that computes it:
 `POST /v1/contacts/address-book`.
 
 A choice between two different lists is a path segment, never a parameter:
-`/v1/search-fields/contacts` and `/v1/search-fields/conversations` are two
-fixed lists, not one list read with `?list=`. Why: a parameter narrows a list;
+`/v1/search-fields/contacts`, `/v1/search-fields/conversations` and
+`/v1/search-fields/messages` are three fixed lists, not one list read with
+`?list=`. Why: a parameter narrows a list;
 choosing which list to read is choosing a resource, and the path does that.
 
 Two levels of nesting. The multipart upload,

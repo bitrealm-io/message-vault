@@ -227,6 +227,11 @@ export function useRoutePagedList<T extends { id: string | number }>(
   opts?: {
     firstPageSize?: number;
     fillPageSize?: number;
+    /**
+     * The largest `offset` the route accepts. The list ends where the next
+     * page would start past it, even when `total` names more rows.
+     */
+    maxOffset?: number;
     /** False holds the list back, as `enabled` does on `useQuery`. */
     enabled?: boolean;
   },
@@ -234,6 +239,7 @@ export function useRoutePagedList<T extends { id: string | number }>(
   const account = useAccountScope();
   const firstPageSize = opts?.firstPageSize ?? PAGE_SIZE_FIRST;
   const fillPageSize = opts?.fillPageSize ?? PAGE_SIZE_FILL;
+  const maxOffset = opts?.maxOffset ?? Number.POSITIVE_INFINITY;
   const queryKey = routeQueryKey(account, key);
   // Once `loadAll` has run for this list, its pages after the first are the
   // largest the server answers, and stay so: a refetch reads as many pages as
@@ -266,7 +272,7 @@ export function useRoutePagedList<T extends { id: string | number }>(
     getNextPageParam: (_lastPage, pages) => {
       const loaded = pages.reduce((sum, page) => sum + page.items.length, 0);
       const total = pages[pages.length - 1]?.total ?? 0;
-      return loaded < total ? loaded : undefined;
+      return loaded < total && loaded <= maxOffset ? loaded : undefined;
     },
   });
 

@@ -138,6 +138,138 @@ pub async fn load_messages(
     .await
 }
 
+/// The keys the Messages list, `GET /v1/messages`, accepts in `sort=`:
+/// [`MessageSort`]'s one key, `date`, and `relevance`. A conversation's own
+/// messages sort by [`MessageSort`] alone: a search can rank its matches, and
+/// a conversation read in order cannot. The two are separate types so that
+/// `relevance` is refused where nothing ranks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MessageListSort {
+    /// The message's timestamp, as [`MessageSort::Date`].
+    Date,
+    /// How well the message matches the query's free-text words, best first:
+    /// the full-text index's `bm25()`.
+    Relevance,
+}
+
+/// The Messages list's keys, as `sort=` spells them.
+pub const MESSAGE_LIST_SORT_KEYS: [(&str, MessageListSort); 2] = [
+    ("date", MessageListSort::Date),
+    ("relevance", MessageListSort::Relevance),
+];
+
+/// Oldest first, as [`DEFAULT_MESSAGE_SORT`] reads a conversation when `sort`
+/// is absent.
+pub const DEFAULT_MESSAGE_LIST_SORT: [SortKey<MessageListSort>; 1] = [SortKey {
+    key: MessageListSort::Date,
+    direction: Direction::Asc,
+}];
+
+/// The join a relevance order ranks by: every message the rank query
+/// matches, with its `bm25()`, keyed by message id. Its one `?` is the rank
+/// query.
+///
+/// `MATERIALIZED` is load-bearing. Without it SQLite (3.53) flattens the
+/// subquery into the outer query and asks the full-text index once per
+/// candidate message, `rowid = m.id AND MATCH ?`, the per-row cost #413
+/// removed from the filter: 22 s instead of 0.1 s for `the` on the medium
+/// Demo Account. Materialized, the index is asked once for the whole search.
+const RANK_JOIN_SQL: &str = "
+     LEFT JOIN (WITH ranked AS MATERIALIZED (
+                  SELECT rowid AS rank_id, bm25(messages_fts) AS rank
+                  FROM messages_fts WHERE messages_fts MATCH ?)
+                SELECT rank_id, rank FROM ranked) r ON r.rank_id = m.id";
+
+/// One page of the messages a search matches, in `order`.
+///
+/// A `relevance` key ranks by `bm25()` over `filter`'s rank query, read once
+/// for the whole search through [`RANK_JOIN_SQL`] rather than per row (#413). A
+/// message the filter matches without the index, by an attachment's file
+/// name, has no rank and comes after every ranked one. Ties, and every
+/// message under a date-only order, fall back to the date, newest first
+/// after a relevance key, and then to `sort_order` and `id`.
+///
+/// # Errors
+///
+/// `validation-failed` when `order` names `relevance` and the filter has no
+/// free-text word to rank by, or names `-relevance`, which has no meaning;
+/// otherwise an error when a statement fails.
+pub async fn load_message_list_page(
+    conn: &mut SqliteConnection,
+    filter: &crate::search::Filter,
+    order: &[SortKey<MessageListSort>],
+    limit: usize,
+    offset: usize,
+) -> Result<Vec<Message>, ApiError> {
+    let (sql, params) = message_list_page_sql(filter, order, limit, offset)?;
+    fetch_message_page(conn, &sql, &params).await
+}
+
+/// The statement [`load_message_list_page`] runs, and its parameters.
+///
+/// # Errors
+///
+/// As [`load_message_list_page`], for a sort it refuses.
+pub(crate) fn message_list_page_sql(
+    filter: &crate::search::Filter,
+    order: &[SortKey<MessageListSort>],
+    limit: usize,
+    offset: usize,
+) -> Result<(String, Vec<SqlParam>), ApiError> {
+    if order
+        .iter()
+        .any(|k| k.key == MessageListSort::Relevance && k.direction == Direction::Desc)
+    {
+        return Err(ApiError::validation(
+            "sort: relevance has one direction, best match first; write `relevance`, not `-relevance`",
+        ));
+    }
+
+    let ranked = order.iter().any(|k| k.key == MessageListSort::Relevance);
+    let mut from_sql = messages_from_sql();
+    let mut params = Vec::new();
+    if ranked {
+        let Some(rank_query) = filter.rank_query() else {
+            return Err(ApiError::validation(
+                "sort: relevance needs a free-text word in q to rank by; sort by date instead",
+            ));
+        };
+        from_sql.push_str(RANK_JOIN_SQL);
+        params.push(SqlParam::Text(rank_query.to_string()));
+    }
+    params.extend_from_slice(filter.params());
+
+    let mut terms = Vec::new();
+    let mut date_direction = None;
+    for key in order {
+        match key.key {
+            // `bm25()` is lower for a better match, so best first is
+            // ascending, and an unranked message (NULL) comes last.
+            MessageListSort::Relevance => terms.push("r.rank IS NULL ASC, r.rank ASC".to_string()),
+            MessageListSort::Date => {
+                let d = key.direction.sql();
+                terms.push(format!("m.timestamp {d}, m.sort_order {d}"));
+                date_direction = Some(key.direction);
+            }
+        }
+    }
+    let tie = date_direction.unwrap_or(Direction::Desc);
+    if date_direction.is_none() {
+        let d = tie.sql();
+        terms.push(format!("m.timestamp {d}, m.sort_order {d}"));
+    }
+    terms.push(format!("m.id {}", tie.sql()));
+
+    Ok(message_page_sql(
+        &from_sql,
+        filter.where_sql(),
+        &params,
+        &terms.join(", "),
+        limit,
+        offset,
+    ))
+}
+
 /// [`load_messages`] with the caller's own `FROM` clause and `ORDER BY`.
 ///
 /// `from_sql` must bind `messages m` and carry [`conversation_join_sql`],
@@ -156,6 +288,20 @@ pub(crate) async fn load_messages_from(
     limit: usize,
     offset: usize,
 ) -> Result<Vec<Message>, ApiError> {
+    let (sql, params) = message_page_sql(from_sql, where_sql, params, order_by, limit, offset);
+    fetch_message_page(conn, &sql, &params).await
+}
+
+/// The statement [`load_messages_from`] runs, and its parameters with
+/// `limit` and `offset` last.
+fn message_page_sql(
+    from_sql: &str,
+    where_sql: &str,
+    params: &[SqlParam],
+    order_by: &str,
+    limit: usize,
+    offset: usize,
+) -> (String, Vec<SqlParam>) {
     let sql = format!(
         "SELECT m.id, m.conversation_id, m.source, m.service, m.guid, m.timestamp,
                 m.sort_order, m.is_from_me, hs.raw AS sender, m.subject, m.body,
@@ -172,8 +318,16 @@ pub(crate) async fn load_messages_from(
     // so it reads as the largest one rather than wrapping to the first page.
     params.push(SqlParam::Int(i64::try_from(limit).unwrap_or(i64::MAX)));
     params.push(SqlParam::Int(i64::try_from(offset).unwrap_or(i64::MAX)));
+    (sql, params)
+}
 
-    let rows = (&mut *conn).fetch_all(bind_all(&sql, &params)).await?;
+/// Runs a statement from [`message_page_sql`] and reads its rows as messages.
+async fn fetch_message_page(
+    conn: &mut SqliteConnection,
+    sql: &str,
+    params: &[SqlParam],
+) -> Result<Vec<Message>, ApiError> {
+    let rows = (&mut *conn).fetch_all(bind_all(sql, params)).await?;
     let page_rows: Vec<RawRow> = rows
         .iter()
         .map(|row| {

@@ -497,13 +497,17 @@ export type MessagesListParams = {
   q?: string;
   offset?: number;
   limit?: number;
-  /** `date` (oldest first, the default) or `-date`. */
-  sort?: "date" | "-date";
+  /**
+   * `date` (oldest first, the default), `-date`, or `relevance`: best match
+   * first, which needs a free-text word in `q` (`hasFreeText`).
+   */
+  sort?: "date" | "-date" | "relevance";
 };
 
 /**
  * One row per message matching `q`, across every conversation the account
- * has. A read route, not Export: the thread's find box uses it with `in:#id`.
+ * has. A read route, not Export: the Messages list on the Messages screen
+ * reads it, and the thread's find box uses it with `in:#id`.
  */
 export function listMessages(
   params: MessagesListParams,
@@ -775,7 +779,7 @@ export function deleteSavedSearch(id: number): Promise<void> {
 // ── Search ──────────────────────────────────────────────────────────────────
 
 /** The lists whose search words the server describes, one path each. */
-export type SearchFieldList = "contacts" | "conversations";
+export type SearchFieldList = "contacts" | "conversations" | "messages";
 
 /** Every word the search language accepts on one list. */
 export function listSearchFields(

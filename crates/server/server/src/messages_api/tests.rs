@@ -585,3 +585,244 @@ async fn date_today_is_the_day_on_the_accounts_clock() {
     bodies.sort_unstable();
     assert_eq!(bodies, ["early today", "right now"], "{page}");
 }
+
+/// Bodies of a page's messages, in the order the page lists them.
+fn texts(page: &serde_json::Value) -> Vec<&str> {
+    page["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m["text"].as_str().unwrap())
+        .collect()
+}
+
+/// One conversation whose best match for `dentist` is its oldest message, so
+/// relevance and date put the matches in different orders.
+async fn seeded_for_relevance() -> (TestFixture, RegisteredAccount) {
+    let (fixture, alice) = fixture_with_account().await;
+    seed_conversation(
+        &fixture.state,
+        &SeedConversation {
+            account_id: alice.account_id,
+            handle: "+15555550100",
+            conversation_type: "individual",
+            group_title: None,
+            source_file: "t.json",
+            messages: &[
+                SeedMessage {
+                    source: "imessage",
+                    timestamp: "2024-01-01T10:00:00Z",
+                    is_from_me: false,
+                    body: "dentist dentist dentist",
+                },
+                SeedMessage {
+                    source: "imessage",
+                    timestamp: "2024-01-02T10:00:00Z",
+                    is_from_me: false,
+                    body: "after work I will call the office of the dentist about next week",
+                },
+                SeedMessage {
+                    source: "imessage",
+                    timestamp: "2024-01-03T10:00:00Z",
+                    is_from_me: true,
+                    body: "the dentist moved it",
+                },
+                SeedMessage {
+                    source: "imessage",
+                    timestamp: "2024-01-04T10:00:00Z",
+                    is_from_me: true,
+                    body: "nothing to see",
+                },
+            ],
+        },
+    )
+    .await;
+    (fixture, alice)
+}
+
+/// `sort=relevance` puts the best match first, by the full-text index's
+/// `bm25()` on the query's free-text words (#313), whatever the dates say.
+#[tokio::test]
+async fn relevance_puts_the_best_match_first() {
+    let (fixture, alice) = seeded_for_relevance().await;
+    let page: serde_json::Value = get_json(
+        &fixture.state,
+        "/v1/messages?q=dentist&sort=relevance",
+        &alice.token,
+    )
+    .await;
+    assert_eq!(page["total"], serde_json::json!(3), "{page}");
+    assert_eq!(
+        texts(&page),
+        [
+            "dentist dentist dentist",
+            "the dentist moved it",
+            "after work I will call the office of the dentist about next week",
+        ]
+    );
+
+    // The same matches by date, newest first, for contrast.
+    let page: serde_json::Value = get_json(
+        &fixture.state,
+        "/v1/messages?q=dentist&sort=-date",
+        &alice.token,
+    )
+    .await;
+    assert_eq!(
+        texts(&page),
+        [
+            "the dentist moved it",
+            "after work I will call the office of the dentist about next week",
+            "dentist dentist dentist",
+        ]
+    );
+}
+
+/// Relevance pages like every other order: the second page carries on where
+/// the first stopped.
+#[tokio::test]
+async fn relevance_pages_by_offset() {
+    let (fixture, alice) = seeded_for_relevance().await;
+    let page: serde_json::Value = get_json(
+        &fixture.state,
+        "/v1/messages?q=dentist&sort=relevance&limit=2&offset=2",
+        &alice.token,
+    )
+    .await;
+    assert_eq!(page["total"], serde_json::json!(3), "{page}");
+    assert_eq!(
+        texts(&page),
+        ["after work I will call the office of the dentist about next week"]
+    );
+}
+
+/// Only the words a match must have rank it: a word behind `-` or `not`
+/// excludes and says nothing about how well a message matches, and a field
+/// word is not free text. With no free-text word left there is nothing to
+/// rank by, so the server refuses rather than answering in another order.
+#[tokio::test]
+async fn relevance_without_free_text_words_is_validation_failed() {
+    let (fixture, alice) = seeded_for_relevance().await;
+    for q in ["", "-dentist", "date%3A2024", "not%20dentist"] {
+        let (status, text) = get_raw(
+            &fixture.state,
+            &format!("/v1/messages?q={q}&sort=relevance"),
+            &alice.token,
+        )
+        .await;
+        expect_problem(status, &text, ProblemType::ValidationFailed);
+        assert!(text.contains("free-text"), "{q}: {text}");
+    }
+}
+
+/// A free-text word inside `or` ranks, and a negated word beside a positive
+/// one leaves the positive one ranking.
+#[tokio::test]
+async fn relevance_ranks_by_the_positive_words_only() {
+    let (fixture, alice) = seeded_for_relevance().await;
+    let page: serde_json::Value = get_json(
+        &fixture.state,
+        "/v1/messages?q=dentist%20-office&sort=relevance",
+        &alice.token,
+    )
+    .await;
+    assert_eq!(
+        texts(&page),
+        ["dentist dentist dentist", "the dentist moved it"],
+        "{page}"
+    );
+    let page: serde_json::Value = get_json(
+        &fixture.state,
+        "/v1/messages?q=moved%20or%20dentist&sort=relevance",
+        &alice.token,
+    )
+    .await;
+    assert_eq!(page["total"], serde_json::json!(3), "{page}");
+    assert_eq!(texts(&page)[0], "the dentist moved it", "{page}");
+}
+
+/// Relevance has one direction, best match first: `-relevance` would list the
+/// unranked messages first and then the worst match, which nobody asks for.
+#[tokio::test]
+async fn descending_relevance_is_validation_failed() {
+    let (fixture, alice) = seeded_for_relevance().await;
+    for sort in ["-relevance", "-relevance,date", "-date,-relevance"] {
+        let (status, text) = get_raw(
+            &fixture.state,
+            &format!("/v1/messages?q=dentist&sort={sort}"),
+            &alice.token,
+        )
+        .await;
+        expect_problem(status, &text, ProblemType::ValidationFailed);
+        assert!(text.contains("-relevance"), "{sort}: {text}");
+    }
+}
+
+/// A relevance search asks the full-text index once for the whole search,
+/// never once per candidate message (#413). SQLite flattens a plain joined
+/// subquery into a per-row `rowid = m.id AND MATCH` lookup, which took 22 s
+/// for `the` on the medium Demo Account, so the plan of the statement the
+/// route runs must materialize the rank.
+#[tokio::test]
+async fn a_relevance_search_reads_the_index_once() {
+    use crate::db::conversation_messages::{MessageListSort, message_list_page_sql};
+    use crate::paging::{Direction, SortKey};
+
+    let (fixture, alice) = fixture_with_account().await;
+    let clock = (
+        chrono_tz::UTC,
+        chrono::NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+    );
+    let mut conn = fixture.state.db.acquire().await.unwrap();
+    for q in ["the", "from:me the -office", "the or dentist"] {
+        let filter = crate::messages_api::message_filter(alice.account_id, q, clock).unwrap();
+        let order = [SortKey {
+            key: MessageListSort::Relevance,
+            direction: Direction::Asc,
+        }];
+        let (sql, params) = message_list_page_sql(&filter, &order, 40, 0).unwrap();
+        let rows = sqlx::Executor::fetch_all(
+            &mut *conn,
+            crate::db::sql::bind_all(&format!("EXPLAIN QUERY PLAN {sql}"), &params),
+        )
+        .await
+        .unwrap();
+        let plan: Vec<String> = rows
+            .iter()
+            .map(|r| sqlx::Row::get::<String, _>(r, 3))
+            .collect();
+        assert!(
+            !plan
+                .iter()
+                .any(|d| d.contains("messages_fts") && d.contains("LEFT-JOIN")),
+            "{q}: per-row full-text lookup: {plan:?}"
+        );
+        assert!(
+            plan.iter().any(|d| d.starts_with("MATERIALIZE")),
+            "{q}: {plan:?}"
+        );
+    }
+}
+
+/// The Messages list names both its keys when a sort is refused.
+#[tokio::test]
+async fn an_unknown_sort_names_date_and_relevance() {
+    let (fixture, alice) = fixture_with_account().await;
+    let (status, text) = get_raw(&fixture.state, "/v1/messages?sort=colour", &alice.token).await;
+    expect_problem(status, &text, ProblemType::ValidationFailed);
+    assert!(text.contains("date, relevance"), "{text}");
+}
+
+/// One conversation's messages take no `relevance`: the conversation panel
+/// reads a conversation in date order and has no query to rank by.
+#[tokio::test]
+async fn a_conversations_messages_take_no_relevance() {
+    let (fixture, alice, direct, _group) = seeded().await;
+    let (status, text) = get_raw(
+        &fixture.state,
+        &format!("/v1/conversations/{direct}/messages?sort=relevance"),
+        &alice.token,
+    )
+    .await;
+    expect_problem(status, &text, ProblemType::ValidationFailed);
+}

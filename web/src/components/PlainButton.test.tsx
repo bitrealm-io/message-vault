@@ -13,6 +13,16 @@ describe("PlainButton", () => {
     expect(screen.getByRole("button", { name: "Sort" })).toHaveAttribute("title", "Sorted by Name");
   });
 
+  it("keeps aria-current, which React Aria's Button drops, and clears it", () => {
+    const { rerender } = render(<PlainButton aria-current="page">Accounts</PlainButton>);
+    expect(screen.getByRole("button", { name: "Accounts" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    rerender(<PlainButton>Accounts</PlainButton>);
+    expect(screen.getByRole("button", { name: "Accounts" })).not.toHaveAttribute("aria-current");
+  });
+
   it("marks keyboard focus, and runs onPress from the keyboard", async () => {
     const user = userEvent.setup();
     const onPress = vi.fn();

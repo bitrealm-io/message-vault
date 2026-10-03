@@ -769,24 +769,29 @@ pub async fn load(
     Ok(counts)
 }
 
-/// The address book `csv_text` with each new contact it lists given the id of
-/// the Unknown that holds one of its identities, as a person who exported the
-/// address book after an import and typed the names onto the Unknowns' rows
-/// would write it. Loaded back, the file names those Unknowns in place, where
-/// a new contact would take their identities and leave them to be deleted.
+/// The address book `csv_text` rewritten so that each new contact it lists
+/// carries the id of the Unknown that holds one of its identities, as a
+/// person who exported the address book after an import and typed the names
+/// onto the Unknowns' rows would write it. Only the text is rewritten; the
+/// account is read and nothing is written. Loaded back, the file names those
+/// Unknowns in place, where a new contact would take their identities and
+/// leave them to be deleted.
 ///
 /// The file is read as [`load`] reads it, so the identities are matched by
 /// the key the load would give them. A new contact stays new when no Unknown
-/// holds its identities, when the Unknown also holds an identity the
+/// holds its identities; when the Unknown also holds an identity the
 /// contact's rows do not list (an Append load would then leave the named
-/// contact holding it), or when an earlier contact of the file already took
-/// that Unknown. A file the load would refuse comes back as it was, so the
-/// load reports the refusal.
+/// contact holding it); when the file already speaks for that Unknown, by its
+/// id or through an earlier contact; or when a row would read as another
+/// identity under the Unknown's id than as a new contact's. A file the load
+/// would refuse comes back as it was, so the load reports the refusal. Rows
+/// keep their numbers, so a note or a refusal from the load names the row of
+/// `csv_text`.
 ///
 /// # Errors
 ///
 /// Returns an error when reading the account fails.
-pub(crate) async fn assign_unknowns_to_new_contacts(
+pub(crate) async fn rewrite_ids_to_unknowns(
     conn: &mut SqliteConnection,
     account_id: i64,
     csv_text: &str,
@@ -806,14 +811,48 @@ pub(crate) async fn assign_unknowns_to_new_contacts(
         }
     }
     let is_unknown = |id: i64| snapshot.contacts.get(&id).is_some_and(String::is_empty);
+    let rows_of = |contact: &FileContact| -> Vec<&FileRow> {
+        rows.iter()
+            .filter(|row| {
+                if contact.id_text.is_empty() {
+                    row.number == contact.first_row
+                } else {
+                    row.contact_id == contact.id_text
+                }
+            })
+            .collect()
+    };
 
     // The Unknown each new contact takes: by its `contact_id` text, or by its
-    // only row when that text is blank.
+    // only row when that text is blank. An Unknown the file names by its id
+    // is spoken for already.
     let mut by_text: HashMap<&str, i64> = HashMap::new();
     let mut by_row: HashMap<usize, i64> = HashMap::new();
-    let mut taken: HashSet<i64> = HashSet::new();
+    let mut taken: HashSet<i64> = file
+        .iter()
+        .filter_map(|c| match c.target {
+            Target::Known(id) => Some(id),
+            Target::New => None,
+        })
+        .collect();
     for contact in file.iter().filter(|c| c.target == Target::New) {
         let listed: HashSet<&IdentityKey> = contact.identities.iter().map(|i| &i.key).collect();
+        let contact_rows = rows_of(contact);
+        // Under the Unknown's id, a phone written without `+` can read as
+        // another key (see [`row_identity`]); the rows must read the same.
+        let reads_the_same = |unknown: i64| {
+            let mut keys = HashSet::new();
+            for row in &contact_rows {
+                match row_identity(row, Some(unknown), &snapshot) {
+                    Ok(Some(identity)) => {
+                        keys.insert(identity.key);
+                    }
+                    Ok(None) => {}
+                    Err(_) => return false,
+                }
+            }
+            keys.len() == listed.len() && keys.iter().all(|key| listed.contains(key))
+        };
         let unknown = contact.identities.iter().find_map(|identity| {
             let &(_, Some(holder)) = snapshot.handles.get(&identity.key)? else {
                 return None;
@@ -821,7 +860,11 @@ pub(crate) async fn assign_unknowns_to_new_contacts(
             let holds_only_listed = held
                 .get(&holder)
                 .is_some_and(|keys| keys.iter().all(|key| listed.contains(key)));
-            (is_unknown(holder) && !taken.contains(&holder) && holds_only_listed).then_some(holder)
+            (is_unknown(holder)
+                && !taken.contains(&holder)
+                && holds_only_listed
+                && reads_the_same(holder))
+            .then_some(holder)
         });
         let Some(unknown) = unknown else { continue };
         taken.insert(unknown);
@@ -832,24 +875,37 @@ pub(crate) async fn assign_unknowns_to_new_contacts(
         }
     }
 
-    let mut writer = csv::Writer::from_writer(Vec::new());
-    writer.write_record(COLUMNS)?;
+    // A blank row stands where `read_rows` skipped one, so every row keeps
+    // its number. The header is row 1.
+    let mut book: Vec<[String; 6]> = Vec::new();
     for row in &rows {
+        while book.len() + 2 < row.number {
+            book.push(Default::default());
+        }
         let unknown = if row.contact_id.is_empty() {
             by_row.get(&row.number)
         } else {
             by_text.get(row.contact_id.as_str())
         };
-        let contact_id = unknown.map_or_else(|| row.contact_id.clone(), i64::to_string);
-        let cells = [
-            contact_id.as_str(),
-            row.display_name.as_str(),
-            row.groups.as_str(),
-            row.service.as_str(),
-            row.handle_type.as_str(),
-            row.identity.as_str(),
-        ]
-        .map(written_cell);
+        book.push([
+            unknown.map_or_else(|| row.contact_id.clone(), i64::to_string),
+            row.display_name.clone(),
+            row.groups.clone(),
+            row.service.clone(),
+            row.handle_type.clone(),
+            row.identity.clone(),
+        ]);
+    }
+    write_book(book)
+}
+
+/// The address book file of `rows`, each in the order of [`COLUMNS`], under
+/// the header, with every cell written as [`written_cell`] writes it.
+fn write_book(rows: impl IntoIterator<Item = [String; 6]>) -> Result<String> {
+    let mut writer = csv::Writer::from_writer(Vec::new());
+    writer.write_record(COLUMNS)?;
+    for row in rows {
+        let cells = row.each_ref().map(|cell| written_cell(cell));
         writer.write_record(cells.iter().map(|cell| cell.as_bytes()))?;
     }
     let bytes = writer
@@ -1110,32 +1166,24 @@ pub async fn export_csv(
         groups.entry(contact_id).or_default().push(name);
     }
 
-    let mut writer = csv::Writer::from_writer(Vec::new());
-    writer.write_record(COLUMNS)?;
-    for (id, name, service, handle_type, normalized) in rows {
-        if only.is_some_and(|only| !only.contains(&id)) {
-            continue;
-        }
-        let group_names = groups
-            .get(&id)
-            .map(|names| names.join(&GROUP_SEPARATOR.to_string()))
-            .unwrap_or_default();
-        let id = id.to_string();
-        let cells = [
-            id.as_str(),
-            name.as_str(),
-            group_names.as_str(),
-            service.as_deref().unwrap_or(""),
-            handle_type.as_deref().unwrap_or(""),
-            normalized.as_deref().unwrap_or(""),
-        ]
-        .map(written_cell);
-        writer.write_record(cells.iter().map(|cell| cell.as_bytes()))?;
-    }
-    let bytes = writer
-        .into_inner()
-        .map_err(|e| anyhow::anyhow!("finish the address book: {e}"))?;
-    String::from_utf8(bytes).context("the address book is not UTF-8")
+    let book = rows
+        .into_iter()
+        .filter(|(id, ..)| only.is_none_or(|only| only.contains(id)))
+        .map(|(id, name, service, handle_type, normalized)| {
+            let group_names = groups
+                .get(&id)
+                .map(|names| names.join(&GROUP_SEPARATOR.to_string()))
+                .unwrap_or_default();
+            [
+                id.to_string(),
+                name,
+                group_names,
+                service.unwrap_or_default(),
+                handle_type.unwrap_or_default(),
+                normalized.unwrap_or_default(),
+            ]
+        });
+    write_book(book)
 }
 
 #[cfg(test)]

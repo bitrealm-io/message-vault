@@ -796,7 +796,7 @@ async fn import_demo_sources_with(
 /// The demo is built the way a person builds theirs: the imports bring the
 /// people in as Unknowns, and the person exports the address book, types the
 /// names onto the Unknowns' rows, and loads it back.
-/// [`address_book::assign_unknowns_to_new_contacts`] does the typing: it
+/// [`address_book::rewrite_ids_to_unknowns`] does the typing: it
 /// gives each contact of the bundle's file the id of the Unknown the imports
 /// made for it. The load goes through
 /// [`address_book::load`], the function `POST /v1/contacts` calls, so the
@@ -816,7 +816,7 @@ async fn load_demo_address_book(
     let text = fs::read_to_string(&prepared.contacts_csv)
         .with_context(|| format!("read {}", prepared.contacts_csv.display()))?;
     let mut conn = db.acquire().await?;
-    let text = address_book::assign_unknowns_to_new_contacts(&mut conn, account_id, &text)
+    let text = address_book::rewrite_ids_to_unknowns(&mut conn, account_id, &text)
         .await
         .context("match the demo address book to the Unknowns the imports made")?;
     let loaded = address_book::load(&mut conn, account_id, &text, LoadMode::Append).await;

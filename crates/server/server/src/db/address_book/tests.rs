@@ -1526,3 +1526,85 @@ async fn a_write_that_commits_while_the_load_reads_does_not_fail_it() {
     .unwrap_or_else(|e| panic!("load failed: {e}"));
     assert_eq!(counts.contacts_created, 1);
 }
+
+// --- Rewriting a file's new contacts onto the Unknowns ---
+
+/// The `contact_id` cell of each data row of a file.
+fn ids_of(text: &str) -> Vec<String> {
+    text.lines()
+        .skip(1)
+        .map(|line| line.split(',').next().unwrap_or_default().to_string())
+        .collect()
+}
+
+#[tokio::test]
+async fn a_new_contact_whose_identity_an_unknown_holds_names_that_unknown_in_place() {
+    let (mut conn, _pool, _dir) = account().await;
+    let unknown = imported(&mut conn, "", &[("phone", "phone", "+15550001111")]).await;
+
+    let text = rewrite_ids_to_unknowns(
+        &mut conn,
+        ACCOUNT,
+        &file(&["abc,Alice,,phone,phone,+15550001111"]),
+    )
+    .await
+    .unwrap();
+    assert_eq!(ids_of(&text), [unknown.to_string()]);
+
+    let counts = loaded(&mut conn, &text, LoadMode::Append).await;
+    assert_eq!((counts.contacts_updated, counts.contacts_created), (1, 0));
+    assert_eq!(name_of(&mut conn, unknown).await.as_deref(), Some("Alice"));
+}
+
+#[tokio::test]
+async fn an_unknown_the_file_names_by_its_id_is_not_given_to_a_new_contact() {
+    let (mut conn, _pool, _dir) = account().await;
+    let unknown = imported(&mut conn, "", &[("phone", "phone", "+15550001111")]).await;
+    let original = file(&[
+        &format!("{unknown},Bob,,,,"),
+        "abc,Alice,,phone,phone,+15550001111",
+    ]);
+
+    let text = rewrite_ids_to_unknowns(&mut conn, ACCOUNT, &original)
+        .await
+        .unwrap();
+    assert_eq!(ids_of(&text), [unknown.to_string(), "abc".to_string()]);
+    loaded(&mut conn, &text, LoadMode::Append).await;
+    assert_eq!(name_of(&mut conn, unknown).await.as_deref(), Some("Bob"));
+}
+
+#[tokio::test]
+async fn a_new_contact_whose_rows_read_otherwise_under_the_unknowns_id_stays_new() {
+    let (mut conn, _pool, _dir) = account().await;
+    imported(&mut conn, "", &[("phone", "phone", "+6591234567")]).await;
+    // As a new contact, the second row is another number; under the
+    // Unknown's id it would read as the first row's `+6591234567`.
+    let original = file(&[
+        "c1,Carol,,phone,phone,+6591234567",
+        "c1,,,phone,phone,6591234567",
+    ]);
+
+    let text = rewrite_ids_to_unknowns(&mut conn, ACCOUNT, &original)
+        .await
+        .unwrap();
+    assert_eq!(ids_of(&text), ["c1", "c1"]);
+}
+
+#[tokio::test]
+async fn a_rewritten_file_keeps_its_blank_rows_so_every_row_keeps_its_number() {
+    let (mut conn, _pool, _dir) = account().await;
+    let unknown = imported(&mut conn, "", &[("phone", "phone", "+15550001111")]).await;
+    let original = file(&[
+        "abc,Alice,,phone,phone,+15550001111",
+        ",,,,,",
+        "def,Dan,,phone,phone,+15550002222",
+    ]);
+
+    let text = rewrite_ids_to_unknowns(&mut conn, ACCOUNT, &original)
+        .await
+        .unwrap();
+    assert_eq!(
+        ids_of(&text),
+        [unknown.to_string(), String::new(), "def".to_string()]
+    );
+}

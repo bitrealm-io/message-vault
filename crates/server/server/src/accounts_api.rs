@@ -30,7 +30,9 @@ use crate::db::handles::{self, Identity};
 use crate::db::storage::{self, Scope};
 use crate::db::{WriteTx, begin_write};
 use crate::db::{account_profile, imports, server_settings, session_tokens};
+use crate::exports_api::OwnerExportRun;
 use crate::extract::{Json, Path, Query};
+use crate::imports_api::{ImportRun, OwnerImportRun};
 use crate::paging::{DEFAULT_LIST_LIMIT, Page, PageQuery, page_of, page_params};
 use crate::server::{ApiError, AppState, AuthIdentity, Created, LoggedIn, Owner};
 
@@ -1242,9 +1244,49 @@ pub(crate) async fn list_account_identities(
 // carries; these ask only who is calling. Which contacts a run created is the
 // holder's address book, so `/v1/imports/{id}/contacts` has no twin here: the
 // run's detail carries the counts.
+//
+// The account reads its runs in full. The owner reads each as an
+// `OwnerImportRun` or `OwnerExportRun`, which hold only what ADR 0008 lists:
+// a run's summary, its issues and an export's query say whom the account
+// talks to and what it searched for. The owner's view is a type of its own
+// rather than the account's with fields removed, so a field added to a run
+// reaches the owner only when someone adds it to that type.
+
+/// An account's Import Runs as its reader may see them: in full for the
+/// account itself, each an `OwnerImportRun` for the owner.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[serde(untagged)]
+pub(crate) enum AccountImportRuns {
+    /// The account's own runs.
+    Own(Page<imports::ImportSummary>),
+    /// Another account's runs, as the owner reads them.
+    Owner(Page<OwnerImportRun>),
+}
+
+/// One of an account's Import Runs as its reader may see it.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[serde(untagged)]
+pub(crate) enum AccountImportRun {
+    /// The account's own run.
+    Own(ImportRun),
+    /// Another account's run, as the owner reads it.
+    Owner(OwnerImportRun),
+}
+
+/// An account's Export Runs as its reader may see them: in full for the
+/// account itself, each an `OwnerExportRun` for the owner.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[serde(untagged)]
+pub(crate) enum AccountExportRuns {
+    /// The account's own runs.
+    Own(Page<message_crate_api_types::ExportRun>),
+    /// Another account's runs, as the owner reads them.
+    Owner(Page<OwnerExportRun>),
+}
 
 /// An account's Import Runs as a page, newest first unless `sort` says
-/// otherwise. The owner reads any account's; an account reads its own.
+/// otherwise. The owner reads any account's, each an `OwnerImportRun`; an
+/// account reads its own in full.
 #[utoipa::path(
     get,
     path = "/v1/accounts/{id}/imports",
@@ -1258,7 +1300,7 @@ pub(crate) async fn list_account_identities(
         ("sort" = Option<String>, Query, description = "`started_at` or `-started_at`. Default `-started_at`, newest first.")
     ),
     responses(
-        (status = 200, body = Page<imports::ImportSummary>),
+        (status = 200, body = AccountImportRuns),
         crate::problem::openapi::NotTheOwner
     )
 )]
@@ -1267,13 +1309,33 @@ pub(crate) async fn list_account_imports(
     Path(target): Path<i64>,
     LoggedIn(auth): LoggedIn,
     Query(query): Query<crate::imports_api::ListImportsQuery>,
-) -> Result<Json<Page<imports::ImportSummary>>, ApiError> {
-    require_reach(&state, &auth, target).await?;
-    crate::imports_api::imports_page(&state, target, query).await
+) -> Result<Json<AccountImportRuns>, ApiError> {
+    let mut conn = state.db.acquire().await?;
+    let reach = require_account_reach(&mut conn, &auth, target, Admits::Owner).await?;
+    let rows = crate::imports_api::import_rows_page(&mut conn, target, query).await?;
+    if !reach.is_own() {
+        let mut items = Vec::with_capacity(rows.items.len());
+        for row in rows.items {
+            items.push(crate::imports_api::owner_import_run(&mut conn, row).await?);
+        }
+        return Ok(Json(AccountImportRuns::Owner(Page {
+            items,
+            total: rows.total,
+            limit: rows.limit,
+            offset: rows.offset,
+        })));
+    }
+    Ok(Json(AccountImportRuns::Own(Page {
+        items: rows.items.into_iter().map(Into::into).collect(),
+        total: rows.total,
+        limit: rows.limit,
+        offset: rows.offset,
+    })))
 }
 
-/// One of an account's Import Runs: status, timings, counts and issues. A run
-/// that is another account's is a 404.
+/// One of an account's Import Runs: status, timings and counts, and for the
+/// account itself its summary and issues. A run that is another account's
+/// is a 404.
 #[utoipa::path(
     get,
     path = "/v1/accounts/{id}/imports/{import_id}",
@@ -1284,7 +1346,7 @@ pub(crate) async fn list_account_imports(
         ("import_id" = i64, Path, description = "Import Run id")
     ),
     responses(
-        (status = 200, body = crate::imports_api::ImportRun),
+        (status = 200, body = AccountImportRun),
         crate::problem::openapi::NotTheOwner
     )
 )]
@@ -1292,13 +1354,23 @@ pub(crate) async fn get_account_import(
     State(state): State<AppState>,
     Path((target, import_id)): Path<(i64, i64)>,
     LoggedIn(auth): LoggedIn,
-) -> Result<Json<crate::imports_api::ImportRun>, ApiError> {
-    require_reach(&state, &auth, target).await?;
-    crate::imports_api::import_detail(&state, target, import_id).await
+) -> Result<Json<AccountImportRun>, ApiError> {
+    let mut conn = state.db.acquire().await?;
+    let reach = require_account_reach(&mut conn, &auth, target, Admits::Owner).await?;
+    if !reach.is_own() {
+        let row = imports::get_owned_import(&mut conn, target, import_id)
+            .await
+            .map_err(ApiError::from)?;
+        let run = crate::imports_api::owner_import_run(&mut conn, row).await?;
+        return Ok(Json(AccountImportRun::Owner(run)));
+    }
+    let run = crate::imports_api::import_detail(&mut conn, target, import_id).await?;
+    Ok(Json(AccountImportRun::Own(run)))
 }
 
 /// An account's Export Runs as a page, newest first unless `sort` says
-/// otherwise. The owner reads any account's; an account reads its own.
+/// otherwise. The owner reads any account's, each an `OwnerExportRun`; an
+/// account reads its own in full.
 #[utoipa::path(
     get,
     path = "/v1/accounts/{id}/exports",
@@ -1312,7 +1384,7 @@ pub(crate) async fn get_account_import(
         ("sort" = Option<String>, Query, description = "`started_at` or `-started_at`. Default `-started_at`, newest first.")
     ),
     responses(
-        (status = 200, body = Page<message_crate_api_types::ExportRun>),
+        (status = 200, body = AccountExportRuns),
         crate::problem::openapi::NotTheOwner
     )
 )]
@@ -1321,20 +1393,19 @@ pub(crate) async fn list_account_exports(
     Path(target): Path<i64>,
     LoggedIn(auth): LoggedIn,
     Query(query): Query<crate::exports_api::ListExportsQuery>,
-) -> Result<Json<Page<message_crate_api_types::ExportRun>>, ApiError> {
-    require_reach(&state, &auth, target).await?;
-    crate::exports_api::exports_page(&state, target, query).await
-}
-
-/// [`require_account_reach`], admitting the owner, on a connection of its
-/// own, for a handler whose work then runs on another.
-async fn require_reach(
-    state: &AppState,
-    auth: &AuthIdentity,
-    target: i64,
-) -> Result<Reach, ApiError> {
+) -> Result<Json<AccountExportRuns>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    require_account_reach(&mut conn, auth, target, Admits::Owner).await
+    let reach = require_account_reach(&mut conn, &auth, target, Admits::Owner).await?;
+    let page = crate::exports_api::exports_page(&mut conn, target, query).await?;
+    if !reach.is_own() {
+        return Ok(Json(AccountExportRuns::Owner(Page {
+            items: page.items.into_iter().map(OwnerExportRun::from).collect(),
+            total: page.total,
+            limit: page.limit,
+            offset: page.offset,
+        })));
+    }
+    Ok(Json(AccountExportRuns::Own(page)))
 }
 
 #[cfg(test)]

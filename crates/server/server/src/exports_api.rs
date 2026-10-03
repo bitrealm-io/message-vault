@@ -10,7 +10,7 @@
 use crate::extract::{Json, Path as AxumPath, Query};
 use axum::extract::State;
 use message_crate_api_types::{ExportQueryList, ExportRun, ExportScope, ExportStatus};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sqlx::SqliteConnection;
 
 use crate::db::conversation_messages::{
@@ -28,6 +28,74 @@ use crate::server::{ApiError, AppState, Created, ExportAccess};
 /// stays under SQLite's variable cap; the same figure `POST /v1/contacts/summaries`
 /// uses.
 pub const MAX_SELECTION_IDS: usize = 500;
+
+/// Which of the three forms an Export Run's scope took, without what it
+/// asked for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ExportScopeKind {
+    /// Everything the account holds.
+    Everything,
+    /// A query in the search language.
+    Query,
+    /// Conversations and messages picked by hand.
+    Selection,
+}
+
+/// An Export Run as the owner reads it under another account: the form of
+/// its scope, its tool, times, outcome and counts
+/// (`docs/adr/0008-the-owner-holds-no-messages.md`, "What the owner may
+/// see"). A query's text is a search over the account's messages, and a
+/// selection names its conversations, so neither is here, and a field
+/// reaches the owner only by being added here.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct OwnerExportRun {
+    /// Export Run id.
+    id: i64,
+    /// The form of the scope the run asked for.
+    scope_kind: ExportScopeKind,
+    /// Exporting tool, e.g. `message-crate-pull`, when the client named one.
+    tool: Option<String>,
+    /// Lifecycle status.
+    status: ExportStatus,
+    /// UTC time the run started.
+    started_at: String,
+    /// UTC time the run finished, when it has.
+    finished_at: Option<String>,
+    /// Messages the scope matched when the run was created.
+    message_count: i64,
+    /// Distinct conversations with at least one matching message.
+    conversation_count: i64,
+    /// Distinct attachment fingerprints among the matching messages.
+    attachment_count: i64,
+    /// Sum of the known sizes of those distinct attachments, in bytes.
+    total_bytes: i64,
+    /// How far the run's messages have been read, in places.
+    messages_delivered: i64,
+}
+
+impl From<ExportRun> for OwnerExportRun {
+    fn from(run: ExportRun) -> Self {
+        let scope_kind = match run.scope {
+            ExportScope::Everything => ExportScopeKind::Everything,
+            ExportScope::Query { .. } => ExportScopeKind::Query,
+            ExportScope::Selection { .. } => ExportScopeKind::Selection,
+        };
+        Self {
+            id: run.id,
+            scope_kind,
+            tool: run.tool,
+            status: run.status,
+            started_at: run.started_at,
+            finished_at: run.finished_at,
+            message_count: run.message_count,
+            conversation_count: run.conversation_count,
+            attachment_count: run.attachment_count,
+            total_bytes: run.total_bytes,
+            messages_delivered: run.messages_delivered,
+        }
+    }
+}
 
 /// Start an Export Run over `scope`: compile the scope, list the ids of the
 /// messages it matches now, count them, and record the run as `running`, all
@@ -310,17 +378,21 @@ pub(crate) async fn list_exports(
     ExportAccess(auth): ExportAccess,
     Query(query): Query<ListExportsQuery>,
 ) -> Result<Json<Page<ExportRun>>, ApiError> {
-    exports_page(&state, auth.account_id, query).await
+    let mut conn = state.db.acquire().await?;
+    exports_page(&mut conn, auth.account_id, query)
+        .await
+        .map(Json)
 }
 
-/// One account's Export Runs as a page. `GET /v1/exports` answers it for the
-/// credential's account and `GET /v1/accounts/{id}/exports` for the account
-/// named, so the two lists cannot drift.
+/// One account's Export Runs as a page, in full. `GET /v1/exports` answers
+/// from it for the credential's account and `GET /v1/accounts/{id}/exports`
+/// for the account named, so the two lists cannot drift; the second shapes
+/// it for the owner as [`OwnerExportRun`].
 pub(crate) async fn exports_page(
-    state: &AppState,
+    conn: &mut SqliteConnection,
     account: i64,
     query: ListExportsQuery,
-) -> Result<Json<Page<ExportRun>>, ApiError> {
+) -> Result<Page<ExportRun>, ApiError> {
     let page = page_params(
         query.limit,
         query.offset,
@@ -346,9 +418,8 @@ pub(crate) async fn exports_page(
         )));
     }
 
-    let mut conn = state.db.acquire().await?;
     let (items, total) = exports::list_exports_page(
-        &mut conn,
+        conn,
         account,
         status,
         &order,
@@ -356,12 +427,12 @@ pub(crate) async fn exports_page(
         i64::try_from(page.offset).map_err(anyhow::Error::from)?,
     )
     .await?;
-    Ok(Json(Page {
+    Ok(Page {
         items,
         total,
         limit: page.limit,
         offset: page.offset,
-    }))
+    })
 }
 
 /// One Export Run.

@@ -50,10 +50,14 @@ async fn account_handle_addresses(
 /// The account's identities as `(normalized address, handle type)`, whatever
 /// service each is linked under: one number is one person on every service,
 /// so a Text Message identity also names the number on WhatsApp.
+///
+/// Separate from [`account_handle_addresses`], which lists one row per
+/// service for the profile (#1570), and from `IdentitiesOf::Account`, which
+/// lists each identity with its counts: this is the set an import checks.
 pub async fn account_identity_keys(
     conn: &mut SqliteConnection,
     account_id: i64,
-) -> Result<std::collections::HashSet<(String, String)>> {
+) -> Result<std::collections::HashSet<(String, HandleType)>> {
     let rows: Vec<(String, String)> = sqlx::query_as(
         "SELECT DISTINCT h.normalized, h.handle_type FROM handles h
          JOIN account_handles ah ON ah.handle_id = h.id
@@ -62,7 +66,10 @@ pub async fn account_identity_keys(
     .bind(account_id)
     .fetch_all(&mut *conn)
     .await?;
-    Ok(rows.into_iter().collect())
+    Ok(rows
+        .into_iter()
+        .map(|(normalized, handle_type)| (normalized, HandleType::parse(&handle_type)))
+        .collect())
 }
 
 /// Ensure an `accounts` row exists at `account_id`, with the id as its stub

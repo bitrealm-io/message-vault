@@ -25,7 +25,8 @@ use crate::models::{
 use media::MediaMode;
 
 use super::contact_name::{
-    IncomingSender, count_other_identity, ensure_contact_for_handle, resolve_incoming_sender_handle,
+    IncomingSender, count_other_identity, ensure_contact_for_handle, is_account_identity,
+    resolve_incoming_sender_handle,
 };
 use super::{ImportFailure, ImportOptions, ImportStats};
 
@@ -232,7 +233,7 @@ pub(super) struct StagingInserts {
     /// The account's identities, as `(normalized address, handle type)`.
     /// A participant at one of them is the holder, who is never a
     /// participant (ADR-0015, #1093).
-    identities: HashSet<(String, String)>,
+    identities: HashSet<(String, HandleType)>,
 }
 
 impl StagingInserts {
@@ -241,7 +242,7 @@ impl StagingInserts {
     pub(super) fn new(
         account_id: i64,
         import_id: Option<i64>,
-        identities: HashSet<(String, String)>,
+        identities: HashSet<(String, HandleType)>,
     ) -> Self {
         Self {
             account_id,
@@ -616,11 +617,7 @@ async fn insert_participant(
     // account's identities gets no handle, contact or participant row. The
     // exporters drop the addresses their backup names as the owner's; this
     // catches the ones only the account knows (#1093).
-    let (normalized, _) = crate::db::handles::normalize_handle(&handle, handle_type);
-    if stmts
-        .identities
-        .contains(&(normalized, handle_type.as_str().to_string()))
-    {
+    if is_account_identity(&stmts.identities, &handle, handle_type) {
         return Ok(());
     }
     let (handle_id, flagged, cached) = upsert_handle_row_cached(
@@ -690,6 +687,7 @@ async fn resolve_message_rows(
         let sender_handle_id = resolve_incoming_sender_handle(
             tx,
             &mut stmts.handles,
+            &stmts.identities,
             stmts.account_id,
             stmts.import_id,
             IncomingSender {
@@ -890,6 +888,7 @@ async fn tapback_row(
     let sender_handle_id = resolve_incoming_sender_handle(
         tx,
         &mut stmts.handles,
+        &stmts.identities,
         stmts.account_id,
         stmts.import_id,
         IncomingSender {

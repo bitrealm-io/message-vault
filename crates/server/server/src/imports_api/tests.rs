@@ -4192,9 +4192,13 @@ async fn an_account_identity_listed_among_a_groups_members_is_not_a_participant(
                 r#"{{"schema_version":4,"export":{{"source":"{source}","tool":"t","tool_version":"1","owner_handle":null,"owner_display_name":null}},"#,
                 r#""conversation":{{"chat_identifier":"{chat}","conversation_type":"group","group_title":"Trip","participants":["#,
                 r#"{{"handle":"+15555550101","display_name":"Ada"}},{{"handle":"+15555550102","display_name":"Bob"}},{{"handle":"+15555550199","display_name":"Me"}}],"#,
-                r#""stats":{{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1400773261000,"last_timestamp_unix_ms":1400773261000}}}}}}"#,
+                r#""stats":{{"message_count":2,"attachment_count":0,"first_timestamp_unix_ms":1400773261000,"last_timestamp_unix_ms":1400773262000}}}}}}"#,
                 "\n",
                 r#"{{"guid":"{chat}-1","timestamp_unix_ms":1400773261000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+15555550101","sender_display_name":"Ada","subject":null,"text":"hi","attachments":[],"imessage":null,"source":null}}"#,
+                "\n",
+                // The holder's other device: an incoming message from the
+                // holder's own number, which the exporter did not know.
+                r#"{{"guid":"{chat}-2","timestamp_unix_ms":1400773262000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+15555550199","sender_display_name":"Me","subject":null,"text":"on my way","attachments":[],"imessage":null,"source":null}}"#,
                 "\n",
             ),
             source = source,

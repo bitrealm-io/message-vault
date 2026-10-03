@@ -232,8 +232,8 @@ building heads that the next push replaced, so they now cost no runners.
 The price: a skipped job counts as passed, so a draft's required checks read
 green while nothing ran. They mean nothing until the pull request is ready,
 and `pr-review` watches the run started by marking it ready rather than the
-check list (AGENTS.md, "Review on the pull request", step 6). `pr-review`
-merges only a pull request that is not a draft.
+check list (AGENTS.md, "Review on the pull request", step 6). GitHub does not
+merge a draft, so a green draft cannot merge.
 
 `check-pr.sh` checks rather than rewrites. It no longer calls `format-all.sh`,
 so it can now fail on formatting, which it never could before. `format-all.sh`

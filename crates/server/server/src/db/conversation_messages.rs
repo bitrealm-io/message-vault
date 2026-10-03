@@ -171,7 +171,7 @@ pub const DEFAULT_SEARCH_SORT: [SortKey<SearchSort>; 1] = [SortKey {
 /// candidate message, `rowid = m.id AND MATCH ?`, the per-row cost #413
 /// removed from the filter: 22 s instead of 0.1 s for `the` on the medium
 /// Demo Account. Materialized, the index is asked once for the whole search.
-pub(crate) const RANK_JOIN_SQL: &str = "
+const RANK_JOIN_SQL: &str = "
      LEFT JOIN (WITH ranked AS MATERIALIZED (
                   SELECT rowid AS rank_id, bm25(messages_fts) AS rank
                   FROM messages_fts WHERE messages_fts MATCH ?)
@@ -198,6 +198,21 @@ pub async fn load_search_page(
     limit: usize,
     offset: usize,
 ) -> Result<Vec<Message>, ApiError> {
+    let (sql, params) = search_page_sql(filter, order, limit, offset)?;
+    fetch_message_page(conn, &sql, &params).await
+}
+
+/// The statement [`load_search_page`] runs, and its parameters.
+///
+/// # Errors
+///
+/// As [`load_search_page`], for a sort it refuses.
+pub(crate) fn search_page_sql(
+    filter: &crate::search::Filter,
+    order: &[SortKey<SearchSort>],
+    limit: usize,
+    offset: usize,
+) -> Result<(String, Vec<SqlParam>), ApiError> {
     if order
         .iter()
         .any(|k| k.key == SearchSort::Relevance && k.direction == Direction::Desc)
@@ -242,16 +257,14 @@ pub async fn load_search_page(
     }
     terms.push(format!("m.id {}", tie.sql()));
 
-    load_messages_from(
-        conn,
+    Ok(message_page_sql(
         &from_sql,
         filter.where_sql(),
         &params,
         &terms.join(", "),
         limit,
         offset,
-    )
-    .await
+    ))
 }
 
 /// [`load_messages`] with the caller's own `FROM` clause and `ORDER BY`.
@@ -272,6 +285,20 @@ pub(crate) async fn load_messages_from(
     limit: usize,
     offset: usize,
 ) -> Result<Vec<Message>, ApiError> {
+    let (sql, params) = message_page_sql(from_sql, where_sql, params, order_by, limit, offset);
+    fetch_message_page(conn, &sql, &params).await
+}
+
+/// The statement [`load_messages_from`] runs, and its parameters with
+/// `limit` and `offset` last.
+fn message_page_sql(
+    from_sql: &str,
+    where_sql: &str,
+    params: &[SqlParam],
+    order_by: &str,
+    limit: usize,
+    offset: usize,
+) -> (String, Vec<SqlParam>) {
     let sql = format!(
         "SELECT m.id, m.conversation_id, m.source, m.service, m.guid, m.timestamp,
                 m.sort_order, m.is_from_me, hs.raw AS sender, m.subject, m.body,
@@ -288,8 +315,16 @@ pub(crate) async fn load_messages_from(
     // so it reads as the largest one rather than wrapping to the first page.
     params.push(SqlParam::Int(i64::try_from(limit).unwrap_or(i64::MAX)));
     params.push(SqlParam::Int(i64::try_from(offset).unwrap_or(i64::MAX)));
+    (sql, params)
+}
 
-    let rows = (&mut *conn).fetch_all(bind_all(&sql, &params)).await?;
+/// Runs a statement from [`message_page_sql`] and reads its rows as messages.
+async fn fetch_message_page(
+    conn: &mut SqliteConnection,
+    sql: &str,
+    params: &[SqlParam],
+) -> Result<Vec<Message>, ApiError> {
+    let rows = (&mut *conn).fetch_all(bind_all(sql, params)).await?;
     let page_rows: Vec<RawRow> = rows
         .iter()
         .map(|row| {

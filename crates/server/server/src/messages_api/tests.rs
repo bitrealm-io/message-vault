@@ -758,37 +758,50 @@ async fn descending_relevance_is_validation_failed() {
     }
 }
 
-/// The relevance join asks the full-text index once for the whole search,
+/// A relevance search asks the full-text index once for the whole search,
 /// never once per candidate message (#413). SQLite flattens a plain joined
 /// subquery into a per-row `rowid = m.id AND MATCH` lookup, which took 22 s
-/// for `the` on the medium Demo Account, so the plan must materialize it.
+/// for `the` on the medium Demo Account, so the plan of the statement the
+/// route runs must materialize the rank.
 #[tokio::test]
-async fn the_relevance_join_reads_the_index_once() {
-    let (fixture, _alice) = fixture_with_account().await;
-    let mut conn = fixture.state.db.acquire().await.unwrap();
-    let sql = format!(
-        "EXPLAIN QUERY PLAN SELECT m.id FROM messages m {}
-         WHERE m.id IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?)
-         ORDER BY r.rank",
-        crate::db::conversation_messages::RANK_JOIN_SQL
+async fn a_relevance_search_reads_the_index_once() {
+    use crate::db::conversation_messages::{SearchSort, search_page_sql};
+    use crate::paging::{Direction, SortKey};
+
+    let (fixture, alice) = fixture_with_account().await;
+    let clock = (
+        chrono_tz::UTC,
+        chrono::NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
     );
-    let rows: Vec<(i64, i64, i64, String)> = sqlx::query_as(&sql)
-        .bind("\"the\"")
-        .bind("\"the\"")
-        .fetch_all(&mut *conn)
+    let mut conn = fixture.state.db.acquire().await.unwrap();
+    for q in ["the", "from:me the -office", "the or dentist"] {
+        let filter = crate::messages_api::message_filter(alice.account_id, q, clock).unwrap();
+        let order = [SortKey {
+            key: SearchSort::Relevance,
+            direction: Direction::Asc,
+        }];
+        let (sql, params) = search_page_sql(&filter, &order, 40, 0).unwrap();
+        let rows = sqlx::Executor::fetch_all(
+            &mut *conn,
+            crate::db::sql::bind_all(&format!("EXPLAIN QUERY PLAN {sql}"), &params),
+        )
         .await
         .unwrap();
-    let plan: Vec<&str> = rows.iter().map(|r| r.3.as_str()).collect();
-    assert!(
-        !plan
+        let plan: Vec<String> = rows
             .iter()
-            .any(|d| d.contains("messages_fts") && d.contains("LEFT-JOIN")),
-        "per-row full-text lookup: {plan:?}"
-    );
-    assert!(
-        plan.iter().any(|d| d.starts_with("MATERIALIZE")),
-        "{plan:?}"
-    );
+            .map(|r| sqlx::Row::get::<String, _>(r, 3))
+            .collect();
+        assert!(
+            !plan
+                .iter()
+                .any(|d| d.contains("messages_fts") && d.contains("LEFT-JOIN")),
+            "{q}: per-row full-text lookup: {plan:?}"
+        );
+        assert!(
+            plan.iter().any(|d| d.starts_with("MATERIALIZE")),
+            "{q}: {plan:?}"
+        );
+    }
 }
 
 /// The Messages list names both its keys when a sort is refused.

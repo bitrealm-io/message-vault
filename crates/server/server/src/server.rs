@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
+use axum::extract::DefaultBodyLimit;
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::{Json, Router};
@@ -478,6 +479,23 @@ pub enum ApiError {
     ValidationFailed(Vec<String>),
     /// `400` — the request cannot be read at all.
     MalformedBody(String),
+    /// `400` — a line of an import batch is not the JSON Lines the server
+    /// reads. A `malformed-body` that also carries the line as `line`.
+    MalformedImportLine {
+        /// The sentence, naming the line as a line of the batch.
+        detail: String,
+        /// The line of the batch, counted from 1 with blank lines included.
+        line: usize,
+    },
+    /// `422` — lines of an import batch were read and broke a rule. A
+    /// `validation-failed` that also carries the first such line as `line`.
+    InvalidImportLines {
+        /// One sentence per rule, naming the lines as lines of the batch.
+        errors: Vec<String>,
+        /// The first line that broke a rule, counted from 1 with blank
+        /// lines included.
+        line: usize,
+    },
     /// `415` — `Content-Type` absent or not one the route accepts.
     UnsupportedMediaType(String),
     /// `413` — the body is over the configured cap.
@@ -539,8 +557,10 @@ impl ApiError {
     #[must_use]
     pub fn problem_type(&self) -> Option<ProblemType> {
         Some(match self {
-            Self::ValidationFailed(_) => ProblemType::ValidationFailed,
-            Self::MalformedBody(_) => ProblemType::MalformedBody,
+            Self::ValidationFailed(_) | Self::InvalidImportLines { .. } => {
+                ProblemType::ValidationFailed
+            }
+            Self::MalformedBody(_) | Self::MalformedImportLine { .. } => ProblemType::MalformedBody,
             Self::UnsupportedMediaType(_) => ProblemType::UnsupportedMediaType,
             Self::PayloadTooLarge(_) => ProblemType::PayloadTooLarge,
             Self::InvalidCredentials(_) => ProblemType::InvalidCredentials,
@@ -590,6 +610,7 @@ impl ApiError {
                 word: None,
                 did_you_mean: None,
                 retry_after: None,
+                line: None,
             };
         };
         let mut problem = Problem {
@@ -602,6 +623,7 @@ impl ApiError {
             word: None,
             did_you_mean: None,
             retry_after: None,
+            line: None,
         };
         match self {
             Self::ValidationFailed(errors) => problem.errors = Some(errors.clone()),
@@ -619,6 +641,14 @@ impl ApiError {
                 problem.detail = Some(detail.clone());
                 problem.word = word.map(str::to_string);
                 problem.did_you_mean = did_you_mean.map(str::to_string);
+            }
+            Self::MalformedImportLine { detail, line } => {
+                problem.detail = Some(detail.clone());
+                problem.line = Some(*line as u64);
+            }
+            Self::InvalidImportLines { errors, line } => {
+                problem.errors = Some(errors.clone());
+                problem.line = Some(*line as u64);
             }
             Self::MalformedBody(m)
             | Self::UnsupportedMediaType(m)
@@ -651,12 +681,16 @@ impl std::fmt::Display for ApiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Internal(e) => f.write_str(&error_chain(e)),
-            Self::ValidationFailed(errors) => f.write_str(&errors.join("; ")),
+            Self::ValidationFailed(errors) | Self::InvalidImportLines { errors, .. } => {
+                f.write_str(&errors.join("; "))
+            }
             Self::RateLimited { retry_after_secs } => write!(
                 f,
                 "too many authentication attempts; try again in {retry_after_secs} seconds"
             ),
-            Self::SearchQueryInvalid { detail, .. } => f.write_str(detail),
+            Self::SearchQueryInvalid { detail, .. } | Self::MalformedImportLine { detail, .. } => {
+                f.write_str(detail)
+            }
             Self::MalformedBody(m)
             | Self::UnsupportedMediaType(m)
             | Self::PayloadTooLarge(m)
@@ -810,8 +844,7 @@ fn build_cors_layer(origins: &[String]) -> CorsLayer {
 fn limited_auth_router() -> (Router<AppState>, utoipa::openapi::OpenApi) {
     let (router, spec) = crate::openapi::public_openapi().split_for_parts();
     (
-        // Auth JSON is tiny; keep a tight limit so Argon2 abuse cannot ship 512 MiB bodies.
-        router.layer(RequestBodyLimitLayer::new(32 * 1024)),
+        router.layer(RequestBodyLimitLayer::new(MAX_AUTH_BODY_BYTES)),
         spec,
     )
 }
@@ -847,6 +880,18 @@ async fn json_body_limit_response(response: Response) -> Response {
     }
     ApiError::PayloadTooLarge("the request body is too large".to_string()).into_response()
 }
+
+/// The body cap of the routes a stranger may call ([`limited_auth_router`]):
+/// 32 KiB, so password hashing cannot be fed a large body.
+pub(crate) const MAX_AUTH_BODY_BYTES: usize = 32 * 1024;
+
+/// The cap on a JSON body, the one `crate::extract::Json` reads: 32 MiB. It
+/// is sized for the largest body the web app sends, the completion of an
+/// Import Run (`POST /v1/imports/{id}/complete`), which carries every issue
+/// of the run; at a few hundred bytes an issue, that is about a hundred
+/// thousand issues. Without it a JSON body is held to Axum's own 2 MiB
+/// default, a figure nobody chose.
+pub(crate) const MAX_JSON_BODY_BYTES: usize = 32 * 1024 * 1024;
 
 /// The body cap of every route but the attachment uploads: 512 MiB, the
 /// attachment size limit a new Message Crate starts with. It is fixed in the
@@ -1052,6 +1097,9 @@ pub(crate) fn http_app(state: AppState) -> Router {
     }
     api.method_not_allowed_fallback(api_method_not_allowed)
         .fallback_service(ServeDir::new(static_dir))
+        // The cap `extract::Json` reads a body against. The routes that read
+        // a body of their own hold it to their own figure instead.
+        .layer(DefaultBodyLimit::max(MAX_JSON_BODY_BYTES))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             limit_request_body,
@@ -1107,7 +1155,7 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
         crate::operation_lock::clear_ready(&cfg.paths.db)?;
         crate::reset_demo::seed_new_database(&cfg).await;
     }
-    let opened = OpenDb::open(cfg).await?;
+    let opened = OpenDb::create_or_open(cfg).await?;
     crate::operation_lock::mark_ready(&opened.cfg.paths.db)?;
     let mode: String = sqlx::query_scalar("PRAGMA journal_mode")
         .fetch_one(&opened.db)

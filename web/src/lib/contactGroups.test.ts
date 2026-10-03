@@ -42,6 +42,7 @@ describe("reserved groups", () => {
     expect(isReservedGroupName("Contacts")).toBe(true);
     expect(isReservedGroupName("no group")).toBe(true);
     expect(reservedGroupError("Trash")).toBe("Trash is a reserved Contact Group");
+    expect(reservedGroupError("Group Chats")).toBe('"Group Chats" is a reserved Contact Group');
     expect(isReservedGroupName("Family")).toBe(false);
   });
 

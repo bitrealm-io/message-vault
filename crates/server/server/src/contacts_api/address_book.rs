@@ -22,8 +22,8 @@ use crate::server::{
 /// A row is under a hundred bytes, so a few megabytes is already tens of
 /// thousands of identities, and the whole file is read into memory before
 /// parsing. The route reads the body itself against this cap, as the asset
-/// routes do: Axum's `Bytes` extractor would stop at its own 2 MiB default
-/// first, and a cap that never answers is no cap.
+/// routes do, and not through `crate::extract::Json`, whose cap is
+/// [`crate::server::MAX_JSON_BODY_BYTES`].
 pub(crate) const MAX_ADDRESS_BOOK_BYTES: usize = 8 * 1024 * 1024;
 
 /// The file name Export gives the address book.

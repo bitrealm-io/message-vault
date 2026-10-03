@@ -97,7 +97,10 @@ A program using that token stops working at once.
 A token made on this screen expires 365 days after it is made.
 The **Expires** column shows that date.
 
-The Owner has no **API Tokens** section, because a token reaches one account's messages and the Owner holds none.
+The Owner sees this table in the account's **User Settings**, without the **Token** column, and can revoke a token there so a leaked one can be ended.
+The Owner can't add or rename a token.
+
+The Owner's own Settings have no **API Tokens** section, because a token reaches one account's messages and the Owner holds none.
 
 ### Danger zone
 

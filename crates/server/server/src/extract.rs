@@ -9,8 +9,8 @@
 
 use axum::extract::rejection::JsonRejection;
 use axum::extract::{FromRequest, FromRequestParts, OptionalFromRequest, Request};
-use axum::http::StatusCode;
 use axum::http::request::Parts;
+use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -91,10 +91,23 @@ where
     }
 }
 
+/// Whether the request says it carries a body: a `Content-Length` above 0,
+/// or a `Transfer-Encoding`, which chunks a body of no stated length.
+fn declares_a_body(req: &Request) -> bool {
+    let headers = req.headers();
+    headers.contains_key(header::TRANSFER_ENCODING)
+        || headers
+            .get(header::CONTENT_LENGTH)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u64>().ok())
+            .is_some_and(|bytes| bytes > 0)
+}
+
 /// `body: Option<Json<T>>`, for a route one caller sends a body to and
-/// another does not: `None` when the request carries no `Content-Type`, the
-/// parsed body when it does, and the same rejections as the required form
-/// when what it carries is not JSON.
+/// another does not: `None` when the request carries no body, the parsed
+/// body when it carries JSON, and the same rejections as the required form
+/// when what it carries is not JSON. A body with no `Content-Type` is
+/// `415 Unsupported Media Type`, never read as no body.
 impl<T, S> OptionalFromRequest<S> for Json<T>
 where
     T: DeserializeOwned,
@@ -103,6 +116,12 @@ where
     type Rejection = ApiError;
 
     async fn from_request(req: Request, state: &S) -> Result<Option<Self>, Self::Rejection> {
+        if !req.headers().contains_key(header::CONTENT_TYPE) && declares_a_body(&req) {
+            return Err(ApiError::UnsupportedMediaType(
+                "the request carries a body and no Content-Type; send it as application/json"
+                    .to_string(),
+            ));
+        }
         match <axum::Json<T> as OptionalFromRequest<S>>::from_request(req, state).await {
             Ok(Some(axum::Json(value))) => Ok(Some(Json(value))),
             Ok(None) => Ok(None),
@@ -178,26 +197,44 @@ mod tests {
         expect_problem(status, &text, ProblemType::UnsupportedMediaType);
     }
 
-    /// A JSON body over the cap its route holds it to answers the
-    /// `payload-too-large` problem, while a body under the cap that is not
-    /// JSON still answers `malformed-body`: the cap never turns a syntax
-    /// error into a 413, and a 413 is never a 400. The cap here is Axum's
-    /// 2 MiB default, and the body is sent with a `Content-Length` over it;
-    /// the extractor's arm for a body it has to read is tested below without
-    /// HTTP.
+    /// A JSON body is held to [`MAX_JSON_BODY_BYTES`], a figure the server
+    /// sets, and not to Axum's 2 MiB default: a body of exactly that many
+    /// bytes is read (here it parses, and the saved search's name then
+    /// breaks a rule), and one byte more answers the `payload-too-large`
+    /// problem. A body under the cap that is not JSON still answers
+    /// `malformed-body`: the cap never turns a syntax error into a 413, and
+    /// a 413 is never a 400.
+    ///
+    /// [`MAX_JSON_BODY_BYTES`]: crate::server::MAX_JSON_BODY_BYTES
     #[tokio::test]
-    async fn a_json_body_over_the_body_cap_is_a_json_413_and_a_syntax_error_a_400() {
+    async fn a_json_body_is_read_up_to_the_json_body_cap_and_a_byte_more_is_a_json_413() {
+        use crate::server::MAX_JSON_BODY_BYTES;
         let (fixture, user) = fixture_with_account().await;
         let state = fixture.state.clone();
+        let body_of = |bytes: usize| {
+            let frame = r#"{"name":"","query":"hi"}"#;
+            let padding = "a".repeat(bytes - frame.len());
+            let body = format!(r#"{{"name":"{padding}","query":"hi"}}"#);
+            assert_eq!(body.len(), bytes);
+            body
+        };
 
-        let padding = "a".repeat(3 * 1024 * 1024);
-        let body = serde_json::json!({ "name": padding, "query": "hi" }).to_string();
         let (status, text) = post_raw(
             &state,
             "/v1/saved-searches",
             &user.token,
             "application/json",
-            body,
+            body_of(MAX_JSON_BODY_BYTES),
+        )
+        .await;
+        expect_problem(status, &text, ProblemType::ValidationFailed);
+
+        let (status, text) = post_raw(
+            &state,
+            "/v1/saved-searches",
+            &user.token,
+            "application/json",
+            body_of(MAX_JSON_BODY_BYTES + 1),
         )
         .await;
         expect_problem(status, &text, ProblemType::PayloadTooLarge);
@@ -270,6 +307,42 @@ mod tests {
             "a read failure is malformed-body, got {error:?}"
         );
         assert_eq!(error.status(), StatusCode::BAD_REQUEST);
+    }
+
+    /// The optional form tells no body from a body with no `Content-Type`:
+    /// a chunked body is a body even with no `Content-Length`, and is
+    /// `415`; a request with no body, or an empty one, is `None` (#1100).
+    #[tokio::test]
+    async fn the_optional_form_refuses_a_body_without_a_content_type() {
+        async fn optional(request: Request<axum::body::Body>) -> Result<bool, ApiError> {
+            <Json<serde_json::Value> as axum::extract::OptionalFromRequest<()>>::from_request(
+                request,
+                &(),
+            )
+            .await
+            .map(|body| body.is_some())
+        }
+
+        let chunked = Request::delete("/")
+            .header(header::TRANSFER_ENCODING, "chunked")
+            .body(axum::body::Body::from(r#"{"confirm": true}"#))
+            .unwrap();
+        let error = optional(chunked).await.unwrap_err();
+        assert!(
+            matches!(error, ApiError::UnsupportedMediaType(_)),
+            "a chunked body with no Content-Type is 415, got {error:?}"
+        );
+
+        let none = Request::delete("/")
+            .body(axum::body::Body::empty())
+            .unwrap();
+        assert!(!optional(none).await.unwrap(), "no body is None");
+
+        let empty = Request::delete("/")
+            .header(header::CONTENT_LENGTH, "0")
+            .body(axum::body::Body::empty())
+            .unwrap();
+        assert!(!optional(empty).await.unwrap(), "an empty body is None");
     }
 
     #[tokio::test]

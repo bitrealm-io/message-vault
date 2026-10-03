@@ -2,6 +2,9 @@ use super::*;
 use media::MediaMode;
 use std::fs;
 
+/// An attachment size limit for tests that do not look at it.
+const ASSET_MAX_BYTES: u64 = 512 * 1024 * 1024;
+
 fn test_options(owner_phones: Vec<String>) -> ExtractOptions {
     ExtractOptions {
         backup_password: String::new(),
@@ -81,20 +84,101 @@ fn non_imessage_sources_defer_the_media_step_too() {
 }
 
 #[test]
-fn imessage_compress_still_validates_media_fields_up_front() {
+fn compress_validates_the_minimum_size_before_staging() {
     // `Form.attachment_media` reads Clone for a real Compress choice (so
     // the exporter stages originals instead of converting), which means
-    // `Form`'s own compress validation no longer runs for it. Without the
-    // explicit `parse_compress_options` call in `build_exporter_config`,
-    // a malformed `media_min_size` would sail through here and only
-    // surface hours later, at the review.
+    // `Form`'s own compress validation never runs for it. Without
+    // `media_settings_for`, a malformed `media_min_size` would sail through
+    // and only surface hours later, at the review.
     let mut options = test_options(Vec::new());
     options.attachment_media = AttachmentMedia::Compress;
     options.media_min_size = "banana".into();
-    let err = build_exporter_config("imessage-ios", "/backup", "/out", &options).unwrap_err();
+    let err = media_settings_for(&options, ASSET_MAX_BYTES).unwrap_err();
     assert!(
         err.contains("banana"),
         "expected the malformed min-size value to be named: {err}"
+    );
+}
+
+#[test]
+fn compress_with_an_empty_max_fps_is_refused_naming_the_field() {
+    // #1153: the form's Max FPS is free text, and a cleared field used to
+    // fail only after hours of Staging, at the summary.
+    for fps in ["", "  ", "fast", "0", "-5", "NaN", "inf"] {
+        let mut options = test_options(Vec::new());
+        options.attachment_media = AttachmentMedia::Compress;
+        options.media_max_fps = fps.into();
+        let err = media_settings_for(&options, ASSET_MAX_BYTES).unwrap_err();
+        assert!(err.contains("Max FPS"), "{fps:?}: {err}");
+    }
+}
+
+#[test]
+fn an_empty_max_fps_is_no_problem_when_nothing_is_compressed() {
+    for chosen in [
+        AttachmentMedia::Clone,
+        AttachmentMedia::Convert,
+        AttachmentMedia::Disabled,
+    ] {
+        let mut options = test_options(Vec::new());
+        options.attachment_media = chosen;
+        options.media_max_fps = String::new();
+        let settings = media_settings_for(&options, ASSET_MAX_BYTES).unwrap();
+        assert_eq!(settings.mode, chosen.media_mode());
+        assert_eq!(settings.compress, media::CompressOptions::default());
+    }
+}
+
+#[test]
+fn the_media_settings_carry_the_mode_the_fields_and_the_limit() {
+    let mut options = test_options(Vec::new());
+    options.attachment_media = AttachmentMedia::Compress;
+    options.media_max_resolution = MaxResolution::P720;
+    options.media_max_fps = "24".into();
+    options.media_min_size = "5M".into();
+
+    let settings = media_settings_for(&options, 123_456_789).unwrap();
+
+    assert_eq!(settings.mode, MediaMode::Compress);
+    assert_eq!(settings.compress.max_resolution, MaxResolution::P720);
+    assert_eq!(settings.compress.max_fps, 24.0);
+    assert_eq!(settings.compress.min_size_bytes, 5 * 1024 * 1024);
+    // The server's limit, passed in. The desktop app has no number of its own.
+    assert_eq!(settings.asset_max_bytes, 123_456_789);
+}
+
+#[test]
+fn staging_records_the_media_settings_in_the_folder() {
+    // The Staging Review's summary and the Media stage read them from here,
+    // so the whole run works to the values Staging was started with.
+    let tmp = tempfile::tempdir().unwrap();
+    let input = tmp.path().join("sms.xml");
+    fs::write(
+        &input,
+        r#"<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<smses count="1">
+  <sms address="+15555550101" date="1400773400000" type="1" body="hi" />
+</smses>
+"#,
+    )
+    .unwrap();
+    let output = tmp.path().join("out");
+    let mut options = test_options(vec!["+15555550100".into()]);
+    options.attachment_media = AttachmentMedia::Convert;
+    let config = build_exporter_config(
+        "sms-backup-restore",
+        input.to_str().unwrap(),
+        output.to_str().unwrap(),
+        &options,
+    )
+    .unwrap();
+    let settings = media_settings_for(&options, ASSET_MAX_BYTES).unwrap();
+
+    run_staging(&config, &output, &settings).unwrap();
+
+    assert_eq!(
+        message_staging::read_media_settings(&output).unwrap(),
+        settings
     );
 }
 

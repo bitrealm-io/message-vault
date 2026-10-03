@@ -33,7 +33,11 @@ use std::fmt;
 use std::str::FromStr;
 
 /// Attachment media handling after export.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+///
+/// Serialized under the names [`MediaMode::as_str`] gives, so the media
+/// settings a staging folder records read the same as the form's values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum MediaMode {
     /// Do not write attachment files during export.
     Disabled,
@@ -98,14 +102,19 @@ impl FromStr for MediaMode {
 }
 
 /// Max long-edge cap for video compress (no upscale).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+///
+/// Serialized under the names [`MaxResolution::as_str`] gives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum MaxResolution {
     /// Cap the video long edge at 1280 px.
+    #[serde(rename = "720p")]
     P720,
     /// Cap the video long edge at 1920 px; the default.
     #[default]
+    #[serde(rename = "1080p")]
     P1080,
     /// Cap the video long edge at 3840 px.
+    #[serde(rename = "4k")]
     P4k,
 }
 
@@ -178,7 +187,7 @@ pub fn compress_options_from_form(
 }
 
 /// Options applied only when [`MediaMode::Compress`].
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct CompressOptions {
     /// Long-edge cap applied when compressing video.
     pub max_resolution: MaxResolution,

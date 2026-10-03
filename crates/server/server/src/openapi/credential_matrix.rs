@@ -225,6 +225,12 @@ impl Operation {
         self.path.starts_with("/v1/accounts/{id}")
     }
 
+    /// Making or renaming an API token, which only the account that holds
+    /// it does.
+    fn makes_or_renames_a_token(&self) -> bool {
+        self.path.contains("/api-tokens") && matches!(self.method.as_str(), "post" | "patch")
+    }
+
     /// What `credential` should get from this operation.
     fn expected(&self, credential: Credential) -> Expected {
         if self.security.is_none() {
@@ -237,11 +243,12 @@ impl Operation {
             // A session with no scope named admits any logged-in person, but
             // the owner's session reaches only what the rules give it: its own
             // session, the routes that name the owner, and the accounts it
-            // manages, where it sees no API tokens (ADR-0008).
+            // manages, where it lists and revokes API tokens and never makes
+            // or renames one.
             Credential::Owner => {
                 let reaches = self.names_owner()
                     || self.path == "/v1/session"
-                    || (self.is_under_an_account() && !self.path.contains("/api-tokens"));
+                    || (self.is_under_an_account() && !self.makes_or_renames_a_token());
                 if reaches {
                     Expected::Accepted
                 } else {
@@ -876,7 +883,25 @@ fn the_expected_outcome_follows_the_declared_security_and_the_owner_rule() {
         "/v1/accounts/{id}/api-tokens",
         json!([{ "session": [] }]),
     );
-    assert_eq!(tokens.expected(Credential::Owner), Expected::Refused);
+    assert_eq!(tokens.expected(Credential::Owner), Expected::Accepted);
+    let revoke = op(
+        "delete",
+        "/v1/accounts/{id}/api-tokens/{token_id}",
+        json!([{ "session": [] }]),
+    );
+    assert_eq!(revoke.expected(Credential::Owner), Expected::Accepted);
+    let mint = op(
+        "post",
+        "/v1/accounts/{id}/api-tokens",
+        json!([{ "session": [] }]),
+    );
+    assert_eq!(mint.expected(Credential::Owner), Expected::Refused);
+    let rename = op(
+        "patch",
+        "/v1/accounts/{id}/api-tokens/{token_id}",
+        json!([{ "session": [] }]),
+    );
+    assert_eq!(rename.expected(Credential::Owner), Expected::Refused);
 
     let public = op("get", "/v1/server", Value::Null);
     let outcomes: BTreeSet<String> = CREDENTIALS

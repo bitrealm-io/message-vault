@@ -21,14 +21,40 @@ export const tdStyle = "border-b border-border p-2 px-3 text-[0.813rem] text-tex
  */
 type Schema = components["schemas"];
 
-/** One past Import Run, as the imports list returns it. */
-export type ImportRow = Schema["ImportSummary"];
+/**
+ * One past Import Run, as the imports list returns it: in full to the
+ * account itself, and to the owner without what the run held.
+ */
+export type ImportRow = Schema["ImportSummary"] | Schema["OwnerImportRun"];
 
-/** One Export Run as the history table lists it. */
-export type ExportRow = Schema["ExportRun"];
+/**
+ * One Export Run as the history table lists it: in full to the account
+ * itself, and to the owner without what the run asked for.
+ */
+export type ExportRow = Schema["ExportRun"] | Schema["OwnerExportRun"];
 
 /** One large attachment in the storage breakdown. */
 export type TopAttachment = Schema["TopAttachment"];
+
+/**
+ * What an Export Run asked for, in one line. The account reads its own runs
+ * in full ({@link describeExportScope}); the owner is told only which of the
+ * three forms the scope took, because the search is the account's own.
+ */
+export function describeExportRun(run: ExportRow): string {
+  if (!("scope_kind" in run)) return describeExportScope(run.scope);
+  switch (run.scope_kind) {
+    case "everything":
+      return "Everything";
+    case "query":
+      return "A search";
+    case "selection":
+      return "Picked by hand";
+    default:
+      run.scope_kind satisfies never;
+      return run.scope_kind;
+  }
+}
 
 /**
  * What an Export Run asked for, in one line: "Everything", the search it
@@ -58,8 +84,11 @@ export function describeExportScope(scope: Schema["ExportScope"]): string {
   }
 }
 
-/** One Import Run in full, with its issues. */
-export type ImportDetailResponse = Schema["ImportRun"];
+/**
+ * One Import Run: in full, with its summary and issues, to the account
+ * itself; to the owner with the summary's counts and how many issues.
+ */
+export type ImportDetailResponse = Schema["AccountImportRun"];
 
 /** Human-readable file size (for example "1.2 MB"). */
 export function formatBytes(bytes: number): string {
@@ -140,10 +169,13 @@ export function importStatusLabel(status: Schema["ImportStatus"]): string {
 
 /** Build the import summary panel model from a server import-detail response. */
 export function toImportSummaryView(detail: ImportDetailResponse): ImportSummaryView {
-  const summary =
-    detail.summary && typeof detail.summary === "object"
-      ? (detail.summary as Record<string, unknown>)
-      : {};
+  // The owner reads the summary's counts and nothing else of it.
+  const summary: Record<string, unknown> =
+    "counts" in detail
+      ? detail.counts
+      : detail.summary && typeof detail.summary === "object"
+        ? (detail.summary as Record<string, unknown>)
+        : {};
   const hasAnyStageTiming =
     detail.parse_ms != null ||
     detail.attachments_ms != null ||
@@ -180,6 +212,6 @@ export function toImportSummaryView(detail: ImportDetailResponse): ImportSummary
     prepareMs: detail.prepare_ms,
     uploadMs: detail.upload_ms,
     durationMs,
-    issues: detail.issues,
+    issues: "issues" in detail ? detail.issues : [],
   };
 }

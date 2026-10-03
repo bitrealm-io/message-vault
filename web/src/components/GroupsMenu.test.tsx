@@ -18,11 +18,11 @@ function renderMenu(labeled = true) {
       allGroups={[...GROUPS]}
       checks={{ College: "on", Family: "off", Work: "off" }}
       labeled={labeled}
-      ariaLabel={labeled ? "Contact Groups" : "Tags"}
-      title={labeled ? "Contact Groups" : "Tags"}
-      searchPlaceholder={labeled ? "Search groups…" : "Search tags…"}
-      emptyText={labeled ? "No groups" : "No tags"}
-      noMatchText={labeled ? "No matching groups" : "No matching tags"}
+      ariaLabel={labeled ? "Contact Groups" : "Message Tags"}
+      title={labeled ? "Contact Groups" : "Message Tags"}
+      searchPlaceholder={labeled ? "Search Contact Groups…" : "Search Message Tags…"}
+      emptyText={labeled ? "No Contact Groups" : "No Message Tags"}
+      noMatchText={labeled ? "No matching Contact Groups" : "No matching Message Tags"}
     />,
   );
 }
@@ -37,7 +37,7 @@ describe("GroupsMenu", () => {
     expect(screen.getByText("Family")).toBeTruthy();
     expect(screen.getByText("Work")).toBeTruthy();
 
-    await user.type(screen.getByRole("searchbox", { name: "Search groups…" }), "fam");
+    await user.type(screen.getByRole("searchbox", { name: "Search Contact Groups…" }), "fam");
     expect(screen.queryByText("College")).toBeNull();
     expect(screen.getByText("Family")).toBeTruthy();
     expect(screen.queryByText("Work")).toBeNull();
@@ -54,14 +54,14 @@ describe("GroupsMenu", () => {
       expect(groupRow?.className).toContain(token);
     }
 
-    await user.type(screen.getByRole("searchbox", { name: "Search groups…" }), "zzz");
+    await user.type(screen.getByRole("searchbox", { name: "Search Contact Groups…" }), "zzz");
     const empty = screen.getByRole("status");
     expect(empty.tagName).toBe("DIV");
-    expect(empty.textContent).toContain("No matching groups");
+    expect(empty.textContent).toContain("No matching Contact Groups");
     for (const token of ROW_TOKENS) {
       expect(empty.className).toContain(token);
     }
-    expect(screen.queryByText("No groups")).toBeNull();
+    expect(screen.queryByText("No Contact Groups")).toBeNull();
   });
 
   it("shows no groups on the same row when the catalog is empty", async () => {
@@ -78,19 +78,19 @@ describe("GroupsMenu", () => {
 
     await user.click(screen.getByRole("button", { name: "Contact Groups" }));
     const empty = screen.getByRole("status");
-    expect(empty.textContent).toContain("No groups");
+    expect(empty.textContent).toContain("No Contact Groups");
     for (const token of ROW_TOKENS) {
       expect(empty.className).toContain(token);
     }
-    expect(screen.queryByText("No matching groups")).toBeNull();
+    expect(screen.queryByText("No matching Contact Groups")).toBeNull();
   });
 
   it("filters the icon-only tags menu", async () => {
     const user = userEvent.setup();
     renderMenu(false);
 
-    await user.click(screen.getByRole("button", { name: "Tags" }));
-    await user.type(screen.getByRole("searchbox", { name: "Search tags…" }), "wor");
+    await user.click(screen.getByRole("button", { name: "Message Tags" }));
+    await user.type(screen.getByRole("searchbox", { name: "Search Message Tags…" }), "wor");
     expect(screen.getByText("Work")).toBeTruthy();
     expect(screen.queryByText("College")).toBeNull();
     expect(screen.queryByText("Family")).toBeNull();

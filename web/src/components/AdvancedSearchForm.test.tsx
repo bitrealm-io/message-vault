@@ -16,7 +16,7 @@ describe("AdvancedSearchForm on Messages", () => {
 
     const names = screen.getAllByRole("option").map((o) => o.textContent?.replace("✓", "").trim());
     expect(names).toEqual([
-      "iMessage",
+      "Apple Messages",
       "WhatsApp",
       "SMS Backup & Restore",
       "GO SMS Pro",
@@ -37,5 +37,21 @@ describe("AdvancedSearchForm on Messages", () => {
     await user.click(screen.getByRole("button", { name: "Search" }));
 
     expect(onApply).toHaveBeenCalledWith("source:imazing,go-sms-pro");
+  });
+});
+
+describe("AdvancedSearchForm on Contacts", () => {
+  it("names the iMessage service by its app, and still searches it as imessage", async () => {
+    const user = userEvent.setup();
+    const onApply = vi.fn();
+    render(<AdvancedSearchForm mode="contacts" onApply={onApply} onClose={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /Service/ }));
+    const names = screen.getAllByRole("option").map((o) => o.textContent?.replace("✓", "").trim());
+    expect(names).toEqual(["Apple Messages (iMessage)", "SMS", "MMS", "RCS", "WhatsApp"]);
+
+    await user.click(screen.getByRole("option", { name: "Apple Messages (iMessage)" }));
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    expect(onApply).toHaveBeenCalledWith("service:imessage");
   });
 });

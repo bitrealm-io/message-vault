@@ -22,6 +22,7 @@ function report(overrides: Partial<PushFinishedReport> = {}): PushFinishedReport
     conversations_total: 10,
     conversations_failed: 0,
     conversations_skipped: 0,
+    conversations_cancelled: 0,
     results: [],
     ...overrides,
   };
@@ -79,15 +80,17 @@ describe("importOutcome", () => {
     expect(importOutcome({ report: report(), threw: false, issues: [] })).toBe("completed");
   });
 
-  it("is failed when the job threw, whatever the report says", () => {
-    expect(importOutcome({ report: report(), threw: true, issues: [] })).toBe("failed");
+  // A failed Upload is paused, not failed (#1233): the run stays open at
+  // its Upload with its folder, and the next visit offers Resume or Discard.
+  it("is paused when the job threw, whatever the report says", () => {
+    expect(importOutcome({ report: report(), threw: true, issues: [] })).toBe("paused");
   });
 
-  it("is failed when there is no report at all", () => {
-    expect(importOutcome({ report: undefined, threw: false, issues: [] })).toBe("failed");
+  it("is paused when there is no report at all", () => {
+    expect(importOutcome({ report: undefined, threw: false, issues: [] })).toBe("paused");
   });
 
-  it("is failed when every conversation failed and nothing landed (2026-08-27 shape)", () => {
+  it("is paused when every conversation failed and nothing landed (2026-08-27 shape)", () => {
     const r = report({
       ok: false,
       conversations_total: 681,
@@ -97,7 +100,7 @@ describe("importOutcome", () => {
       messages_inserted: 0,
       messages_failed: 8_000,
     });
-    expect(importOutcome({ report: r, threw: false, issues: [] })).toBe("failed");
+    expect(importOutcome({ report: r, threw: false, issues: [] })).toBe("paused");
   });
 
   it("is completed when a re-push dedupes everything to skips", () => {
@@ -111,9 +114,23 @@ describe("importOutcome", () => {
     expect(importOutcome({ report: r, threw: false, issues: [] })).toBe("completed");
   });
 
-  it("is completed_with_issues when some conversations failed but others landed", () => {
+  it("is paused when some conversations failed but others landed", () => {
+    // What a server that stops answering part-way leaves: the push records
+    // every later conversation as failed and moves on. The journal does not
+    // mark them sent, so a resume sends them.
     const r = report({ ok: false, conversations_ok: 8, conversations_failed: 2 });
-    expect(importOutcome({ report: r, threw: false, issues: [] })).toBe("completed_with_issues");
+    expect(importOutcome({ report: r, threw: false, issues: [] })).toBe("paused");
+  });
+
+  it("is paused when conversations were left unsent, even without the cancel flag", () => {
+    const r = report({
+      ok: false,
+      conversations_total: 10,
+      conversations_ok: 7,
+      conversations_failed: 1,
+      conversations_cancelled: 2,
+    });
+    expect(importOutcome({ report: r, threw: false, issues: [] })).toBe("paused");
   });
 
   it("is completed_with_issues when messages failed inside ok conversations", () => {
@@ -121,7 +138,7 @@ describe("importOutcome", () => {
     expect(importOutcome({ report: r, threw: false, issues: [] })).toBe("completed_with_issues");
   });
 
-  it("is cancelled when the cancel flag stopped the push partway", () => {
+  it("is paused when the cancel flag stopped the push partway", () => {
     // What run.rs reports when the cancel flag stops `drive` after 200 of 681.
     const r = report({
       ok: false,
@@ -130,17 +147,17 @@ describe("importOutcome", () => {
       conversations_ok: 200,
       conversations_failed: 0,
     });
-    expect(importOutcome({ report: r, threw: false, issues: [] })).toBe("cancelled");
+    expect(importOutcome({ report: r, threw: false, issues: [] })).toBe("paused");
   });
 
-  it("is failed when the push stopped short with no failed conversation and no cancel", () => {
+  it("is paused when the push stopped short with no failed conversation and no cancel", () => {
     const r = report({
       ok: false,
       conversations_total: 681,
       conversations_ok: 200,
       conversations_failed: 0,
     });
-    expect(importOutcome({ report: r, threw: false, issues: [] })).toBe("failed");
+    expect(importOutcome({ report: r, threw: false, issues: [] })).toBe("paused");
   });
 
   it("is completed_with_issues when the run recorded an issue", () => {
@@ -178,16 +195,16 @@ describe("importOutcome against an approved plan", () => {
     expect(outcome).toBe("completed_with_issues");
   });
 
-  it("zero conversations is a failure however clean the issue list is", () => {
-    // Decision 21's floor, unchanged by this task: conversations_total > 0
-    // with nothing ok and nothing skipped means nothing landed at all.
+  it("an Upload that sent nothing is paused however clean the issue list is", () => {
+    // Decision 21's floor: conversations_total > 0 with nothing ok and
+    // nothing skipped means nothing landed at all, so the run is not finished.
     const outcome = importOutcome({
       report: report({ conversations_ok: 0, messages_inserted: 0 }),
       threw: false,
       issues: [],
       approved: approvedPlan({ tooLarge: 0 }),
     });
-    expect(outcome).toBe("failed");
+    expect(outcome).toBe("paused");
   });
 
   it("behaves exactly as before when there is no approved plan", () => {

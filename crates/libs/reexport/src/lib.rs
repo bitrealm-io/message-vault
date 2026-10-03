@@ -312,7 +312,7 @@ fn detect_ir_export(input_dir: &Path) -> Result<DetectedExport> {
                     Some(OutputFormat::Xml)
                 }
                 "json" if looks_like_ir_json(&path)? => Some(OutputFormat::Json),
-                "jsonl" | "ndjson" if looks_like_ir_jsonl(&path)? => Some(OutputFormat::Jsonl),
+                "jsonl" if looks_like_ir_jsonl(&path)? => Some(OutputFormat::Jsonl),
                 "csv" if looks_like_ir_csv(&path)? => Some(OutputFormat::Csv),
                 "mbox" => Some(OutputFormat::Mbox),
                 _ => None,
@@ -387,7 +387,7 @@ fn list_artifacts(input_dir: &Path, format: OutputFormat) -> Result<Vec<PathBuf>
                     && path
                         .extension()
                         .and_then(|extension| extension.to_str())
-                        .is_some_and(|extension| extension == "jsonl" || extension == "ndjson")
+                        .is_some_and(|extension| extension == "jsonl")
                     && looks_like_ir_jsonl(&path)?
             }
             OutputFormat::Csv => {

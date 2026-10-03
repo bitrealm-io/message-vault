@@ -43,7 +43,7 @@ Convert reads the six formats Export writes:
 
 | Format | Recognised by |
 |---|---|
-| JSON Lines | `.jsonl` or `.ndjson` files |
+| JSON Lines | `.jsonl` files |
 | JSON | `.json` files |
 | CSV | `.csv` files |
 | MBOX | `.mbox` files |

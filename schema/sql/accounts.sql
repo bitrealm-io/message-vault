@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS account_session_tokens (
     -- Unix-seconds string for when this session token was issued.
     created_at TEXT NOT NULL,
     -- Unix-seconds string; session rejected after this time.
-    expires_at TEXT NOT NULL DEFAULT '0',
+    expires_at TEXT NOT NULL,
     -- Which app last used this session: 'desktop' or 'website'. NULL until a
     -- request names one.
     app_kind TEXT,

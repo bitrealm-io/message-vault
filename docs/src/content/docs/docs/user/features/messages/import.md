@@ -277,6 +277,11 @@ Resuming it sends only the conversations that are not in the Message Crate yet.
 An Upload that fails is paused the same way, because a failure there is mostly the network or the server.
 Every conversation it did not send stays staged for the resume.
 
+**Log out** during an Upload first asks: "An Upload is running. Logging out pauses it; you can resume it after you log in."
+**Log out** there pauses the Upload, waits until it has stopped, and then logs out; **Go back** leaves the Upload running.
+The next time the same account logs in and opens Import, the run is offered with **Resume**.
+An Upload is also paused, without asking, when the account is deleted or its session has ended.
+
 ## Resuming
 
 When Import is opened and the account already has a run open, the screen shows that run in place of the form.

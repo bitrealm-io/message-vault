@@ -63,12 +63,18 @@ struct DerivedBlob {
     mime_type: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, sqlx::FromRow)]
 struct AssetRow {
     sha256: String,
     assets_path: String,
     mime_type: Option<String>,
     derived_assets_path: Option<String>,
+    /// The Preview's fingerprint and type, as the rows that name it say.
+    derived_sha256: Option<String>,
+    derived_mime_type: Option<String>,
+    /// Rows of the blob that name no Preview yet, such as the rows of a
+    /// source imported after the Preview was made.
+    rows_without_preview: i64,
     /// Attachment file name from the export (`attachments.original_name`).
     original_name: Option<String>,
     /// Attachment path inside the export (`attachments.path`).
@@ -224,6 +230,10 @@ impl<'a> AccountPass<'a> {
         };
         let kind = match plan(row, self.opts, on_disk)? {
             Plan::RemoveIncomplete => return self.remove_incomplete(row, &source_path),
+            Plan::Skip(SkipReason::AlreadyDerived) => {
+                self.share_existing_preview(conn, row).await?;
+                return Ok(Outcome::Skipped);
+            }
             Plan::Skip(_) => return Ok(Outcome::Skipped),
             Plan::Derive(kind) => kind,
         };
@@ -235,6 +245,43 @@ impl<'a> AccountPass<'a> {
         update_derived(conn, self.account_id, &row.sha256, &blob).await?;
         println!("{} -> {}", self.label(row), blob.assets_path);
         Ok(Outcome::Derived)
+    }
+
+    /// Point the rows of `row`'s blob that name no Preview at the Preview
+    /// the other rows already name. A file imported from a second source
+    /// after its Preview was made has such rows; without this they would
+    /// never say a Preview exists, because the blob is not converted again.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the rows cannot be updated.
+    async fn share_existing_preview(
+        &self,
+        conn: &mut SqliteConnection,
+        row: &AssetRow,
+    ) -> Result<()> {
+        if row.rows_without_preview == 0 || self.opts.dry_run {
+            return Ok(());
+        }
+        let (Some(sha256), Some(assets_path), Some(mime_type)) = (
+            row.derived_sha256.clone(),
+            row.derived_assets_path.clone(),
+            row.derived_mime_type.clone(),
+        ) else {
+            return Ok(());
+        };
+        let blob = DerivedBlob {
+            sha256,
+            assets_path,
+            mime_type,
+        };
+        update_derived(conn, self.account_id, &row.sha256, &blob).await?;
+        println!(
+            "{} -> {} (existing preview)",
+            self.label(row),
+            blob.assets_path
+        );
+        Ok(())
     }
 
     /// Delete a `.part` left by an interrupted upload, or say so in a dry
@@ -332,25 +379,19 @@ async fn list_attachments(conn: &mut SqliteConnection, account_id: i64) -> Resul
     // can share a blob under different names, and only one derived file per
     // blob is ever produced, so collapse those rows and keep any name that
     // could identify the media type.
-    let rows = sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-        ),
-    >(
+    let rows = sqlx::query_as::<_, AssetRow>(
         r"
         SELECT
-            a.sha256,
-            a.assets_path,
-            MAX(a.mime_type),
-            MAX(a.derived_assets_path),
-            MAX(a.original_name),
-            MAX(a.path)
+            a.sha256 AS sha256,
+            a.assets_path AS assets_path,
+            MAX(a.mime_type) AS mime_type,
+            MAX(a.derived_assets_path) AS derived_assets_path,
+            MAX(a.derived_sha256) AS derived_sha256,
+            MAX(a.derived_mime_type) AS derived_mime_type,
+            SUM(CASE WHEN COALESCE(a.derived_assets_path, '') = '' THEN 1 ELSE 0 END)
+                AS rows_without_preview,
+            MAX(a.original_name) AS original_name,
+            MAX(a.path) AS source_path
         FROM attachments a
         JOIN messages m ON m.id = a.message_id
         JOIN conversations c ON c.id = m.conversation_id
@@ -364,22 +405,7 @@ async fn list_attachments(conn: &mut SqliteConnection, account_id: i64) -> Resul
     .bind(account_id)
     .fetch_all(&mut *conn)
     .await?;
-    let out = rows
-        .into_iter()
-        .map(
-            |(sha256, assets_path, mime_type, derived_assets_path, original_name, source_path)| {
-                AssetRow {
-                    sha256,
-                    assets_path,
-                    mime_type,
-                    derived_assets_path,
-                    original_name,
-                    source_path,
-                }
-            },
-        )
-        .collect();
-    Ok(out)
+    Ok(rows)
 }
 
 /// Point every attachment row of the account for `original_sha`, from every

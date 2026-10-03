@@ -14,6 +14,9 @@ fn row(assets_path: &str) -> AssetRow {
         assets_path: assets_path.to_string(),
         mime_type: None,
         derived_assets_path: None,
+        derived_sha256: None,
+        derived_mime_type: None,
+        rows_without_preview: 1,
         original_name: None,
         source_path: None,
     }
@@ -654,6 +657,30 @@ fn a_dry_run_counts_the_preview_it_would_write_and_writes_nothing() {
         assert_eq!(fs::read_dir(&converted).unwrap().count(), 0);
         let mut conn = opened.conn().await.unwrap();
         assert_eq!(derived_of(&mut conn, attachment_id).await, None);
+    });
+}
+
+/// A file imported again from a second source after its Preview was made:
+/// the new rows name no Preview yet. The next run finds the Preview on disk
+/// and does not convert again, but it points the new rows at that Preview,
+/// so the web app asks for it for both sources.
+#[test]
+fn a_second_source_imported_after_the_preview_was_made_gets_the_preview() {
+    with_real_ffmpeg(async {
+        let (opened, _dir, imessage_attachment) = fixture_with_png("imessage").await;
+        let opts = ProcessAssetsOptions::default();
+        assert_eq!(run(&opened, &opts).await.unwrap(), stats(1, 1, 0, 0));
+        let mut conn = opened.conn().await.unwrap();
+        let message_id = seed_message(&mut conn, "whatsapp").await;
+        let whatsapp_attachment =
+            attach_stored_blob(&opened, &mut conn, message_id, SHA, ".png", PNG_1X1_RGB).await;
+        assert_eq!(derived_of(&mut conn, whatsapp_attachment).await, None);
+
+        assert_eq!(run(&opened, &opts).await.unwrap(), stats(1, 0, 1, 0));
+
+        let preview = derived_of(&mut conn, imessage_attachment).await;
+        assert!(preview.is_some());
+        assert_eq!(derived_of(&mut conn, whatsapp_attachment).await, preview);
     });
 }
 

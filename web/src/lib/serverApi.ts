@@ -66,12 +66,16 @@ function query(params: Record<string, string | number | boolean | undefined | nu
  * because a list that shrank between two requests reports a total it no
  * longer has.
  */
-async function readEveryPage<T>(
-  readPage: (page: { limit: number; offset: number }) => Promise<{ items: T[]; total: number }>,
-): Promise<T[]> {
-  const rows: T[] = [];
+async function readEveryPage<Page extends { items: unknown[]; total: number }>(
+  path: string,
+  opts?: RequestOptions,
+): Promise<Page["items"]> {
+  const rows: Page["items"] = [];
   for (;;) {
-    const page = await readPage({ limit: PAGE_SIZE_MAX, offset: rows.length });
+    const page = await apiClient.get<Page>(
+      withQuery(path, query({ limit: PAGE_SIZE_MAX, offset: rows.length })),
+      opts,
+    );
     rows.push(...page.items);
     if (page.items.length === 0 || rows.length >= page.total) return rows;
   }
@@ -149,9 +153,7 @@ export function claimServer(
 
 /** Every account of this Message Crate, for the owner: the owner's own first, then the rest by username. */
 export function listAccounts(opts?: RequestOptions): Promise<Schema["Account"][]> {
-  return readEveryPage((page) =>
-    apiClient.get<Schema["Page_Account"]>(withQuery("/v1/accounts", query(page)), opts),
-  );
+  return readEveryPage<Schema["Page_Account"]>("/v1/accounts", opts);
 }
 
 /**
@@ -286,9 +288,7 @@ export function listAccountIdentities(
   accountId?: number,
 ): Promise<Schema["Identity"][]> {
   const path = `${accountBase(accountId)}/identities`;
-  return readEveryPage((page) =>
-    apiClient.get<Schema["Page_Identity"]>(withQuery(path, query(page)), opts),
-  );
+  return readEveryPage<Schema["Page_Identity"]>(path, opts);
 }
 
 /** Which page of an account's run history to read. Absent values are left off the URL. */
@@ -358,9 +358,7 @@ export function listApiTokens(
   accountId?: number,
 ): Promise<Schema["ApiToken"][]> {
   const path = `${accountBase(accountId)}/api-tokens`;
-  return readEveryPage((page) =>
-    apiClient.get<Schema["Page_ApiToken"]>(withQuery(path, query(page)), opts),
-  );
+  return readEveryPage<Schema["Page_ApiToken"]>(path, opts);
 }
 
 export function createApiToken(
@@ -497,9 +495,7 @@ export function getConversationSources(
   opts?: RequestOptions,
 ): Promise<Schema["ConversationSource"][]> {
   const path = `/v1/conversations/${conversationId}/sources`;
-  return readEveryPage((page) =>
-    apiClient.get<Schema["Page_ConversationSource"]>(withQuery(path, query(page)), opts),
-  );
+  return readEveryPage<Schema["Page_ConversationSource"]>(path, opts);
 }
 
 /** Put a conversation in the trash. Idempotent: trashing an already-trashed one still answers. */
@@ -643,9 +639,7 @@ export function deleteContact(contactId: string | number): Promise<void> {
 
 /** Every Contact Group of the logged-in account. */
 export function listContactGroups(opts?: RequestOptions): Promise<Schema["NamedSet"][]> {
-  return readEveryPage((page) =>
-    apiClient.get<Schema["Page_NamedSet"]>(withQuery("/v1/contact-groups", query(page)), opts),
-  );
+  return readEveryPage<Schema["Page_NamedSet"]>("/v1/contact-groups", opts);
 }
 
 export function createContactGroup(
@@ -690,9 +684,7 @@ export function updateContactGroupMembers(
 
 /** Every Message Tag of the logged-in account. */
 export function listMessageTags(opts?: RequestOptions): Promise<Schema["NamedSet"][]> {
-  return readEveryPage((page) =>
-    apiClient.get<Schema["Page_NamedSet"]>(withQuery("/v1/message-tags", query(page)), opts),
-  );
+  return readEveryPage<Schema["Page_NamedSet"]>("/v1/message-tags", opts);
 }
 
 export function createMessageTag(
@@ -737,9 +729,7 @@ export function updateMessageTagMembers(
 
 /** Every Saved Search of the logged-in account. */
 export function listSavedSearches(opts?: RequestOptions): Promise<Schema["SavedSearch"][]> {
-  return readEveryPage((page) =>
-    apiClient.get<Schema["Page_SavedSearch"]>(withQuery("/v1/saved-searches", query(page)), opts),
-  );
+  return readEveryPage<Schema["Page_SavedSearch"]>("/v1/saved-searches", opts);
 }
 
 export function createSavedSearch(
@@ -770,9 +760,7 @@ export function listSearchFields(
   opts?: RequestOptions,
 ): Promise<Schema["FieldDoc"][]> {
   const path = `/v1/search-fields/${list}`;
-  return readEveryPage((page) =>
-    apiClient.get<Schema["Page_FieldDoc"]>(withQuery(path, query(page)), opts),
-  );
+  return readEveryPage<Schema["Page_FieldDoc"]>(path, opts);
 }
 
 // ── Import Runs ─────────────────────────────────────────────────────────────

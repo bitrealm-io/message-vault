@@ -5,54 +5,6 @@
 //! only; the real program is covered on every platform by
 //! `tests/helper_process.rs`.
 
-#[cfg(unix)]
-pub(crate) use fake::{fake_helper, source_line, spawn_fake};
-
-#[cfg(unix)]
-mod fake {
-    use std::{
-        fs,
-        os::unix::fs::PermissionsExt,
-        path::{Path, PathBuf},
-    };
-
-    use imessage_reader_protocol::Request;
-
-    use crate::helper::Helper;
-
-    /// Write `body` as an executable `/bin/sh` script in `dir`. The script
-    /// reads the request line first, as the real program does.
-    pub(crate) fn fake_helper(dir: &Path, body: &str) -> PathBuf {
-        let path = dir.join("imessage-reader");
-        fs::write(&path, format!("#!/bin/sh\nread -r request\n{body}\n")).unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
-        path
-    }
-
-    /// Start the fake at `path` with `request`. Retries while another test
-    /// thread's fork still holds the script open for writing (`ETXTBSY`).
-    pub(crate) fn spawn_fake(path: &Path, request: &Request) -> Helper {
-        for _ in 0..50 {
-            match Helper::spawn_at(path, request, None, None) {
-                Ok(helper) => return helper,
-                Err(e)
-                    if e.downcast_ref::<std::io::Error>()
-                        .is_some_and(|io| io.raw_os_error() == Some(26)) =>
-                {
-                    std::thread::sleep(std::time::Duration::from_millis(20));
-                }
-                Err(e) => panic!("start the fake helper: {e:#}"),
-            }
-        }
-        panic!("the fake helper stayed busy");
-    }
-
-    /// The shell line that prints a `source` event with `version`.
-    pub(crate) fn source_line(version: u32) -> String {
-        format!(r#"echo '{{"event":"source","protocol_version":{version},"encrypted":false}}'"#)
-    }
-}
-
 mod locating {
     use std::{ffi::OsString, fs, path::Path};
 
@@ -207,7 +159,7 @@ mod faults {
         Event, IdentitiesRequest, PROTOCOL_VERSION, Platform, Request, Source,
     };
 
-    use super::fake::{fake_helper, source_line, spawn_fake};
+    use crate::testutil::{fake_helper, source_line, spawn_fake};
 
     /// A request that expects a `source` event first.
     fn identities_request() -> Request {

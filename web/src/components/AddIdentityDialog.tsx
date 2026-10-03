@@ -45,7 +45,7 @@ function alreadyListed(
  *
  * A value that is not a number or an address, or one already in `existing`
  * on the same service, is refused here before anyone is asked. The same
- * number on Text message and on WhatsApp is two identities, so it is not a
+ * number on Text Message and on WhatsApp is two identities, so it is not a
  * duplicate.
  */
 export default function AddIdentityDialog({

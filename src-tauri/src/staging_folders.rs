@@ -17,7 +17,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use message_ir_format::{EXPORT_SENTINEL, write_export_sentinel};
+use message_ir_format::{EXPORT_SENTINEL, mark_export_folder};
 
 use crate::commands::paths::{resolve_openable_path, resolve_staging_root};
 
@@ -164,7 +164,7 @@ impl StagingFolders {
                 }
             }
         }
-        write_export_sentinel(&folder)
+        mark_export_folder(&folder)
             .map_err(|error| format!("Could not mark {}: {error:#}", folder.display()))?;
         let folder = folder
             .canonicalize()

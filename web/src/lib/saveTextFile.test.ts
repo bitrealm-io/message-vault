@@ -53,28 +53,23 @@ describe("saveTextFile", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
-  it("asks where to save in the desktop app and writes the file there", async () => {
+  it("has the desktop app ask where to save and write the file, with no path from the window", async () => {
     isTauri.mockReturnValue(true);
-    save.mockResolvedValue("/home/sam/Documents/address-book.csv");
-    invoke.mockResolvedValue(undefined);
+    invoke.mockResolvedValue(true);
 
     expect(await saveTextFile("address-book.csv", "a,b\n", "text/csv")).toBe(true);
 
-    expect(save).toHaveBeenCalledWith({
-      defaultPath: "address-book.csv",
-      filters: [{ name: "CSV", extensions: ["csv"] }],
-    });
+    expect(save).not.toHaveBeenCalled();
     expect(invoke).toHaveBeenCalledWith("save_text_file", {
-      path: "/home/sam/Documents/address-book.csv",
+      fileName: "address-book.csv",
       contents: "a,b\n",
     });
   });
 
-  it("writes nothing when the desktop app's dialog is closed without a choice", async () => {
+  it("reports false when the desktop app's dialog is closed without a choice", async () => {
     isTauri.mockReturnValue(true);
-    save.mockResolvedValue(null);
+    invoke.mockResolvedValue(false);
 
     expect(await saveTextFile("address-book.csv", "a,b\n", "text/csv")).toBe(false);
-    expect(invoke).not.toHaveBeenCalled();
   });
 });

@@ -14,7 +14,7 @@
 // through approve first, because there is no other way to reach it.
 
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActiveImportSession } from "../../lib/importSession";
 import type {
   FfmpegToolsProbe,
@@ -24,6 +24,7 @@ import type {
 } from "../../lib/tauri";
 import type { AttachmentMediaMode, ImportIssueEvent, ImportProgressEvent } from "../../lib/types";
 import { restoreFormFromSnapshot, snapshotSecret } from "./formSnapshot";
+import { importRunStore } from "./importRunStore";
 
 const createImportMock = vi.fn();
 const getServerStateMock = vi.fn();
@@ -90,6 +91,7 @@ vi.mock("../../lib/useAccountProfile", () => ({
 
 vi.mock("../../lib/api", () => ({
   getBaseUrl: () => "http://127.0.0.1:8080",
+  getAccountId: () => auth.accountId,
 }));
 
 // The three server calls this hook makes. Everything else in serverApi stays real,
@@ -101,8 +103,13 @@ vi.mock("../../lib/serverApi", async (importOriginal) => ({
   completeImport: (...args: unknown[]) => completeImportMock(...args),
 }));
 
+/** The logged-in account. A test of two accounts on one desktop app changes it. */
+let auth: { token: string | null; accountId: number | null } = {
+  token: "test-token",
+  accountId: 1,
+};
 vi.mock("../../lib/auth", () => ({
-  useAuth: () => ({ token: "test-token" }),
+  useAuth: () => auth,
 }));
 
 vi.mock("../../lib/tauri-check", () => ({
@@ -2510,5 +2517,159 @@ describe("parseStoredStagingSummary", () => {
       ],
     };
     expect(parseStoredStagingSummary(badVerdict)).toBeUndefined();
+  });
+});
+
+describe("one desktop app, two accounts (#1085)", () => {
+  const ACCOUNT_A = { token: "token-of-A", accountId: 1 };
+  const ACCOUNT_B = { token: "token-of-B", accountId: 2 };
+
+  beforeEach(() => {
+    auth = ACCOUNT_A;
+    resetImportRun();
+    runMock.mockReset();
+    runMock.mockImplementationOnce(runResult(EXTRACT_RESULT));
+    cancelMock.mockReset();
+    getServerStateMock.mockResolvedValue({ asset_max_bytes: 512 * MIB });
+    createImportMock.mockReset();
+    createImportMock.mockResolvedValue({ id: 1 });
+    completeImportMock.mockReset();
+    completeImportMock.mockResolvedValue({});
+    createStagingDirMock.mockReset();
+    createStagingDirMock.mockResolvedValue("/home/sam/message-crate/staging-iphone");
+    invokePathStatMock.mockResolvedValue(null);
+    invokeSummarizeStagingMock.mockResolvedValue(stagingSummary());
+    invokeDeleteStagingMock.mockReset();
+    invokePushMock.mockReset();
+    readRunRecordMock.mockReset();
+    saveRunRecordMock.mockReset();
+    probeFfmpegToolsMock.mockResolvedValue(okProbe());
+    setImportStageMock.mockReset();
+    setImportStageMock.mockResolvedValue(undefined);
+    discardImportSessionMock.mockReset();
+    discardImportSessionMock.mockResolvedValue(undefined);
+    invokeImessageBackupIdentitiesMock.mockResolvedValue([]);
+    loadAccountProfileMock.mockResolvedValue({ phones: [], emails: [] });
+  });
+
+  afterEach(() => {
+    auth = { token: "test-token", accountId: 1 };
+  });
+
+  it("does not offer account A's parked form to account B", async () => {
+    invokeImessageBackupIdentitiesMock.mockResolvedValue(["+15550001111"]);
+    loadAccountProfileMock.mockResolvedValue({ phones: ["+15550109999"], emails: [] });
+    const a = renderHook(() => useImportJob());
+    await act(() => a.result.current.startImport({ ...form(), backupPassword: "secret-of-A" }));
+    expect(a.result.current.phase).toBe("identity_stop");
+    a.unmount();
+
+    // A logs out, B logs in on the same desktop app and opens Import.
+    auth = ACCOUNT_B;
+    const b = renderHook(() => useImportJob());
+    expect(b.result.current.phase).toBe("form");
+    expect(b.result.current.sourceIdentities).toBeNull();
+    await act(() => b.result.current.continueAfterIdentityStop());
+    expect(createImportMock).not.toHaveBeenCalled();
+  });
+
+  it("creates no run when account A logs out while its backup is being read", async () => {
+    let finishProbe: ((identities: string[]) => void) | null = null;
+    invokeImessageBackupIdentitiesMock.mockImplementation(
+      () =>
+        new Promise<string[]>((resolve) => {
+          finishProbe = resolve;
+        }),
+    );
+    const a = renderHook(() => useImportJob());
+    let runOfA: Promise<void> = Promise.resolve();
+    act(() => {
+      runOfA = a.result.current.startImport({ ...form(), backupPassword: "secret-of-A" });
+    });
+    await waitFor(() => expect(finishProbe).not.toBeNull());
+
+    // A logs out and B logs in before the probe of A's backup ends. The
+    // server calls go with B's session from here on.
+    auth = ACCOUNT_B;
+    await act(async () => {
+      finishProbe?.([]);
+      await runOfA;
+    });
+
+    expect(createImportMock).not.toHaveBeenCalled();
+    expect(runMock).not.toHaveBeenCalled();
+  });
+
+  it("shows account A's waiting review to A only, and B's actions leave it alone", async () => {
+    const a = renderHook(() => useImportJob());
+    await act(() => a.result.current.startImport(form()));
+    expect(a.result.current.phase).toBe("staging_review");
+    a.unmount();
+
+    auth = ACCOUNT_B;
+    const b = renderHook(() => useImportJob());
+    expect(b.result.current.phase).toBe("form");
+    expect(b.result.current.form).toBeNull();
+    expect(b.result.current.stagingDir).toBeNull();
+    expect(b.result.current.stagingSummary).toBeNull();
+
+    await act(() => b.result.current.cancelRun());
+    await act(() => b.result.current.approve());
+    act(() => b.result.current.returnToForm());
+    // A's staged folder and A's run are A's to delete or carry on.
+    expect(invokeDeleteStagingMock).not.toHaveBeenCalled();
+    expect(discardImportSessionMock).not.toHaveBeenCalled();
+    expect(invokePushMock).not.toHaveBeenCalled();
+    b.unmount();
+
+    // A logs back in and finds the run where it was left.
+    auth = ACCOUNT_A;
+    const aAgain = renderHook(() => useImportJob());
+    expect(aAgain.result.current.phase).toBe("staging_review");
+    expect(aAgain.result.current.stagingDir).toBe("/home/sam/message-crate/staging-iphone");
+  });
+
+  it("stops account A's Staging before account B's run starts, and keeps A's end out of it", async () => {
+    createStagingDirMock
+      .mockResolvedValueOnce("/home/sam/message-crate/staging-of-A")
+      .mockResolvedValueOnce("/home/sam/message-crate/staging-of-B");
+    createImportMock.mockResolvedValueOnce({ id: 11 }).mockResolvedValueOnce({ id: 22 });
+    // A's extract runs until a Cancel stops it, the way the desktop job does.
+    let stopExtractOfA: (() => void) | null = null;
+    runMock.mockReset();
+    runMock.mockImplementationOnce(async (fn) => {
+      await fn();
+      await new Promise<void>((resolve) => {
+        stopExtractOfA = resolve;
+      });
+      throw new Error("cancelled");
+    });
+    runMock.mockImplementationOnce(runResult(EXTRACT_RESULT));
+    cancelMock.mockImplementation(async () => stopExtractOfA?.());
+
+    const a = renderHook(() => useImportJob());
+    let runOfA: Promise<void> = Promise.resolve();
+    act(() => {
+      runOfA = a.result.current.startImport(form());
+    });
+    await waitFor(() => expect(stopExtractOfA).not.toBeNull());
+    a.unmount();
+
+    auth = ACCOUNT_B;
+    const b = renderHook(() => useImportJob());
+    await act(() => b.result.current.startImport(form()));
+    await act(() => runOfA);
+
+    expect(cancelMock).toHaveBeenCalled();
+    // A's run stays open on the server, resumable from its own folder.
+    expect(completeImportMock).not.toHaveBeenCalled();
+    expect(saveRunRecordMock).toHaveBeenCalledWith(
+      expect.objectContaining({ staging_dir: "/home/sam/message-crate/staging-of-A" }),
+    );
+    // B's run is B's alone.
+    expect(b.result.current.phase).toBe("staging_review");
+    expect(b.result.current.importSessionId).toBe(22);
+    expect(b.result.current.stagingDir).toBe("/home/sam/message-crate/staging-of-B");
+    expect(importRunStore.get().accountId).toBe(ACCOUNT_B.accountId);
   });
 });

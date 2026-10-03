@@ -3,17 +3,20 @@
 //! ("The reference": a rule checked one route at a time is checked on the
 //! routes someone remembered).
 //!
-//! Part of it reads the document: the page shape and paging parameters of
-//! every list, a `Location` on every `201`, a `404` on every path with an id,
-//! one-sentence summaries, declared tags, kebab-case paths and the nesting
-//! depth. The rest calls every operation through the router, on the
-//! credential matrix's fixture: with no credential it must answer `401`,
-//! with a query parameter it does not declare `422`, with a body that has no
-//! `Content-Type` or one the route does not take `415`, with a JSON body
-//! that is not JSON `400`, and a list with
-//! `limit`, or an `offset` past the ceiling its description states, out of
-//! range `422`. Each answer must be a problem document carrying its
-//! `request_id`, of a status and type the operation's document lists.
+//! Part of it reads the document: the page shape and paging parameters of every
+//! list, a `Location` on every `201`, a `404` on every path with an id, no body
+//! on the success of a `HEAD`, one-sentence summaries, declared tags,
+//! kebab-case paths and the nesting depth. The rest calls every operation
+//! through the router, on the credential matrix's fixture: with no credential
+//! it must answer `401`, with a query parameter it does not declare `422`, with
+//! a body that has no `Content-Type` or one the route does not take `415`, with
+//! a JSON body that is not JSON `400`, and a list with `limit`, or an `offset`
+//! past the ceiling its description states, out of range `422`. Each answer
+//! must be a problem document carrying its `request_id`, of a status and type
+//! the operation's document lists. An `Accept` that names nothing JSON must
+//! answer `406` exactly where the document lists it; a `GET` that succeeds must
+//! answer a media type its document declares; and a `201` must name in its
+//! `Location` a resource the same credential can `GET`.
 //!
 //! The failures an operation's shape brings are written into the document
 //! by `shared_parts`, so a check that reads them back from the document
@@ -37,6 +40,14 @@ use crate::problem::{Problem, ProblemType};
 /// "Naming a route").
 const MULTIPART_PART: &str = "/v1/assets/{sha256}/uploads/{upload_id}/parts/{part}";
 
+/// The creations whose `Location` names a path with no `GET` yet (#1486).
+/// The list empties when that issue is fixed, and nothing is added to it.
+const UNREADABLE_LOCATIONS: [&str; 3] = [
+    "/v1/contact-groups",
+    "/v1/message-tags",
+    "/v1/saved-searches",
+];
+
 /// The four keys of every page.
 const PAGE_KEYS: [&str; 4] = ["items", "total", "limit", "offset"];
 
@@ -56,11 +67,32 @@ async fn every_operation_keeps_the_rules_the_document_can_show() {
     // wrongly accepts (a delete, a logout) cannot change what the next
     // operation sees.
     let shared = Shared::build().await;
+    let mut refuse_the_demo_account = BTreeSet::new();
     for (n, op) in operations.iter().enumerate() {
         let world = World::build(&shared, n).await;
         let spec = &doc["paths"][&op.path][&op.method];
-        for rule in called_rules(&world, op, spec).await {
+        for rule in called_rules(&doc, &world, op, spec).await {
             broken.push(format!("{}: {rule}", op.label()));
+        }
+        match demo_account_rule(&world, op, spec).await {
+            DemoAnswer::RefusedAsDocumented => {
+                refuse_the_demo_account.insert(op.label());
+            }
+            DemoAnswer::RefusedBreaking(rule) => {
+                refuse_the_demo_account.insert(op.label());
+                broken.push(format!("{}: {rule}", op.label()));
+            }
+            DemoAnswer::Other => {}
+        }
+    }
+    // The check above is only as good as the routes that reach it: an import
+    // start, a delete for good and an address book load must each refuse the
+    // Demo Account by its id.
+    for label in ["POST /v1/imports", "DELETE /v1/trash", "POST /v1/contacts"] {
+        if !refuse_the_demo_account.contains(label) {
+            broken.push(format!(
+                "{label}: the Demo Account was not refused by its id"
+            ));
         }
     }
 
@@ -112,6 +144,17 @@ fn read_rules(doc: &Value, op: &Operation, spec: &Value) -> Vec<String> {
     }
 
     let responses = spec["responses"].as_object().cloned().unwrap_or_default();
+    // A failure keeps its problem document's media type, as every failure
+    // does, and the HEAD answer carries the header without the body.
+    if op.method == "head" {
+        for (status, response) in &responses {
+            if status.starts_with('2') && !response["content"].is_null() {
+                broken.push(format!(
+                    "a HEAD answer has no body, and its {status} declares one"
+                ));
+            }
+        }
+    }
     if responses.contains_key("201") && spec["responses"]["201"]["headers"]["Location"].is_null() {
         broken.push("201 without a Location header".to_string());
     }
@@ -123,7 +166,7 @@ fn read_rules(doc: &Value, op: &Operation, spec: &Value) -> Vec<String> {
         broken.push("no 404, which an id in the path brings".to_string());
     }
 
-    if let Some(page) = page_schema(doc, spec) {
+    for page in page_schemas(doc, spec) {
         let required: BTreeSet<&str> = page["required"]
             .as_array()
             .into_iter()
@@ -154,7 +197,7 @@ fn read_rules(doc: &Value, op: &Operation, spec: &Value) -> Vec<String> {
 /// problem type the server answers must be ones the document lists for the
 /// operation. Reading the document alone cannot show that, because the
 /// document and any reading of it come from the same code in `shared_parts`.
-async fn called_rules(world: &World<'_>, op: &Operation, spec: &Value) -> Vec<String> {
+async fn called_rules(doc: &Value, world: &World<'_>, op: &Operation, spec: &Value) -> Vec<String> {
     let mut broken = Vec::new();
     if !op.path.starts_with("/v1/") {
         return broken;
@@ -230,7 +273,29 @@ async fn called_rules(world: &World<'_>, op: &Operation, spec: &Value) -> Vec<St
         }
     }
 
-    if op.method == "get" && page_schema_named(spec).is_some() {
+    // An `Accept` that names nothing JSON. A route that answers JSON refuses
+    // it with `406`, which its document must list; a route that answers
+    // bytes ignores it, and its document must not claim a `406` it never
+    // gives.
+    let answer = call_with(world, op, &path, token, sent(), &[("accept", "text/html")]).await;
+    if answer.status == StatusCode::NOT_ACCEPTABLE || !spec["responses"]["406"].is_null() {
+        broken.extend(answer.problem_rule(
+            op,
+            spec,
+            ProblemType::NotAcceptable,
+            "Accept: text/html",
+        ));
+    }
+
+    // A read that succeeds answers in a media type its document declares.
+    if op.method == "get" {
+        let answer = call(world, op, &path, token, None).await;
+        if answer.status == StatusCode::OK {
+            broken.extend(answer.declared_media_type_rule(spec));
+        }
+    }
+
+    if op.method == "get" && !page_schemas(doc, spec).is_empty() {
         let mut out_of_range = vec!["limit=0", "limit=501"];
         // A browse list says its offset ceiling in the parameter's own
         // description, and must keep to it.
@@ -242,13 +307,83 @@ async fn called_rules(world: &World<'_>, op: &Operation, spec: &Value) -> Vec<St
             broken.extend(answer.problem_rule(op, spec, ProblemType::ValidationFailed, query));
         }
     }
+
+    // A creation names the new resource in `Location`, and the credential
+    // that made it can read it there ("Status codes"). Last, because it
+    // makes something.
+    if !spec["responses"]["201"].is_null()
+        && token.is_some()
+        && !UNREADABLE_LOCATIONS.contains(&op.path.as_str())
+    {
+        let answer = call(world, op, &path, token, sent()).await;
+        if answer.status == StatusCode::CREATED {
+            match &answer.location {
+                None => broken.push("a 201 with no Location".to_string()),
+                Some(location) => {
+                    let read = Operation {
+                        method: "get".to_string(),
+                        path: location.clone(),
+                        security: None,
+                    };
+                    let followed = call(world, &read, location, token, None).await;
+                    if followed.status != StatusCode::OK {
+                        broken.push(format!(
+                            "the 201's Location {location} answered GET with {}: {}",
+                            followed.status.as_u16(),
+                            followed.text
+                        ));
+                    }
+                }
+            }
+        }
+    }
     broken
+}
+
+/// What the Demo Account was answered.
+enum DemoAnswer {
+    /// `demo-account-protected`, as the document lists it.
+    RefusedAsDocumented,
+    /// `demo-account-protected`, breaking the rule named.
+    RefusedBreaking(String),
+    /// Anything else.
+    Other,
+}
+
+/// Call the operation as the Demo Account, whose row grants every
+/// permission, so a refusal comes from its id alone (ADR 0016). Wherever the
+/// server answers `demo-account-protected`, the document must list it. A
+/// `HEAD` answer has no body to tell the problem type by, so it is skipped.
+async fn demo_account_rule(world: &World<'_>, op: &Operation, spec: &Value) -> DemoAnswer {
+    if !op.path.starts_with("/v1/") || op.method == "head" || !takes_a_credential_only(op) {
+        return DemoAnswer::Other;
+    }
+    let path = world.path_for(op);
+    let body =
+        credential_matrix::body_for(op, 0).map(|(content_type, body)| (Some(content_type), body));
+    let token = world.demo_session().await;
+    let answer = call(world, op, &path, Some(&token), body).await;
+    let refused = serde_json::from_str::<Problem>(&answer.text)
+        .is_ok_and(|problem| problem.kind == ProblemType::DemoAccountProtected.url());
+    if !refused {
+        return DemoAnswer::Other;
+    }
+    match answer.problem_rule(
+        op,
+        spec,
+        ProblemType::DemoAccountProtected,
+        "the Demo Account",
+    ) {
+        Some(rule) => DemoAnswer::RefusedBreaking(rule),
+        None => DemoAnswer::RefusedAsDocumented,
+    }
 }
 
 /// A response, read whole.
 struct Answer {
     status: StatusCode,
     content_type: String,
+    location: Option<String>,
     text: String,
 }
 
@@ -311,6 +446,31 @@ impl Answer {
         }
         None
     }
+
+    /// What is wrong with a `200` answer's media type, if anything: one the
+    /// operation's document does not declare for its `200`. A declared
+    /// range (`*/*`, `image/*`) covers every type in it.
+    fn declared_media_type_rule(&self, spec: &Value) -> Option<String> {
+        let answered = self
+            .content_type
+            .split(';')
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase();
+        let declared: Vec<&String> = spec["responses"]["200"]["content"]
+            .as_object()
+            .map(|content| content.keys().collect())
+            .unwrap_or_default();
+        let covered = declared.iter().any(|range| match range.split_once('/') {
+            Some(("*", "*")) => true,
+            Some((kind, "*")) => answered.split('/').next() == Some(kind),
+            _ => **range == answered,
+        });
+        (!covered).then(|| {
+            format!("a 200 answered as {answered}, and the document declares {declared:?}")
+        })
+    }
 }
 
 /// Call `op` at `path` with `token`, or no credential, sending `body` with
@@ -322,8 +482,23 @@ async fn call(
     token: Option<&str>,
     body: Option<(Option<&str>, Vec<u8>)>,
 ) -> Answer {
+    call_with(world, op, path, token, body, &[]).await
+}
+
+/// [`call`], with `headers` added to the request.
+async fn call_with(
+    world: &World<'_>,
+    op: &Operation,
+    path: &str,
+    token: Option<&str>,
+    body: Option<(Option<&str>, Vec<u8>)>,
+    headers: &[(&str, &str)],
+) -> Answer {
     let method = reqwest::Method::from_bytes(op.method.to_uppercase().as_bytes()).unwrap();
     let mut request = reqwest::Client::new().request(method, world.url(path));
+    for (name, value) in headers {
+        request = request.header(*name, *value);
+    }
     if let Some(token) = token {
         request = request.bearer_auth(token);
     }
@@ -341,10 +516,16 @@ async fn call(
         .and_then(|v| v.to_str().ok())
         .unwrap_or_default()
         .to_string();
+    let location = response
+        .headers()
+        .get(reqwest::header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
     let text = response.text().await.unwrap_or_default();
     Answer {
         status,
         content_type,
+        location,
         text,
     }
 }
@@ -371,17 +552,37 @@ fn is_kebab(segment: &str) -> bool {
         })
 }
 
-/// The name of the page schema a `200` answers, if it answers a page.
-fn page_schema_named(spec: &Value) -> Option<&str> {
-    spec["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
+/// The schema name a `$ref` points at.
+fn schema_named(reference: &Value) -> Option<&str> {
+    reference["$ref"]
         .as_str()
         .and_then(|r| r.strip_prefix("#/components/schemas/"))
-        .filter(|name| name.starts_with("Page_"))
 }
 
-/// The page schema a `200` answers, if it answers a page.
-fn page_schema<'d>(doc: &'d Value, spec: &Value) -> Option<&'d Value> {
-    page_schema_named(spec).map(|name| &doc["components"]["schemas"][name])
+/// The page schemas a `200` answers: the page it names, or each page of a
+/// choice between pages, as an account's history answers the account in
+/// full and the owner without content. Empty when it answers no page.
+fn page_schemas<'d>(doc: &'d Value, spec: &Value) -> Vec<&'d Value> {
+    let schemas = &doc["components"]["schemas"];
+    let Some(name) =
+        schema_named(&spec["responses"]["200"]["content"]["application/json"]["schema"])
+    else {
+        return Vec::new();
+    };
+    if name.starts_with("Page_") {
+        return vec![&schemas[name]];
+    }
+    let choices: Vec<&str> = schemas[name]["oneOf"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(schema_named)
+        .collect();
+    if !choices.is_empty() && choices.iter().all(|c| c.starts_with("Page_")) {
+        choices.into_iter().map(|c| &schemas[c]).collect()
+    } else {
+        Vec::new()
+    }
 }
 
 /// What the operation says about its `offset`.

@@ -225,6 +225,12 @@ impl Operation {
         self.path.starts_with("/v1/accounts/{id}")
     }
 
+    /// Making or renaming an API token, which only the account that holds
+    /// it does.
+    fn makes_or_renames_a_token(&self) -> bool {
+        self.path.contains("/api-tokens") && matches!(self.method.as_str(), "post" | "patch")
+    }
+
     /// What `credential` should get from this operation.
     fn expected(&self, credential: Credential) -> Expected {
         if self.security.is_none() {
@@ -237,11 +243,12 @@ impl Operation {
             // A session with no scope named admits any logged-in person, but
             // the owner's session reaches only what the rules give it: its own
             // session, the routes that name the owner, and the accounts it
-            // manages, where it sees no API tokens (ADR-0008).
+            // manages, where it lists and revokes API tokens and never makes
+            // or renames one.
             Credential::Owner => {
                 let reaches = self.names_owner()
                     || self.path == "/v1/session"
-                    || (self.is_under_an_account() && !self.path.contains("/api-tokens"));
+                    || (self.is_under_an_account() && !self.makes_or_renames_a_token());
                 if reaches {
                     Expected::Accepted
                 } else {
@@ -318,6 +325,8 @@ impl Shared {
             .await
             .unwrap();
         drop(conn);
+        // The Demo Account, whose row grants everything, for `document_rules`.
+        fixture.demo_account().await;
         let server = crate::test_support::serve(&fixture.state).await;
         Self {
             fixture,
@@ -504,7 +513,9 @@ impl<'a> World<'a> {
         let response = reqwest::Client::new()
             .put(asset)
             .bearer_auth(&world.tokens.alice)
-            .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+            // Stored as an image, so its download answers in a media type of its
+            // own and not the fallback.
+            .header(reqwest::header::CONTENT_TYPE, "image/png")
             .body(ASSET_BYTES)
             .send()
             .await
@@ -523,6 +534,21 @@ impl<'a> World<'a> {
             .unwrap()
             .to_string();
         world
+    }
+
+    /// A new Session for the Demo Account. An account holds one Session at a
+    /// time, and a call may end it, so each call asks for its own.
+    pub(super) async fn demo_session(&self) -> String {
+        let mut conn = self.shared.fixture.conn().await;
+        crate::db::session_tokens::revoke_account_sessions(
+            &mut conn,
+            account_profile::DEMO_ACCOUNT_ID,
+        )
+        .await
+        .unwrap();
+        insert_account_session_token(&mut conn, account_profile::DEMO_ACCOUNT_ID)
+            .await
+            .unwrap()
     }
 
     pub(super) fn url(&self, path: &str) -> String {
@@ -662,7 +688,7 @@ pub(super) fn body_for(op: &Operation, n: usize) -> Option<(&'static str, Vec<u8
                 .to_vec(),
         )),
         ("post", "/v1/contacts/address-book") => json(json!({})),
-        ("post", "/v1/contacts/summaries") => json(json!({ "ids": [] })),
+        ("post", "/v1/contacts/summaries") => json(json!({ "ids": [1] })),
         ("post", "/v1/contacts/unmatched-identities") => json(json!({ "identifiers": [] })),
         ("patch", "/v1/contacts/{id}") => json(json!({ "name": "Samantha" })),
         ("post", "/v1/exports") => json(json!({ "scope": { "kind": "everything" } })),
@@ -849,7 +875,25 @@ fn the_expected_outcome_follows_the_declared_security_and_the_owner_rule() {
         "/v1/accounts/{id}/api-tokens",
         json!([{ "session": [] }]),
     );
-    assert_eq!(tokens.expected(Credential::Owner), Expected::Refused);
+    assert_eq!(tokens.expected(Credential::Owner), Expected::Accepted);
+    let revoke = op(
+        "delete",
+        "/v1/accounts/{id}/api-tokens/{token_id}",
+        json!([{ "session": [] }]),
+    );
+    assert_eq!(revoke.expected(Credential::Owner), Expected::Accepted);
+    let mint = op(
+        "post",
+        "/v1/accounts/{id}/api-tokens",
+        json!([{ "session": [] }]),
+    );
+    assert_eq!(mint.expected(Credential::Owner), Expected::Refused);
+    let rename = op(
+        "patch",
+        "/v1/accounts/{id}/api-tokens/{token_id}",
+        json!([{ "session": [] }]),
+    );
+    assert_eq!(rename.expected(Credential::Owner), Expected::Refused);
 
     let public = op("get", "/v1/server", Value::Null);
     let outcomes: BTreeSet<String> = CREDENTIALS

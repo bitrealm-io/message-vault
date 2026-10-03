@@ -37,6 +37,7 @@ openextract-exporter = { path = "../crates/exporters/openextract-exporter", defa
 imazing-exporter = { path = "../crates/exporters/imazing-exporter", default-features = false }
 whatsapp-exporter = { path = "../crates/exporters/whatsapp-exporter", default-features = false }
 imessage-ir-exporter = { path = "../crates/exporters/imessage-ir-exporter", default-features = false }
+ios-backup = { path = "../crates/libs/ios-backup" }
 message-reexport = { path = "../crates/libs/reexport" }
 message-crate-push = { path = "../crates/libs/push" }
 message-crate-pull = { path = "../crates/libs/pull" }

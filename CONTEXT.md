@@ -126,10 +126,11 @@ _Avoid_: Test data, Sample data, Demo mode
 The account that holds Demo Data, with the username `demo`. It has no
 password and can never be given one, so anyone who reaches the Message Crate
 can enter it. It may export, and move things to the trash and restore them; it
-may not import or delete for good, so a person's own messages never land in it
-and one visitor cannot empty it for the next. Its status, its permissions and
-its own identities are fixed; the names, groups, tags and searches a visitor
-makes in it stay until it is reset. The owner can delete it, or reset it to
+may not import, delete for good, or load an address book, so a person's own
+messages and contacts never land in it and one visitor cannot empty it for the
+next. Its status, its permissions, its own identities, its display name and its
+time zone are fixed; the names, groups, tags and searches a visitor makes in it
+stay until it is reset. The owner can delete it, or reset it to
 how it started, and change nothing else about it.
 _Avoid_: Demo user, Guest, Sample account
 
@@ -178,6 +179,12 @@ to decide which messages are the holder's own rather than someone else's. A
 backup's owner address becomes an account identity only when the person adds it;
 an import never adds one.
 
+A person a backup names with no address has an identity of type `other`
+whose value is the name, one for each service. It is a sign the import was
+incomplete, and a contact whose only identities are of that type is Unknown.
+Every identity a conversation or a message uses is on a contact; one taken
+off its contact goes to a new contact with no name.
+
 Handle is the word in the code and the database for the same thing.
 _Avoid_: Handle, Address, Number
 
@@ -185,7 +192,10 @@ _Avoid_: Handle, Address, Number
 Another person in a Conversation, as the account holder sees it. The account
 holder is never a participant: every conversation in an account is the holder's
 own, so Message Crate knows they are in it without listing them. Which of the
-holder's identities a message used is recorded on the message. A conversation
+holder's identities a message used is recorded on the message. Every
+participant has exactly one identity, an identity of type `other` holding the
+name when the backup named the person with no address, and the participant's
+contact is the one that identity is on. A conversation
 the holder has with themselves, notes sent to their own address, therefore has
 no participants and makes no contact; it goes by the account's display name.
 _Avoid_: Member, Recipient
@@ -194,7 +204,7 @@ _Avoid_: Member, Recipient
 When a contact last sent a message: the newest message any of the contact's
 identities was the sender of, shown on the contact list and one of the two ways
 the list can be ordered. It is not the contact's last activity. A message the
-account owner sent to the contact, or one another member of a group chat
+account owner sent to the contact, or one another member of a group conversation
 sent, does not move it, because neither is hearing from the contact. A
 message in a conversation in the Trash does not move it either: the column
 is not asked for the Trash, so it leaves the Trash out, and `last-message:`
@@ -211,7 +221,8 @@ _Avoid_: First seen, First active, First message
 
 **Unknown**:
 The Contact Group Message Crate computes from contacts that have no name or no
-identity. It has no members of its own and empties as a person names people.
+address. An identity of type `other` holds a name, not an address, so a
+contact whose only identities are of that type is Unknown. It has no members of its own and empties as a person names people.
 _Avoid_: Unnamed, Unresolved, Uncategorised
 
 **Trash**:
@@ -271,11 +282,12 @@ messages or the account. The account holder reads the same status and
 permissions under Settings, Account, and changes none. The owner sets the
 account's display name, time zone and identities on Profile as the holder does,
 which is not the holder's own profile setup, and reads there its last login and
-the app it connects with. The owner reads the Storage tab as the holder sees
-it, without seeing inside it. The owner's own row opens the owner's own Settings,
-which is also where the account button's Settings goes. An owner's password
-reset sets the password and nothing more: it does not end the person's
-session and does not make them choose a new one.
+the app it connects with. On the Demo Account its display name, time zone and
+identities are fixed, for the owner as for the holder. The owner reads the
+Storage tab as the holder sees it, without seeing inside it. The owner's own
+row opens the owner's own Settings, which is also where the account button's
+Settings goes. An owner's password reset sets the password and nothing more:
+it does not end the person's session and does not make them choose a new one.
 _Avoid_: Console, Dashboard, Admin, Admin panel
 
 **Audit Trail**:
@@ -311,7 +323,7 @@ both. A program holding one can bring messages in, or take them out
 through an Export Run it starts, but it can never browse: reading messages
 outside a run needs a Session. The secret is shown once when the token is
 made; afterwards the account sees only its name, a masked hint, and when it
-was last used.
+was last used. The owner sees the same without the hint, and may revoke it.
 _Avoid_: App password, Key, Credential, Session
 
 **User**:

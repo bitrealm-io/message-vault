@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { isAndroidSmsSource, needsOwnerEmails, splitEmails } from "../lib/androidSmsSources";
+import { apiErrorMessage } from "../lib/apiErrorMessage";
 import {
   type IdentityService,
   identityOnProfile,
@@ -19,7 +20,7 @@ import {
 } from "../lib/imessageImport";
 import { discardImportSession, getActiveImportSession } from "../lib/importSession";
 import { keys } from "../lib/queryKeys";
-import { useRouteCache } from "../lib/routeQuery";
+import { useRouteCache, useRouteQuery } from "../lib/routeQuery";
 import { unmatchedIdentities } from "../lib/serverApi";
 import {
   getImporterPath,
@@ -68,6 +69,9 @@ const PATH_PROBE_DEBOUNCE_MS = 200;
  * `crates/server/server/src/contacts_api.rs`) — the client batches to it rather than
  * discovering the limit from a 422. */
 const MAX_MATCH_IDENTIFIERS = 500;
+
+/** Stands in for a staging summary's identifiers before there is one, as one stable value. */
+const NO_IDENTIFIERS: readonly string[] = [];
 
 /** Nothing to decide -- the form renders. The one spelling of "no resume". */
 const NO_RESUME: ResumeDecision = { kind: "none", session: null };
@@ -145,8 +149,31 @@ export default function ImportScreen() {
       : "media"
     : null;
 
-  /** Null while the lookup hasn't finished (or failed) for the summary currently shown. */
-  const [unknownContacts, setUnknownContacts] = useState<number | null>(null);
+  /**
+   * How many of the staged contact identifiers this account has no contact
+   * for, asked while a review is shown, batched at the server's own cap so a
+   * large import doesn't send an oversized request. A failure is shown on the
+   * review and does not block it: the split into existing and new contacts
+   * helps the person decide, and approving does not depend on it.
+   */
+  const contactIdentifiers = stagingSummary?.contactIdentifiers ?? NO_IDENTIFIERS;
+  const unknownContactsQuery = useRouteQuery(
+    keys.contacts.unmatchedCount(contactIdentifiers),
+    async (signal) => {
+      let total = 0;
+      for (let i = 0; i < contactIdentifiers.length; i += MAX_MATCH_IDENTIFIERS) {
+        const batch = contactIdentifiers.slice(i, i + MAX_MATCH_IDENTIFIERS);
+        const res = await unmatchedIdentities({ identifiers: batch }, { signal });
+        total += res.items.length;
+      }
+      return total;
+    },
+    { enabled: isReviewPhase(phase) && stagingSummary != null },
+  );
+  const unknownContacts = unknownContactsQuery.data ?? null;
+  const unknownContactsError = unknownContactsQuery.error
+    ? apiErrorMessage(unknownContactsQuery.error, "The server didn't answer.")
+    : null;
 
   const { profile } = useAccountProfile();
   const updateProfile = useUpdateAccountProfile();
@@ -283,36 +310,6 @@ export default function ImportScreen() {
       cancelled = true;
     };
   }, [phase, cache]);
-
-  /**
-   * Ask the server which of the staged contact identifiers this account
-   * already has, once per summary shown at a review, batched at the
-   * server's own cap so a large import doesn't send an oversized request. A
-   * failed batch leaves the count unknown rather than blocking the review:
-   * the count of contacts new to the account is a nicety, not a requirement.
-   */
-  useEffect(() => {
-    if (!isReviewPhase(phase) || !stagingSummary) return;
-    let cancelled = false;
-    setUnknownContacts(null);
-    void (async () => {
-      const identifiers = stagingSummary.contactIdentifiers;
-      let total = 0;
-      try {
-        for (let i = 0; i < identifiers.length; i += MAX_MATCH_IDENTIFIERS) {
-          const batch = identifiers.slice(i, i + MAX_MATCH_IDENTIFIERS);
-          const res = await unmatchedIdentities({ identifiers: batch });
-          total += res.items.length;
-        }
-        if (!cancelled) setUnknownContacts(total);
-      } catch {
-        if (!cancelled) setUnknownContacts(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [phase, stagingSummary]);
 
   /** Populate the visible form from a resumed or restarted session's settings. */
   function applyRestoredFormState(restored: ReturnType<typeof restoreFormFromSnapshot>): void {
@@ -861,6 +858,7 @@ export default function ImportScreen() {
           completionText={completionText}
           reviewWaiting={reviewWaiting}
           unknownContacts={unknownContacts}
+          unknownContactsError={unknownContactsError}
           mediaToolsMissing={mediaToolsMissing}
           mediaPartiallyRan={mediaPartiallyRan}
           identityPanel={

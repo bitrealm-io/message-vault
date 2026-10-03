@@ -30,7 +30,7 @@ const LOCK: &str = ".lock";
 /// One request's scratch folder. Dropping it deletes the folder and
 /// everything in it.
 #[derive(Debug)]
-pub(crate) struct ScratchDir {
+pub struct ScratchDir {
     path: PathBuf,
     /// Held for the life of the request. `None` once [`Drop`] has let go
     /// of it, because Windows cannot delete a file that is still open.
@@ -45,7 +45,7 @@ impl ScratchDir {
     ///
     /// Returns an error when `root` or the new folder cannot be made, or a
     /// lock file cannot be made or locked.
-    pub(crate) fn create(root: &Path) -> Result<Self> {
+    pub fn create(root: &Path) -> Result<Self> {
         fs::create_dir_all(root)
             .with_context(|| format!("make the scratch folder {}", root.display()))?;
         restrict_to_owner(root)?;
@@ -73,7 +73,7 @@ impl ScratchDir {
     }
 
     /// The folder the reader may write decrypted files into.
-    pub(crate) fn path(&self) -> &Path {
+    pub fn path(&self) -> &Path {
         &self.path
     }
 }

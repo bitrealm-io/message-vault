@@ -131,6 +131,7 @@ function renderView(props: Partial<Parameters<typeof ImportRunView>[0]> = {}) {
           importSessionId={null}
           reviewWaiting={null}
           unknownContacts={null}
+          unknownContactsError={null}
           onApprove={() => {}}
           onCancelRun={() => {}}
           onCancel={() => {}}
@@ -155,7 +156,7 @@ const WAITING_MEDIA = "Media Review";
 describe("runHeading and the operation line", () => {
   it("names the source while the run is going", () => {
     expect(runHeading("running", form(), null, undefined)).toBe(
-      "Importing from iMessage · iPhone backup",
+      "Importing from Apple Messages · iPhone backup",
     );
     expect(sourceDisplayName("whatsapp-android")).toBe("WhatsApp · Android");
     expect(sourceDisplayName("sms-backup-restore")).toBe("SMS Backup & Restore");
@@ -222,7 +223,7 @@ describe("ImportRunView", () => {
     const staging = "/home/sam/message-crate/staging-iphone";
     renderView({ stagingDir: staging });
 
-    expect(screen.getByRole("heading", { name: "Importing from iMessage · iPhone backup" }));
+    expect(screen.getByRole("heading", { name: "Importing from Apple Messages · iPhone backup" }));
     expect(screen.getByText("/backups/iphone")).toBeInTheDocument();
     expect(screen.queryByText("What you asked for")).not.toBeInTheDocument();
 
@@ -347,6 +348,21 @@ describe("ImportRunView", () => {
     });
     expect(screen.getByText("Contacts")).toBeInTheDocument();
     expect(screen.queryByText("Existing")).not.toBeInTheDocument();
+  });
+
+  it("says on the review why the contact split is missing when the lookup failed", () => {
+    renderView({
+      phase: "staging_review",
+      running: false,
+      steps: stepsAt("convert", { Staging: "done" }),
+      stagingSummary: staged({ contactIdentifiers: ["+15550100"] }),
+      reviewWaiting: "staging",
+      unknownContacts: null,
+      unknownContactsError: "network down",
+    });
+    const review = within(stageRow(WAITING_STAGING));
+    expect(review.getByText(/network down/)).toBeInTheDocument();
+    expect(review.queryByText("Existing")).not.toBeInTheDocument();
   });
 
   it("sorts the estimates into three piles when a Media stage is coming", async () => {
@@ -486,7 +502,9 @@ describe("ImportRunView", () => {
     });
 
     expect(screen.getByRole("heading", { name: "Imported 47,910 messages" })).toBeInTheDocument();
-    expect(screen.getByText("iMessage · iPhone backup · /backups/iphone")).toBeInTheDocument();
+    expect(
+      screen.getByText("Apple Messages · iPhone backup · /backups/iphone"),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Import another" })).not.toBeInTheDocument();
 
     const upload = within(stageRow("Upload"));

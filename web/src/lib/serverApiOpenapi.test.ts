@@ -33,7 +33,8 @@ import * as serverApi from "./serverApi";
 
 vi.mock("./api", () => ({
   apiClient: {
-    get: vi.fn().mockResolvedValue({}),
+    // An empty page, so a list read whole stops after one request.
+    get: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     post: vi.fn().mockResolvedValue({}),
     postRaw: vi.fn().mockResolvedValue({}),
     postText: vi.fn().mockResolvedValue(""),
@@ -180,11 +181,18 @@ const EXERCISED: Record<string, () => unknown> = {
   listConversationMessages: () =>
     serverApi.listConversationMessages(
       12,
-      every<serverApi.ConversationMessagesParams>({ offset: 0, limit: 50 }),
+      every<serverApi.ConversationMessagesParams>({
+        offset: 0,
+        limit: 50,
+        sort: "-date",
+        around: 7,
+        before: 7,
+        after: 7,
+      }),
     ),
   listMessages: () =>
     serverApi.listMessages(
-      every<serverApi.MessagesListParams>({ q: "receipt", limit: 40, offset: 0 }),
+      every<serverApi.MessagesListParams>({ q: "receipt", limit: 40, offset: 0, sort: "-date" }),
     ),
   getConversationSources: () => serverApi.getConversationSources(12),
   trashConversation: () => serverApi.trashConversation(12),
@@ -245,7 +253,8 @@ const EXERCISED: Record<string, () => unknown> = {
   setImportStage: () => serverApi.setImportStage(4, { stage: "staged" }),
   completeImport: () => serverApi.completeImport(4, { status: "completed" }),
   discardImport: () => serverApi.discardImport(4),
-  getImportContacts: () => serverApi.getImportContacts(4),
+  getImportContacts: () =>
+    serverApi.getImportContacts(4, every<serverApi.ImportContactsParams>({ limit: 50, offset: 0 })),
 };
 
 /**

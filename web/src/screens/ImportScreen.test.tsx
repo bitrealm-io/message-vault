@@ -135,6 +135,7 @@ vi.mock("./import/ImportRunView", () => ({
   default: (props: {
     reviewWaiting: string | null;
     unknownContacts: number | null;
+    unknownContactsError: string | null;
     identityPanel?: unknown;
     onApprove: () => void;
     onCancelRun: () => void;
@@ -143,6 +144,7 @@ vi.mock("./import/ImportRunView", () => ({
     <div data-testid="import-run">
       <span data-testid="run-review-waiting">{String(props.reviewWaiting)}</span>
       <span data-testid="run-unknown-contacts">{String(props.unknownContacts)}</span>
+      <span data-testid="run-unknown-contacts-error">{String(props.unknownContactsError)}</span>
       <span data-testid="run-has-identities">{String(props.identityPanel != null)}</span>
       <button type="button" onClick={props.onApprove}>
         run-approve
@@ -1110,8 +1112,12 @@ describe("ImportScreen gates", () => {
     });
 
     expect(apiPostMock).toHaveBeenCalledTimes(1);
-    expect(apiPostMock).toHaveBeenCalledWith({ identifiers: ["a", "b", "c"] });
-    expect(screen.getByTestId("run-unknown-contacts")).toHaveTextContent("2");
+    expect(apiPostMock).toHaveBeenCalledWith(
+      { identifiers: ["a", "b", "c"] },
+      { signal: expect.any(AbortSignal) },
+    );
+    await waitFor(() => expect(screen.getByTestId("run-unknown-contacts")).toHaveTextContent("2"));
+    expect(screen.getByTestId("run-unknown-contacts-error")).toHaveTextContent("null");
   });
 
   it("batches the contact-match lookup at 500 identifiers per request and sums unknown across batches", async () => {
@@ -1142,20 +1148,21 @@ describe("ImportScreen gates", () => {
     const bodies = apiPostMock.mock.calls.map(([body]) => body as { identifiers: string[] });
     expect(bodies[0]?.identifiers).toHaveLength(500);
     expect(bodies[1]?.identifiers).toHaveLength(120);
-    expect(screen.getByTestId("run-unknown-contacts")).toHaveTextContent("430");
+    await waitFor(() =>
+      expect(screen.getByTestId("run-unknown-contacts")).toHaveTextContent("430"),
+    );
   });
 
-  it("renders the review without the unknown-contact count when the lookup fails", async () => {
+  it("shows why the unknown-contact count is missing when the lookup fails", async () => {
     hookState.phase = "staging_review";
     hookState.stagingSummary = stagingSummary({ contactIdentifiers: ["a"] });
     apiPostMock.mockRejectedValue(new Error("network down"));
     renderWithProviders(<ImportScreen />);
 
     await screen.findByTestId("import-run");
-    await act(async () => {
-      await Promise.resolve();
-    });
-
+    await waitFor(() =>
+      expect(screen.getByTestId("run-unknown-contacts-error")).toHaveTextContent("network down"),
+    );
     expect(screen.getByTestId("run-unknown-contacts")).toHaveTextContent("null");
   });
 

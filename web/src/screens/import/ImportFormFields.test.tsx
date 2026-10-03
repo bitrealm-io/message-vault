@@ -249,7 +249,7 @@ describe("ImportFormFields iMessage methods", () => {
     renderForm({ source: "whatsapp-android", onSourceChange });
     await user.click(screen.getByLabelText("Import source"));
     expect(await screen.findByRole("option", { name: "WhatsApp" })).toBeTruthy();
-    await user.click(screen.getByRole("option", { name: "iMessage" }));
+    await user.click(screen.getByRole("option", { name: "Apple Messages" }));
     expect(onSourceChange).toHaveBeenCalledWith(IMESSAGE_SOURCE_ID);
   });
 
@@ -258,7 +258,7 @@ describe("ImportFormFields iMessage methods", () => {
     const user = userEvent.setup();
     renderForm({ source: "imessage-ios", onSourceChange });
     await user.click(screen.getByLabelText("Import source"));
-    expect(await screen.findByRole("option", { name: "iMessage" })).toBeTruthy();
+    expect(await screen.findByRole("option", { name: "Apple Messages" })).toBeTruthy();
     await user.click(screen.getByRole("option", { name: "WhatsApp" }));
     expect(onSourceChange).toHaveBeenCalledWith(WHATSAPP_SOURCE_ID);
   });

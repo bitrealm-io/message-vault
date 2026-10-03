@@ -47,7 +47,7 @@ Between those steps, `PATCH /v1/imports/{id}` moves a live run to another stage,
 
 ### Import body
 
-A batch body is `Content-Type: application/jsonl` or `application/x-ndjson`. Any other media type answers `415 Unsupported Media Type`, because attachments never travel in a batch. A body larger than the attachment size limit (`asset_max_bytes` on `GET /v1/server`, 512 MiB until the Owner changes it) answers `413 Payload Too Large`.
+A batch body is `Content-Type: application/jsonl` or `application/x-ndjson`. Any other media type answers `415 Unsupported Media Type`, because attachments never travel in a batch. A body larger than 512 MiB, a cap fixed in the server, answers `413 Payload Too Large`; the attachment size limit the Owner sets holds the attachment uploads only.
 
 A file the server cannot read answers `400 Bad Request` with a `malformed-body` problem document. Its `detail` names the line where reading stopped. For a file of the wrong schema version, `detail` names the version the file has and the version the server reads: nothing is upgraded, so the file must be exported again with current tools. Every other failure is a problem document too, described under "Failures" in the HTTP interface rules.
 
@@ -84,10 +84,10 @@ Every export route takes the `export` scope on a session or an API token. A prog
 
 - Free text and `"quoted phrases"` match the message body, the subject, and any attachment file name.
 - `body:`, `subject:` — text, `none`, `any`, restricted to that one field.
-- `name:`, `handle:` — a participant's name or handle; text, `none`, `any`.
+- `name:`, `identity:` — a participant's name or identity; text, `none`, `any`.
 - `title:` — the conversation's title; text, `none`, `any`.
-- `with:` — a participant, by name, handle, `pre*` prefix, or `#id`.
-- `from:`, `to:` — who sent it or who it went to; `me`, name, handle, `pre*` prefix, or `#id`.
+- `with:` — a participant, by name, identity, `pre*` prefix, or `#id`.
+- `from:`, `to:` — who sent it or who it went to; `me`, name, identity, `pre*` prefix, or `#id`.
 - `in:` — this one conversation; title, handle, `pre*` prefix, or `#id`.
 - `group:` — this Contact Group, on the contact or on a participant; name, `pre*` prefix, `#id`, `none`, `unknown`.
 - `tag:` — this Message Tag; name, `pre*` prefix, `#id`, `none`.

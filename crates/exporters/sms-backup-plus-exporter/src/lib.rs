@@ -13,7 +13,6 @@ mod parse_emit;
 mod run;
 mod types;
 
-pub use message_crate_core::RunResult;
 pub use run::run;
 
 #[cfg(test)]

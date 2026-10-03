@@ -24,6 +24,12 @@ An import only adds. It never moves an identity from one contact to another,
 never removes an identity or a Contact Group membership, and never deletes a
 contact outside the Trash.
 
+Every identity a conversation or a message uses is on a contact. An
+identity leaves a contact one way, `contacts::move_identity` in
+`crates/server/server/src/db/contacts.rs`: to the contact it is given, or off.
+One taken off that a conversation or a message uses goes to a new contact
+with no name, so the person is Unknown again. One nothing uses is deleted.
+
 ### A person the backup gives an address for
 
 An import meets a person three ways: as a participant of a conversation, as
@@ -40,7 +46,7 @@ flowchart TD
   D -- yes --> D1["The identity joins that contact"]
   D1 --> E
   D -- no --> N["New contact with origin import, holding this identity. It takes the backup's name, or no name."]
-  E -- yes --> T["The trashed contact is discarded with every identity it had. A new contact is made from the backup, holding this identity and the same number on the other service."]
+  E -- yes --> T["A new contact is made from the backup, holding this identity and the same number on the other service. The trashed contact is discarded. Each other identity it had that a conversation uses goes to a new contact with no name; one nothing uses is deleted."]
   E -- no --> F{"Does the backup give a name, and is the contact nameless and made by an import?"}
   F -- yes --> F1["The contact takes the backup's name"]
   F -- no --> F2["The contact is left as it is"]
@@ -60,14 +66,28 @@ flowchart TD
 
 ### A person the backup names with no address
 
+A participant or a sender the backup names with no address gets an identity
+of type `other` whose value is the name, on the conversation's service. From
+there it is a person with an address, above: the identity finds its contact,
+or a new contact takes the name. Nothing is looked up by name.
+
 ```mermaid
 flowchart TD
-  A["A participant with no address"] --> B{"Does the backup give a name?"}
+  A["A participant or sender with no address"] --> B{"Does the backup give a name?"}
   B -- no --> B1["Nothing is created"]
-  B -- yes --> C{"Does exactly one contact outside the Trash have that name, ignoring letter case?"}
-  C -- yes --> C1["That contact is used"]
-  C -- "no, or more than one" --> C2["New contact with origin import, the name, and no identity"]
+  B -- yes --> C["The identity of type other holding the name, on this service"]
+  C --> D["As a person with an address, above"]
 ```
+
+- Two people one service names alike, with no address for either, share the
+  identity, and so the contact.
+- The name on WhatsApp and the name in text messages are two identities, one
+  on each service, and join one contact as the same number does.
+- A contact whose only identities are of type `other` is Unknown, whatever
+  its name.
+- Each identity of type `other` is a person the exporter could not tie to an
+  address, so the import is incomplete. The run counts the ones it met
+  (`other_identities`).
 
 ### What gets no contact
 
@@ -130,8 +150,7 @@ flowchart TD
   G -- Append --> I
   G -- Edit --> H["Take identities off each file contact that its rows do not list (step 6)"]
   H --> I["Delete contacts left with no name and no identity"]
-  I --> J["Delete identities a load made that nothing uses"]
-  J --> K["Commit and report the seven counts and the notes"]
+  I --> K["Commit and report the seven counts and the notes"]
 ```
 
 ### 2. Which contact a row speaks for
@@ -291,14 +310,14 @@ flowchart TD
   M -- Append --> Z["Other memberships and identities stay"]
   M -- Edit --> C["Remove memberships its rows do not list"]
   C --> D["After every contact is placed: take off each identity the contact holds that its rows do not list. Counts as identities_removed."]
-  D --> D1["The identity itself stays when a conversation, message or reaction uses it"]
+  D --> D1["One a conversation, message or reaction uses goes to a new contact with no name. One nothing uses is deleted."]
   Z --> E
   D1 --> E{"Did any contact lose an identity, by a move or a removal?"}
   E -- no --> G
   E -- yes --> F{"Does it now have no name and no identity?"}
   F -- yes --> F1["Contact deleted, even one the file does not list. Counts as contacts_deleted."]
   F -- no --> G
-  F1 --> G["Delete identities a load made that are on no contact and used by nothing"]
+  F1 --> G["Done"]
 ```
 
 ### What a load leaves alone
@@ -337,8 +356,8 @@ identity (step 4). Each sentence starts with its row number.
 | Same number on the other service | Joins the contact that already holds the other one | Does not follow. The file must list it |
 | Identity already on another contact | Never moved. The import uses that contact | Moved if the holder is nameless or in the file. Otherwise the load is refused |
 | Removing things | Never removes an identity, a membership, or a contact outside the Trash | Edit removes unlisted identities and memberships. An emptied nameless contact is deleted |
-| Contact in the Trash | Discarded with all its identities and made new from the backup | Cannot be addressed. Its id is treated as unknown text |
-| Person named with no address | Uses the contact with that name when exactly one outside the Trash has it, else makes a contact with a name and no identity | A row with a name and blank identity columns makes the same kind of contact, and never matches by name |
+| Contact in the Trash | Discarded and made new from the backup. Its other identities in conversations go to new contacts with no name | Cannot be addressed. Its id is treated as unknown text |
+| Person named with no address | An identity of type `other` holding the name, on the conversation's service, and its contact | A row with a name and blank identity columns makes a contact with no identity, and never matches by name |
 | Contact Groups | One group per Import Run, holding the contacts the run touched | The groups the `groups` column lists |
 | Bad data | No refusal for contact reasons. An odd phone number is stored and flagged | Any broken rule refuses the whole file |
 | `origin` written | `import` | `address_book` |

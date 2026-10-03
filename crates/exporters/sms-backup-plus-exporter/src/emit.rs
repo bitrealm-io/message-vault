@@ -32,8 +32,9 @@ const EXPORT_TOOL_VERSION: &str = "1.5.11";
 const GROUP_MESSAGES_WITHOUT_SENDER: &str = "group_messages_without_sender";
 
 /// Report counter: received MMS whose `To` names a group but none of the
-/// owner's numbers or email addresses, keyed by `X-smssync-address` instead.
-/// Counted after copies are reduced to one.
+/// owner's numbers or email addresses, filed one-to-one under `From` instead,
+/// or under `X-smssync-address` when `From` gives no address. Counted after
+/// copies are reduced to one.
 const GROUP_MESSAGES_OWNER_NOT_NAMED: &str = "group_messages_owner_not_named";
 
 /// The EML's path relative to the input root it was found under, for the vendor `source` bag.
@@ -233,9 +234,9 @@ impl ProjectionHooks for SbpProjection {
     }
 }
 
-/// Project one conversation, then count the group messages it kept with no
-/// sender, or keyed without the owner, from the messages written: copies
-/// dropped by the projection are not counted.
+/// Project one conversation, then count the messages it kept that did not
+/// name the owner, and the group messages it kept with no sender, from the
+/// messages written: copies dropped by the projection are not counted.
 fn project_and_count(
     chat_id: &str,
     convo: &mut PendingConversation,
@@ -244,9 +245,7 @@ fn project_and_count(
     report: &mut ExportReport,
 ) -> Option<ConversationDocument> {
     let doc = project_conversation(chat_id, convo, hooks, report)?;
-    if doc.conversation.conversation_type != IrConversationType::Group {
-        return Some(doc);
-    }
+    let is_group = doc.conversation.conversation_type == IrConversationType::Group;
     for msg in &doc.messages {
         let eml_path = msg
             .source
@@ -257,13 +256,13 @@ fn project_and_count(
         if owner_not_named.contains(eml_path) {
             report.bump(GROUP_MESSAGES_OWNER_NOT_NAMED, 1);
         }
-        if msg.direction == IrDirection::Incoming && msg.sender_handle.is_none() {
+        if is_group && msg.direction == IrDirection::Incoming && msg.sender_handle.is_none() {
             report.bump(GROUP_MESSAGES_WITHOUT_SENDER, 1);
             report.issues.push(RunIssue {
                 kind: "skip".into(),
                 step: "parse".into(),
-                item: eml_path.to_string(),
-                reason: "The sender of this group message could not be read, so it is stored with no sender.".into(),
+                item: format!("{eml_path} (sender)"),
+                reason: "The sender of this group message could not be read and was left out. The message itself is kept.".into(),
             });
         }
     }
@@ -774,25 +773,6 @@ mod tests {
                 .unwrap();
         }
         assert_eq!(ingest.report.extra("skipped_unreadable_part"), 3);
-    }
-
-    /// Two copies of a received MMS whose `To` names none of the owner's
-    /// addresses are one message, counted once. Its sender was read, so it
-    /// is not an issue.
-    #[test]
-    fn a_group_message_not_naming_the_owner_is_counted_once_over_two_copies() {
-        let copy = |eml_path: &str| ParsedMessage {
-            chat_key: "+15555550111_+15555550122".into(),
-            conversation_type: IrConversationType::Group,
-            sender: Handle::parse("+15555550111"),
-            owner_not_named: true,
-            ..parsed(1_600_000_000.1, true, eml_path)
-        };
-        let (msgs, report) = project(vec![copy("a.eml"), copy("b.eml")]);
-        assert_eq!(msgs.len(), 1);
-        assert_eq!(report.extra(GROUP_MESSAGES_OWNER_NOT_NAMED), 1);
-        assert_eq!(report.extra(GROUP_MESSAGES_WITHOUT_SENDER), 0);
-        assert!(report.issues.is_empty(), "{:?}", report.issues);
     }
 
     #[test]

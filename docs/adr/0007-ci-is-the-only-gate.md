@@ -22,7 +22,7 @@ against its base and publishes four booleans — `rust`, `web`, `docs`, `docker`
 | `docs` | `docs` | `npm ci`, `astro check`, `astro build` — the site without rustdoc or the HTTP API catalog |
 | `license` | always | `check-license.sh` |
 | `docker-context` | always | `check-docker-context.sh` |
-| `docker-build` | `docker`, pull requests only | `docker/build-push-action` with `push: false`: the release Dockerfile builds |
+| `docker-build` | `docker`, pull requests and the merge queue only | `docker/build-push-action` with `push: false`: the release Dockerfile builds |
 | `version` | always | `check-version-lockstep.sh`: the four product version files and their lockfiles agree, and on a `v*` tag agree with the tag |
 
 Two classifier arms are not what the directory alone would suggest.
@@ -34,9 +34,9 @@ files the Dockerfile copies or reads, and so the only files that can stop the
 image building while the Rust jobs stay green. Before `docker-build` existed
 the image was built for the first time on the release tag, so a pull request
 that broke `docker/Dockerfile` merged green and the failure appeared where the
-fix is a new tag. The job runs on pull requests only: the tag job builds and
-pushes the same image, and a push to `main` was checked by the pull request
-that produced it.
+fix is a new tag. The job runs on pull requests and merge queue runs only: the
+tag job builds and pushes the same image, and a push to `main` was checked by
+the merge queue run that produced it.
 
 `src-tauri`'s Clippy stays inside `check-tauri` rather than the `clippy` job,
 because its build needs the webkit and gtk system packages that job already
@@ -248,23 +248,37 @@ so twenty-six tests, the crash-recovery and resume suite among them, passed
 on every pull request without running. A test that skips itself is not a
 gate, so the tool it needs is part of the job.
 
-The ruleset does not require a branch to be up to date with `main` before it
-merges, so each pull request is checked against the `main` it branched from,
-not the `main` it lands on. Two pull requests that are green on their own can
-squash-merge into a `main` that does not compile. Requiring up-to-date branches
-would prevent that at the cost of a rebase before every merge; a merge queue
-would prevent it without the rebase, at the cost of one more CI run per merge.
-Neither is in place. What is in place is detection: `ci.yml` cancels an
-in-progress run only for a `pull_request` event, never for a push to `main` or
-a tag, so every commit on `main` gets its own verdict and a bad combination
-shows up on the merge that caused it. Before this, a burst of squash merges
-cancelled every `main` run but the last — twelve merges on 2026-09-05 left
-eleven cancelled runs and one result.
+A pull request's own run checks it against the `main` it branched from, not
+the `main` it lands on, so two pull requests that are green on their own can
+squash-merge into a `main` that does not compile. Many agent sessions merge in
+parallel, so this happens. The ruleset therefore requires the merge queue: a
+pull request is merged by adding it to the queue, GitHub builds a commit of it
+on top of `main` and everything ahead of it, `ci.yml` runs on that commit as a
+`merge_group` event, and only a green run lands it. The cost is one more CI
+run per merge; requiring up-to-date branches would have cost a rebase before
+every merge instead. The merge queue is free for a public repository owned by
+an organization. `ci.yml` still cancels an in-progress run only for a
+`pull_request` event, never for a merge queue run, a push to `main` or a tag,
+so every commit on `main` keeps its own verdict. Before this, a burst of squash
+merges cancelled every `main` run but the last — twelve merges on 2026-09-05
+left eleven cancelled runs and one result.
+
+The ruleset also requires every review conversation to be resolved before a
+merge. It requires no approving review: GitHub does not let the author of a
+pull request approve it, and the agent that opens a pull request uses the
+same account as the one that reviews it. The review is the conversations: the
+reviewer leaves each finding as a comment on the line, the author answers it
+with the commit that fixes it or the reason it stays, and resolves it. A pull
+request with an open finding cannot enter the queue. Approvals from a second
+account or a paid review bot would add a cost and no check that the
+conversations do not already make.
 
 The `changes` job is load-bearing and worth testing before the ruleset is
 enabled. A diff that is too broad runs the Rust matrix on a README edit; a diff
-that is too narrow skips it on a code change. On a tag or a `workflow_dispatch`
-there is no base commit to diff against, so every output is `true`.
+that is too narrow skips it on a code change. A merge queue run diffs against
+the `main` commit it merges onto (`merge_group.base_sha`). On a push, a tag or
+a `workflow_dispatch` there is no base commit to diff against, so every output
+is `true`.
 
 `ci.yml` granted `contents: write` and `packages: write` to every job. Only
 `github-release` writes anything with the GitHub token, and the Docker image

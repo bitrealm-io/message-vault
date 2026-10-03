@@ -35,6 +35,48 @@ Fill the sections in rather than deleting them. Root Cause and Regression
 Risk on a fix are the two that make it reviewable, so answer them plainly
 instead of dropping them.
 
+#### Review on the pull request
+
+The ruleset on `main` blocks a merge while any review conversation is open,
+and requires no approval: the reviewing agent and the author share one GitHub
+account, and GitHub does not let an author approve their own pull request.
+Why: `docs/adr/0007-ci-is-the-only-gate.md`.
+
+1. **The reviewer posts each finding on its line**, all in one review:
+
+   ```bash
+   gh api repos/messagecrate/message-crate/pulls/<N>/reviews \
+     -f event=COMMENT -f body='<one-line summary of the review>' \
+     -f 'comments[][path]=<file>' -F 'comments[][line]=<line>' \
+     -f 'comments[][body]=<the finding and why it matters>'
+   ```
+
+   Repeat the three `comments[]` fields for each finding. A finding with no
+   line goes in a top-level comment instead (`gh pr comment <N>`), and is
+   answered the same way but has nothing to resolve.
+2. **The author answers every finding in its thread**, with the commit that
+   fixes it or the reason it stays as it is, then resolves the thread:
+
+   ```bash
+   gh api repos/messagecrate/message-crate/pulls/<N>/comments/<comment-id>/replies \
+     -f body='Fixed in <sha>: <what changed>.'
+   gh api graphql -f query='query { repository(owner: "messagecrate", name: "message-crate") {
+     pullRequest(number: <N>) { reviewThreads(first: 100) { nodes { id isResolved
+       comments(first: 1) { nodes { databaseId path body } } } } } } }'
+   gh api graphql -f query='mutation { resolveReviewThread(input: {threadId: "<thread-id>"}) { thread { isResolved } } }'
+   ```
+
+   Never resolve a thread without a reply in it.
+
+#### Merging
+
+`main` requires the merge queue. `gh pr merge <N>` adds a green pull request
+to the queue, or turns on auto-merge when its checks are still running; it
+takes no `--squash`, because the queue's merge method is fixed. The queue
+runs `ci.yml` again on the pull request merged onto the latest `main`, and
+lands it only when that run is green. Never pass `--admin`: it merges past the
+queue.
+
 ## Tools
 
 - **GitHub MCP** (`plugin-github-github`) for issues, PR read/search, reviews, and GitHub code search when the server is authenticated; fall back to `gh` when it is not. See [`.cursor/rules/github-mcp.mdc`](.cursor/rules/github-mcp.mdc).

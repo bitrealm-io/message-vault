@@ -4,6 +4,8 @@ import type { PushFinishedReport } from "./tauri";
 import {
   awaitTauriJob,
   invokeDeleteStaging,
+  invokeReadImportRunRecord,
+  invokeSaveImportRunRecord,
   invokeSummarizeStaging,
   invokeTranscodeStaging,
   parseTauriJobResult,
@@ -44,6 +46,7 @@ function reportJson(overrides: Partial<PushFinishedReport> = {}): string {
     conversations_total: 5,
     conversations_failed: 0,
     conversations_skipped: 0,
+    conversations_cancelled: 0,
     results: [],
     ...overrides,
   };
@@ -73,6 +76,15 @@ describe("parseTauriJobResult", () => {
   it("does not attach a report missing conversations_skipped", () => {
     const parsed: Record<string, unknown> = JSON.parse(reportJson());
     delete parsed.conversations_skipped;
+    const result = parseTauriJobResult(JSON.stringify(parsed));
+    expect(result.report).toBeUndefined();
+  });
+
+  // Without `conversations_cancelled`, an Upload that left conversations
+  // unsent could read as finished.
+  it("does not attach a report missing conversations_cancelled", () => {
+    const parsed: Record<string, unknown> = JSON.parse(reportJson());
+    delete parsed.conversations_cancelled;
     const result = parseTauriJobResult(JSON.stringify(parsed));
     expect(result.report).toBeUndefined();
   });
@@ -206,6 +218,28 @@ describe("staging command wrappers resolve their own staging root", () => {
       args: {
         stagingDir: "/home/sam/message-crate/staging-run",
         stagingRoot: "/home/sam/message-crate",
+      },
+    });
+  });
+
+  it("reads and saves the Import Run record under the root it resolves itself", async () => {
+    await invokeReadImportRunRecord({ staging_dir: "/home/sam/message-crate/staging-run" });
+    await invokeSaveImportRunRecord({
+      staging_dir: "/home/sam/message-crate/staging-run",
+      record: { issues: [] },
+    });
+
+    expect(invoke).toHaveBeenCalledWith("read_import_run_record", {
+      args: {
+        stagingDir: "/home/sam/message-crate/staging-run",
+        stagingRoot: "/home/sam/message-crate",
+      },
+    });
+    expect(invoke).toHaveBeenCalledWith("save_import_run_record", {
+      args: {
+        stagingDir: "/home/sam/message-crate/staging-run",
+        stagingRoot: "/home/sam/message-crate",
+        record: { issues: [] },
       },
     });
   });

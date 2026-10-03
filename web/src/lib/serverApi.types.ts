@@ -1044,7 +1044,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Messages matching `q`, oldest first unless `sort` says otherwise: the same rows an Export Run with a `query` scope would hand over, behind a logged-in session with the list defaults and the list's offset ceiling. */
+        /**
+         * Messages matching `q`, oldest first unless `sort` says otherwise: the same rows an Export Run with a `query` scope would hand over, behind a logged-in session with the list defaults and the list's offset ceiling.
+         * @description `sort=relevance` puts the best match first, ranked by the full-text
+         *     index's `bm25()` on the query's free-text words: the words not behind `-`
+         *     or `not`. A query with no such word has nothing to rank by, and
+         *     `relevance` is then `validation-failed`. Ties, and a message found only by
+         *     an attachment's file name, which the index does not rank, follow by date,
+         *     newest first.
+         */
         get: operations["list_messages"];
         put?: never;
         post?: never;
@@ -1147,6 +1155,23 @@ export interface paths {
         };
         /** The search words the Conversations list accepts. */
         get: operations["list_conversation_search_fields"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/search-fields/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The search words the Messages list accepts. */
+        get: operations["list_message_search_fields"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9224,7 +9249,7 @@ export interface operations {
                 limit?: number;
                 /** @description Page offset, max 50000 */
                 offset?: number;
-                /** @description `date` or `-date`. Default `date`, oldest first. */
+                /** @description `date`, `-date` or `relevance` (best match first; needs a free-text word in `q`). Default `date`, oldest first. */
                 sort?: string;
             };
             header?: never;
@@ -9712,6 +9737,62 @@ export interface operations {
         };
     };
     list_conversation_search_fields: {
+        parameters: {
+            query?: {
+                /** @description Page size, default 40, max 500. */
+                limit?: number | null;
+                /** @description Page offset, max 50000. */
+                offset?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_FieldDoc"];
+                };
+            };
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_message_search_fields: {
         parameters: {
             query?: {
                 /** @description Page size, default 40, max 500. */

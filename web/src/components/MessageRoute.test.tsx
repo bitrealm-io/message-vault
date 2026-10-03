@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getConversation, listConversationMessages, trashConversation } from "../lib/serverApi";
-import type { Conversation } from "../lib/types";
+import type { Conversation, Message } from "../lib/types";
 import { mockedAuth, Providers } from "../test/providers";
 import MessageRoute from "./MessageRoute";
 import { RightToolbarProvider } from "./RightToolbarContext";
@@ -31,6 +31,28 @@ vi.mock("../screens/ConversationList", () => ({
       <output data-testid="list-query">{query}</output>
       <button type="button" onClick={() => onSelect(conv(6, "Second result"))}>
         Second result
+      </button>
+    </div>
+  ),
+}));
+
+// The Messages list, the same way: one result in conversation 6 to click,
+// and the query and the selected message the route hands it.
+vi.mock("../screens/MessageSearchList", () => ({
+  default: ({
+    onSelect,
+    query,
+    selectedId,
+  }: {
+    onSelect: (m: Message) => void;
+    query: string;
+    selectedId: number | null;
+  }) => (
+    <div>
+      <output data-testid="message-list-query">{query}</output>
+      <output data-testid="message-list-selected">{String(selectedId)}</output>
+      <button type="button" onClick={() => onSelect(message(77, 6))}>
+        Message result
       </button>
     </div>
   ),
@@ -72,6 +94,28 @@ function conv(id: number, label: string): Conversation {
     is_group: false,
     label,
     tags: [],
+  };
+}
+
+function message(id: number, conversationId: number): Message {
+  return {
+    id,
+    source: "imessage",
+    timestamp: "2024-01-01T10:00:00Z",
+    sort_order: 0,
+    is_from_me: false,
+    is_announcement: false,
+    is_reply: false,
+    num_replies: 0,
+    text: "photo",
+    conversation: {
+      id: conversationId,
+      chat_identifier: "+1",
+      conversation_type: "individual",
+      participants: [],
+    },
+    attachments: [],
+    tapbacks: [],
   };
 }
 
@@ -232,5 +276,49 @@ describe("MessageRoute", () => {
     await user.click(screen.getByRole("button", { name: "Second result" }));
     expect(screen.getByTestId("location").textContent).toBe(`/messages/6${search}`);
     expect(screen.getByTestId("list-query").textContent).toBe(query);
+  });
+
+  describe("the Messages view", () => {
+    it("lists messages for the search when the address asks for them", async () => {
+      getConversationMock.mockImplementation(async (id) => conv(id, `Chat ${id}`));
+      renderAt("/messages/5?q=photo&view=messages");
+      expect(screen.getByTestId("message-list-query").textContent).toBe("photo");
+      expect(screen.queryByTestId("list-query")).not.toBeInTheDocument();
+      expect(screen.getByRole("radio", { name: "Messages", checked: true })).toBeInTheDocument();
+    });
+
+    it("opens a result's conversation at that message, keeping the list", async () => {
+      getConversationMock.mockImplementation(async (id) => conv(id, `Chat ${id}`));
+      const user = userEvent.setup();
+
+      renderAt("/messages/5?q=photo&view=messages&msort=-date");
+      await user.click(screen.getByRole("button", { name: "Message result" }));
+
+      expect(screen.getByTestId("location").textContent).toBe(
+        "/messages/6?q=photo&view=messages&msort=-date&at=77",
+      );
+      expect(screen.getByTestId("message-list-selected").textContent).toBe("77");
+      await screen.findByText("Chat 6");
+      // The panel reads the messages around the result, not the newest ones.
+      await waitFor(() =>
+        expect(listConversationMessagesMock).toHaveBeenCalledWith(
+          6,
+          expect.objectContaining({ around: 77 }),
+          expect.anything(),
+        ),
+      );
+    });
+
+    it("drops the result's message when the switch goes back to Conversations and one is opened", async () => {
+      getConversationMock.mockImplementation(async (id) => conv(id, `Chat ${id}`));
+      const user = userEvent.setup();
+
+      renderAt("/messages/5?q=photo&view=messages&at=77");
+      await user.click(screen.getByRole("radio", { name: "Conversations" }));
+      expect(screen.getByTestId("location").textContent).toBe("/messages/5?q=photo&at=77");
+
+      await user.click(screen.getByRole("button", { name: "Second result" }));
+      expect(screen.getByTestId("location").textContent).toBe("/messages/6?q=photo");
+    });
   });
 });

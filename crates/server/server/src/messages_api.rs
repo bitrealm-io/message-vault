@@ -11,7 +11,8 @@ use crate::extract::{Json, Path, Query};
 use axum::extract::State;
 
 use crate::db::conversation_messages::{
-    DEFAULT_MESSAGE_SORT, MESSAGE_SORT_KEYS, Message, count_matching_messages, load_messages,
+    DEFAULT_MESSAGE_SORT, DEFAULT_SEARCH_SORT, Message, SEARCH_SORT_KEYS, count_matching_messages,
+    load_messages, load_search_page,
 };
 use crate::db::sql::SqlParam;
 use crate::paging::{ListRequest, Page, PageQuery};
@@ -41,6 +42,13 @@ pub(crate) fn message_filter(
 /// Messages matching `q`, oldest first unless `sort` says otherwise: the same
 /// rows an Export Run with a `query` scope would hand over, behind a logged-in
 /// session with the list defaults and the list's offset ceiling.
+///
+/// `sort=relevance` puts the best match first, ranked by the full-text
+/// index's `bm25()` on the query's free-text words: the words not behind `-`
+/// or `not`. A query with no such word has nothing to rank by, and
+/// `relevance` is then `validation-failed`. Ties, and a message found only by
+/// an attachment's file name, which the index does not rank, follow by date,
+/// newest first.
 #[utoipa::path(
     get,
     path = "/v1/messages",
@@ -50,7 +58,7 @@ pub(crate) fn message_filter(
         ("q" = Option<String>, Query, description = "Search query in the Messages list's words; empty matches every message"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
         ("offset" = Option<usize>, Query, description = "Page offset, max 50000"),
-        ("sort" = Option<String>, Query, description = "`date` or `-date`. Default `date`, oldest first.")
+        ("sort" = Option<String>, Query, description = "`date`, `-date` or `relevance` (best match first; needs a free-text word in `q`). Default `date`, oldest first.")
     ),
     responses(
         (status = 200, body = crate::paging::Page<Message>),
@@ -67,21 +75,20 @@ pub(crate) async fn list_messages(
         &mut conn,
         auth.account_id,
         query,
-        &MESSAGE_SORT_KEYS,
-        &DEFAULT_MESSAGE_SORT,
+        &SEARCH_SORT_KEYS,
+        &DEFAULT_SEARCH_SORT,
     )
     .await?;
     let filter = message_filter(auth.account_id, &list.q, list.clock)?;
-    let total = count_matching_messages(&mut conn, &filter).await?;
-    let items = load_messages(
+    let items = load_search_page(
         &mut conn,
-        filter.where_sql(),
-        filter.params(),
+        &filter,
         &list.order,
         list.page.limit,
         list.page.offset,
     )
     .await?;
+    let total = count_matching_messages(&mut conn, &filter).await?;
     Ok(Json(Page {
         items,
         total,

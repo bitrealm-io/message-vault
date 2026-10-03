@@ -17,16 +17,18 @@ Which list a search runs on depends on where it is typed.
 
 | Typed in | Runs on |
 |---|---|
-| The search box on **Messages**, which reads **Search messages** | Conversations |
+| The search box on **Messages**, with **Conversations** picked above the list; the box reads **Search conversations** | Conversations |
+| The search box on **Messages**, with **Messages** picked above the list; the box reads **Search messages** | Messages, in every Conversation |
 | The search box on **Contacts**, which reads **Search contacts** | Contacts |
 | The search box on **Trash**, which reads **Search Trash** | Conversations and Contacts in the Trash, both at once |
 | **Find** in an open Conversation | Messages, in that one Conversation |
 | The search of an [Export](/docs/user/features/messages/export/) | Conversations or Messages, whichever its **Search in** field names |
 
-The search box on **Messages** returns Conversations, not single messages.
-Plain words there match a Conversation's title and the people in it.
-They don't match what was said, because message text belongs to the Messages list.
+The switch above the list on **Messages** picks what one search returns: **Conversations** or **Messages**.
+With **Conversations**, plain words match a Conversation's title and the people in it, not what was said, because message text belongs to the Messages list.
 `body:avocado` is the search for Conversations where someone wrote "avocado".
+With **Messages**, the same box lists every message that matches, from every Conversation, and plain words match what was said.
+[Browse messages](/docs/user/features/messages/browse/#the-messages-list) describes that list.
 
 The list narrows as the search is typed.
 A search the server refuses is answered with a message that gives the reason.

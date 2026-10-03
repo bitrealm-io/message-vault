@@ -72,6 +72,14 @@ export const keys = {
       ["conversations", "find", String(id), q, sort, offset, limit] as const,
     sources: (id: number | null) => ["conversations", "sources", String(id)] as const,
   },
+  /**
+   * The Messages list: the messages a search matches across every
+   * conversation, `GET /v1/messages`, one entry per query and sort.
+   */
+  messages: {
+    all: ["messages"] as const,
+    list: (q: string, sort: string) => ["messages", "list", q, sort] as const,
+  },
   contactGroups: { all: ["contact-groups"] as const },
   messageTags: { all: ["message-tags"] as const },
   savedSearches: { all: ["saved-searches"] as const },

@@ -17,14 +17,34 @@ fn fts5_literal(term: &str) -> String {
 /// which SQLite cannot drive from the FTS index and so ran the match once
 /// per candidate message (#413).
 pub(crate) fn matching_ids(out: &mut Sql, term: &TextTerm) {
-    let q = match term {
+    out.push("SELECT rowid FROM messages_fts WHERE messages_fts MATCH ");
+    out.bind_text(match_expr(term));
+}
+
+/// One term as an FTS5 query: a quoted phrase, with `*` after it for a prefix.
+fn match_expr(term: &TextTerm) -> String {
+    match term {
         TextTerm::Term { text, prefix: true } => format!("{}*", fts5_literal(text)),
         TextTerm::Term {
             text,
             prefix: false,
         }
         | TextTerm::Phrase(text) => fts5_literal(text),
-    };
-    out.push("SELECT rowid FROM messages_fts WHERE messages_fts MATCH ");
-    out.bind_text(q);
+    }
+}
+
+/// The FTS5 query a relevance order ranks by: any of `terms`, so `bm25()`
+/// scores a message on every free-text word it has. `None` when there is no
+/// term, and so nothing to rank by.
+pub(crate) fn rank_query(terms: &[&TextTerm]) -> Option<String> {
+    if terms.is_empty() {
+        return None;
+    }
+    Some(
+        terms
+            .iter()
+            .map(|t| match_expr(t))
+            .collect::<Vec<_>>()
+            .join(" OR "),
+    )
 }

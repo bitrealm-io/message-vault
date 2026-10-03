@@ -25,6 +25,7 @@ export default function SortMenu<Id extends string>({
   itemNoun,
   ascLabel = "Ascending",
   descLabel = "Descending",
+  unordered = [],
 }: {
   fields: ReadonlyArray<SortField<Id>>;
   sort: Id;
@@ -34,6 +35,8 @@ export default function SortMenu<Id extends string>({
   itemNoun: string;
   ascLabel?: string;
   descLabel?: string;
+  /** Fields that have one order of their own, such as Relevance: no Order choice is shown for them. */
+  unordered?: ReadonlyArray<Id>;
 }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -42,17 +45,19 @@ export default function SortMenu<Id extends string>({
   const { onKeyDown } = useMenuKeyboard(open, menuRef, close, triggerRef);
 
   const sortLabel = fields.find((f) => f.id === sort)?.label ?? fields[0]?.label ?? "";
+  const ordered = !unordered.includes(sort);
   const orderLabel = order === "asc" ? ascLabel : descLabel;
+  const sortedBy = ordered ? `${sortLabel}, ${orderLabel}` : sortLabel;
 
   return (
     <div className="relative">
       <button
         type="button"
         ref={triggerRef}
-        aria-label={`Sort ${itemNoun} by ${sortLabel}, ${orderLabel}`}
+        aria-label={`Sort ${itemNoun} by ${sortedBy}`}
         aria-expanded={open}
         aria-haspopup="menu"
-        title={`Sorted by ${sortLabel}, ${orderLabel}`}
+        title={`Sorted by ${sortedBy}`}
         onClick={() => setOpen((v) => !v)}
         className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-border bg-elevated text-muted hover:text-text"
       >
@@ -79,24 +84,28 @@ export default function SortMenu<Id extends string>({
               }}
             />
           ))}
-          <div className="my-1.5 border-t border-border" />
-          <div className="px-3 pb-1.5 text-[0.75rem] font-semibold text-text">Order</div>
-          <SortOption
-            label={ascLabel}
-            selected={order === "asc"}
-            onSelect={() => {
-              onChange({ sort, order: "asc" });
-              setOpen(false);
-            }}
-          />
-          <SortOption
-            label={descLabel}
-            selected={order === "desc"}
-            onSelect={() => {
-              onChange({ sort, order: "desc" });
-              setOpen(false);
-            }}
-          />
+          {ordered ? (
+            <>
+              <div className="my-1.5 border-t border-border" />
+              <div className="px-3 pb-1.5 text-[0.75rem] font-semibold text-text">Order</div>
+              <SortOption
+                label={ascLabel}
+                selected={order === "asc"}
+                onSelect={() => {
+                  onChange({ sort, order: "asc" });
+                  setOpen(false);
+                }}
+              />
+              <SortOption
+                label={descLabel}
+                selected={order === "desc"}
+                onSelect={() => {
+                  onChange({ sort, order: "desc" });
+                  setOpen(false);
+                }}
+              />
+            </>
+          ) : null}
         </div>
       ) : null}
     </div>

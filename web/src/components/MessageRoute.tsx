@@ -2,11 +2,12 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from "reac
 import { apiErrorMessage } from "../lib/apiErrorMessage";
 import { asMessagesLocationState } from "../lib/messagesLocationState";
 import { keys } from "../lib/queryKeys";
+import { AT_PARAM, openedAt } from "../lib/resultsView";
 import { useRouteQuery } from "../lib/routeQuery";
 import { getConversation } from "../lib/serverApi";
-import ConversationList from "../screens/ConversationList";
 import MessageView from "../screens/MessageView";
 import ListColumn from "./ListColumn";
+import ResultsColumn from "./ResultsColumn";
 import RightPane from "./RightPane";
 
 /** The route's `:conversationId` as a number, or null when it is not a positive integer. */
@@ -29,6 +30,8 @@ export default function MessageRoute() {
   const conversationSearch = searchParams.get("q") || "";
   const conversationFilter = searchParams.get("f") || "";
   const query = conversationFilter || conversationSearch;
+  // A result in the Messages list opens its conversation at the message.
+  const at = openedAt(searchParams);
 
   const locationState = asMessagesLocationState(location.state);
   // The router hands us whatever row the person clicked, which can be
@@ -61,16 +64,20 @@ export default function MessageRoute() {
   return (
     <>
       <ListColumn>
-        <ConversationList
-          selectedId={conversationId}
-          onSelect={(c) =>
+        <ResultsColumn
+          query={query}
+          selectedConversationId={conversationId}
+          onSelectConversation={(c) => {
             // The list is filtered by this location's `q` and `f`, so the
             // conversation opened keeps them and the list stays as it was.
-            navigate(`/messages/${c.id}${location.search}`, {
+            // The message a result opened at belongs to the last one.
+            const params = new URLSearchParams(searchParams);
+            params.delete(AT_PARAM);
+            const search = params.toString();
+            navigate(`/messages/${c.id}${search ? `?${search}` : ""}`, {
               state: { conversation: c, openContactId, openContactPreview },
-            })
-          }
-          query={query}
+            });
+          }}
         />
       </ListColumn>
       <RightPane>
@@ -80,10 +87,12 @@ export default function MessageRoute() {
             // the pane never empties between two conversations. Keyed by id,
             // the thread starts again for each one: its page, year and find,
             // and any Move to trash or Contact Group still answering for the
-            // last one, which then acts on nothing.
+            // last one, which then acts on nothing. Another result in the
+            // same conversation starts it again at that message.
             <MessageView
-              key={conversation.id}
+              key={`${conversation.id}:${at ?? ""}`}
               conversation={conversation}
+              openAt={at}
               onOpenContact={(contactId, preview) => {
                 navigate(location.pathname + location.search, {
                   state: {

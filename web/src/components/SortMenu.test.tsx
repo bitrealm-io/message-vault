@@ -26,4 +26,26 @@ describe("SortMenu", () => {
     await user.click(button);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
+
+  it("offers no order for a field that has none, and names none", async () => {
+    const user = userEvent.setup();
+    render(
+      <SortMenu
+        fields={[
+          { id: "relevance", label: "Relevance" },
+          { id: "date", label: "Date" },
+        ]}
+        unordered={["relevance"]}
+        sort="relevance"
+        order="desc"
+        onChange={() => {}}
+        itemNoun="messages"
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Sort messages by Relevance" }));
+    expect(screen.getAllByRole("menuitemradio").map((item) => item.textContent)).toEqual([
+      "Relevance",
+      "Date",
+    ]);
+  });
 });

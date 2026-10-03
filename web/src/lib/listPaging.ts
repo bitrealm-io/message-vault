@@ -10,6 +10,11 @@
 export const PAGE_SIZE_FIRST = 40;
 /** Rows in each page loaded as the person scrolls. */
 export const PAGE_SIZE_FILL = 100;
+/**
+ * The largest `offset` a browse list accepts (`docs/architecture/http-api.md`,
+ * "Lists"). A list that pages past it ends there.
+ */
+export const MAX_LIST_OFFSET = 50_000;
 /** Contacts catalog first page — large enough for typical accounts in one request. */
 export const PAGE_SIZE_CONTACTS_FIRST = 500;
 

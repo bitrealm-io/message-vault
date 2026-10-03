@@ -87,6 +87,7 @@ pub fn today_in(zone: chrono_tz::Tz) -> NaiveDate {
 pub struct Filter {
     where_sql: String,
     params: Vec<SqlParam>,
+    rank_query: Option<String>,
 }
 
 impl Filter {
@@ -99,6 +100,13 @@ impl Filter {
     /// The values to bind, in the textual order of `where_sql`.
     pub fn params(&self) -> &[SqlParam] {
         &self.params
+    }
+
+    /// The full-text query a Messages search ranks by: its free-text words
+    /// not under a negation, joined by `OR`, for `bm25()`. `None` on the
+    /// other lists, and for a query with no such word.
+    pub fn rank_query(&self) -> Option<&str> {
+        self.rank_query.as_deref()
     }
 
     /// This filter narrowed by one more fragment, `AND`-ed inside the
@@ -144,6 +152,7 @@ pub fn compile_messages_of_conversations(req: CompileRequest<'_>) -> Result<Filt
             conversations.where_sql
         ),
         params,
+        rank_query: None,
     })
 }
 

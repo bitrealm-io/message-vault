@@ -181,6 +181,9 @@ pub fn api_openapi() -> OpenApiRouter<AppState> {
         .routes(routes!(
             crate::search_fields_api::list_conversation_search_fields
         ))
+        .routes(routes!(
+            crate::search_fields_api::list_message_search_fields
+        ))
         .routes(routes!(crate::conversations_api::list_conversations))
         .routes(routes!(crate::conversations_api::get_conversation))
         .routes(routes!(crate::conversations_api::list_conversation_sources))

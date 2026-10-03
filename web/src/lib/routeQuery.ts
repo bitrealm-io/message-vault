@@ -204,11 +204,20 @@ export type PagedListResult<T> = {
 export function useRoutePagedList<T extends { id: string | number }>(
   key: RouteQueryKey,
   fetchPage: PagedFetchPage<T>,
-  opts?: { firstPageSize?: number; fillPageSize?: number },
+  opts?: {
+    firstPageSize?: number;
+    fillPageSize?: number;
+    /**
+     * The largest `offset` the route accepts. The list ends where the next
+     * page would start past it, even when `total` names more rows.
+     */
+    maxOffset?: number;
+  },
 ): PagedListResult<T> {
   const account = useAccountScope();
   const firstPageSize = opts?.firstPageSize ?? PAGE_SIZE_FIRST;
   const fillPageSize = opts?.fillPageSize ?? PAGE_SIZE_FILL;
+  const maxOffset = opts?.maxOffset ?? Number.POSITIVE_INFINITY;
 
   const query = useInfiniteQuery<
     OffsetPage<T>,
@@ -228,7 +237,7 @@ export function useRoutePagedList<T extends { id: string | number }>(
     getNextPageParam: (_lastPage, pages) => {
       const loaded = pages.reduce((sum, page) => sum + page.items.length, 0);
       const total = pages[pages.length - 1]?.total ?? 0;
-      return loaded < total ? loaded : undefined;
+      return loaded < total && loaded <= maxOffset ? loaded : undefined;
     },
   });
 

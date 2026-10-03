@@ -34,9 +34,9 @@ _Avoid_: Thread Tag, Conversation Tag, Label
 
 **Conversation**:
 One exchange with one person or group, holding its messages and
-participants. It is the unit the product acts on: tagging, trashing, and
-searching all resolve to whole conversations even where the interface
-speaks of messages. A Conversation the source app keeps as a group is a
+participants. It is the unit the product acts on: tagging and trashing
+resolve to whole conversations, and searching resolves to whole
+conversations unless the person asks for messages. A Conversation the source app keeps as a group is a
 **group conversation**; one with a single other person is a **one-to-one
 conversation**. The search words for the two are `kind:group` and
 `kind:direct`, short because they are typed; everything a person reads says

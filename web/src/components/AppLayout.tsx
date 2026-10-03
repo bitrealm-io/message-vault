@@ -4,6 +4,7 @@ import { contactBrowseQuery } from "../lib/contactBrowseQuery";
 import { groupFromSlug, slugFromPath, slugPath } from "../lib/contactGroups";
 import { asMessagesLocationState } from "../lib/messagesLocationState";
 import { tagFromSlug, tagListQuery } from "../lib/messageTags";
+import { messagesSearch, resultsView } from "../lib/resultsView";
 import { trashed } from "../lib/searchQuery";
 import type { Conversation } from "../lib/types";
 import { useContactGroups } from "../lib/useContactGroups";
@@ -23,6 +24,7 @@ import {
 } from "./contactDrawer/contactDrawerTypes";
 import LeftPanel from "./LeftPanel";
 import ListColumn from "./ListColumn";
+import ResultsColumn from "./ResultsColumn";
 import RightPane from "./RightPane";
 import { RightToolbarProvider } from "./RightToolbarContext";
 
@@ -181,20 +183,22 @@ export default function AppLayout() {
         navigate(`/contacts${params}`);
       }
     } else if (pathname.startsWith("/messages/")) {
+      // The open conversation stays open, at the message a result opened it
+      // at, and the results keep their list and sort.
       const id = pathname.split("/")[2];
       if (id) {
-        navigate(`/messages/${id}?q=${encodeURIComponent(q)}`, {
+        navigate(`/messages/${id}${messagesSearch(searchParams, { q })}`, {
           state: location.state,
         });
         return;
       }
-      navigate(`/?q=${encodeURIComponent(q)}`);
+      navigate(`/${messagesSearch(searchParams, { q, at: "" })}`);
     } else if (noTagMode) {
-      navigate(`/no-tag${q ? `?q=${encodeURIComponent(q)}` : ""}`);
+      navigate(`/no-tag${messagesSearch(searchParams, { q, at: "" })}`);
     } else if (tagSlugParam !== null) {
-      navigate(`${slugPath("/tag", tagSlugParam)}${q ? `?q=${encodeURIComponent(q)}` : ""}`);
+      navigate(`${slugPath("/tag", tagSlugParam)}${messagesSearch(searchParams, { q, at: "" })}`);
     } else {
-      navigate(`/?q=${encodeURIComponent(q)}`);
+      navigate(`/${messagesSearch(searchParams, { q, at: "" })}`);
     }
   };
 
@@ -270,7 +274,15 @@ export default function AppLayout() {
       <div className="flex h-screen flex-col bg-bg font-sans text-text">
         <AppHeader
           searchQuery={searchQuery}
-          searchTarget={trashMode ? "trash" : contactsMode ? "contacts" : "messages"}
+          searchTarget={
+            trashMode
+              ? "trash"
+              : contactsMode
+                ? "contacts"
+                : resultsView(searchParams) === "messages"
+                  ? "messages"
+                  : "conversations"
+          }
           onSearchChange={handleSearchChange}
           onSearch={handleSearch}
         />
@@ -290,10 +302,10 @@ export default function AppLayout() {
                       name={tagSlugParam ?? ""}
                     />
                   ) : (
-                    <ConversationList
-                      selectedId={null}
-                      onSelect={handleConversationSelect}
+                    <ResultsColumn
                       query={threadListQuery}
+                      selectedConversationId={null}
+                      onSelectConversation={handleConversationSelect}
                     />
                   )}
                 </ListColumn>

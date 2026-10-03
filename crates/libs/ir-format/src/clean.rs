@@ -8,17 +8,25 @@ use std::path::Path;
 
 /// Sentinel file written into export directories so `clean_previous_ir_output` can
 /// distinguish a real export directory from a user directory that was pointed at
-/// by mistake.
+/// by mistake. It also lists, one per line, the files a merged archive wrote
+/// into the folder ([`record_archive_files`]), which the next clean removes.
 pub const EXPORT_SENTINEL: &str = ".message-crate-export";
 
-/// Write a sentinel file marking `output_dir` as an export target.
+/// Mark `output_dir` as an export target, creating the sentinel when it is
+/// missing. An existing sentinel keeps the archive files it lists, so the
+/// next clean still removes them.
 /// Callers should run this after `create_dir_all` on a fresh export.
 ///
 /// # Errors
 ///
 /// Returns an error when the sentinel cannot be written.
 pub fn write_export_sentinel(output_dir: &Path) -> Result<()> {
-    fs::write(output_dir.join(EXPORT_SENTINEL), "")?;
+    let path = output_dir.join(EXPORT_SENTINEL);
+    fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .with_context(|| format!("write {}", path.display()))?;
     Ok(())
 }
 
@@ -71,8 +79,7 @@ pub fn clean_previous_ir_output(output_dir: &Path) -> Result<()> {
         for name in recorded_archive_files(output_dir)? {
             let path = output_dir.join(name);
             if path.is_file() {
-                fs::remove_file(&path)
-                    .with_context(|| format!("remove previous {}", path.display()))?;
+                remove_previous(&path)?;
             }
         }
     }
@@ -85,8 +92,7 @@ pub fn clean_previous_ir_output(output_dir: &Path) -> Result<()> {
             continue;
         }
         if is_export_artifact(name) {
-            fs::remove_file(&path)
-                .with_context(|| format!("remove previous {}", path.display()))?;
+            remove_previous(&path)?;
         }
     }
     // Drop staged attachments from previous runs. Files named by a SHA-256
@@ -104,8 +110,15 @@ pub fn clean_previous_ir_output(output_dir: &Path) -> Result<()> {
     }
     clean_previous_mail_output(output_dir)?;
     // Write the sentinel so future runs know this is a safe export directory.
-    write_export_sentinel(output_dir)?;
+    // The archive files it listed are gone, so it starts with no list.
+    let sentinel = output_dir.join(EXPORT_SENTINEL);
+    fs::write(&sentinel, "").with_context(|| format!("write {}", sentinel.display()))?;
     Ok(())
+}
+
+/// Remove one file a previous export left.
+fn remove_previous(path: &Path) -> Result<()> {
+    fs::remove_file(path).with_context(|| format!("remove previous {}", path.display()))
 }
 
 /// Record in the sentinel of `output_dir` the names of the files a merged
@@ -236,22 +249,41 @@ mod tests {
     #[test]
     fn removes_the_files_an_archive_recorded_and_nothing_else() {
         let tmp = tempfile::tempdir().unwrap();
-        let dir = tmp.path();
+        let dir = tmp.path().join("export");
+        fs::create_dir(&dir).unwrap();
+        let dir = dir.as_path();
         write_export_sentinel(dir).unwrap();
         let recorded = ["archive.xml", "archive.xml.tmp"].map(String::from);
         record_archive_files(dir, &recorded).unwrap();
+        // A damaged list cannot reach outside the folder.
         record_archive_files(dir, &["../outside.xml".to_string()]).unwrap();
+        let outside = tmp.path().join("outside.xml");
+        fs::write(&outside, "mine").unwrap();
         for name in ["archive.xml", "archive.xml.tmp", "sms-20261001.xml"] {
             fs::write(dir.join(name), "x").unwrap();
         }
-        let outside = tmp.path().parent().unwrap().join("outside.xml");
-        let outside_existed = outside.exists();
 
         clean_previous_ir_output(dir).unwrap();
 
         assert_eq!(names(dir), [EXPORT_SENTINEL, "sms-20261001.xml"]);
-        assert_eq!(outside.exists(), outside_existed);
+        assert!(outside.is_file(), "a file outside the folder is kept");
         assert_eq!(fs::read_to_string(dir.join(EXPORT_SENTINEL)).unwrap(), "");
+    }
+
+    /// Pull marks a folder without cleaning it, so marking it again keeps
+    /// the archive files an earlier export listed for the next clean.
+    #[test]
+    fn marking_a_folder_again_keeps_the_archive_files_it_lists() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        write_export_sentinel(dir).unwrap();
+        record_archive_files(dir, &["archive.xml".to_string()]).unwrap();
+        fs::write(dir.join("archive.xml"), "x").unwrap();
+
+        write_export_sentinel(dir).unwrap();
+        clean_previous_ir_output(dir).unwrap();
+
+        assert_eq!(names(dir), [EXPORT_SENTINEL]);
     }
 
     #[test]

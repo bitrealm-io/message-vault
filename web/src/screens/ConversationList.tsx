@@ -99,10 +99,13 @@ export default function ConversationList({
   // Select all ticks every conversation the list holds, so it loads the pages
   // not yet on screen first: an action that follows reaches all of them, not
   // the page in hand (issue #1145).
-  const selectAll = useSelectAll(
-    loadAll,
-    JSON.stringify([debouncedQ, sortState]),
-    (rows: Conversation[]) => setCheckedIds(new Set(rows.map((c) => c.id))),
+  const {
+    selectAll,
+    cancel: cancelSelectAll,
+    selecting: selectingAll,
+    error: selectAllError,
+  } = useSelectAll(loadAll, [debouncedQ, sortState], (rows: Conversation[]) =>
+    setCheckedIds(new Set(rows.map((c) => c.id))),
   );
 
   const selectedConversation = conversations.find((c) => c.id === selectedId) ?? null;
@@ -210,19 +213,21 @@ export default function ConversationList({
         rangeLabel={showRangePill ? undefined : rangeLabel}
         refreshing={!showRangePill && refreshing}
         filling={!showRangePill && filling}
-        selectAllChecked={selectAllChecked}
-        selectAllIndeterminate={selectAllIndeterminate}
-        onSelectAllChange={(on) => {
-          if (on) {
-            void selectAll.selectAll();
-            return;
-          }
-          selectAll.cancel();
-          setCheckedIds(new Set());
+        selectAll={{
+          checked: selectAllChecked,
+          indeterminate: selectAllIndeterminate,
+          onChange: (on) => {
+            if (on) {
+              void selectAll();
+              return;
+            }
+            cancelSelectAll();
+            setCheckedIds(new Set());
+          },
+          label: "Select all conversations",
+          disabled: conversations.length === 0 || selectingAll,
+          error: selectAllError,
         }}
-        selectAllLabel="Select all conversations"
-        selectAllDisabled={conversations.length === 0 || selectAll.selecting}
-        selectAllError={selectAll.error}
         actions={
           <ConversationSortMenu
             sort={sortState.sort}

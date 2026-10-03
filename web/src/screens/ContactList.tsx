@@ -179,14 +179,15 @@ export default function ContactList({
   // yet on screen first: Export and the Contact Groups menu then reach all of
   // them, not the page in hand (issue #1145). It ticks only the contacts the
   // list shows, by the same test as the rows on screen (`shows`, below).
-  const selectAll = useSelectAll(
-    loadAll,
-    JSON.stringify([serverQ, filter, groupFilter, clearCheckedRev]),
-    (rows: Contact[]) => {
-      const ids = new Set(rows.filter(shows).map((c) => c.id));
-      startTransition(() => setCheckedIds(ids));
-    },
-  );
+  const {
+    selectAll,
+    cancel: cancelSelectAll,
+    selecting: selectingAll,
+    error: selectAllError,
+  } = useSelectAll(loadAll, [serverQ, filter, groupFilter, clearCheckedRev], (rows: Contact[]) => {
+    const ids = new Set(rows.filter(shows).map((c) => c.id));
+    startTransition(() => setCheckedIds(ids));
+  });
 
   const catalogComplete =
     !loading && !refreshing && contacts.length >= total && (total > 0 || contacts.length === 0);
@@ -456,20 +457,22 @@ export default function ContactList({
         onSelect(c);
       }}
       isRowHighlighted={(c) => (checkedIds.size > 0 ? checkedIds.has(c.id) : c.id === selectedId)}
-      selectAllChecked={selectAllChecked}
-      selectAllIndeterminate={selectAllIndeterminate}
-      onSelectAllChange={(on) => {
-        rangeAnchorRef.current = null;
-        if (on) {
-          void selectAll.selectAll();
-          return;
-        }
-        selectAll.cancel();
-        startTransition(() => setCheckedIds(new Set()));
+      selectAll={{
+        checked: selectAllChecked,
+        indeterminate: selectAllIndeterminate,
+        onChange: (on) => {
+          rangeAnchorRef.current = null;
+          if (on) {
+            void selectAll();
+            return;
+          }
+          cancelSelectAll();
+          startTransition(() => setCheckedIds(new Set()));
+        },
+        label: "Select all contacts",
+        disabled: selectingAll,
+        error: selectAllError,
       }}
-      selectAllLabel="Select all contacts"
-      selectAllDisabled={selectAll.selecting}
-      selectAllError={selectAll.error}
       getId={(c) => c.id}
       getTextValue={(c) => contactLabelText(c.name, c.addresses)}
       ariaLabel="Contacts"

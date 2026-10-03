@@ -14,7 +14,7 @@ import { groupByLetter } from "../lib/contactSort";
 import { formatVisibleRange } from "../lib/listPaging";
 import { isTauri } from "../lib/tauri-check";
 import { listRowDividersThin, resizeHandleGutter } from "../lib/tw";
-import ListRangeHeader from "./ListRangeHeader";
+import ListRangeHeader, { type SelectAllBox } from "./ListRangeHeader";
 import ListRangePill, { RANGE_PILL_OVERLAY_INSET, RANGE_PILL_SCROLL_PAD } from "./ListRangePill";
 import VirtualList, { type VisibleRange } from "./VirtualList";
 
@@ -55,14 +55,8 @@ type InfiniteOffsetListProps<T> = {
   errorPrefix?: string;
   /** Control on the right of the “N–M of total” row. */
   headerActions?: ReactNode;
-  selectAllChecked?: boolean;
-  selectAllIndeterminate?: boolean;
-  onSelectAllChange?: (checked: boolean) => void;
-  selectAllLabel?: string;
-  /** Select all waits, as while it loads every page; an empty list always does. */
-  selectAllDisabled?: boolean;
-  /** Why Select all ticked nothing, shown under the toolbar. */
-  selectAllError?: string | null;
+  /** The toolbar's Select all box; it waits while the list is empty. */
+  selectAll?: SelectAllBox;
   /** Letter for in-list section headers. Omit while searching. */
   getSectionLetter?: (item: T) => string;
 };
@@ -557,12 +551,7 @@ export default function InfiniteOffsetList<T extends object>({
   rangeTotal,
   errorPrefix = "Could not load list",
   headerActions,
-  selectAllChecked = false,
-  selectAllIndeterminate = false,
-  onSelectAllChange,
-  selectAllLabel,
-  selectAllDisabled = false,
-  selectAllError = null,
+  selectAll,
   getSectionLetter,
 }: InfiniteOffsetListProps<T>) {
   const [visibleRange, setVisibleRange] = useState<VisibleRange>({
@@ -615,12 +604,9 @@ export default function InfiniteOffsetList<T extends object>({
         refreshing={!showRangePill && refreshing}
         filling={!showRangePill && filling}
         actions={headerActions}
-        selectAllChecked={selectAllChecked}
-        selectAllIndeterminate={selectAllIndeterminate}
-        onSelectAllChange={onSelectAllChange}
-        selectAllLabel={selectAllLabel}
-        selectAllDisabled={items.length === 0 || selectAllDisabled}
-        selectAllError={selectAllError}
+        selectAll={
+          selectAll && { ...selectAll, disabled: items.length === 0 || selectAll.disabled }
+        }
       />
       {headerLetter ? (
         <div className="flex shrink-0 items-center border-b border-border bg-panel px-3 py-1">

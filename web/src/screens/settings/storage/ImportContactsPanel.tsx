@@ -1,6 +1,6 @@
 import { type UIEvent, useCallback } from "react";
 import { apiErrorMessage } from "../../../lib/apiErrorMessage";
-import { NEAR_END_PX } from "../../../lib/listPaging";
+import { isNearEnd } from "../../../lib/listPaging";
 import { keys } from "../../../lib/queryKeys";
 import { type PagedFetchPage, useRoutePagedList } from "../../../lib/routeQuery";
 import { getImportContacts } from "../../../lib/serverApi";
@@ -53,7 +53,7 @@ export default function ImportContactsPanel({
   /** Ask for the next page once the person scrolls near the end of the rows loaded. */
   const onScroll = (e: UIEvent<HTMLUListElement>) => {
     const el = e.currentTarget;
-    if (el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR_END_PX) loadMore();
+    if (isNearEnd(el)) loadMore();
   };
 
   if (loading) return <div className="text-[0.813rem] text-muted">Loading contacts…</div>;

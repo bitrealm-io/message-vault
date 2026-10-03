@@ -6,43 +6,44 @@ import { apiErrorMessage } from "./apiErrorMessage";
  * then hand all of its rows to `onRows`, so an action that follows reaches
  * every row the list holds and not the page in hand (issue #1145).
  *
- * `scope` names what the list shows (its search, sort, group, and anything
- * else that changes its rows). An answer for a scope the list has since left
+ * `scope` lists what the list shows by (its search, sort, group, and
+ * anything else that changes its rows). An answer for a scope the list has since left
  * is dropped, and `selecting` and `error` belong to the scope they were
  * raised for, so a new search starts clear.
  */
 export function useSelectAll<T>(
   loadAll: () => Promise<T[]>,
-  scope: string,
+  scope: readonly unknown[],
   onRows: (rows: T[]) => void,
 ) {
-  const currentScope = useRef(scope);
-  currentScope.current = scope;
+  const scopeKey = JSON.stringify(scope);
+  const currentScope = useRef(scopeKey);
+  currentScope.current = scopeKey;
   const run = useRef(0);
   const [selectingFor, setSelectingFor] = useState<string | null>(null);
   const [failure, setFailure] = useState<{ scope: string; message: string } | null>(null);
 
-  const selecting = selectingFor === scope;
+  const selecting = selectingFor === scopeKey;
 
   const selectAll = async () => {
     if (selecting) return;
-    const mine = ++run.current;
-    const forScope = scope;
-    const current = () => mine === run.current && currentScope.current === forScope;
+    const thisRun = ++run.current;
+    const forScope = scopeKey;
+    const stillWanted = () => thisRun === run.current && currentScope.current === forScope;
     setSelectingFor(forScope);
     setFailure(null);
     try {
       const rows = await loadAll();
-      if (current()) onRows(rows);
+      if (stillWanted()) onRows(rows);
     } catch (error) {
-      if (current()) {
+      if (stillWanted()) {
         setFailure({
           scope: forScope,
           message: `Select all could not read every row: ${apiErrorMessage(error, "the list did not load")}`,
         });
       }
     } finally {
-      if (mine === run.current) setSelectingFor(null);
+      if (thisRun === run.current) setSelectingFor(null);
     }
   };
 
@@ -59,6 +60,6 @@ export function useSelectAll<T>(
     /** Pages are loading for Select all; the box waits. */
     selecting,
     /** Why the last Select all ticked nothing, for this scope. */
-    error: failure?.scope === scope ? failure.message : null,
+    error: failure?.scope === scopeKey ? failure.message : null,
   };
 }

@@ -5,7 +5,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import ContactLabel from "../components/ContactLabel";
 import { apiErrorMessage } from "../lib/apiErrorMessage";
 import { contactLabelText } from "../lib/contactLabel";
-import { NEAR_END_PX } from "../lib/listPaging";
+import { isNearEnd } from "../lib/listPaging";
 import { keys } from "../lib/queryKeys";
 import { type PagedFetchPage, useRoutePagedList, useRouteQuery } from "../lib/routeQuery";
 import { unsupportedFieldWords, useSearchFields } from "../lib/searchFields";
@@ -375,7 +375,7 @@ export default function TrashScreen() {
                   className="m-0 max-h-[32rem] list-none overflow-y-auto rounded border border-border bg-elevated p-0"
                   onScroll={(e: UIEvent<HTMLUListElement>) => {
                     const el = e.currentTarget;
-                    if (el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR_END_PX) {
+                    if (isNearEnd(el)) {
                       loadMoreContacts();
                     }
                   }}

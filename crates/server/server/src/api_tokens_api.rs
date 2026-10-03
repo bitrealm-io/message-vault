@@ -1,10 +1,10 @@
 //! An account's named API tokens: `/v1/accounts/{id}/api-tokens`.
 //!
-//! The account itself makes, renames, lists, reads and revokes its tokens.
-//! The owner lists, reads and revokes them too, and makes and renames none:
-//! the owner must be able to end a credential that has leaked, and a token's
-//! label, permissions and last use are not message content. The owner never
-//! reads any part of a secret, so what it is shown leaves out `token_hint`. A logged-in
+//! The account itself makes, renames, lists, reads and revokes its tokens. The
+//! owner lists, reads and revokes them too, and makes and renames none: the
+//! owner must be able to end a credential that has leaked, and a token's label,
+//! permissions and last use are not message content. The owner never reads any
+//! part of a secret, so what it is shown leaves out `token_hint`. A logged-in
 //! session is required; a token cannot mint, rename or revoke tokens.
 
 use crate::extract::{Json, Path, Query};
@@ -12,7 +12,7 @@ use crate::paging::{DEFAULT_LIST_LIMIT, Page, PageQuery, page_of, page_params};
 use axum::extract::State;
 use serde::{Deserialize, Serialize};
 
-use crate::accounts_api::{Admits, require_account_reach};
+use crate::accounts_api::{Admits, Reach, require_account_reach};
 use crate::db::api_tokens;
 use crate::db::permissions::Permissions;
 use crate::db::{account_profile, schema};
@@ -168,10 +168,9 @@ pub async fn list_api_tokens(
     schema::ensure_accounts_schema(&mut conn).await?;
     let rows = api_tokens::list_api_tokens(&mut conn, account_id).await?;
     let account_permissions = holder_permissions(&mut conn, account_id).await?;
-    let shows_hint = reach.is_own();
     let items: Vec<ApiToken> = rows
         .into_iter()
-        .map(|row| shown(row, account_permissions, shows_hint))
+        .map(|row| capped_and_masked_for(reach, row, account_permissions))
         .collect();
 
     Ok(Json(page_of(items, params)))
@@ -189,21 +188,22 @@ async fn holder_permissions(
         .map_or_else(Permissions::none, |a| a.permissions))
 }
 
-/// A token as it is shown: what it may do now, its stored scopes capped by
-/// the holding account's permissions, so a permission the owner turned off
-/// after the token was made shows as off. The masked secret is shown only to
-/// the account that holds the token: the hint is part of the secret.
-fn shown(
+/// A token as `reach` is shown it: what it may do now, its stored scopes
+/// capped by the holding account's permissions, so a permission the owner
+/// turned off after the token was made shows as off. The masked secret is
+/// shown only to the account that holds the token, never to the owner of
+/// another account: the hint is part of the secret.
+fn capped_and_masked_for(
+    reach: Reach,
     row: api_tokens::ApiTokenRow,
     account_permissions: Permissions,
-    shows_hint: bool,
 ) -> ApiToken {
     let token = ApiToken::from(api_tokens::ApiTokenRow {
         permissions: row.permissions.intersect(account_permissions),
         ..row
     });
     ApiToken {
-        token_hint: token.token_hint.filter(|_| shows_hint),
+        token_hint: token.token_hint.filter(|_| reach.is_own()),
         ..token
     }
 }
@@ -237,7 +237,7 @@ pub async fn get_api_token(
         .await?
         .ok_or_else(|| ApiError::NotFound("API token not found".into()))?;
     let account_permissions = holder_permissions(&mut conn, account_id).await?;
-    Ok(Json(shown(row, account_permissions, reach.is_own())))
+    Ok(Json(capped_and_masked_for(reach, row, account_permissions)))
 }
 
 /// Create a named API token. Returns the plaintext secret once, at creation;

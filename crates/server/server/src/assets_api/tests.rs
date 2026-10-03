@@ -664,7 +664,6 @@ async fn an_upload_answers_its_state() {
             "received_parts": [2],
         })
     );
-
 }
 
 /// The attachment size limit is read from the Server Settings on each upload:

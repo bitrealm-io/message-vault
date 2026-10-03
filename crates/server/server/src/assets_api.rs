@@ -72,7 +72,7 @@ pub enum AssetError {
     #[error("{0}")]
     Invalid(String),
     /// The upload id names no upload in progress.
-    #[error("upload session not found")]
+    #[error("no upload with this id is in progress")]
     UploadNotFound,
     /// Another request to the same upload holds its lock: the upload is
     /// busy, not wrong, so the request is sent again once that one finishes.
@@ -1232,7 +1232,8 @@ pub(crate) async fn complete_asset_upload(
     ),
     responses(
         (status = 204, description = "Upload aborted"),
-        crate::problem::openapi::AssetUploadInvalid
+        crate::problem::openapi::AssetUploadInvalid,
+        crate::problem::openapi::StateConflict
     )
 )]
 pub(crate) async fn delete_asset_upload(

@@ -756,7 +756,7 @@ async fn import_demo_sources_with(
             } else {
                 ImportMode::Append
             };
-            let imported = imports_api::import_jsonl_files_on_conn(
+            let imported = imports_api::import_on_conn(
                 &mut conn,
                 batch,
                 &ImportOptions::fixed(FixedImportArgs {
@@ -774,7 +774,7 @@ async fn import_demo_sources_with(
             match imported {
                 Ok(stats) => run.add_run(&stats),
                 Err(error) => {
-                    result = Err(error.into());
+                    result = Err(error);
                     break;
                 }
             }

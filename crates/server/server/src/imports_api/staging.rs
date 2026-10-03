@@ -119,16 +119,31 @@ fn store_claimed_or_path(
             }));
         }
         if let Some(source) = checked {
-            return match claimed.and_then(|claimed| {
-                assets_api::store_verified(
-                    &source,
-                    &claimed,
-                    assets_dir,
-                    att.mime_type.as_deref(),
-                    false,
-                    false,
-                )
-            }) {
+            let claimed = match claimed {
+                Ok(claimed) => claimed,
+                Err(_) if !source.is_file() => {
+                    asset_stats.missing += 1;
+                    return Ok(None);
+                }
+                // A stated fingerprint that is not one: the sender's to fix,
+                // naming the line and the path as sent.
+                Err(_) => {
+                    return Err(ImportFailure::AttachmentSha256Invalid {
+                        path: path_as_sent(att),
+                        stated: sha.to_string(),
+                        line,
+                    }
+                    .into());
+                }
+            };
+            return match assets_api::store_verified(
+                &source,
+                &claimed,
+                assets_dir,
+                att.mime_type.as_deref(),
+                false,
+                false,
+            ) {
                 Ok((stored, already)) => {
                     if already {
                         asset_stats.deduped += 1;
@@ -141,9 +156,8 @@ fn store_claimed_or_path(
                     asset_stats.missing += 1;
                     Ok(None)
                 }
-                // The export states a fingerprint its file does not have,
-                // or one that is not a fingerprint: the sender's to fix,
-                // naming the line and the path as sent.
+                // The export states a fingerprint its file does not have:
+                // the sender's to fix, naming the line and the path as sent.
                 Err(AssetError::Mismatch { claimed, actual }) => {
                     Err(ImportFailure::AttachmentMismatch {
                         path: path_as_sent(att),
@@ -153,12 +167,6 @@ fn store_claimed_or_path(
                     }
                     .into())
                 }
-                Err(AssetError::Invalid(_)) => Err(ImportFailure::AttachmentSha256Invalid {
-                    path: path_as_sent(att),
-                    stated: sha.to_string(),
-                    line,
-                }
-                .into()),
                 Err(err) => Err(err.into()),
             };
         }

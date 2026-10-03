@@ -322,7 +322,9 @@ fn write_part_in(session: &Path, sha: &Sha256, part: u32, body: &[u8]) -> Result
     let _lock = lock_session(session)?;
     let mut manifest = read_manifest(session)?;
     if manifest.sha256 != sha.as_str() {
-        return Err(AssetError::Invalid("upload session sha256 mismatch".into()));
+        return Err(AssetError::Invalid(
+            "the upload was started for a different SHA-256".into(),
+        ));
     }
     if body.len() > manifest.part_size {
         return Err(AssetError::Invalid(format!(
@@ -359,8 +361,9 @@ fn write_part_in(session: &Path, sha: &Sha256, part: u32, body: &[u8]) -> Result
 ///
 /// # Errors
 ///
-/// Returns [`AssetError::UploadNotFound`] when the upload session is missing,
-/// [`AssetError::Invalid`] when a part is missing,
+/// Returns [`AssetError::UploadNotFound`] when the upload is missing or is
+/// removed while it completes,
+/// [`AssetError::Invalid`] when a part never arrived,
 /// [`AssetError::Mismatch`] when the fingerprint does not match, and
 /// [`AssetError::Internal`] when the file cannot be stored.
 pub fn complete_upload(
@@ -406,14 +409,21 @@ fn complete_session(
 fn assemble(session: &Path, sha: &Sha256) -> Result<(UploadManifest, PathBuf), AssetError> {
     let manifest = read_manifest(session)?;
     if manifest.sha256 != sha.as_str() {
-        return Err(AssetError::Invalid("upload session sha256 mismatch".into()));
+        return Err(AssetError::Invalid(
+            "the upload was started for a different SHA-256".into(),
+        ));
     }
     // The empty file has no parts: it completes with none and is checked
     // against its fingerprint like any other file.
     let count = expected_part_count(manifest.bytes, manifest.part_size);
     for n in 1..=count {
-        if !manifest.received.contains(&n) || !part_path(session, n).is_file() {
+        if !manifest.received.contains(&n) {
             return Err(AssetError::Invalid(format!("missing part {n} of {count}")));
+        }
+        // A part the manifest received whose file is gone is one a removal
+        // took before it reached the manifest.
+        if !part_path(session, n).is_file() {
+            return Err(AssetError::UploadNotFound);
         }
     }
 
@@ -452,14 +462,39 @@ fn assemble(session: &Path, sha: &Sha256) -> Result<(UploadManifest, PathBuf), A
     Ok((manifest, assembled))
 }
 
-/// Abort and delete staging for an upload session.
+/// Abort an upload and delete its folder. An upload that is already gone is
+/// aborted too.
+///
+/// # Errors
+///
+/// Returns [`AssetError::Invalid`] when the upload id is invalid,
+/// [`AssetError::Locked`] when a part or completion for the upload is still
+/// running, and [`AssetError::Internal`] when the folder cannot be removed.
 pub fn abort_upload(assets_root: &Path, sha: &Sha256, upload_id: &str) -> Result<(), AssetError> {
     let upload_id = require_upload_id(upload_id)?;
     let session = session_dir(assets_root, sha, &upload_id);
-    if session.exists() {
-        fs::remove_dir_all(&session).with_context(|| format!("remove {}", session.display()))?;
+    if !session.exists() {
+        return Ok(());
     }
-    Ok(())
+    // A part or completion still running holds the lock, and emptying the
+    // folder under it would fail it and leave files behind. The lock is
+    // dropped before the removal, because Windows does not delete a file
+    // that is open.
+    match lock_session(&session) {
+        Ok(lock) => drop(lock),
+        Err(AssetError::Internal(_)) if !session.exists() => return Ok(()),
+        Err(err) => return Err(err),
+    }
+    match fs::remove_dir_all(&session) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        // A request that took the lock after this abort let go of it wrote
+        // into the folder while it was being emptied.
+        Err(e) if e.kind() == std::io::ErrorKind::DirectoryNotEmpty => Err(AssetError::Locked),
+        Err(e) => Err(anyhow::Error::new(e)
+            .context(format!("remove {}", session.display()))
+            .into()),
+    }
 }
 
 #[cfg(test)]
@@ -730,6 +765,53 @@ mod tests {
         assert!(matches!(err, AssetError::UploadNotFound), "{err}");
         let err = complete_upload(root, &sha, &upload_id).unwrap_err();
         assert!(matches!(err, AssetError::UploadNotFound), "{err}");
+    }
+
+    /// A completion that finds a part it received already deleted by a
+    /// removal finds the upload gone, not a part the client never sent.
+    #[test]
+    fn a_completion_whose_received_part_was_removed_finds_no_upload() {
+        let dir = tempdir().unwrap();
+        let root = dir.path();
+        let sha = Sha256::of_bytes(b"hello");
+        let limits = UploadLimits {
+            part_size: 1024,
+            max_bytes: 2048,
+        };
+        let (_, start) = start_upload(root, &sha, 5, None, limits).unwrap();
+        let upload_id = start.unwrap().upload_id;
+        put_part(root, &sha, &upload_id, 1, b"hello").unwrap();
+        let session = session_dir(root, &sha, &upload_id);
+        fs::remove_file(part_path(&session, 1)).unwrap();
+
+        let err = complete_upload(root, &sha, &upload_id).unwrap_err();
+        assert!(matches!(err, AssetError::UploadNotFound), "{err}");
+    }
+
+    /// An abort while a part is still being written waits its turn, and
+    /// leaves the upload in place.
+    #[test]
+    fn an_abort_while_a_part_is_written_is_refused_as_locked() {
+        let dir = tempdir().unwrap();
+        let root = dir.path();
+        let sha = Sha256::of_bytes(b"hello");
+        let limits = UploadLimits {
+            part_size: 1024,
+            max_bytes: 2048,
+        };
+        let (_, start) = start_upload(root, &sha, 5, None, limits).unwrap();
+        let upload_id = start.unwrap().upload_id;
+        let session = session_dir(root, &sha, &upload_id);
+
+        let held = lock_session(&session).unwrap();
+        let err = abort_upload(root, &sha, &upload_id).unwrap_err();
+        assert!(matches!(err, AssetError::Locked), "{err}");
+        assert!(manifest_path(&session).is_file());
+
+        drop(held);
+        abort_upload(root, &sha, &upload_id).unwrap();
+        assert!(!session.exists());
+        abort_upload(root, &sha, &upload_id).unwrap();
     }
 
     /// S2-8: a second request to an upload while the first holds the lock is

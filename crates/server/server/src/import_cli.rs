@@ -208,14 +208,13 @@ async fn import_under_session(
         media: opts.media,
         wipe_sources: Some(vec![source.to_string()]),
     };
-    let result = imports_api::import_jsonl_files_on_conn(
+    let result = imports_api::import_on_conn(
         conn,
         paths,
         &import_opts,
         imports_api::ImportSchemaMode::AssumeReady,
     )
-    .await
-    .map_err(anyhow::Error::from);
+    .await;
     session.finish(conn, &result).await;
     result
 }

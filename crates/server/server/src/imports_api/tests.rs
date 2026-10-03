@@ -1945,6 +1945,32 @@ async fn a_batch_whose_file_does_not_match_its_sha256_is_a_422_naming_the_file()
     assert!(problem.errors.unwrap()[0].contains("photo.bin"), "{text}");
 }
 
+/// A stated SHA-256 that is not 64 hex digits, on a file that is there, is
+/// the sender's to fix too: 422 naming the line and the file.
+#[tokio::test]
+async fn a_batch_whose_stated_sha256_is_not_one_is_a_422_naming_the_file() {
+    let (fixture, account) = fixture_with_account().await;
+    let state = fixture.state.clone();
+    let path = batches_path(&state, &account.token, "whatsapp").await;
+    let assets_dir = state
+        .cfg
+        .paths
+        .assets_dir_for_account(account.account_id, "whatsapp");
+    fs::create_dir_all(&assets_dir).unwrap();
+    fs::write(assets_dir.join("photo.bin"), b"the bytes on disk").unwrap();
+    let body = one_attachment_batch("photo.bin", Some("not-a-fingerprint"));
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &account.token, "application/jsonl", body)
+            .await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    assert_eq!(problem.line, Some(2), "{text}");
+    assert!(problem.errors.unwrap()[0].contains("photo.bin"), "{text}");
+}
+
 /// A batch is refused before its body is read when the run is over: the
 /// row, not the request, says what a batch imports under, and a discarded
 /// run has nothing to import under.

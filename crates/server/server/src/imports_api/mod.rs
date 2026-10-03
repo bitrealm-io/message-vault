@@ -286,7 +286,7 @@ pub(crate) async fn import_jsonl_files(
     let mut conn = pool.acquire().await?;
     println!("  sql:      opened {}", db_path.display());
     let _ = io::stdout().flush();
-    Ok(import_jsonl_files_on_conn(&mut conn, paths, opts, ImportSchemaMode::Ensure).await?)
+    import_on_conn(&mut conn, paths, opts, ImportSchemaMode::Ensure).await
 }
 
 /// A fixed source needs no check here: every caller that passes one has
@@ -315,8 +315,10 @@ pub async fn import_jsonl_files_on_conn(
     Ok(import_on_conn(conn, paths, opts, schema_mode).await?)
 }
 
-/// [`import_jsonl_files_on_conn`], with every failure still inside `anyhow`.
-async fn import_on_conn(
+/// [`import_jsonl_files_on_conn`], with every failure still inside `anyhow`,
+/// for the callers that only report it: the `import` command, `reset-demo`
+/// and [`import_jsonl_files`].
+pub(crate) async fn import_on_conn(
     conn: &mut SqliteConnection,
     paths: &[PathBuf],
     opts: &ImportOptions<'_>,

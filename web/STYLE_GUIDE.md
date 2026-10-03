@@ -74,8 +74,9 @@ Defined as named constants in `src/lib/zLayers.ts`. Use those rather than a bare
 | 10 | `Z_RANGE_PILL` | The floating range pill over a list's rows |
 | 20 | `Z_APP_HEADER` | The app header, so its menus paint over the panels below |
 | 30 | `Z_RESIZE_HANDLE` | Column resize handles — below every drawer and panel opened over them |
+| 35 | `Z_CONTACT_DRAWER` | The overlay contact drawer — not modal, so above the handles and below every scrim |
 | 40 | `Z_DRAWER_SCRIM` | Drawer scrim |
-| 50 | `Z_DRAWER` | Drawer panel, the overlay contact drawer among them |
+| 50 | `Z_DRAWER` | Modal drawer panel (Sources) |
 | 70 | `Z_INLINE_PANEL` | Inline overlays (advanced search panel) — clears the resize handle |
 | 71 | `Z_INLINE_PANEL_TAIL` | The pointer tail on an inline panel |
 | 80 | `Z_ROW_MENU` | Sidebar row action menus |

@@ -26,10 +26,17 @@ export const Z_APP_HEADER = "z-20";
  */
 export const Z_RESIZE_HANDLE = "z-30";
 
-/** Backdrop behind a drawer. */
+/**
+ * The overlay contact drawer, opened from a conversation. It is not modal and
+ * stays open while other dialogs open, so it sits above the resize handles and
+ * below every scrim: a dialog opened over it dims it and takes its clicks.
+ */
+export const Z_CONTACT_DRAWER = "z-[35]";
+
+/** Backdrop behind a modal drawer. */
 export const Z_DRAWER_SCRIM = "z-40";
 
-/** A drawer panel (the settings drawer, the overlay contact drawer), above its scrim. */
+/** A modal drawer panel (the Sources drawer), above its scrim. */
 export const Z_DRAWER = "z-50";
 
 /** Advanced-search panel and similar inline overlays; must clear the resize handle. */

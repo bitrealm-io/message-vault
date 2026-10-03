@@ -29,6 +29,8 @@ pub(crate) struct ParsedMessage {
     pub sender: Option<Handle>,
     pub text: String,
     pub attachments: Vec<AttachmentBlob>,
+    /// MIME parts dropped because their content could not be decoded.
+    pub unreadable_parts: u64,
     pub name_alias: Option<String>,
     /// `X-smssync-id` when present.
     pub smssync_id: Option<String>,

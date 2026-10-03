@@ -1136,10 +1136,10 @@ pub(crate) async fn complete_import(
                 Err(other) => ApiError::Internal(other),
             },
         )?;
-    let run = import_run(&mut conn, row).await?;
+    let run = import_run(&mut conn, row).await;
     drop(conn);
     crate::asset_store::sweep_after_run(&state.db, &state.cfg.paths, account).await;
-    Ok(Json(run))
+    run.map(Json)
 }
 
 /// Add the sidebar shortcut to the messages this run brought in.
@@ -1455,10 +1455,10 @@ pub(crate) async fn discard_import(
     let account = resolve_import_account(&auth);
     let mut conn = state.db.acquire().await?;
     crate::db::imports::discard_import(&mut conn, account, import_id).await?;
-    let run = full_import_run(&mut conn, account, import_id).await?;
+    let run = full_import_run(&mut conn, account, import_id).await;
     drop(conn);
     crate::asset_store::sweep_after_run(&state.db, &state.cfg.paths, account).await;
-    Ok(Json(run))
+    run.map(Json)
 }
 
 /// Import one message-ir JSONL body.

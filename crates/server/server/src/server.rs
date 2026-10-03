@@ -453,6 +453,15 @@ pub enum ApiError {
         /// The line of the batch, counted from 1 with blank lines included.
         line: usize,
     },
+    /// `422` — lines of an import batch were read and broke a rule. A
+    /// `validation-failed` that also carries the first such line as `line`.
+    InvalidImportLines {
+        /// One sentence per rule, naming the lines as lines of the batch.
+        errors: Vec<String>,
+        /// The first line that broke a rule, counted from 1 with blank
+        /// lines included.
+        line: usize,
+    },
     /// `415` — `Content-Type` absent or not one the route accepts.
     UnsupportedMediaType(String),
     /// `413` — the body is over the configured cap.
@@ -514,7 +523,9 @@ impl ApiError {
     #[must_use]
     pub fn problem_type(&self) -> Option<ProblemType> {
         Some(match self {
-            Self::ValidationFailed(_) => ProblemType::ValidationFailed,
+            Self::ValidationFailed(_) | Self::InvalidImportLines { .. } => {
+                ProblemType::ValidationFailed
+            }
             Self::MalformedBody(_) | Self::MalformedImportLine { .. } => ProblemType::MalformedBody,
             Self::UnsupportedMediaType(_) => ProblemType::UnsupportedMediaType,
             Self::PayloadTooLarge(_) => ProblemType::PayloadTooLarge,
@@ -601,6 +612,10 @@ impl ApiError {
                 problem.detail = Some(detail.clone());
                 problem.line = Some(*line as u64);
             }
+            Self::InvalidImportLines { errors, line } => {
+                problem.errors = Some(errors.clone());
+                problem.line = Some(*line as u64);
+            }
             Self::MalformedBody(m)
             | Self::UnsupportedMediaType(m)
             | Self::PayloadTooLarge(m)
@@ -632,7 +647,9 @@ impl std::fmt::Display for ApiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Internal(e) => f.write_str(&error_chain(e)),
-            Self::ValidationFailed(errors) => f.write_str(&errors.join("; ")),
+            Self::ValidationFailed(errors) | Self::InvalidImportLines { errors, .. } => {
+                f.write_str(&errors.join("; "))
+            }
             Self::RateLimited { retry_after_secs } => write!(
                 f,
                 "too many authentication attempts; try again in {retry_after_secs} seconds"

@@ -903,7 +903,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Import one message-ir JSONL body. */
+        /**
+         * Import one message-ir JSONL body.
+         * @description Every message needs a non-empty `guid`. A batch with a message without
+         *     one is refused with `422`, naming its lines, and nothing in it is stored.
+         *     A message whose `guid` the source already holds is skipped, so a batch
+         *     sent again after its answer was lost stores nothing twice.
+         */
         post: operations["create_import_batch"];
         delete?: never;
         options?: never;
@@ -3199,9 +3205,11 @@ export interface components {
             /**
              * Format: int64
              * @description `malformed-body` from an import batch: the line of the request body
-             *     the server could not read, counted from 1 with blank lines included.
-             *     The body is a batch the client packed, so only the client can say
-             *     which file and line of its own that line came from.
+             *     the server could not read; `validation-failed` from an import batch:
+             *     the first line that broke a rule, such as a message without a guid.
+             *     Counted from 1 with blank lines included. The body is a batch the
+             *     client packed, so only the client can say which file and line of its
+             *     own that line came from.
              */
             line?: number | null;
             /** @description The `x-request-id` of the response this came in. */

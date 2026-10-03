@@ -2460,8 +2460,7 @@ fn serve_a_200_that_drops_the_batch_body() -> (String, Arc<AtomicUsize>) {
     (base_url, batches)
 }
 
-/// A `200 OK` whose body is cut off means the server committed the batch.
-/// Sending it again would store every message without a GUID a second time,
+/// A `200 OK` whose body is cut off means the server committed the batch,
 /// so the batch is posted once and the conversation fails with a sentence
 /// saying the answer could not be read (#1162).
 #[test]

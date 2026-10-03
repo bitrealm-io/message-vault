@@ -39,7 +39,7 @@ pub mod failure;
 pub mod promote;
 pub mod staging;
 
-pub use failure::ImportFailure;
+pub use failure::{ImportFailure, MISSING_GUID_LINES_NAMED};
 
 use staging::StagingInserts;
 
@@ -1270,6 +1270,11 @@ pub(crate) async fn discard_import(
 }
 
 /// Import one message-ir JSONL body.
+///
+/// Every message needs a non-empty `guid`. A batch with a message without
+/// one is refused with `422`, naming its lines, and nothing in it is stored.
+/// A message whose `guid` the source already holds is skipped, so a batch
+/// sent again after its answer was lost stores nothing twice.
 #[utoipa::path(
     post,
     path = "/v1/imports/{id}/batches",
@@ -1357,13 +1362,18 @@ fn import_semaphore() -> &'static tokio::sync::Semaphore {
 
 /// Turn an import's error into the HTTP failure a caller should see.
 ///
-/// The two failures a sender can fix by changing the file travel up the
-/// pipeline as `ImportFailure` and become `malformed-body` with their own
-/// sentence and the line of the batch as `line`. Everything else (a disk or
-/// database error, a bug) is a 500: the message goes to stderr and the
-/// client sees "internal server error".
+/// The failures a sender can fix by changing the file travel up the
+/// pipeline as `ImportFailure`, each with its own sentence and the line of
+/// the batch as `line`. A line that could not be read is `malformed-body`;
+/// messages that were read and have no guid are `validation-failed`.
+/// Everything else (a disk or database error, a bug) is a 500: the message
+/// goes to stderr and the client sees "internal server error".
 fn classify_import_error(err: anyhow::Error) -> ApiError {
     match ImportFailure::in_error(&err) {
+        Some(failure @ ImportFailure::MissingGuid { .. }) => ApiError::InvalidImportLines {
+            errors: vec![failure.batch_sentence()],
+            line: failure.line(),
+        },
         Some(failure) => ApiError::MalformedImportLine {
             detail: failure.batch_sentence(),
             line: failure.line(),

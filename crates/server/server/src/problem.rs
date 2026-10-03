@@ -177,7 +177,8 @@ impl ProblemType {
     pub fn page(self) -> String {
         match self {
             Self::ValidationFailed => "A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.\n\n\
-`errors` lists every rule the request broke, one sentence each, not only the first. Fix each one and send the request again.".to_string(),
+`errors` lists every rule the request broke, one sentence each, not only the first. Fix each one and send the request again.\n\n\
+For an import batch whose messages have no `guid`, `line` carries the first such line of the request body, counted from 1 with blank lines included. It is a line of the batch, not of any file: a client that packed the batch from several files turns it into the file and line it came from.".to_string(),
             Self::MalformedBody => "The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. Nothing was parsed, so nothing is reported field by field; `detail` says where reading stopped.\n\n\
 For an import batch, `line` carries the line of the request body that could not be read, counted from 1 with blank lines included. It is a line of the batch, not of any file: a client that packed the batch from several files turns it into the file and line it came from.".to_string(),
             Self::UnsupportedMediaType => "The request's `Content-Type` is absent or not one this route accepts. An import body is `application/x-ndjson` or `application/jsonl`; a JSON route takes `application/json`. Send the right header with the same body.".to_string(),

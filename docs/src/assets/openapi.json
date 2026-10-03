@@ -6852,6 +6852,7 @@
           "Import"
         ],
         "summary": "Import one message-ir JSONL body.",
+        "description": "Every message needs a non-empty `guid`. A batch with a message without\none is refused with `422`, naming its lines, and nothing in it is stored.\nA message whose `guid` the source already holds is skipped, so a batch\nsent again after its answer was lost stores nothing twice.",
         "operationId": "create_import_batch",
         "parameters": [
           {
@@ -13638,7 +13639,7 @@
               "null"
             ],
             "format": "int64",
-            "description": "`malformed-body` from an import batch: the line of the request body\nthe server could not read, counted from 1 with blank lines included.\nThe body is a batch the client packed, so only the client can say\nwhich file and line of its own that line came from.",
+            "description": "`malformed-body` from an import batch: the line of the request body\nthe server could not read; `validation-failed` from an import batch:\nthe first line that broke a rule, such as a message without a guid.\nCounted from 1 with blank lines included. The body is a batch the\nclient packed, so only the client can say which file and line of its\nown that line came from.",
             "minimum": 0
           },
           "request_id": {

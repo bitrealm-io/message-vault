@@ -36,7 +36,7 @@ pub(crate) const NOT_SMS_OR_MMS_LEFT_OUT: &str = "messages_not_sms_or_mms_left_o
 /// with no service, or one pulled back from the server as `unknown`) is
 /// held when its kind says SMS or MMS, as every other layer reads it. RCS
 /// and every other service are left out.
-pub fn sbr_holds(msg: &IrMessage) -> bool {
+pub fn is_sms_or_mms(msg: &IrMessage) -> bool {
     match msg.service {
         IrService::Sms => true,
         IrService::Unknown => matches!(msg.message_kind, IrMessageKind::Sms | IrMessageKind::Mms),
@@ -84,7 +84,7 @@ impl SbrBackupSession {
     /// elements, and count every other message as left out. A conversation
     /// with no SMS or MMS writes nothing.
     pub fn append_document(&mut self, doc: &ConversationDocument) -> Result<()> {
-        self.not_sms_or_mms += doc.messages.iter().filter(|m| !sbr_holds(m)).count() as u64;
+        self.not_sms_or_mms += doc.messages.iter().filter(|m| !is_sms_or_mms(m)).count() as u64;
         for msg in document_to_sbr_messages(doc, &self.output_dir)? {
             self.writer.write_message(&msg)?;
         }
@@ -120,7 +120,7 @@ pub(crate) fn document_to_sbr_messages(
         .and_then(nonempty)
         .unwrap_or_default();
     let mut out = Vec::with_capacity(doc.messages.len());
-    for msg in doc.messages.iter().filter(|m| sbr_holds(m)) {
+    for msg in doc.messages.iter().filter(|m| is_sms_or_mms(m)) {
         out.push(ir_message_to_sbr(doc, msg, &owner, output_dir)?);
     }
     Ok(out)

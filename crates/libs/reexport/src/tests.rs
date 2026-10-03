@@ -166,8 +166,11 @@ fn xml_writes_only_sms_and_mms_and_the_log_names_what_was_left_out() {
     assert!(text.contains("hello sms"), "{text}");
     assert!(!text.contains("hello imessage"), "{text}");
     assert!(!text.contains("hello whatsapp"), "{text}");
-    assert!(
-        result.messages.contains(&"Conversations: 1".to_string()),
+    // The desktop app repeats the last line as the run's summary, so the
+    // conversation count closes the log, not the left-out line.
+    assert_eq!(
+        result.messages.last().map(String::as_str),
+        Some("Conversations: 1"),
         "{:?}",
         result.messages
     );

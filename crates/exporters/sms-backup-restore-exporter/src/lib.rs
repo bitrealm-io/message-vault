@@ -14,7 +14,7 @@ mod write;
 pub use message_crate_core::RunResult;
 pub use read::{ReadOptions, ReadReport, read_backup};
 pub use run::run;
-pub use write::{SbrArchive, not_sms_or_mms_line, sbr_holds};
+pub use write::{SbrArchive, is_sms_or_mms, not_sms_or_mms_line};
 
 #[cfg(test)]
 #[path = "../tests/convert_smoke.rs"]

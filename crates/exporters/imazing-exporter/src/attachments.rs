@@ -1,200 +1,188 @@
-//! Locate iMazing attachment files next to CSV exports.
+//! Find the file iMazing wrote for a CSV row, in the row's own chat folder.
+//!
+//! iMazing names a media file `{Message Date} - {label} - {name}`. The date
+//! is the row's `Message Date` with each `:` replaced by a space. The label
+//! comes from the chat and can't be rebuilt from a row, so it is not
+//! compared. The name is the row's `Attachment` cell as iMazing changed it
+//! when it wrote the file ([`names_on_disk`]).
 
+use crate::unnamed_files::file_name_second;
 use message_csv::AttachmentCell;
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Maximum directory depth for attachment discovery. iMazing export trees are
-/// only a few levels deep; this bounds any pathological nesting.
-const MAX_WALK_DEPTH: usize = 64;
+/// The extensions iMazing converts when it writes a file, each with the one
+/// it writes instead.
+const CONVERTED_EXTENSIONS: [(&str, &str); 4] = [
+    ("heic", "jpg"),
+    ("caf", "mp3"),
+    ("opus", "mp3"),
+    ("webp", "png"),
+];
 
-/// One-time index of every file under the input tree.
-///
-/// Built once per export so attachment lookup does not re-walk the tree for
-/// every attachment row.
-pub(crate) struct AttachmentIndex {
-    /// Lowercase file name -> paths sorted by path (exact-name lookup).
-    by_name: HashMap<String, Vec<PathBuf>>,
-    /// (lowercase file name, path) pairs sorted by path (suffix-match fallback).
-    all: Vec<(String, PathBuf)>,
+/// The longest stem iMazing writes into a file name, in characters.
+const MAX_STEM_CHARS: usize = 40;
+
+/// The regular files directly in one chat folder.
+pub(crate) struct FolderFiles {
+    files: Vec<(String, PathBuf)>,
 }
 
-impl AttachmentIndex {
-    /// Walk `root` once and index every regular file. When `root` is a file
-    /// (single-CSV input), index its parent directory instead so sibling
-    /// media is still discoverable.
-    pub(crate) fn build(root: &Path) -> Self {
+impl FolderFiles {
+    /// Read the regular files directly in `folder`.
+    ///
+    /// Symbolic links are skipped, because following one can reach a file
+    /// outside the export. A name that is not UTF-8 is skipped, because no
+    /// CSV cell can name it.
+    pub(crate) fn read(folder: &Path) -> Self {
         let mut files = Vec::new();
-        let base = if root.is_dir() {
-            root
-        } else {
-            root.parent().unwrap_or(root)
-        };
-        collect_files(base, 0, &mut files);
-        files.sort_by(|a, b| a.1.cmp(&b.1));
-        let mut by_name: HashMap<String, Vec<PathBuf>> = HashMap::new();
-        for (name, path) in &files {
-            by_name.entry(name.clone()).or_default().push(path.clone());
+        if let Ok(entries) = fs::read_dir(folder) {
+            for entry in entries.flatten() {
+                let Ok(file_type) = entry.file_type() else {
+                    continue;
+                };
+                if file_type.is_symlink() || !file_type.is_file() {
+                    continue;
+                }
+                let path = entry.path();
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    files.push((name.to_string(), path));
+                }
+            }
         }
-        AttachmentIndex {
-            by_name,
-            all: files,
-        }
+        FolderFiles { files }
     }
 
-    /// Find a file whose name matches `csv_name` (exact, `_`/`-` prefixed, or
-    /// suffix match), preferring the lexicographically first path.
-    fn lookup(&self, csv_name: &str) -> Option<PathBuf> {
-        if let Some(paths) = self.by_name.get(&csv_name.to_ascii_lowercase())
-            && let Some(p) = paths.first()
-        {
-            return Some(p.clone());
-        }
-        for (name, path) in &self.all {
-            if attachment_name_matches(name, csv_name) {
-                return Some(path.clone());
+    /// The file iMazing wrote for `row`: a name that starts with the row's
+    /// second and ` - `, and ends with ` - ` and the first of
+    /// [`names_on_disk`] that any file ends with.
+    ///
+    /// `None` when no file has that shape, or when two or more do, because
+    /// then nothing tells which file is the row's.
+    pub(crate) fn find(&self, row: &RowAttachment<'_>) -> Option<PathBuf> {
+        let start = format!("{} - ", file_name_second(row.message_date));
+        for name in names_on_disk(row.csv_name, row.ordinal) {
+            let end = format!(" - {name}");
+            let mut matches = self.files.iter().filter(|(file, _)| {
+                file.len() >= start.len() + end.len()
+                    && file.starts_with(&start)
+                    && file.ends_with(&end)
+            });
+            if let Some((_, path)) = matches.next() {
+                return matches.next().is_none().then(|| path.clone());
             }
         }
         None
     }
 }
 
-/// Collect every regular file under `dir` (symlinks skipped, depth-bounded).
-fn collect_files(dir: &Path, depth: usize, out: &mut Vec<(String, PathBuf)>) {
-    if depth > MAX_WALK_DEPTH {
-        return;
-    }
-    let Ok(entries) = fs::read_dir(dir) else {
-        return;
+/// What a row tells about the file iMazing wrote for its attachment.
+pub(crate) struct RowAttachment<'a> {
+    /// The row's `Attachment` cell, a bare basename.
+    pub csv_name: &'a str,
+    /// The row's `Message Date` as the CSV writes it.
+    pub message_date: &'a str,
+    /// Which of the rows of its CSV that share its `Message Date` and
+    /// `Attachment` this row is, counting from 1 in CSV order.
+    pub ordinal: usize,
+}
+
+/// The names iMazing may have given the file of a row whose `Attachment`
+/// cell is `csv_name`, most likely first:
+///
+/// 1. the name as written;
+/// 2. the name with the extension converted (heic to jpg, caf and opus to
+///    mp3, webp to png);
+/// 3. either of these with every non-ASCII character removed from the stem
+///    and the stem cut to its first 40 characters.
+///
+/// When rows of one CSV share a second and a name, iMazing writes `X.ext`
+/// for the first and `X 2.ext`, `X 3.ext`, … for the rest, so the `ordinal`-th
+/// row's stem ends with ` {ordinal}` from the second on.
+fn names_on_disk(csv_name: &str, ordinal: usize) -> Vec<String> {
+    let (stem, extension) = match csv_name.rsplit_once('.') {
+        Some((stem, extension)) if !stem.is_empty() => (stem, Some(extension)),
+        _ => (csv_name, None),
     };
-    for entry in entries.flatten() {
-        let Ok(file_type) = entry.file_type() else {
-            continue;
-        };
-        // Skip symlinks: following them can loop (stack overflow) and can reach
-        // files outside the input tree.
-        if file_type.is_symlink() {
-            continue;
+    let converted = extension.and_then(|extension| {
+        CONVERTED_EXTENSIONS
+            .iter()
+            .find(|(from, _)| extension.eq_ignore_ascii_case(from))
+            .map(|(_, to)| *to)
+    });
+    let short: String = stem
+        .chars()
+        .filter(char::is_ascii)
+        .take(MAX_STEM_CHARS)
+        .collect();
+    let mut names: Vec<String> = Vec::new();
+    for stem in [stem, short.as_str()] {
+        for extension in [extension, converted].into_iter().flatten() {
+            let name = with_ordinal(stem, Some(extension), ordinal);
+            if !names.contains(&name) {
+                names.push(name);
+            }
         }
-        let path = entry.path();
-        if file_type.is_dir() {
-            collect_files(&path, depth + 1, out);
-            continue;
-        }
-        if !file_type.is_file() {
-            continue;
-        }
-        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-            out.push((name.to_ascii_lowercase(), path));
+        if extension.is_none() {
+            let name = with_ordinal(stem, None, ordinal);
+            if !names.contains(&name) {
+                names.push(name);
+            }
         }
     }
+    names
+}
+
+/// `stem` with ` {ordinal}` after it from the second row on, then the extension.
+fn with_ordinal(stem: &str, extension: Option<&str>, ordinal: usize) -> String {
+    let mut name = stem.to_string();
+    if ordinal > 1 {
+        name.push_str(&format!(" {ordinal}"));
+    }
+    if let Some(extension) = extension {
+        name.push('.');
+        name.push_str(extension);
+    }
+    name
 }
 
 /// Inputs for [`resolve_attachment_cell`].
 pub(crate) struct ResolveAttachmentArgs<'a> {
-    pub csv_name: &'a str,
+    pub row: RowAttachment<'a>,
     pub attachment_type: &'a str,
-    pub csv_parent: &'a Path,
-    pub index: Option<&'a AttachmentIndex>,
-    pub copy_attachments: bool,
+    /// The files of the row's chat folder. `None` when the run does not copy
+    /// attachments, so no file is looked for.
+    pub files: Option<&'a FolderFiles>,
 }
 
-/// Resolve a CSV attachment name into an [`AttachmentCell`] and optional source path.
+/// Resolve a CSV attachment name into an [`AttachmentCell`] and the file
+/// iMazing wrote for the row, when the row's chat folder holds it.
 ///
-/// Lookup order (unchanged):
-/// 1. Files in the CSV's parent directory
-/// 2. Indexed walk under the input tree
-///
-/// Does not copy files. When `copy_attachments` is false, keep the CSV name only.
-/// On a missing file, fall back to the CSV name so the row still projects.
+/// Does not copy files. A row with no file keeps the CSV name, and the
+/// writer marks its attachment `file_missing`.
 pub(crate) fn resolve_attachment_cell(
     args: ResolveAttachmentArgs<'_>,
 ) -> (AttachmentCell, Option<PathBuf>) {
     let ResolveAttachmentArgs {
-        csv_name,
+        row,
         attachment_type,
-        csv_parent,
-        index,
-        copy_attachments,
+        files,
     } = args;
-    let mime = mime_hint(attachment_type, csv_name);
-    let is_sticker = attachment_type.eq_ignore_ascii_case("sticker");
-    let cell_from_csv = || AttachmentCell {
+    let cell = AttachmentCell {
         meta: message_ir::AttachmentMeta {
             path: None,
-            original_name: Some(csv_name.to_string()),
-            mime_type: mime.clone(),
+            original_name: Some(row.csv_name.to_string()),
+            mime_type: mime_hint(attachment_type, row.csv_name),
             digest_sha256: None,
             size_bytes: None,
             missing_reason: None,
         },
-        is_sticker,
+        is_sticker: attachment_type.eq_ignore_ascii_case("sticker"),
         transcription: None,
         sticker_effect: None,
     };
-    if !copy_attachments {
-        return (cell_from_csv(), None);
-    }
-    match find_attachment_source(csv_name, csv_parent, index) {
-        Some(src) => (cell_from_csv(), Some(src)),
-        None => (cell_from_csv(), None),
-    }
-}
-
-/// Whether the file named `disk_name` is the one a CSV row calls `csv_name`.
-///
-/// The names match when they are equal, or when the disk name ends with the
-/// CSV name and the character before it is not an ASCII letter or digit
-/// (`IMG_1234.jpg` for `1234.jpg`). Case is ignored. The separator is
-/// required so a short CSV name such as `1.jpg` does not match an unrelated
-/// file such as `photo11.jpg`.
-fn attachment_name_matches(disk_name: &str, csv_name: &str) -> bool {
-    let disk = disk_name.to_ascii_lowercase();
-    let csv = csv_name.to_ascii_lowercase();
-    // `strip_suffix` cuts only where the CSV name starts, which is always
-    // between two characters. Cutting at a byte count instead panics on a
-    // name with a character longer than one byte.
-    let Some(prefix) = disk.strip_suffix(csv.as_str()) else {
-        return false;
-    };
-    match prefix.chars().next_back() {
-        None => true,
-        Some(c) => !c.is_ascii_alphanumeric(),
-    }
-}
-
-fn find_attachment_on_disk(
-    csv_name: &str,
-    csv_parent: &Path,
-    index: &AttachmentIndex,
-) -> Option<PathBuf> {
-    if let Ok(entries) = fs::read_dir(csv_parent) {
-        for entry in entries.flatten() {
-            let Ok(file_type) = entry.file_type() else {
-                continue;
-            };
-            // Match the index walker: do not follow symlinks out of the tree.
-            if file_type.is_symlink() || !file_type.is_file() {
-                continue;
-            }
-            let path = entry.path();
-            if let Some(name) = path.file_name().and_then(|n| n.to_str())
-                && attachment_name_matches(name, csv_name)
-            {
-                return Some(path);
-            }
-        }
-    }
-    index.lookup(csv_name)
-}
-
-fn find_attachment_source(
-    csv_name: &str,
-    csv_parent: &Path,
-    index: Option<&AttachmentIndex>,
-) -> Option<PathBuf> {
-    index.and_then(|i| find_attachment_on_disk(csv_name, csv_parent, i))
+    let source = files.and_then(|files| files.find(&row));
+    (cell, source)
 }
 
 /// The MIME type of an attachment, from its `Attachment type` cell or, when
@@ -266,58 +254,14 @@ mod tests {
         }
     }
 
-    #[test]
-    fn attachment_name_matches_suffix_and_separators() {
-        assert!(attachment_name_matches("IMG_1234.jpg", "1234.jpg"));
-        assert!(attachment_name_matches("photo_abc.jpg", "abc.jpg"));
-        assert!(attachment_name_matches("photo-abc.jpg", "abc.jpg"));
-        assert!(attachment_name_matches("prefix.abc.jpg", "abc.jpg"));
-        assert!(!attachment_name_matches("other.jpg", "abc.jpg"));
-        // Bare ends_with would wrongly match these short CSV names.
-        assert!(!attachment_name_matches("photo11.jpg", "1.jpg"));
-        assert!(!attachment_name_matches("image10.jpg", "0.jpg"));
-        assert!(!attachment_name_matches("photo11.jpg", "11.jpg"));
-    }
-
-    /// A file whose name only has a separator somewhere before the end is
-    /// not the file a row names: `a_bcd.png` is not `xyz.png`.
-    #[test]
-    fn a_disk_name_that_does_not_end_with_the_csv_name_does_not_match() {
-        assert!(!attachment_name_matches("a_bcd.png", "xyz.png"));
-        assert!(!attachment_name_matches("photo-1.png", "xyz.png"));
-        assert!(!attachment_name_matches("xyz.png.bak", "xyz.png"));
-        // A disk name shorter than the CSV name cannot end with it.
-        assert!(!attachment_name_matches("z.png", "xyz.png"));
-    }
-
-    /// The names a row may still be matched by: the same name in any case,
-    /// and the name after a separator that is not a letter or a digit.
-    #[test]
-    fn a_disk_name_that_ends_with_the_csv_name_after_a_separator_matches() {
-        assert!(attachment_name_matches("xyz.png", "xyz.png"));
-        assert!(attachment_name_matches("XYZ.PNG", "xyz.png"));
-        assert!(attachment_name_matches("xyz.png", "XYZ.png"));
-        assert!(attachment_name_matches("a_xyz.png", "xyz.png"));
-        assert!(attachment_name_matches("a-xyz.png", "xyz.png"));
-        assert!(attachment_name_matches("a.xyz.png", "xyz.png"));
-        assert!(attachment_name_matches("a xyz.png", "xyz.png"));
-        assert!(attachment_name_matches(
-            "ABC123_Image000000.JPG",
-            "image000000.jpg"
-        ));
-        assert!(!attachment_name_matches("axyz.png", "xyz.png"));
-        assert!(!attachment_name_matches("1xyz.png", "xyz.png"));
-    }
-
-    /// A name with a character longer than one byte is compared, never cut
-    /// in the middle of that character: `é.png` is two bytes longer than
-    /// `.png`, so cutting `x.png`'s five bytes off its end lands inside `é`.
-    #[test]
-    fn a_name_with_a_character_longer_than_one_byte_is_compared_without_a_panic() {
-        assert!(!attachment_name_matches("é.png", "x.png"));
-        assert!(!attachment_name_matches("日本.png", "abc.png"));
-        assert!(attachment_name_matches("写真_日本.png", "日本.png"));
-        assert!(attachment_name_matches("日本.png", "日本.png"));
+    /// A row of `2020-01-01 12:00:00` naming `csv_name`, the first of its name
+    /// in that second.
+    fn row(csv_name: &str) -> RowAttachment<'_> {
+        RowAttachment {
+            csv_name,
+            message_date: "2020-01-01 12:00:00",
+            ordinal: 1,
+        }
     }
 
     #[test]
@@ -327,14 +271,16 @@ mod tests {
         let attachments = dir.path().join("attachments");
         fs::create_dir_all(&chat).unwrap();
         fs::create_dir_all(&attachments).unwrap();
-        fs::write(chat.join("photo.jpg"), b"jpeg-bytes").unwrap();
-        let index = AttachmentIndex::build(dir.path());
+        fs::write(
+            chat.join("2020-01-01 12 00 00 - Bob - photo.jpg"),
+            b"jpeg-bytes",
+        )
+        .unwrap();
+        let files = FolderFiles::read(&chat);
         let (cell, source) = resolve_attachment_cell(ResolveAttachmentArgs {
-            csv_name: "photo.jpg",
+            row: row("photo.jpg"),
             attachment_type: "image",
-            csv_parent: &chat,
-            index: Some(&index),
-            copy_attachments: true,
+            files: Some(&files),
         });
         assert!(
             cell.meta.digest_sha256.is_none(),
@@ -381,7 +327,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn parent_dir_skips_symlinks() {
+    fn a_symlink_in_the_chat_folder_is_not_followed() {
         use std::os::unix::fs::symlink;
         let dir = tempfile::tempdir().unwrap();
         let chat = dir.path().join("chat");
@@ -389,42 +335,33 @@ mod tests {
         fs::create_dir_all(&chat).unwrap();
         fs::create_dir_all(&outside).unwrap();
         fs::write(outside.join("secret.jpg"), b"secret").unwrap();
-        symlink(outside.join("secret.jpg"), chat.join("photo.jpg")).unwrap();
-        let index = AttachmentIndex::build(&chat);
-        assert_eq!(
-            find_attachment_on_disk("photo.jpg", &chat, &index),
-            None,
-            "symlink in CSV parent must not be followed"
-        );
+        symlink(
+            outside.join("secret.jpg"),
+            chat.join("2020-01-01 12 00 00 - Bob - photo.jpg"),
+        )
+        .unwrap();
+        assert_eq!(FolderFiles::read(&chat).find(&row("photo.jpg")), None);
     }
 
+    /// The candidate names in order: as written, converted, then each with
+    /// the stem made ASCII and cut to 40 characters. A name iMazing would
+    /// leave as it is gives only itself.
     #[test]
-    fn index_finds_exact_and_suffix_matches() {
-        let dir = tempfile::tempdir().unwrap();
-        let chat = dir.path().join("chat");
-        fs::create_dir_all(&chat).unwrap();
-        fs::write(chat.join("ABC123_image000000.jpg"), b"jpeg").unwrap();
-        fs::write(chat.join("notes.txt"), b"x").unwrap();
-        let index = AttachmentIndex::build(dir.path());
+    fn the_names_on_disk_are_tried_as_written_first() {
+        assert_eq!(names_on_disk("IMG_0001.jpg", 1), vec!["IMG_0001.jpg"]);
         assert_eq!(
-            index.lookup("image000000.jpg"),
-            Some(chat.join("ABC123_image000000.jpg"))
+            names_on_disk("IMG_0001.HEIC", 1),
+            vec!["IMG_0001.HEIC", "IMG_0001.jpg"]
         );
-        assert_eq!(index.lookup("notes.txt"), Some(chat.join("notes.txt")));
-        assert_eq!(index.lookup("missing.jpg"), None);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn index_skips_symlink_loops() {
-        use std::os::unix::fs::symlink;
-        let dir = tempfile::tempdir().unwrap();
-        let a = dir.path().join("a");
-        fs::create_dir_all(&a).unwrap();
-        // Self-referential symlink: must be skipped, not followed forever.
-        symlink(&a, a.join("loop")).unwrap();
-        fs::write(a.join("photo.jpg"), b"jpeg").unwrap();
-        let index = AttachmentIndex::build(dir.path());
-        assert_eq!(index.lookup("photo.jpg"), Some(a.join("photo.jpg")));
+        assert_eq!(
+            names_on_disk("Caf\u{e9} \u{2019}menu\u{2019}.webp", 2),
+            vec![
+                "Caf\u{e9} \u{2019}menu\u{2019} 2.webp",
+                "Caf\u{e9} \u{2019}menu\u{2019} 2.png",
+                "Caf menu 2.webp",
+                "Caf menu 2.png",
+            ]
+        );
+        assert_eq!(names_on_disk("sticker_0001", 3), vec!["sticker_0001 3"]);
     }
 }

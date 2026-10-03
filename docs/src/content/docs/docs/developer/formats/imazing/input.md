@@ -18,13 +18,37 @@ Messages/{YYYY-MM-DD HH MM SS} - {label}/Messages - {export-stamp} - {label}.csv
 WhatsApp/{YYYY-MM-DD HH MM SS} - {label}/WhatsApp - {export-stamp} - {label}.csv
 ```
 
-Media files sit beside the CSV in each chat folder. There is no `Attachments/` subdirectory. Filenames often use:
+Media files sit beside the CSV in each chat folder. There is no `Attachments/` subdirectory. A media file's name has this shape:
 
 ```text title="Attachment filename"
-{message timestamp} - {truncated chat label} - {original basename}
+{YYYY-MM-DD HH MM SS} - {label} - {name}
 ```
 
-The CSV `Attachment` cell usually contains only the original basename.
+- The timestamp is the row's `Message Date` with each `:` replaced by a space. It matches to the second: no file is off by a second or by whole hours.
+- The label comes from the chat, and a row can't rebuild it. It differs from the chat folder's label in 71 of 298 Messages folders and from `Chat Session` in 142.
+- The name is the row's `Attachment` cell, which is always a bare basename, as iMazing changed it when it wrote the file. It can itself hold ` - `, so the file name can't be split on ` - `.
+
+iMazing changes the basename in four ways:
+
+- It converts the extension: heic to jpg, caf to mp3, opus to mp3, webp to png.
+- It cuts a stem longer than 40 characters to its first 40.
+- It removes non-ASCII characters from the stem. U+202F, U+2019, U+202D, U+2026 and U+00AE occur.
+- When several rows of one conversation share a `Message Date` and a basename, it names their files `X.ext`, `X 2.ext`, and on to `X N.ext`.
+
+The importer finds a row's file in the row's own chat folder only, never in another conversation's.
+The file's name must start with the row's timestamp and ` - `, and end with ` - ` and the first of these names that any file ends with:
+
+1. the `Attachment` cell as written;
+2. the cell with the extension converted, read in any case, so `IMG_0001.HEIC` gives `IMG_0001.jpg`;
+3. either of these with every non-ASCII character removed from the stem and the stem cut to its first 40 characters.
+
+The label between the two is not compared, because a row can't rebuild it.
+When n rows of one CSV share a `Message Date` and an `Attachment`, the first takes the plain name and the k-th, in CSV order, the name whose stem ends with ` k`.
+No timestamp tolerance or case folding applies.
+A row whose folder holds no such file, or two or more, has its attachment marked `file_missing`, because no rule tells which file is the row's.
+A Location row names a `.vcf` while its file is a `.url` with another stem, so it is marked `file_missing` too.
+
+Three points are not confirmed: that the ` 2`, ` 3` files follow the order of the rows in the CSV, the order in which iMazing removes non-ASCII characters and cuts to 40, and any version of iMazing other than 3.5.5.
 
 Two kinds of file in a Messages chat folder are named by no row:
 

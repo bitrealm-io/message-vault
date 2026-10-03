@@ -567,6 +567,42 @@ async fn the_owner_sets_a_managed_accounts_profile() {
     assert_eq!(patched["emails"], serde_json::json!([]));
 }
 
+/// An email address is an identity of each account that adds it, as a phone
+/// number is: two accounts can both hold one, and each profile lists it
+/// (#1027).
+#[tokio::test]
+async fn two_accounts_can_each_hold_the_same_email_address() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
+    let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+    for username in ["carol", "dave"] {
+        let (_, created): (String, serde_json::Value) = post_created_json(
+            &state,
+            "/v1/accounts",
+            &owner.token,
+            serde_json::json!({ "username": username, "password": "hunter2hunter2" }),
+        )
+        .await;
+        let path = member(created["account_id"].as_i64().unwrap());
+
+        let patched: serde_json::Value = patch_json(
+            &state,
+            &path,
+            &owner.token,
+            serde_json::json!({
+                "identities": [{ "address": "ann@example.com", "service": "email" }]
+            }),
+        )
+        .await;
+
+        assert_eq!(
+            patched["emails"],
+            serde_json::json!(["ann@example.com"]),
+            "{username}"
+        );
+    }
+}
+
 /// The owner's PATCH naming one profile field alone saves that field. A
 /// PATCH is not required to carry the name and the zone together, and the
 /// route answers 200 either way, so only a read-back shows the save.

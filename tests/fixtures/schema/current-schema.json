@@ -1,7 +1,6 @@
 {
   "tables": [
     "accounts",
-    "account_emails",
     "account_api_tokens",
     "account_prefs",
     "schema_meta",
@@ -31,7 +30,6 @@
     "account_session_tokens"
   ],
   "indexes": [
-    "ix_account_emails_one_primary",
     "ix_imports_account_started",
     "ix_import_issues_import",
     "ix_conversations_account_id",

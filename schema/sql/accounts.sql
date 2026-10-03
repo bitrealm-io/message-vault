@@ -33,21 +33,6 @@ CREATE TABLE IF NOT EXISTS accounts (
     last_login_at TEXT
 );
 
--- Email addresses attached to an account (not used for login).
-CREATE TABLE IF NOT EXISTS account_emails (
-    -- Owning account (`accounts.id`).
-    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-    -- Email address; unique case-insensitively across all accounts.
-    email TEXT NOT NULL UNIQUE COLLATE NOCASE,
-    -- 1 = primary email for this account; at most one per account via partial index.
-    is_primary INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (account_id, email)
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS ix_account_emails_one_primary
-    ON account_emails(account_id)
-    WHERE is_primary = 1;
-
 -- Handles that mean “me” when matching message participants.
 CREATE TABLE IF NOT EXISTS account_handles (
     -- Owning account (`accounts.id`).

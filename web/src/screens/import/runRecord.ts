@@ -1,5 +1,5 @@
-import { isIssueStage } from "../../components/import/groupImportIssues";
 import type { ImportIssue } from "../../components/import/ImportSummaryPanel";
+import { isIssueStage } from "../../components/import/importIssueStage";
 import type { PushFinishedReport } from "../../lib/tauri";
 
 /**

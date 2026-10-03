@@ -1,9 +1,6 @@
-import type { components } from "../../lib/serverApi.types";
 import StepProgress, { type Step, type StepStatus } from "../StepProgress";
+import type { ImportIssueStage } from "./importIssueStage";
 import VirtualizedImportIssuesTable from "./VirtualizedImportIssuesTable";
-
-/** The Stage (CONTEXT.md) an issue came from, as the server records it. */
-export type ImportIssueStage = components["schemas"]["ImportIssueStage"];
 
 export type ImportIssue = {
   kind: string;

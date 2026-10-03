@@ -1,9 +1,9 @@
 import {
   completionTextFor,
   type ImportIssue,
-  type ImportIssueStage,
   type ImportSummaryView,
 } from "../../components/import/ImportSummaryPanel";
+import type { ImportIssueStage } from "../../components/import/importIssueStage";
 import { getAccountId, getBaseUrl } from "../../lib/api";
 import { formatAttachmentProgress } from "../../lib/attachmentProgressCopy";
 import { useAuth } from "../../lib/auth";

@@ -1,7 +1,8 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
-import { groupImportIssues, type ImportIssueGroup, ISSUE_STAGE_LABEL } from "./groupImportIssues";
+import { groupImportIssues, type ImportIssueGroup } from "./groupImportIssues";
 import type { ImportIssue } from "./ImportSummaryPanel";
+import { ISSUE_STAGE_LABEL } from "./importIssueStage";
 import {
   COLLAPSED_ROW_HEIGHT,
   estimateExpandedHeight,

@@ -1,4 +1,5 @@
-import type { ImportIssue, ImportIssueStage } from "../../components/import/ImportSummaryPanel";
+import type { ImportIssue } from "../../components/import/ImportSummaryPanel";
+import type { ImportIssueStage } from "../../components/import/importIssueStage";
 import { formatAttachmentProgress } from "../../lib/attachmentProgressCopy";
 import type { AttachmentMediaMode, ImportIssueEvent, ImportProgressEvent } from "../../lib/types";
 

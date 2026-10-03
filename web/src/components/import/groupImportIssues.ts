@@ -1,8 +1,23 @@
-import type { ImportIssue } from "./ImportSummaryPanel";
+import type { ImportIssue, ImportIssueStage } from "./ImportSummaryPanel";
+
+/**
+ * The name of each Stage (CONTEXT.md) an issue can come from. Keyed by every
+ * Stage, so it is also the list a stored issue's `stage` is checked against.
+ */
+export const ISSUE_STAGE_LABEL: Record<ImportIssueStage, string> = {
+  staging: "Staging",
+  media: "Media",
+  upload: "Upload",
+};
+
+/** Whether `value` is a Stage an issue can come from. */
+export function isIssueStage(value: unknown): value is ImportIssueStage {
+  return typeof value === "string" && Object.hasOwn(ISSUE_STAGE_LABEL, value);
+}
 
 export type ImportIssueGroup = {
   kind: string;
-  stage: string;
+  stage: ImportIssueStage;
   reason: string;
   items: string[];
 };

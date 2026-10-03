@@ -1,6 +1,6 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
-import { groupImportIssues, type ImportIssueGroup } from "./groupImportIssues";
+import { groupImportIssues, type ImportIssueGroup, ISSUE_STAGE_LABEL } from "./groupImportIssues";
 import type { ImportIssue } from "./ImportSummaryPanel";
 import {
   COLLAPSED_ROW_HEIGHT,
@@ -11,13 +11,6 @@ import {
 } from "./importIssuesTableLayout";
 
 const ISSUE_COLUMNS = "grid-cols-[minmax(0,1fr)_4.5rem_minmax(0,1.4fr)]";
-
-/** The name of each Stage (CONTEXT.md) an issue can come from. */
-const STAGE_LABEL: Record<string, string> = {
-  staging: "Staging",
-  media: "Media",
-  upload: "Upload",
-};
 
 function parseFileLabel(group: ImportIssueGroup): string {
   if (group.items.length === 1) {
@@ -151,7 +144,7 @@ export default function VirtualizedImportIssuesTable({ issues }: { issues: Impor
                 </div>
                 {/* biome-ignore lint/a11y/useSemanticElements: virtualized grid cannot use native table elements */}
                 <div role="cell" className="overflow-hidden px-3 py-2 capitalize text-text">
-                  <span className="block truncate">{STAGE_LABEL[group.stage] ?? group.stage}</span>
+                  <span className="block truncate">{ISSUE_STAGE_LABEL[group.stage]}</span>
                 </div>
                 {/* biome-ignore lint/a11y/useSemanticElements: virtualized grid cannot use native table elements */}
                 <div

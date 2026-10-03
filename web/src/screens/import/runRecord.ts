@@ -1,3 +1,4 @@
+import { isIssueStage } from "../../components/import/groupImportIssues";
 import type { ImportIssue } from "../../components/import/ImportSummaryPanel";
 import type { PushFinishedReport } from "../../lib/tauri";
 
@@ -58,7 +59,7 @@ function isIssue(value: unknown): value is ImportIssue {
   const r = value as Record<string, unknown>;
   return (
     typeof r.kind === "string" &&
-    (r.stage === "staging" || r.stage === "media" || r.stage === "upload") &&
+    isIssueStage(r.stage) &&
     typeof r.item === "string" &&
     typeof r.reason === "string"
   );

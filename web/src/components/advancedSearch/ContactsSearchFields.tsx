@@ -17,7 +17,7 @@ import DateBoundField from "./DateBoundField";
 
 /** The transports the search language knows, named the way people name them. */
 const SERVICE_ITEMS: readonly ChoiceItem[] = [
-  { id: "imessage", label: "iMessage" },
+  { id: "imessage", label: "Apple Messages (iMessage)" },
   { id: "sms", label: "SMS" },
   { id: "mms", label: "MMS" },
   { id: "rcs", label: "RCS" },

@@ -1,6 +1,8 @@
 use super::*;
 use crate::config::PathsConfig;
+use crate::imports_api::IMPORT_CONTACT_GROUP_NAME_SQL;
 use sqlx::SqliteConnection;
+use std::collections::BTreeSet;
 
 pub(crate) fn write_tiny_reset_bundle(root: &Path) {
     fs::create_dir_all(root.join("config")).expect("create bundle config");
@@ -86,6 +88,19 @@ fn a_seed_toml_with_an_unknown_key_or_section_is_refused_naming_it() {
 
     let text = refusal_of_committed_seed_with("[account]\n", "[acount]\nx = 1\n\n[account]\n");
     assert!(text.contains("`acount`"), "{text}");
+}
+
+/// The config of a test build: its database at `db`, its data in `data_dir`.
+fn test_config(db: &Path, data_dir: &Path) -> Config {
+    Config {
+        paths: PathsConfig {
+            db: db.to_path_buf(),
+            data_dir: data_dir.to_path_buf(),
+            assets_dir: "assets".into(),
+            assets_converted_dir: "assets_converted".into(),
+        },
+        server: None,
+    }
 }
 
 /// Open `db` with the schema applied and one connection checked out.
@@ -219,15 +234,7 @@ async fn failed_reset_preserves_existing_demo_account() {
         "not a conversation\n",
     )
     .expect("write unreadable jsonl");
-    let cfg = Config {
-        paths: PathsConfig {
-            db: db.clone(),
-            data_dir,
-            assets_dir: "assets".into(),
-            assets_converted_dir: "assets_converted".into(),
-        },
-        server: None,
-    };
+    let cfg = test_config(&db, &data_dir);
 
     let result = reset_prepared_bundle(&cfg, &bundle, DEMO_ACCOUNT_ID).await;
 
@@ -278,15 +285,7 @@ async fn a_reset_whose_rebuild_fails_leaves_the_database_and_server_ready_in_pla
         "not a conversation\n",
     )
     .expect("write unreadable jsonl");
-    let cfg = Config {
-        paths: PathsConfig {
-            db: db.clone(),
-            data_dir: temp.path().join("data"),
-            assets_dir: "assets".into(),
-            assets_converted_dir: "assets_converted".into(),
-        },
-        server: None,
-    };
+    let cfg = test_config(&db, &temp.path().join("data"));
 
     let result = reset_prepared_bundle(&cfg, &bundle, DEMO_ACCOUNT_ID).await;
 
@@ -478,15 +477,7 @@ async fn a_reset_that_renames_another_accounts_contact_is_refused() {
     seed_reset_test_database(&db).await;
     let bundle = temp.path().join("bundle");
     write_tiny_reset_bundle(&bundle);
-    let cfg = Config {
-        paths: PathsConfig {
-            db: db.clone(),
-            data_dir: temp.path().join("data"),
-            assets_dir: "assets".into(),
-            assets_converted_dir: "assets_converted".into(),
-        },
-        server: None,
-    };
+    let cfg = test_config(&db, &temp.path().join("data"));
 
     let result = reset_prepared_bundle_with(&cfg, &bundle, DEMO_ACCOUNT_ID, async |db| {
         sqlx::query("UPDATE contacts SET preferred_name = 'Renamed' WHERE account_id = 9")
@@ -526,15 +517,7 @@ async fn reset_refuses_while_server_holds_database_lock() {
     fs::write(&demo_file, b"keep").expect("write demo file");
     let bundle = temp.path().join("bundle");
     write_tiny_reset_bundle(&bundle);
-    let cfg = Config {
-        paths: PathsConfig {
-            db: db.clone(),
-            data_dir,
-            assets_dir: "assets".into(),
-            assets_converted_dir: "assets_converted".into(),
-        },
-        server: None,
-    };
+    let cfg = test_config(&db, &data_dir);
     let _serve_lock = crate::operation_lock::acquire_for_serve(&db).expect("acquire server lock");
 
     let result = reset_prepared_bundle(&cfg, &bundle, DEMO_ACCOUNT_ID).await;
@@ -1248,15 +1231,7 @@ async fn a_generated_demo_bundle_imports_whole_and_its_overlap_dedupes() {
 
     let db_path = temp.path().join("messagecrate.db");
     let target = db_path.as_path();
-    let cfg = Config {
-        paths: PathsConfig {
-            db: db_path.clone(),
-            data_dir: temp.path().join("data"),
-            assets_dir: "assets".into(),
-            assets_converted_dir: "assets_converted".into(),
-        },
-        server: None,
-    };
+    let cfg = test_config(&db_path, &temp.path().join("data"));
 
     let prepared = validate_prepared_bundle(bundle).expect("the generator wrote a complete bundle");
     let build = build_pool(target).await;
@@ -1453,9 +1428,9 @@ async fn unknowns_holding(conn: &mut SqliteConnection, wanted: &[String]) -> usi
 
 /// The demo is built the way a person builds theirs: the imports bring the
 /// people in with no names, and the address book, loaded after them through
-/// the function `POST /v1/contacts` calls, names them. Each named contact
-/// takes its identities from the Unknown the import made, on every service
-/// the number was met on, and that Unknown, left with nothing, is gone.
+/// the function `POST /v1/contacts` calls, names them. Each Unknown the
+/// import made is named in place, holding its number on every service the
+/// number was met on.
 #[tokio::test]
 async fn the_demo_address_book_names_the_unknowns_the_imports_made() {
     let temp = tempfile::tempdir().expect("create test directory");
@@ -1474,15 +1449,7 @@ async fn the_demo_address_book_names_the_unknowns_the_imports_made() {
 
     let db_path = temp.path().join("messagecrate.db");
     let target = db_path.as_path();
-    let cfg = Config {
-        paths: PathsConfig {
-            db: db_path.clone(),
-            data_dir: temp.path().join("data"),
-            assets_dir: "assets".into(),
-            assets_converted_dir: "assets_converted".into(),
-        },
-        server: None,
-    };
+    let cfg = test_config(&db_path, &temp.path().join("data"));
     let prepared = validate_prepared_bundle(bundle).expect("the generator wrote a complete bundle");
     let build = build_pool(target).await;
     seed_demo_account(&build, DEMO_ACCOUNT_ID, &prepared.seed)
@@ -1516,6 +1483,17 @@ async fn the_demo_address_book_names_the_unknowns_the_imports_made() {
         unknowns_holding(&mut conn, &wanted).await > 0,
         "the imports made Unknowns for the people the book names"
     );
+    // The contacts the book names in place: the ids the load's rewrite of
+    // the book gives its contacts, read before the load changes anything.
+    let text = fs::read_to_string(&prepared.contacts_csv).expect("read the demo address book");
+    let rewritten = address_book::rewrite_ids_to_nameless(&mut conn, DEMO_ACCOUNT_ID, &text)
+        .await
+        .expect("rewrite the demo address book");
+    let book_ids: BTreeSet<i64> = address_book::contact_ids_of(&rewritten)
+        .iter()
+        .filter_map(|id| id.parse().ok())
+        .collect();
+    assert!(!book_ids.is_empty(), "the book names an Unknown in place");
     close_test_db(pool, conn).await;
 
     let counts = load_demo_address_book(&build, &prepared, DEMO_ACCOUNT_ID)
@@ -1523,9 +1501,15 @@ async fn the_demo_address_book_names_the_unknowns_the_imports_made() {
         .expect("load the demo address book");
 
     let (pool, mut conn) = test_db(target).await;
-    assert_eq!(counts.contacts_created as usize, book.len());
-    assert!(counts.identities_moved > 0, "{counts:?}");
-    assert!(counts.contacts_deleted > 0, "{counts:?}");
+    assert!(
+        counts.contacts_updated > 0,
+        "the book names the Unknowns in place: {counts:?}"
+    );
+    // A book contact that took an Unknown's identities instead of naming it
+    // would leave it empty, and the load would delete it and its place in
+    // every import Contact Group (#1511).
+    assert_eq!(counts.identities_moved, 0, "{counts:?}");
+    assert_eq!(counts.contacts_deleted, 0, "{counts:?}");
     assert_eq!(counts.identities_removed, 0, "{counts:?}");
     assert_eq!(
         unknowns_holding(&mut conn, &wanted).await,
@@ -1581,16 +1565,22 @@ async fn the_demo_address_book_names_the_unknowns_the_imports_made() {
 
     // The conversations follow the identity to the named contact: a
     // one-to-one conversation with a number the book names reads as that
-    // person.
-    let named_conversations = count(
-        &mut conn,
+    // person. Only the contacts the book lists count, so a name an import
+    // gave does not pass for one the book gave.
+    let book_ids_json = serde_json::to_string(&book_ids).expect("write the ids as JSON");
+    let named_conversations: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM conversations cv
          JOIN contact_handles ch ON ch.handle_id = cv.chat_handle_id
          JOIN contacts c ON c.id = ch.contact_id
          WHERE cv.account_id = $1 AND cv.conversation_type = 'individual'
-           AND trim(c.preferred_name) <> '' AND c.origin = 'address_book'",
+           AND trim(c.preferred_name) <> ''
+           AND c.id IN (SELECT value FROM json_each($2))",
     )
-    .await;
+    .bind(DEMO_ACCOUNT_ID)
+    .bind(&book_ids_json)
+    .fetch_one(&mut *conn)
+    .await
+    .expect("count the conversations the book named");
     assert!(named_conversations > 0);
     close_test_db(pool, conn).await;
 }
@@ -1692,15 +1682,7 @@ async fn the_wipe_removes_the_demo_rows_and_folder_and_leaves_other_accounts() {
     let other_folder = data_dir.join("9");
     fs::create_dir_all(&other_folder).expect("create other account folder");
     fs::write(other_folder.join("keep.bin"), b"keep").expect("write other attachment");
-    let cfg = Config {
-        paths: PathsConfig {
-            db: db.clone(),
-            data_dir: data_dir.clone(),
-            assets_dir: "assets".into(),
-            assets_converted_dir: "assets_converted".into(),
-        },
-        server: None,
-    };
+    let cfg = test_config(&db, &data_dir);
 
     let build = build_pool(&db).await;
     wipe_demo_account(&cfg, &build, DEMO_ACCOUNT_ID, AuditActor::CommandLine)
@@ -1749,15 +1731,7 @@ async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
     let bundle = temp.path().join("bundle");
     write_tiny_reset_bundle(&bundle);
     write_overlap_conversation(&bundle);
-    let cfg = Config {
-        paths: PathsConfig {
-            db: db.clone(),
-            data_dir: data_dir.clone(),
-            assets_dir: "assets".into(),
-            assets_converted_dir: "assets_converted".into(),
-        },
-        server: None,
-    };
+    let cfg = test_config(&db, &data_dir);
     {
         let (pool, mut conn) = test_db(&db).await;
         assert!(
@@ -1827,15 +1801,15 @@ async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
     );
     // Issue #1107: each of the build's runs has its Contact Group and its
     // Saved Search, as a run a person imports does.
-    let runs: Vec<(String, i64, i64)> = sqlx::query_as(
+    let runs: Vec<(String, i64, i64)> = sqlx::query_as(&format!(
         "SELECT i.source,
                 (SELECT COUNT(*) FROM contact_groups g
                  WHERE g.account_id = i.account_id AND g.kind = 'import'
-                   AND g.name = i.source || ' import ' || substr(i.finished_at, 1, 10)),
+                   AND g.name = {IMPORT_CONTACT_GROUP_NAME_SQL}),
                 (SELECT COUNT(*) FROM saved_searches s
                  WHERE s.account_id = i.account_id AND s.query = 'import:#' || i.id)
-         FROM imports i WHERE i.account_id = $1 ORDER BY i.id",
-    )
+         FROM imports i WHERE i.account_id = $1 ORDER BY i.id"
+    ))
     .bind(DEMO_ACCOUNT_ID)
     .fetch_all(&mut *conn)
     .await
@@ -2240,4 +2214,51 @@ async fn another_account_writes_between_the_demo_builds_import_batches() {
     drop(conn);
     others.close().await;
     build.close().await;
+}
+
+/// Each of the build's three import runs has a Contact Group holding the
+/// contacts it touched, and the address book the build loads after them
+/// leaves every one of those groups with members (#1511).
+#[tokio::test]
+async fn every_import_contact_group_of_a_built_demo_has_members() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let seed_cfg = demo_seed::testutil::small_config(temp.path());
+    demo_seed::generate(&seed_cfg).expect("generate the small bundle");
+    let bundle = Path::new(&seed_cfg.out);
+    let db_path = temp.path().join("messagecrate.db");
+    let cfg = test_config(&db_path, &temp.path().join("data"));
+    let prepared = validate_prepared_bundle(bundle).expect("the generator wrote a complete bundle");
+    let build = build_pool(&db_path).await;
+    rebuild_demo_account(
+        &cfg,
+        &build,
+        &prepared,
+        DEMO_ACCOUNT_ID,
+        AuditActor::CommandLine,
+    )
+    .await
+    .expect("build the demo account");
+    build.close().await;
+
+    let (pool, mut conn) = test_db(&db_path).await;
+    let groups: Vec<(String, i64)> = sqlx::query_as(&format!(
+        "SELECT i.source,
+                (SELECT COUNT(*) FROM contact_group_members m
+                 JOIN contact_groups g ON g.id = m.group_id
+                 WHERE g.account_id = i.account_id AND g.kind = 'import'
+                   AND g.name = {IMPORT_CONTACT_GROUP_NAME_SQL})
+         FROM imports i WHERE i.account_id = $1 ORDER BY i.id"
+    ))
+    .bind(DEMO_ACCOUNT_ID)
+    .fetch_all(&mut *conn)
+    .await
+    .expect("read the demo's import Contact Groups");
+    assert_eq!(groups.len(), DEMO_IMPORT_SOURCES.len(), "{groups:?}");
+    for (source, members) in &groups {
+        assert!(
+            *members > 0,
+            "the {source} import Contact Group is empty: {groups:?}"
+        );
+    }
+    close_test_db(pool, conn).await;
 }

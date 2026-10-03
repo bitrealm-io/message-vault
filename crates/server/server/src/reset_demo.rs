@@ -800,14 +800,24 @@ async fn import_demo_sources_with(
     Ok(totals)
 }
 
-/// Load the bundle's address book into the demo account, in Edit mode, once
-/// its messages are in.
+/// Load the bundle's address book into the demo account, in Append mode,
+/// once its messages are in.
 ///
 /// The demo is built the way a person builds theirs: the imports bring the
-/// people in as Unknowns, and the address book names them. It goes through
+/// people in as Unknowns, and the person exports the address book, types the
+/// names onto the Unknowns' rows, and loads it back.
+/// [`address_book::rewrite_ids_to_nameless`] does the typing: it
+/// gives each contact of the bundle's file the id of the Unknown the imports
+/// made for it. The load goes through
 /// [`address_book::load`], the function `POST /v1/contacts` calls, so the
-/// demo exercises the same rules a person's file does, the move from an
-/// Unknown holder among them.
+/// demo exercises the same rules a person's file does.
+///
+/// Naming the Unknown in place keeps it in the Contact Group of each Import
+/// Run that touched it (#1511). A new contact taking the Unknown's
+/// identities instead would leave the Unknown empty, so the load would
+/// delete it and the run's group would lose it. The mode is Append because
+/// Edit takes a contact out of every Contact Group its rows do not list, and
+/// the bundle's file cannot list the groups the Import Runs make.
 async fn load_demo_address_book(
     db: &SqlitePool,
     prepared: &PreparedBundle,
@@ -816,11 +826,18 @@ async fn load_demo_address_book(
     let text = fs::read_to_string(&prepared.contacts_csv)
         .with_context(|| format!("read {}", prepared.contacts_csv.display()))?;
     let mut conn = db.acquire().await?;
-    let loaded = address_book::load(&mut conn, account_id, &text, LoadMode::Edit).await;
+    let text = address_book::rewrite_ids_to_nameless(&mut conn, account_id, &text)
+        .await
+        .context("match the demo address book to the Unknowns the imports made")?;
+    let loaded = address_book::load(&mut conn, account_id, &text, LoadMode::Append).await;
     let counts = loaded.map_err(|e| anyhow::anyhow!("load the demo address book: {e}"))?;
     println!(
-        "  contacts: {} named from the address book ({} identities moved from Unknowns, {} added)",
-        counts.contacts_created, counts.identities_moved, counts.identities_added
+        "  contacts: {} named from the address book ({} Unknowns named in place, {} new; {} identities moved from Unknowns, {} added)",
+        counts.contacts_changed(),
+        counts.contacts_updated,
+        counts.contacts_created,
+        counts.identities_moved,
+        counts.identities_added
     );
     Ok(counts)
 }

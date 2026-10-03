@@ -35,7 +35,8 @@ export default function MessageView({
     setFindTerm,
     finding,
     activeMatch,
-    setActiveMatch,
+    nextMatch,
+    prevMatch,
     loading,
     error,
     fetchConversationPage,
@@ -133,8 +134,8 @@ export default function MessageView({
         matchCount={finding ? total : 0}
         matchPosition={offset + activeMatch}
         activeYear={activeYear}
-        onPrevMatch={() => setActiveMatch((a) => (a - 1 + matchIds.length) % matchIds.length)}
-        onNextMatch={() => setActiveMatch((a) => (a + 1) % matchIds.length)}
+        onPrevMatch={prevMatch}
+        onNextMatch={nextMatch}
       />
 
       <MessageThread

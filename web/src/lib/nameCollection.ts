@@ -52,7 +52,7 @@ export type ChipTarget = {
 
 /** The server calls one of these collections is built from. */
 export type NameCollectionRoutes = {
-  list: (opts?: { signal?: AbortSignal }) => Promise<{ items: NamedSet[] }>;
+  list: (opts?: { signal?: AbortSignal }) => Promise<NamedSet[]>;
   create: (body: { name: string }) => Promise<NamedSet>;
   update: (id: number, body: { name: string }) => Promise<NamedSet>;
   remove: (id: number) => Promise<void>;
@@ -106,9 +106,9 @@ export function createNameCollection(config: NameCollectionConfig): NameCollecti
   };
 }
 
-/** The cache holds the server's list as it came, ids included. */
-async function fetchSets(collection: NameCollection, signal: AbortSignal): Promise<NamedSet[]> {
-  return (await collection.routes.list({ signal })).items;
+/** The cache holds every set of the collection as the server answered it, ids included. */
+function fetchSets(collection: NameCollection, signal: AbortSignal): Promise<NamedSet[]> {
+  return collection.routes.list({ signal });
 }
 
 /** One row of a list that shows names as chips. */

@@ -30,6 +30,7 @@ import {
   problemFromBody,
 } from "./api";
 import { buildAssetPath, buildAssetPreviewPath } from "./assetUrl";
+import { PAGE_SIZE_MAX } from "./listPaging";
 import type { components, paths } from "./serverApi.types";
 
 type Schema = components["schemas"];
@@ -53,6 +54,27 @@ function query(params: Record<string, string | number | boolean | undefined | nu
     search.set(key, String(value));
   }
   return search.toString();
+}
+
+/**
+ * Every row of a paged list, read in pages of the server's maximum.
+ *
+ * Every `/v1` list answers one page, and 40 rows when no `limit` is sent, so
+ * a caller that takes one answer as the whole list loses every row past the
+ * page (issue #1145). This asks for the next page until the rows read reach
+ * the `total` the last page reported. An empty page ends the reading too,
+ * because a list that shrank between two requests reports a total it no
+ * longer has.
+ */
+async function readEveryPage<T>(
+  readPage: (page: { limit: number; offset: number }) => Promise<{ items: T[]; total: number }>,
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (;;) {
+    const page = await readPage({ limit: PAGE_SIZE_MAX, offset: rows.length });
+    rows.push(...page.items);
+    if (page.items.length === 0 || rows.length >= page.total) return rows;
+  }
 }
 
 /** Append a query string only when it has something in it. */
@@ -125,9 +147,11 @@ export function claimServer(
 // the account id; the ones Settings calls address the logged-in
 // account through `ownAccountPath`.
 
-/** The accounts of this Message Crate, for the owner: the owner's own first, then the rest by username. */
-export function listAccounts(opts?: RequestOptions): Promise<Schema["Page_Account"]> {
-  return apiClient.get<Schema["Page_Account"]>("/v1/accounts", opts);
+/** Every account of this Message Crate, for the owner: the owner's own first, then the rest by username. */
+export function listAccounts(opts?: RequestOptions): Promise<Schema["Account"][]> {
+  return readEveryPage((page) =>
+    apiClient.get<Schema["Page_Account"]>(withQuery("/v1/accounts", query(page)), opts),
+  );
 }
 
 /**
@@ -256,12 +280,15 @@ function accountBase(accountId?: number): string {
   return accountId === undefined ? ownAccountPath() : accountPath(accountId);
 }
 
-/** An account's identities with the messages held at each: the logged-in one, or as the owner the one named. */
+/** Every identity of an account with the messages held at each: the logged-in one, or as the owner the one named. */
 export function listAccountIdentities(
   opts?: RequestOptions,
   accountId?: number,
-): Promise<Schema["Page_Identity"]> {
-  return apiClient.get<Schema["Page_Identity"]>(`${accountBase(accountId)}/identities`, opts);
+): Promise<Schema["Identity"][]> {
+  const path = `${accountBase(accountId)}/identities`;
+  return readEveryPage((page) =>
+    apiClient.get<Schema["Page_Identity"]>(withQuery(path, query(page)), opts),
+  );
 }
 
 /** Which page of an account's run history to read. Absent values are left off the URL. */
@@ -312,8 +339,12 @@ export function deleteAllMessages(
 // An account's tokens live under its own row, and nobody else's session
 // reaches them.
 
-export function listApiTokens(opts?: RequestOptions): Promise<Schema["Page_ApiToken"]> {
-  return apiClient.get<Schema["Page_ApiToken"]>(`${ownAccountPath()}/api-tokens`, opts);
+/** Every API token of the logged-in account. */
+export function listApiTokens(opts?: RequestOptions): Promise<Schema["ApiToken"][]> {
+  const path = `${ownAccountPath()}/api-tokens`;
+  return readEveryPage((page) =>
+    apiClient.get<Schema["Page_ApiToken"]>(withQuery(path, query(page)), opts),
+  );
 }
 
 export function createApiToken(
@@ -429,13 +460,14 @@ export function listMessages(
   return apiClient.get<Schema["Page_Message"]>(withQuery("/v1/messages", query(params)), opts);
 }
 
+/** Every source a conversation's messages came from. */
 export function getConversationSources(
   conversationId: number,
   opts?: RequestOptions,
-): Promise<Schema["Page_ConversationSource"]> {
-  return apiClient.get<Schema["Page_ConversationSource"]>(
-    `/v1/conversations/${conversationId}/sources`,
-    opts,
+): Promise<Schema["ConversationSource"][]> {
+  const path = `/v1/conversations/${conversationId}/sources`;
+  return readEveryPage((page) =>
+    apiClient.get<Schema["Page_ConversationSource"]>(withQuery(path, query(page)), opts),
   );
 }
 
@@ -577,8 +609,11 @@ export function deleteContact(contactId: string | number): Promise<void> {
 // A Contact Group is addressed by its id. Screens hold names; the lookup from
 // a name to an id lives in `nameCollection.ts`, not here.
 
-export function listContactGroups(opts?: RequestOptions): Promise<Schema["Page_NamedSet"]> {
-  return apiClient.get<Schema["Page_NamedSet"]>("/v1/contact-groups", opts);
+/** Every Contact Group of the logged-in account. */
+export function listContactGroups(opts?: RequestOptions): Promise<Schema["NamedSet"][]> {
+  return readEveryPage((page) =>
+    apiClient.get<Schema["Page_NamedSet"]>(withQuery("/v1/contact-groups", query(page)), opts),
+  );
 }
 
 export function createContactGroup(
@@ -621,8 +656,11 @@ export function updateContactGroupMembers(
 
 // ── Message Tags ────────────────────────────────────────────────────────────
 
-export function listMessageTags(opts?: RequestOptions): Promise<Schema["Page_NamedSet"]> {
-  return apiClient.get<Schema["Page_NamedSet"]>("/v1/message-tags", opts);
+/** Every Message Tag of the logged-in account. */
+export function listMessageTags(opts?: RequestOptions): Promise<Schema["NamedSet"][]> {
+  return readEveryPage((page) =>
+    apiClient.get<Schema["Page_NamedSet"]>(withQuery("/v1/message-tags", query(page)), opts),
+  );
 }
 
 export function createMessageTag(
@@ -665,8 +703,11 @@ export function updateMessageTagMembers(
 
 // ── Saved Searches ──────────────────────────────────────────────────────────
 
-export function listSavedSearches(opts?: RequestOptions): Promise<Schema["Page_SavedSearch"]> {
-  return apiClient.get<Schema["Page_SavedSearch"]>("/v1/saved-searches", opts);
+/** Every Saved Search of the logged-in account. */
+export function listSavedSearches(opts?: RequestOptions): Promise<Schema["SavedSearch"][]> {
+  return readEveryPage((page) =>
+    apiClient.get<Schema["Page_SavedSearch"]>(withQuery("/v1/saved-searches", query(page)), opts),
+  );
 }
 
 export function createSavedSearch(
@@ -691,12 +732,15 @@ export function deleteSavedSearch(id: number): Promise<void> {
 /** The lists whose search words the server describes, one path each. */
 export type SearchFieldList = "contacts" | "conversations";
 
-/** The words the search language accepts on one list. */
+/** Every word the search language accepts on one list. */
 export function listSearchFields(
   list: SearchFieldList,
   opts?: RequestOptions,
-): Promise<Schema["Page_FieldDoc"]> {
-  return apiClient.get<Schema["Page_FieldDoc"]>(`/v1/search-fields/${list}`, opts);
+): Promise<Schema["FieldDoc"][]> {
+  const path = `/v1/search-fields/${list}`;
+  return readEveryPage((page) =>
+    apiClient.get<Schema["Page_FieldDoc"]>(withQuery(path, query(page)), opts),
+  );
 }
 
 // ── Import Runs ─────────────────────────────────────────────────────────────

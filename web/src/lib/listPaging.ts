@@ -12,6 +12,8 @@ export const PAGE_SIZE_FIRST = 40;
 export const PAGE_SIZE_FILL = 100;
 /** Contacts catalog first page — large enough for typical accounts in one request. */
 export const PAGE_SIZE_CONTACTS_FIRST = 500;
+/** The largest page any list route answers (`MAX_LIST_LIMIT` in the server's `paging.rs`). */
+export const PAGE_SIZE_MAX = 500;
 
 /** Status suffix appended to a visible-range label. */
 export function listActivitySuffix(refreshing: boolean, filling: boolean): string {

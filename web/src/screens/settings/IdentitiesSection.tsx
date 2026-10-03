@@ -88,7 +88,7 @@ export function IdentitiesSection({
     managed ? keys.ownerAccounts.identities(managedAccountId) : keys.accountProfile.identities,
     (signal) => listAccountIdentities({ signal }, managedAccountId),
   );
-  const listed = identities.data?.items;
+  const listed = identities.data;
   const rows: Identity[] = useMemo(() => listed ?? placeholderRows(profile), [listed, profile]);
   const tableRows: IdentityRow[] = useMemo(
     () =>
@@ -120,7 +120,7 @@ export function IdentitiesSection({
     try {
       await updateProfile.mutateAsync({ remove_identities: [{ address, service }] });
       const { data } = await identities.refetch({ throwOnError: true });
-      if (listsIdentity(data?.items ?? [], address, service)) {
+      if (listsIdentity(data ?? [], address, service)) {
         throw new Error("The server did not remove that identity.");
       }
       setRemoveTarget(null);

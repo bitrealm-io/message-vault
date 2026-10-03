@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ConversationRow from "../components/ConversationRow";
 import ConversationSortMenu from "../components/ConversationSortMenu";
 import ListRangeHeader from "../components/ListRangeHeader";
@@ -89,10 +89,36 @@ export default function ConversationList({
     error,
     hasMore,
     loadMore,
+    loadAll,
   } = useRoutePagedList(
     keys.conversations.list({ q: debouncedQ, sort: sortState.sort, order: sortState.order }),
     fetchPage,
   );
+
+  // Select all ticks every conversation the list holds, so it loads the pages
+  // not yet on screen first: an action that follows reaches all of them, not
+  // the page in hand (issue #1145). A new search or sort while the pages load
+  // makes that answer stale, so it is dropped.
+  const [selectingAll, setSelectingAll] = useState(false);
+  const selectAllRun = useRef(0);
+  useEffect(() => {
+    void debouncedQ;
+    void sortState;
+    selectAllRun.current += 1;
+    setSelectingAll(false);
+  }, [debouncedQ, sortState]);
+  const selectAll = async () => {
+    const run = ++selectAllRun.current;
+    setSelectingAll(true);
+    try {
+      const rows = await loadAll();
+      if (run === selectAllRun.current) setCheckedIds(new Set(rows.map((c) => c.id)));
+    } catch {
+      // The list shows its own load failure; nothing is ticked.
+    } finally {
+      if (run === selectAllRun.current) setSelectingAll(false);
+    }
+  };
 
   const selectedConversation = conversations.find((c) => c.id === selectedId) ?? null;
   const targetConversations = useMemo(() => {
@@ -170,8 +196,10 @@ export default function ConversationList({
     tagActions.create,
   ]);
 
+  // The box reads as ticked only when every conversation the list holds is
+  // ticked, which needs every page loaded: rows not yet fetched are not ticked.
   const selectAllChecked =
-    conversations.length > 0 && conversations.every((c) => checkedIds.has(c.id));
+    !hasMore && conversations.length > 0 && conversations.every((c) => checkedIds.has(c.id));
   const selectAllIndeterminate =
     !selectAllChecked && conversations.some((c) => checkedIds.has(c.id));
 
@@ -200,10 +228,11 @@ export default function ConversationList({
         selectAllChecked={selectAllChecked}
         selectAllIndeterminate={selectAllIndeterminate}
         onSelectAllChange={(on) => {
-          setCheckedIds(on ? new Set(conversations.map((c) => c.id)) : new Set());
+          if (on) void selectAll();
+          else setCheckedIds(new Set());
         }}
         selectAllLabel="Select all conversations"
-        selectAllDisabled={conversations.length === 0}
+        selectAllDisabled={conversations.length === 0 || selectingAll}
         actions={
           <ConversationSortMenu
             sort={sortState.sort}

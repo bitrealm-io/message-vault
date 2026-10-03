@@ -125,27 +125,22 @@ beforeEach(() => {
     top_attachments: [],
   });
   listAccountImports.mockResolvedValue({ items: [anImport], total: 1, limit: 40, offset: 0 });
-  listAccountIdentities.mockResolvedValue({
-    items: [
-      {
-        address: "+15555550100",
-        service: "phone",
-        start_date: "2020-01-01T00:00:00Z",
-        end_date: "2020-02-03T00:00:00Z",
-        conversations: 2,
-        direct_messages: 12,
-        group_messages: 30,
-      },
-    ],
-    total: 1,
-    limit: 40,
-    offset: 0,
-  });
+  listAccountIdentities.mockResolvedValue([
+    {
+      address: "+15555550100",
+      service: "phone",
+      start_date: "2020-01-01T00:00:00Z",
+      end_date: "2020-02-03T00:00:00Z",
+      conversations: 2,
+      direct_messages: 12,
+      group_messages: 30,
+    },
+  ]);
   getAccountImport.mockResolvedValue(anImportDetail);
   listAccountExports.mockResolvedValue({ items: [], total: 0, limit: 40, offset: 0 });
   deleteAccountById.mockResolvedValue(undefined);
   deleteAccountMessages.mockResolvedValue(undefined);
-  listAccounts.mockResolvedValue({ items: [theOwner, anAccount] });
+  listAccounts.mockResolvedValue([theOwner, anAccount]);
   getServerSettings.mockResolvedValue({ public_registration: false });
   getDemoAccount.mockResolvedValue({ status: "ready", size: null, error: null });
   getServerStorage.mockResolvedValue({
@@ -351,9 +346,10 @@ describe("OwnerHome", () => {
 
   it("narrows the accounts table to the usernames the search bar matches", async () => {
     const user = userEvent.setup({ delay: null });
-    listAccounts.mockResolvedValue({
-      items: [anAccount, { ...anAccount, account_id: 102, username: "carol" }],
-    });
+    listAccounts.mockResolvedValue([
+      anAccount,
+      { ...anAccount, account_id: 102, username: "carol" },
+    ]);
     renderHome();
 
     await screen.findByText("bob");
@@ -461,7 +457,7 @@ describe("OwnerHome", () => {
 
     updateAccount.mockResolvedValue({ ...anAccount, phones: [] });
     getAccount.mockResolvedValue({ ...anAccount, phones: [] });
-    listAccountIdentities.mockResolvedValue({ items: [], total: 0, limit: 40, offset: 0 });
+    listAccountIdentities.mockResolvedValue([]);
     // Remove asks first; the identity goes only once the dialog agrees.
     await user.click(screen.getByRole("button", { name: "Remove +15555550100 (Text message)" }));
     expect(updateAccount).not.toHaveBeenCalledWith(
@@ -617,17 +613,15 @@ describe("OwnerHome", () => {
   });
 
   it("shows when each account last logged in, or Never", async () => {
-    listAccounts.mockResolvedValue({
-      items: [
-        anAccount,
-        {
-          ...anAccount,
-          account_id: 102,
-          username: "carol",
-          last_login_at: "2026-09-17T14:05:00Z",
-        },
-      ],
-    });
+    listAccounts.mockResolvedValue([
+      anAccount,
+      {
+        ...anAccount,
+        account_id: 102,
+        username: "carol",
+        last_login_at: "2026-09-17T14:05:00Z",
+      },
+    ]);
     renderHome();
 
     expect(await screen.findByText("Never")).toBeInTheDocument();

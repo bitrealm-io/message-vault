@@ -33,10 +33,9 @@ export const keys = {
      * The trashed contacts the Trash screen lists.
      *
      * A builder of its own rather than `list("trashed:yes …")` because the
-     * contact list screen holds that entry as TanStack Query's paged
-     * `InfiniteData` and the Trash screen holds a single page, and two shapes
-     * must not share a key. It still sits under the `lists` prefix, with
-     * everything else that lists contacts.
+     * Trash screen pages its list in pages of its own size, and two lists
+     * paged differently must not share an entry. It still sits under the
+     * `lists` prefix, with everything else that lists contacts.
      */
     trashed: (q: string) => ["contacts", "list", "trashed", q] as const,
     /**

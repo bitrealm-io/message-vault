@@ -38,7 +38,7 @@ afterEach(() => {
 beforeEach(() => {
   apiGet.mockReset();
   apiPost.mockReset();
-  apiGet.mockResolvedValue({ items: [] });
+  apiGet.mockResolvedValue([]);
 });
 
 async function openComposeForm() {
@@ -157,7 +157,7 @@ describe("ApiTokensSection table", () => {
   };
 
   it("shows when each token expires, and Never for one that does not", async () => {
-    apiGet.mockResolvedValue({ items: [expiring, unending] });
+    apiGet.mockResolvedValue([expiring, unending]);
     render(<ApiTokensSection accountCanImport={true} accountCanExport={true} />);
 
     const rowOf = (label: string) => screen.getByText(label).closest("tr") as HTMLElement;
@@ -172,7 +172,7 @@ describe("ApiTokensSection table", () => {
   });
 
   it("says API Token everywhere, never API key, and promises no delete", async () => {
-    apiGet.mockResolvedValue({ items: [expiring] });
+    apiGet.mockResolvedValue([expiring]);
     apiPost.mockResolvedValue({
       id: 3,
       label: "Phone",

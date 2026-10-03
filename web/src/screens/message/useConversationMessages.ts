@@ -146,6 +146,33 @@ export function useConversationMessages(conversationId: number) {
     setActiveMatch(0);
   };
 
+  // Find steps through every match the server counted, not the page of them
+  // on screen: past the last match of a page it turns to the next page, and
+  // it wraps only at the first and last of `total` (issue #1145).
+  const nextMatch = () => {
+    if (total === 0) return;
+    if (offset + activeMatch + 1 < Math.min(offset + messages.length, total)) {
+      setActiveMatch(activeMatch + 1);
+      return;
+    }
+    setOffset(offset + PAGE_SIZE < total ? offset + PAGE_SIZE : 0);
+    setActiveMatch(0);
+  };
+
+  const prevMatch = () => {
+    if (total === 0) return;
+    if (activeMatch > 0) {
+      setActiveMatch(activeMatch - 1);
+      return;
+    }
+    // Every page before the last is full, so the previous page's last match
+    // sits at `PAGE_SIZE - 1`; before the first match comes the last one.
+    const previous =
+      offset > 0 ? offset - PAGE_SIZE : Math.floor((total - 1) / PAGE_SIZE) * PAGE_SIZE;
+    setOffset(previous);
+    setActiveMatch(Math.min(PAGE_SIZE, total - previous) - 1);
+  };
+
   const setFindTerm = (term: string) => {
     setFindTermState(term);
     setOffset(0);
@@ -177,7 +204,8 @@ export function useConversationMessages(conversationId: number) {
     setFindTerm,
     finding,
     activeMatch,
-    setActiveMatch,
+    nextMatch,
+    prevMatch,
     loading: query.isLoading,
     /** A cached page is being revalidated in the background. */
     refreshing: query.isFetching && !query.isLoading,

@@ -169,9 +169,40 @@ export default function ContactList({
     error,
     hasMore,
     loadMore: requestMore,
+    loadAll,
   } = useRoutePagedList(keys.contacts.list(serverQ), fetchPage, {
     firstPageSize: serverQ.trim() ? PAGE_SIZE_FIRST : PAGE_SIZE_CONTACTS_FIRST,
   });
+
+  // Select all ticks every contact the list holds, so it loads the pages not
+  // yet on screen first: Export and the Contact Groups menu then reach all of
+  // them, not the page in hand (issue #1145). A new search, group page or
+  // Clear while the pages load makes that answer stale, so it is dropped.
+  const selectAllRun = useRef(0);
+  const selectingAll = useRef(false);
+  useEffect(() => {
+    void serverQ;
+    void filter;
+    void groupFilter;
+    void clearCheckedRev;
+    selectAllRun.current += 1;
+    selectingAll.current = false;
+  }, [serverQ, filter, groupFilter, clearCheckedRev]);
+  const selectAll = async () => {
+    if (selectingAll.current) return;
+    selectingAll.current = true;
+    const run = ++selectAllRun.current;
+    try {
+      const rows = await loadAll();
+      if (run !== selectAllRun.current) return;
+      const ids = new Set(rows.filter(shows).map((c) => c.id));
+      startTransition(() => setCheckedIds(ids));
+    } catch {
+      // The list shows its own load failure; nothing is ticked.
+    } finally {
+      if (run === selectAllRun.current) selectingAll.current = false;
+    }
+  };
 
   const catalogComplete =
     !loading && !refreshing && contacts.length >= total && (total > 0 || contacts.length === 0);
@@ -227,24 +258,21 @@ export default function ContactList({
   const handleMarkTerm = highlightNeedle(filter);
 
   // Filter by name and handle in the browser. Server results are used when the
-  // filter has search words the client cannot apply.
-  // Memoized: a fresh array here would invalidate `displayContacts` and
-  // `checkedContacts` on every render, and the `onCheckedChange` effect below
-  // would then re-render the parent in a loop.
-  const filteredContacts = useMemo(
-    () =>
-      filterActive && !advancedActive
-        ? contacts.filter((c) => contactMatchesFilter(c, filter))
-        : contacts,
-    [contacts, filter, filterActive, advancedActive],
+  // filter has search words the client cannot apply. Select all applies the
+  // same test to the rows it loads, so it ticks what the list shows.
+  // Memoized: a fresh array here would invalidate `checkedContacts` on every
+  // render, and the `onCheckedChange` effect below would then re-render the
+  // parent in a loop.
+  const shows = useCallback(
+    (c: Contact) =>
+      (!filterActive || advancedActive || contactMatchesFilter(c, filter)) &&
+      contactBelongsToGroup(c, groupFilter),
+    [filter, filterActive, advancedActive, groupFilter],
   );
 
   const displayContacts = useMemo(
-    () =>
-      [...filteredContacts]
-        .filter((c) => contactBelongsToGroup(c, groupFilter))
-        .sort((a, b) => compareContacts(a, b, sortState)),
-    [filteredContacts, sortState, groupFilter],
+    () => contacts.filter(shows).sort((a, b) => compareContacts(a, b, sortState)),
+    [contacts, shows, sortState],
   );
 
   const selectedContact = displayContacts.find((c) => c.id === selectedId) ?? null;
@@ -257,8 +285,10 @@ export default function ContactList({
     () => checkedContacts.map((c) => Number(c.id)).filter((id) => Number.isFinite(id) && id > 0),
     [checkedContacts],
   );
+  // Ticked only when every contact the list holds is ticked, which needs every
+  // page loaded: contacts not yet fetched are not ticked.
   const selectAllChecked =
-    displayContacts.length > 0 && displayContacts.every((c) => checkedIds.has(c.id));
+    !hasMore && displayContacts.length > 0 && displayContacts.every((c) => checkedIds.has(c.id));
   const selectAllIndeterminate =
     !selectAllChecked && displayContacts.some((c) => checkedIds.has(c.id));
   const targetContacts = useMemo(() => {
@@ -446,9 +476,12 @@ export default function ContactList({
       selectAllIndeterminate={selectAllIndeterminate}
       onSelectAllChange={(on) => {
         rangeAnchorRef.current = null;
-        startTransition(() => {
-          setCheckedIds(on ? new Set(displayContacts.map((c) => c.id)) : new Set());
-        });
+        if (on) {
+          void selectAll();
+          return;
+        }
+        selectAllRun.current += 1;
+        startTransition(() => setCheckedIds(new Set()));
       }}
       selectAllLabel="Select all contacts"
       getId={(c) => c.id}

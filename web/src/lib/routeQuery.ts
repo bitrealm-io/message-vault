@@ -29,10 +29,10 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { ApiError } from "./api";
 import { useAuth } from "./auth";
-import { PAGE_SIZE_FILL, PAGE_SIZE_FIRST } from "./listPaging";
+import { PAGE_SIZE_FILL, PAGE_SIZE_FIRST, PAGE_SIZE_MAX } from "./listPaging";
 import {
   type AccountScope,
   ANONYMOUS_ACCOUNT,
@@ -157,7 +157,27 @@ export type PagedListResult<T> = {
   error: Error | null;
   hasMore: boolean;
   loadMore: () => void;
+  /**
+   * Load every page still missing, in pages of the server's maximum, and
+   * answer every row of the list. A screen that acts on the whole list, such
+   * as Select all, waits for this rather than acting on the rows on screen.
+   */
+  loadAll: () => Promise<T[]>;
 };
+
+/** The rows of every page, each once by its id: offsets that moved can repeat one. */
+function distinctRows<T extends { id: string | number }>(pages: readonly OffsetPage<T>[]): T[] {
+  const seen = new Set<string | number>();
+  const rows: T[] = [];
+  for (const page of pages) {
+    for (const row of page.items) {
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      rows.push(row);
+    }
+  }
+  return rows;
+}
 
 /**
  * An offset-paged server list, account-scoped like every other cache entry.
@@ -181,11 +201,19 @@ export type PagedListResult<T> = {
 export function useRoutePagedList<T extends { id: string | number }>(
   key: RouteQueryKey,
   fetchPage: PagedFetchPage<T>,
-  opts?: { firstPageSize?: number; fillPageSize?: number },
+  opts?: {
+    firstPageSize?: number;
+    fillPageSize?: number;
+    /** False holds the list back, as `enabled` does on `useQuery`. */
+    enabled?: boolean;
+  },
 ): PagedListResult<T> {
   const account = useAccountScope();
   const firstPageSize = opts?.firstPageSize ?? PAGE_SIZE_FIRST;
   const fillPageSize = opts?.fillPageSize ?? PAGE_SIZE_FILL;
+  // `loadAll` reads the rest of the list in the largest pages the server
+  // answers; a page loaded because the person scrolled stays small.
+  const loadingAll = useRef(false);
 
   const query = useInfiniteQuery<
     OffsetPage<T>,
@@ -195,10 +223,11 @@ export function useRoutePagedList<T extends { id: string | number }>(
     number
   >({
     queryKey: routeQueryKey(account, key),
+    enabled: opts?.enabled ?? true,
     initialPageParam: 0,
     queryFn: ({ pageParam, signal }) =>
       fetchPage({
-        limit: pageParam === 0 ? firstPageSize : fillPageSize,
+        limit: pageParam === 0 ? firstPageSize : loadingAll.current ? PAGE_SIZE_MAX : fillPageSize,
         offset: pageParam,
         signal,
       }),
@@ -213,18 +242,7 @@ export function useRoutePagedList<T extends { id: string | number }>(
   // A new array every render defeats every memo downstream (the tag menu and
   // its effect included), so this is the one place that must not recompute
   // unless the query actually produced new pages.
-  const items = useMemo(() => {
-    const seen = new Set<string | number>();
-    const rows: T[] = [];
-    for (const page of pages) {
-      for (const row of page.items) {
-        if (seen.has(row.id)) continue;
-        seen.add(row.id);
-        rows.push(row);
-      }
-    }
-    return rows;
-  }, [pages]);
+  const items = useMemo(() => distinctRows(pages), [pages]);
 
   const totalMoved = pages.some((page) => page.total !== pages[0]?.total);
   const { isFetching, refetch } = query;
@@ -246,6 +264,19 @@ export function useRoutePagedList<T extends { id: string | number }>(
     hasMore: query.hasNextPage,
     loadMore: () => {
       if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage();
+    },
+    loadAll: async () => {
+      loadingAll.current = true;
+      try {
+        let result = query;
+        while (result.hasNextPage) {
+          result = await result.fetchNextPage();
+          if (result.isError) throw result.error;
+        }
+        return distinctRows(result.data?.pages ?? []);
+      } finally {
+        loadingAll.current = false;
+      }
     },
   };
 }

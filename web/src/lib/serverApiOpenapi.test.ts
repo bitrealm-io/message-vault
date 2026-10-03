@@ -33,7 +33,8 @@ import * as serverApi from "./serverApi";
 
 vi.mock("./api", () => ({
   apiClient: {
-    get: vi.fn().mockResolvedValue({}),
+    // An empty page, so a list read whole stops after one request.
+    get: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     post: vi.fn().mockResolvedValue({}),
     postRaw: vi.fn().mockResolvedValue({}),
     postText: vi.fn().mockResolvedValue(""),

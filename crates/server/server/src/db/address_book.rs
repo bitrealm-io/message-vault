@@ -52,6 +52,16 @@ pub enum LoadMode {
     Edit,
 }
 
+impl LoadMode {
+    /// The mode's name as the `mode` query parameter spells it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            LoadMode::Append => "append",
+            LoadMode::Edit => "edit",
+        }
+    }
+}
+
 /// What a load changed.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, utoipa::ToSchema)]
 pub struct LoadCounts {
@@ -970,6 +980,18 @@ async fn apply(
     Ok(counts)
 }
 
+/// An address book [`export_csv`] wrote, with how many contacts and
+/// identities it holds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WrittenAddressBook {
+    /// The CSV text.
+    pub csv: String,
+    /// The distinct contacts the file holds.
+    pub contacts: u64,
+    /// The rows that carry an identity.
+    pub identities: u64,
+}
+
 /// One row of [`export_csv`]'s query: the contact's id and name, and one of
 /// its identities as service, handle type and key, absent for a contact
 /// with no identity.
@@ -990,7 +1012,7 @@ pub async fn export_csv(
     conn: &mut SqliteConnection,
     account_id: i64,
     only: Option<&HashSet<i64>>,
-) -> Result<String> {
+) -> Result<WrittenAddressBook> {
     let rows: Vec<ExportRow> = sqlx::query_as(
         "SELECT ct.id, trim(ct.preferred_name), h.service, h.handle_type, h.normalized
          FROM contacts ct
@@ -1023,9 +1045,15 @@ pub async fn export_csv(
 
     let mut writer = csv::Writer::from_writer(Vec::new());
     writer.write_record(COLUMNS)?;
+    let mut contacts: HashSet<i64> = HashSet::new();
+    let mut identities = 0_u64;
     for (id, name, service, handle_type, normalized) in rows {
         if only.is_some_and(|only| !only.contains(&id)) {
             continue;
+        }
+        contacts.insert(id);
+        if normalized.is_some() {
+            identities += 1;
         }
         let group_names = groups
             .get(&id)
@@ -1046,7 +1074,12 @@ pub async fn export_csv(
     let bytes = writer
         .into_inner()
         .map_err(|e| anyhow::anyhow!("finish the address book: {e}"))?;
-    String::from_utf8(bytes).context("the address book is not UTF-8")
+    let csv = String::from_utf8(bytes).context("the address book is not UTF-8")?;
+    Ok(WrittenAddressBook {
+        csv,
+        contacts: u64::try_from(contacts.len()).unwrap_or(u64::MAX),
+        identities,
+    })
 }
 
 #[cfg(test)]

@@ -121,13 +121,7 @@ pub(crate) async fn create_contacts(
     let counts = address_book::load(&mut conn, auth.account_id, content, query.mode).await?;
     let count = |n: u64| Some(i64::try_from(n).unwrap_or(i64::MAX));
     let details = Details {
-        mode: Some(
-            match query.mode {
-                LoadMode::Append => "append",
-                LoadMode::Edit => "edit",
-            }
-            .to_string(),
-        ),
+        mode: Some(query.mode.as_str().to_string()),
         contacts_created: count(counts.contacts_created),
         contacts_updated: count(counts.contacts_updated),
         contacts_deleted: count(counts.contacts_deleted),
@@ -225,11 +219,11 @@ pub(crate) async fn export_address_book(
                 .collect()
         })
     };
-    let csv = address_book::export_csv(&mut conn, auth.account_id, only.as_ref()).await?;
-    let (contacts, identities) = written_counts(&csv);
+    let written = address_book::export_csv(&mut conn, auth.account_id, only.as_ref()).await?;
+    let count = |n: u64| Some(i64::try_from(n).unwrap_or(i64::MAX));
     let details = Details {
-        contacts: Some(contacts),
-        identities: Some(identities),
+        contacts: count(written.contacts),
+        identities: count(written.identities),
         ..Details::default()
     };
     audit_trail::record_about(
@@ -248,27 +242,7 @@ pub(crate) async fn export_address_book(
                 format!("attachment; filename=\"{EXPORT_FILE_NAME}\""),
             ),
         ],
-        csv,
+        written.csv,
     )
         .into_response())
-}
-
-/// How many contacts and identities a written address book holds, for the
-/// Audit Trail: the distinct `contact_id`s, and the rows with an identity.
-fn written_counts(csv: &str) -> (i64, i64) {
-    let mut reader = csv::Reader::from_reader(csv.as_bytes());
-    let mut contacts = HashSet::new();
-    let mut identities = 0_i64;
-    for record in reader.records().flatten() {
-        if let Some(id) = record.get(0) {
-            contacts.insert(id.to_string());
-        }
-        if record.get(5).is_some_and(|identity| !identity.is_empty()) {
-            identities += 1;
-        }
-    }
-    (
-        i64::try_from(contacts.len()).unwrap_or(i64::MAX),
-        identities,
-    )
 }

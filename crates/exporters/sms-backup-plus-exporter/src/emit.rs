@@ -1,8 +1,8 @@
 //! Convert SMS Backup+ `.eml` trees into the shared conversation structure,
 //! then write the chosen output format via [`ExportWriter`].
 
-use crate::attachments_emit::{merge_attachments, queue_attachments};
-use crate::identity::{chat_id_for, cover_identity, name_only_key, timestamp_ms};
+use crate::attachments_emit::queue_attachments;
+use crate::identity::{chat_id_for, name_only_key, timestamp_ms};
 use crate::parse_emit::{ParsedEmlKind, collect_eml_paths, parse_one_eml};
 use crate::types::ParsedMessage;
 use anyhow::{Result, bail};
@@ -80,28 +80,11 @@ fn ensure_convo<'a>(
     convo
 }
 
-/// Prefer the copy that names its Android message id; otherwise keep the
-/// earlier timestamp.
-///
-/// The same message can be exported more than once — a mailbox backed up to
-/// Gmail and again to a local folder yields two `.eml` files — and only some
-/// export routes preserve `X-smssync-id`. The copy that still carries it is the
-/// more complete record.
-fn should_replace_kept(existing: &PendingMessage, incoming: &ParsedMessage) -> bool {
-    if incoming
-        .smssync_id
-        .as_ref()
-        .is_some_and(|s| !s.trim().is_empty())
-        && existing.extra_str("smssync_id").trim().is_empty()
-    {
-        return true;
-    }
-    (incoming.timestamp_secs as i64) < existing.sort_key
-}
-
 /// Map a parsed EML message onto the pending message shape.
+///
+/// The `date_ms` extra is set only when the mail carried milliseconds, so the
+/// projection knows a whole-second copy from a millisecond one.
 fn pending_from_parsed(msg: ParsedMessage, pending_atts: Vec<PendingAttachment>) -> PendingMessage {
-    let date_ms = timestamp_ms(msg.timestamp_secs).to_string();
     let name = msg.name_alias.clone().unwrap_or_default();
     PendingMessage {
         sort_key: msg.timestamp_secs as i64,
@@ -113,7 +96,12 @@ fn pending_from_parsed(msg: ParsedMessage, pending_atts: Vec<PendingAttachment>)
         extra: {
             let mut e = BTreeMap::new();
             e.insert("smssync_id".into(), msg.smssync_id.unwrap_or_default());
-            e.insert("date_ms".into(), date_ms);
+            if msg.has_milliseconds {
+                e.insert(
+                    "date_ms".into(),
+                    timestamp_ms(msg.timestamp_secs).to_string(),
+                );
+            }
             e.insert("contact_name".into(), name);
             e.insert("android_type".into(), msg.android_type);
             e.insert("eml_path".into(), msg.eml_path);
@@ -122,17 +110,15 @@ fn pending_from_parsed(msg: ParsedMessage, pending_atts: Vec<PendingAttachment>)
     }
 }
 
-/// Add a parsed message to its conversation, replacing a kept twin when this copy carries
-/// more (dedupe by cover identity).
+/// Add a parsed message to its conversation. Copies of one message are
+/// kept here and reduced to one by the shared projection.
 fn add_message(
     conversations: &mut HashMap<String, PendingConversation>,
-    by_identity: &mut HashMap<String, HashMap<String, usize>>,
     msg: ParsedMessage,
     pending_atts: Vec<PendingAttachment>,
     report: &mut ExportReport,
 ) {
     let chat_id = chat_id_for(&msg);
-    let dedupe_key = cover_identity(&msg);
     let name_only = name_only_key(&msg).is_some();
 
     let peers: Vec<String> = msg
@@ -154,27 +140,6 @@ fn add_message(
     }
 
     report.bump("messages_before_dedupe", 1);
-
-    // Online dedupe state keyed by chat id: fingerprint → index in `messages`
-    // (keep earliest `sort_key`). The shared PendingConversation carries
-    // document data only.
-    let idx_map = by_identity.entry(chat_id.clone()).or_default();
-
-    if let Some(&idx) = idx_map.get(&dedupe_key) {
-        report.duplicates_dropped += 1;
-        if should_replace_kept(&convo.messages[idx], &msg) {
-            let kept_atts = std::mem::take(&mut convo.messages[idx].attachments);
-            let mut pending = pending_from_parsed(msg, pending_atts);
-            merge_attachments(&mut pending.attachments, kept_atts);
-            convo.messages[idx] = pending;
-        } else {
-            merge_attachments(&mut convo.messages[idx].attachments, pending_atts);
-        }
-        return;
-    }
-
-    let idx = convo.messages.len();
-    idx_map.insert(dedupe_key, idx);
     convo.messages.push(pending_from_parsed(msg, pending_atts));
 }
 
@@ -218,6 +183,20 @@ impl ProjectionHooks for SbpProjection {
 
     fn attachment_to_ir(&self, att: &PendingAttachment, _msg: &PendingMessage) -> IrAttachment {
         att.to_ir()
+    }
+
+    /// Of two copies of one message, the dedupe step keeps the first one
+    /// this order puts first when nothing else decides. A copy that carries
+    /// `X-smssync-id` comes first, because only some export routes keep it,
+    /// and then the `.eml` path, so the copy kept does not depend on the
+    /// order the files were found in. The id never decides whether two
+    /// copies are one message.
+    fn message_order(&self, a: &PendingMessage, b: &PendingMessage) -> std::cmp::Ordering {
+        let no_id = |m: &PendingMessage| m.extra_str("smssync_id").trim().is_empty();
+        a.sort_key
+            .cmp(&b.sort_key)
+            .then_with(|| no_id(a).cmp(&no_id(b)))
+            .then_with(|| a.extra_str("eml_path").cmp(b.extra_str("eml_path")))
     }
 
     fn source(&self, convo: &PendingConversation, msg: &PendingMessage) -> IrSource {
@@ -307,8 +286,8 @@ pub(crate) struct ConvertExportArgs<'a, P: AsRef<Path>> {
 /// Convert SMS Backup+ EML tree(s) into the shared conversation structure, then
 /// write the chosen output format.
 ///
-/// Deduplication runs while scanning, using [`cover_identity`] (second-floored
-/// chat + direction + text) so two exports of the same SMS collapse to one.
+/// Copies of one message, such as two exports of one mailbox, are reduced to
+/// one by the shared projection (`message_ir::one_copy_per_message`).
 /// When `cancel` is set, cooperative cancellation is checked during the EML walk
 /// and while merging parse results.
 ///
@@ -474,16 +453,13 @@ fn parse_eml_path(
     parse_one_eml(eml_path, rel_path, &inputs.owners, &inputs.owner_emails_lc)
 }
 
-/// Everything the scan accumulates: conversations, dedupe state, and the
-/// counts that end up in the report.
+/// Everything the scan accumulates: conversations and the counts that end
+/// up in the report.
 struct EmlIngest<'a> {
     /// Where attachment payloads are written as they are parsed; `None`
     /// when the run does not copy attachments.
     spool: Option<&'a AttachmentSpool>,
     conversations: HashMap<String, PendingConversation>,
-    /// Online dedupe state (fingerprint → message index) keyed by chat id;
-    /// the shared `PendingConversation` carries document data only.
-    by_identity: HashMap<String, HashMap<String, usize>>,
     report: ExportReport,
 }
 
@@ -493,7 +469,6 @@ impl<'a> EmlIngest<'a> {
         Self {
             spool,
             conversations: HashMap::with_capacity((eml_count / 4).min(50_000)),
-            by_identity: HashMap::new(),
             report: ExportReport::default(),
         }
     }
@@ -533,13 +508,7 @@ impl<'a> EmlIngest<'a> {
             self.report.bump("unknown_chat_messages", 1);
         }
         let atts = queue_attachments(&msg.attachments, self.spool)?;
-        add_message(
-            &mut self.conversations,
-            &mut self.by_identity,
-            msg,
-            atts,
-            &mut self.report,
-        );
+        add_message(&mut self.conversations, msg, atts, &mut self.report);
         Ok(())
     }
 
@@ -585,33 +554,6 @@ mod tests {
             relative_eml_path(Path::new("/elsewhere/three.eml"), &inputs, &file_inputs),
             Path::new("/elsewhere/three.eml").display().to_string()
         );
-    }
-
-    #[test]
-    fn merge_attachments_unions_by_digest() {
-        let mut into = vec![PendingAttachment {
-            rel_path: "attachments/a.jpg".into(),
-            content_type: "image/jpeg".into(),
-            digest_sha256: Some("aaa".into()),
-            name_hint: Some("a.jpg".into()),
-        }];
-        let from = vec![
-            PendingAttachment {
-                rel_path: "attachments/a.jpg".into(),
-                content_type: "image/jpeg".into(),
-                digest_sha256: Some("aaa".into()),
-                name_hint: Some("a.jpg".into()),
-            },
-            PendingAttachment {
-                rel_path: "attachments/b.jpg".into(),
-                content_type: "image/jpeg".into(),
-                digest_sha256: Some("bbb".into()),
-                name_hint: Some("b.jpg".into()),
-            },
-        ];
-        merge_attachments(&mut into, from);
-        assert_eq!(into.len(), 2);
-        assert_eq!(into[1].digest_sha256.as_deref(), Some("bbb"));
     }
 
     #[test]
@@ -705,95 +647,117 @@ mod tests {
         assert_eq!(std::fs::read_dir(&att_dir).unwrap().count(), 1);
     }
 
-    /// Which copy of a duplicated message is kept.
-    ///
-    /// When two `.eml` files describe the same message, `should_replace_kept`
-    /// decides whether the one arriving now replaces the one already held. Both
-    /// rules are pinned here, because neither was exercised before: the whole
-    /// function could be replaced with `true` or `false` and the suite stayed
-    /// green, which means the export could silently keep the worse copy.
-    ///
-    /// The rules, in the order the function applies them:
-    ///
-    /// 1. A message carrying an `X-smssync-id` beats one without, because only
-    ///    some export routes preserve it and the copy that kept it is the more
-    ///    complete record.
-    /// 2. Otherwise the earlier timestamp wins, so re-running an import does
-    ///    not shuffle the order.
-    #[test]
-    fn between_two_flat_messages_the_one_with_an_smssync_id_wins() {
-        let without_id = pending(1_000, "");
-        let with_id = parsed(1_000.0, Some("276"));
-        assert!(
-            should_replace_kept(&without_id, &with_id),
-            "an id is more than no id"
-        );
-
-        // And not the other way round: a message with an id is not replaced by
-        // one without, even at the same instant.
-        let kept_with_id = pending(1_000, "276");
-        let incoming_without = parsed(1_000.0, None);
-        assert!(!should_replace_kept(&kept_with_id, &incoming_without));
-
-        // A blank or whitespace id is no id at all.
-        for blank in ["", "   "] {
-            let incoming_blank = parsed(1_000.0, Some(blank));
-            assert!(
-                !should_replace_kept(&without_id, &incoming_blank),
-                "an id of {blank:?} is not an id"
-            );
+    /// The messages of every conversation as the shared projection writes
+    /// them, with the copies of one message reduced to one.
+    fn project(parsed: Vec<ParsedMessage>) -> (Vec<IrMessage>, ExportReport) {
+        let mut ingest = EmlIngest::new(None, parsed.len());
+        for msg in parsed {
+            ingest.add_parsed(msg).unwrap();
         }
-    }
-
-    #[test]
-    fn otherwise_the_earlier_message_is_the_one_kept() {
-        let kept = pending(1_000, "276");
-
-        let earlier = parsed(999.0, Some("276"));
-        assert!(
-            should_replace_kept(&kept, &earlier),
-            "an earlier copy replaces a later one, so a re-import is stable"
-        );
-
-        let later = parsed(1_001.0, Some("276"));
-        assert!(!should_replace_kept(&kept, &later));
-
-        // The same instant is not earlier, so the first one seen stays.
-        let same = parsed(1_000.0, Some("276"));
-        assert!(!should_replace_kept(&kept, &same));
-    }
-
-    /// A `PendingMessage` already held, with the two fields the decision reads.
-    fn pending(sort_key: i64, smssync_id: &str) -> PendingMessage {
-        let mut extra = std::collections::BTreeMap::new();
-        extra.insert("smssync_id".to_string(), smssync_id.to_string());
-        PendingMessage {
-            sort_key,
-            is_from_me: false,
-            sender_handle: "+15555550101".into(),
-            sender_display_name: None,
-            text: "hello".into(),
-            attachments: Vec::new(),
-            extra,
+        let hooks = SbpProjection {
+            export: message_crate_core::export_meta(
+                EXPORT_SOURCE,
+                EXPORT_TOOL,
+                EXPORT_TOOL_VERSION,
+                Some("+15555550100".into()),
+                None,
+            ),
+        };
+        let mut report = ingest.report;
+        let mut messages = Vec::new();
+        let mut conversations: Vec<_> = ingest.conversations.into_iter().collect();
+        conversations.sort_by(|a, b| a.0.cmp(&b.0));
+        for (chat_id, mut convo) in conversations {
+            if let Some(doc) =
+                message_crate_core::project_conversation(&chat_id, &mut convo, &hooks, &mut report)
+            {
+                messages.extend(doc.messages);
+            }
         }
+        (messages, report)
     }
 
-    /// A `ParsedMessage` arriving now, with the two fields the decision reads.
-    fn parsed(timestamp_secs: f64, smssync_id: Option<&str>) -> ParsedMessage {
+    /// A message from +15555550101, with or without the milliseconds.
+    fn parsed(timestamp_secs: f64, has_milliseconds: bool, eml_path: &str) -> ParsedMessage {
         ParsedMessage {
             chat_key: "+15555550101".into(),
             conversation_type: "individual".into(),
             group_title: None,
-            participants: Vec::new(),
+            participants: Handle::parse("+15555550101").into_iter().collect(),
             timestamp_secs,
+            has_milliseconds,
             is_from_me: false,
             sender: Handle::parse("+15555550101"),
             text: "hello".into(),
             attachments: Vec::new(),
             name_alias: None,
-            smssync_id: smssync_id.map(str::to_string),
+            smssync_id: None,
             android_type: "1".into(),
-            eml_path: "flat.eml".into(),
+            eml_path: eml_path.into(),
+        }
+    }
+
+    #[test]
+    fn verify_e3_1_two_group_senders_in_one_second_are_two_messages() {
+        let group = |sender: &str, timestamp_secs: f64| ParsedMessage {
+            chat_key: "+15555550111_+15555550122".into(),
+            conversation_type: "group".into(),
+            sender: Handle::parse(sender),
+            text: "Happy birthday!".into(),
+            ..parsed(timestamp_secs, true, "")
+        };
+        let (msgs, report) = project(vec![
+            group("+15555550111", 1_600_000_000.1),
+            group("+15555550122", 1_600_000_000.6),
+        ]);
+        assert_eq!(msgs.len(), 2);
+        assert_eq!(report.duplicates_dropped, 0);
+        assert_ne!(msgs[0].guid, msgs[1].guid);
+    }
+
+    /// SMS Backup+ reads milliseconds from `X-smssync-date` and whole
+    /// seconds from `Date` when that header is missing, so two files of one
+    /// message can differ in precision. One message comes out, with the
+    /// millisecond time and one id, whichever file is read first.
+    #[test]
+    fn a_whole_second_copy_and_a_millisecond_copy_are_one_message_whichever_comes_first() {
+        let whole = || parsed(1_609_459_200.0, false, "a/whole.eml");
+        let exact = || parsed(1_609_459_200.876, true, "b/exact.eml");
+        let (first, report) = project(vec![whole(), exact()]);
+        let (second, _) = project(vec![exact(), whole()]);
+        assert_eq!(first.len(), 1);
+        assert_eq!(report.duplicates_dropped, 1);
+        assert_eq!(first[0].timestamp_unix_ms, 1_609_459_200_876);
+        assert_eq!(first[0].guid, second[0].guid);
+    }
+
+    /// Two millisecond copies with different times are two messages, such as
+    /// the same text sent twice 300 ms apart.
+    #[test]
+    fn two_millisecond_copies_at_different_times_are_two_messages() {
+        let (msgs, _) = project(vec![
+            parsed(1_609_459_200.1, true, "a.eml"),
+            parsed(1_609_459_200.4, true, "b.eml"),
+        ]);
+        assert_eq!(msgs.len(), 2);
+        assert_ne!(msgs[0].guid, msgs[1].guid);
+    }
+
+    /// Between two copies the backup cannot tell apart, the one that carries
+    /// `X-smssync-id` is kept, because only some export routes keep it. The
+    /// id does not make them two messages.
+    #[test]
+    fn of_two_copies_the_one_with_an_smssync_id_is_kept() {
+        let mut with_id = parsed(1_609_459_200.5, true, "b.eml");
+        with_id.smssync_id = Some("276".into());
+        let without_id = parsed(1_609_459_200.5, true, "a.eml");
+        for order in [
+            vec![with_id.clone(), without_id.clone()],
+            vec![without_id, with_id],
+        ] {
+            let (msgs, _) = project(order);
+            assert_eq!(msgs.len(), 1);
+            assert_eq!(msgs[0].source.as_ref().unwrap().fields["smssync_id"], "276");
         }
     }
 }

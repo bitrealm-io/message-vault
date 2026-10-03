@@ -223,20 +223,21 @@ fn reset_account_work_dir(data_dir: &Path) -> Result<tempfile::TempDir> {
         })
 }
 
-/// Generate the Demo Data set of `size` and rebuild the demo account from it,
-/// writing the active config to `config_dest`.
+/// Generate the Demo Data set of `size` and rebuild the demo account from it
+/// in the database `cfg` names. The config file is the operator's: the caller
+/// reads it, and nothing here writes it (#1216).
 ///
 /// # Errors
 ///
 /// Returns an error when generation fails, the database cannot be replaced,
 /// or import / media processing fails.
-pub async fn run_reset_demo(size: DemoSize, config_dest: &Path) -> Result<ResetDemoStats> {
+pub async fn run_reset_demo(size: DemoSize, cfg: &Config) -> Result<ResetDemoStats> {
     let work = tempfile::tempdir().context("create temporary demo bundle directory")?;
     let bundle = work.path().join("bundle");
     println!("Reset demo — generating the {size} data set");
     let seed_stats =
         demo_seed::generate_size_to(size, &bundle).context("generate demo bundle (demo-seed)")?;
-    let reset_stats = prepare_config_and_reset(&bundle, config_dest, DEMO_ACCOUNT_ID).await?;
+    let reset_stats = reset_prepared_bundle(cfg, &bundle, DEMO_ACCOUNT_ID).await?;
 
     Ok(ResetDemoStats {
         seed: seed_stats,
@@ -522,8 +523,7 @@ async fn whole_demo_account_or_none(
 
 /// Build the Demo Account in the database `db`, the one `cfg` names, from
 /// the bundle at `bundle`. There is nothing to snapshot or swap: this writes
-/// to the database directly, touching the Demo Account alone, and leaves the
-/// config file as it is.
+/// to the database directly, touching the Demo Account alone.
 async fn build_from_bundle(
     cfg: &Config,
     db: &SqlitePool,
@@ -533,55 +533,24 @@ async fn build_from_bundle(
     rebuild_demo_account(cfg, db, &prepared, DEMO_ACCOUNT_ID).await
 }
 
-/// Copy the bundle's config into place and reset the account by the
-/// snapshot-and-swap path.
-async fn prepare_config_and_reset(
-    bundle: &Path,
-    config_dest: &Path,
-    account_id: i64,
-) -> Result<ResetPreparedStats> {
-    validate_prepared_bundle(bundle)?;
-    let demo_config = bundle.join("config/config.toml");
-    if !demo_config.is_file() {
-        bail!(
-            "incomplete demo bundle under {} (need config/config.toml)",
-            bundle.display()
-        );
-    }
-    let config_parent = parent_dir_or_cwd(config_dest);
-    fs::create_dir_all(config_parent)
-        .with_context(|| format!("create config directory {}", config_parent.display()))?;
-    let temporary_config = tempfile::Builder::new()
-        .prefix(".reset-demo-config-")
-        .tempfile_in(config_parent)
-        .context("create temporary demo config")?;
-    fs::copy(&demo_config, temporary_config.path()).with_context(|| {
-        format!(
-            "copy prepared config {} to {}",
-            demo_config.display(),
-            temporary_config.path().display()
-        )
-    })?;
-    let cfg = Config::load(temporary_config.path())?;
-    let temporary_config = temporary_config.into_temp_path();
-    reset_prepared_bundle(
-        &cfg,
-        bundle,
-        account_id,
-        config_dest,
-        temporary_config.as_ref(),
-    )
-    .await
-}
-
 /// Build the new state in a prepared database next to the active one, prove
 /// nothing outside the demo account changed, then swap it in.
 async fn reset_prepared_bundle(
     cfg: &Config,
     bundle: &Path,
     account_id: i64,
-    config_dest: &Path,
-    prepared_config: &Path,
+) -> Result<ResetPreparedStats> {
+    reset_prepared_bundle_with(cfg, bundle, account_id, async |_| Ok(())).await
+}
+
+/// [`reset_prepared_bundle`] with `after_rebuild` run on the prepared
+/// database once the rebuild has finished, so a test can change a row the
+/// rebuild must not change and see the reset refused.
+async fn reset_prepared_bundle_with(
+    cfg: &Config,
+    bundle: &Path,
+    account_id: i64,
+    after_rebuild: impl AsyncFnOnce(&SqlitePool) -> Result<()>,
 ) -> Result<ResetPreparedStats> {
     let prepared = validate_prepared_bundle(bundle)?;
     let _operation_lock = crate::operation_lock::acquire_for_reset(&cfg.paths.db)?;
@@ -605,7 +574,11 @@ async fn reset_prepared_bundle(
     temporary_cfg.paths.db = prepared_db.clone();
     temporary_cfg.paths.data_dir = data_work.path().to_path_buf();
     let opened = OpenDb::open(temporary_cfg.clone()).await?;
-    let stats = rebuild_demo_account(&temporary_cfg, &opened.db, &prepared, account_id).await;
+    let stats = match rebuild_demo_account(&temporary_cfg, &opened.db, &prepared, account_id).await
+    {
+        Ok(stats) => after_rebuild(&opened.db).await.map(|()| stats),
+        Err(error) => Err(error),
+    };
     // Closed before anything checks, checkpoints or renames the file.
     opened.close().await;
     let stats = stats?;
@@ -618,8 +591,6 @@ async fn reset_prepared_bundle(
         prepared_db: &prepared_db,
         active_account: &active_account,
         prepared_account: &prepared_account,
-        active_config: config_dest,
-        prepared_config,
     };
     install_reset_state_or_keep_work(&paths, db_work, data_work, &mut ready).await?;
     ready.mark_ready()?;
@@ -640,10 +611,8 @@ async fn install_reset_state_or_keep_work(
     let Err(error) = install_reset_state(paths).await else {
         return Ok(());
     };
-    let config_backup = sqlite_sidecar(paths.prepared_config, ".previous-active");
     let previous_state_still_in_work = db_work.path().join("previous-messagecrate.db").exists()
-        || data_work.path().join("previous-account").exists()
-        || config_backup.exists();
+        || data_work.path().join("previous-account").exists();
     if previous_state_still_in_work {
         ready.keep_cleared();
         let db_work = db_work.keep();
@@ -991,30 +960,51 @@ fn sqlite_sidecar(db: &Path, suffix: &str) -> PathBuf {
     PathBuf::from(path)
 }
 
-/// Refuse to install the prepared database if any non-demo account's row counts differ from
-/// the active one: a reset must only ever touch the demo account.
+/// Refuse to install the prepared database when it changed anything outside
+/// the Demo Account: a row of any other account in any table, or a row that
+/// belongs to no account, such as the Server Settings. A reset must only ever
+/// touch the Demo Account (#1225).
 async fn verify_non_demo_state_preserved(
     active: &Path,
     prepared: &Path,
     demo_id: i64,
 ) -> Result<()> {
-    if !active.is_file() {
+    if !active.is_file() || !has_accounts_table(active).await? {
+        // A database with no accounts holds nothing a reset could lose.
         return Ok(());
     }
     let active_state = non_demo_state(active, demo_id).await?;
     let prepared_state = non_demo_state(prepared, demo_id).await?;
-    if active_state != prepared_state {
+    let changed: Vec<String> = active_state
+        .keys()
+        .chain(prepared_state.keys())
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .filter(|table| active_state.get(*table) != prepared_state.get(*table))
+        .map(|table| {
+            let rows = |state: &BTreeMap<String, TableDigest>| {
+                state
+                    .get(table)
+                    .map_or_else(|| "no table".to_owned(), |digest| digest.rows.to_string())
+            };
+            format!(
+                "{table} (active rows={}, prepared rows={})",
+                rows(&active_state),
+                rows(&prepared_state)
+            )
+        })
+        .collect();
+    if !changed.is_empty() {
         bail!(
-            "prepared reset database changed non-demo account state; active={active_state:?}, prepared={prepared_state:?}"
+            "prepared reset database changed rows outside the Demo Account in: {}",
+            changed.join(", ")
         );
     }
     Ok(())
 }
 
-/// Message counts per account for every account except the demo one, used
-/// to prove a reset changed nothing else. The owner is among them: a reset
-/// writes no owner, so one that exists must still be there afterwards.
-async fn non_demo_state(db: &Path, demo_id: i64) -> Result<BTreeMap<i64, i64>> {
+/// Whether the database at `db` has an `accounts` table.
+async fn has_accounts_table(db: &Path) -> Result<bool> {
     let pool = engine::open_pool_for_path(db)
         .await
         .with_context(|| format!("open {} to verify non-demo accounts", db.display()))?;
@@ -1022,37 +1012,211 @@ async fn non_demo_state(db: &Path, demo_id: i64) -> Result<BTreeMap<i64, i64>> {
         .acquire()
         .await
         .with_context(|| format!("open {} to verify non-demo accounts", db.display()))?;
-    let has_accounts: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'accounts'",
-    )
-    .fetch_one(&mut *conn)
-    .await
-    .with_context(|| format!("check accounts table in {}", db.display()))?;
-    if has_accounts == 0 {
-        conn.close().await?;
-        pool.close().await;
-        return Ok(BTreeMap::new());
-    }
-    let rows = sqlx::query(
-        "SELECT a.id, COUNT(m.id)
-         FROM accounts a
-         LEFT JOIN messages m ON m.account_id = a.id
-         WHERE a.id != $1
-         GROUP BY a.id
-         ORDER BY a.id",
-    )
-    .bind(demo_id)
-    .fetch_all(&mut *conn)
-    .await?;
-    let mut state = BTreeMap::new();
-    for row in rows {
-        let account_id: i64 = row.try_get(0)?;
-        let message_count: i64 = row.try_get(1)?;
-        state.insert(account_id, message_count);
-    }
+    let exists = schema::table_exists(&mut conn, "accounts")
+        .await
+        .with_context(|| format!("check accounts table in {}", db.display()))?;
     conn.close().await?;
     pool.close().await;
+    Ok(exists)
+}
+
+/// The rows of one table that a reset must leave as they were: how many, and
+/// a SHA-256 over all of them in a fixed order.
+#[derive(Debug, PartialEq, Eq)]
+struct TableDigest {
+    rows: u64,
+    sha256: String,
+}
+
+/// Tables a reset compares no rows of. `demo_account_build` is the build's
+/// own record; it is written and removed by the build itself.
+const UNCOMPARED_TABLES: [&str; 1] = ["demo_account_build"];
+
+/// A digest per table of every row that does not belong to the Demo Account:
+/// the rows of every other account, the owner's among them, and the rows that
+/// belong to no account, such as `server_settings`. A row belongs to the
+/// account in its `account_id` column, or, for a table without one, to the
+/// account of the row a `NOT NULL` foreign key points at.
+///
+/// Full-text index tables are left out: the index is contentless, so it has
+/// no rows to read back, and it is written from `messages`, which is compared.
+async fn non_demo_state(db: &Path, demo_id: i64) -> Result<BTreeMap<String, TableDigest>> {
+    let pool = engine::open_pool_for_path(db)
+        .await
+        .with_context(|| format!("open {} to verify non-demo accounts", db.display()))?;
+    let mut conn = pool
+        .acquire()
+        .await
+        .with_context(|| format!("open {} to verify non-demo accounts", db.display()))?;
+    let state = non_demo_state_on_conn(&mut conn, demo_id)
+        .await
+        .with_context(|| format!("read the non-demo rows of {}", db.display()));
+    conn.close().await?;
+    pool.close().await;
+    state
+}
+
+async fn non_demo_state_on_conn(
+    conn: &mut sqlx::SqliteConnection,
+    demo_id: i64,
+) -> Result<BTreeMap<String, TableDigest>> {
+    use futures_util::TryStreamExt;
+    use sha2::{Digest, Sha256};
+
+    let tables: Vec<(String, String)> = sqlx::query_as(
+        "SELECT name, COALESCE(sql, '') FROM sqlite_master
+         WHERE type = 'table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'
+         ORDER BY name",
+    )
+    .fetch_all(&mut *conn)
+    .await?;
+    let virtual_tables: Vec<&str> = tables
+        .iter()
+        .filter(|(_, sql)| {
+            sql.trim_start()
+                .to_ascii_uppercase()
+                .starts_with("CREATE VIRTUAL TABLE")
+        })
+        .map(|(name, _)| name.as_str())
+        .collect();
+    let mut state = BTreeMap::new();
+    for (table, _) in &tables {
+        let is_index = virtual_tables
+            .iter()
+            .any(|vt| table == vt || table.starts_with(&format!("{vt}_")));
+        if is_index || UNCOMPARED_TABLES.contains(&table.as_str()) {
+            continue;
+        }
+        let columns = table_columns(conn, table).await?;
+        let row_text = columns
+            .iter()
+            .map(|column| format!("quote(t.{})", quote_ident(column)))
+            .collect::<Vec<_>>()
+            .join(" || ',' || ");
+        let owner = row_owner(conn, table, &columns).await?;
+        let selection = match &owner {
+            Some(owner) => format!(
+                "FROM {} t {} WHERE {} != $1",
+                quote_ident(table),
+                owner.join,
+                owner.account
+            ),
+            None => format!("FROM {} t", quote_ident(table)),
+        };
+        let sql = format!("SELECT {row_text} {selection} ORDER BY 1");
+        let query = sqlx::query_scalar::<_, String>(&sql);
+        // Only a table whose rows belong to accounts leaves the Demo
+        // Account's rows out.
+        let query = match owner {
+            Some(_) => query.bind(demo_id),
+            None => query,
+        };
+        let mut rows = query.fetch(&mut *conn);
+        let mut hasher = Sha256::new();
+        let mut count = 0u64;
+        while let Some(row) = rows
+            .try_next()
+            .await
+            .with_context(|| format!("read {table}"))?
+        {
+            hasher.update(row.as_bytes());
+            hasher.update(b"\n");
+            count += 1;
+        }
+        drop(rows);
+        state.insert(
+            table.clone(),
+            TableDigest {
+                rows: count,
+                sha256: crate::assets_api::hex_encode(&hasher.finalize()),
+            },
+        );
+    }
     Ok(state)
+}
+
+/// How to find the account a row of a table belongs to: a join to add after
+/// the table, aliased `t`, and the expression that names the account.
+struct RowOwner {
+    join: String,
+    account: String,
+}
+
+/// The account a row of `table` belongs to, or `None` for a table whose rows
+/// belong to no account (it has no `account_id` and no foreign key).
+///
+/// # Errors
+///
+/// Returns an error for a table with a foreign key but no `NOT NULL` one to a
+/// table that has `account_id`: its rows cannot be told apart, and a new
+/// table like that needs a rule here.
+async fn row_owner(
+    conn: &mut sqlx::SqliteConnection,
+    table: &str,
+    columns: &[String],
+) -> Result<Option<RowOwner>> {
+    if table == "accounts" {
+        return Ok(Some(RowOwner {
+            join: String::new(),
+            account: "t.id".into(),
+        }));
+    }
+    if columns.iter().any(|column| column == "account_id") {
+        return Ok(Some(RowOwner {
+            join: String::new(),
+            account: "t.account_id".into(),
+        }));
+    }
+    let keys: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT fk.\"table\", fk.\"from\", fk.\"to\"
+         FROM pragma_foreign_key_list($1) fk
+         JOIN pragma_table_info($1) col ON col.name = fk.\"from\"
+         WHERE col.\"notnull\" = 1
+         ORDER BY fk.id",
+    )
+    .bind(table)
+    .fetch_all(&mut *conn)
+    .await?;
+    for (parent, from, to) in &keys {
+        if table_columns(conn, parent)
+            .await?
+            .iter()
+            .any(|c| c == "account_id")
+        {
+            return Ok(Some(RowOwner {
+                join: format!(
+                    "JOIN {} p ON p.{} = t.{}",
+                    quote_ident(parent),
+                    quote_ident(to),
+                    quote_ident(from)
+                ),
+                account: "p.account_id".into(),
+            }));
+        }
+    }
+    let any_key: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pragma_foreign_key_list($1)")
+        .bind(table)
+        .fetch_one(&mut *conn)
+        .await?;
+    if any_key > 0 {
+        bail!("cannot tell which account a row of {table} belongs to");
+    }
+    Ok(None)
+}
+
+/// The column names of `table`, in declaration order.
+async fn table_columns(conn: &mut sqlx::SqliteConnection, table: &str) -> Result<Vec<String>> {
+    Ok(
+        sqlx::query_scalar("SELECT name FROM pragma_table_info($1) ORDER BY cid")
+            .bind(table)
+            .fetch_all(&mut *conn)
+            .await?,
+    )
+}
+
+/// `name` as a quoted SQLite identifier.
+fn quote_ident(name: &str) -> String {
+    format!("\"{}\"", name.replace('"', "\"\""))
 }
 
 #[derive(Clone, Copy)]
@@ -1061,11 +1225,9 @@ struct ResetPaths<'a> {
     prepared_db: &'a Path,
     active_account: &'a Path,
     prepared_account: &'a Path,
-    active_config: &'a Path,
-    prepared_config: &'a Path,
 }
 
-/// Swap the prepared database, account folder, and config into their active paths.
+/// Swap the prepared database and account folder into their active paths.
 async fn install_reset_state(paths: &ResetPaths<'_>) -> Result<()> {
     install_reset_state_with(paths, demo_seed::move_path).await
 }
@@ -1085,12 +1247,11 @@ where
     replace_reset_state_with(paths, rename)
 }
 
-/// One of the three things a reset swaps: the database file, the account
-/// folder, or the config file. Each has an active path, a prepared
-/// replacement, and a backup path the active one is moved to first so the
-/// swap can be undone.
+/// One of the two things a reset swaps: the database file or the account
+/// folder. Each has an active path, a prepared replacement, and a backup path
+/// the active one is moved to first so the swap can be undone.
 struct Swap<'a> {
-    /// What the paths hold, for messages: "database", "account directory", "config".
+    /// What the paths hold, for messages: "database" or "account directory".
     what: &'static str,
     active: &'a Path,
     prepared: &'a Path,
@@ -1170,8 +1331,8 @@ impl<'a> Swap<'a> {
 }
 
 impl<'a> ResetPaths<'a> {
-    /// The three swaps in install order: database, account folder, config.
-    fn swaps(&self) -> Result<[Swap<'a>; 3]> {
+    /// The two swaps in install order: database, then account folder.
+    fn swaps(&self) -> Result<[Swap<'a>; 2]> {
         let db_backup = self
             .prepared_db
             .parent()
@@ -1182,7 +1343,6 @@ impl<'a> ResetPaths<'a> {
             .parent()
             .context("prepared account has no parent")?
             .join("previous-account");
-        let config_backup = sqlite_sidecar(self.prepared_config, ".previous-active");
         Ok([
             Swap::new("database", self.active_db, self.prepared_db, db_backup),
             Swap::new(
@@ -1190,12 +1350,6 @@ impl<'a> ResetPaths<'a> {
                 self.active_account,
                 self.prepared_account,
                 account_backup,
-            ),
-            Swap::new(
-                "config",
-                self.active_config,
-                self.prepared_config,
-                config_backup,
             ),
         ])
     }
@@ -1207,10 +1361,7 @@ fn replace_reset_state_with<F>(paths: &ResetPaths<'_>, mut rename: F) -> Result<
 where
     F: FnMut(&Path, &Path) -> Result<()>,
 {
-    if !paths.prepared_db.is_file()
-        || !paths.prepared_account.is_dir()
-        || !paths.prepared_config.is_file()
-    {
+    if !paths.prepared_db.is_file() || !paths.prepared_account.is_dir() {
         bail!("prepared reset state is incomplete");
     }
     if let Some(parent) = paths.active_account.parent() {

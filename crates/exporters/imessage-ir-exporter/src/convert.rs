@@ -16,12 +16,13 @@ use std::{
 
 use anyhow::{Context, Result, anyhow, bail};
 use imessage_reader_protocol::{
-    Attachment as AttachmentRecord, AttachmentSource as SourceRecord,
+    Attachment as AttachmentRecord, AttachmentFile, AttachmentSource as SourceRecord,
     Conversation as ConversationRecord, Event, Imessage as ImessageRecord,
     Message as MessageRecord,
 };
 use message_crate_core::{
-    ExportReport, MediaConfig, OutputFormat, ProgressEvent, stage_conversation_attachments,
+    ExportReport, MediaConfig, OutputFormat, ProgressEvent, RunIssue,
+    stage_conversation_attachments,
 };
 use message_ir::{
     ConversationDocument, ConversationMeta, ExportMeta, HandleType, IrAttachment,
@@ -44,6 +45,9 @@ const CONVERSATION_PROGRESS_EVERY: usize = 100;
 /// The run result's count of rows the program read but could not convert,
 /// named like the other exporters' `skipped_*` counts.
 pub(crate) const SKIPPED_UNREADABLE_MESSAGE: &str = "skipped_unreadable_message";
+/// The run result's count of attachments an encrypted backup holds that the
+/// program could not decrypt ([`NotDecrypted`]).
+pub(crate) const ATTACHMENT_NOT_DECRYPTED: &str = "attachment_not_decrypted";
 
 /// Messages accumulated for one Apple `chat_identifier` before projection.
 struct PendingConversation {
@@ -83,14 +87,42 @@ struct Collected {
     failures: u64,
 }
 
+/// Prepare the output folder and open the sink, before the program starts.
+///
+/// Attachment files are written after the stream by the shared runner, so
+/// prior IR artifacts (including stale `attachments/`) must be cleaned
+/// first, the same pattern as WhatsApp and SMS Backup & Restore. A resumed
+/// run is the exception: what the interrupted run wrote is exactly the work
+/// this one gets to skip. The run makes the program's scratch folder inside
+/// the output folder only after this, so the clean never meets it.
+///
+/// # Errors
+///
+/// Returns an error when the output folder cannot be prepared.
+pub(crate) fn open_output(options: &ExportOptions) -> Result<ExportWriterParts> {
+    Ok(ExportWriter::open(
+        &options.export_path,
+        options.output_format,
+        options.transforms.clone(),
+        options.resume,
+    )
+    .map_err(|e| anyhow!("open export sink: {e:#}"))?
+    .into_parts())
+}
+
 /// Stream the program's records into conversations, then write the chosen
-/// output format (JSON Lines, JSON, CSV, EML, MBOX, or XML).
+/// output format (JSON Lines, JSON, CSV, EML, MBOX, or XML) through
+/// `output`, which [`open_output`] opened.
 ///
 /// # Errors
 ///
 /// Returns an error when the program fails, a conversation cannot be
 /// written, or the user cancels.
-pub(crate) fn export(helper: &mut Helper, options: &ExportOptions) -> Result<ExportReport> {
+pub(crate) fn export(
+    helper: &mut Helper,
+    options: &ExportOptions,
+    output: ExportWriterParts,
+) -> Result<ExportReport> {
     let format = options.output_format;
     options.emit_log("");
     options.emit_log(format!(
@@ -98,25 +130,12 @@ pub(crate) fn export(helper: &mut Helper, options: &ExportOptions) -> Result<Exp
         format.as_str(),
         options.export_path.display(),
     ));
-
-    // Open the sink before the stream. Attachment files are written after
-    // the stream by the shared runner, so prior IR artifacts (including stale
-    // `attachments/`) must be cleaned first, the same pattern as WhatsApp and
-    // SMS Backup & Restore. A resumed run is the exception: what the
-    // interrupted run wrote is exactly the work this one gets to skip.
     let ExportWriterParts {
         mut sink,
         attachments_dir,
         use_queue,
         ..
-    } = ExportWriter::open(
-        &options.export_path,
-        format,
-        options.transforms.clone(),
-        options.resume,
-    )
-    .map_err(|e| anyhow!("open export sink: {e:#}"))?
-    .into_parts();
+    } = output;
 
     let mut collected = collect(helper, options)?;
     options.check_cancel()?;
@@ -129,20 +148,26 @@ pub(crate) fn export(helper: &mut Helper, options: &ExportOptions) -> Result<Exp
         .map(|convo| convo.messages.len() as u64)
         .sum();
 
+    let mut not_decrypted = NotDecrypted::default();
     if format.is_mail_archive() && options.attachment_embed == AttachmentEmbed::Embed {
-        embed_attachment_bytes(helper, options, &mut collected)?;
+        embed_attachment_bytes(helper, options, &mut collected, &mut not_decrypted)?;
     }
 
     // The queue-or-sink decision came from `ExportWriter::open`: JSONL
     // without obfuscation is the import path and drains the write queue;
     // everything else keeps the sink path.
     let mut report = if use_queue {
-        drain_conversations(helper, options, collected)?
+        drain_conversations(helper, options, collected, &mut not_decrypted)?
     } else {
         let mut report = ExportReport::default();
         if is_file_backed(format) {
-            report.attachments_saved +=
-                stage_attachments(helper, options, &mut collected, &attachments_dir)?;
+            report.attachments_saved += stage_attachments(
+                helper,
+                options,
+                &mut collected,
+                &attachments_dir,
+                &mut not_decrypted,
+            )?;
         }
         report.conversations += write_conversations(options, &mut sink, collected.conversations)?;
         sink.finish(&mut report)
@@ -155,6 +180,7 @@ pub(crate) fn export(helper: &mut Helper, options: &ExportOptions) -> Result<Exp
     if failures > 0 {
         report.bump(SKIPPED_UNREADABLE_MESSAGE, failures);
     }
+    not_decrypted.report_into(&mut report);
     Ok(report)
 }
 
@@ -388,30 +414,89 @@ fn attachment_to_ir(
     (ir, load)
 }
 
+/// Attachments of an encrypted backup the program holds but could not hand
+/// over: the decrypt failed, or the decrypted copy could not be written or
+/// read back. Each one is recorded without its bytes, as a missing one is,
+/// but the run counts them apart, because a full scratch disk is a fault to
+/// fix and not a gap in the backup.
+#[derive(Debug, Default)]
+struct NotDecrypted(Vec<(PathBuf, String)>);
+
+impl NotDecrypted {
+    /// How many reasons the run's summary names; the rest are counted.
+    const REASONS_NAMED: usize = 5;
+
+    /// Note one attachment and say why on the log as it happens.
+    fn record(&mut self, options: &ExportOptions, path: &Path, reason: String) {
+        options.emit_log(format!(
+            "warning: attachment {} could not be decrypted: {reason}",
+            path.display()
+        ));
+        self.0.push((path.to_path_buf(), reason));
+    }
+
+    /// Add the count, the first reasons, and one issue per attachment to
+    /// `report`.
+    fn report_into(self, report: &mut ExportReport) {
+        if self.0.is_empty() {
+            return;
+        }
+        report.bump(ATTACHMENT_NOT_DECRYPTED, self.0.len() as u64);
+        for (path, reason) in self.0.iter().take(Self::REASONS_NAMED) {
+            report.errors.push(format!(
+                "attachment {} could not be decrypted: {reason}",
+                path.display()
+            ));
+        }
+        report
+            .issues
+            .extend(self.0.into_iter().map(|(path, reason)| RunIssue {
+                kind: "error".into(),
+                step: "attachments".into(),
+                item: path.display().to_string(),
+                reason: format!("could not be decrypted: {reason}"),
+            }));
+    }
+}
+
 /// Read one attachment's bytes: through the program for an encrypted backup,
 /// straight from disk otherwise. Empty bytes mean the file is not there, and
-/// the reason is already on the log.
+/// the reason is already on the log; an attachment the program could not
+/// decrypt is also noted in `not_decrypted`.
 fn read_attachment(
     helper: &mut Helper,
     options: &ExportOptions,
     encrypted: bool,
     path: &Path,
+    not_decrypted: &mut NotDecrypted,
 ) -> Result<Vec<u8>, String> {
     if encrypted {
-        let Some(temp) = helper
+        let temp = match helper
             .decrypt_attachment(path)
             .map_err(|e| format!("{e:#}"))?
-        else {
-            return Ok(Vec::new());
+        {
+            AttachmentFile::Ready { path } => path,
+            AttachmentFile::Missing => return Ok(Vec::new()),
+            AttachmentFile::Failed { reason } => {
+                not_decrypted.record(options, path, reason);
+                return Ok(Vec::new());
+            }
         };
-        let bytes = fs::read(&temp).map_err(|e| format!("read {}: {e}", temp.display()));
+        let bytes = fs::read(&temp);
         if let Err(why) = fs::remove_file(&temp) {
             options.emit_log(format!(
                 "Unable to remove decrypted temp file {}: {why}",
                 temp.display()
             ));
         }
-        return bytes;
+        return Ok(bytes.unwrap_or_else(|e| {
+            not_decrypted.record(
+                options,
+                path,
+                format!("read the decrypted copy {}: {e}", temp.display()),
+            );
+            Vec::new()
+        }));
     }
     if !path.is_file() {
         return Ok(Vec::new());
@@ -434,6 +519,7 @@ fn embed_attachment_bytes(
     helper: &mut Helper,
     options: &ExportOptions,
     collected: &mut Collected,
+    not_decrypted: &mut NotDecrypted,
 ) -> Result<()> {
     let encrypted = collected.encrypted;
     for convo in collected.conversations.values_mut() {
@@ -443,7 +529,7 @@ fn embed_attachment_bytes(
                 options.check_cancel()?;
                 let bytes = match loads.next() {
                     Some(AttachmentLoad::Path { path, .. }) => {
-                        read_attachment(helper, options, encrypted, &path)
+                        read_attachment(helper, options, encrypted, &path, not_decrypted)
                             .map_err(|e| anyhow!("attachment {}: {e}", path.display()))?
                     }
                     Some(AttachmentLoad::Bytes(bytes)) => bytes,
@@ -482,7 +568,7 @@ fn write_conversations(
             continue;
         }
         kept += 1;
-        let doc = pending_to_document(chat_identifier, convo, options.request.use_caller_id);
+        let doc = pending_to_document(chat_identifier, convo, options.use_caller_id);
         let document_id = doc.conversation.chat_identifier.clone();
         sink.write_document(doc)
             .map_err(|e| anyhow!("write {} for {}: {e:#}", format.as_str(), document_id))?;
@@ -565,8 +651,9 @@ fn drain_conversations(
     helper: &mut Helper,
     options: &ExportOptions,
     collected: Collected,
+    not_decrypted: &mut NotDecrypted,
 ) -> Result<ExportReport> {
-    let use_caller_id = options.request.use_caller_id;
+    let use_caller_id = options.use_caller_id;
     let units: Vec<ConversationUnit> = collected
         .conversations
         .into_iter()
@@ -590,15 +677,16 @@ fn drain_conversations(
         // parallelized well anyway.
         let mut load = |source: &mut AttachmentSource| match source {
             AttachmentSource::Path(path) => {
-                let bytes = read_attachment(helper, options, true, path).map_err(|e| {
-                    // Say why before it becomes a chip: a systemic failure
-                    // otherwise reads as a run's worth of unexplained gaps.
-                    options.emit_log(format!(
-                        "warning: attachment {} could not be read: {e}",
-                        path.display()
-                    ));
-                    e
-                })?;
+                let bytes =
+                    read_attachment(helper, options, true, path, not_decrypted).map_err(|e| {
+                        // Say why before it becomes a chip: a systemic failure
+                        // otherwise reads as a run's worth of unexplained gaps.
+                        options.emit_log(format!(
+                            "warning: attachment {} could not be read: {e}",
+                            path.display()
+                        ));
+                        e
+                    })?;
                 Ok((!bytes.is_empty()).then_some(bytes))
             }
             other => message_staging::load_attachment_source(other),
@@ -638,6 +726,7 @@ fn stage_attachments(
     options: &ExportOptions,
     collected: &mut Collected,
     attachments_dir: &Path,
+    not_decrypted: &mut NotDecrypted,
 ) -> Result<u64> {
     let media = MediaConfig {
         mode: options.transforms.media,
@@ -661,18 +750,24 @@ fn stage_attachments(
         &media,
         |i| match loads.get(i) {
             Some(AttachmentLoad::Path { path, .. }) => {
-                let bytes = read_attachment(&mut helper.borrow_mut(), options, encrypted, path)
-                    .map_err(|e| {
-                        // The shared step turns any Err other than "cancelled" into a
-                        // file_missing attachment and moves on. Log the real reason here
-                        // first, or a systemic failure (a revoked Full Disk Access, a
-                        // failing disk) degrades into a run's worth of unexplained chips.
-                        options.emit_log(format!(
-                            "warning: attachment {} could not be read: {e}",
-                            path.display()
-                        ));
-                        e
-                    })?;
+                let bytes = read_attachment(
+                    &mut helper.borrow_mut(),
+                    options,
+                    encrypted,
+                    path,
+                    not_decrypted,
+                )
+                .map_err(|e| {
+                    // The shared step turns any Err other than "cancelled" into a
+                    // file_missing attachment and moves on. Log the real reason here
+                    // first, or a systemic failure (a revoked Full Disk Access, a
+                    // failing disk) degrades into a run's worth of unexplained chips.
+                    options.emit_log(format!(
+                        "warning: attachment {} could not be read: {e}",
+                        path.display()
+                    ));
+                    e
+                })?;
                 Ok((!bytes.is_empty()).then_some(bytes))
             }
             Some(AttachmentLoad::Bytes(bytes)) => Ok(Some(bytes.clone())),
@@ -711,17 +806,14 @@ mod tests {
 
     fn options(output_format: OutputFormat, obfuscate: bool) -> ExportOptions {
         ExportOptions {
-            request: imessage_reader_protocol::ExportRequest {
-                source: imessage_reader_protocol::Source {
-                    db_path: PathBuf::from("/nowhere/chat.db"),
-                    platform: imessage_reader_protocol::Platform::MacOs,
-                    backup_password: None,
-                },
-                attachment_root: None,
-                contacts_path: None,
-                use_caller_id: false,
-                scratch_dir: PathBuf::from("/nowhere/scratch"),
+            source: imessage_reader_protocol::Source {
+                db_path: PathBuf::from("/nowhere/chat.db"),
+                platform: imessage_reader_protocol::Platform::MacOs,
+                backup_password: None,
             },
+            attachment_root: None,
+            contacts_path: None,
+            use_caller_id: false,
             export_path: PathBuf::from("/nowhere/out"),
             attachment_embed: AttachmentEmbed::Embed,
             transforms: message_crate_core::ExportTransforms {

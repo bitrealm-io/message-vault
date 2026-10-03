@@ -3,7 +3,8 @@ use media::MediaMode;
 use message_crate_core::{ExportReport, OutputFormat};
 use message_ir::{
     ConversationMeta, ConversationStats, ExportMeta, HandleType, IrConversationType, IrImessage,
-    IrMessage, IrMessageKind, IrParticipant, IrService, IrSource, SCHEMA_VERSION,
+    IrMessage, IrMessageKind, IrParticipant, IrService, IrSource, MessageGuid, MessageIdentity,
+    SCHEMA_VERSION,
 };
 use serde_json::{Value, json};
 use std::fs;
@@ -207,7 +208,7 @@ fn doc_with_a_marker_in_every_field() -> ConversationDocument {
             },
         },
         messages: vec![IrMessage {
-            guid: "6A1B2C3D-0000-4000-8000-000000000001".into(),
+            guid: "LEAK-27".into(),
             timestamp_unix_ms: 1_400_773_261_000,
             direction: IrDirection::Incoming,
             service: IrService::IMessage,
@@ -231,7 +232,7 @@ fn doc_with_a_marker_in_every_field() -> ConversationDocument {
             }],
             imessage: Some(IrImessage {
                 is_reply: true,
-                in_reply_to_guid: Some("6A1B2C3D-0000-4000-8000-000000000002".into()),
+                in_reply_to_guid: Some("LEAK-28".into()),
                 thread_originator_part: Some(0),
                 num_replies: Some(1),
                 is_deleted: false,
@@ -254,7 +255,7 @@ fn doc_with_a_marker_in_every_field() -> ConversationDocument {
                 app: Some(json!({ "url": "https://LEAK-24.example/", "title": "LEAK-25" })),
                 balloon_bundle_id: Some("com.apple.DigitalTouchBalloonProvider".into()),
                 balloon_kind: Some("sketch".into()),
-                associated_guid: Some("6A1B2C3D-0000-4000-8000-000000000003".into()),
+                associated_guid: Some("LEAK-29".into()),
                 associated_part: Some(0),
                 tapback_kind: Some("emoji".into()),
                 tapback_emoji: Some("👍".into()),
@@ -280,7 +281,6 @@ const KEPT_AS_IS: &[(&str, &str)] = &[
     ),
     ("conversation.conversation_type", "enum value"),
     ("conversation.participants[].handle_type", "enum value"),
-    ("messages[].guid", "opaque message id"),
     ("messages[].direction", "enum value"),
     ("messages[].service", "enum value"),
     ("messages[].message_kind", "enum value"),
@@ -296,8 +296,6 @@ const KEPT_AS_IS: &[(&str, &str)] = &[
         "messages[].attachments[].missing_reason",
         "closed set of reasons",
     ),
-    ("messages[].imessage.in_reply_to_guid", "opaque message id"),
-    ("messages[].imessage.associated_guid", "opaque message id"),
     ("messages[].imessage.send_effect", "Apple effect label"),
     (
         "messages[].imessage.read_receipt_rfc3339",
@@ -414,13 +412,13 @@ fn obfuscate_keeps_each_tapback_and_replaces_only_who_reacted() {
     assert_eq!(tapback["kind"], json!("emoji"));
     assert_eq!(tapback["emoji"], json!("👍"));
     assert_eq!(tapback["is_from_me"], json!(false));
-    for key in ["reactor_handle", "sender"] {
-        let reactor = tapback[key]
-            .as_str()
-            .unwrap_or_else(|| panic!("{key} is kept as a string"));
-        assert!(!reactor.is_empty());
-        assert!(!reactor.contains("LEAK-"), "{key} kept {reactor}");
-    }
+    let reactor = tapback["reactor_handle"]
+        .as_str()
+        .expect("reactor_handle is kept as a string");
+    assert!(!reactor.is_empty());
+    assert!(!reactor.contains("LEAK-"), "reactor_handle kept {reactor}");
+    // `sender` is not a tapback key, so it goes with the other unknown keys.
+    assert!(tapback.get("sender").is_none(), "{tapback}");
 }
 
 #[test]
@@ -445,4 +443,67 @@ fn media_disabled_clears_each_attachment_path_bytes_and_fingerprint() {
         Some("image/jpeg"),
         "the metadata stays"
     );
+}
+
+/// For a source without ids of its own, the `guid` is a hash of content the
+/// obfuscated output partly keeps, so a kept `guid` would check a guess at
+/// the original text. The obfuscated `guid` is made again from the
+/// obfuscated message, and a reply still points at its target.
+#[test]
+fn obfuscate_makes_each_guid_again_and_keeps_replies_pointing_at_their_target() {
+    let original = |text: &str, ms: i64| {
+        MessageGuid::new(&MessageIdentity {
+            chat: "+15555550101",
+            is_from_me: false,
+            sender: Some("+15555550101"),
+            timestamp_unix_ms: ms,
+            text,
+            attachment_digests: &[],
+            vendor_key: None,
+        })
+        .into_string()
+    };
+    let mut doc = doc_with_image_attachment();
+    doc.messages[0].attachments.clear();
+    doc.messages[0].guid = original("hi", doc.messages[0].timestamp_unix_ms);
+    let mut reply = doc.messages[0].clone();
+    reply.guid = original("hi", reply.timestamp_unix_ms + 1);
+    reply.timestamp_unix_ms += 1;
+    reply.imessage = Some(IrImessage {
+        is_reply: true,
+        in_reply_to_guid: Some(doc.messages[0].guid.clone()),
+        ..IrImessage::default()
+    });
+    doc.messages.push(reply);
+    let before: Vec<String> = doc.messages.iter().map(|m| m.guid.clone()).collect();
+
+    let obfuscated = |doc: &ConversationDocument| {
+        let mut doc = doc.clone();
+        obfuscate_document(&mut doc, &mut Obfuscator::new([7u8; 32]));
+        doc
+    };
+    let after = obfuscated(&doc);
+    for (old, msg) in before.iter().zip(&after.messages) {
+        assert_ne!(&msg.guid, old, "the original guid is kept");
+        assert_eq!(msg.guid.len(), 64);
+    }
+    assert_ne!(after.messages[0].guid, after.messages[1].guid);
+    assert_eq!(
+        after.messages[1]
+            .imessage
+            .as_ref()
+            .unwrap()
+            .in_reply_to_guid
+            .as_deref(),
+        Some(after.messages[0].guid.as_str()),
+        "the reply points at its target's new guid"
+    );
+    assert_eq!(
+        obfuscated(&doc).messages[0].guid,
+        after.messages[0].guid,
+        "one seed gives one guid"
+    );
+    let mut other_seed = doc.clone();
+    obfuscate_document(&mut other_seed, &mut Obfuscator::new([8u8; 32]));
+    assert_ne!(other_seed.messages[0].guid, after.messages[0].guid);
 }

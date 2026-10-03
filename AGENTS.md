@@ -183,7 +183,7 @@ Work from the repository root. The server process must be running before the web
 ./scripts/run-dev.sh --release       # optimized build; combines with any flag above
 ```
 
-`serve` adds the Demo Account to a database that does not exist yet, so a plain first start has it too; `--reset` creates the database empty first (`create-database`). `--reset` and `--reset-demo` cannot be combined. Neither claims the Message Crate; add `--owner` to either for that. `./scripts/run-dev.sh --help` lists every flag with examples. `--reset-demo` also rewrites `config/config.toml` from the example (CORS for Vite `:5173` enabled). Later sessions omit `--reset-demo` so the existing database stays.
+`serve` adds the Demo Account to a database that does not exist yet, so a plain first start has it too; `--reset` creates the database empty first (`create-database`). `--reset` and `--reset-demo` cannot be combined. Neither claims the Message Crate; add `--owner` to either for that. `./scripts/run-dev.sh --help` lists every flag with examples. The script writes `config/config.toml` from the example (CORS for Vite `:5173` enabled) only when the file is missing. Later sessions omit `--reset-demo` so the existing database stays.
 
 API: **http://127.0.0.1:8080**. After `--reset-demo`, press **Explore Demo Account** on the login card; the Demo Account has no password. After `--owner`, log in as `admin` / `admin`. Otherwise create the owner in the UI.
 

@@ -90,12 +90,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List the account's named API tokens with their permissions and masked secrets. */
+        /**
+         * List the account's named API tokens with their permissions and masked secrets.
+         * @description Each token's permissions are capped by the account's as they are now.
+         */
         get: operations["list_api_tokens"];
         put?: never;
         /**
          * Create a named API token.
-         * @description Returns the plaintext secret once, at creation; it is never returned again.
+         * @description Returns the plaintext secret once, at creation; it is never returned again. The token's permissions are those the request asks for and the account holds.
          */
         post: operations["create_api_token"];
         delete?: never;
@@ -221,6 +224,11 @@ export interface paths {
         /**
          * Destroy one account's conversations, messages, and attachments.
          * @description The account itself, its contacts, and its login survive.
+         *
+         *     The rows go in one transaction, between two batches of a running Import
+         *     Run and never inside one. The attachment files go after it, unless the
+         *     account has a running Import Run: that run may have uploaded files for a
+         *     batch it has not sent yet, so every file stays on disk.
          *
          *     The owner may, on any account. The account itself may with a
          *     session that carries the `delete` permission, and confirms in the body.
@@ -1514,11 +1522,11 @@ export interface components {
         };
         /**
          * @description Final stats and issues for a running Import Run. The outcome is stated
-         *     once, as `status`.
+         *     once, as `status`. The run's message and attachment counts are not part
+         *     of it: the server counts what the run holds, since a resumed Upload's
+         *     client knows only what the resume sent.
          */
         CompleteImportRequest: {
-            /** Format: int64 */
-            attachment_count?: number | null;
             /** Format: int64 */
             attachments_ms?: number | null;
             /** Format: int64 */
@@ -1526,8 +1534,6 @@ export interface components {
             /** Format: int64 */
             duration_ms?: number | null;
             issues?: components["schemas"]["CompleteImportIssueRequest"][];
-            /** Format: int64 */
-            message_count?: number | null;
             /** Format: int64 */
             parse_ms?: number | null;
             /** Format: int64 */
@@ -1905,7 +1911,8 @@ export interface components {
         DeleteMessagesResponse: {
             /**
              * Format: int64
-             * @description Attachment rows deleted (on-disk files are removed too).
+             * @description Attachment rows deleted. Their files are removed too, unless the
+             *     account has a running Import Run.
              */
             attachments: number;
             /**
@@ -3443,7 +3450,11 @@ export interface components {
             disabled?: boolean | null;
             /** @description Identities to link onto the account profile. */
             identities?: components["schemas"]["AccountIdentityRequest"][];
-            /** @description Display name to set; `None` (or empty) leaves the current name unchanged. */
+            /**
+             * @description Display name. Absent leaves the current name unchanged, `null` clears
+             *     it, and a string sets it, trimmed. A string that is empty after
+             *     trimming clears it.
+             */
             preferred_name?: string | null;
             /** @description Identities to unlink from the account profile. */
             remove_identities?: components["schemas"]["AccountIdentityRequest"][];

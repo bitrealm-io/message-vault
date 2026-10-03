@@ -59,7 +59,7 @@ Each `<SMS>` becomes one message in a shared conversation. `chat_identifier` hol
 | `conversation_type` | Always `individual` for XML SMS; `group` for a PDU with two or more people besides the owner |
 | `group_title` | Derived for PDU groups; empty for XML |
 | `participants_json` | Peer handles for the conversation |
-| `guid` | SHA-256 of chat id + local timestamp + direction + text + attachment digests |
+| `guid` | SHA-256 of the message identity (`MessageGuid`): chat id, direction, sender, UTC milliseconds, collapsed text, sorted attachment digests. A PDU file records whole seconds, so its milliseconds are zero unless its XML row supplied them |
 | `service` | Always `sms` |
 | `sender_handle` / `sender_display_name` | Outgoing uses export owner; incoming from address / contactName |
 | `attachments_json` | `[]` for XML; media paths for PDU |

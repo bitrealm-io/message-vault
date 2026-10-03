@@ -50,8 +50,43 @@ fn content_key_stable_across_whitespace_and_offset_forms() {
         Some("Running late"),
         &[],
     );
+    assert!(a.is_some());
     assert_eq!(a, b);
     assert_eq!(a, c);
+}
+
+/// The content key and an exported message's `guid` come from one function:
+/// the content key at whole seconds, the `guid` at milliseconds.
+#[test]
+fn the_content_key_is_the_message_identity_at_whole_seconds() {
+    let key = compute_content_key(
+        "+14075551212",
+        false,
+        Some("+14075551212"),
+        "2015-03-12T18:04:22Z",
+        Some("hi"),
+        &[],
+    )
+    .unwrap();
+    let identity = message_ir::MessageIdentity {
+        chat: "+14075551212",
+        is_from_me: false,
+        sender: Some("+14075551212"),
+        timestamp_unix_ms: 1_426_183_462_345,
+        text: "hi",
+        attachment_digests: &[],
+        vendor_key: None,
+    };
+    assert_eq!(key, identity.key(message_ir::TimePrecision::Seconds));
+    assert_ne!(key, message_ir::MessageGuid::new(&identity).as_str());
+}
+
+#[test]
+fn a_time_that_does_not_parse_gives_no_content_key() {
+    assert_eq!(
+        compute_content_key("+14075551212", true, None, "yesterday", Some("hi"), &[]),
+        None
+    );
 }
 
 #[test]
@@ -85,7 +120,7 @@ fn parallel_content_keys_match_serial() {
     let parallel = hash_content_keys(&rows, &groups, &shas);
     let serial: Vec<_> = rows
         .iter()
-        .map(|row| content_key_for_row(row, &groups, &shas))
+        .filter_map(|row| content_key_for_row(row, &groups, &shas))
         .collect();
     // Both sides call `content_key_for_row`, so this alone only shows that the
     // parallel pass keeps its input order — worth having, and not enough. The

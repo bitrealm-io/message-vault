@@ -443,9 +443,12 @@ pub struct AccountIdentityRequest {
 /// disabled flag and the three permissions are the owner's alone.
 #[derive(Debug, Default, Deserialize, utoipa::ToSchema)]
 pub struct UpdateAccountRequest {
-    /// Display name to set; `None` (or empty) leaves the current name unchanged.
-    #[serde(default)]
-    pub preferred_name: Option<String>,
+    /// Display name. Absent leaves the current name unchanged, `null` clears
+    /// it, and a string sets it, trimmed. A string that is empty after
+    /// trimming clears it.
+    #[serde(default, deserialize_with = "present")]
+    #[schema(value_type = Option<String>)]
+    pub preferred_name: Option<Option<String>>,
     /// IANA time zone to set, for example `America/New_York`; `None` leaves
     /// the current zone unchanged. An unknown name is a 422.
     #[serde(default)]
@@ -468,6 +471,17 @@ pub struct UpdateAccountRequest {
     /// Allow or forbid deleting message data.
     #[serde(default)]
     pub can_delete: Option<bool>,
+}
+
+/// Read a field that is in the body as `Some`, `null` included. With
+/// `#[serde(default)]` an absent field stays `None` and `null` becomes
+/// `Some(None)`, so a PATCH can tell "leave alone" from "clear".
+fn present<'de, D, T>(deserializer: D) -> std::result::Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
 }
 
 impl UpdateAccountRequest {
@@ -545,7 +559,7 @@ fn parse_profile_service(
 async fn apply_profile_update(
     conn: &mut SqliteConnection,
     account_id: i64,
-    preferred_name: Option<&str>,
+    preferred_name: Option<Option<&str>>,
     time_zone: Option<&str>,
     identities: &[AccountIdentityRequest],
     remove_identities: &[AccountIdentityRequest],
@@ -557,12 +571,7 @@ async fn apply_profile_update(
         account_profile::set_time_zone(conn, account_id, zone).await?;
     }
     if let Some(name) = preferred_name {
-        let name = name.trim();
-        let stored_name = if name.is_empty() {
-            None::<&str>
-        } else {
-            Some(name)
-        };
+        let stored_name = name.map(str::trim).filter(|n| !n.is_empty());
         account_profile::set_preferred_name(conn, account_id, stored_name).await?;
     }
 
@@ -627,7 +636,7 @@ async fn update_profile_on_conn(
     apply_profile_update(
         &mut tx,
         account_id,
-        req.preferred_name.as_deref(),
+        req.preferred_name.as_ref().map(Option::as_deref),
         req.time_zone.as_deref(),
         &req.identities,
         &req.remove_identities,
@@ -1012,7 +1021,8 @@ pub struct DeleteMessagesRequest {
 pub struct DeleteMessagesResponse {
     /// Conversations deleted.
     pub conversations: u64,
-    /// Attachment rows deleted (on-disk files are removed too).
+    /// Attachment rows deleted. Their files are removed too, unless the
+    /// account has a running Import Run.
     pub attachments: u64,
 }
 
@@ -1048,6 +1058,11 @@ fn remove_account_asset_trees(
 
 /// Destroy one account's conversations, messages, and attachments. The
 /// account itself, its contacts, and its login survive.
+///
+/// The rows go in one transaction, between two batches of a running Import
+/// Run and never inside one. The attachment files go after it, unless the
+/// account has a running Import Run: that run may have uploaded files for a
+/// batch it has not sent yet, so every file stays on disk.
 ///
 /// The owner may, on any account. The account itself may with a
 /// session that carries the `delete` permission, and confirms in the body.
@@ -1086,13 +1101,23 @@ pub async fn delete_account_messages(
         }
     }
 
+    // The account's import lock, as each batch takes it, so the delete runs
+    // between two batches and never inside one. The lock order is account
+    // lock, then pool, so the connection is given back first.
+    drop(conn);
+    let _batch_lock = state.account_import_locks.lock(target.to_string()).await;
+    let mut conn = state.db.acquire().await?;
     let stats = account_profile::delete_all_messages_for_account(&mut conn, target).await?;
-    remove_account_asset_trees(
-        &state.cfg.paths.data_dir,
-        target,
-        &state.cfg.paths.assets_dir,
-        &state.cfg.paths.assets_converted_dir,
-    )?;
+    // A running Import Run may have uploaded files for a batch it has not
+    // sent yet, and no row names them, so its account's files stay on disk.
+    if !stats.import_running {
+        remove_account_asset_trees(
+            &state.cfg.paths.data_dir,
+            target,
+            &state.cfg.paths.assets_dir,
+            &state.cfg.paths.assets_converted_dir,
+        )?;
+    }
 
     Ok(Json(DeleteMessagesResponse {
         conversations: stats.conversations,

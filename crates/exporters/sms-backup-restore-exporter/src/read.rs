@@ -6,18 +6,19 @@ use message_crate_core::{
     CancelFlag, LogSink, MediaConfig, ProgressSink, check_cancel, discover_files,
     document_messages, is_cancelled, stage_conversation_attachments,
 };
-use message_csv::{format_local_ts, stable_guid};
+use message_csv::format_local_ts;
 use message_ir::{
     ConversationDocument, ConversationMeta, ConversationStats, ExportMeta, HandleType,
     IrAttachment, IrConversationType, IrDirection, IrMessage, IrMessageKind, IrParticipant,
-    IrService, IrSource, SCHEMA_VERSION, owner_sender,
+    IrService, IrSource, MessageCopy, MessageGuid, MessageIdentity, SCHEMA_VERSION, TimePrecision,
+    one_copy_per_message, owner_sender,
 };
 use message_staging::{AttachmentSpool, load_attachment_source};
 use phone::{Handle, OwnerHandleSet};
 use sbr::{
     AttachmentBlob, ConversationKind, ParseStats, Record, infer_owner_phones, parse_file_with,
 };
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 const EXPORT_SOURCE: &str = "sms-backup-restore";
@@ -104,7 +105,6 @@ struct PendingMessage {
     text: String,
     subject: String,
     attachments: Vec<PendingAttachment>,
-    dedupe_key: String,
     message_kind: &'static str,
     date_ms: String,
     contact_name: String,
@@ -252,18 +252,7 @@ fn add_record(
             participants: peers,
             messages: Vec::new(),
         });
-    let names: Vec<_> = attachments.iter().map(|a| a.digest.as_str()).collect();
-    // Include the full fractional timestamp and sender to avoid false deduplication
-    // of distinct messages within the same second.
     let sender = record.sender.map(Handle::into_key);
-    let dedupe_key = format!(
-        "{}|{}|{}|{}|{}",
-        record.timestamp_secs,
-        u8::from(record.is_from_me),
-        sender.as_deref().unwrap_or(""),
-        record.text,
-        names.join(",")
-    );
     let source_fields = serde_json::to_value(&record.source_fields)?
         .as_object()
         .cloned()
@@ -276,7 +265,6 @@ fn add_record(
         text: record.text,
         subject: record.subject,
         attachments,
-        dedupe_key,
         message_kind: record.message_kind,
         date_ms: record.date_ms,
         contact_name: record.contact_name,
@@ -286,11 +274,57 @@ fn add_record(
     Ok(())
 }
 
-/// Sort by time and drop later messages with the same dedupe key.
+impl PendingMessage {
+    /// The UTC instant in milliseconds and how finely the XML recorded it:
+    /// the `date` attribute's milliseconds, else the sort key's whole second.
+    fn time(&self) -> (i64, TimePrecision) {
+        match self.date_ms.trim().parse::<i64>() {
+            Ok(ms) => (ms, TimePrecision::Milliseconds),
+            Err(_) => (
+                (self.sort_key as i64).saturating_mul(1000),
+                TimePrecision::Seconds,
+            ),
+        }
+    }
+
+    /// Digests of the attachments, for the message's identity.
+    fn attachment_digests(&self) -> Vec<String> {
+        self.attachments.iter().map(|a| a.digest.clone()).collect()
+    }
+}
+
+/// Sort by time and keep one copy of each message
+/// ([`one_copy_per_message`]), each with the time it keeps.
 fn dedupe(messages: &mut Vec<PendingMessage>) {
     messages.sort_by(|a, b| a.sort_key.total_cmp(&b.sort_key));
-    let mut seen = HashSet::new();
-    messages.retain(|m| seen.insert(m.dedupe_key.clone()));
+    let prepared: Vec<_> = messages
+        .iter()
+        .map(|m| (m.time(), m.attachment_digests()))
+        .collect();
+    let copies: Vec<MessageCopy<'_>> = messages
+        .iter()
+        .zip(&prepared)
+        .map(|(m, ((ms, precision), digests))| MessageCopy {
+            is_from_me: m.is_from_me,
+            sender: m.sender.as_deref(),
+            timestamp_unix_ms: *ms,
+            precision: *precision,
+            text: &m.text,
+            attachment_digests: digests,
+            vendor_key: None,
+        })
+        .collect();
+    let kept = one_copy_per_message(&copies);
+    let mut kept = kept.into_iter();
+    messages.retain_mut(|m| match kept.next().flatten() {
+        Some(ms) => {
+            if m.time().0 != ms {
+                m.date_ms = ms.to_string();
+            }
+            true
+        }
+        None => false,
+    });
 }
 
 /// Display names seen per sender handle across the conversation.
@@ -374,29 +408,24 @@ fn ir_message(
     message: &PendingMessage,
     owner: &(Option<String>, Option<String>),
 ) -> IrMessage {
-    let timestamp_unix_ms = message
-        .date_ms
-        .parse()
-        .unwrap_or_else(|_| (message.sort_key as i64).saturating_mul(1000));
-    let timestamp = format_local_ts(message.sort_key as i64).expect("timestamps validated");
-    let digests: Vec<_> = message
-        .attachments
-        .iter()
-        .map(|a| a.digest.clone())
-        .collect();
+    let (timestamp_unix_ms, _) = message.time();
+    let digests = message.attachment_digests();
     let (sender_handle, sender_display_name) = if message.is_from_me {
         owner.clone()
     } else {
         (message.sender.clone(), message.sender_display_name.clone())
     };
     IrMessage {
-        guid: stable_guid(
-            chat_id,
-            &timestamp.0,
-            message.is_from_me,
-            &message.text,
-            &digests,
-        ),
+        guid: MessageGuid::new(&MessageIdentity {
+            chat: chat_id,
+            is_from_me: message.is_from_me,
+            sender: message.sender.as_deref(),
+            timestamp_unix_ms,
+            text: &message.text,
+            attachment_digests: &digests,
+            vendor_key: None,
+        })
+        .into_string(),
         timestamp_unix_ms,
         direction: if message.is_from_me {
             IrDirection::Outgoing
@@ -951,5 +980,14 @@ mod tests {
             Some("+447911123456")
         );
         assert_eq!(docs[0].conversation.chat_identifier, "+447700900123");
+    }
+
+    #[test]
+    fn verify_e1_4_two_group_senders_in_one_second_get_two_guids() {
+        let docs = read_xml(
+            r#"<mms date="1400773400100" msg_box="1" address="+15555550101~+15555550102~+15555550100"><parts><part ct="text/plain" text="lol"/></parts><addrs><addr address="+15555550101" type="137"/><addr address="+15555550102" type="151"/><addr address="+15555550100" type="151"/></addrs></mms><mms date="1400773400200" msg_box="1" address="+15555550101~+15555550102~+15555550100"><parts><part ct="text/plain" text="lol"/></parts><addrs><addr address="+15555550102" type="137"/><addr address="+15555550101" type="151"/><addr address="+15555550100" type="151"/></addrs></mms>"#,
+        );
+        assert_eq!(docs[0].messages.len(), 2, "the exporter keeps both");
+        assert_ne!(docs[0].messages[0].guid, docs[0].messages[1].guid);
     }
 }

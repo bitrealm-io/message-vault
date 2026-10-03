@@ -62,6 +62,9 @@ pub(crate) struct TapbackCell {
     pub kind: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub emoji: Option<String>,
+    /// True when the owner reacted, so a reader never has to guess it from
+    /// the message reacted to.
+    pub is_from_me: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reactor_handle: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

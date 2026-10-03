@@ -131,6 +131,7 @@ function renderView(props: Partial<Parameters<typeof ImportRunView>[0]> = {}) {
           importSessionId={null}
           reviewWaiting={null}
           unknownContacts={null}
+          unknownContactsError={null}
           onApprove={() => {}}
           onCancelRun={() => {}}
           onCancel={() => {}}
@@ -347,6 +348,21 @@ describe("ImportRunView", () => {
     });
     expect(screen.getByText("Contacts")).toBeInTheDocument();
     expect(screen.queryByText("Existing")).not.toBeInTheDocument();
+  });
+
+  it("says on the review why the contact split is missing when the lookup failed", () => {
+    renderView({
+      phase: "staging_review",
+      running: false,
+      steps: stepsAt("convert", { Staging: "done" }),
+      stagingSummary: staged({ contactIdentifiers: ["+15550100"] }),
+      reviewWaiting: "staging",
+      unknownContacts: null,
+      unknownContactsError: "network down",
+    });
+    const review = within(stageRow(WAITING_STAGING));
+    expect(review.getByText(/network down/)).toBeInTheDocument();
+    expect(review.queryByText("Existing")).not.toBeInTheDocument();
   });
 
   it("sorts the estimates into three piles when a Media stage is coming", async () => {

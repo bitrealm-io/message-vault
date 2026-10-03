@@ -441,3 +441,21 @@ fn attachments_are_staged_from_the_spool_on_both_write_arms() {
         );
     }
 }
+
+/// The shared cleaning removes the XML an earlier export wrote, and the two
+/// temporary files beside it, whatever the second export writes.
+#[test]
+fn a_second_export_removes_the_backup_an_earlier_one_wrote() {
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sample.xml");
+    let owner = ["+15555550100".to_string()];
+    let tmp = tempfile::tempdir().unwrap();
+    convert(&fixture, tmp.path(), &owner, OutputFormat::Xml).unwrap();
+    assert!(tmp.path().join("smses.xml").is_file());
+    // What an export stopped before it finished leaves behind.
+    crate::testutil::leave_partial_backup(tmp.path());
+
+    convert(&fixture, tmp.path(), &owner, OutputFormat::Csv).unwrap();
+
+    crate::testutil::assert_no_backup_left(tmp.path());
+    assert!(!csv_files(tmp.path()).is_empty());
+}

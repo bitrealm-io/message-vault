@@ -1,5 +1,6 @@
 import { Fragment } from "react";
 import type { ImportSummaryView } from "../../../components/import/ImportSummaryPanel";
+import PlainButton from "../../../components/PlainButton";
 import ScrollingTableCard from "../../../components/ScrollingTableCard";
 import ImportDetailPanel from "./ImportDetailPanel";
 import PageControl from "./PageControl";
@@ -77,18 +78,15 @@ export default function ImportHistoryTable({
                         onClick={() => onToggle(row.id)}
                       >
                         <td className={tdStyle}>
-                          <button
-                            type="button"
+                          <PlainButton
                             aria-expanded={isSelected}
                             aria-controls={detailId}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              onToggle(row.id);
-                            }}
+                            // React Aria stops the press here, so the row's own click does not toggle it back.
+                            onPress={() => onToggle(row.id)}
                             className="w-full rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-accent"
                           >
                             {formatImportDate(row.finished_at ?? row.started_at)}
-                          </button>
+                          </PlainButton>
                         </td>
                         <td className={tdStyle}>{row.source}</td>
                         <td className={`${tdStyle} text-right tabular-nums`}>

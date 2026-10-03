@@ -570,8 +570,6 @@ fn write_skipped_invalid_address_csv(
     more: u64,
 ) -> Result<()> {
     let path = output_dir.join("skipped_invalid_address.csv");
-    // Remove legacy filename from earlier builds.
-    remove_if_exists(&output_dir.join("skipped_bad_addr.csv"));
     if details.is_empty() && more == 0 {
         remove_if_exists(&path);
         return Ok(());

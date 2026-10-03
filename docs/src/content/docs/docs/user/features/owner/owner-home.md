@@ -9,7 +9,7 @@ The Owner runs the Message Crate and holds no messages, so Owner Home has no **M
 Nothing in Owner Home shows a message's text, an attachment's contents, or a contact's name.
 The Owner sees counts, sizes, dates, and attachment file names.
 
-The side panel lists five sections: **Dashboard**, **Server Settings**, **User Accounts**, **Activity**, and **Logs**.
+The side panel lists five sections: **Dashboard**, **Server Settings**, **User Accounts**, **Audit Trail**, and **Logs**.
 Login opens **User Accounts**.
 
 ## Dashboard
@@ -190,14 +190,24 @@ The Owner doesn't see which contacts an import created, and doesn't see which co
 The Owner's row opens **Settings for Owner**.
 **Settings** in the account menu, the round button at the top right, opens the same settings.
 
-The tabs are **Account**, **Profile**, and **Appearance**.
+The tabs are **Account**, **Profile**, **Audit Trail**, and **Appearance**.
 There is no **Storage** tab, because the Owner holds no messages.
 
 Changing the Owner's password needs **Current password** as well as the new one, because the Owner's login reaches every account.
 There is no **Reset password**, because the Owner must have a password.
 There is no **Danger zone**, because the Owner can't be deleted.
 
-## Activity and Logs
+## Audit Trail
 
-**Activity** and **Logs** show only their name.
-Nothing is built behind them yet.
+**Audit Trail** lists what each user did on the Message Crate, and when, newest first: logins and how each session ended, refused logins, Import Runs and Export Runs, and every change to an account.
+The **Account** column names the account each entry is about.
+**Account** at the top narrows the list to one account, the entries its holder reads in the **Audit Trail** tab of their [Settings](/docs/user/features/settings/audit-trail/).
+
+Nobody can change or delete an entry, the Owner included.
+A deleted account's entries stay under its old username, marked **deleted**.
+Opening and closing the Message Crate to new accounts is recorded too, under no account.
+
+## Logs
+
+**Logs** shows only its name.
+Nothing is built behind it yet.

@@ -1,0 +1,26 @@
+Chat Session,Message Date,Service,Type,Sender ID,Sender Name,Status,Replying to,Subject,Text,Reactions,Attachment,Attachment type
+Bob Example,2020-01-01 12:00:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,voice 1,,Audio Message.caf,Audio
+Bob Example,2020-01-01 12:01:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,voice 2,,Audio Message.caf,Audio
+Bob Example,2020-01-01 12:02:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,heic picture,,IMG_0001.heic,Image
+Bob Example,2020-01-01 12:03:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,long name,,Minutes of the neighbourhood garden committee meeting.pdf,
+Bob Example,2020-01-01 12:04:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,narrow space,,Meeting notes.pdf,
+Bob Example,2020-01-01 12:05:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,first of the second,,image0.jpg,Image
+Bob Example,2020-01-01 12:05:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,second of the second,,image0.jpg,Image
+Bob Example,2020-01-01 12:06:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,file in another chat,,IMG_0002.jpg,Image
+Bob Example,2020-01-01 12:07:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,picture 3 at 12:07,,IMG_0003.jpg,Image
+Bob Example,2020-01-01 12:08:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,picture 3 at 12:08,,IMG_0003.jpg,Image
+Bob Example,2020-01-01 12:09:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,two files,,photo.jpg,Image
+Bob Example,2020-01-01 12:10:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,short of two names,,photo.jpg,Image
+Bob Example,2020-01-01 12:10:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,long of two names,,Holiday - photo.jpg,Image
+Bob Example,2020-01-01 12:11:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,first long name,,Minutes of the neighbourhood garden committee meeting 1.pdf,
+Bob Example,2020-01-01 12:11:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,second long name,,Minutes of the neighbourhood garden committee meeting 2.pdf,
+Bob Example,2020-01-01 12:12:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,location,,Current Location.vcf,
+Bob Example,2020-01-01 12:13,iMessage,Incoming,+15555550101,Bob Example,Read,,,date without seconds,,IMG_0004.jpg,Image
+Bob Example,2020-01-01 12:14:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,photo first,,photo.jpg,Image
+Bob Example,2020-01-01 12:14:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,photo second,,photo.jpg,Image
+Bob Example,2020-01-01 12:14:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,photo 2 named,,photo 2.jpg,Image
+Bob Example,2020-01-01 12:15:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,upper-case extension,,snap.JPG,Image
+Bob Example,2020-01-01 12:15:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,lower-case extension,,snap.jpg,Image
+Bob Example,2020-01-01 12:16:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,first of a pair,,image0.jpg,Image
+Bob Example,2020-01-01 12:16:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,second of a pair,,image0.jpg,Image
+Bob Example,2020-01-01 12:17:00,iMessage,Incoming,+15555550101,Bob Example,Read,,,label ends with a dash,,dash.jpg,Image

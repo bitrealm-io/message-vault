@@ -87,9 +87,9 @@ pub(crate) fn require_ffmpeg() -> Result<()> {
         Ok(())
     } else {
         bail!(
-            "ffmpeg and ffprobe are required for --media-mode convert/compress. \
-             Keep the release-bundled tools in lib/ next to this program (or ../lib/ from cli/), \
-             install ffmpeg on PATH, or set MESSAGE_CRATE_BIN to a directory that contains both."
+            "ffmpeg and ffprobe are required to convert or compress attachments. \
+             Keep the bundled tools in lib/ next to this program, install ffmpeg on PATH, \
+             or set MESSAGE_CRATE_BIN to a folder that contains both."
         )
     }
 }
@@ -107,7 +107,6 @@ fn command_runs(bin: &Path, args: &[&str]) -> bool {
 
 /// Resolve `ffmpeg` / `ffprobe`: tools-dir override, then beside the running
 /// executable, `lib/` under its directory, `lib/` under its parent directory,
-/// the parent directory itself (legacy flat-root archives),
 /// `MESSAGE_CRATE_BIN`, then PATH.
 fn resolve_tool(name: &str) -> Option<PathBuf> {
     if !matches!(name, "ffmpeg" | "ffprobe") {
@@ -203,10 +202,6 @@ fn find_tool_with_override(name: &str, override_dir: Option<&Path>) -> Option<Pa
             dir.join("lib").join(&executable),
             dir.parent()
                 .map(|p| p.join("lib").join(&executable))
-                .unwrap_or_default(),
-            // Legacy flat-root archives.
-            dir.parent()
-                .map(|p| p.join(&executable))
                 .unwrap_or_default(),
         ];
         for candidate in candidates {

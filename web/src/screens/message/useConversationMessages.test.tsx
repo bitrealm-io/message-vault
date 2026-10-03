@@ -258,6 +258,44 @@ describe("useConversationMessages", () => {
       ),
     );
   });
+
+  it("steps Find past a page of matches, and round from the oldest to the newest (#1145)", async () => {
+    const matches = 120;
+    getMessages.mockImplementation((async (_id: number, params: { around?: number }) =>
+      page([message(params.around ?? matches)])) as unknown as typeof listConversationMessages);
+    // The server pages the matches 50 at a time, newest first, and counts all of them.
+    searchMessages.mockImplementation(async ({ offset = 0, limit = 50 }) => ({
+      items: Array.from({ length: Math.max(0, Math.min(limit, matches - offset)) }, (_, i) =>
+        message(matches - offset - i),
+      ),
+      total: matches,
+      limit,
+      offset,
+    }));
+
+    const { result } = renderHook(() => useConversationMessages(7), { wrapper: Providers });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => result.current.find.openFind());
+    act(() => result.current.find.setTerm("hello"));
+    await waitFor(() => expect(result.current.highlightId).toBe(120));
+
+    // ▲ 50 times: from the last match of the first page onto the second page.
+    for (let i = 0; i < 50; i++) act(() => result.current.find.prevMatch());
+    await waitFor(() => expect(result.current.highlightId).toBe(70));
+    expect(result.current.find.position).toBe(50);
+    expect(result.current.find.total).toBe(matches);
+    expect(searchMessages).toHaveBeenLastCalledWith(
+      expect.objectContaining({ offset: 50 }),
+      expect.anything(),
+    );
+
+    // ▼ from the newest goes round to the oldest, on the last page.
+    for (let i = 0; i < 50; i++) act(() => result.current.find.nextMatch());
+    await waitFor(() => expect(result.current.highlightId).toBe(120));
+    act(() => result.current.find.nextMatch());
+    await waitFor(() => expect(result.current.highlightId).toBe(1));
+    expect(result.current.find.position).toBe(matches - 1);
+  });
 });
 
 describe("conversationYears", () => {

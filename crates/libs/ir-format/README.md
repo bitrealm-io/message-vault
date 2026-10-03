@@ -1,6 +1,6 @@
 # message-ir-format
 
-Writes a `ConversationDocument` to JSON, JSON Lines, CSV, EML, or MBOX. A format that folds every conversation into one file, such as a SyncTech `smses.xml`, is written through a `MergedArchive` the caller supplies. Obfuscation runs here when finishing an export. Media convert/compress runs before that, in the staging step. Readers exist for every format so a folder can be converted later.
+Writes a `ConversationDocument` to JSON, JSON Lines, CSV, EML, or MBOX. A format that folds every conversation into one file is written through a `MergedArchive` the caller supplies. Obfuscation runs here when finishing an export. Media convert/compress runs before that, in the staging step. Readers exist for every format so a folder can be converted later.
 
 Exporters and `message-reexport` use this crate. The desktop app's Export screen and the Convert tab in Settings use it through `message-reexport`.
 

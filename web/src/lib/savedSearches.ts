@@ -35,9 +35,8 @@ export function useSavedSearches(): {
   savedSearches: SavedSearch[];
   loading: boolean;
 } {
-  const { data, isPending } = useRouteQuery(
-    keys.savedSearches.all,
-    async (signal) => (await listSavedSearches({ signal })).items,
+  const { data, isPending } = useRouteQuery(keys.savedSearches.all, (signal) =>
+    listSavedSearches({ signal }),
   );
   return { savedSearches: data ?? [], loading: isPending };
 }

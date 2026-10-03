@@ -329,8 +329,8 @@ fn scan_one_attachment(
 ) -> Result<AttachmentProjection> {
     let Some(rel) = att.path.as_deref().and_then(message_ir::trimmed) else {
         // No path means the bytes were never staged. "Do not copy" exports
-        // look like this, and the reason the exporter set ("not_copied";
-        // older exports say "skipped" or "embed_disabled") explains why.
+        // look like this, and the reason the exporter set ("not_copied")
+        // explains why.
         // Keep the metadata so the thread still shows the file was there.
         scan.skipped += 1;
         if att.missing_reason.is_none() {

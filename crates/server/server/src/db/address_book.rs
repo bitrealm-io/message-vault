@@ -39,7 +39,7 @@ pub const COLUMNS: [&str; 6] = [
 pub(crate) const GROUP_SEPARATOR: char = ';';
 
 /// How a load applies the file.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, utoipa::ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum LoadMode {
     /// Create the contacts the file names, rename the ones it holds, and add
@@ -77,6 +77,14 @@ pub struct LoadCounts {
     /// the `+` from a number without showing it, so the load says how it
     /// read the number.
     pub notes: Vec<String>,
+}
+
+impl LoadCounts {
+    /// The contacts the load created or updated.
+    #[must_use]
+    pub fn contacts_changed(&self) -> u64 {
+        self.contacts_created + self.contacts_updated
+    }
 }
 
 /// Why a load did not happen.
@@ -769,6 +777,146 @@ pub async fn load(
     Ok(counts)
 }
 
+/// The address book `csv_text` rewritten so that each new contact it lists
+/// carries the id of the nameless contact that holds one of its identities,
+/// as a person who exported the address book after an import and typed the
+/// names onto the rows of its Unknowns would write it. Only the text is
+/// rewritten; the account is read and nothing is written. Loaded back, the
+/// file names those nameless contacts in place, where a new contact would
+/// take their identities and leave them to be deleted.
+///
+/// The test is the name alone: a contact with a name is already named, and
+/// a nameless one is what the file's name is for.
+///
+/// It is written for the demo address book, whose every contact has a
+/// `contact_id` key of its own and whose rows are never blank. A new contact
+/// with a blank `contact_id` stays new, because its rows have no text to
+/// rewrite that only they share. A blank row is left out, as the load leaves
+/// it out.
+///
+/// The file is read as [`load`] reads it, so the identities are matched by
+/// the key the load would give them. A new contact stays new when no
+/// nameless contact holds its identities; when the nameless contact also
+/// holds an identity the contact's rows do not list (an Append load would
+/// then leave the named contact holding it); or when a row would read as
+/// another identity under the nameless contact's id than as a new
+/// contact's. A file the load would refuse comes back as it was, so the load
+/// reports the refusal.
+///
+/// # Errors
+///
+/// Returns an error when reading the account fails.
+pub(crate) async fn rewrite_ids_to_nameless(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    csv_text: &str,
+) -> Result<String> {
+    let Ok(rows) = read_rows(csv_text) else {
+        return Ok(csv_text.to_string());
+    };
+    let snapshot = Snapshot::read(conn, account_id).await?;
+    let Ok(file) = plan(&rows, &snapshot) else {
+        return Ok(csv_text.to_string());
+    };
+
+    let mut held: HashMap<i64, HashSet<&IdentityKey>> = HashMap::new();
+    for (key, &(_, holder)) in &snapshot.handles {
+        if let Some(holder) = holder {
+            held.entry(holder).or_default().insert(key);
+        }
+    }
+    let is_nameless = |id: i64| snapshot.contacts.get(&id).is_some_and(String::is_empty);
+
+    // The nameless contact each new contact takes, by its `contact_id` text.
+    // No two new contacts can take the same one: it must hold only
+    // identities the contact lists, and the load refuses a file that lists
+    // one identity under two contacts.
+    let mut nameless_of: HashMap<&str, i64> = HashMap::new();
+    for contact in file
+        .iter()
+        .filter(|c| c.target == Target::New && !c.id_text.is_empty())
+    {
+        let listed: HashSet<&IdentityKey> = contact.identities.iter().map(|i| &i.key).collect();
+        let contact_rows: Vec<&FileRow> = rows
+            .iter()
+            .filter(|row| row.contact_id == contact.id_text)
+            .collect();
+        // Under the nameless contact's id, a phone written without `+` can
+        // read as another key (see [`row_identity`]); the rows must read the
+        // same.
+        let reads_the_same = |nameless: i64| {
+            let mut keys = HashSet::new();
+            for row in &contact_rows {
+                match row_identity(row, Some(nameless), &snapshot) {
+                    Ok(Some(identity)) => {
+                        keys.insert(identity.key);
+                    }
+                    Ok(None) => {}
+                    Err(_) => return false,
+                }
+            }
+            keys.len() == listed.len() && keys.iter().all(|key| listed.contains(key))
+        };
+        let nameless = contact.identities.iter().find_map(|identity| {
+            let &(_, Some(holder)) = snapshot.handles.get(&identity.key)? else {
+                return None;
+            };
+            let holds_only_listed = held
+                .get(&holder)
+                .is_some_and(|keys| keys.iter().all(|key| listed.contains(key)));
+            (is_nameless(holder) && holds_only_listed && reads_the_same(holder)).then_some(holder)
+        });
+        if let Some(nameless) = nameless {
+            nameless_of.insert(contact.id_text.as_str(), nameless);
+        }
+    }
+
+    let book = rows.iter().map(|row| {
+        [
+            nameless_of
+                .get(row.contact_id.as_str())
+                .map_or_else(|| row.contact_id.clone(), i64::to_string),
+            row.display_name.clone(),
+            row.groups.clone(),
+            row.service.clone(),
+            row.handle_type.clone(),
+            row.identity.clone(),
+        ]
+    });
+    write_book(book)
+}
+
+/// The `contact_id` cell of each data row of an address book file, read with
+/// the CSV reader the load uses.
+#[cfg(test)]
+pub(crate) fn contact_ids_of(text: &str) -> Vec<String> {
+    csv::Reader::from_reader(text.as_bytes())
+        .records()
+        .map(|record| {
+            record
+                .expect("an address book row")
+                .get(0)
+                .unwrap_or_default()
+                .to_string()
+        })
+        .collect()
+}
+
+/// The address book file of `rows`, each in the order of [`COLUMNS`], under
+/// the header, with every cell written as [`written_cell`] writes it.
+fn write_book(rows: impl IntoIterator<Item = [String; 6]>) -> Result<String> {
+    let mut writer = csv::Writer::from_writer(Vec::new());
+    writer.write_record(COLUMNS)?;
+    for row in rows {
+        let cells = row.each_ref().map(|cell| written_cell(cell));
+        writer.write_record(cells.iter().map(|cell| cell.as_bytes()))?;
+    }
+    let bytes = writer
+        .into_inner()
+        .map_err(|e| anyhow::anyhow!("finish the address book: {e}"))?;
+    String::from_utf8(bytes).context("the address book is not UTF-8")
+}
+
 /// Write a checked file. Nothing here refuses: [`plan`] already has.
 async fn apply(
     tx: &mut WriteTx<'_>,
@@ -970,6 +1118,18 @@ async fn apply(
     Ok(counts)
 }
 
+/// An address book [`export_csv`] wrote, with how many contacts and
+/// identities it holds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WrittenAddressBook {
+    /// The CSV text.
+    pub csv: String,
+    /// The distinct contacts the file holds.
+    pub contacts: u64,
+    /// The rows that carry an identity.
+    pub identities: u64,
+}
+
 /// One row of [`export_csv`]'s query: the contact's id and name, and one of
 /// its identities as service, handle type and key, absent for a contact
 /// with no identity.
@@ -990,7 +1150,7 @@ pub async fn export_csv(
     conn: &mut SqliteConnection,
     account_id: i64,
     only: Option<&HashSet<i64>>,
-) -> Result<String> {
+) -> Result<WrittenAddressBook> {
     let rows: Vec<ExportRow> = sqlx::query_as(
         "SELECT ct.id, trim(ct.preferred_name), h.service, h.handle_type, h.normalized
          FROM contacts ct
@@ -1021,32 +1181,36 @@ pub async fn export_csv(
         groups.entry(contact_id).or_default().push(name);
     }
 
-    let mut writer = csv::Writer::from_writer(Vec::new());
-    writer.write_record(COLUMNS)?;
-    for (id, name, service, handle_type, normalized) in rows {
-        if only.is_some_and(|only| !only.contains(&id)) {
-            continue;
-        }
-        let group_names = groups
-            .get(&id)
-            .map(|names| names.join(&GROUP_SEPARATOR.to_string()))
-            .unwrap_or_default();
-        let id = id.to_string();
-        let cells = [
-            id.as_str(),
-            name.as_str(),
-            group_names.as_str(),
-            service.as_deref().unwrap_or(""),
-            handle_type.as_deref().unwrap_or(""),
-            normalized.as_deref().unwrap_or(""),
-        ]
-        .map(written_cell);
-        writer.write_record(cells.iter().map(|cell| cell.as_bytes()))?;
-    }
-    let bytes = writer
-        .into_inner()
-        .map_err(|e| anyhow::anyhow!("finish the address book: {e}"))?;
-    String::from_utf8(bytes).context("the address book is not UTF-8")
+    let rows: Vec<ExportRow> = rows
+        .into_iter()
+        .filter(|(id, ..)| only.is_none_or(|only| only.contains(id)))
+        .collect();
+    let contacts: HashSet<i64> = rows.iter().map(|(id, ..)| *id).collect();
+    let identities = rows
+        .iter()
+        .filter(|(.., normalized)| normalized.is_some())
+        .count();
+    let book = rows
+        .into_iter()
+        .map(|(id, name, service, handle_type, normalized)| {
+            let group_names = groups
+                .get(&id)
+                .map(|names| names.join(&GROUP_SEPARATOR.to_string()))
+                .unwrap_or_default();
+            [
+                id.to_string(),
+                name,
+                group_names,
+                service.unwrap_or_default(),
+                handle_type.unwrap_or_default(),
+                normalized.unwrap_or_default(),
+            ]
+        });
+    Ok(WrittenAddressBook {
+        csv: write_book(book)?,
+        contacts: u64::try_from(contacts.len()).unwrap_or(u64::MAX),
+        identities: u64::try_from(identities).unwrap_or(u64::MAX),
+    })
 }
 
 #[cfg(test)]

@@ -1347,6 +1347,16 @@ fn every_api_error_answers_the_status_its_problem_type_declares() {
     }
 }
 
+/// A request refused because another request to the same upload holds its
+/// lock found the upload busy, not wrong: `409 state-conflict`, so a client
+/// sends it again rather than blaming its bytes.
+#[test]
+fn an_asset_upload_held_by_another_request_is_a_state_conflict() {
+    let error = ApiError::from(crate::assets_api::AssetError::Locked);
+    assert_eq!(error.problem_type(), Some(ProblemType::StateConflict));
+    assert_eq!(error.status(), StatusCode::CONFLICT);
+}
+
 #[test]
 fn every_api_error_displays_its_detail_sentence() {
     assert_eq!(

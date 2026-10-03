@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import Button from "../components/Button";
+import PlainButton from "../components/PlainButton";
 import { setBaseUrl } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { DEFAULT_TAURI_SERVER_URL, initialLoginServerUrl } from "../lib/authGuards";
@@ -413,17 +414,16 @@ export default function LoginScreen() {
                 <ExploreDemoAccountButton serverUrl={address} disabled={state !== "connected"} />
               ) : null}
               <div className="mt-4 text-center">
-                <button
-                  type="button"
+                <PlainButton
                   className={accentLink}
-                  onClick={() => {
+                  onPress={() => {
                     setDraft(address);
                     setTested(null);
                     setSettingsOpen(true);
                   }}
                 >
                   Change server address
-                </button>
+                </PlainButton>
               </div>
             </>
           )}

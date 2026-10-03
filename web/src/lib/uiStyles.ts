@@ -1,3 +1,5 @@
+import { Z_POPOVER } from "./zLayers";
+
 /** Shared theme-aware Tailwind class strings using the tokens from theme.css. */
 
 /**
@@ -29,7 +31,7 @@ export const pageCenter =
  * out of the form and over the "or" rule below it.
  */
 export const authCard =
-  "box-border flex min-h-[38rem] w-full max-w-xl flex-col bg-panel border border-border rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.15)] p-8";
+  "box-border flex min-h-[38rem] w-full max-w-xl flex-col bg-panel border border-border rounded-lg shadow-card p-8";
 
 /** Content region of an auth card: everything above the pinned action row. */
 export const authCardBody = "flex min-h-0 flex-1 flex-col";
@@ -66,4 +68,11 @@ export const accentLink =
   "text-[0.813rem] text-accent cursor-pointer bg-transparent border-none p-0 hover:underline";
 
 /** Floating panels / menus (advanced search, selects, date pickers, recent searches). */
-export const popupShadow = "shadow-[0_10px_32px_rgba(0,0,0,0.28),0_2px_8px_rgba(0,0,0,0.14)]";
+export const popupShadow = "shadow-popup";
+
+/** A menu item without its text colour. The focused one (arrow keys or hover) takes the hover background. */
+export const menuItemClass =
+  "box-border flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[0.813rem] outline-none data-focused:bg-hover data-disabled:cursor-not-allowed data-disabled:opacity-40";
+
+/** The popover a menu opens in, below its trigger. */
+export const menuPopoverClass = `min-w-[7.5rem] rounded-lg border border-border bg-popover py-1 outline-none ${popupShadow} ${Z_POPOVER}`;

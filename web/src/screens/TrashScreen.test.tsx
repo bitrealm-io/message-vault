@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -65,7 +65,7 @@ function fieldsFor(list: keyof typeof FIELD_WORDS) {
     help: "",
     example: `${word}:x`,
   }));
-  return { items, total: items.length, limit: 40, offset: 0 };
+  return items;
 }
 const getConversationMock = vi.mocked(getConversation);
 const restoreConversationMock = vi.mocked(restoreConversation);
@@ -509,5 +509,34 @@ describe("TrashScreen", () => {
     await userEvent.click(screen.getByRole("button", { name: "select Bob" }));
     await screen.findByText("Bob Kahn");
     expect(screen.queryByText("Restore refused.")).toBeNull();
+  });
+
+  describe("more trashed contacts than one page", () => {
+    const everyone = Array.from({ length: 150 }, (_, i) => contact(i + 1, `Person ${i + 1}`));
+
+    it("says when Trash holds more contacts than it lists", async () => {
+      const items = everyone.slice(0, 100);
+      listContactsMock.mockResolvedValue({ items, total: 150, limit: 100, offset: 0 });
+      renderAt("/trash");
+      await screen.findByText("Person 100");
+      expect(screen.queryByText(/150/)).not.toBeNull();
+    });
+
+    it("reaches the contacts past the first page", async () => {
+      listContactsMock.mockImplementation(async ({ limit = 40, offset = 0 }) => ({
+        items: everyone.slice(offset, offset + limit),
+        total: everyone.length,
+        limit,
+        offset,
+      }));
+      renderAt("/trash");
+      await screen.findByText("Person 1");
+      expect(screen.queryByText("Person 150")).toBeNull();
+      // Scrolled to the end of the contacts loaded: jsdom has no layout, so
+      // every height reads 0 and the list is at its end.
+      fireEvent.scroll(screen.getByRole("list", { name: "Contacts in Trash" }));
+      await screen.findByText("Person 150");
+      expect(screen.getByRole("button", { name: "Restore Person 150" })).not.toBeDisabled();
+    });
   });
 });

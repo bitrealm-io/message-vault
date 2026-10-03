@@ -1,0 +1,23 @@
+From: owner@example.com
+To: "Alice, Bob" <+15555550101@unknown.email>
+Subject: SMS with Alice, Bob
+Date: Fri, 01 Jan 2021 00:04:00 +0000
+Message-ID: <a5@sms-backup-plus.local>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mc-part"
+X-smssync-datatype: MMS
+X-smssync-type: 128
+X-smssync-address: +15555550101~+15555550102
+X-smssync-date: 1609459440000
+
+--mc-part
+Content-Type: text/plain; charset=utf-8
+
+A dot for the group
+--mc-part
+Content-Type: image/png
+Content-Disposition: attachment; filename="dot.png"
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==
+--mc-part--

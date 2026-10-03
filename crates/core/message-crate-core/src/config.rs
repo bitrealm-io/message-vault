@@ -26,8 +26,12 @@ pub enum OutputFormat {
     Json,
     /// Per-conversation common message as JSON Lines (header + one message per line).
     Jsonl,
-    /// Single SMS Backup & Restore XML backup (`smses.xml`).
+    /// One XML file holding every conversation, written by the merged archive
+    /// the caller supplies; the crate that owns that archive names the file.
     Xml,
+    /// SMS Backup+ mail: a folder of `.eml` files per conversation with the
+    /// `X-smssync-*` headers, holding only SMS and MMS.
+    SmsBackupPlus,
 }
 
 impl fmt::Display for OutputFormat {
@@ -38,14 +42,14 @@ impl fmt::Display for OutputFormat {
             Self::Mbox => "MBOX (per conversation)",
             Self::Json => "JSON (common message)",
             Self::Jsonl => "JSONL (common message lines)",
-            Self::Xml => "XML (SMS Backup & Restore)",
+            Self::Xml => "XML (one file)",
+            Self::SmsBackupPlus => "EML (SMS Backup+)",
         })
     }
 }
 
 impl OutputFormat {
-    /// Short format id (`json`, `jsonl`, `csv`, …) that the export form stores
-    /// and [`OutputFormat::parse`] reads back.
+    /// Short format id (`json`, `jsonl`, `csv`, …) that the export form stores.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Csv => "csv",
@@ -54,25 +58,7 @@ impl OutputFormat {
             Self::Json => "json",
             Self::Jsonl => "jsonl",
             Self::Xml => "xml",
-        }
-    }
-
-    /// Parse a format id. `ndjson` is accepted as JSON Lines; `sbr`/`smses` as XML.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error string when `s` is not a known format.
-    pub fn parse(s: &str) -> Result<Self, String> {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "csv" => Ok(Self::Csv),
-            "eml" => Ok(Self::Eml),
-            "mbox" => Ok(Self::Mbox),
-            "json" => Ok(Self::Json),
-            "jsonl" | "ndjson" => Ok(Self::Jsonl),
-            "xml" | "sbr" | "smses" => Ok(Self::Xml),
-            other => Err(format!(
-                "unknown output format '{other}' (expected csv, eml, mbox, json, jsonl, or xml)"
-            )),
+            Self::SmsBackupPlus => "sms-backup-plus",
         }
     }
 
@@ -107,7 +93,8 @@ pub struct ExporterConfig {
     /// nothing; the desktop app sets a sink and drives its progress bar
     /// from the events. Log lines are never read for counts.
     pub progress: Option<ProgressSink>,
-    /// Packaging format (`csv` / `eml` / `mbox` / `json` / `jsonl` / `xml`).
+    /// Packaging format (`csv` / `eml` / `mbox` / `json` / `jsonl` / `xml` /
+    /// `sms-backup-plus`).
     pub output_format: OutputFormat,
     /// Continue an interrupted export in the same output directory: previous
     /// output is kept, and conversations already written are skipped. Only
@@ -201,8 +188,14 @@ pub enum SourceConfig {
 }
 
 #[derive(Debug, Clone, Default)]
-/// Empty marker: convert an existing export folder to another output format.
-pub struct FormatConfig {}
+/// Convert an existing export folder to another output format.
+pub struct FormatConfig {
+    /// When the Export Run this conversion is part of started. Export pulls
+    /// JSON Lines from the server and then converts them, so its run starts
+    /// well before the conversion does. `None` for Settings → Convert, which
+    /// is a run of its own.
+    pub run_started: Option<chrono::DateTime<chrono::Utc>>,
+}
 
 #[derive(Debug, Clone)]
 /// GO SMS Pro extras: owner phone numbers used to mark outgoing messages.
@@ -315,38 +308,8 @@ mod tests {
             progress: None,
             output_format: OutputFormat::Json,
             resume: false,
-            source: SourceConfig::Format(FormatConfig {}),
+            source: SourceConfig::Format(FormatConfig::default()),
         }
-    }
-
-    #[test]
-    fn parse_accepts_every_format_id_and_its_aliases() {
-        assert_eq!(OutputFormat::parse("csv"), Ok(OutputFormat::Csv));
-        assert_eq!(OutputFormat::parse("eml"), Ok(OutputFormat::Eml));
-        assert_eq!(OutputFormat::parse("mbox"), Ok(OutputFormat::Mbox));
-        assert_eq!(OutputFormat::parse("json"), Ok(OutputFormat::Json));
-        assert_eq!(OutputFormat::parse("jsonl"), Ok(OutputFormat::Jsonl));
-        assert_eq!(OutputFormat::parse("ndjson"), Ok(OutputFormat::Jsonl));
-        assert_eq!(OutputFormat::parse("xml"), Ok(OutputFormat::Xml));
-        assert_eq!(OutputFormat::parse("sbr"), Ok(OutputFormat::Xml));
-        assert_eq!(OutputFormat::parse("smses"), Ok(OutputFormat::Xml));
-    }
-
-    #[test]
-    fn parse_ignores_case_and_surrounding_whitespace() {
-        assert_eq!(OutputFormat::parse("  JSONL\n"), Ok(OutputFormat::Jsonl));
-        assert_eq!(OutputFormat::parse("Csv"), Ok(OutputFormat::Csv));
-    }
-
-    #[test]
-    fn parse_refuses_an_unknown_format_and_lists_the_known_ones() {
-        assert_eq!(
-            OutputFormat::parse("pdf"),
-            Err(
-                "unknown output format 'pdf' (expected csv, eml, mbox, json, jsonl, or xml)"
-                    .to_string()
-            )
-        );
     }
 
     #[test]

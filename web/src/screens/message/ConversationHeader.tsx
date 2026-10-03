@@ -1,5 +1,7 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
+import { ToggleButton } from "react-aria-components";
 import { useNavigate } from "react-router-dom";
+import PlainButton from "../../components/PlainButton";
 import PopupMenu, { type PopupMenuItem } from "../../components/PopupMenu";
 import { apiErrorMessage } from "../../lib/apiErrorMessage";
 import { formatMonthYear } from "../../lib/formatDate";
@@ -7,12 +9,11 @@ import { conversationServiceLabel } from "../../lib/serviceLabel";
 import { useTimeZone } from "../../lib/timeZone";
 import { useTrashConversation } from "../../lib/trash";
 import type { Conversation } from "../../lib/types";
-import { Z_POPOVER } from "../../lib/zLayers";
 import ContactGroupFromConversation from "./ContactGroupFromConversation";
 import { useContactGroupMembers } from "./contactGroupMembers";
 
 const TOOL_CLASS =
-  "cursor-pointer rounded-md border border-border bg-panel px-2.5 py-[0.2rem] text-[0.813rem] text-text hover:bg-hover";
+  "cursor-pointer rounded-md border border-border bg-panel px-2.5 py-[0.2rem] text-[0.813rem] text-text outline-none hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent";
 
 /** The menu rows for the people in the conversation; one with a contact opens it. */
 function participantItems(
@@ -28,6 +29,9 @@ function participantItems(
     const contactId = p.contact_id;
     return {
       label,
+      // A person may be named like a fixed row ("Sources"); the menu keys
+      // rows by id, so a person's row has one no fixed row can share.
+      id: `participant:${label}`,
       disabled: !contactId,
       onSelect: () => {
         if (contactId) onOpenContact?.(contactId);
@@ -74,11 +78,7 @@ export default function ConversationHeader({
   const navigate = useNavigate();
   const trashConversation = useTrashConversation();
   const groupMembers = useContactGroupMembers(conversation);
-  const [jumpOpen, setJumpOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
   const [groupDialogOpen, setGroupDialogOpen] = useState(false);
-  const jumpRef = useRef<HTMLButtonElement>(null);
-  const moreRef = useRef<HTMLButtonElement>(null);
 
   // The conversation just left the list this thread was opened from, so go
   // back to it rather than leave the person on a thread that has quietly gone.
@@ -130,51 +130,36 @@ export default function ConversationHeader({
           ) : null}
           <span>{conversation.message_count.toLocaleString()} messages</span>
         </div>
-        <div className="relative ml-auto flex gap-1.5">
-          <button
-            type="button"
-            aria-pressed={findOpen}
-            onClick={onToggleFind}
-            className={`${TOOL_CLASS} ${findOpen ? "border-accent" : ""}`}
+        <div className="ml-auto flex gap-1.5">
+          <ToggleButton
+            isSelected={findOpen}
+            onChange={onToggleFind}
+            className={`${TOOL_CLASS} data-[selected]:border-accent`}
           >
             Find
-          </button>
-          <button
-            type="button"
-            ref={jumpRef}
-            aria-haspopup="menu"
-            aria-expanded={jumpOpen}
-            onClick={() => setJumpOpen((o) => !o)}
-            className={`${TOOL_CLASS} ${jumpOpen ? "border-accent" : ""}`}
-          >
-            Jump to ▾
-          </button>
-          <button
-            type="button"
-            ref={moreRef}
-            aria-haspopup="menu"
-            aria-expanded={moreOpen}
-            aria-label="More for this conversation"
-            onClick={() => setMoreOpen((o) => !o)}
-            className={`${TOOL_CLASS} ${moreOpen ? "border-accent" : ""}`}
-          >
-            ⋯
-          </button>
+          </ToggleButton>
           <PopupMenu
-            open={jumpOpen}
-            onClose={() => setJumpOpen(false)}
-            triggerRef={jumpRef}
+            trigger={
+              <PlainButton className={`${TOOL_CLASS} aria-expanded:border-accent`}>
+                Jump to ▾
+              </PlainButton>
+            }
             label="Jump to"
             items={jumpItems}
-            className={`absolute top-full right-9 mt-1 max-h-[60vh] overflow-y-auto ${Z_POPOVER}`}
+            className="max-h-[60vh] overflow-y-auto"
           />
           <PopupMenu
-            open={moreOpen}
-            onClose={() => setMoreOpen(false)}
-            triggerRef={moreRef}
+            trigger={
+              <PlainButton
+                aria-label="More for this conversation"
+                className={`${TOOL_CLASS} aria-expanded:border-accent`}
+              >
+                ⋯
+              </PlainButton>
+            }
             label="More for this conversation"
             items={moreItems}
-            className={`absolute top-full right-0 mt-1 max-h-[60vh] min-w-[12rem] overflow-y-auto ${Z_POPOVER}`}
+            className="max-h-[60vh] min-w-[12rem] overflow-y-auto"
           />
         </div>
       </div>

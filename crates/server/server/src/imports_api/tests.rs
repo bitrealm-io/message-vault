@@ -1734,8 +1734,9 @@ async fn batches_path(state: &crate::server::AppState, token: &str, source: &str
     format!("/v1/imports/{}/batches", created["id"].as_i64().unwrap())
 }
 
+/// A schema-3 header was read; its version breaks a rule, so it is 422.
 #[tokio::test]
-async fn http_import_of_a_schema_3_file_is_a_400_naming_both_versions() {
+async fn http_import_of_a_schema_3_file_is_a_422_naming_both_versions() {
     let (state, _fixture, token) = importer().await;
     let path = batches_path(&state, &token, "whatsapp").await;
     let body = concat!(
@@ -1745,19 +1746,26 @@ async fn http_import_of_a_schema_3_file_is_a_400_naming_both_versions() {
     );
     let (status, text) =
         crate::test_support::post_raw(&state, &path, &token, "application/jsonl", body).await;
-    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST, "{text}");
-    let err: serde_json::Value = serde_json::from_str(&text).unwrap();
-    assert_eq!(
-        err["detail"],
-        "This file is schema version 3; Message Crate reads version 4 (line 1 of the batch)."
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
     );
-    assert_eq!(err["line"], 1, "{text}");
+    assert_eq!(
+        problem.errors.unwrap(),
+        vec![
+            "This file is schema version 3; Message Crate reads version 4 (line 1 of the batch)."
+                .to_string()
+        ]
+    );
+    assert_eq!(problem.line, Some(1), "{text}");
 }
 
 /// A batch is a request body, not a file the sender has: Upload packs it
 /// from parts of one or more staged files. The failure names the line of the
 /// batch, in the sentence and as `line`, so the client can turn it into the
-/// line of the file it came from.
+/// line of the file it came from. Only a line that is not JSON at all cannot
+/// be read, so only it is 400.
 #[tokio::test]
 async fn http_import_of_a_line_that_is_not_json_is_a_400_naming_the_line_of_the_batch() {
     let (state, _fixture, token) = importer().await;
@@ -1782,6 +1790,185 @@ async fn http_import_of_a_line_that_is_not_json_is_a_400_naming_the_line_of_the_
         message.starts_with("Could not read line 3 of the batch:"),
         "{message}"
     );
+}
+
+/// A line that is not UTF-8 cannot be read as text, let alone as JSON, so
+/// it is 400 naming the line, not a 500.
+#[tokio::test]
+async fn http_import_of_a_line_that_is_not_utf8_is_a_400_naming_the_line() {
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+    let mut body = replace_run_batch("+15555550151", &["g-1"]).into_bytes();
+    body.extend_from_slice(b"{\"guid\":\"\xff\xfe\"}\n");
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &token, "application/jsonl", body).await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::MalformedBody,
+    );
+    let message = problem.detail.unwrap();
+    assert!(
+        message.starts_with("Could not read line 3 of the batch:"),
+        "{message}"
+    );
+}
+
+/// A line that breaks a rule is named by its line in the batch, blank lines
+/// counted, in the sentence and as `line`, as a line that is not JSON is: the
+/// client maps `line` back to the staged file and line it packed it from.
+#[tokio::test]
+async fn a_refusal_after_a_blank_line_names_the_line_of_the_batch() {
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+    let header = replace_run_batch("+15555550151", &[]);
+    let body = format!("{header}\n{{\"guid\":7}}\n");
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &token, "application/jsonl", body).await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    assert_eq!(problem.line, Some(3), "{text}");
+    assert!(
+        problem.errors.unwrap()[0].starts_with("Line 3 of the batch:"),
+        "{text}"
+    );
+}
+
+/// C1-7: a header that is JSON with the wrong fields was read and broke a
+/// rule, as the same mistake in a JSON body does, so it answers 422.
+#[tokio::test]
+async fn a_batch_whose_header_has_the_wrong_fields_is_a_422_naming_the_line() {
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+    let body = concat!(
+        r#"{"schema_version":4,"export":{"source":"whatsapp"},"conversation":{"chat_identifier":7}}"#,
+        "\n",
+    );
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &token, "application/jsonl", body).await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    assert!(
+        problem.errors.unwrap()[0]
+            .starts_with("Line 1 of the batch: the conversation header is not valid"),
+        "{text}"
+    );
+}
+
+/// C1-7: an empty batch was read; it holds no conversation, which breaks a
+/// rule, so it answers 422.
+#[tokio::test]
+async fn an_empty_batch_is_a_422() {
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &token, "application/jsonl", "").await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+}
+
+/// One conversation whose single message has one attachment at `path`,
+/// stating `sha` when there is one.
+fn one_attachment_batch(path: &str, sha: Option<&str>) -> String {
+    let digest = sha.map_or("null".to_string(), |s| format!(r#""{s}""#));
+    format!(
+        concat!(
+            r#"{{"schema_version":4,"export":{{"source":"whatsapp","tool":"t","tool_version":"0","owner_handle":"+15555550150","owner_display_name":"Me"}},"#,
+            r#""conversation":{{"chat_identifier":"+15555550151","conversation_type":"individual","group_title":null,"#,
+            r#""participants":[{{"handle":"+15555550151","display_name":null}}],"#,
+            r#""stats":{{"message_count":1,"attachment_count":1,"first_timestamp_unix_ms":1700000000000,"last_timestamp_unix_ms":1700000000000}}}}}}"#,
+            "\n",
+            r#"{{"guid":"g-att","timestamp_unix_ms":1700000000000,"direction":"incoming","service":"whatsapp","message_kind":"sms","sender_handle":"+15555550151","sender_display_name":null,"subject":null,"text":"x","#,
+            r#""attachments":[{{"path":"{path}","original_name":"a.bin","mime_type":"application/octet-stream","digest_sha256":{digest},"is_sticker":false,"transcription":null,"sticker_effect":null}}],"imessage":null,"source":null}}"#,
+            "\n",
+        ),
+        path = path,
+        digest = digest,
+    )
+}
+
+/// S1-11: an attachment path that leaves the folder is the sender's to fix,
+/// so it answers 422 naming the path, not 500.
+#[tokio::test]
+async fn a_batch_with_an_unsafe_attachment_path_is_a_422_naming_the_path() {
+    let (state, _fixture, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+    let body = one_attachment_batch("../secret.txt", None);
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &token, "application/jsonl", body).await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    // Line 1 is the header; the message with the attachment is line 2.
+    assert_eq!(problem.line, Some(2), "{text}");
+    assert!(
+        problem.errors.unwrap()[0].contains("../secret.txt"),
+        "{text}"
+    );
+}
+
+/// S1-11: a file whose bytes do not hash to the SHA-256 the batch states is
+/// the sender's to fix, so it answers 422 naming the file, not 500.
+#[tokio::test]
+async fn a_batch_whose_file_does_not_match_its_sha256_is_a_422_naming_the_file() {
+    let (fixture, account) = fixture_with_account().await;
+    let state = fixture.state.clone();
+    let path = batches_path(&state, &account.token, "whatsapp").await;
+    let assets_dir = state
+        .cfg
+        .paths
+        .assets_dir_for_account(account.account_id, "whatsapp");
+    fs::create_dir_all(&assets_dir).unwrap();
+    fs::write(assets_dir.join("photo.bin"), b"the bytes on disk").unwrap();
+    let stated = assets_api::sha256_hex(b"the bytes the export saw");
+    let body = one_attachment_batch("photo.bin", Some(&stated));
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &account.token, "application/jsonl", body)
+            .await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    assert_eq!(problem.line, Some(2), "{text}");
+    assert!(problem.errors.unwrap()[0].contains("photo.bin"), "{text}");
+}
+
+/// A stated SHA-256 that is not 64 hex digits, on a file that is there, is
+/// the sender's to fix too: 422 naming the line and the file.
+#[tokio::test]
+async fn a_batch_whose_stated_sha256_is_not_one_is_a_422_naming_the_file() {
+    let (fixture, account) = fixture_with_account().await;
+    let state = fixture.state.clone();
+    let path = batches_path(&state, &account.token, "whatsapp").await;
+    let assets_dir = state
+        .cfg
+        .paths
+        .assets_dir_for_account(account.account_id, "whatsapp");
+    fs::create_dir_all(&assets_dir).unwrap();
+    fs::write(assets_dir.join("photo.bin"), b"the bytes on disk").unwrap();
+    let body = one_attachment_batch("photo.bin", Some("not-a-fingerprint"));
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &account.token, "application/jsonl", body)
+            .await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    assert_eq!(problem.line, Some(2), "{text}");
+    assert!(problem.errors.unwrap()[0].contains("photo.bin"), "{text}");
 }
 
 /// A batch is refused before its body is read when the run is over: the
@@ -3787,4 +3974,39 @@ async fn the_batch_answer_counts_the_contacts_it_created() {
     let answer: serde_json::Value = serde_json::from_str(&text).unwrap();
     assert_eq!(answer["contacts_created"], 1, "{text}");
     assert_eq!(answer["participants"], 1, "{text}");
+}
+
+/// The SQL form of an Import Run's Contact Group name is the name the run's
+/// group is given, before and after the run finishes.
+#[tokio::test]
+async fn the_sql_form_of_an_import_groups_name_is_the_name_the_group_is_given() {
+    let (fixture, account) = fixture_with_account().await;
+    let (_, created): (String, serde_json::Value) = post_created_json(
+        &fixture.state,
+        "/v1/imports",
+        &account.token,
+        serde_json::json!({ "source": "imessage" }),
+    )
+    .await;
+    let import_id = created["id"].as_i64().expect("created session has an id");
+    let mut conn = fixture.state.db.acquire().await.unwrap();
+    for finished_at in [None, Some("2031-02-03T04:05:06Z")] {
+        sqlx::query("UPDATE imports SET finished_at = $1 WHERE id = $2")
+            .bind(finished_at)
+            .bind(import_id)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        let row = crate::db::imports::get_owned_import(&mut conn, account.account_id, import_id)
+            .await
+            .unwrap();
+        let from_sql: String = sqlx::query_scalar(&format!(
+            "SELECT {IMPORT_CONTACT_GROUP_NAME_SQL} FROM imports i WHERE i.id = $1"
+        ))
+        .bind(import_id)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+        assert_eq!(from_sql, import_contact_group_name(&row), "{finished_at:?}");
+    }
 }

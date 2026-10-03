@@ -33,10 +33,9 @@ export const keys = {
      * The trashed contacts the Trash screen lists.
      *
      * A builder of its own rather than `list("trashed:yes …")` because the
-     * contact list screen holds that entry as TanStack Query's paged
-     * `InfiniteData` and the Trash screen holds a single page, and two shapes
-     * must not share a key. It still sits under the `lists` prefix, with
-     * everything else that lists contacts.
+     * Trash screen pages its list in pages of its own size, and two lists
+     * paged differently must not share an entry. It still sits under the
+     * `lists` prefix, with everything else that lists contacts.
      */
     trashed: (q: string) => ["contacts", "list", "trashed", q] as const,
     /**
@@ -113,6 +112,13 @@ export const keys = {
     running: ["imports", "running"] as const,
     /** The contacts one Import Run created or changed, as a paged list. */
     contacts: (id: number) => ["imports", String(id), "contacts"] as const,
+  },
+  /**
+   * Pages of an Audit Trail: every account's (`"all"`, the owner's), the
+   * logged-in account's own (`"own"`), or one account the owner has opened.
+   */
+  auditTrail: {
+    page: (whose: number | "all" | "own", page: number) => ["audit-trail", whose, page] as const,
   },
   serverSettings: { all: ["server-settings"] as const },
   /** Where the Demo Account stands, from `GET /v1/server/demo-account`. */

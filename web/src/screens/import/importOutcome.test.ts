@@ -11,7 +11,6 @@ function report(overrides: Partial<PushFinishedReport> = {}): PushFinishedReport
   return {
     ok: true,
     cancelled: false,
-    messages: 100,
     messages_attempted: 100,
     messages_inserted: 100,
     messages_deduped: 0,

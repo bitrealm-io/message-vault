@@ -1,14 +1,15 @@
 /** Initials and a stable avatar color for contact list chips. */
 
-const AVATAR_COLORS = [
-  "#c45c6a",
-  "#7c6bc4",
-  "#3d8b7a",
-  "#b87a3d",
-  "#4a7eb8",
-  "#9a5fa0",
-  "#5a8f4a",
-  "#b85c8a",
+/** The avatar palette, one class per `--avatar-N` token in `theme.css`. */
+export const AVATAR_COLOR_CLASSES = [
+  "bg-avatar-1",
+  "bg-avatar-2",
+  "bg-avatar-3",
+  "bg-avatar-4",
+  "bg-avatar-5",
+  "bg-avatar-6",
+  "bg-avatar-7",
+  "bg-avatar-8",
 ] as const;
 
 /** First letter of a name, or empty when there is no usable character. */
@@ -80,10 +81,11 @@ function normalizeName(name: string | null | undefined): string {
 }
 
 /**
- * Pick a palette color from the display name and preferred handle.
- * The same person keeps the same color even if their contact id changes.
+ * Pick a palette color, as its background class, from the display name and
+ * preferred handle. The same person keeps the same color even if their
+ * contact id changes.
  */
-export function contactAvatarColor(input: {
+export function contactAvatarClass(input: {
   displayName?: string | null;
   preferredName?: string | null;
   preferredHandle?: string | null;
@@ -96,6 +98,7 @@ export function contactAvatarColor(input: {
     normalizeName([input.firstName, input.lastName].filter(Boolean).join(" "));
   const handle = normalizeHandle(input.preferredHandle);
   const seed = `${name}\0${handle}`;
-  const color = AVATAR_COLORS[hashString(seed) % AVATAR_COLORS.length];
-  return color ?? AVATAR_COLORS[0] ?? "#c45c6a";
+  return (
+    AVATAR_COLOR_CLASSES[hashString(seed) % AVATAR_COLOR_CLASSES.length] ?? AVATAR_COLOR_CLASSES[0]
+  );
 }

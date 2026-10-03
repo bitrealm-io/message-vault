@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { Label, Radio, RadioGroup } from "react-aria-components";
 import Button from "../../components/Button";
 import { ApiError } from "../../lib/api";
 import { useRouteCache } from "../../lib/routeQuery";
@@ -95,26 +96,42 @@ export function AddressBookSection() {
         Export on the Contacts screen writes your contacts as a CSV file. Edit it in a spreadsheet,
         then load it here. Contacts the file does not mention stay as they are.
       </p>
-      <fieldset className="mb-3 flex flex-col gap-2 border-0 p-0">
-        <legend className="mb-1 p-0 text-[0.813rem] font-medium">How to load it</legend>
+      <RadioGroup
+        value={mode}
+        onChange={(value) => {
+          const next = MODES.find((option) => option.value === value);
+          if (next) setMode(next.value);
+        }}
+        isDisabled={busy}
+        className="mb-3 flex flex-col gap-2"
+      >
+        <Label className="mb-1 text-[0.813rem] font-medium">How to load it</Label>
         {MODES.map((option) => (
-          <label key={option.value} className="flex cursor-pointer items-start gap-2">
-            <input
-              type="radio"
-              name="address-book-mode"
-              className="mt-1"
-              value={option.value}
-              checked={mode === option.value}
-              disabled={busy}
-              onChange={() => setMode(option.value)}
-            />
-            <span className="text-[0.813rem]">
-              <span className="font-medium">{option.label}</span>
-              <span className="block text-muted">{option.detail}</span>
-            </span>
-          </label>
+          <Radio
+            key={option.value}
+            value={option.value}
+            className="flex cursor-pointer items-start gap-2 data-disabled:cursor-not-allowed data-disabled:opacity-60"
+          >
+            {({ isSelected, isFocusVisible }) => (
+              <>
+                {/* React Aria hides the input, so this circle is the radio, focus ring included. */}
+                <span
+                  aria-hidden
+                  className={`mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-full border ${
+                    isSelected ? "border-accent" : "border-border"
+                  } ${isFocusVisible ? "outline-2 outline-offset-1 outline-accent outline-solid" : ""}`}
+                >
+                  {isSelected ? <span className="size-2 rounded-full bg-accent" /> : null}
+                </span>
+                <span className="text-[0.813rem]">
+                  <span className="font-medium">{option.label}</span>
+                  <span className="block text-muted">{option.detail}</span>
+                </span>
+              </>
+            )}
+          </Radio>
         ))}
-      </fieldset>
+      </RadioGroup>
       <input
         ref={fileRef}
         type="file"

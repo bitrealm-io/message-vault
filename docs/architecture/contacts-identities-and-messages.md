@@ -284,9 +284,13 @@ to leave it out again.
 list the holder's own address among a group's members. The exporter leaves out
 the addresses the backup names as the owner's, and the server leaves out any
 participant whose address is one of the account's identities, for every source.
-Why: the two know different addresses. The backup may list the holder under an
-old number the exporter cannot know is theirs. Not built on the server yet:
-[#1093](https://github.com/messagecrate/message-crate/issues/1093).
+The server matches by normalized address and type, whatever service the
+identity is linked under, so a Text Message identity also drops the number from
+a WhatsApp group. It loads the identities once per run and makes no handle,
+contact or participant row for a match (`imports_api/staging.rs`,
+`insert_participant`); an import never adds an identity. Why: the two know
+different addresses. The backup may list the holder under an old number the
+exporter cannot know is theirs.
 
 **A conversation with yourself has no participants.** Notes the holder sends to
 their own address are a conversation whose chat handle is one of the holder's

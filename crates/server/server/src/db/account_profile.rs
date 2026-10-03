@@ -47,6 +47,24 @@ async fn account_handle_addresses(
     .await?)
 }
 
+/// The account's identities as `(normalized address, handle type)`, whatever
+/// service each is linked under: one number is one person on every service,
+/// so a Text Message identity also names the number on WhatsApp.
+pub async fn account_identity_keys(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+) -> Result<std::collections::HashSet<(String, String)>> {
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT DISTINCT h.normalized, h.handle_type FROM handles h
+         JOIN account_handles ah ON ah.handle_id = h.id
+         WHERE ah.account_id = $1",
+    )
+    .bind(account_id)
+    .fetch_all(&mut *conn)
+    .await?;
+    Ok(rows.into_iter().collect())
+}
+
 /// Ensure an `accounts` row exists at `account_id`, with the id as its stub
 /// username. The demo reset and the tests use it to place a row at a chosen
 /// id, and the import and export paths call it before they write for an

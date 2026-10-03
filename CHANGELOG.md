@@ -237,6 +237,11 @@ released versions carry their date on the heading.
 
 #### Importing
 
+- 2026-10-03 **You are no longer listed among the people in your own group
+  conversations.** When a backup named one of your own phone numbers or email
+  addresses among a group's members, an import added you to the group as
+  another person, with a contact of your own. Any address on your account now
+  stays out, on every service, even one the backup did not know was yours.
 - 2026-10-03 **Group texts from an SMS Backup+ archive are group
   conversations.** Every group text used to be filed as a conversation with
   one of its members alone. A group text you sent and the replies to it now

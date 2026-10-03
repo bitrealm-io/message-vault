@@ -20,6 +20,7 @@ use sqlx::{Row, SqlitePool};
 use crate::config::Config;
 use crate::db::account_profile;
 use crate::db::address_book::{self, LoadCounts, LoadMode};
+use crate::db::audit_trail::AuditActor;
 use crate::db::demo_account_build;
 use crate::db::engine;
 use crate::db::maintenance;
@@ -397,7 +398,7 @@ async fn begin_demo_build(db: &SqlitePool) -> Result<()> {
 ///
 /// Returns an error when the account or the record cannot be removed.
 pub async fn remove_failed_demo_build(cfg: &Config, db: &SqlitePool) -> Result<()> {
-    wipe_demo_account(cfg, db, DEMO_ACCOUNT_ID).await?;
+    wipe_demo_account(cfg, db, DEMO_ACCOUNT_ID, AuditActor::Server).await?;
     let mut conn = db.acquire().await?;
     demo_account_build::end(&mut conn).await
 }
@@ -417,7 +418,7 @@ pub async fn remove_part_built_demo_account(cfg: &Config, db: &SqlitePool) -> Re
         demo_account_build::is_unfinished(&mut conn).await?
     };
     if unfinished {
-        wipe_demo_account(cfg, db, DEMO_ACCOUNT_ID).await?;
+        wipe_demo_account(cfg, db, DEMO_ACCOUNT_ID, AuditActor::Server).await?;
     }
     Ok(unfinished)
 }
@@ -480,7 +481,7 @@ pub async fn build_demo_account(
             .await
             .context("the demo bundle generator stopped")?
             .context("generate demo bundle (demo-seed)")?;
-        build_from_bundle(&cfg, &db, &bundle).await
+        build_from_bundle(&cfg, &db, &bundle, AuditActor::Owner).await
     }
     .await;
     whole_demo_account_or_none(&cfg, &db, outcome).await
@@ -496,7 +497,7 @@ where
         let work = tempfile::tempdir().context("create temporary demo bundle directory")?;
         let bundle = work.path().join("bundle");
         generate(&bundle).context("generate demo bundle (demo-seed)")?;
-        build_from_bundle(cfg, db, &bundle).await
+        build_from_bundle(cfg, db, &bundle, AuditActor::Server).await
     }
     .await;
     whole_demo_account_or_none(cfg, db, outcome).await
@@ -528,9 +529,10 @@ async fn build_from_bundle(
     cfg: &Config,
     db: &SqlitePool,
     bundle: &Path,
+    actor: AuditActor,
 ) -> Result<ResetPreparedStats> {
     let prepared = validate_prepared_bundle(bundle)?;
-    rebuild_demo_account(cfg, db, &prepared, DEMO_ACCOUNT_ID).await
+    rebuild_demo_account(cfg, db, &prepared, DEMO_ACCOUNT_ID, actor).await
 }
 
 /// Build the new state in a prepared database next to the active one, prove
@@ -574,7 +576,14 @@ async fn reset_prepared_bundle_with(
     temporary_cfg.paths.db = prepared_db.clone();
     temporary_cfg.paths.data_dir = data_work.path().to_path_buf();
     let opened = OpenDb::open(temporary_cfg.clone()).await?;
-    let stats = match rebuild_demo_account(&temporary_cfg, &opened.db, &prepared, account_id).await
+    let stats = match rebuild_demo_account(
+        &temporary_cfg,
+        &opened.db,
+        &prepared,
+        account_id,
+        AuditActor::CommandLine,
+    )
+    .await
     {
         Ok(stats) => after_rebuild(&opened.db).await.map(|()| stats),
         Err(error) => Err(error),
@@ -639,9 +648,10 @@ async fn rebuild_demo_account(
     db: &SqlitePool,
     prepared: &PreparedBundle,
     account_id: i64,
+    actor: AuditActor,
 ) -> Result<ResetPreparedStats> {
     begin_demo_build(db).await?;
-    wipe_demo_account(cfg, db, account_id).await?;
+    wipe_demo_account(cfg, db, account_id, actor).await?;
     print_reset_header(account_id, prepared, &cfg.paths.db.display());
     seed_demo_account(db, account_id, &prepared.seed).await?;
     let import = import_demo_sources(cfg, db, prepared, account_id).await?;
@@ -1539,9 +1549,16 @@ async fn seed_demo_account_on_conn(
     Ok(())
 }
 
-/// Delete the demo account's rows (child rows follow via CASCADE) and
-/// on-disk attachments. Leaves the database and other accounts intact.
-async fn wipe_demo_account(cfg: &Config, db: &SqlitePool, account_id: i64) -> Result<()> {
+/// Delete the demo account, `actor` acting, and its on-disk attachments.
+/// Leaves the database and other accounts intact. Its data rows follow via
+/// CASCADE; its Audit Trail stays, unlinked, with an `account_deleted` entry,
+/// as any account's does (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`).
+async fn wipe_demo_account(
+    cfg: &Config,
+    db: &SqlitePool,
+    account_id: i64,
+    actor: AuditActor,
+) -> Result<()> {
     println!(
         "Reset demo — clearing account data in {}",
         cfg.paths.db.display()
@@ -1550,19 +1567,15 @@ async fn wipe_demo_account(cfg: &Config, db: &SqlitePool, account_id: i64) -> Re
         .acquire()
         .await
         .with_context(|| format!("open {} for demo account wipe", cfg.paths.db.display()))?;
-    let deleted = sqlx::query("DELETE FROM accounts WHERE id = $1")
-        .bind(account_id)
-        .execute(&mut *conn)
-        .await
-        .with_context(|| format!("delete account {account_id}"))?
-        .rows_affected();
-    println!("  sql:      demo account rows removed (accounts matched={deleted})");
+    let deleted = account_profile::delete_account(&mut conn, account_id, actor).await?;
+    println!("  sql:      demo account rows removed (account existed={deleted})");
     drop(conn);
 
     let account_root = cfg.paths.data_dir.join(account_id.to_string());
     remove_tree_if_exists(&account_root)?;
     Ok(())
 }
+
 /// Remove a folder tree; a missing folder is not an error.
 fn remove_tree_if_exists(path: &Path) -> Result<()> {
     if path.exists() {

@@ -61,6 +61,9 @@ pub struct AuthIdentity {
     pub account_id: i64,
     /// What this credential is allowed to do.
     pub capability: AuthCapability,
+    /// The credential as the Audit Trail records it on a run it starts: a
+    /// Session and its app, or an API token's label and hint.
+    pub credential: crate::db::audit_trail::CredentialUsed,
 }
 
 impl AuthIdentity {
@@ -1251,7 +1254,7 @@ const MAX_APP_BUILD_LEN: usize = 64;
 /// The app a request says it comes from. `None` unless both headers are
 /// present and well formed: curl, Swagger UI and a script send neither, and
 /// are served without anything being recorded.
-fn connecting_app(headers: &HeaderMap) -> Option<session_tokens::ConnectingApp> {
+pub(crate) fn connecting_app(headers: &HeaderMap) -> Option<session_tokens::ConnectingApp> {
     let kind = session_tokens::AppKind::parse(headers.get(APP_HEADER)?.to_str().ok()?)?;
     let build = headers.get(APP_VERSION_HEADER)?.to_str().ok()?.trim();
     let well_formed = !build.is_empty()
@@ -1271,6 +1274,8 @@ enum Credential {
     Session,
     ApiToken(Permissions),
 }
+
+use crate::db::audit_trail::CredentialUsed;
 
 /// Resolve a Bearer credential on an existing connection.
 ///
@@ -1302,14 +1307,22 @@ pub async fn resolve_auth_on_conn(
                 );
             }
         }
-        Some((session.account_id, Credential::Session))
+        // The app this request named, or the one the session last recorded.
+        let used = CredentialUsed::Session(app.cloned().or(session.app));
+        Some((session.account_id, Credential::Session, used))
     } else {
         api_tokens::lookup_account_for_api_token(&mut *conn, token)
             .await?
-            .map(|tok| (tok.account_id, Credential::ApiToken(tok.permissions)))
+            .map(|tok| {
+                let used = CredentialUsed::ApiToken {
+                    label: tok.label,
+                    hint: tok.token_hint,
+                };
+                (tok.account_id, Credential::ApiToken(tok.permissions), used)
+            })
     };
 
-    let Some((account_id, credential)) = resolved else {
+    let Some((account_id, credential, used)) = resolved else {
         return Err(ApiError::AuthenticationRequired("invalid API token".into()));
     };
 
@@ -1338,6 +1351,7 @@ pub async fn resolve_auth_on_conn(
     Ok(AuthIdentity {
         account_id,
         capability,
+        credential: used,
     })
 }
 

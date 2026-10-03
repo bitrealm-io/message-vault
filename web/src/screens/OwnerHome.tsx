@@ -12,24 +12,25 @@ import { NAV_LEADING_ROW_CLASS } from "../components/navSectionLayout";
 import { useAuth } from "../lib/auth";
 import { parseSelectKey } from "../lib/selectKey";
 import { OwnerAccountsPanel } from "./owner/OwnerAccountsPanel";
+import { OwnerAuditTrailPanel } from "./owner/OwnerAuditTrailPanel";
 import { OwnerDashboardPanel } from "./owner/OwnerDashboardPanel";
 import { ServerSettingsPanel } from "./owner/ServerSettingsPanel";
 import SettingsScreen from "./SettingsScreen";
 
 /** What the side panel lists, in its order. */
-const SECTIONS = ["dashboard", "settings", "accounts", "activity", "logs"] as const;
+const SECTIONS = ["dashboard", "settings", "accounts", "audit-trail", "logs"] as const;
 
 const SECTION_LABELS: Record<(typeof SECTIONS)[number], string> = {
   dashboard: "Dashboard",
   // Not "Settings": that is the screen an account is managed from, here and in the app.
   settings: "Server Settings",
   accounts: "User Accounts",
-  activity: "Activity",
+  "audit-trail": "Audit Trail",
   logs: "Logs",
 };
 
 /** Sections the side panel lists before anything is built behind them. */
-const EMPTY_SECTIONS: ReadonlySet<(typeof SECTIONS)[number]> = new Set(["activity", "logs"]);
+const EMPTY_SECTIONS: ReadonlySet<(typeof SECTIONS)[number]> = new Set(["logs"]);
 
 function sectionLinkClass(active: boolean): string {
   return `${NAV_LEADING_ROW_CLASS} box-border w-full cursor-pointer rounded border-none px-2 py-1.5 text-left text-[0.875rem] text-text hover:bg-hover ${
@@ -45,9 +46,10 @@ function sectionLinkClass(active: boolean): string {
  * a search bar and the account button, over a side panel and a content pane.
  * What fills it is the owner's own. The owner has no conversations, no
  * contacts, no import, no export and no trash, so the side panel lists
- * Dashboard, Server Settings, User Accounts, Activity and Logs, and the search
- * bar filters the accounts table. Dashboard shows what the whole database holds.
- * Activity and Logs show only their name: nothing is built behind them yet.
+ * Dashboard, Server Settings, User Accounts, Audit Trail and Logs, and the
+ * search bar filters the accounts table. Dashboard shows what the whole
+ * database holds, and Audit Trail what each user did and when. Logs shows only
+ * its name: nothing is built behind it yet.
  *
  * `/owner/accounts/{id}` is one account's Settings, the screen its holder
  * sees, opened from the gear in the account's row. The owner's own row
@@ -147,6 +149,7 @@ export default function OwnerHome() {
               {section === "dashboard" && <OwnerDashboardPanel />}
               {section === "settings" && <ServerSettingsPanel />}
               {section === "accounts" && <OwnerAccountsPanel filter={accountSearch} />}
+              {section === "audit-trail" && <OwnerAuditTrailPanel />}
             </div>
           )}
         </main>

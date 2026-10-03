@@ -7,12 +7,14 @@
 use axum::extract::State;
 use axum::http::HeaderMap;
 use serde::{Deserialize, Serialize};
-use sqlx::{SqliteConnection, SqlitePool};
+use sqlx::{Connection, SqliteConnection, SqlitePool};
 
 use crate::credentials::{
     MAX_PASSWORD_BYTES, check_auth_rate_limit, dummy_password_hash, normalize_username,
     password_bucket, unknown_username_bucket, verify_login_password, verify_password,
 };
+use crate::db::audit_trail::{self, AuditReason};
+use crate::db::session_tokens::ConnectingApp;
 use crate::db::{account_profile, api_tokens, schema, session_tokens};
 use crate::dedupe;
 use crate::extract::Json;
@@ -40,17 +42,20 @@ pub struct CreateSessionResponse {
 }
 
 impl CreateSessionResponse {
-    /// Issue (or reuse) the session token for an existing account. Uses the
-    /// account id when the row has no username.
+    /// Open the Session for an existing account, replacing the one it had,
+    /// and record the login. Uses the account id when the row has no username.
     async fn for_existing_account(
         conn: &mut SqliteConnection,
         account_id: i64,
+        app: Option<&ConnectingApp>,
     ) -> anyhow::Result<CreateSessionResponse> {
-        let token = session_tokens::get_or_create_session_token(conn, account_id).await?;
-        account_profile::record_login(conn, account_id).await?;
         let username = account_profile::username_for_account(conn, account_id)
             .await?
             .unwrap_or_else(|| account_id.to_string());
+        let mut tx = conn.begin().await?;
+        let token = session_tokens::open_session(&mut tx, account_id, &username, app).await?;
+        account_profile::record_login(&mut tx, account_id).await?;
+        tx.commit().await?;
         Ok(CreateSessionResponse {
             token,
             account_id,
@@ -129,12 +134,15 @@ async fn load_username(pool: &SqlitePool, account_id: i64) -> Result<Option<Stri
 )]
 pub async fn create_session(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(req): Json<CreateSessionRequest>,
 ) -> Result<Created<CreateSessionResponse>, ApiError> {
     let username = normalize_username(&req.username);
     if username.is_empty() {
         return Err(ApiError::validation("username is required"));
     }
+    let app = crate::server::connecting_app(&headers);
+    let app = app.as_ref();
     let mut conn = state.db.acquire().await?;
     let account_id = account_profile::lookup_account_by_username(&mut conn, &username).await?;
     // Counted per account, not per username as typed: the lookup ignores
@@ -143,15 +151,28 @@ pub async fn create_session(
         Some(id) => password_bucket(id),
         None => unknown_username_bucket(&username),
     };
+    // A rate-limited attempt is turned away before anything is checked, and
+    // the Audit Trail records nothing of it.
     check_auth_rate_limit(&state.auth_rate_limits, &bucket)?;
     if req.password.len() > MAX_PASSWORD_BYTES {
         return Err(ApiError::validation("password is too long"));
     }
+    // Refused logins for usernames nobody holds are kept for a fixed time,
+    // and a login is when the old ones go.
+    audit_trail::trim_refused_logins(&mut conn).await?;
 
     let password = req.password.clone();
 
     let Some(account_id) = account_id else {
         let _ = verify_password(dummy_password_hash(), &password);
+        audit_trail::record_refused_login(
+            &mut conn,
+            &username,
+            None,
+            AuditReason::UnknownUsername,
+            app,
+        )
+        .await?;
         return Err(ApiError::InvalidCredentials(
             "invalid username or password".into(),
         ));
@@ -167,8 +188,20 @@ pub async fn create_session(
         ));
     }
 
+    let stored_username = account_profile::username_for_account(&mut conn, account_id)
+        .await?
+        .unwrap_or_else(|| username.clone());
+    let account = Some((account_id, stored_username.as_str()));
     let password_hash = account_profile::load_password_hash(&mut conn, account_id).await?;
     if !verify_login_password(password_hash.as_deref(), &password) {
+        audit_trail::record_refused_login(
+            &mut conn,
+            &username,
+            account,
+            AuditReason::WrongPassword,
+            app,
+        )
+        .await?;
         return Err(ApiError::InvalidCredentials(
             "invalid username or password".into(),
         ));
@@ -178,10 +211,18 @@ pub async fn create_session(
         .await?
         .ok_or_else(|| ApiError::InvalidCredentials("invalid username or password".into()))?;
     if auth.disabled {
+        audit_trail::record_refused_login(
+            &mut conn,
+            &username,
+            account,
+            AuditReason::AccountDisabled,
+            app,
+        )
+        .await?;
         return Err(ApiError::AccountDisabled("this account is disabled".into()));
     }
 
-    let body = CreateSessionResponse::for_existing_account(&mut conn, account_id).await?;
+    let body = CreateSessionResponse::for_existing_account(&mut conn, account_id, app).await?;
 
     Ok(Created {
         location: "/v1/session".to_string(),

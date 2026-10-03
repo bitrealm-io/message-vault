@@ -70,6 +70,7 @@ async fn api_tokens_never_resolve_to_the_owner() {
     let token_auth = crate::server::AuthIdentity {
         account_id: auth.account_id,
         capability: crate::server::AuthCapability::ApiToken(auth.permissions()),
+        credential: crate::db::audit_trail::CredentialUsed::Session(None),
     };
     assert!(!token_auth.is_owner());
     assert!(crate::server::require_owner(&token_auth).is_err());

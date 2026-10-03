@@ -280,6 +280,13 @@ pub(crate) async fn create_export(
     let mut conn = state.db.acquire().await?;
     let clock = crate::db::account_profile::account_clock(&mut conn, account).await?;
     let run = start_export_run(&mut conn, account, &body.scope, tool, clock).await?;
+    crate::db::audit_trail::record_run_credential(
+        &mut conn,
+        crate::db::audit_trail::Run::Export,
+        run.id,
+        &auth.credential,
+    )
+    .await?;
     Ok(Created {
         location: format!("/v1/exports/{}", run.id),
         body: run,

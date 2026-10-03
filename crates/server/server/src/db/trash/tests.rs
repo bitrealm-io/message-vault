@@ -737,7 +737,7 @@ async fn empty_trash_takes_everything_trashed_and_only_that() {
     .await
     .unwrap();
 
-    let orphaned = empty_trash(&mut conn, ACCOUNT_A).await.unwrap();
+    let orphaned = empty_trash(&mut conn, ACCOUNT_A).await.unwrap().orphaned;
 
     assert_eq!(
         orphaned,
@@ -787,7 +787,10 @@ async fn empty_trash_on_an_empty_trash_is_a_noop() {
     let mut conn = fixture.conn().await;
     let id = insert_conversation_on(&mut conn, ACCOUNT_A, "+15550001").await;
 
-    assert_eq!(empty_trash(&mut conn, ACCOUNT_A).await.unwrap(), Vec::new());
+    assert_eq!(
+        empty_trash(&mut conn, ACCOUNT_A).await.unwrap().orphaned,
+        Vec::new()
+    );
     assert_eq!(
         count(
             &mut conn,

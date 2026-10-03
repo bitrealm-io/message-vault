@@ -1187,6 +1187,119 @@
         ]
       }
     },
+    "/v1/accounts/{id}/audit-trail": {
+      "get": {
+        "tags": [
+          "Audit Trail"
+        ],
+        "summary": "An account's Audit Trail, newest first: every entry about the account, whoever acted, the owner's changes to it and the logins refused for its username included, with its Import and Export Runs.",
+        "description": "The owner reads any account's; an account reads its own.",
+        "operationId": "list_account_audit_trail",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Account id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, default 40, at most 500",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Rows to skip, at most 50000",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_AuditEntry"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "[`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/authentication-required"
+            ]
+          },
+          "403": {
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/not-the-owner",
+              "https://messagecrate.app/docs/developer/reference/errors/insufficient-scope",
+              "https://messagecrate.app/docs/developer/reference/errors/account-disabled"
+            ]
+          },
+          "404": {
+            "description": "[`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/not-found"
+            ]
+          },
+          "422": {
+            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/validation-failed"
+            ]
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/accounts/{id}/exports": {
       "get": {
         "tags": [
@@ -3133,6 +3246,98 @@
           {
             "api-token": [
               "import"
+            ]
+          }
+        ]
+      }
+    },
+    "/v1/audit-trail": {
+      "get": {
+        "tags": [
+          "Audit Trail"
+        ],
+        "summary": "Every account's Audit Trail, newest first: logins, sessions ending, refused logins, Import Runs, Export Runs, and the owner's and holders' changes to accounts, including those of deleted accounts under their old usernames.",
+        "description": "The owner's alone.",
+        "operationId": "list_audit_trail",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, default 40, at most 500",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Rows to skip, at most 50000",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_AuditEntry"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "[`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/authentication-required"
+            ]
+          },
+          "403": {
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/not-the-owner",
+              "https://messagecrate.app/docs/developer/reference/errors/insufficient-scope",
+              "https://messagecrate.app/docs/developer/reference/errors/account-disabled"
+            ]
+          },
+          "422": {
+            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/validation-failed"
+            ]
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "owner"
             ]
           }
         ]
@@ -10256,6 +10461,281 @@
           }
         }
       },
+      "AuditAction": {
+        "type": "string",
+        "description": "What an entry records.",
+        "enum": [
+          "logged_in",
+          "session_ended",
+          "login_refused",
+          "account_created",
+          "account_disabled",
+          "account_enabled",
+          "password_set",
+          "permissions_changed",
+          "messages_deleted",
+          "conversation_deleted",
+          "trash_emptied",
+          "account_deleted",
+          "registration_opened",
+          "registration_closed",
+          "api_token_created",
+          "api_token_deleted",
+          "address_book_loaded",
+          "address_book_exported",
+          "import_run",
+          "export_run"
+        ]
+      },
+      "AuditActor": {
+        "type": "string",
+        "description": "Who acted.",
+        "enum": [
+          "owner",
+          "holder",
+          "command_line",
+          "server",
+          "anonymous"
+        ]
+      },
+      "AuditEntry": {
+        "type": "object",
+        "description": "One entry of the Audit Trail as the interface hands it out: an entry of\n`audit_entries`, an Import Run, or an Export Run. `id` is the row's id in\nits own table, so `action` and `id` together name an entry. Fields that do\nnot describe the action are left out.",
+        "required": [
+          "id",
+          "action",
+          "at",
+          "actor"
+        ],
+        "properties": {
+          "account_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The account the entry is about, or `null` when it is about none, or\nthe account has been deleted."
+          },
+          "action": {
+            "$ref": "#/components/schemas/AuditAction",
+            "description": "What happened."
+          },
+          "actor": {
+            "$ref": "#/components/schemas/AuditActor",
+            "description": "Who acted."
+          },
+          "api_token_hint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The API token's masked hint as it was then, such as `mc-api-Sd..mE`."
+          },
+          "api_token_label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The API token's label as it was then."
+          },
+          "app": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AppKind",
+                "description": "The app the request named, `desktop` or `website`."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "app_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "That app's Build, such as `0.9.0+343fe0d8`. Present exactly when `app` is."
+          },
+          "at": {
+            "type": "string",
+            "description": "When, RFC 3339 UTC: the run's start for a run, the expiry for a\nsession that expired."
+          },
+          "attachments": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Attachments a run accepted or matched, or deleted for good."
+          },
+          "bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Bytes an Import Run uploaded, or an Export Run's attachments total."
+          },
+          "contacts": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Contacts forgotten when the trash was emptied, or written to an\nexported address book."
+          },
+          "contacts_created": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "`address_book_loaded`: contacts made."
+          },
+          "contacts_deleted": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "`address_book_loaded`: contacts removed."
+          },
+          "contacts_updated": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "`address_book_loaded`: contacts renamed or changed."
+          },
+          "conversations": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Conversations an Export Run matched, or deleted for good."
+          },
+          "credential": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RunCredential",
+                "description": "A run: what started it. Absent for a run the server started itself."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The row's id: the entry's, the Import Run's or the Export Run's. For a\nsession that expired, the id of its `logged_in` entry."
+          },
+          "identities": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Identities written to an exported address book."
+          },
+          "messages": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Messages a run accepted or matched."
+          },
+          "mode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`address_book_loaded`: `append` or `edit`."
+          },
+          "permissions_added": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "`permissions_changed`: permissions turned on."
+          },
+          "permissions_removed": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "`permissions_changed`: permissions turned off."
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AuditReason",
+                "description": "`session_ended`: how the Session ended. `login_refused`: why."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scope_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "An Export Run: `everything`, `query` or `selection`. Never the query\nor the picked ids."
+          },
+          "scope_list": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "An Export Run with a query: the list it was for, `conversations` or\n`messages`."
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "An Import Run: the source it imported, such as `imessage`."
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A run: its status as the run's own list spells it."
+          },
+          "username": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The username of the account the entry is about, as it was; for a\nrefused login, the username as typed. Kept after the account is deleted."
+          }
+        }
+      },
+      "AuditReason": {
+        "type": "string",
+        "description": "How a Session ended, or why a login was refused.",
+        "enum": [
+          "logged_out",
+          "replaced",
+          "revoked",
+          "expired",
+          "unknown_username",
+          "wrong_password",
+          "account_disabled"
+        ]
+      },
       "ClaimRequest": {
         "type": "object",
         "description": "Body for claiming a Message Crate.",
@@ -12413,6 +12893,263 @@
           }
         }
       },
+      "Page_AuditEntry": {
+        "type": "object",
+        "description": "One page of a list.",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "One entry of the Audit Trail as the interface hands it out: an entry of\n`audit_entries`, an Import Run, or an Export Run. `id` is the row's id in\nits own table, so `action` and `id` together name an entry. Fields that do\nnot describe the action are left out.",
+              "required": [
+                "id",
+                "action",
+                "at",
+                "actor"
+              ],
+              "properties": {
+                "account_id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "description": "The account the entry is about, or `null` when it is about none, or\nthe account has been deleted."
+                },
+                "action": {
+                  "$ref": "#/components/schemas/AuditAction",
+                  "description": "What happened."
+                },
+                "actor": {
+                  "$ref": "#/components/schemas/AuditActor",
+                  "description": "Who acted."
+                },
+                "api_token_hint": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "The API token's masked hint as it was then, such as `mc-api-Sd..mE`."
+                },
+                "api_token_label": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "The API token's label as it was then."
+                },
+                "app": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AppKind",
+                      "description": "The app the request named, `desktop` or `website`."
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "app_version": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "That app's Build, such as `0.9.0+343fe0d8`. Present exactly when `app` is."
+                },
+                "at": {
+                  "type": "string",
+                  "description": "When, RFC 3339 UTC: the run's start for a run, the expiry for a\nsession that expired."
+                },
+                "attachments": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "description": "Attachments a run accepted or matched, or deleted for good."
+                },
+                "bytes": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "description": "Bytes an Import Run uploaded, or an Export Run's attachments total."
+                },
+                "contacts": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "description": "Contacts forgotten when the trash was emptied, or written to an\nexported address book."
+                },
+                "contacts_created": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "description": "`address_book_loaded`: contacts made."
+                },
+                "contacts_deleted": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "description": "`address_book_loaded`: contacts removed."
+                },
+                "contacts_updated": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "description": "`address_book_loaded`: contacts renamed or changed."
+                },
+                "conversations": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "description": "Conversations an Export Run matched, or deleted for good."
+                },
+                "credential": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/RunCredential",
+                      "description": "A run: what started it. Absent for a run the server started itself."
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "id": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "The row's id: the entry's, the Import Run's or the Export Run's. For a\nsession that expired, the id of its `logged_in` entry."
+                },
+                "identities": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "description": "Identities written to an exported address book."
+                },
+                "messages": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "description": "Messages a run accepted or matched."
+                },
+                "mode": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "`address_book_loaded`: `append` or `edit`."
+                },
+                "permissions_added": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "`permissions_changed`: permissions turned on."
+                },
+                "permissions_removed": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "`permissions_changed`: permissions turned off."
+                },
+                "reason": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AuditReason",
+                      "description": "`session_ended`: how the Session ended. `login_refused`: why."
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "scope_kind": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "An Export Run: `everything`, `query` or `selection`. Never the query\nor the picked ids."
+                },
+                "scope_list": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "An Export Run with a query: the list it was for, `conversations` or\n`messages`."
+                },
+                "source": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "An Import Run: the source it imported, such as `imessage`."
+                },
+                "status": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "A run: its status as the run's own list spells it."
+                },
+                "username": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "The username of the account the entry is about, as it was; for a\nrefused login, the username as typed. Kept after the account is deleted."
+                }
+              }
+            },
+            "description": "The rows on this page."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Page size used.",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Page offset used.",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows matching the query across every page.",
+            "minimum": 0
+          }
+        }
+      },
       "Page_ContactSelectionSummary": {
         "type": "object",
         "description": "One page of a list.",
@@ -13772,6 +14509,14 @@
           }
         }
       },
+      "RunCredential": {
+        "type": "string",
+        "description": "What started a run: a Session or an API token.",
+        "enum": [
+          "session",
+          "api_token"
+        ]
+      },
       "SavedSearch": {
         "type": "object",
         "description": "One row of `saved_searches`.",
@@ -14364,6 +15109,10 @@
     {
       "name": "Accounts",
       "description": "The accounts: the owner manages them, and each account reads and writes its own, API tokens included"
+    },
+    {
+      "name": "Audit Trail",
+      "description": "What each user did on this Message Crate, and when: the owner reads every account's, and each account its own"
     },
     {
       "name": "Import",

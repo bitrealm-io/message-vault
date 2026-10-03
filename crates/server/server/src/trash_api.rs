@@ -13,6 +13,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 
 use crate::config::Config;
+use crate::db::audit_trail::{self, AuditAction, AuditActor, Details};
 use crate::db::trash::{self, OrphanedFile};
 use crate::server::{ApiError, AppState, FullDeleteAccess};
 
@@ -125,7 +126,22 @@ pub(crate) async fn empty_trash(
 ) -> Result<StatusCode, ApiError> {
     let orphaned = {
         let mut conn = state.db.acquire().await?;
-        trash::empty_trash(&mut conn, auth.account_id).await?
+        let emptied = trash::empty_trash(&mut conn, auth.account_id).await?;
+        let count = |n: usize| Some(i64::try_from(n).unwrap_or(i64::MAX));
+        let details = Details {
+            conversations: count(emptied.conversations),
+            contacts: count(emptied.contacts),
+            ..Details::default()
+        };
+        audit_trail::record_about(
+            &mut conn,
+            AuditAction::TrashEmptied,
+            AuditActor::Holder,
+            auth.account_id,
+            details,
+        )
+        .await?;
+        emptied.orphaned
     };
     remove_orphaned_files(Arc::clone(&state.cfg), auth.account_id, orphaned).await?;
     Ok(StatusCode::NO_CONTENT)

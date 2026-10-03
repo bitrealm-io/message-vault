@@ -7,13 +7,13 @@ description: What the Account and Profile tabs of Settings show and change, the 
 The menu names the logged-in account and holds two entries, **Settings** and **Log out**.
 
 Settings is divided into tabs.
-An account sees **Account**, **Profile**, **Storage**, **System**, and **Appearance**.
+An account sees **Account**, **Profile**, **Storage**, **Audit Trail**, **System**, and **Appearance**.
 The desktop app adds **Convert** between **System** and **Appearance**.
 This page covers the first two.
 
 ## What the Owner sees
 
-The Owner's Settings has three tabs, **Account**, **Profile**, and **Appearance**, under the heading **Settings for Owner**.
+The Owner's Settings has four tabs, **Account**, **Profile**, **Audit Trail**, and **Appearance**, under the heading **Settings for Owner**.
 **Storage**, **System**, and **Convert** are absent, because they concern messages and the Owner holds none.
 
 The Owner's **Account** tab holds **Username** and **Change Password** only.

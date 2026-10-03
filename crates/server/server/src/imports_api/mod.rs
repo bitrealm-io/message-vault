@@ -882,6 +882,13 @@ pub(crate) async fn create_import(
         source_identities: identities_json.as_deref(),
     };
     let id = crate::db::imports::start_import(&mut conn, &args).await?;
+    crate::db::audit_trail::record_run_credential(
+        &mut conn,
+        crate::db::audit_trail::Run::Import,
+        id,
+        &auth.credential,
+    )
+    .await?;
 
     Ok(Created {
         location: format!("/v1/imports/{id}"),

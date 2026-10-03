@@ -73,6 +73,10 @@ CREATE TABLE IF NOT EXISTS account_session_tokens (
     -- The Build that app reported, e.g. '0.9.0+343fe0d8'. Set with app_kind,
     -- and rewritten only when either differs from what a request sends.
     app_build TEXT,
+    -- The Audit Trail's `logged_in` entry for this session
+    -- (`audit_entries.id`), so the entry that ends it can name it. NULL for a
+    -- session made outside a login, such as a test's.
+    login_entry_id INTEGER REFERENCES audit_entries(id),
     PRIMARY KEY (account_id)
 );
 
@@ -152,8 +156,27 @@ CREATE TABLE IF NOT EXISTS schema_meta (
 CREATE TABLE IF NOT EXISTS imports (
     -- Surrogate primary key for this import run.
     id INTEGER PRIMARY KEY,
-    -- Owning account (`accounts.id`).
-    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    -- Owning account (`accounts.id`). Set NULL when the account is deleted:
+    -- the run is part of the Audit Trail, which outlives the account
+    -- (docs/adr/0020-the-audit-trail-outlives-the-account.md).
+    account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
+    -- The username the account had, written when the account is deleted and
+    -- `account_id` becomes NULL, so the run still says whose it was.
+    username TEXT,
+    -- What started the run: 'session' or 'api_token'. NULL for a run the
+    -- server started itself (the Demo Account build, the CLI import).
+    credential TEXT,
+    -- The app the starting Session named: 'desktop' or 'website'. NULL when
+    -- the request named none or a token started the run.
+    app_kind TEXT,
+    -- That app's Build, such as '0.9.0+343fe0d8'; set with app_kind.
+    app_build TEXT,
+    -- The starting API token's label as it was then, so the run names the
+    -- token after it is renamed or deleted.
+    api_token_label TEXT,
+    -- The starting API token's masked hint (mc-api-Sd..mE) as it was then.
+    -- Never the token or its hash.
+    api_token_hint TEXT,
     -- Backup/source family (for example imessage, whatsapp, sms-backup-restore).
     source TEXT NOT NULL,
     -- Client/tool name that performed the import (optional).
@@ -225,8 +248,28 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_imports_active_account
 CREATE TABLE IF NOT EXISTS exports (
     -- Surrogate primary key for this export run.
     id INTEGER PRIMARY KEY,
-    -- Owning account (`accounts.id`).
-    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    -- Owning account (`accounts.id`). Set NULL when the account is deleted,
+    -- as for `imports`; the deletion also clears `scope_query`,
+    -- `scope_conversation_ids` and `scope_message_ids`, which describe the
+    -- person's messages.
+    account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
+    -- The username the account had, written when the account is deleted and
+    -- `account_id` becomes NULL, so the run still says whose it was.
+    username TEXT,
+    -- What started the run: 'session' or 'api_token'. NULL for a run the
+    -- server started itself (the Demo Account build, the CLI import).
+    credential TEXT,
+    -- The app the starting Session named: 'desktop' or 'website'. NULL when
+    -- the request named none or a token started the run.
+    app_kind TEXT,
+    -- That app's Build, such as '0.9.0+343fe0d8'; set with app_kind.
+    app_build TEXT,
+    -- The starting API token's label as it was then, so the run names the
+    -- token after it is renamed or deleted.
+    api_token_label TEXT,
+    -- The starting API token's masked hint (mc-api-Sd..mE) as it was then.
+    -- Never the token or its hash.
+    api_token_hint TEXT,
     -- Which of the three scope forms the run asked for: everything, query,
     -- or selection.
     scope_kind TEXT NOT NULL,
@@ -305,3 +348,63 @@ CREATE TABLE IF NOT EXISTS import_contacts (
 
 CREATE INDEX IF NOT EXISTS ix_import_contacts_contact
     ON import_contacts(contact_id);
+
+-- The Audit Trail: what each user did on this Message Crate, and when, for
+-- everything `imports` and `exports` do not already record. An entry is
+-- written once and never changed by a route; deleting an account sets its
+-- `account_id` NULL and keeps the entry
+-- (docs/adr/0020-the-audit-trail-outlives-the-account.md). A password, a
+-- session token and an API token never enter it, hashed or not, and nothing
+-- here says what a message said or which conversation it was in.
+CREATE TABLE IF NOT EXISTS audit_entries (
+    -- Entry id.
+    id INTEGER PRIMARY KEY,
+    -- When it happened, RFC 3339 UTC, as `imports.started_at` is written.
+    at TEXT NOT NULL,
+    -- What happened: logged_in, session_ended, login_refused,
+    -- account_created, account_disabled, account_enabled, password_set,
+    -- permissions_changed, messages_deleted, conversation_deleted,
+    -- trash_emptied, account_deleted, registration_opened,
+    -- registration_closed, api_token_created, api_token_deleted,
+    -- address_book_loaded or address_book_exported.
+    action TEXT NOT NULL,
+    -- Who acted: owner, holder (the account's own holder), command_line
+    -- (a server command), server (the server on its own), or anonymous
+    -- (someone at the login card).
+    actor TEXT NOT NULL,
+    -- The account the entry is about (`accounts.id`). NULL when it is about
+    -- no account (a refused login for an unknown username, opening or closing
+    -- registration) or once the account is deleted.
+    account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
+    -- That account's username when the entry was written; for a refused
+    -- login, the username as typed, trimmed and cut to 128 characters.
+    username TEXT,
+    -- session_ended: logged_out, replaced or revoked. login_refused:
+    -- unknown_username, wrong_password or account_disabled. NULL otherwise.
+    reason TEXT,
+    -- logged_in and login_refused: the app the request named, 'desktop' or
+    -- 'website'; NULL when the request named none.
+    app_kind TEXT,
+    -- That app's Build; set with app_kind.
+    app_build TEXT,
+    -- session_ended: the logged_in entry of the session that ended.
+    session_entry_id INTEGER REFERENCES audit_entries(id),
+    -- logged_in: when the session expires, RFC 3339 UTC. A session with no
+    -- session_ended entry reads as expired from this time, so expiry needs
+    -- no entry and no sweeper. Moved forward when a password change renews
+    -- the session.
+    session_expires_at TEXT,
+    -- JSON object of the entry's counts and names: permissions added and
+    -- removed, conversations and attachments deleted, an API token's label
+    -- and hint, an address book's mode and contact counts.
+    details TEXT
+);
+
+CREATE INDEX IF NOT EXISTS ix_audit_entries_account_at
+    ON audit_entries(account_id, at);
+
+CREATE INDEX IF NOT EXISTS ix_audit_entries_at
+    ON audit_entries(at);
+
+CREATE INDEX IF NOT EXISTS ix_audit_entries_session
+    ON audit_entries(session_entry_id);

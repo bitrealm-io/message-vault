@@ -31,6 +31,7 @@ use crate::server::AppState;
         (name = "Health", description = "Process liveness"),
         (name = "Session", description = "The logged-in credential: log in, check it, log out"),
         (name = "Accounts", description = "The accounts: the owner manages them, and each account reads and writes its own, API tokens included"),
+        (name = "Audit Trail", description = "What each user did on this Message Crate, and when: the owner reads every account's, and each account its own"),
         (name = "Import", description = "Import Runs: start one, send JSON Lines batches into it, close it"),
         (name = "Export", description = "Export Runs: create one, page its messages, close it"),
         (name = "Assets", description = "Attachment bytes"),
@@ -130,6 +131,8 @@ pub fn api_openapi() -> OpenApiRouter<AppState> {
         .routes(routes!(crate::accounts_api::list_account_imports))
         .routes(routes!(crate::accounts_api::get_account_import))
         .routes(routes!(crate::accounts_api::list_account_exports))
+        .routes(routes!(crate::accounts_api::list_account_audit_trail))
+        .routes(routes!(crate::audit_trail_api::list_audit_trail))
         .routes(routes!(
             crate::api_tokens_api::list_api_tokens,
             crate::api_tokens_api::create_api_token

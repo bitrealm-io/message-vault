@@ -60,6 +60,10 @@ pub struct ApiTokenAuth {
     pub account_id: i64,
     /// What this token may do (not yet intersected with its owner's grant).
     pub permissions: Permissions,
+    /// The token's label, which a run it starts records.
+    pub label: String,
+    /// The token's masked hint, which a run it starts records.
+    pub token_hint: String,
 }
 
 /// Label validation failures.
@@ -100,6 +104,10 @@ pub fn generate_api_token() -> Result<String> {
     generate_prefixed_token("mc-api-")
 }
 
+/// One token's row as a Bearer lookup reads it: account_id, can_import,
+/// can_export, expires_at, disabled, label, token_hint.
+type TokenAuthRow = (i64, i64, i64, Option<String>, i64, String, String);
+
 /// Look up which account owns this API token Bearer value.
 /// On a successful match, updates `last_accessed_at`; a failed update is
 /// logged and does not reject the token. Expired or disabled tokens are
@@ -113,15 +121,15 @@ pub async fn lookup_account_for_api_token(
     token: &str,
 ) -> Result<Option<ApiTokenAuth>> {
     let token_hash = hash_api_token(token);
-    let row: Option<(i64, i64, i64, Option<String>, i64)> = sqlx::query_as(
-        "SELECT account_id, can_import, can_export, expires_at, disabled
+    let row: Option<TokenAuthRow> = sqlx::query_as(
+        "SELECT account_id, can_import, can_export, expires_at, disabled, label, token_hint
          FROM account_api_tokens WHERE token_hash = $1",
     )
     .bind(token_hash.as_str())
     .fetch_optional(&mut *conn)
     .await?;
     match row {
-        Some((account_id, can_import, can_export, expires_at, disabled)) => {
+        Some((account_id, can_import, can_export, expires_at, disabled, label, token_hint)) => {
             if disabled != 0 {
                 return Ok(None);
             }
@@ -149,6 +157,8 @@ pub async fn lookup_account_for_api_token(
             Ok(Some(ApiTokenAuth {
                 account_id,
                 permissions: Permissions::token(can_import != 0, can_export != 0),
+                label,
+                token_hint,
             }))
         }
         None => Ok(None),

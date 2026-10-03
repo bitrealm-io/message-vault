@@ -294,7 +294,7 @@ pub async fn delete_trashed(
 pub async fn empty_trash(
     conn: &mut SqliteConnection,
     account_id: i64,
-) -> Result<Vec<OrphanedFile>, sqlx::Error> {
+) -> Result<EmptiedTrash, sqlx::Error> {
     let mut tx = conn.begin().await?;
     let conversation_ids: Vec<i64> = sqlx::query_scalar(
         "SELECT t.conversation_id
@@ -323,7 +323,22 @@ pub async fn empty_trash(
     // tables allow because neither carries a foreign key to its target.
     purge_account(&mut tx, account_id).await?;
     tx.commit().await?;
-    Ok(orphaned)
+    Ok(EmptiedTrash {
+        orphaned,
+        conversations: conversation_ids.len(),
+        contacts: contact_ids.len(),
+    })
+}
+
+/// What emptying the trash did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmptiedTrash {
+    /// Attachment files no remaining message references.
+    pub orphaned: Vec<OrphanedFile>,
+    /// Conversations deleted for good.
+    pub conversations: usize,
+    /// Contacts made Unknown again.
+    pub contacts: usize,
 }
 
 /// One attachment's stored files, read before its message is deleted so the

@@ -1,9 +1,12 @@
 //! GUI session Bearer tokens (`mc-user-…`); one per account, rotates on login.
+//! Opening and ending a Session writes its entries in the Audit Trail.
 
 use anyhow::{Context, Result, bail};
 pub use message_crate_api_types::AppKind;
 use rand::TryRng;
 use sqlx::SqliteConnection;
+
+use crate::db::audit_trail::{self, AuditActor, AuditReason};
 
 const TOKEN_ALPHANUM: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
@@ -44,11 +47,6 @@ fn fill_random(buf: &mut [u8]) -> Result<()> {
         bail!("secure random returned an empty entropy buffer");
     }
     Ok(())
-}
-
-/// Expiry timestamp for a session issued at `now_secs`.
-fn session_expiry_unix(now_secs: u64) -> String {
-    format!("{}", now_secs.saturating_add(SESSION_TTL_SECS))
 }
 
 /// Current Unix time in seconds.
@@ -167,7 +165,9 @@ pub async fn connecting_app_for_account(
     Ok(found.and_then(|(kind, build)| ConnectingApp::from_columns(kind, build)))
 }
 
-/// Create or replace the account's session token hash; returns plaintext once.
+/// Replace the account's session token with a new one and return the
+/// plaintext once. The Session carries on: a password change renews it, and
+/// its `logged_in` entry in the Audit Trail moves its expiry with it.
 ///
 /// # Errors
 ///
@@ -179,7 +179,7 @@ pub async fn rotate_account_session_token(
     let token = generate_session_token()?;
     let token_hash = hash_api_token(&token);
     let created_at = unix_secs_string();
-    let expires_at = session_expiry_unix(now_unix_secs());
+    let expires = now_unix_secs().saturating_add(SESSION_TTL_SECS);
     sqlx::query(
         r"
         INSERT INTO account_session_tokens (account_id, token_hash, created_at, expires_at)
@@ -193,18 +193,93 @@ pub async fn rotate_account_session_token(
     .bind(account_id)
     .bind(token_hash)
     .bind(created_at)
-    .bind(expires_at)
+    .bind(expires.to_string())
     .execute(&mut *conn)
     .await
     .with_context(|| format!("rotate session token for {account_id}"))?;
+    if let Some(login_entry_id) = login_entry_for_account(conn, account_id).await? {
+        audit_trail::renew_login(conn, login_entry_id, expires).await?;
+    }
+    Ok(token)
+}
+
+/// The Audit Trail's `logged_in` entry for the account's live session, when
+/// a login made it.
+async fn login_entry_for_account(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+) -> Result<Option<i64>> {
+    let found: Option<Option<i64>> = sqlx::query_scalar(
+        "SELECT login_entry_id FROM account_session_tokens WHERE account_id = $1",
+    )
+    .bind(account_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+    Ok(found.flatten())
+}
+
+/// Log in: open the account's one Session and return its token once.
+///
+/// A Session the account already had is replaced, and the Audit Trail says
+/// so: a login on the desktop ends the website's. The new Session's
+/// `logged_in` entry names the app the request named, and the session row
+/// records that app from the start. Called by every route that opens a
+/// Session for a person: login, claiming the Message Crate, and registering.
+///
+/// # Errors
+///
+/// Returns an error when a token cannot be generated or a write fails.
+pub async fn open_session(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    username: &str,
+    app: Option<&ConnectingApp>,
+) -> Result<String> {
+    let actor = AuditActor::logged_in_as(account_id);
+    if let Some(previous) = login_entry_for_account(conn, account_id).await? {
+        audit_trail::record_session_end(conn, previous, AuditReason::Replaced, actor).await?;
+    }
+    let token = generate_session_token()?;
+    let token_hash = hash_api_token(&token);
+    let created_at = unix_secs_string();
+    let expires = now_unix_secs().saturating_add(SESSION_TTL_SECS);
+    let login_entry_id =
+        audit_trail::record_login(conn, (account_id, username), app, expires).await?;
+    sqlx::query(
+        r"
+        INSERT INTO account_session_tokens
+            (account_id, token_hash, created_at, expires_at, app_kind, app_build, login_entry_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT(account_id) DO UPDATE SET
+            token_hash = excluded.token_hash,
+            created_at = excluded.created_at,
+            expires_at = excluded.expires_at,
+            app_kind = excluded.app_kind,
+            app_build = excluded.app_build,
+            login_entry_id = excluded.login_entry_id
+        ",
+    )
+    .bind(account_id)
+    .bind(token_hash)
+    .bind(created_at)
+    .bind(expires.to_string())
+    .bind(app.map(|app| app.kind.as_str()))
+    .bind(app.map(|app| app.build.as_str()))
+    .bind(login_entry_id)
+    .execute(&mut *conn)
+    .await
+    .with_context(|| format!("open a session for {account_id}"))?;
     Ok(token)
 }
 
 /// Create a fresh session token for an account and return the plaintext.
+/// No login made it, so the Audit Trail holds no entry for it: the tests and
+/// the credential matrix use it to stand a Session up directly.
 ///
 /// # Errors
 ///
 /// Returns an error when a token cannot be generated or the insert fails.
+#[cfg(test)]
 pub async fn insert_account_session_token(
     conn: &mut SqliteConnection,
     account_id: i64,
@@ -217,6 +292,7 @@ pub async fn insert_account_session_token(
 /// # Errors
 ///
 /// Returns an error when a token cannot be generated or the insert fails.
+#[cfg(test)]
 pub async fn insert_account_session_token_with_ttl(
     conn: &mut SqliteConnection,
     account_id: i64,
@@ -240,51 +316,57 @@ pub async fn insert_account_session_token_with_ttl(
     Ok(token)
 }
 
-/// Session token for GUI: if a row exists, rotate it; otherwise insert.
+/// Log out: end the Session the presented token names, and record that it
+/// ended. Returns whether the token named a Session.
 ///
 /// # Errors
 ///
-/// Returns an error when the lookup or token write fails.
-pub async fn get_or_create_session_token(
-    conn: &mut SqliteConnection,
-    account_id: i64,
-) -> Result<String> {
-    let existing: Option<String> =
-        sqlx::query_scalar("SELECT token_hash FROM account_session_tokens WHERE account_id = $1")
-            .bind(account_id)
-            .fetch_optional(&mut *conn)
-            .await?;
-    match existing {
-        Some(_) => rotate_account_session_token(conn, account_id).await,
-        None => insert_account_session_token(conn, account_id).await,
-    }
-}
-
-/// Revoke the presented session token (logout). Returns whether a row was deleted.
-///
-/// # Errors
-///
-/// Returns an error when the delete fails.
+/// Returns an error when the lookup, the record or the delete fails.
 pub async fn revoke_session_token(conn: &mut SqliteConnection, token: &str) -> Result<bool> {
     let token_hash = hash_api_token(token);
-    let n = sqlx::query("DELETE FROM account_session_tokens WHERE token_hash = $1")
+    let found: Option<(i64, Option<i64>)> = sqlx::query_as(
+        "SELECT account_id, login_entry_id FROM account_session_tokens WHERE token_hash = $1",
+    )
+    .bind(token_hash.as_str())
+    .fetch_optional(&mut *conn)
+    .await?;
+    let Some((account_id, login_entry_id)) = found else {
+        return Ok(false);
+    };
+    if let Some(login_entry_id) = login_entry_id {
+        audit_trail::record_session_end(
+            conn,
+            login_entry_id,
+            AuditReason::LoggedOut,
+            AuditActor::logged_in_as(account_id),
+        )
+        .await?;
+    }
+    sqlx::query("DELETE FROM account_session_tokens WHERE token_hash = $1")
         .bind(token_hash)
         .execute(&mut *conn)
-        .await?
-        .rows_affected();
-    Ok(n > 0)
+        .await?;
+    Ok(true)
 }
 
-/// Revoke every session token belonging to `account_id` (at most one row).
-/// Used by `reset-owner-password`, the shell command for an owner who has
-/// lost their password, so the old password's login ends with it. The owner
-/// setting another account's password through `/v1` does not call this: that
-/// sets the password and nothing more, and the account's session carries on.
+/// End the account's Session, if it has one, and record it as `revoked` by
+/// `actor`. Used by `reset-owner-password`, the shell command for an owner
+/// who has lost their password, so the old password's login ends with it,
+/// and by a Demo Account rebuild. The owner setting another account's
+/// password through `/v1` does not call this: that sets the password and
+/// nothing more, and the account's session carries on.
 ///
 /// # Errors
 ///
-/// Returns an error when the delete fails.
-pub async fn revoke_account_sessions(conn: &mut SqliteConnection, account_id: i64) -> Result<()> {
+/// Returns an error when the record or the delete fails.
+pub async fn revoke_account_sessions(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    actor: AuditActor,
+) -> Result<()> {
+    if let Some(login_entry_id) = login_entry_for_account(conn, account_id).await? {
+        audit_trail::record_session_end(conn, login_entry_id, AuditReason::Revoked, actor).await?;
+    }
     sqlx::query("DELETE FROM account_session_tokens WHERE account_id = $1")
         .bind(account_id)
         .execute(&mut *conn)

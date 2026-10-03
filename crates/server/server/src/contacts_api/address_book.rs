@@ -11,6 +11,7 @@ use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 
 use crate::db::address_book::{self, LoadCounts, LoadError, LoadMode};
+use crate::db::audit_trail::{self, AuditAction, AuditActor, Details};
 use crate::db::sql::bind_args;
 use crate::extract::{Json, Query};
 use crate::server::{ApiError, AppState, FullAccess, content_type_base, read_body_limited};
@@ -107,6 +108,28 @@ pub(crate) async fn create_contacts(
     }
     let mut conn = state.db.acquire().await?;
     let counts = address_book::load(&mut conn, auth.account_id, content, query.mode).await?;
+    let count = |n: u64| Some(i64::try_from(n).unwrap_or(i64::MAX));
+    let details = Details {
+        mode: Some(
+            match query.mode {
+                LoadMode::Append => "append",
+                LoadMode::Edit => "edit",
+            }
+            .to_string(),
+        ),
+        contacts_created: count(counts.contacts_created),
+        contacts_updated: count(counts.contacts_updated),
+        contacts_deleted: count(counts.contacts_deleted),
+        ..Details::default()
+    };
+    audit_trail::record_about(
+        &mut conn,
+        AuditAction::AddressBookLoaded,
+        AuditActor::Holder,
+        auth.account_id,
+        details,
+    )
+    .await?;
     Ok(Json(counts))
 }
 
@@ -192,6 +215,20 @@ pub(crate) async fn export_address_book(
         })
     };
     let csv = address_book::export_csv(&mut conn, auth.account_id, only.as_ref()).await?;
+    let (contacts, identities) = written_counts(&csv);
+    let details = Details {
+        contacts: Some(contacts),
+        identities: Some(identities),
+        ..Details::default()
+    };
+    audit_trail::record_about(
+        &mut conn,
+        AuditAction::AddressBookExported,
+        AuditActor::Holder,
+        auth.account_id,
+        details,
+    )
+    .await?;
     Ok((
         [
             (header::CONTENT_TYPE, "text/csv; charset=utf-8".to_string()),
@@ -203,4 +240,24 @@ pub(crate) async fn export_address_book(
         csv,
     )
         .into_response())
+}
+
+/// How many contacts and identities a written address book holds, for the
+/// Audit Trail: the distinct `contact_id`s, and the rows with an identity.
+fn written_counts(csv: &str) -> (i64, i64) {
+    let mut reader = csv::Reader::from_reader(csv.as_bytes());
+    let mut contacts = HashSet::new();
+    let mut identities = 0_i64;
+    for record in reader.records().flatten() {
+        if let Some(id) = record.get(0) {
+            contacts.insert(id.to_string());
+        }
+        if record.get(5).is_some_and(|identity| !identity.is_empty()) {
+            identities += 1;
+        }
+    }
+    (
+        i64::try_from(contacts.len()).unwrap_or(i64::MAX),
+        identities,
+    )
 }

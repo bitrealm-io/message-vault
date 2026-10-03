@@ -131,6 +131,26 @@ export interface paths {
         patch: operations["update_api_token"];
         trace?: never;
     };
+    "/v1/accounts/{id}/audit-trail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * An account's Audit Trail, newest first: every entry about the account, whoever acted, the owner's changes to it and the logins refused for its username included, with its Import and Export Runs.
+         * @description The owner reads any account's; an account reads its own.
+         */
+        get: operations["list_account_audit_trail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/accounts/{id}/exports": {
         parameters: {
             query?: never;
@@ -401,6 +421,26 @@ export interface paths {
         get?: never;
         /** Write one part of a chunked asset upload. */
         put: operations["replace_asset_upload_part"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/audit-trail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every account's Audit Trail, newest first: logins, sessions ending, refused logins, Import Runs, Export Runs, and the owner's and holders' changes to accounts, including those of deleted accounts under their old usernames.
+         * @description The owner's alone.
+         */
+        get: operations["list_audit_trail"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1512,6 +1552,130 @@ export interface components {
             /** @description OCR/ASR transcription, when processed. */
             transcription?: string | null;
         };
+        /**
+         * @description What an entry records.
+         * @enum {string}
+         */
+        AuditAction: "logged_in" | "session_ended" | "login_refused" | "account_created" | "account_disabled" | "account_enabled" | "password_set" | "permissions_changed" | "messages_deleted" | "conversation_deleted" | "trash_emptied" | "account_deleted" | "registration_opened" | "registration_closed" | "api_token_created" | "api_token_deleted" | "address_book_loaded" | "address_book_exported" | "import_run" | "export_run";
+        /**
+         * @description Who acted.
+         * @enum {string}
+         */
+        AuditActor: "owner" | "holder" | "command_line" | "server" | "anonymous";
+        /**
+         * @description One entry of the Audit Trail as the interface hands it out: an entry of
+         *     `audit_entries`, an Import Run, or an Export Run. `id` is the row's id in
+         *     its own table, so `action` and `id` together name an entry. Fields that do
+         *     not describe the action are left out.
+         */
+        AuditEntry: {
+            /**
+             * Format: int64
+             * @description The account the entry is about, or `null` when it is about none, or
+             *     the account has been deleted.
+             */
+            account_id?: number | null;
+            /** @description What happened. */
+            action: components["schemas"]["AuditAction"];
+            /** @description Who acted. */
+            actor: components["schemas"]["AuditActor"];
+            /** @description The API token's masked hint as it was then, such as `mc-api-Sd..mE`. */
+            api_token_hint?: string | null;
+            /** @description The API token's label as it was then. */
+            api_token_label?: string | null;
+            app?: components["schemas"]["AppKind"] | null;
+            /** @description That app's Build, such as `0.9.0+343fe0d8`. Present exactly when `app` is. */
+            app_version?: string | null;
+            /**
+             * @description When, RFC 3339 UTC: the run's start for a run, the expiry for a
+             *     session that expired.
+             */
+            at: string;
+            /**
+             * Format: int64
+             * @description Attachments a run accepted or matched, or deleted for good.
+             */
+            attachments?: number | null;
+            /**
+             * Format: int64
+             * @description Bytes an Import Run uploaded, or an Export Run's attachments total.
+             */
+            bytes?: number | null;
+            /**
+             * Format: int64
+             * @description Contacts forgotten when the trash was emptied, or written to an
+             *     exported address book.
+             */
+            contacts?: number | null;
+            /**
+             * Format: int64
+             * @description `address_book_loaded`: contacts made.
+             */
+            contacts_created?: number | null;
+            /**
+             * Format: int64
+             * @description `address_book_loaded`: contacts removed.
+             */
+            contacts_deleted?: number | null;
+            /**
+             * Format: int64
+             * @description `address_book_loaded`: contacts renamed or changed.
+             */
+            contacts_updated?: number | null;
+            /**
+             * Format: int64
+             * @description Conversations an Export Run matched, or deleted for good.
+             */
+            conversations?: number | null;
+            credential?: components["schemas"]["RunCredential"] | null;
+            /**
+             * Format: int64
+             * @description The row's id: the entry's, the Import Run's or the Export Run's. For a
+             *     session that expired, the id of its `logged_in` entry.
+             */
+            id: number;
+            /**
+             * Format: int64
+             * @description Identities written to an exported address book.
+             */
+            identities?: number | null;
+            /**
+             * Format: int64
+             * @description Messages a run accepted or matched.
+             */
+            messages?: number | null;
+            /** @description `address_book_loaded`: `append` or `edit`. */
+            mode?: string | null;
+            /** @description `permissions_changed`: permissions turned on. */
+            permissions_added?: string[] | null;
+            /** @description `permissions_changed`: permissions turned off. */
+            permissions_removed?: string[] | null;
+            reason?: components["schemas"]["AuditReason"] | null;
+            /**
+             * @description An Export Run: `everything`, `query` or `selection`. Never the query
+             *     or the picked ids.
+             */
+            scope_kind?: string | null;
+            /**
+             * @description An Export Run with a query: the list it was for, `conversations` or
+             *     `messages`.
+             */
+            scope_list?: string | null;
+            /** @description An Import Run: the source it imported, such as `imessage`. */
+            source?: string | null;
+            /** @description A run: its status as the run's own list spells it. */
+            status?: string | null;
+            /**
+             * @description The username of the account the entry is about, as it was; for a
+             *     refused login, the username as typed. Kept after the account is deleted.
+             */
+            username?: string | null;
+        };
+        /**
+         * @description How a Session ended, or why a login was refused.
+         * @enum {string}
+         */
+        AuditReason: "logged_out" | "replaced" | "revoked" | "expired" | "unknown_username" | "wrong_password" | "account_disabled";
         /** @description Body for claiming a Message Crate. */
         ClaimRequest: {
             /** @description Password for the owner. Must satisfy the server's password policy. */
@@ -2592,6 +2756,122 @@ export interface components {
             total: number;
         };
         /** @description One page of a list. */
+        Page_AuditEntry: {
+            /** @description The rows on this page. */
+            items: {
+                /**
+                 * Format: int64
+                 * @description The account the entry is about, or `null` when it is about none, or
+                 *     the account has been deleted.
+                 */
+                account_id?: number | null;
+                /** @description What happened. */
+                action: components["schemas"]["AuditAction"];
+                /** @description Who acted. */
+                actor: components["schemas"]["AuditActor"];
+                /** @description The API token's masked hint as it was then, such as `mc-api-Sd..mE`. */
+                api_token_hint?: string | null;
+                /** @description The API token's label as it was then. */
+                api_token_label?: string | null;
+                app?: components["schemas"]["AppKind"] | null;
+                /** @description That app's Build, such as `0.9.0+343fe0d8`. Present exactly when `app` is. */
+                app_version?: string | null;
+                /**
+                 * @description When, RFC 3339 UTC: the run's start for a run, the expiry for a
+                 *     session that expired.
+                 */
+                at: string;
+                /**
+                 * Format: int64
+                 * @description Attachments a run accepted or matched, or deleted for good.
+                 */
+                attachments?: number | null;
+                /**
+                 * Format: int64
+                 * @description Bytes an Import Run uploaded, or an Export Run's attachments total.
+                 */
+                bytes?: number | null;
+                /**
+                 * Format: int64
+                 * @description Contacts forgotten when the trash was emptied, or written to an
+                 *     exported address book.
+                 */
+                contacts?: number | null;
+                /**
+                 * Format: int64
+                 * @description `address_book_loaded`: contacts made.
+                 */
+                contacts_created?: number | null;
+                /**
+                 * Format: int64
+                 * @description `address_book_loaded`: contacts removed.
+                 */
+                contacts_deleted?: number | null;
+                /**
+                 * Format: int64
+                 * @description `address_book_loaded`: contacts renamed or changed.
+                 */
+                contacts_updated?: number | null;
+                /**
+                 * Format: int64
+                 * @description Conversations an Export Run matched, or deleted for good.
+                 */
+                conversations?: number | null;
+                credential?: components["schemas"]["RunCredential"] | null;
+                /**
+                 * Format: int64
+                 * @description The row's id: the entry's, the Import Run's or the Export Run's. For a
+                 *     session that expired, the id of its `logged_in` entry.
+                 */
+                id: number;
+                /**
+                 * Format: int64
+                 * @description Identities written to an exported address book.
+                 */
+                identities?: number | null;
+                /**
+                 * Format: int64
+                 * @description Messages a run accepted or matched.
+                 */
+                messages?: number | null;
+                /** @description `address_book_loaded`: `append` or `edit`. */
+                mode?: string | null;
+                /** @description `permissions_changed`: permissions turned on. */
+                permissions_added?: string[] | null;
+                /** @description `permissions_changed`: permissions turned off. */
+                permissions_removed?: string[] | null;
+                reason?: components["schemas"]["AuditReason"] | null;
+                /**
+                 * @description An Export Run: `everything`, `query` or `selection`. Never the query
+                 *     or the picked ids.
+                 */
+                scope_kind?: string | null;
+                /**
+                 * @description An Export Run with a query: the list it was for, `conversations` or
+                 *     `messages`.
+                 */
+                scope_list?: string | null;
+                /** @description An Import Run: the source it imported, such as `imessage`. */
+                source?: string | null;
+                /** @description A run: its status as the run's own list spells it. */
+                status?: string | null;
+                /**
+                 * @description The username of the account the entry is about, as it was; for a
+                 *     refused login, the username as typed. Kept after the account is deleted.
+                 */
+                username?: string | null;
+            }[];
+            /** @description Page size used. */
+            limit: number;
+            /** @description Page offset used. */
+            offset: number;
+            /**
+             * Format: int64
+             * @description Rows matching the query across every page.
+             */
+            total: number;
+        };
+        /** @description One page of a list. */
         Page_ContactSelectionSummary: {
             /** @description The rows on this page. */
             items: {
@@ -3279,6 +3559,11 @@ export interface components {
             /** @description How much Demo Data to build. */
             size: components["schemas"]["DemoDataSize"];
         };
+        /**
+         * @description What started a run: a Session or an API token.
+         * @enum {string}
+         */
+        RunCredential: "session" | "api_token";
         /** @description One row of `saved_searches`. */
         SavedSearch: {
             /**
@@ -4347,6 +4632,76 @@ export interface operations {
             };
             /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_account_audit_trail: {
+        parameters: {
+            query?: {
+                /** @description Page size, default 40, at most 500 */
+                limit?: number;
+                /** @description Rows to skip, at most 50000 */
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Account id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_AuditEntry"];
+                };
+            };
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5592,6 +5947,64 @@ export interface operations {
              *
              *     [`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the server expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.
              */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_audit_trail: {
+        parameters: {
+            query?: {
+                /** @description Page size, default 40, at most 500 */
+                limit?: number;
+                /** @description Rows to skip, at most 50000 */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_AuditEntry"];
+                };
+            };
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;

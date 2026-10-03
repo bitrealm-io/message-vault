@@ -237,11 +237,11 @@ released versions carry their date on the heading.
 
 #### Importing
 
-- 2026-10-03 **An Upload that cannot read its folder pauses and names it.**
-  When the app could not read part of the folder an Upload sends from, the
-  conversations it could not see were left out without a word, and the
-  Upload reported success. The Upload now pauses and names the folder, so
-  it can be resumed once the folder can be read.
+- 2026-10-03 **An Upload that cannot read its staged files pauses and names
+  the folder.** When the app could not read part of the files an Import Run
+  had staged, the conversations it could not see were left out without a
+  word, and the Upload reported success. The Upload now pauses and names
+  the folder, so it can be resumed once that folder can be read.
 - 2026-10-03 **A message sent twice a moment apart is shown twice.** When
   one source held a message sent twice a second or two apart, and another
   source held one copy, matching the sources hid all but one of the three.

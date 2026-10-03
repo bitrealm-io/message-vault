@@ -258,7 +258,7 @@ const EXERCISED: Record<string, () => unknown> = {
     ),
   getImport: () => serverApi.getImport(4),
   createImport: () => serverApi.createImport({ source: "iPhone" }),
-  setImportStage: () => serverApi.setImportStage(4, { stage: "staged" }),
+  setImportStage: () => serverApi.setImportStage(4, { stage: "media" }),
   completeImport: () => serverApi.completeImport(4, { status: "completed" }),
   discardImport: () => serverApi.discardImport(4),
   getImportContacts: () =>

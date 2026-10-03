@@ -568,7 +568,7 @@ async fn active_session_is_empty_then_reports_the_live_one() {
         source: "imessage".into(),
         mode: ImportMode::Append,
         tool: Some("message-crate".into()),
-        stage: Some("write".into()),
+        stage: Some(crate::db::imports::ImportStage::Write),
         staging_dir: Some("/home/u/message-crate/staging-260830".into()),
         device_id: Some("device-a".into()),
         form: Some(serde_json::json!({ "source": "imessage-ios" })),
@@ -596,7 +596,7 @@ async fn active_session_is_empty_then_reports_the_live_one() {
         .await
         .expect("a running run is listed");
     assert_eq!(session.id, created.body.id);
-    assert_eq!(session.stage.as_deref(), Some("write"));
+    assert_eq!(session.stage, Some(crate::db::imports::ImportStage::Write));
     assert_eq!(
         session.staging_dir.as_deref(),
         Some("/home/u/message-crate/staging-260830")
@@ -747,33 +747,16 @@ async fn stage_endpoint_advances_and_rejects_an_unknown_stage() {
         import_access(&state, &token).await,
         AxumPath(import_id),
         Json(UpdateImportRequest {
-            stage: "upload".into(),
+            stage: crate::db::imports::ImportStage::Upload,
             summary: None,
         }),
     )
     .await
     .unwrap();
     assert_eq!(
-        running_import(&state, &token)
-            .await
-            .unwrap()
-            .stage
-            .as_deref(),
-        Some("upload")
+        running_import(&state, &token).await.unwrap().stage,
+        Some(crate::db::imports::ImportStage::Upload)
     );
-
-    let err = update_import(
-        State(state.clone()),
-        import_access(&state, &token).await,
-        AxumPath(import_id),
-        Json(UpdateImportRequest {
-            stage: "halfway".into(),
-            summary: None,
-        }),
-    )
-    .await
-    .unwrap_err();
-    assert!(matches!(err, ApiError::ValidationFailed(_)));
 }
 
 #[tokio::test]

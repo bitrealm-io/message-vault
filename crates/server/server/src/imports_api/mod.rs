@@ -575,7 +575,7 @@ pub(crate) struct CreateImportRequest {
     pub(crate) tool: Option<String>,
     /// Stage the run opens at. Defaults to `parse`.
     #[serde(default)]
-    pub(crate) stage: Option<String>,
+    pub(crate) stage: Option<crate::db::imports::ImportStage>,
     /// Absolute staging path on the client that owns this Import Run.
     #[serde(default)]
     pub(crate) staging_dir: Option<String>,
@@ -759,7 +759,7 @@ pub(crate) struct ImportRun {
     /// Time spent uploading, when finished.
     pub(crate) upload_ms: Option<i64>,
     /// Where a running run is; null once it is over.
-    pub(crate) stage: Option<String>,
+    pub(crate) stage: Option<crate::db::imports::ImportStage>,
     /// Absolute path to the staging folder on the client that owns the run.
     pub(crate) staging_dir: Option<String>,
     /// Which install created the run.
@@ -1005,18 +1005,6 @@ pub(crate) async fn full_import_run(
     import_run(conn, row).await
 }
 
-/// The stage `raw` spells, or a `422 Unprocessable Entity` naming the six stages the server knows.
-fn parse_stage(raw: &str) -> Result<crate::db::imports::ImportStage, ApiError> {
-    use crate::db::imports::ImportStage;
-    ImportStage::parse(raw).ok_or_else(|| {
-        let expected: Vec<&str> = ImportStage::ALL.iter().map(|s| s.as_str()).collect();
-        ApiError::validation(format!(
-            "invalid import stage '{raw}'; expected one of {}",
-            expected.join(", ")
-        ))
-    })
-}
-
 /// Start an Import Run and return its id. Finish the run at
 /// POST /v1/imports/{id}/complete.
 #[utoipa::path(
@@ -1045,10 +1033,7 @@ pub(crate) async fn create_import(
     }
     validate_source_id(&body.source).map_err(|e| ApiError::validation(e.to_string()))?;
     let account = resolve_import_account(&auth);
-    let stage = match body.stage.as_deref() {
-        None => crate::db::imports::ImportStage::Parse,
-        Some(raw) => parse_stage(raw)?,
-    };
+    let stage = body.stage.unwrap_or(crate::db::imports::ImportStage::Parse);
     // Credentials never reach the row, whoever the client is.
     let form = body.form.as_ref().map(strip_form_credentials);
     let form_json = optional_json_string(form.as_ref(), "form")?;
@@ -1384,7 +1369,8 @@ pub(crate) async fn import_run(
 /// `media`, `media_review` or `upload`.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub(crate) struct UpdateImportRequest {
-    pub(crate) stage: String,
+    /// The stage the run moves to.
+    pub(crate) stage: crate::db::imports::ImportStage,
     /// What the user approved at the Review they just passed, when they passed one.
     ///
     /// Recorded here rather than at completion so an approval survives a
@@ -1424,7 +1410,7 @@ pub(crate) async fn update_import(
     Json(body): Json<UpdateImportRequest>,
 ) -> Result<Json<ImportRun>, ApiError> {
     let account = resolve_import_account(&auth);
-    let stage = parse_stage(&body.stage)?;
+    let stage = body.stage;
     let summary_json = optional_json_string(body.summary.as_ref(), "summary")?;
     let mut conn = state.db.acquire().await?;
     crate::db::imports::set_import_stage(

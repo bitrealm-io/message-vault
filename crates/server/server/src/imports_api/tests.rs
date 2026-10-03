@@ -154,8 +154,9 @@ async fn a_stage_answers_by_the_words_of_context_md_only() {
     )
     .sentence();
     assert!(
-        sentence
-            .contains("expected one of parse, write, staging_review, media, media_review, upload"),
+        sentence.contains(
+            "expected one of `parse`, `write`, `staging_review`, `media`, `media_review`, `upload`"
+        ),
         "the refusal lists the stages the server knows: {sentence}"
     );
 

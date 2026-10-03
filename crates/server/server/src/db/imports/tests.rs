@@ -354,7 +354,7 @@ async fn active_session_round_trips_and_blocks_a_second() {
         .await
         .expect("the run is running");
     assert_eq!(active.id, id);
-    assert_eq!(active.stage.as_deref(), Some("parse"));
+    assert_eq!(active.stage, Some(ImportStage::Parse));
     assert_eq!(
         active.staging_dir.as_deref(),
         Some("/home/u/message-crate/staging-iphone-260830")
@@ -383,7 +383,7 @@ async fn stage_advances_and_discard_frees_the_slot() {
         .await
         .unwrap();
     let active = running_import(&mut conn, account).await.unwrap();
-    assert_eq!(active.stage.as_deref(), Some("upload"));
+    assert_eq!(active.stage, Some(ImportStage::Upload));
 
     discard_import(&mut conn, account, id).await.unwrap();
     assert!(

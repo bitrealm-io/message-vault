@@ -433,7 +433,7 @@ fn format_discarded_import(
             row.source,
             row.mode,
             row.started_at,
-            row.stage.as_deref().unwrap_or("none"),
+            row.stage.map_or("none", |stage| stage.as_str()),
         ),
         None => format!("Account {account} has no active import session.\n"),
     }

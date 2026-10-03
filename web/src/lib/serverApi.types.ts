@@ -2130,8 +2130,7 @@ export interface components {
             source_fingerprint?: unknown;
             /** @description Addresses the backup's device sent from, when the client read them. */
             source_identities?: unknown;
-            /** @description Stage the run opens at. Defaults to `parse`. */
-            stage?: string | null;
+            stage?: components["schemas"]["ImportStage"] | null;
             /** @description Absolute staging path on the client that owns this Import Run. */
             staging_dir?: string | null;
             tool?: string | null;
@@ -2513,8 +2512,7 @@ export interface components {
             source_fingerprint: unknown;
             /** @description Addresses the backup's device sent from (JSON array), or null. */
             source_identities: unknown;
-            /** @description Where a running run is; null once it is over. */
-            stage?: string | null;
+            stage?: components["schemas"]["ImportStage"] | null;
             /** @description Absolute path to the staging folder on the client that owns the run. */
             staging_dir?: string | null;
             /** @description UTC time the run started. */
@@ -2534,6 +2532,16 @@ export interface components {
              */
             upload_ms?: number | null;
         };
+        /**
+         * @description Where a running Import Run is: a part of one of its Stages, or a Review
+         *     between them (`CONTEXT.md`).
+         *
+         *     `status` records how a run ended; this records where it is. Both are
+         *     needed: a run can sit at `Write` while running, and at `Write` having
+         *     failed. `Parse` and `Write` are the two parts of the Staging Stage.
+         * @enum {string}
+         */
+        ImportStage: "parse" | "write" | "staging_review" | "media" | "media_review" | "upload";
         /** @description Counters for one import run (staging and promote results). */
         ImportStats: {
             /**
@@ -3511,8 +3519,7 @@ export interface components {
                 source_fingerprint: unknown;
                 /** @description Addresses the backup's device sent from (JSON array), or null. */
                 source_identities: unknown;
-                /** @description Where a running run is; null once it is over. */
-                stage?: string | null;
+                stage?: components["schemas"]["ImportStage"] | null;
                 /** @description Absolute path to the staging folder on the client that owns the run. */
                 staging_dir?: string | null;
                 /** @description UTC time the run started. */
@@ -4236,7 +4243,8 @@ export interface components {
          *     `media`, `media_review` or `upload`.
          */
         UpdateImportRequest: {
-            stage: string;
+            /** @description The stage the run moves to. */
+            stage: components["schemas"]["ImportStage"];
             /**
              * @description What the user approved at the Review they just passed, when they passed one.
              *

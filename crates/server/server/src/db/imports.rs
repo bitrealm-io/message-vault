@@ -15,7 +15,8 @@ use crate::paging::{Direction, SortKey};
 /// `status` records how a run ended; this records where it is. Both are
 /// needed: a run can sit at `Write` while running, and at `Write` having
 /// failed. `Parse` and `Write` are the two parts of the Staging Stage.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
 pub enum ImportStage {
     /// Staging, reading the backup. Nothing durable exists yet.
     Parse,
@@ -187,8 +188,8 @@ pub struct ImportRow {
     pub upload_ms: Option<i64>,
     /// Client-provided summary payload.
     pub summary_json: Option<String>,
-    /// Lifecycle stage while the run is live; `None` once it is over.
-    pub stage: Option<String>,
+    /// Where the run is while it is live; `None` once it is over.
+    pub stage: Option<ImportStage>,
     /// Absolute path to the staging folder on the client that owns it.
     pub staging_dir: Option<String>,
     /// Which install created the run.
@@ -458,7 +459,16 @@ fn import_from_row(row: &SqliteRow) -> Result<ImportRow, sqlx::Error> {
         prepare_ms: row.try_get(14)?,
         upload_ms: row.try_get(15)?,
         summary_json: row.try_get(16)?,
-        stage: row.try_get(17)?,
+        stage: row
+            .try_get::<Option<String>, _>(17)?
+            .map(|stage| {
+                ImportStage::parse(&stage).ok_or_else(|| {
+                    sqlx::Error::Decode(
+                        format!("imports.stage holds unknown value '{stage}'").into(),
+                    )
+                })
+            })
+            .transpose()?,
         staging_dir: row.try_get(18)?,
         device_id: row.try_get(19)?,
         form_json: row.try_get(20)?,

@@ -387,7 +387,7 @@ fn imports_discard_prints_the_session_or_that_there_was_none() {
         prepare_ms: None,
         upload_ms: None,
         summary_json: None,
-        stage: Some("parse".into()),
+        stage: Some(crate::db::imports::ImportStage::Parse),
         staging_dir: None,
         device_id: None,
         form_json: None,

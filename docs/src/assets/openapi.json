@@ -13103,11 +13103,15 @@
             "description": "Addresses the backup's device sent from, when the client read them."
           },
           "stage": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Stage the run opens at. Defaults to `parse`."
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ImportStage",
+                "description": "Stage the run opens at. Defaults to `parse`."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "staging_dir": {
             "type": [
@@ -13823,11 +13827,15 @@
             "description": "Addresses the backup's device sent from (JSON array), or null."
           },
           "stage": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Where a running run is; null once it is over."
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ImportStage",
+                "description": "Where a running run is; null once it is over."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "staging_dir": {
             "type": [
@@ -13863,6 +13871,18 @@
             "description": "Time spent uploading, when finished."
           }
         }
+      },
+      "ImportStage": {
+        "type": "string",
+        "description": "Where a running Import Run is: a part of one of its Stages, or a Review\nbetween them (`CONTEXT.md`).\n\n`status` records how a run ended; this records where it is. Both are\nneeded: a run can sit at `Write` while running, and at `Write` having\nfailed. `Parse` and `Write` are the two parts of the Staging Stage.",
+        "enum": [
+          "parse",
+          "write",
+          "staging_review",
+          "media",
+          "media_review",
+          "upload"
+        ]
       },
       "ImportStats": {
         "type": "object",
@@ -15784,11 +15804,15 @@
                   "description": "Addresses the backup's device sent from (JSON array), or null."
                 },
                 "stage": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "Where a running run is; null once it is over."
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ImportStage",
+                      "description": "Where a running run is; null once it is over."
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "staging_dir": {
                   "type": [
@@ -17148,7 +17172,8 @@
         ],
         "properties": {
           "stage": {
-            "type": "string"
+            "$ref": "#/components/schemas/ImportStage",
+            "description": "The stage the run moves to."
           },
           "summary": {
             "description": "What the user approved at the Review they just passed, when they passed one.\n\nRecorded here rather than at completion so an approval survives a\nreload: the summary shown at a Review is recomputed from the folder, but\nwhat was approved is a different question and only the run\nremembers it. Absent leaves the stored `summary_json` untouched —\nmost stage changes carry nothing, and treating absent as null would\nthrow away the plan the outcome is later judged against."

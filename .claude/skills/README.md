@@ -29,8 +29,7 @@ revert them.
 
 ## Local edits
 
-- `code-review` is replaced by `pr-review`: the review is posted on the pull
-  request, fixed, and queued, following this repo's process (`AGENTS.md`,
-  "Review on the pull request"). The update loop above deletes upstream's
+- `code-review` is replaced by `pr-review`, which follows this repo's review
+  process (`AGENTS.md`, "Review on the pull request"). The update loop above deletes upstream's
   `code-review` again. `implement`, `tdd` and `ask-matt` name `pr-review`
   instead of `code-review`.

@@ -279,11 +279,10 @@ standards, the issue it implements, and correctness, so one axis cannot mask
 another. Every finding is posted, judgement calls included, and closes as
 fixed, declined with evidence, or deferred to a filed issue, so nothing the
 review raised is dropped without a record. The fix commits get one more
-Standards and Correctness pass. Its comments carry a `<!-- pr-review -->`
-marker, because the user and the agents post from one account: a thread
-without it is the user's, and only the user resolves it. A pull request the
-skill has taken through all of that, with green checks, is queued without
-asking the user; the review is the check a merge used to wait on them for.
+Standards and Correctness pass. Its comments carry a marker, because the user
+and the agents post from one account, and only the user resolves a thread
+without it. A pull request the skill has taken through all of that, with green
+checks, is queued without asking the user. The review is the check a merge used to wait on them for.
 
 The `changes` job is load-bearing and worth testing before the ruleset is
 enabled. A diff that is too broad runs the Rust matrix on a README edit; a diff

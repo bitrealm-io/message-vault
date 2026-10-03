@@ -3508,8 +3508,8 @@ export interface components {
             contact_id?: number | null;
             /**
              * @description The identity as the source wrote it: a phone number, email address
-             *     or username. `None` when the source
-             *     named this person without recording any address for them.
+             *     or username. `None` when the source named this person without
+             *     recording any address for them.
              */
             identity?: string | null;
             /**

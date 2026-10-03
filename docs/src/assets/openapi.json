@@ -14189,7 +14189,7 @@
               "string",
               "null"
             ],
-            "description": "The identity as the source wrote it: a phone number, email address\nor username. `None` when the source\nnamed this person without recording any address for them."
+            "description": "The identity as the source wrote it: a phone number, email address\nor username. `None` when the source named this person without\nrecording any address for them."
           },
           "name": {
             "type": "string",

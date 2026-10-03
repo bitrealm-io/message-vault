@@ -2120,6 +2120,108 @@ async fn a_batch_into_another_accounts_run_is_not_found() {
     assert_ne!(status, axum::http::StatusCode::NOT_FOUND);
 }
 
+/// What a request can change on an Import Run: status, stage, approved plan
+/// and finish time.
+async fn run_state(
+    state: &crate::server::AppState,
+    import_id: i64,
+) -> (String, Option<String>, Option<String>, Option<String>) {
+    let mut conn = state.db.acquire().await.unwrap();
+    sqlx::query_as("SELECT status, stage, summary_json, finished_at FROM imports WHERE id = $1")
+        .bind(import_id)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap()
+}
+
+/// The desktop app sends every call of an Import Run with the session logged
+/// in at the time, so a run whose account logged out while it ran reaches
+/// the server with the next account's session (#1085). Every route on a
+/// run refuses another account's session as if the run did not exist, and
+/// leaves the run as it was.
+#[tokio::test]
+async fn every_route_on_another_accounts_run_is_not_found_and_changes_nothing() {
+    let (fixture, alice) = crate::test_support::fixture_with_account().await;
+    let bob = crate::test_support::register_via_api(&fixture.state, "bob", "hunter2hunter2").await;
+    let (_, created): (String, serde_json::Value) = post_created_json(
+        &fixture.state,
+        "/v1/imports",
+        &bob.token,
+        serde_json::json!({ "source": "imessage" }),
+    )
+    .await;
+    let bobs_run = created["id"].as_i64().unwrap();
+    let run = format!("/v1/imports/{bobs_run}");
+    let before = run_state(&fixture.state, bobs_run).await;
+
+    let state = &fixture.state;
+    let token = alice.token.as_str();
+    let refusals = [
+        (
+            "PATCH stage",
+            crate::test_support::patch_raw(
+                state,
+                &run,
+                token,
+                serde_json::json!({ "stage": "pushing", "summary": { "approved": true } }),
+            )
+            .await,
+        ),
+        (
+            "POST complete",
+            crate::test_support::post_raw(
+                state,
+                &format!("{run}/complete"),
+                token,
+                "application/json",
+                r#"{"status":"completed"}"#,
+            )
+            .await,
+        ),
+        (
+            "POST discard",
+            crate::test_support::post_raw(
+                state,
+                &format!("{run}/discard"),
+                token,
+                "application/json",
+                "{}",
+            )
+            .await,
+        ),
+        (
+            "POST batches",
+            crate::test_support::post_raw(
+                state,
+                &format!("{run}/batches"),
+                token,
+                "application/jsonl",
+                "{}\n",
+            )
+            .await,
+        ),
+        (
+            "GET run",
+            crate::test_support::get_raw(state, &run, token).await,
+        ),
+        (
+            "GET contacts",
+            crate::test_support::get_raw(state, &format!("{run}/contacts"), token).await,
+        ),
+    ];
+    for (route, (status, text)) in refusals {
+        assert_eq!(
+            status,
+            axum::http::StatusCode::NOT_FOUND,
+            "{route} on another account's run: {text}"
+        );
+        crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
+    }
+
+    assert_eq!(run_state(&fixture.state, bobs_run).await, before);
+    assert_eq!(before.0, "running");
+}
+
 /// The account that owns Import Run `import_id`.
 async fn run_account(state: &crate::server::AppState, import_id: i64) -> i64 {
     let mut conn = state.db.acquire().await.unwrap();

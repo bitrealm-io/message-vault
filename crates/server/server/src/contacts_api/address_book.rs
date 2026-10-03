@@ -13,15 +13,17 @@ use serde::Deserialize;
 use crate::db::address_book::{self, LoadCounts, LoadError, LoadMode};
 use crate::db::sql::bind_args;
 use crate::extract::{Json, Query};
-use crate::server::{ApiError, AppState, FullAccess, content_type_base, read_body_limited};
+use crate::server::{
+    ApiError, AppState, FullAccess, content_type_base, read_body_limited, refuse_for_demo_account,
+};
 
 /// Largest address book the load route accepts, in bytes.
 ///
 /// A row is under a hundred bytes, so a few megabytes is already tens of
 /// thousands of identities, and the whole file is read into memory before
 /// parsing. The route reads the body itself against this cap, as the asset
-/// routes do: Axum's `Bytes` extractor would stop at its own 2 MiB default
-/// first, and a cap that never answers is no cap.
+/// routes do, and not through `crate::extract::Json`, whose cap is
+/// [`crate::server::MAX_JSON_BODY_BYTES`].
 pub(crate) const MAX_ADDRESS_BOOK_BYTES: usize = 8 * 1024 * 1024;
 
 /// The file name Export gives the address book.
@@ -69,6 +71,13 @@ impl From<LoadError> for ApiError {
 /// The load is one transaction. A file that breaks a rule is refused whole
 /// with `422 Unprocessable Entity`, and `errors` holds one sentence for each
 /// bad row, starting with its row number.
+///
+/// The Demo Account is refused with `demo-account-protected`, in both modes,
+/// by its id: an Edit load deletes contacts for good and an Append load
+/// stores real people's names and numbers in an account anyone can enter
+/// (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`). The import,
+/// export and delete permissions are not asked for; they govern messages and
+/// imports, and any other account loads its address book with a session.
 #[utoipa::path(
     post,
     path = "/v1/contacts",
@@ -84,6 +93,7 @@ impl From<LoadError> for ApiError {
     ),
     responses(
         (status = 200, body = LoadCounts),
+        crate::problem::openapi::DemoAccountProtected,
     )
 )]
 pub(crate) async fn create_contacts(
@@ -92,6 +102,7 @@ pub(crate) async fn create_contacts(
     Query(query): Query<LoadQuery>,
     request: Request,
 ) -> Result<Json<LoadCounts>, ApiError> {
+    refuse_for_demo_account(auth.account_id, "address book cannot be loaded")?;
     if !content_type_base(request.headers())
         .is_some_and(|base| base.eq_ignore_ascii_case("text/csv"))
     {

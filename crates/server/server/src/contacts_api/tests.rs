@@ -212,6 +212,35 @@ async fn a_refused_contact_edit_answers_422_with_the_persons_sentence() {
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
 
+/// A contact deleted after the edit found it: the rename updated no row and
+/// answered `500` with "contact missing after mutate". The edit is one write
+/// transaction, so it finds the contact gone and answers `404`.
+#[tokio::test]
+async fn renaming_a_contact_deleted_meanwhile_answers_not_found() {
+    let (fixture, account) = contacts_fixture_with_handles(&[]).await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
+    let ada =
+        insert_contact_with_handle(&mut conn, account.account_id, "Ada", "+15555550100").await;
+
+    let mut other = crate::db::begin_write(&mut conn).await.unwrap();
+    sqlx::query("DELETE FROM contacts WHERE id = $1")
+        .bind(ada)
+        .execute(&mut *other)
+        .await
+        .unwrap();
+    let (status, _) = crate::db::write_tx::commit_during(
+        other,
+        crate::test_support::patch_failure(
+            &fixture.state,
+            &format!("/v1/contacts/{ada}"),
+            &account.token,
+            serde_json::json!({ "name": "Ada Lovelace" }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
 #[tokio::test]
 async fn replacing_an_identity_with_an_empty_address_is_refused_and_keeps_the_old_one() {
     let (fixture, account) = contacts_fixture_with_handles(&[]).await;
@@ -367,7 +396,7 @@ async fn list_contacts_filters_and_paginates() {
     let by_handle = list_contacts_sorted(
         &mut conn,
         account,
-        "handle:5555550200",
+        "identity:5555550200",
         &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
         0,
@@ -1121,7 +1150,7 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
     .unwrap();
 
     assert!(
-        mutate_contact(
+        mutate_committed(
             &mut conn,
             account,
             contact_id,
@@ -1147,7 +1176,7 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
     assert!(detail.identities[0].address.contains("5555550200"));
 
     assert!(
-        mutate_contact(
+        mutate_committed(
             &mut conn,
             account,
             contact_id,
@@ -1168,7 +1197,7 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
     assert_eq!(renamed.name, "Samantha");
 
     assert!(
-        mutate_contact(
+        mutate_committed(
             &mut conn,
             account,
             contact_id,
@@ -1194,7 +1223,7 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
     assert_eq!(updated.identities[0].address, "sam@example.com");
 
     assert!(
-        mutate_contact(
+        mutate_committed(
             &mut conn,
             account,
             contact_id,
@@ -1227,7 +1256,7 @@ async fn add_identity(
     service: Option<&str>,
 ) {
     assert!(
-        mutate_contact(
+        mutate_committed(
             conn,
             account,
             contact_id,
@@ -1304,7 +1333,7 @@ async fn naming_a_handle_again_under_another_transport_keeps_one_row() {
     add_identity(&mut conn, account, contact_id, "+15555550300", Some("sms")).await;
 
     assert!(
-        mutate_contact(
+        mutate_committed(
             &mut conn,
             account,
             contact_id,
@@ -1356,7 +1385,7 @@ async fn replace_identity(
     service: Option<&str>,
 ) {
     assert!(
-        mutate_contact(
+        mutate_committed(
             conn,
             account,
             contact_id,
@@ -1456,7 +1485,7 @@ async fn mutate_contact_rejects_trashed_contact() {
         .await
         .unwrap();
 
-    let changed = mutate_contact(
+    let changed = mutate_committed(
         &mut conn,
         account,
         contact_id,
@@ -1543,7 +1572,7 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
     const OLD: &str = "2000-01-01 00:00:00";
     set_contact_last_modified(&mut conn, account, contact_id, OLD).await;
     assert!(
-        mutate_contact(
+        mutate_committed(
             &mut conn,
             account,
             contact_id,
@@ -1562,7 +1591,7 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
 
     set_contact_last_modified(&mut conn, account, contact_id, OLD).await;
     assert!(
-        mutate_contact(
+        mutate_committed(
             &mut conn,
             account,
             contact_id,
@@ -1585,7 +1614,7 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
     // Re-adding the same handle is a no-op and must not bump.
     set_contact_last_modified(&mut conn, account, contact_id, OLD).await;
     assert!(
-        mutate_contact(
+        mutate_committed(
             &mut conn,
             account,
             contact_id,
@@ -1609,7 +1638,7 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
 
     set_contact_last_modified(&mut conn, account, contact_id, OLD).await;
     assert!(
-        mutate_contact(
+        mutate_committed(
             &mut conn,
             account,
             contact_id,
@@ -1988,7 +2017,7 @@ async fn list_contacts_filters_no_handle() {
     let page = list_contacts_sorted(
         &mut conn,
         account,
-        "handle:none",
+        "identity:none",
         &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
         0,
@@ -2626,11 +2655,61 @@ async fn the_contact_list_is_a_page_and_summaries_are_items() {
         &state,
         "/v1/contacts/summaries",
         &user.token,
-        serde_json::json!({ "ids": [] }),
+        serde_json::json!({ "ids": [1] }),
     )
     .await;
     assert!(summaries["items"].is_array());
     assert!(summaries.get("contacts").is_none());
+}
+
+/// Summaries are for the contacts a body names, at most
+/// `MAX_CONTACT_SUMMARY_IDS` of them, so an empty list names none and is
+/// refused rather than answered with an empty page as though it had been
+/// read. Every contact is listed by `GET /v1/contacts`.
+#[tokio::test]
+async fn summaries_of_no_contacts_are_refused() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let (status, text) = crate::test_support::post_raw(
+        &fixture.state,
+        "/v1/contacts/summaries",
+        &user.token,
+        "application/json",
+        r#"{"ids":[]}"#,
+    )
+    .await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    let (status, text) = crate::test_support::post_raw(
+        &fixture.state,
+        "/v1/contacts/summaries",
+        &user.token,
+        "application/json",
+        "{}",
+    )
+    .await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+}
+
+/// The reference states the bounds the handler keeps on a summary's `ids`,
+/// so a client built from it knows an empty list is refused.
+#[test]
+fn the_reference_states_the_summary_id_bounds() {
+    let doc: serde_json::Value =
+        serde_json::from_str(&crate::openapi::dump_openapi_json()).unwrap();
+    let ids = &doc["components"]["schemas"]["SummarizeContactsRequest"]["properties"]["ids"];
+    assert_eq!(ids["minItems"], 1, "{ids}");
+    assert_eq!(
+        ids["maxItems"],
+        crate::paging::MAX_CONTACT_SUMMARY_IDS,
+        "{ids}"
+    );
 }
 
 async fn trashed_contact_row_count(conn: &mut SqliteConnection, account_id: i64, id: i64) -> i64 {
@@ -3029,4 +3108,246 @@ async fn a_long_comma_list_is_refused_as_too_many_parts() {
     assert_eq!(response.status(), reqwest::StatusCode::UNPROCESSABLE_ENTITY);
     let body: serde_json::Value = response.json().await.unwrap();
     assert_eq!(body["detail"], "The search has too many parts.", "{body}");
+}
+
+/// The Demo Account holds Demo Data every visitor shares (ADR 0016). A load
+/// would delete its contacts for good in Edit and store real people's names
+/// and numbers in Append, so both are refused by its id and nothing changes.
+#[tokio::test]
+async fn an_address_book_load_on_the_demo_account_is_refused() {
+    let fixture = crate::test_support::test_fixture().await;
+    let state = fixture.state.clone();
+    let (demo, token) = fixture.demo_account_session().await;
+    let contact_id = {
+        let mut conn = state.db.acquire().await.unwrap();
+        // An Unknown: no name, one identity.
+        insert_contact_with_handle(&mut conn, demo, "", "+15555550123").await
+    };
+    let visitor = RegisteredAccount {
+        account_id: demo,
+        username: "demo".into(),
+        token,
+    };
+
+    // Edit with the identity cells blank would delete the Unknown for good.
+    let edit = format!("{ADDRESS_BOOK_HEADER}\n{contact_id},,,,,\n");
+    let (status, text) = load_address_book(&fixture, &visitor, "?mode=edit", edit).await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::DemoAccountProtected,
+    );
+    // Append would store a new person, by name and number.
+    let append = format!("{ADDRESS_BOOK_HEADER}\na,Real Person,,phone,phone,+15555550199\n");
+    let (status, text) = load_address_book(&fixture, &visitor, "", append).await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::DemoAccountProtected,
+    );
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let names: Vec<String> =
+        sqlx::query_scalar("SELECT preferred_name FROM contacts WHERE account_id = $1")
+            .bind(demo)
+            .fetch_all(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(
+        names,
+        vec![String::new()],
+        "the Unknown stays and nobody is added"
+    );
+}
+
+/// The import, export and delete permissions were made for messages and
+/// imports, not for the address book: an account with none of them still
+/// loads one.
+#[tokio::test]
+async fn an_address_book_load_needs_no_import_export_or_delete_permission() {
+    let (fixture, account) = fixture_with_account().await;
+    {
+        let mut conn = fixture.conn().await;
+        account_profile::set_account_flags(
+            &mut conn,
+            account.account_id,
+            account_profile::AccountFlags {
+                can_import: Some(false),
+                can_export: Some(false),
+                can_delete: Some(false),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    }
+    let append = format!("{ADDRESS_BOOK_HEADER}\na,Ada Lovelace,,phone,phone,+15555550142\n");
+    let (status, text) = load_address_book(&fixture, &account, "", append).await;
+    assert_eq!(status, StatusCode::OK, "{text}");
+}
+
+// --- #1105: an identity in a conversation never leaves its contact for no
+// contact ---
+
+/// A one-to-one conversation with Ada at +15555550123, imported into
+/// `account`, and Ada's contact id.
+async fn ada_in_a_conversation(conn: &mut sqlx::SqliteConnection, account: i64) -> i64 {
+    crate::test_support::import_jsonl_text(
+        conn,
+        account,
+        "imessage",
+        r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550123","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550123","display_name":"Ada"}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}
+{"guid":"g-ada-1105","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550123","sender_display_name":null,"subject":null,"text":"hi","attachments":[],"imessage":null,"source":null}
+"#,
+    )
+    .await;
+    sqlx::query_scalar("SELECT id FROM contacts WHERE account_id = $1 AND preferred_name = 'Ada'")
+        .bind(account)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap()
+}
+
+/// The name of the contact `raw` is on.
+async fn holder_name(conn: &mut sqlx::SqliteConnection, raw: &str) -> Vec<String> {
+    sqlx::query_scalar(
+        "SELECT ct.preferred_name FROM handles h
+         JOIN contact_handles ch ON ch.handle_id = h.id
+         JOIN contacts ct ON ct.id = ch.contact_id
+         WHERE h.raw = $1",
+    )
+    .bind(raw)
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn removing_an_identity_in_a_conversation_puts_it_on_a_new_unknown_contact() {
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
+    let ada = ada_in_a_conversation(&mut conn, account).await;
+
+    mutate_committed(
+        &mut conn,
+        account,
+        ada,
+        &UpdateContactRequest {
+            name: None,
+            add_identity: None,
+            update_identity: None,
+            remove_identity: Some(RemoveContactIdentityRequest {
+                address: "+15555550123".into(),
+                service: None,
+            }),
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        holder_name(&mut conn, "+15555550123").await,
+        [String::new()]
+    );
+    crate::test_support::assert_every_person_is_on_a_contact(&mut conn, "remove_identity").await;
+}
+
+#[tokio::test]
+async fn replacing_an_identity_in_a_conversation_puts_the_old_one_on_a_new_unknown_contact() {
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
+    let ada = ada_in_a_conversation(&mut conn, account).await;
+
+    mutate_committed(
+        &mut conn,
+        account,
+        ada,
+        &UpdateContactRequest {
+            name: None,
+            add_identity: None,
+            update_identity: Some(UpdateContactIdentityRequest {
+                previous_address: "+15555550123".into(),
+                address: "+15555550199".into(),
+                service: None,
+            }),
+            remove_identity: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(holder_name(&mut conn, "+15555550199").await, ["Ada"]);
+    assert_eq!(
+        holder_name(&mut conn, "+15555550123").await,
+        [String::new()]
+    );
+    crate::test_support::assert_every_person_is_on_a_contact(&mut conn, "update_identity").await;
+}
+
+/// Two contacts that are one person are joined by removing an identity from
+/// one and adding it to the other. The removed identity, which a
+/// conversation uses, waits on a new contact with no name, and adding it to
+/// the other contact takes it from there and leaves no empty contact behind.
+#[tokio::test]
+async fn an_identity_removed_from_one_contact_can_be_added_to_another() {
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
+    let ada = ada_in_a_conversation(&mut conn, account).await;
+    let lovelace: i64 = sqlx::query_scalar(
+        "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Ada Lovelace') RETURNING id",
+    )
+    .bind(account)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    let edit = |remove: bool| UpdateContactRequest {
+        name: None,
+        add_identity: (!remove).then(|| AddContactIdentityRequest {
+            address: "+15555550123".into(),
+            service: None,
+        }),
+        update_identity: None,
+        remove_identity: remove.then(|| RemoveContactIdentityRequest {
+            address: "+15555550123".into(),
+            service: None,
+        }),
+    };
+
+    mutate_committed(&mut conn, account, ada, &edit(true))
+        .await
+        .unwrap();
+    mutate_committed(&mut conn, account, lovelace, &edit(false))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        holder_name(&mut conn, "+15555550123").await,
+        ["Ada Lovelace"]
+    );
+    let nameless: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM contacts WHERE account_id = $1 AND trim(preferred_name) = ''",
+    )
+    .bind(account)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(nameless, 0, "the contact the identity waited on is gone");
+    crate::test_support::assert_every_person_is_on_a_contact(&mut conn, "a move by hand").await;
+}
+
+/// [`mutate_contact`] in a write transaction of its own, committed when the
+/// edit succeeds, as `update_contact` runs it.
+async fn mutate_committed(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    contact_id: i64,
+    body: &UpdateContactRequest,
+) -> Result<bool, ContactEditError> {
+    let mut tx = crate::db::begin_write(conn).await?;
+    let changed = mutate_contact(&mut tx, account_id, contact_id, body).await?;
+    tx.commit().await?;
+    Ok(changed)
 }

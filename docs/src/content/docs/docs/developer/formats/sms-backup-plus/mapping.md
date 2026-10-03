@@ -25,16 +25,16 @@ In CSV form: one file per conversation (header + one row per message after dedup
 | Shared field | EML source |
 |---------------|------------|
 | `chat_identifier` | Peer's handle key (a number, an email address or a sender name, classified by `phone::Handle::parse`) or `chat-group-…` |
-| `conversation_type` | `individual` / `group` from address list |
+| `conversation_type` | `group` when two or more other participants are named, else `individual`. A mail whose `To` names two or more addresses (in practice an MMS) takes its participants from `To`, plus `From` when it was received, leaving out the owner (a received one only when `To` names the owner); any other mail takes them from `X-smssync-address`. See the `From` / `To` row in [format](/docs/developer/formats/sms-backup-plus/format/) for why |
 | `group_title` | Derived for groups (empty for 1:1) |
 | `participants_json` | Peer handles for the conversation |
 | `guid` | SHA-256 of the message identity (`MessageGuid`): chat id, direction, sender, UTC milliseconds, collapsed text, sorted attachment digests |
 | `timestamp` / `timestamp_utc` / `timestamp_display` / `timestamp_unix_ms` | Flat: `X-smssync-date` / `Date`; archive: body timestamp |
 | `direction` | `incoming` / `outgoing` from `X-smssync-type` or archive sender |
 | `service` | Always `sms` |
-| `sender_handle` / `sender_display_name` | Outgoing uses export owner; incoming may use Subject / name hint |
-| `text` | The first `text/plain` part |
-| `attachments_json` | Non-text MIME parts under `attachments/` |
+| `sender_handle` / `sender_display_name` | Outgoing uses export owner. Incoming one-to-one: the other participant. Incoming group: the address inside `<…>` of `From` (the part before `@unknown.email`, or the whole email address) when it is one of the participants, else no sender. Each group message stored with no sender is counted as `group_messages_without_sender` in the run summary and listed as an issue in the Import Run, naming its EML file. An incoming mail whose `To` names a group but none of the owner's addresses: the address in `From`, else no sender (see `group_messages_owner_not_named` in [format](/docs/developer/formats/sms-backup-plus/format/)). Both counters count stored messages, after duplicates are dropped. The display name may come from Subject, except for a mail that does not name the owner, whose Subject names the `X-smssync-address` contact rather than its sender |
+| `text` | Every `text/plain` part, joined with a newline, in the order of the parts (the SMIL's order when the mail carries one) |
+| `attachments_json` | Every other MIME part with content, a contact card (`text/x-vcard`) included, under `attachments/`. A part that cannot be decoded is dropped and counted as `skipped_unreadable_part` |
 | `message_kind` | `sms` or `mms` |
 | `export_source` / `export_tool` / `export_tool_version` | `sms-backup-plus` / `SMS Backup+` / `1.5.11` |
 | `owner_handle` / `owner_display_name` | Export owner |

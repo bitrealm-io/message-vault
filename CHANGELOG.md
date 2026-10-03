@@ -181,6 +181,8 @@ released versions carry their date on the heading.
   keep its database on a Postgres server, which existed for a hosted service
   that is not built yet. That option is removed, so the server is simpler to
   run and to change. Postgres support comes back with the hosted service.
+  The last of the server code written to choose between the two engines is
+  gone too, with nothing to see.
 - 2026-10-01 **Force reprocessing is gone from the Import form.** It changed
   nothing on a new Import Run, and on a resumed Upload it only sent
   everything again, which made the resume slower and the Duplicate counts
@@ -195,7 +197,18 @@ released versions carry their date on the heading.
   conversations not yet sent. Before, the run was recorded as completed, the
   staged folder was deleted, and the conversations it had not reached were
   never imported. The run's report now puts every conversation in exactly
-  one count, and names the ones the stop left unsent.
+  one count, and names the ones the stop left unsent. An Upload that fails,
+  or sends some conversations and fails the rest, is paused the same way
+  instead of being recorded as failed or finished, and the Import badge
+  reads Paused. Logging out during an Upload asks first, then pauses the
+  Upload before the session ends, so the same account can resume it after
+  logging in; before, every conversation left was recorded as failed. When
+  the server doesn't record a run as finished, the staged folder is kept and
+  the next visit resumes the run, which then gets its Saved Search and
+  Contact Group. A resumed run's report covers every part of the run, not
+  only the last. A Staging or Media stage that fails deletes its staged
+  folder at once, since nothing can resume it, instead of leaving a full
+  unencrypted copy of your messages in the Staging Directory.
 - 2026-10-02 **One desktop job runs at a time.** An export won't start while
   an Import Run's job runs, and the reverse, and the screen says why. Before,
   the two jobs mixed up each other's progress, and one Cancel stopped both.
@@ -203,11 +216,21 @@ released versions carry their date on the heading.
   fiction.** No Demo Data number can be dialled or belong to a real person.
   Demo Data messages also fall in the daytime, between 08:00 and 23:00,
   where most of them used to fall overnight.
+- 2026-10-03 **Convert reads JSON Lines files only when they end in
+  `.jsonl`,** the name Message Crate gives them. A file ending in `.ndjson`
+  is no longer taken for one.
 
 ### Fixes
 
 #### Importing
 
+- 2026-10-03 **Group texts from an SMS Backup+ archive are group
+  conversations.** Every group text used to be filed as a conversation with
+  one of its members alone. A group text you sent and the replies to it now
+  land together in one group conversation, each reply credited to the person
+  who sent it. A group text whose sender matches nobody in the group shows
+  no sender instead of the first member. Each such group text is also listed
+  among the import's issues.
 - 2026-09-23 **A group text from an SMS Backup & Restore backup is no longer
   credited to the wrong person when the backup names no sender.** A group
   MMS without a sender address was shown as sent by whichever member the
@@ -280,7 +303,9 @@ released versions carry their date on the heading.
 - 2026-10-02 **An Upload interrupted at the wrong moment no longer stores
   messages twice.** When the connection dropped while the server's answer to
   a batch was arriving, the batch was sent again and messages without their
-  own id were stored twice.
+  own id were stored twice. Every message now carries an id, so a batch
+  sent again for any reason stores nothing twice. A file holding a message
+  without one is refused whole, naming the first lines at fault.
 - 2026-10-02 **Empty attachments and lowered size limits no longer fail a
   conversation.** A 0-byte attachment was refused, and the whole conversation
   that held it failed. Lowering the attachment size limit during an Upload
@@ -324,7 +349,12 @@ released versions carry their date on the heading.
   Entering an encrypted backup's password made a plain copy of the Messages
   and Contacts databases in the system's temporary folder, which stayed
   there when the app or the reader was stopped. The copy now lives in the
-  run's own folder and is always removed.
+  run's own folder and is always removed. Decrypted attachments are written
+  there too, on the disk the run checks for room, so a small system
+  temporary folder no longer makes every large video fail. An attachment
+  that could not be decrypted is counted and listed among the Import Run's
+  issues with the reason, instead of being marked missing while the run
+  reported success.
 - 2026-10-02 **WhatsApp imports keep what they could not find.** A message
   whose photo file was missing lost the attachment with no trace, and a later
   import with the file in place added the message a second time. It now
@@ -366,9 +396,40 @@ released versions carry their date on the heading.
   instead of too large. Opening the link to a staging folder not made yet
   says nothing is there yet, instead of calling it outside the Staging
   Directory when that directory is reached through a link.
+- 2026-10-02 **An Apple Messages reaction belongs to the person who made
+  it.** Your heart on a friend's message was stored as theirs, and theirs on
+  yours as yours. Each reaction also became an extra message of its own, and
+  removing a reaction showed it as added. A reaction is now stored on the
+  message it reacts to, under the person who made it, and a removed one
+  leaves nothing behind.
+- 2026-10-02 **Two different messages alike are no longer stored as one.**
+  For SMS Backup & Restore, GO SMS Pro, SMS Backup+, iMazing and
+  OpenExtract, "lol" from two people in the same second of a group, or "?"
+  sent twice a moment apart, was stored once and the other copy counted as
+  a duplicate. Reading the same backup on a computer set to another time
+  zone gave every message a new id, so importing it again stored every
+  message a second time. Each message's id now takes in its sender and the
+  exact instant, wherever the backup is read, and every source drops a
+  repeated copy of one message in the same way.
+- 2026-10-02 **The Import form's attachment choices are checked before
+  Staging and hold for the whole run.** Compress & Convert with Max FPS
+  cleared ran Staging to the end, hours on a large backup, then failed, and
+  every resume failed the same way. It is now refused before Staging starts,
+  with a sentence that names Max FPS; a Max FPS of 0 or below is refused
+  too. An iMazing or OpenExtract import always copies the original
+  attachments. Before, it followed whatever Attachments choice was left from
+  another source, so it could re-encode videos or show "Attachments: Skip".
+- 2026-10-02 **An import refused over a line that can't be read names a line
+  you can find.** The server's `import` command counted only the lines that
+  were not blank, so the number pointed at the wrong line. An Upload named a
+  line of its own batch; it now names the staged file and the line in it.
 
 #### Exporting and converting
 
+- 2026-10-03 **Android XML holds only SMS and MMS.** Export and Convert
+  wrote every message as a text message, so an iMessage or a WhatsApp
+  message came back from a re-import as an SMS. They now leave every other
+  message out, and the log says how many were left out and why.
 - 2026-10-01 **An export from the Conversations list holds those
   conversations.** Export opened from a filtered Conversations list wrote
   only the matching messages, or refused a search such as `messages:>100`.
@@ -448,6 +509,17 @@ released versions carry their date on the heading.
   click. A Saved Search click no longer rewrites the Contacts or Trash search
   you go Back to. Trash names an unknown search word once, and says when
   its requests fail instead of saying "Trash is empty."
+- 2026-10-02 **`source:` names every source an import reads.** It took only
+  `imessage`, `whatsapp` and `sms`, where `sms` meant SMS Backup & Restore,
+  so messages from iMazing, OpenExtract, GO SMS Pro and SMS Backup+ could not
+  be searched by source. It now takes `imessage`, `whatsapp`,
+  `sms-backup-restore`, `imazing`, `openextract`, `go-sms-pro` and
+  `sms-backup-plus`, and the Advanced Search form on Messages has a Source
+  field listing them by name. On Conversations, `source:` also finds a
+  conversation that source holds only as duplicates.
+- 2026-10-02 **A conversation of only duplicates shows no date.** Under an
+  `import:` search, such a conversation read as last active on 1 January
+  1970.
 
 #### Contacts and identities
 
@@ -484,6 +556,10 @@ released versions carry their date on the heading.
   already has, instead of becoming a new US number. A row with a stray extra
   comma refuses the load instead of shifting every cell after it. A refusal
   over a contact in the Trash says to restore it or delete it for good.
+  Export writes a `'` before any cell that starts with `=`, `+`, `-` or `@`,
+  so a spreadsheet shows a contact named `=HYPERLINK(…)` as text instead of
+  running it as a formula, and keeps the `+` of every phone number. The load
+  takes that `'` off again, whether or not the spreadsheet kept it.
 - 2026-10-02 **A conversation no longer names a contact in the Trash.** A
   participant whose contact was trashed showed that contact's name and
   linked to a contact that could not be opened. A group with no recorded
@@ -534,7 +610,11 @@ released versions carry their date on the heading.
   promised that a token could delete messages, which no token can, and now
   shows when each token expires. The secret of a new token stays on screen
   until you close its dialog, through a stray click, Escape, or leaving
-  Settings before it arrives.
+  Settings before it arrives. A token shows only the permissions its account
+  holds: one made by an account that may not import no longer says it can,
+  and a permission the Owner turns off shows as off on every token. A token
+  made while its account lacked a permission keeps it off after the Owner
+  turns it on, so make a new token then.
 - 2026-10-02 **Delete account asks for what it needs.** An account with no
   password confirms with its username alone, the dialog says username, a
   refusal such as a wrong password shows inside the dialog, and the typed
@@ -569,6 +649,8 @@ released versions carry their date on the heading.
   change. The time zone field stores the zone you picked, not another one
   with the same rules today. A Staging Directory that can't be used says why,
   and the attachment size limit no longer offers to save a rounded value.
+  Emptying the display name and saving clears it, on your own account and
+  when the Owner clears another's; before, the old name came back.
 - 2026-10-02 **The connection screen keeps track of where it is.** Applying
   an address that does not answer says so and says whether you are still
   connected. In the desktop app, "Use the Message Crate on this computer"
@@ -587,6 +669,14 @@ released versions carry their date on the heading.
   dialog can't be dismissed while it saves, a second click closes the sort
   menu, the list column's resize handle moves from the width you see, and
   Browse says when the file dialog can't open.
+- 2026-10-02 **Delete all messages finishes whole and spares a running
+  import.** A failure part-way left the conversations deleted and the rest
+  in place. While an Import Run was uploading, the delete removed the
+  attachment files of the run's next batch, and that batch stored its
+  messages without their attachments. The delete now succeeds or fails as
+  one step, waits for a batch in progress, and leaves the attachment files
+  on disk while the account has an Import Run going; they are removed by
+  the next Delete all messages with no import running, or with the account.
 
 #### The server
 
@@ -626,6 +716,14 @@ released versions carry their date on the heading.
   wherever it is, oversized and out-of-range requests are refused with the
   documented error, and the API reference pages carry the same headers as
   everything else.
+- 2026-10-02 **`reset-demo` works on the Message Crate your configuration
+  names.** It built the Demo Account into a database of its own choosing
+  beside the configuration folder, whatever the configuration said, and then
+  replaced the configuration file with one the server would not start with.
+  It now rebuilds the Demo Account in the configured database and leaves the
+  file alone. Before it puts the rebuilt database in place, it checks every
+  row of every other account and the Server Settings, and refuses if any of
+  them changed.
 
 ### Upgrading
 
@@ -652,6 +750,21 @@ released versions carry their date on the heading.
 - If you load contacts from the command line, the server's `import-contacts`
   command and the `--contacts` and `--overwrite-contacts` options of `import`
   are gone. Load the Address Book in the app instead.
+- Each message's id from SMS Backup & Restore, GO SMS Pro, SMS Backup+,
+  iMazing, OpenExtract and WhatsApp is now made differently. A backup already
+  imported by an earlier 0.10.0 build is stored a second time if you import
+  it again: use **Delete all messages** in Settings first, then import it.
+- A Saved Search that uses `source:sms` is refused. Edit it to
+  `source:sms-backup-restore`.
+- An Import Run left waiting at a Staging Review or at its Media stage by an
+  earlier build can't go on, and says its Staging did not finish. Discard it
+  and start the import again. Do the same with a paused Apple Messages run
+  from an earlier build: its staged files don't say which reactions are
+  yours, so yours would be stored as someone else's.
+- `reset-demo` no longer writes a configuration file, and reads the one given
+  with `--config`. If an earlier `reset-demo` replaced your configuration
+  file, the server stops at startup with a missing `[server]` section: put
+  your own file back.
 
 ## [0.9.0] - 2026-09-22
 

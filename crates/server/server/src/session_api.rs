@@ -40,13 +40,13 @@ pub struct CreateSessionResponse {
 }
 
 impl CreateSessionResponse {
-    /// Issue (or reuse) the session token for an existing account. Uses the
-    /// account id when the row has no username.
+    /// Issue the session token for an existing account, replacing the one it
+    /// held. Uses the account id when the row has no username.
     async fn for_existing_account(
         conn: &mut SqliteConnection,
         account_id: i64,
     ) -> anyhow::Result<CreateSessionResponse> {
-        let token = session_tokens::get_or_create_session_token(conn, account_id).await?;
+        let token = session_tokens::rotate_account_session_token(conn, account_id).await?;
         account_profile::record_login(conn, account_id).await?;
         let username = account_profile::username_for_account(conn, account_id)
             .await?
@@ -63,8 +63,7 @@ impl CreateSessionResponse {
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct Session {
     sources: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    account_id: Option<i64>,
+    account_id: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     username: Option<String>,
 }
@@ -90,7 +89,7 @@ pub(crate) async fn get_session(
     let sources = list_account_sources(&state.db, account_id).await?;
     Ok(Json(Session {
         sources,
-        account_id: Some(account_id),
+        account_id,
         username,
     }))
 }

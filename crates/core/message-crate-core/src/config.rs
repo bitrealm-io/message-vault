@@ -26,7 +26,8 @@ pub enum OutputFormat {
     Json,
     /// Per-conversation common message as JSON Lines (header + one message per line).
     Jsonl,
-    /// Single SMS Backup & Restore XML backup (`smses.xml`).
+    /// One XML file holding every conversation, written by the merged archive
+    /// the caller supplies; the crate that owns that archive names the file.
     Xml,
     /// SMS Backup+ mail: a folder of `.eml` files per conversation with the
     /// `X-smssync-*` headers, holding only SMS and MMS.
@@ -41,15 +42,14 @@ impl fmt::Display for OutputFormat {
             Self::Mbox => "MBOX (per conversation)",
             Self::Json => "JSON (common message)",
             Self::Jsonl => "JSONL (common message lines)",
-            Self::Xml => "XML (SMS Backup & Restore)",
+            Self::Xml => "XML (one file)",
             Self::SmsBackupPlus => "EML (SMS Backup+)",
         })
     }
 }
 
 impl OutputFormat {
-    /// Short format id (`json`, `jsonl`, `csv`, …) that the export form stores
-    /// and [`OutputFormat::parse`] reads back.
+    /// Short format id (`json`, `jsonl`, `csv`, …) that the export form stores.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Csv => "csv",
@@ -59,28 +59,6 @@ impl OutputFormat {
             Self::Jsonl => "jsonl",
             Self::Xml => "xml",
             Self::SmsBackupPlus => "sms-backup-plus",
-        }
-    }
-
-    /// Parse a format id. `ndjson` is accepted as JSON Lines; `sbr`/`smses` as
-    /// XML; `smsbackupplus` as `sms-backup-plus`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error string when `s` is not a known format.
-    pub fn parse(s: &str) -> Result<Self, String> {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "csv" => Ok(Self::Csv),
-            "eml" => Ok(Self::Eml),
-            "mbox" => Ok(Self::Mbox),
-            "json" => Ok(Self::Json),
-            "jsonl" | "ndjson" => Ok(Self::Jsonl),
-            "xml" | "sbr" | "smses" => Ok(Self::Xml),
-            "sms-backup-plus" | "smsbackupplus" => Ok(Self::SmsBackupPlus),
-            other => Err(format!(
-                "unknown output format '{other}' (expected csv, eml, mbox, json, jsonl, xml, \
-                 or sms-backup-plus)"
-            )),
         }
     }
 
@@ -326,49 +304,6 @@ mod tests {
             resume: false,
             source: SourceConfig::Format(FormatConfig {}),
         }
-    }
-
-    #[test]
-    fn parse_accepts_every_format_id_and_its_aliases() {
-        assert_eq!(OutputFormat::parse("csv"), Ok(OutputFormat::Csv));
-        assert_eq!(OutputFormat::parse("eml"), Ok(OutputFormat::Eml));
-        assert_eq!(OutputFormat::parse("mbox"), Ok(OutputFormat::Mbox));
-        assert_eq!(OutputFormat::parse("json"), Ok(OutputFormat::Json));
-        assert_eq!(OutputFormat::parse("jsonl"), Ok(OutputFormat::Jsonl));
-        assert_eq!(OutputFormat::parse("ndjson"), Ok(OutputFormat::Jsonl));
-        assert_eq!(OutputFormat::parse("xml"), Ok(OutputFormat::Xml));
-        assert_eq!(OutputFormat::parse("sbr"), Ok(OutputFormat::Xml));
-        assert_eq!(OutputFormat::parse("smses"), Ok(OutputFormat::Xml));
-        assert_eq!(
-            OutputFormat::parse("sms-backup-plus"),
-            Ok(OutputFormat::SmsBackupPlus)
-        );
-        assert_eq!(
-            OutputFormat::parse("smsbackupplus"),
-            Ok(OutputFormat::SmsBackupPlus)
-        );
-        assert_eq!(
-            OutputFormat::parse(OutputFormat::SmsBackupPlus.as_str()),
-            Ok(OutputFormat::SmsBackupPlus)
-        );
-    }
-
-    #[test]
-    fn parse_ignores_case_and_surrounding_whitespace() {
-        assert_eq!(OutputFormat::parse("  JSONL\n"), Ok(OutputFormat::Jsonl));
-        assert_eq!(OutputFormat::parse("Csv"), Ok(OutputFormat::Csv));
-    }
-
-    #[test]
-    fn parse_refuses_an_unknown_format_and_lists_the_known_ones() {
-        assert_eq!(
-            OutputFormat::parse("pdf"),
-            Err(
-                "unknown output format 'pdf' (expected csv, eml, mbox, json, jsonl, xml, or \
-                 sms-backup-plus)"
-                    .to_string()
-            )
-        );
     }
 
     #[test]

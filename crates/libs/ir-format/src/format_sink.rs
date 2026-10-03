@@ -2,7 +2,7 @@
 //! (JSON, JSON Lines, CSV, EML, MBOX), or one merged archive supplied by
 //! the crate that owns that archive's format.
 
-use crate::clean::clean_previous_ir_output;
+use crate::clean::{clean_previous_ir_output, record_archive_files};
 use crate::export_transforms::apply_transforms;
 use crate::write::write_format;
 use anyhow::{Context, Result};
@@ -30,6 +30,12 @@ pub trait MergedArchive: std::fmt::Debug + Send {
         documents: &[ConversationDocument],
         report: &mut ExportReport,
     ) -> Result<PathBuf>;
+
+    /// The names of the files [`write`](Self::write) creates in the output
+    /// folder, partial files included. The sink records them before it
+    /// writes, so the next fresh export into the folder removes them
+    /// whatever format it writes.
+    fn file_names(&self) -> Vec<String>;
 }
 
 /// Writes conversations in the requested [`OutputFormat`], or through a
@@ -182,6 +188,7 @@ impl FormatSink {
         report.obfuscated_docs += outcome.obfuscated_docs as u64;
 
         if let Some(archive) = &self.archive {
+            record_archive_files(&self.output_dir, &archive.file_names())?;
             archive.write(&self.output_dir, &self.docs, report)?;
         } else {
             let mut docs: Vec<&mut ConversationDocument> = self.docs.iter_mut().collect();
@@ -338,6 +345,10 @@ mod tests {
                 .collect();
             fs::write(&path, body.join("\n"))?;
             Ok(path)
+        }
+
+        fn file_names(&self) -> Vec<String> {
+            vec!["all.txt".into()]
         }
     }
 

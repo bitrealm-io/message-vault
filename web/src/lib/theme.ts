@@ -167,11 +167,6 @@ function isThemeMode(value: string | null | undefined): value is ThemeMode {
   return value === "light" || value === "dark" || value === "system";
 }
 
-/** True when the value is only light or dark (older storage without "system"). */
-function isResolvedTheme(value: string | null | undefined): value is ResolvedTheme {
-  return value === "light" || value === "dark";
-}
-
 /** Return a lowercase `#rrggbb` color, or null when the text is not a hex color. */
 export function normalizeHex(raw: string): string | null {
   const t = raw.trim();
@@ -259,8 +254,6 @@ export function applyTheme(mode: ThemeMode, seeds: ThemeSeeds): ResolvedTheme {
 export function readStoredMode(): ThemeMode {
   const raw = readPref(THEME_MODE_KEY);
   if (isThemeMode(raw)) return raw;
-  // Older builds stored only "light" or "dark". Treat those as a mode, not "system".
-  if (isResolvedTheme(raw)) return raw;
   return DEFAULT_MODE;
 }
 

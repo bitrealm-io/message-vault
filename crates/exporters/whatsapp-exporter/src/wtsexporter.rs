@@ -57,7 +57,7 @@ impl WtsexporterArgs {
 
 /// Locate `wtsexporter` (the Python WhatsApp export tool this crate shells out to):
 /// `WTSEXPORTER` → sibling of this exe → `cli/` next to the GUI →
-/// legacy parent dir → `MESSAGE_CRATE_BIN` → `PATH`.
+/// `MESSAGE_CRATE_BIN` → `PATH`.
 ///
 /// # Errors
 ///
@@ -85,16 +85,8 @@ pub(crate) fn resolve_wtsexporter() -> Result<PathBuf> {
     if let Ok(current) = env::current_exe()
         && let Some(dir) = current.parent()
     {
-        let candidates = [
-            dir.join(executable),
-            dir.join("cli").join(executable),
-            // Legacy flat-root archives.
-            dir.parent().map(|p| p.join(executable)).unwrap_or_default(),
-        ];
+        let candidates = [dir.join(executable), dir.join("cli").join(executable)];
         for candidate in candidates {
-            if candidate.as_os_str().is_empty() {
-                continue;
-            }
             tried.push(candidate.clone());
             if candidate.is_file() {
                 return Ok(candidate);

@@ -5,56 +5,8 @@
 //! only; the real program is covered on every platform by
 //! `tests/helper_process.rs`.
 
-#[cfg(unix)]
-pub(crate) use fake::{fake_helper, source_line, spawn_fake};
-
-#[cfg(unix)]
-mod fake {
-    use std::{
-        fs,
-        os::unix::fs::PermissionsExt,
-        path::{Path, PathBuf},
-    };
-
-    use imessage_reader_protocol::Request;
-
-    use crate::helper::Helper;
-
-    /// Write `body` as an executable `/bin/sh` script in `dir`. The script
-    /// reads the request line first, as the real program does.
-    pub(crate) fn fake_helper(dir: &Path, body: &str) -> PathBuf {
-        let path = dir.join("imessage-reader");
-        fs::write(&path, format!("#!/bin/sh\nread -r request\n{body}\n")).unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
-        path
-    }
-
-    /// Start the fake at `path` with `request`. Retries while another test
-    /// thread's fork still holds the script open for writing (`ETXTBSY`).
-    pub(crate) fn spawn_fake(path: &Path, request: &Request) -> Helper {
-        for _ in 0..50 {
-            match Helper::spawn_at(path, request, None, None) {
-                Ok(helper) => return helper,
-                Err(e)
-                    if e.downcast_ref::<std::io::Error>()
-                        .is_some_and(|io| io.raw_os_error() == Some(26)) =>
-                {
-                    std::thread::sleep(std::time::Duration::from_millis(20));
-                }
-                Err(e) => panic!("start the fake helper: {e:#}"),
-            }
-        }
-        panic!("the fake helper stayed busy");
-    }
-
-    /// The shell line that prints a `source` event with `version`.
-    pub(crate) fn source_line(version: u32) -> String {
-        format!(r#"echo '{{"event":"source","protocol_version":{version},"encrypted":false}}'"#)
-    }
-}
-
 mod locating {
-    use std::{ffi::OsString, fs, path::Path};
+    use std::{fs, path::Path};
 
     use crate::helper::{HELPER_PATH_ENV, Places, executable_name, locate_in};
 
@@ -62,8 +14,6 @@ mod locating {
         Places {
             explicit: None,
             exe_dir: None,
-            io_bin: None,
-            path: None,
         }
     }
 
@@ -84,7 +34,6 @@ mod locating {
         let found = locate_in(&Places {
             explicit: Some(explicit.clone()),
             exe_dir: Some(&app),
-            ..nowhere()
         })
         .unwrap();
         assert_eq!(found, explicit);
@@ -100,7 +49,6 @@ mod locating {
         let err = locate_in(&Places {
             explicit: Some(missing.clone()),
             exe_dir: Some(&app),
-            ..nowhere()
         })
         .unwrap_err()
         .to_string();
@@ -127,59 +75,17 @@ mod locating {
         assert_eq!(found, program);
     }
 
+    /// The program is looked for beside the app and nowhere else: a copy in
+    /// the folder above is not used.
     #[test]
-    fn a_test_binary_in_deps_finds_the_program_one_folder_up() {
+    fn a_program_in_the_folder_above_the_app_is_not_found() {
         let root = tempfile::tempdir().unwrap();
-        let program = put_program(&root.path().join("debug"));
-        let deps = root.path().join("debug").join("deps");
-        fs::create_dir_all(&deps).unwrap();
-
-        let found = locate_in(&Places {
-            exe_dir: Some(&deps),
-            ..nowhere()
-        })
-        .unwrap();
-        assert_eq!(found, program);
-    }
-
-    #[test]
-    fn the_io_bin_folder_then_path_are_searched_in_that_order() {
-        let root = tempfile::tempdir().unwrap();
-        let io_bin = root.path().join("io-bin");
-        let in_io_bin = put_program(&io_bin);
-        let on_path = root.path().join("on-path");
-        let in_path = put_program(&on_path);
-        let path = std::env::join_paths([&on_path]).unwrap();
-
-        let found = locate_in(&Places {
-            io_bin: Some(io_bin),
-            path: Some(path.clone()),
-            ..nowhere()
-        })
-        .unwrap();
-        assert_eq!(found, in_io_bin);
-
-        let found = locate_in(&Places {
-            io_bin: Some(root.path().join("empty")),
-            path: Some(path),
-            ..nowhere()
-        })
-        .unwrap();
-        assert_eq!(found, in_path);
-    }
-
-    #[test]
-    fn a_missing_program_names_the_folders_the_app_looked_in() {
-        let root = tempfile::tempdir().unwrap();
+        put_program(root.path());
         let app = root.path().join("app");
         fs::create_dir_all(&app).unwrap();
-        let io_bin = root.path().join("io-bin");
-        let path: OsString = std::env::join_paths([root.path().join("on-path")]).unwrap();
 
         let err = locate_in(&Places {
             exe_dir: Some(&app),
-            io_bin: Some(io_bin.clone()),
-            path: Some(path),
             ..nowhere()
         })
         .unwrap_err()
@@ -191,13 +97,10 @@ mod locating {
             )),
             "{err}"
         );
-        let tried = format!(
-            "Tried: {}, {}, {}",
-            app.join(&executable).display(),
-            root.path().join(&executable).display(),
-            io_bin.join(&executable).display()
+        assert!(
+            err.ends_with(&format!("Tried: {}", app.join(&executable).display())),
+            "{err}"
         );
-        assert!(err.ends_with(&tried), "{err}");
     }
 }
 
@@ -207,7 +110,7 @@ mod faults {
         Event, IdentitiesRequest, PROTOCOL_VERSION, Platform, Request, Source,
     };
 
-    use super::fake::{fake_helper, source_line, spawn_fake};
+    use crate::testutil::{fake_helper, source_line, spawn_fake};
 
     /// A request that expects a `source` event first.
     fn identities_request() -> Request {

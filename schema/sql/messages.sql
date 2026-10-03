@@ -21,38 +21,24 @@ CREATE INDEX IF NOT EXISTS ix_conversations_account_id ON conversations (account
 
 -- One other person listed in a conversation. The account holder is never a
 -- participant (ADR-0015); a message records which of the holder's addresses it
--- used in `messages.owner_handle_id`.
+-- used in `messages.owner_handle_id`. A participant's contact is the one its
+-- identity is on (`contact_handles`), so renaming or moving the identity
+-- reaches every conversation at once.
 CREATE TABLE IF NOT EXISTS participants (
     -- Surrogate primary key for this participant row.
     id INTEGER PRIMARY KEY,
     -- Parent conversation (`conversations.id`).
     conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-    -- Participant identity (`handles.id`).
-    -- Participant identity. NULL when the source named this person and
-    -- recorded no address for them; `contact_id` then carries who they are.
-    handle_id INTEGER REFERENCES handles(id) ON DELETE CASCADE,
-    -- Resolved address-book contact when known (`contacts.id`).
-    contact_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
+    -- Participant identity (`handles.id`). A person the source named with no
+    -- address has an identity of type 'other' holding the name.
+    handle_id INTEGER NOT NULL REFERENCES handles(id) ON DELETE CASCADE,
     -- Display name residue from the source for this participant.
-    name_alias TEXT
+    name_alias TEXT,
+    -- A participant is one person's seat in one conversation.
+    UNIQUE (conversation_id, handle_id)
 );
 
--- A participant is one person's seat in one conversation. A participant
--- with an identity is that identity; one without is its contact. The two
--- indexes say so, because a UNIQUE over all three columns never matches a
--- row holding a NULL in SQLite: a re-import added the name-only
--- participant again, and one whose contact an import replaced (ADR-0013)
--- got a second row for the same identity. `contact_id` stays out of the
--- first index because a handle's contact is read through `contact_handles`.
-CREATE UNIQUE INDEX IF NOT EXISTS ux_participants_conversation_handle
-    ON participants (conversation_id, handle_id)
-    WHERE handle_id IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS ux_participants_conversation_name_only_contact
-    ON participants (conversation_id, contact_id)
-    WHERE handle_id IS NULL;
-
 CREATE INDEX IF NOT EXISTS ix_participants_handle_id ON participants (handle_id);
-CREATE INDEX IF NOT EXISTS ix_participants_contact_id ON participants (contact_id);
 
 -- One message in a conversation.
 CREATE TABLE IF NOT EXISTS messages (

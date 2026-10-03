@@ -69,7 +69,7 @@ mod tests {
     use imessage_reader_protocol::{BackupDomainRequest, PROTOCOL_VERSION, Request};
 
     use super::{DecryptedDomain, read_answer};
-    use crate::helper::tests::{fake_helper, source_line, spawn_fake};
+    use crate::testutil::{fake_helper, source_line, spawn_fake};
 
     fn request() -> Request {
         Request::BackupDomain(BackupDomainRequest {

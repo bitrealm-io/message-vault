@@ -829,6 +829,58 @@ async fn the_same_words_from_two_group_members_are_never_near_duplicates() {
     assert_eq!(duplicate_of(&mut conn, from_bo).await, None);
 }
 
+/// A pass runs after the import that called it has committed, so another
+/// account's import can commit while the pass reads. A deferred transaction
+/// then failed at its first write with `SQLITE_BUSY_SNAPSHOT`, which the busy
+/// timeout does not retry, and the batch answered `500` with the duplicates
+/// still shown.
+#[tokio::test]
+async fn a_write_that_commits_while_the_pass_reads_does_not_fail_it() {
+    let (pool, _dir) = engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    setup_db(&mut conn).await;
+    let first = insert_msg(
+        &mut conn,
+        InsertMsgArgs {
+            source: "go-sms-pro",
+            guid: "g1",
+            timestamp: "2015-03-12T18:04:22Z",
+            from_me: 1,
+            body: "Running late",
+            sort_order: 0,
+        },
+    )
+    .await;
+    let second = insert_msg(
+        &mut conn,
+        InsertMsgArgs {
+            source: "sms-backup-plus",
+            guid: "g2",
+            timestamp: "2015-03-12T18:04:22Z",
+            from_me: 1,
+            body: "Running late",
+            sort_order: 0,
+        },
+    )
+    .await;
+
+    let mut other_conn = pool.acquire().await.unwrap();
+    let mut other = crate::db::begin_write(&mut other_conn).await.unwrap();
+    sqlx::query("INSERT INTO accounts (id, username) VALUES (8, 'another')")
+        .execute(&mut *other)
+        .await
+        .unwrap();
+    let priority = ["go-sms-pro".into(), "sms-backup-plus".into()];
+    let stats = crate::db::write_tx::commit_during(
+        other,
+        dedupe_cross_source(&mut conn, TEST_ACCOUNT_ID, Some(&priority), 2),
+    )
+    .await
+    .expect("the pass waits for the other write and then runs");
+    assert_eq!(stats.exact_flagged, 1);
+    assert_eq!(duplicate_of(&mut conn, second).await, Some(first));
+}
+
 // ---------------------------------------------------------------------------
 // Several conversations, handles, senders and attachments.
 //

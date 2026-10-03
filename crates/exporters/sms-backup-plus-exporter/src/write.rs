@@ -26,12 +26,14 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::flat_eml::UNKNOWN_EMAIL_DOMAIN;
+
 /// The export report counter for messages left out because SMS Backup+
 /// holds only SMS and MMS.
 pub(crate) const LEFT_OUT: &str = "messages_not_sms_or_mms_left_out";
 
-/// Domain of every address and id the writer makes up. `.local` is never
-/// routed, and the importer recognises SMS Backup+ mail by it.
+/// Domain of the `Message-ID` and `References` the writer makes up. `.local`
+/// is never routed.
 const DOMAIN: &str = "sms-backup-plus.local";
 
 /// Writes the SMS and MMS of every conversation as SMS Backup+ mail. Hand it
@@ -52,6 +54,12 @@ impl SmsBackupPlusArchive {
             backup_time_ms: backup_time.timestamp_millis(),
         }
     }
+}
+
+/// Whether SMS Backup+ mail holds `message`: an SMS, or an MMS, which has
+/// the SMS service with the `mms` kind. Every other message is left out.
+pub fn writes_message(message: &IrMessage) -> bool {
+    message.service == IrService::Sms
 }
 
 /// The log line saying how many messages the archive left out and why, or
@@ -83,7 +91,7 @@ impl MergedArchive for SmsBackupPlusArchive {
             let messages: Vec<IrMessage> = doc
                 .messages
                 .iter()
-                .filter(|message| message.service == IrService::Sms)
+                .filter(|message| writes_message(message))
                 .cloned()
                 .collect();
             let left_out = doc.messages.len() - messages.len();
@@ -107,6 +115,13 @@ impl MergedArchive for SmsBackupPlusArchive {
             self.write_conversation(output_dir, doc)?;
         }
         Ok(output_dir.to_path_buf())
+    }
+
+    /// None: the archive writes only folders of `.eml` files, and the next
+    /// clean of the folder removes every such folder as it does the EML
+    /// format's (`mail::clean_previous_mail_output`).
+    fn file_names(&self) -> Vec<String> {
+        Vec::new()
     }
 }
 
@@ -332,14 +347,17 @@ impl<'a> Conversation<'a> {
     }
 }
 
-/// `"Name" <handle@sms-backup-plus.local>`. The importer reads a group
-/// sender from the part before the `@`, so the handle is kept whole; an `@`
-/// inside it becomes `=`.
+/// `"Name" <address>`, as SMS Backup+ writes it: an email address as it is,
+/// and any other handle, such as a phone number, as `<handle>@unknown.email`.
+/// The importer reads the handle back from the part before `@unknown.email`
+/// and any other address whole, so each handle comes back as it went out.
 fn address(handle: &str, name: Option<&str>) -> Address<'static> {
-    Address::new_address(
-        name.map(str::to_string),
-        format!("{}@{DOMAIN}", handle.replace('@', "=")),
-    )
+    let address = if handle.contains('@') {
+        handle.to_string()
+    } else {
+        format!("{handle}@{UNKNOWN_EMAIL_DOMAIN}")
+    };
+    Address::new_address(name.map(str::to_string), address)
 }
 
 #[cfg(test)]

@@ -14,16 +14,14 @@ import {
   setOpenToNetwork,
 } from "../../lib/localServer";
 import { readPref, removePref, writePref } from "../../lib/storage";
+import { getRememberImporterPaths, setRememberImporterPaths } from "../../lib/system-settings";
 import {
-  defaultStagingDir,
-  getHomeDir,
-  getRememberImporterPaths,
-  getStagingDir,
-  isUsableStagingParent,
-  setRememberImporterPaths,
-  setStagingDir,
-} from "../../lib/system-settings";
-import { type FfmpegToolsProbe, probeFfmpegTools, setFfmpegToolsDir } from "../../lib/tauri";
+  type FfmpegToolsProbe,
+  invokeSetStagingRoot,
+  invokeStagingRoot,
+  probeFfmpegTools,
+  setFfmpegToolsDir,
+} from "../../lib/tauri";
 import { isTauri } from "../../lib/tauri-check";
 import { readerLicenseUrl, readerSourceUrl } from "../../lib/thirdPartySoftware";
 
@@ -212,6 +210,8 @@ export function SystemSection() {
   const [ffmpegPath, setFfmpegPath] = useState("");
   const [stagingPath, setStagingPath] = useState("");
   const [defaultStagingPath, setDefaultStagingPath] = useState("");
+  /** The Staging Directory the desktop process holds now. */
+  const [stagingError, setStagingError] = useState<string | null>(null);
   const [rememberPaths, setRememberPaths] = useState(false);
   const [probe, setProbe] = useState<FfmpegToolsProbe | null>(null);
   const ffmpegDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -257,11 +257,13 @@ export function SystemSection() {
     setFfmpegPath(storedFfmpeg);
 
     void (async () => {
-      const home = await getHomeDir();
-      const defaultDir = defaultStagingDir(home);
-      setDefaultStagingPath(defaultDir);
-      const storedStaging = getStagingDir();
-      setStagingPath(storedStaging || defaultDir);
+      try {
+        const staging = await invokeStagingRoot();
+        setDefaultStagingPath(staging.defaultRoot);
+        setStagingPath(staging.root);
+      } catch (caught: unknown) {
+        setStagingError(caught instanceof Error ? caught.message : String(caught));
+      }
       await runFfmpegApply(storedFfmpeg);
     })();
 
@@ -270,31 +272,51 @@ export function SystemSection() {
     };
   }, [runFfmpegApply]);
 
+  // The desktop process keeps the setting and decides what it takes: every
+  // value typed is sent, and a refusal is shown as the desktop process gave
+  // it, so the window holds no rule of its own. An empty value goes back to
+  // the default. A run already staged keeps the folder it was made in; the
+  // new setting applies to runs started after it.
+  const stagingSaveGen = useRef(0);
+  const lastStagingSave = useRef<Promise<unknown>>(Promise.resolve());
   const onStagingPathChange = (next: string) => {
     setStagingPath(next);
-    const defaultDir = defaultStagingPath;
-    const trimmed = next.trim();
-    // Empty or equal to the default → no override (import uses the default parent).
-    if (!trimmed || (defaultDir && trimmed === defaultDir)) {
-      setStagingDir("");
-      return;
-    }
-    // Relative / filesystem root while typing: keep the field, do not persist yet.
-    if (!isUsableStagingParent(trimmed)) {
-      return;
-    }
-    setStagingDir(trimmed);
+    const gen = ++stagingSaveGen.current;
+    const save = invokeSetStagingRoot(next.trim());
+    lastStagingSave.current = save;
+    save.then(
+      (saved) => {
+        if (gen !== stagingSaveGen.current) return;
+        setStagingError(null);
+      },
+      (caught: unknown) => {
+        if (gen !== stagingSaveGen.current) return;
+        setStagingError(`Not saved. ${caught instanceof Error ? caught.message : String(caught)}`);
+      },
+    );
   };
 
-  // A typed value that is neither empty, the default, nor usable is kept in the field but not saved.
-  const stagingTrimmed = stagingPath.trim();
-  const stagingNotSaved =
-    stagingTrimmed !== "" &&
-    stagingTrimmed !== defaultStagingPath &&
-    !isUsableStagingParent(stagingTrimmed);
-
+  // A value the desktop process refused stays in the field until it is left.
+  // The field then shows the folder the desktop process holds, read once the
+  // last save has answered, so a value accepted after the refusal is never
+  // hidden behind the one shown before it.
   const onStagingPathBlur = () => {
-    if (stagingNotSaved) setStagingPath(getStagingDir() || defaultStagingPath);
+    if (stagingError === null) return;
+    const gen = ++stagingSaveGen.current;
+    setStagingError(null);
+    lastStagingSave.current
+      .catch(() => undefined)
+      .then(() => invokeStagingRoot())
+      .then(
+        (staging) => {
+          if (gen !== stagingSaveGen.current) return;
+          setStagingPath(staging.root);
+        },
+        (caught: unknown) => {
+          if (gen !== stagingSaveGen.current) return;
+          setStagingError(caught instanceof Error ? caught.message : String(caught));
+        },
+      );
   };
 
   const onFfmpegPathChange = (next: string) => {
@@ -336,9 +358,9 @@ export function SystemSection() {
             placeholder={defaultStagingPath || "~/message-crate"}
           />
         </div>
-        {stagingNotSaved ? (
-          <p className="col-start-2 m-0 pl-2 text-[0.75rem] text-danger">
-            Not saved. The staging directory must be a full path, and not the root of a drive.
+        {stagingError ? (
+          <p className="col-start-2 m-0 pl-2 text-[0.75rem] text-danger" role="alert">
+            {stagingError}
           </p>
         ) : null}
         <p className={settingsHelp}>

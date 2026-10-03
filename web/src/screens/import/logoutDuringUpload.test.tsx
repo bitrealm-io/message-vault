@@ -110,7 +110,6 @@ function pausedReport(): PushFinishedReport {
   return {
     ok: false,
     cancelled: true,
-    messages: 4_000,
     messages_attempted: 4_000,
     messages_inserted: 4_000,
     messages_deduped: 0,
@@ -206,10 +205,14 @@ describe("logging out during an Upload", () => {
     // conversation was recorded as failed.
     expect(completeImportMock).not.toHaveBeenCalled();
     expect(setImportStageMock.mock.calls.map((call) => call[1])).toEqual(["pushing"]);
-    expect(result.current.job.summaryView?.status).toBe("paused");
-    expect(result.current.job.summaryView?.filesFailed).toBe(0);
     expect(getToken()).toBeNull();
     expect(result.current.auth.isAuthenticated).toBe(false);
+    // The paused run is the account's (#1085): logged out, the screen shows
+    // the form, and the account finds the run again when it logs back in.
+    expect(result.current.job.phase).toBe("form");
+    await act(() => result.current.auth.login("http://127.0.0.1:8080", "next-session-token", 7));
+    expect(result.current.job.summaryView?.status).toBe("paused");
+    expect(result.current.job.summaryView?.filesFailed).toBe(0);
   });
 
   it("leaves the Upload running and the account logged in when the person goes back", async () => {

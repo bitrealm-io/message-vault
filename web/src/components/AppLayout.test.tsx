@@ -27,6 +27,11 @@ vi.mock("../screens/ConversationList", () => ({
     </div>
   ),
 }));
+vi.mock("../screens/MessageSearchList", () => ({
+  default: ({ query }: { query: string }) => (
+    <div data-testid="message-search-list">{`query: ${query}`}</div>
+  ),
+}));
 // The header stands in as one button that searches for "ada".
 vi.mock("./AppHeader", () => ({
   default: ({ onSearch }: { onSearch: (q: string) => void }) => (
@@ -188,5 +193,20 @@ describe("AppLayout on a Contact Group or Message Tag page", () => {
 
     await user.click(screen.getByRole("button", { name: "Search for ada" }));
     expect(screen.getByTestId("location").textContent).toBe("/tag/%231?q=ada");
+  });
+
+  it.each([
+    ["nothing typed asks for a search", "/tag/Holiday?view=messages", "query: "],
+    ["a typed search lists the tag's matches", "/tag/Holiday?q=ada&view=messages", null],
+  ])("on a tag page, the Messages list with %s", (_name, entry, expected) => {
+    sets.tags = ["Holiday"];
+    renderLayout(entry);
+    const list = screen.getByTestId("message-search-list").textContent ?? "";
+    if (expected === null) {
+      expect(list).toContain("Holiday");
+      expect(list).toContain("ada");
+    } else {
+      expect(list).toBe(expected);
+    }
   });
 });

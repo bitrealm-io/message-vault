@@ -567,14 +567,12 @@ released versions carry their date on the heading.
   Crate doesn't know, such as an iPhone message sent by satellite, was filed
   under a new contact with no name and left out of the named contact's
   counts.
+- 2026-10-03 **The contact drawer opened from a conversation covers the
+  column resize handles.** It sat below the handles, so a handle could show
+  through it.
 
 #### Accounts, Settings and screens
 
-- 2026-10-03 **The contact panel opened from a conversation covers the column
-  resize handles, and the Sources panel dims the screen the way every other
-  dialog does.** The contact panel sat below the handles, so a handle could
-  show through it. The shade behind the Sources panel now follows the light
-  or the dark theme instead of one fixed grey.
 - 2026-09-22 **Changing a password checks things in a sensible order and
   says so in full sentences.** Message Crate now checks the current password
   first, then that the new password was typed the same way twice, then that
@@ -668,6 +666,9 @@ released versions carry their date on the heading.
   one step, waits for a batch in progress, and leaves the attachment files
   on disk while the account has an Import Run going; they are removed by
   the next Delete all messages with no import running, or with the account.
+- 2026-10-03 **The Sources panel dims the screen the way every other dialog
+  does.** The shade behind it now follows the light or the dark theme instead
+  of one fixed grey.
 
 #### The server
 

@@ -1,4 +1,4 @@
-import type { MessageSearchSort } from "./messageSearchSort";
+import { type MessageSearchSort, messageSortFromParam } from "./messageSearchSort";
 
 /**
  * What the Messages screen's results list: the conversations a search
@@ -8,10 +8,13 @@ import type { MessageSearchSort } from "./messageSearchSort";
  */
 export type ResultsView = "conversations" | "messages";
 
-/** The address parameters the Messages list keeps. */
+/** Which results the list shows: `messages`, or absent for Conversations. */
 export const VIEW_PARAM = "view";
-/** The sort the person picked in the Messages list, as the route spells it. */
-export const MESSAGE_SORT_PARAM = "msort";
+/**
+ * The sort the person picked in the Messages list, spelled as `GET
+ * /v1/messages` spells it. Only the Messages list keeps a sort in the address.
+ */
+export const MESSAGE_SORT_PARAM = "sort";
 /** The message a search result opened its conversation at. */
 export const AT_PARAM = "at";
 
@@ -22,16 +25,7 @@ export function resultsView(params: URLSearchParams): ResultsView {
 
 /** The sort the person picked in the Messages list, or null for the default. */
 export function pickedMessageSort(params: URLSearchParams): MessageSearchSort | null {
-  switch (params.get(MESSAGE_SORT_PARAM)) {
-    case "relevance":
-      return { sort: "relevance", order: "desc" };
-    case "date":
-      return { sort: "date", order: "asc" };
-    case "-date":
-      return { sort: "date", order: "desc" };
-    default:
-      return null;
-  }
+  return messageSortFromParam(params.get(MESSAGE_SORT_PARAM));
 }
 
 /** The message a search result opened at: a positive integer, or null. */

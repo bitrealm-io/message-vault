@@ -9,17 +9,14 @@
 //! streams back into [`message_ir::IrMessage`]s, then
 //! [`message_ir_format::FormatSink`] writes the chosen output format (JSON
 //! Lines, JSON, CSV, EML, MBOX, or XML). The protocol is
-//! `imessage-reader-protocol`; how the program is found is in [`helper`].
+//! `imessage-reader-protocol`; the program is found and started by
+//! `ios_backup::Helper`, which the checks run on an iPhone backup before an
+//! import use too.
+//!
+//! [`run`] is this crate's whole public surface
+//! (`docs/adr/0001-no-command-line-except-the-server.md`).
 
-mod backup;
-mod backup_domain;
 mod convert;
-mod helper;
-mod identity;
 mod run;
-mod scratch;
 
-pub use backup::ios_backup_encrypted_flag;
-pub use backup_domain::{DecryptedDomain, decrypt_ios_backup_domain};
-pub use identity::{backup_identities, ios_backup_phone_number};
 pub use run::run;

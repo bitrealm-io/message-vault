@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EXPORT_SOURCES } from "./exportSources";
 import { IMESSAGE_METHODS, IMESSAGE_SOURCE_ID } from "./imessageImport";
-import { importSessionCreateBody, sourceForMethod } from "./importSource";
+import { importSessionCreateBody, showsAttachmentOptions, sourceForMethod } from "./importSource";
 import { WHATSAPP_METHODS, WHATSAPP_SOURCE_ID } from "./whatsappImport";
 
 describe("sourceForMethod", () => {
@@ -57,5 +57,25 @@ describe("importSessionCreateBody", () => {
 
   it("sends sms-backup-restore unchanged", () => {
     expect(importSessionCreateBody("sms-backup-restore").source).toBe("sms-backup-restore");
+  });
+});
+
+describe("showsAttachmentOptions", () => {
+  it("is true for every source whose form has the Attachments field", () => {
+    const sources = [
+      ...IMESSAGE_METHODS.map((m) => m.id),
+      ...WHATSAPP_METHODS.map((m) => m.id),
+      "sms-backup-restore",
+      "go-sms-pro",
+      "sms-backup-plus",
+    ];
+    for (const source of sources) {
+      expect(showsAttachmentOptions(source), source).toBe(true);
+    }
+  });
+
+  it("is false for iMazing and OpenExtract, whose forms have none", () => {
+    expect(showsAttachmentOptions("imazing")).toBe(false);
+    expect(showsAttachmentOptions("openextract")).toBe(false);
   });
 });

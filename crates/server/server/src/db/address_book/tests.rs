@@ -58,6 +58,33 @@ async fn imported(
     id
 }
 
+/// Make `raw`, already an identity, the one other person in a one-to-one
+/// conversation, so something cites it.
+async fn in_a_conversation(conn: &mut SqliteConnection, raw: &str) {
+    let handle_id: i64 =
+        sqlx::query_scalar("SELECT id FROM handles WHERE account_id = $1 AND raw = $2")
+            .bind(ACCOUNT)
+            .bind(raw)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    let conversation: i64 = sqlx::query_scalar(
+        "INSERT INTO conversations (account_id, chat_handle_id, conversation_type, source_file)
+         VALUES ($1, $2, 'individual', 'c.jsonl') RETURNING id",
+    )
+    .bind(ACCOUNT)
+    .bind(handle_id)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO participants (conversation_id, handle_id) VALUES ($1, $2)")
+        .bind(conversation)
+        .bind(handle_id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+}
+
 /// Put a contact in a Contact Group, creating the group.
 async fn join_group(conn: &mut SqliteConnection, contact_id: i64, group: &str) {
     named_membership::set_membership(
@@ -702,6 +729,7 @@ async fn edit_removes_the_identities_and_memberships_the_rows_do_not_list() {
     )
     .await;
     join_group(&mut conn, ada, "Family").await;
+    in_a_conversation(&mut conn, "+15555550109").await;
     let text = file(&[
         &format!("{ada},Ada,Work,phone,phone,+15555550100"),
         &format!("{ada},Ada,Work,phone,email,ada@example.com"),
@@ -722,16 +750,20 @@ async fn edit_removes_the_identities_and_memberships_the_rows_do_not_list() {
         ["phone/email/ada@example.com", "phone/phone/+15555550100"]
     );
     assert_eq!(groups_of(&mut conn, ada).await, ["Work"]);
-    // The identity is off the contact and still in the database: an import
-    // made it, and its conversations cite it.
-    let still_there: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM handles WHERE account_id = $1 AND normalized = '+15555550109'",
+    // The identity is off the contact and, because a conversation cites it,
+    // on a new contact with no name: the person is Unknown for it again.
+    let holder: Vec<String> = sqlx::query_scalar(
+        "SELECT ct.preferred_name FROM handles h
+         JOIN contact_handles ch ON ch.handle_id = h.id
+         JOIN contacts ct ON ct.id = ch.contact_id
+         WHERE h.account_id = $1 AND h.normalized = '+15555550109'",
     )
     .bind(ACCOUNT)
-    .fetch_one(&mut *conn)
+    .fetch_all(&mut *conn)
     .await
     .unwrap();
-    assert_eq!(still_there, 1);
+    assert_eq!(holder, [String::new()]);
+    crate::test_support::assert_every_person_is_on_a_contact(&mut conn, "an Edit load").await;
     // The Contact Group it left is not deleted either.
     let family: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM contact_groups WHERE name = 'Family'")
@@ -739,6 +771,33 @@ async fn edit_removes_the_identities_and_memberships_the_rows_do_not_list() {
             .await
             .unwrap();
     assert_eq!(family, 1);
+}
+
+/// An identity Edit takes off a contact that nothing else uses is deleted,
+/// because on no contact it would appear in no list.
+#[tokio::test]
+async fn edit_deletes_an_unlisted_identity_nothing_uses() {
+    let (mut conn, _pool, _dir) = account().await;
+    let ada = imported(
+        &mut conn,
+        "Ada",
+        &[
+            ("phone", "phone", "+15555550100"),
+            ("phone", "phone", "+15555550109"),
+        ],
+    )
+    .await;
+    let text = file(&[&format!("{ada},Ada,,phone,phone,+15555550100")]);
+    let counts = loaded(&mut conn, &text, LoadMode::Edit).await;
+    assert_eq!(counts.identities_removed, 1);
+    let left: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM handles WHERE account_id = $1 AND normalized = '+15555550109'",
+    )
+    .bind(ACCOUNT)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(left, 0);
 }
 
 /// A group name is matched to a Contact Group ignoring case, and one that
@@ -1443,4 +1502,27 @@ async fn an_export_libreoffice_saved_again_changes_nothing() {
         assert_eq!(counts, LoadCounts::default(), "{mode:?}");
         assert_eq!(picture(&mut conn).await, before, "{mode:?}");
     }
+}
+
+// --- Another write at the same time ---
+
+/// An import that commits while a load reads the account's contacts made the
+/// load's first write fail with `SQLITE_BUSY_SNAPSHOT`, and the load answered
+/// `500`. The load waits for the other write instead and then runs.
+#[tokio::test]
+async fn a_write_that_commits_while_the_load_reads_does_not_fail_it() {
+    let (mut conn, pool, _dir) = account().await;
+    let mut other_conn = pool.acquire().await.unwrap();
+    let mut other = crate::db::begin_write(&mut other_conn).await.unwrap();
+    crate::db::account_profile::ensure_account_row(&mut other, ACCOUNT + 1)
+        .await
+        .unwrap();
+    let text = file(&["ada,Ada,Family,phone,phone,+15555550100"]);
+    let counts = crate::db::write_tx::commit_during(
+        other,
+        load(&mut conn, ACCOUNT, &text, LoadMode::Append),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("load failed: {e}"));
+    assert_eq!(counts.contacts_created, 1);
 }

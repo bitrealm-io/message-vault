@@ -4,7 +4,6 @@ import { type DesktopJobName, holdDesktopJob } from "./desktopJob";
 import type { components } from "./serverApi.types";
 import { resolveStagingParent } from "./system-settings";
 import type {
-  AttachmentMediaMode,
   ExtractConfig,
   ExtractErrorEvent,
   ImportIssueEvent,
@@ -35,6 +34,7 @@ export async function invokeExtract(config: ExtractConfig): Promise<void> {
       whatsappDb: config.whatsapp_db ?? null,
       whatsappBusiness: config.whatsapp_business ?? null,
       resume: config.resume ?? null,
+      assetMaxBytes: config.asset_max_bytes,
     },
   });
 }
@@ -45,9 +45,11 @@ export async function invokeCancel(): Promise<void> {
 }
 
 /**
- * Form fields shared by `summarize_staging` and `transcode_staging` — the
- * same media fields `ExtractConfig` carries, addressed at an already-staged
- * folder instead of a fresh backup.
+ * The staged folder `summarize_staging` and `transcode_staging` act on.
+ *
+ * It carries no media settings: `extract` recorded the run's in the folder,
+ * and both commands read them from there, so they work to the values the
+ * Import Run was started with.
  *
  * There is no `staging_root` field: the wrappers below resolve it themselves
  * via `resolveStagingParent`, the same source `openPathInExplorer`
@@ -56,12 +58,6 @@ export async function invokeCancel(): Promise<void> {
  */
 export interface StagingConfig {
   staging_dir: string;
-  attachment_media?: AttachmentMediaMode;
-  media_max_resolution?: string;
-  media_max_fps?: string;
-  media_min_size?: string;
-  /** The server's attachment size limit, in bytes, as stored with the Import Run. */
-  asset_max_bytes: number;
 }
 
 /**
@@ -122,11 +118,6 @@ export async function invokeSummarizeStaging(config: StagingConfig): Promise<Sta
     args: {
       stagingDir: config.staging_dir,
       stagingRoot,
-      attachmentMedia: config.attachment_media ?? null,
-      mediaMaxResolution: config.media_max_resolution ?? null,
-      mediaMaxFps: config.media_max_fps ?? null,
-      mediaMinSize: config.media_min_size ?? null,
-      assetMaxBytes: config.asset_max_bytes,
     },
   });
 }
@@ -142,11 +133,6 @@ export async function invokeTranscodeStaging(config: StagingConfig): Promise<voi
     args: {
       stagingDir: config.staging_dir,
       stagingRoot,
-      attachmentMedia: config.attachment_media ?? null,
-      mediaMaxResolution: config.media_max_resolution ?? null,
-      mediaMaxFps: config.media_max_fps ?? null,
-      mediaMinSize: config.media_min_size ?? null,
-      assetMaxBytes: config.asset_max_bytes,
     },
   });
 }
@@ -162,6 +148,31 @@ export async function invokeDeleteStaging(config: { staging_dir: string }): Prom
       stagingDir: config.staging_dir,
       stagingRoot,
     },
+  });
+}
+
+/**
+ * Read the Import Run record kept in a staging folder
+ * (`read_import_run_record`): what a paused run's earlier parts recorded.
+ * Null when the folder holds none. The caller checks its shape.
+ */
+export async function invokeReadImportRunRecord(config: {
+  staging_dir: string;
+}): Promise<unknown | null> {
+  const stagingRoot = await resolveStagingRoot();
+  return invoke("read_import_run_record", {
+    args: { stagingDir: config.staging_dir, stagingRoot },
+  });
+}
+
+/** Write the Import Run record into its staging folder (`save_import_run_record`). */
+export async function invokeSaveImportRunRecord(config: {
+  staging_dir: string;
+  record: unknown;
+}): Promise<void> {
+  const stagingRoot = await resolveStagingRoot();
+  return invoke("save_import_run_record", {
+    args: { stagingDir: config.staging_dir, stagingRoot, record: config.record },
   });
 }
 
@@ -194,6 +205,8 @@ export interface PushFinishedReport {
   conversations_total: number;
   conversations_failed: number;
   conversations_skipped: number;
+  /** Conversations a stop left unsent; the next push sends them. */
+  conversations_cancelled: number;
   results: Array<{
     file: string;
     status: string;
@@ -464,7 +477,8 @@ function isPushFinishedReport(value: unknown): value is PushFinishedReport {
     typeof value.conversations_ok === "number" &&
     typeof value.conversations_total === "number" &&
     typeof value.conversations_failed === "number" &&
-    typeof value.conversations_skipped === "number"
+    typeof value.conversations_skipped === "number" &&
+    typeof value.conversations_cancelled === "number"
   );
 }
 

@@ -23,8 +23,7 @@ erDiagram
     Contact ||--o{ Identity : "is reached at"
     Contact }o--o{ ContactGroup : "is a member of"
     Conversation ||--o{ Participant : "includes"
-    Participant }o--o| Identity : "takes part as"
-    Participant }o--o| Contact : "is this person"
+    Participant }o--|| Identity : "takes part as"
     Conversation ||--o{ Message : "holds"
     Message }o--o| Identity : "was sent from"
     Message }o--o| Identity : "is held at"
@@ -39,8 +38,7 @@ allowed, and a crow's foot means many.
 | Account owns Identity | An account's identity is one of the account holder's own addresses: the messages from it belong to the holder (`account_handles`). This is ownership, where a contact's identity is participation; the rule below says how Import applies it. |
 | Contact is reached at Identity | A contact is one person and gathers any number of identities under one name. An identity belongs to at most one contact (`contact_handles`, keyed on the handle). |
 | Conversation includes Participant | A participant is one other person's seat in one conversation, and keeps what that backup called them there (`participants.name_alias`). The account holder is never a participant; the rule below says why. |
-| Participant takes part as Identity | Normally the address the person used. It is empty when the source named a person and recorded no address for them. |
-| Participant is this person | Every participant has a contact (`participants.contact_id`). For a participant with no identity, this link is the only tie to a contact. |
+| Participant takes part as Identity | Every participant has exactly one identity: the address the person used, or, when the source named the person and recorded no address, an identity of type `other` holding the name. The participant's contact is the one its identity is on. |
 | Conversation holds Message | A message lives in exactly one conversation. |
 | Message is held at Identity | The account holder's own address on this message: the one it was sent from, or the one it was received at (`messages.owner_handle_id`). Set from the backup, sent or received. Empty when the backup names no owner. The identity need not be one of the account's. |
 | Message was sent from Identity | Set for a received message. Empty for a message the account owner sent, and for one whose source recorded no sender (`messages.sender_handle_id`). A message never points at a contact; it reaches one through its sender's identity. |
@@ -49,15 +47,40 @@ allowed, and a crow's foot means many.
 
 ## Rules
 
-**An import makes a contact for every person it meets.** An unmatched phone
-number becomes a contact with that identity and no name. A person named with
-no address becomes a contact with a name and no identity. A message's sender
-counts as met even when no conversation header names them, as in
-`orphaned.jsonl` or a group header that leaves someone out. Why: an identity on
-no contact appears in no list in the product, so it could never be found,
-named, or merged. Junk contacts cost one delete.
+**An identity is always on a contact, and every participant and every sender
+of a message is a contact.** An import makes a contact for every person it
+meets: an unmatched phone number becomes a contact with that identity and no
+name. A message's sender counts as met even when no conversation header names
+them, as in `orphaned.jsonl` or a group header that leaves someone out. An
+identity can move to another contact, move to a new contact, or be deleted,
+and `contacts::move_identity` is the only way it leaves a contact. An identity
+a conversation or a message uses is never deleted and never left on no
+contact: when it comes off its contact, or its contact is deleted, it goes to
+a new contact with no name, so the person is Unknown again. Only an identity
+nothing uses is deleted outright, and no message goes with it. The account
+holder's own identities are the exception: they are on no contact (see "The
+account holder is never a participant"). Why: an identity on no contact
+appears in no list in the product, so it could never be found, named, or
+merged; and a participant that reaches its contact two ways, through an
+identity or through a link of its own, gave each reader a second case to get
+wrong (#1105). Junk contacts cost one delete.
 
-**A contact missing a name or an identity is Unknown.** Unknown is computed
+**A person the source names with no address is an identity of type `other`
+holding the name.** There is one for each service: the name in text messages
+and the name on WhatsApp are two identities, which join one contact as the
+same number on two services does. Two people one service names alike, with no
+address for either, share the identity. Every participant then has an
+identity, and `participants.handle_id` is required. An identity of type
+`other` is a sign that the import was incomplete: an exporter that produces
+one has a gap, and each Import Run counts the ones it met
+(`other_identities`). Why: a person keyed by their contact made a second
+contact and a second seat each time the contact was renamed, and counted in
+none of their groups (#1105). Rejected: a value scoped to one conversation,
+which could not be read, typed or loaded back from the address book.
+
+**A contact missing a name or an address is Unknown.** An identity of type
+`other` is no address, so a contact whose only identities are of that type is
+Unknown however it is named. Unknown is computed
 from the contacts, so it empties as people are named. It uses the ordinary
 contacts screen; there is no separate review queue. Unknown counts as a
 group: the contact shows it among its Contact Groups, and an Unknown contact
@@ -224,16 +247,15 @@ Contacts screen already expresses and a Settings button cannot. A durable
 record of each load, in the Settings table beside message imports, is
 deferred, not rejected.
 
-**A person has one seat in a conversation.** A participant with an
-identity is keyed on the conversation and that identity. A participant with
-no identity is keyed on the conversation and its contact. The schema holds
-both as partial unique indexes on `participants`, and an import that meets
-an existing seat leaves it as it is. `participants.contact_id` is not part of
-the first key, because a participant with an identity finds its contact
-through `contact_handles`, and the column goes empty when an import replaces
-a trashed contact. Why: a key that includes an empty column matches
-nothing, so re-importing the same backup added the same person
-again.
+**A person has one seat in a conversation.** A participant is keyed on the
+conversation and its identity (`UNIQUE (conversation_id, handle_id)` on
+`participants`), and an import that meets an existing seat leaves it as it
+is. A participant has no contact column: it reaches its contact through its
+identity in `contact_handles`, so a renamed contact or a moved identity
+reaches every conversation at once. Why: a key that includes an empty column
+matches nothing, so re-importing the same backup added the same person again,
+and a contact column written once at import went stale when the identity
+moved, so search found the conversation under the old contact.
 
 **A participant's display name has one rule.** The contact's name, else what
 that backup called them in that conversation, else the identity. One loader
@@ -327,12 +349,14 @@ the mail account a backup was stored in. Because the address is already on the
 messages, linking it later shows its counts without a re-import.
 
 **An import replaces a trashed contact.** When an import meets an identity of
-a trashed contact, it discards that contact with every identity it had and
-makes a new one from the backup, as a first import would. See
-[ADR 0013](../adr/0013-an-import-replaces-a-trashed-contact.md). A person
-named with no address is never matched by name to a trashed contact. Why: the
-same run may discard that contact, and a trashed contact that shares a live
-contact's name would make the name look ambiguous.
+a trashed contact, it makes a new contact from the backup, as a first import
+would, holding that identity and the same number on the other service, and
+discards the trashed contact. Each other identity the trashed contact had
+leaves it as the first rule says: to a new contact with no name when a
+conversation or a message uses it. See
+[ADR 0013](../adr/0013-an-import-replaces-a-trashed-contact.md). An import
+never looks a contact up by name, so a trashed contact that shares a name
+with someone the backup names is never matched.
 
 **A failed import changes no contact.** Staging meets every identity first,
 so it is where the import makes contacts and discards trashed ones. Staging
@@ -379,7 +403,7 @@ flowchart LR
 | Tables for conversations, participants, messages | `schema/sql/messages.sql` |
 | What an import creates for a conversation and its participants | `crates/server/server/src/imports_api/staging.rs` |
 | Making, naming, and replacing a contact during import | `crates/server/server/src/imports_api/contact_name.rs` |
-| Linking identities to contacts, sibling identities | `crates/server/server/src/db/contacts.rs` |
+| Linking identities to contacts, sibling identities, the one way an identity leaves a contact (`move_identity`) | `crates/server/server/src/db/contacts.rs` |
 | Writing and loading the address book | `crates/server/server/src/db/address_book.rs` |
 | The display name rule | `crates/server/server/src/db/participant_names.rs` |
 | Which conversations involve a contact | `involves_contact_expr` in `db/contacts/read.rs`, `conversation_involves` in `search/bridge.rs` |

@@ -8,8 +8,8 @@ use message_crate_push::ImportMode;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 use httpmock::prelude::*;
 use message_crate_push::{AuthError, ProgressEvent, PushConfig, authenticate, run};
@@ -503,6 +503,70 @@ fn failed_combined_request_only_fails_its_files() {
             .count(),
         2
     );
+}
+
+/// The server counts lines of the batch, which Upload packs from several
+/// staged files. A refusal of the batch's fourth line is reported as the
+/// line of the staged file that line came from: the second file's first
+/// message, on its line 3 because of the blank line above it.
+#[test]
+fn a_refused_line_of_a_batch_is_reported_as_the_line_of_its_staged_file() {
+    let server = MockServer::start();
+    let _auth = mock_session(&server);
+    let _run = mock_import_run(&server, 7);
+    let refused = server.mock(|when, then| {
+        when.method(POST).path("/v1/imports/7/batches");
+        then.status(400)
+            .header("Content-Type", "application/problem+json")
+            .json_body(json!({
+                "type": "https://messagecrate.app/docs/developer/reference/errors/malformed-body",
+                "title": "Malformed body",
+                "status": 400,
+                "detail": "Could not read line 4 of the batch: the message is not valid: boom.",
+                "request_id": "3f2b1c0e-8d4a-4b6e-9f21-5c7d8e9a0b1c",
+                "line": 4
+            }));
+    });
+
+    let dir = tempdir().unwrap();
+    // Batch lines 1 and 2: the first file's header and its one message.
+    write_jsonl(dir.path(), &sample_doc());
+    // Batch lines 3 to 5: the second file's header and its two messages,
+    // which are lines 3 and 4 of the file because line 2 is blank.
+    let mut second = sample_doc_for("+15555550102", "guid-2");
+    let mut later = second.messages[0].clone();
+    later.guid = "guid-3".into();
+    second.messages.push(later);
+    let second_name = format!("{}.jsonl", second.filename_stem());
+    let header = json!({
+        "schema_version": second.schema_version,
+        "export": second.export,
+        "conversation": second.conversation,
+    });
+    let mut text = format!("{header}\n\n");
+    for message in &second.messages {
+        text.push_str(&serde_json::to_string(message).unwrap());
+        text.push('\n');
+    }
+    fs::write(dir.path().join(&second_name), text).unwrap();
+
+    let report = run(&text_only_config(dir.path(), server.base_url()), None).unwrap();
+
+    assert!(!report.ok);
+    assert_eq!(refused.calls(), 1);
+    assert_eq!(report.conversations_failed, 2);
+    for result in &report.results {
+        let error = result.error.as_deref().unwrap();
+        assert!(
+            error.starts_with(&format!("line 3 of {second_name}: ")),
+            "{}: {error}",
+            result.file
+        );
+        assert!(
+            error.contains("Could not read line 4 of the batch"),
+            "the server's own sentence stays: {error}"
+        );
+    }
 }
 
 /// Three conversations, the middle one unreadable, in name order.
@@ -1445,6 +1509,215 @@ fn a_failed_upload_frees_a_shared_file_for_the_next_conversation() {
     assert_eq!(report.conversations_failed, 1);
     assert_eq!(report.conversations_ok, 1);
     assert_eq!(import.calls(), 1);
+}
+
+/// How long [`serve_a_held_first_upload`] holds the first asset PUT open.
+const UPLOAD_HOLD: std::time::Duration = std::time::Duration::from_millis(1_000);
+
+/// A server that holds the first asset PUT open for [`UPLOAD_HOLD`] and then
+/// answers it with `first_put` (a status line such as `503 Service
+/// Unavailable`). Every later PUT answers `200 OK` at once. Each connection
+/// is served on its own thread, so a batch can arrive while the first PUT is
+/// held. Returns the base URL and what the server saw, in order: `put held`,
+/// `put answered`, `put` for each later PUT, and `batch guid-a guid-b` for
+/// each batch with the guids it carried.
+fn serve_a_held_first_upload(first_put: &'static str) -> (String, Arc<Mutex<Vec<String>>>) {
+    use std::io::{BufRead, BufReader, Read};
+    use std::net::TcpListener;
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base_url = format!("http://{}", listener.local_addr().unwrap());
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let seen = Arc::clone(&events);
+    let first_put_taken = Arc::new(AtomicBool::new(false));
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { return };
+            let seen = Arc::clone(&seen);
+            let first_put_taken = Arc::clone(&first_put_taken);
+            std::thread::spawn(move || {
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                let mut request_line = String::new();
+                if reader.read_line(&mut request_line).is_err() {
+                    return;
+                }
+                let mut content_length = 0usize;
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).unwrap_or(0) == 0 || line == "\r\n" {
+                        break;
+                    }
+                    if let Some((name, value)) = line.split_once(':')
+                        && name.eq_ignore_ascii_case("content-length")
+                    {
+                        content_length = value.trim().parse().unwrap_or(0);
+                    }
+                }
+                let mut body = vec![0u8; content_length];
+                let _ = reader.read_exact(&mut body);
+                let answer = |status: &str, body: &str| {
+                    format!(
+                        "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    )
+                };
+                let log = |event: String| seen.lock().unwrap().push(event);
+                let response = if request_line.starts_with("GET /v1/session ") {
+                    answer("200 OK", r#"{"account_id":1,"username":"alice"}"#)
+                } else if request_line.starts_with("POST /v1/imports ") {
+                    answer("201 Created", r#"{"id":7}"#)
+                } else if request_line.starts_with("POST /v1/imports/7/batches ") {
+                    let body = String::from_utf8_lossy(&body);
+                    let guids: Vec<&str> = ["guid-a", "guid-b"]
+                        .into_iter()
+                        .filter(|guid| body.contains(&format!("\"{guid}\"")))
+                        .collect();
+                    log(format!("batch {}", guids.join(" ")));
+                    let count = guids.len();
+                    answer(
+                        "200 OK",
+                        &format!(r#"{{"messages":{count},"messages_appended":{count}}}"#),
+                    )
+                } else if request_line.starts_with("POST /v1/imports/7/complete ") {
+                    answer("200 OK", r#"{"id":7}"#)
+                } else if request_line.starts_with("HEAD /v1/assets/") {
+                    "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                        .to_string()
+                } else if request_line.starts_with("PUT /v1/assets/") {
+                    if first_put_taken.swap(true, Ordering::SeqCst) {
+                        log("put".into());
+                        answer("200 OK", r#"{"already_present":false}"#)
+                    } else {
+                        log("put held".into());
+                        std::thread::sleep(UPLOAD_HOLD);
+                        log("put answered".into());
+                        if first_put.starts_with("200") {
+                            answer(first_put, r#"{"already_present":false}"#)
+                        } else {
+                            answer(
+                                first_put,
+                                r#"{"type":"about:blank","title":"Service unavailable","status":503,"detail":"the server is busy"}"#,
+                            )
+                        }
+                    }
+                } else {
+                    answer("404 Not Found", "{}")
+                };
+                let _ = stream.write_all(response.as_bytes());
+                let _ = stream.shutdown(std::net::Shutdown::Both);
+            });
+        }
+    });
+    (base_url, events)
+}
+
+/// Two conversations that share one attachment, written so the second one
+/// claims the shared file first: the first conversation (`guid-a`) carries
+/// 20,000 more messages, so its worker is still reading it when the second
+/// (`guid-b`) claims the file.
+fn two_conversations_sharing_a_file(dir: &Path) {
+    const ASSET_BYTES: &[u8] = b"shared attachment bytes";
+    let digest = hex::encode(Sha256::digest(ASSET_BYTES));
+    fs::create_dir(dir.join("attachments")).unwrap();
+    fs::write(dir.join("attachments/shared.txt"), ASSET_BYTES).unwrap();
+
+    let mut first = sample_doc_for("+15555550101", "guid-a");
+    first.messages[0].attachments = vec![ir_attachment("attachments/shared.txt", digest.clone())];
+    let filler = first.messages[0].clone();
+    for n in 0..20_000 {
+        let mut message = filler.clone();
+        message.guid = format!("filler-{n}");
+        message.attachments.clear();
+        first.messages.push(message);
+    }
+    write_jsonl(dir, &first);
+    let mut second = sample_doc_for("+15555550102", "guid-b");
+    second.messages[0].attachments = vec![ir_attachment("attachments/shared.txt", digest)];
+    write_jsonl(dir, &second);
+}
+
+/// The batches the server received before it answered the held upload.
+fn batches_before_the_held_upload_ended(events: &[String]) -> Vec<String> {
+    let answered = events
+        .iter()
+        .position(|event| event == "put answered")
+        .expect("the first upload was answered");
+    events[..answered]
+        .iter()
+        .filter(|event| event.starts_with("batch"))
+        .cloned()
+        .collect()
+}
+
+/// While one conversation uploads a shared attachment, the other conversation
+/// waits for that upload to end before its messages are sent. Sent earlier,
+/// the server would store the attachment with no file (#1076).
+#[test]
+fn a_conversation_waits_for_a_shared_attachment_another_is_uploading() {
+    let (base_url, events) = serve_a_held_first_upload("200 OK");
+    let dir = tempdir().unwrap();
+    two_conversations_sharing_a_file(dir.path());
+    let cfg = PushConfig {
+        prepare_workers: 2,
+        batch_size: 100_000,
+        ..text_only_config(dir.path(), base_url)
+    };
+
+    let report = run(&cfg, None).unwrap();
+
+    let events = events.lock().unwrap().clone();
+    assert_eq!(
+        batches_before_the_held_upload_ended(&events),
+        Vec::<String>::new(),
+        "no batch is sent while the shared file is uploading: {events:?}"
+    );
+    assert!(report.ok, "{events:?}");
+    assert_eq!(report.conversations_ok, 2);
+    assert_eq!(
+        events.iter().filter(|e| e.starts_with("put")).count(),
+        2,
+        "one held PUT and its answer, and no second PUT: {events:?}"
+    );
+    assert_eq!(report.assets_uploaded, 1);
+}
+
+/// When the upload of a shared attachment fails, the conversation that was
+/// waiting for it uploads the file itself before its messages are sent
+/// (#1076).
+#[test]
+fn a_conversation_uploads_a_shared_attachment_whose_upload_failed_elsewhere() {
+    let (base_url, events) = serve_a_held_first_upload("503 Service Unavailable");
+    let dir = tempdir().unwrap();
+    two_conversations_sharing_a_file(dir.path());
+    let cfg = PushConfig {
+        prepare_workers: 2,
+        batch_size: 100_000,
+        ..text_only_config(dir.path(), base_url)
+    };
+
+    let report = run(&cfg, None).unwrap();
+
+    let events = events.lock().unwrap().clone();
+    assert_eq!(
+        batches_before_the_held_upload_ended(&events),
+        Vec::<String>::new(),
+        "no batch is sent while the shared file is uploading: {events:?}"
+    );
+    let second_put = events
+        .iter()
+        .position(|event| event == "put")
+        .unwrap_or_else(|| panic!("the waiting conversation uploads the file: {events:?}"));
+    let first_batch = events
+        .iter()
+        .position(|event| event.starts_with("batch"))
+        .unwrap_or_else(|| panic!("the waiting conversation's messages are sent: {events:?}"));
+    assert!(
+        second_put < first_batch,
+        "the file is uploaded before the messages that name it: {events:?}"
+    );
+    assert_eq!(report.conversations_ok, 1);
+    assert_eq!(report.conversations_failed, 1);
+    assert_eq!(report.assets_uploaded, 1);
 }
 
 #[test]
@@ -2396,8 +2669,7 @@ fn serve_a_200_that_drops_the_batch_body() -> (String, Arc<AtomicUsize>) {
     (base_url, batches)
 }
 
-/// A `200 OK` whose body is cut off means the server committed the batch.
-/// Sending it again would store every message without a GUID a second time,
+/// A `200 OK` whose body is cut off means the server committed the batch,
 /// so the batch is posted once and the conversation fails with a sentence
 /// saying the answer could not be read (#1162).
 #[test]

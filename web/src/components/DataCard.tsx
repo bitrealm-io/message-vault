@@ -3,9 +3,12 @@ import type { ReactNode } from "react";
 /** Header row band — distinct from the card body. */
 export const dataCardHeaderRowClass = "border-b border-border bg-elevated";
 
-/** Sortable / static header cells on the header band. */
+/**
+ * Sortable / static header cells on the header band. The focus ring is drawn
+ * inside the cell: the card's scroll region clips a ring drawn outside it.
+ */
 export const dataCardHeaderCellClass =
-  "px-2 py-2 text-center text-[0.688rem] font-semibold uppercase tracking-[0.04em] text-text outline-none cursor-pointer hover:text-accent data-hovered:text-accent";
+  "px-2 py-2 text-center text-[0.688rem] font-semibold uppercase tracking-[0.04em] text-text outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset cursor-pointer hover:text-accent data-hovered:text-accent";
 
 /** Primary body cells. */
 export const dataCardBodyCellClass =

@@ -1,8 +1,10 @@
 //! An account's named API tokens: `/v1/accounts/{id}/api-tokens`.
 //!
-//! The account itself, and nobody else. The owner has no tokens and
-//! does not manage other people's: a token is a program's credential into
-//! one account's messages, and the owner never reaches those. A logged-in
+//! The account itself makes, renames, lists and revokes its tokens. The
+//! owner lists and revokes them too, and makes and renames none: the owner
+//! must be able to end a credential that has leaked, and a token's label,
+//! permissions and last use are not message content. The owner never reads
+//! any part of a secret, so its list leaves out `token_hint`. A logged-in
 //! session is required; a token cannot mint, rename or revoke tokens.
 
 use crate::extract::{Json, Path, Query};
@@ -13,13 +15,14 @@ use serde::{Deserialize, Serialize};
 use crate::accounts_api::{Admits, require_account_reach};
 use crate::db::api_tokens;
 use crate::db::permissions::Permissions;
-use crate::db::schema;
-use crate::server::{ApiError, AppState, Created, FullAccess};
+use crate::db::{account_profile, schema};
+use crate::server::{ApiError, AppState, Created, FullAccess, LoggedIn};
 
-/// Admit only the account whose tokens the path names. The refusal reads the
-/// same whether or not the other account exists.
+/// Admit only the account whose tokens the path names, for making and
+/// renaming. The refusal reads the same whether or not the other account
+/// exists.
 const HOLDER_ONLY: Admits =
-    Admits::NobodyElse("API tokens are managed by the account that holds them");
+    Admits::NobodyElse("API tokens are made and renamed by the account that holds them");
 
 /// One named API token as shown in Settings: label, permissions, and masked secret.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
@@ -32,8 +35,10 @@ pub struct ApiToken {
     pub can_import: bool,
     /// May call the export endpoints.
     pub can_export: bool,
-    /// Masked secret for Settings (e.g. `mc-api-Sd..mE`).
-    pub token_hint: String,
+    /// Masked secret for Settings (e.g. `mc-api-Sd..mE`). Absent when the
+    /// owner lists another account's tokens: the hint is part of the secret.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token_hint: Option<String>,
     /// Creation time as a Unix-seconds string.
     pub created_at: String,
     /// Unix-seconds string of last use; absent when never used.
@@ -53,7 +58,7 @@ impl From<api_tokens::ApiTokenRow> for ApiToken {
             label: row.label,
             can_import: row.permissions.import,
             can_export: row.permissions.export,
-            token_hint: row.token_hint,
+            token_hint: Some(row.token_hint),
             created_at: row.created_at,
             last_accessed_at: row.last_accessed_at,
             expires_at: row.expires_at,
@@ -132,38 +137,45 @@ pub struct UpdateApiTokenResponse {
     pub label: String,
 }
 
-/// List the account's named API tokens with their permissions and masked secrets.
-/// Each token's permissions are capped by the account's as they are now.
+/// List the account's named API tokens with their permissions and masked
+/// secrets. Each token's permissions are capped by the account's as they are
+/// now. The owner lists any account's tokens, without their masked secrets.
 #[utoipa::path(
     get,
     path = "/v1/accounts/{id}/api-tokens",
     tag = "Accounts",
     security(("session" = [])),
     params(
-        ("id" = i64, Path, description = "Account id; must be the caller's own"),
+        ("id" = i64, Path, description = "Account id; the caller's own, or any for the owner"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
         ("offset" = Option<usize>, Query, description = "Page offset")
     ),
     responses(
         (status = 200, body = crate::paging::Page<ApiToken>),
+        crate::problem::openapi::NotTheOwner
     )
 )]
 pub async fn list_api_tokens(
     State(state): State<AppState>,
     Path(account_id): Path<i64>,
-    FullAccess(auth): FullAccess,
+    LoggedIn(auth): LoggedIn,
     Query(query): Query<PageQuery>,
 ) -> Result<Json<Page<ApiToken>>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    require_account_reach(&mut conn, &auth, account_id, HOLDER_ONLY).await?;
+    let reach = require_account_reach(&mut conn, &auth, account_id, Admits::Owner).await?;
     let params = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
 
     schema::ensure_accounts_schema(&mut conn).await?;
     let rows = api_tokens::list_api_tokens(&mut conn, account_id).await?;
     // Each token shows what it may do now: its stored scopes capped by the
-    // account's permissions as they are on this request, so a permission
-    // the owner turned off after the token was made shows as off.
-    let account_permissions = auth.permissions();
+    // permissions of the account that holds it, as they are on this request,
+    // so a permission the owner turned off after the token was made shows as
+    // off. They are read from the account's row, not from the caller, who
+    // may be the owner and holds none.
+    let account_permissions = account_profile::load_account_auth(&mut conn, account_id)
+        .await?
+        .map_or_else(Permissions::none, |a| a.permissions);
+    let shows_hint = reach.is_own();
     let items: Vec<ApiToken> = rows
         .into_iter()
         .map(|row| api_tokens::ApiTokenRow {
@@ -171,6 +183,10 @@ pub async fn list_api_tokens(
             ..row
         })
         .map(ApiToken::from)
+        .map(|token| ApiToken {
+            token_hint: token.token_hint.filter(|_| shows_hint),
+            ..token
+        })
         .collect();
 
     Ok(Json(page_of(items, params)))
@@ -230,27 +246,30 @@ pub async fn create_api_token(
     })
 }
 
-/// Delete one named API token. Requests using it start failing on the next call.
+/// Delete one named API token. Requests using it start failing on the next
+/// call. The owner revokes any account's token, so a leaked one can be ended
+/// without the account's help.
 #[utoipa::path(
     delete,
     path = "/v1/accounts/{id}/api-tokens/{token_id}",
     tag = "Accounts",
     security(("session" = [])),
     params(
-        ("id" = i64, Path, description = "Account id; must be the caller's own"),
+        ("id" = i64, Path, description = "Account id; the caller's own, or any for the owner"),
         ("token_id" = i64, Path, description = "API token id")
     ),
     responses(
         (status = 204, description = "Token deleted"),
+        crate::problem::openapi::NotTheOwner
     )
 )]
 pub async fn delete_api_token(
     State(state): State<AppState>,
     Path((account_id, id)): Path<(i64, i64)>,
-    FullAccess(auth): FullAccess,
+    LoggedIn(auth): LoggedIn,
 ) -> Result<axum::http::StatusCode, ApiError> {
     let mut conn = state.db.acquire().await?;
-    require_account_reach(&mut conn, &auth, account_id, HOLDER_ONLY).await?;
+    require_account_reach(&mut conn, &auth, account_id, Admits::Owner).await?;
     schema::ensure_accounts_schema(&mut conn).await?;
     let deleted = api_tokens::delete_api_token(&mut conn, account_id, id).await?;
 
@@ -381,13 +400,100 @@ mod tests {
         assert_eq!(rows, 0, "a refused create stores no token");
     }
 
-    /// Tokens belong to the account that holds them: another account is
-    /// refused on every token route, and so is the owner, who has none.
+    /// The owner lists another account's tokens, each with its label,
+    /// permissions, creation and last use, and never with any part of the
+    /// secret. The permissions shown are capped by that account's, not by
+    /// the owner's, who holds none.
     #[tokio::test]
-    async fn only_the_account_itself_reaches_its_tokens() {
+    async fn the_owner_lists_an_accounts_tokens_without_their_hints() {
         use crate::test_support::{
-            claim_as_owner, delete_status, get_status, patch_status, post_status, register_via_api,
+            claim_as_owner, get_json, get_status, post_created_json, register_via_api, test_fixture,
+        };
+
+        let fixture = test_fixture().await;
+        let state = fixture.state.clone();
+        let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+        let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
+        let alices = format!("/v1/accounts/{}/api-tokens", alice.account_id);
+        let (_, created): (String, serde_json::Value) = post_created_json(
+            &state,
+            &alices,
+            &alice.token,
+            serde_json::json!({ "label": "pull", "can_import": false }),
+        )
+        .await;
+        // Use the token once, so it has a last use to show.
+        let token = created["token"].as_str().unwrap();
+        assert_eq!(
+            get_status(&state, "/v1/exports", token).await,
+            axum::http::StatusCode::OK
+        );
+
+        let listed: serde_json::Value = get_json(&state, &alices, &owner.token).await;
+        let item = &listed["items"][0];
+        assert_eq!(item["id"], created["id"], "{listed}");
+        assert_eq!(item["label"], "pull", "{listed}");
+        assert_eq!(item["can_import"], false, "{listed}");
+        assert_eq!(item["can_export"], true, "{listed}");
+        assert_eq!(item["created_at"], created["created_at"], "{listed}");
+        assert!(item["last_accessed_at"].is_string(), "{listed}");
+        assert!(
+            item.get("token_hint").is_none(),
+            "the owner never reads any part of a secret: {listed}"
+        );
+
+        let own: serde_json::Value = get_json(&state, &alices, &alice.token).await;
+        assert!(own["items"][0]["token_hint"].is_string(), "{own}");
+    }
+
+    /// The owner revokes another account's token, and the token is refused
+    /// from then on.
+    #[tokio::test]
+    async fn the_owner_revokes_an_accounts_token() {
+        use crate::test_support::{
+            claim_as_owner, delete_status, get_status, post_created_json, register_via_api,
             test_fixture,
+        };
+        use axum::http::StatusCode;
+
+        let fixture = test_fixture().await;
+        let state = fixture.state.clone();
+        let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+        let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
+        let alices = format!("/v1/accounts/{}/api-tokens", alice.account_id);
+        let (_, created): (String, serde_json::Value) = post_created_json(
+            &state,
+            &alices,
+            &alice.token,
+            serde_json::json!({ "label": "leaked" }),
+        )
+        .await;
+        let token = created["token"].as_str().unwrap();
+        let id = created["id"].as_i64().unwrap();
+        assert_eq!(
+            get_status(&state, "/v1/exports", token).await,
+            StatusCode::OK
+        );
+
+        assert_eq!(
+            delete_status(&state, &format!("{alices}/{id}"), &owner.token).await,
+            StatusCode::NO_CONTENT
+        );
+        assert_eq!(
+            get_status(&state, "/v1/exports", token).await,
+            StatusCode::UNAUTHORIZED
+        );
+    }
+
+    /// The owner sees and revokes; making and renaming stay with the
+    /// account, because a token is that account's credential and the owner
+    /// never holds a secret. Another account reaches none of it, and no
+    /// token reaches any token route.
+    #[tokio::test]
+    async fn only_the_account_itself_makes_and_renames_its_tokens() {
+        use crate::test_support::{
+            claim_as_owner, delete_status, get_status, patch_status, post_created_json,
+            post_status, register_via_api, test_fixture,
         };
         use axum::http::StatusCode;
 
@@ -397,48 +503,44 @@ mod tests {
         let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
         let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
         let alices = format!("/v1/accounts/{}/api-tokens", alice.account_id);
+        let (_, created): (String, serde_json::Value) = post_created_json(
+            &state,
+            &alices,
+            &alice.token,
+            serde_json::json!({ "label": "cli" }),
+        )
+        .await;
+        let one = format!("{alices}/{}", created["id"]);
 
-        assert_eq!(
-            get_status(&state, &alices, &alice.token).await,
-            StatusCode::OK
-        );
         for (who, token) in [("bob", &bob.token), ("the owner", &owner.token)] {
-            assert_eq!(
-                get_status(&state, &alices, token).await,
-                StatusCode::FORBIDDEN,
-                "{who} must not list alice's tokens"
-            );
             assert_eq!(
                 post_status(&state, &alices, token, serde_json::json!({ "label": "x" })).await,
                 StatusCode::FORBIDDEN,
                 "{who} must not mint a token for alice"
             );
             assert_eq!(
-                patch_status(
-                    &state,
-                    &format!("{alices}/1"),
-                    token,
-                    serde_json::json!({ "label": "y" })
-                )
-                .await,
+                patch_status(&state, &one, token, serde_json::json!({ "label": "y" })).await,
                 StatusCode::FORBIDDEN,
                 "{who} must not rename alice's token"
             );
-            assert_eq!(
-                delete_status(&state, &format!("{alices}/1"), token).await,
-                StatusCode::FORBIDDEN,
-                "{who} must not revoke alice's token"
-            );
         }
-        // The owner's own row has no tokens either: the route takes an
-        // ordinary session, and the owner's is not one.
         assert_eq!(
-            get_status(
-                &state,
-                &format!("/v1/accounts/{}/api-tokens", owner.account_id),
-                &owner.token
-            )
-            .await,
+            get_status(&state, &alices, &bob.token).await,
+            StatusCode::FORBIDDEN,
+            "bob must not list alice's tokens"
+        );
+        assert_eq!(
+            delete_status(&state, &one, &bob.token).await,
+            StatusCode::FORBIDDEN,
+            "bob must not revoke alice's token"
+        );
+        let secret = created["token"].as_str().unwrap();
+        assert_eq!(
+            get_status(&state, &alices, secret).await,
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            delete_status(&state, &one, secret).await,
             StatusCode::FORBIDDEN
         );
     }

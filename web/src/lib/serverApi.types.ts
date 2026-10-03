@@ -78,7 +78,7 @@ export interface paths {
         head?: never;
         /**
          * Change an account.
-         * @description Its display name, time zone and identities are set by the account itself or by the owner; only the owner sets an account's disabled flag and its import, export and delete permissions. A field the caller may not set answers `403 Forbidden`, and the reloaded account is the answer. The Demo Account's status, permissions and identities are fixed for everyone; its display name and time zone are not.
+         * @description Its display name, time zone and identities are set by the account itself or by the owner; only the owner sets an account's disabled flag and its import, export and delete permissions. A field the caller may not set answers `403 Forbidden`, and the reloaded account is the answer. The Demo Account's status, permissions, identities, display name and time zone are fixed for everyone, the owner included: every visitor shares the account, so a change one makes is what the next one finds.
          */
         patch: operations["update_account"];
         trace?: never;
@@ -497,6 +497,13 @@ export interface paths {
          *     The load is one transaction. A file that breaks a rule is refused whole
          *     with `422 Unprocessable Entity`, and `errors` holds one sentence for each
          *     bad row, starting with its row number.
+         *
+         *     The Demo Account is refused with `demo-account-protected`, in both modes,
+         *     by its id: an Edit load deletes contacts for good and an Append load
+         *     stores real people's names and numbers in an account anyone can enter
+         *     (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`). The import,
+         *     export and delete permissions are not asked for; they govern messages and
+         *     imports, and any other account loads its address book with a session.
          */
         post: operations["create_contacts"];
         delete?: never;
@@ -5032,7 +5039,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -5273,7 +5282,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -5359,7 +5370,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -5440,7 +5453,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -5525,7 +5540,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -6163,7 +6180,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -6548,7 +6567,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -6961,7 +6982,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -7733,7 +7756,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -7799,7 +7824,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -7880,7 +7907,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -7956,7 +7985,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -8061,7 +8092,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -8164,7 +8197,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -8259,7 +8294,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -8322,7 +8359,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */
@@ -10050,7 +10089,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
              *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
              */

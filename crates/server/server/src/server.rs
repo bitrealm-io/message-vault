@@ -143,12 +143,36 @@ pub fn require_logged_in(auth: &AuthIdentity) -> Result<(), ApiError> {
     ))
 }
 
-/// Allow a credential that may import.
+/// Refuse an act the Demo Account is never open to, whoever asks.
+///
+/// The Demo Account has no password, so anyone at the login card can enter
+/// it. Its limits are therefore fixed here, by its id, whatever its
+/// permission row says, and are not settings the owner can change
+/// (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`).
 ///
 /// # Errors
 ///
-/// Returns forbidden when import is not permitted.
+/// Returns `demo-account-protected` when `target` is the Demo Account; `what`
+/// finishes the sentence "the demo account's ...".
+pub fn refuse_for_demo_account(target: i64, what: &str) -> Result<(), ApiError> {
+    if account_profile::is_demo_account(target) {
+        return Err(ApiError::DemoAccountProtected(format!(
+            "the demo account's {what}; the owner can delete the account, and reset-demo restores it"
+        )));
+    }
+    Ok(())
+}
+
+/// Allow a credential that may import. The Demo Account never may, whatever
+/// its permission row says: an import would put real messages into an
+/// account anyone can enter.
+///
+/// # Errors
+///
+/// Returns `demo-account-protected` for the Demo Account, and forbidden when
+/// import is not permitted.
 pub fn require_import_access(auth: &AuthIdentity) -> Result<(), ApiError> {
+    refuse_for_demo_account(auth.account_id, "messages come only from its seed")?;
     if auth.permissions().import {
         return Ok(());
     }
@@ -204,12 +228,16 @@ pub fn require_import_or_export_access(auth: &AuthIdentity) -> Result<(), ApiErr
     ))
 }
 
-/// Allow a credential that may destroy message data.
+/// Allow a credential that may destroy message data. The Demo Account never
+/// may, whatever its permission row says: one visitor would empty it for the
+/// next.
 ///
 /// # Errors
 ///
-/// Returns forbidden when deletion is not permitted.
+/// Returns `demo-account-protected` for the Demo Account, and forbidden when
+/// deletion is not permitted.
 pub fn require_delete_access(auth: &AuthIdentity) -> Result<(), ApiError> {
+    refuse_for_demo_account(auth.account_id, "data cannot be deleted for good")?;
     if auth.permissions().delete {
         return Ok(());
     }
@@ -221,13 +249,14 @@ pub fn require_delete_access(auth: &AuthIdentity) -> Result<(), ApiError> {
 /// Allow a logged-in session that may destroy message data: the guard for
 /// permanent deletion out of the trash. Both halves matter. Trash is a GUI
 /// affair, so an API token is refused the way every trash route refuses it,
-/// and the account's own `can_delete` grant is what keeps the demo account
-/// from deleting anything for good while it still exports and uses the trash.
+/// and the account must hold the `delete` permission. The Demo Account is
+/// refused by its id in [`require_delete_access`], so it uses the trash and
+/// deletes nothing for good.
 ///
 /// # Errors
 ///
-/// Returns forbidden when the credential is an API token or the account may
-/// not delete.
+/// Returns forbidden when the credential is an API token, the account is the
+/// Demo Account, or the account may not delete.
 pub fn require_full_delete_access(auth: &AuthIdentity) -> Result<(), ApiError> {
     require_full_access(auth)?;
     require_delete_access(auth)

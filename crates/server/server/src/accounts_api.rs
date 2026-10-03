@@ -32,7 +32,9 @@ use crate::db::storage::{self, Scope};
 use crate::db::{account_profile, imports, server_settings, session_tokens};
 use crate::extract::{Json, Path, Query};
 use crate::paging::{DEFAULT_LIST_LIMIT, Page, PageQuery, page_of, page_params};
-use crate::server::{ApiError, AppState, AuthIdentity, Created, LoggedIn, Owner};
+use crate::server::{
+    ApiError, AppState, AuthIdentity, Created, LoggedIn, Owner, refuse_for_demo_account,
+};
 
 // ---------------------------------------------------------------------------
 // The account as every caller sees it
@@ -674,26 +676,14 @@ async fn apply_flags(
     Ok(())
 }
 
-/// Refuse an act the Demo Account is never open to, whoever asks.
-///
-/// The Demo Account has no password, so anyone at the login card can enter
-/// it. Its limits are therefore fixed here, by its id, and are not settings
-/// the owner can change (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`).
-fn refuse_for_demo_account(target: i64, what: &str) -> Result<(), ApiError> {
-    if account_profile::is_demo_account(target) {
-        return Err(ApiError::DemoAccountProtected(format!(
-            "the demo account's {what}; the owner can delete the account, and reset-demo restores it"
-        )));
-    }
-    Ok(())
-}
-
 /// Change an account. Its display name, time zone and identities are set by
 /// the account itself or by the owner; only the owner sets an
 /// account's disabled flag and its import, export and delete permissions. A
 /// field the caller may not set answers `403 Forbidden`, and the reloaded
-/// account is the answer. The Demo Account's status, permissions and
-/// identities are fixed for everyone; its display name and time zone are not.
+/// account is the answer. The Demo Account's status, permissions,
+/// identities, display name and time zone are fixed for everyone, the owner
+/// included: every visitor shares the account, so a change one makes is what
+/// the next one finds.
 #[utoipa::path(
     patch,
     path = "/v1/accounts/{id}",
@@ -722,6 +712,12 @@ pub async fn update_account(
         // They decide which messages read as sent and which as received, so a
         // change would make every conversation in Demo Data read wrong.
         refuse_for_demo_account(target, "identities are fixed")?;
+    }
+    if req.preferred_name.is_some() || req.time_zone.is_some() {
+        // The seed sets "Demo User" and UTC. The server files each message by
+        // day in the stored zone, so one stored zone serves display and
+        // search alike for every visitor.
+        refuse_for_demo_account(target, "display name and time zone are fixed")?;
     }
     match reach {
         reach @ (Reach::Own | Reach::OwnersOwn) => {

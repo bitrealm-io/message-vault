@@ -3030,3 +3030,111 @@ async fn a_long_comma_list_is_refused_as_too_many_parts() {
     let body: serde_json::Value = response.json().await.unwrap();
     assert_eq!(body["detail"], "The search has too many parts.", "{body}");
 }
+
+/// The Demo Account holds Demo Data every visitor shares (ADR 0016). A load
+/// would delete its contacts for good in Edit and store real people's names
+/// and numbers in Append, so both are refused by its id and nothing changes.
+#[tokio::test]
+async fn an_address_book_load_on_the_demo_account_is_refused() {
+    let fixture = crate::test_support::test_fixture().await;
+    let state = fixture.state.clone();
+    let demo = fixture
+        .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
+        .await;
+    let contact_id: i64 = {
+        let mut conn = state.db.acquire().await.unwrap();
+        // The seed's grant: export, and neither import nor delete.
+        sqlx::query("UPDATE accounts SET can_import = 0, can_delete = 0 WHERE id = $1")
+            .bind(demo)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        // An Unknown the demo imports made: no name, one identity.
+        let handle: i64 = sqlx::query_scalar(
+            "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
+             VALUES ($1, '+15555550123', '+15555550123', 'phone', 'phone') RETURNING id",
+        )
+        .bind(demo)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+        let contact: i64 = sqlx::query_scalar(
+            "INSERT INTO contacts (account_id, preferred_name, origin)
+             VALUES ($1, '', 'import') RETURNING id",
+        )
+        .bind(demo)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO contact_handles (account_id, handle_id, contact_id) VALUES ($1, $2, $3)",
+        )
+        .bind(demo)
+        .bind(handle)
+        .bind(contact)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+        contact
+    };
+    let token = crate::test_support::log_in(&state, "demo", "").await["token"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let visitor = RegisteredAccount {
+        account_id: demo,
+        username: "demo".into(),
+        token,
+    };
+
+    // Edit with the identity cells blank would delete the Unknown for good.
+    let edit = format!("{ADDRESS_BOOK_HEADER}\n{contact_id},,,,,\n");
+    let (status, text) = load_address_book(&fixture, &visitor, "?mode=edit", edit).await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::DemoAccountProtected,
+    );
+    // Append would store a new person, by name and number.
+    let append = format!("{ADDRESS_BOOK_HEADER}\na,Real Person,,phone,phone,+15555550199\n");
+    let (status, text) = load_address_book(&fixture, &visitor, "", append).await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::DemoAccountProtected,
+    );
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let names: Vec<String> =
+        sqlx::query_scalar("SELECT preferred_name FROM contacts WHERE account_id = $1")
+            .bind(demo)
+            .fetch_all(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(
+        names,
+        vec![String::new()],
+        "the Unknown stays and nobody is added"
+    );
+}
+
+/// The import, export and delete permissions were made for messages and
+/// imports, not for the address book: an account with none of them still
+/// loads one.
+#[tokio::test]
+async fn an_address_book_load_needs_no_import_export_or_delete_permission() {
+    let (fixture, account) = fixture_with_account().await;
+    {
+        let mut conn = fixture.conn().await;
+        sqlx::query(
+            "UPDATE accounts SET can_import = 0, can_export = 0, can_delete = 0 WHERE id = $1",
+        )
+        .bind(account.account_id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    }
+    let append = format!("{ADDRESS_BOOK_HEADER}\na,Ada Lovelace,,phone,phone,+15555550142\n");
+    let (status, text) = load_address_book(&fixture, &account, "", append).await;
+    assert_eq!(status, StatusCode::OK, "{text}");
+}

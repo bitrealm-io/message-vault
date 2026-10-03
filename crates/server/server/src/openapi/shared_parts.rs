@@ -166,6 +166,20 @@ fn failures(path: &str, op: &mut Operation) {
         }) {
             kinds.push(ProblemType::NotTheOwner);
         }
+        // The import and delete guards refuse the Demo Account by its id
+        // (`server::require_import_access`, `server::require_delete_access`),
+        // so a route every credential of which needs one of them can answer it.
+        let every_needs = |scope: &str| {
+            requirements.iter().all(|r| {
+                r.as_object().is_some_and(|r| {
+                    r.values()
+                        .any(|s| s.as_array().is_some_and(|s| s.iter().any(|s| s == scope)))
+                })
+            })
+        };
+        if every_needs("import") || every_needs("delete") {
+            kinds.push(ProblemType::DemoAccountProtected);
+        }
     }
     if op.request_body.is_some() {
         kinds.extend([

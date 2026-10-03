@@ -141,6 +141,9 @@ With nothing typed, the list opens with **This browser**, the zone the browser r
 Picking a row saves it.
 There is no **Save** button, and every date on screen changes to the new zone.
 
+On the `demo` account the display name and the time zone cannot be changed, by the account or by the Owner.
+Every visitor shares that account, so a change one visitor made would be what the next one finds.
+
 ### My Identities
 
 **My Identities** lists the phone numbers and email addresses that are the account holder's own.
@@ -189,5 +192,7 @@ Any other number without `+` is read as a US number when it has ten digits, and 
 After the load, the section lists each number without `+` that it read with its `+` back, and each one that became a new identity.
 
 Contacts the file does not mention stay as they are.
+
+The `demo` account has no **Address book** section, and the server refuses a load into it: **Edit** would delete its contacts for good, and **Append** would store real people's names and numbers in an account anyone can enter.
 
 Contacts themselves are covered in [Contacts](/docs/user/features/contacts/contacts/).

@@ -2695,9 +2695,12 @@ async fn summaries_of_no_contacts_are_refused() {
         &text,
         crate::problem::ProblemType::ValidationFailed,
     );
+}
 
-    // The reference states the same bounds the handler keeps, so a client
-    // built from it knows an empty list is refused.
+/// The reference states the bounds the handler keeps on a summary's `ids`,
+/// so a client built from it knows an empty list is refused.
+#[test]
+fn the_reference_states_the_summary_id_bounds() {
     let doc: serde_json::Value =
         serde_json::from_str(&crate::openapi::dump_openapi_json()).unwrap();
     let ids = &doc["components"]["schemas"]["SummarizeContactsRequest"]["properties"]["ids"];

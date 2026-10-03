@@ -3786,7 +3786,7 @@ export interface components {
         /** @description Body for `POST /v1/contacts/summaries`. */
         SummarizeContactsRequest: {
             /**
-             * @description Contact ids to summarize, within `minItems` and `maxItems`. Every
+             * @description Contact ids to summarize: at least one, and at most 500. Every
              *     contact is listed by `GET /v1/contacts`.
              */
             ids: number[];

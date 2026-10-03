@@ -291,11 +291,11 @@ describe("MessageRoute", () => {
       getConversationMock.mockImplementation(async (id) => conv(id, `Chat ${id}`));
       const user = userEvent.setup();
 
-      renderAt("/messages/5?q=photo&view=messages&msort=-date");
+      renderAt("/messages/5?q=photo&view=messages&sort=-date");
       await user.click(screen.getByRole("button", { name: "Message result" }));
 
       expect(screen.getByTestId("location").textContent).toBe(
-        "/messages/6?q=photo&view=messages&msort=-date&at=77",
+        "/messages/6?q=photo&view=messages&sort=-date&at=77",
       );
       expect(screen.getByTestId("message-list-selected").textContent).toBe("77");
       await screen.findByText("Chat 6");

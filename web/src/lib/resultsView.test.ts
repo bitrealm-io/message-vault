@@ -13,13 +13,13 @@ describe("resultsView", () => {
 
 describe("pickedMessageSort", () => {
   it("reads the route's spelling, and nothing else", () => {
-    expect(pickedMessageSort(params("msort=relevance"))).toEqual({
+    expect(pickedMessageSort(params("sort=relevance"))).toEqual({
       sort: "relevance",
       order: "desc",
     });
-    expect(pickedMessageSort(params("msort=date"))).toEqual({ sort: "date", order: "asc" });
-    expect(pickedMessageSort(params("msort=-date"))).toEqual({ sort: "date", order: "desc" });
-    expect(pickedMessageSort(params("msort=colour"))).toBeNull();
+    expect(pickedMessageSort(params("sort=date"))).toEqual({ sort: "date", order: "asc" });
+    expect(pickedMessageSort(params("sort=-date"))).toEqual({ sort: "date", order: "desc" });
+    expect(pickedMessageSort(params("sort=colour"))).toBeNull();
   });
 });
 
@@ -35,10 +35,10 @@ describe("openedAt", () => {
 describe("messagesSearch", () => {
   it("carries the search and the Messages list's parameters, and drops the filter", () => {
     expect(
-      messagesSearch(params("q=photo&f=with%3A%2342&view=messages&msort=date&at=7"), {
+      messagesSearch(params("q=photo&f=with%3A%2342&view=messages&sort=date&at=7"), {
         at: "9",
       }),
-    ).toBe("?q=photo&view=messages&msort=date&at=9");
+    ).toBe("?q=photo&view=messages&sort=date&at=9");
   });
 
   it("drops a parameter set to empty, and is empty when nothing is left", () => {

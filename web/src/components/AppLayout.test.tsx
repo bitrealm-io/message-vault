@@ -127,7 +127,7 @@ describe("AppLayout", () => {
   it.each([
     ["a search", "?q=dentist"],
     ["a contact's conversations", "?q=with%3A%2342&f=with%3A%2342"],
-    ["the Messages list's picked sort", "?q=dentist&msort=date"],
+    ["the Messages list's picked sort", "?q=dentist&sort=date"],
   ])("keeps %s when a conversation in the list is opened", async (_name, search) => {
     const user = userEvent.setup();
     renderLayout(`/${search}`);

@@ -151,11 +151,6 @@ impl AuthError {
             Self::MissingAccountId => "missing_account",
         }
     }
-
-    /// Technical detail for a log line or an error message.
-    pub fn detail(&self) -> String {
-        self.to_string()
-    }
 }
 
 #[cfg(test)]
@@ -163,7 +158,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn kinds_and_details_cover_all_variants() {
+    fn kinds_and_messages_cover_all_variants() {
         let cases: Vec<(AuthError, &str)> = vec![
             (
                 AuthError::InvalidUrl {
@@ -266,7 +261,7 @@ mod tests {
 
         for (error, kind) in cases {
             assert_eq!(error.kind(), kind);
-            let detail = error.detail();
+            let detail = error.to_string();
             assert!(!detail.is_empty(), "{kind} detail empty");
             assert!(
                 !detail.contains("API key"),

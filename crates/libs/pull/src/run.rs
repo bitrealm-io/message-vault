@@ -289,8 +289,7 @@ impl<'a> Pull<'a> {
     ///
     /// Returns an error when login fails or the journal cannot be read.
     fn login(cfg: &'a PullConfig, out: &mut Option<&mut ProgressFn<'_>>) -> Result<Self> {
-        let auth =
-            authenticate(&cfg.base_url, &cfg.key).map_err(|e| anyhow::anyhow!("{}", e.detail()))?;
+        let auth = authenticate(&cfg.base_url, &cfg.key).map_err(|e| anyhow::anyhow!("{e}"))?;
         let account = auth.account_id;
         let username = auth.username.unwrap_or_else(|| account.to_string());
         emit(

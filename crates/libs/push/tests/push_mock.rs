@@ -1266,8 +1266,12 @@ fn authenticate_maps_http_failures_to_typed_errors() {
     });
     let err = authenticate(&server.base_url(), "bad").unwrap_err();
     assert_eq!(err.kind(), "unauthorized");
-    assert!(err.detail().contains("Log in again"), "{}", err.detail());
-    assert!(!err.detail().contains("API key"), "{}", err.detail());
+    assert!(
+        err.to_string().contains("Log in again"),
+        "{}",
+        err.to_string()
+    );
+    assert!(!err.to_string().contains("API key"), "{}", err.to_string());
 }
 
 #[test]
@@ -1280,7 +1284,7 @@ fn authenticate_maps_html_and_status_failures() {
     });
     let err = authenticate(&server.base_url(), "mc_test").unwrap_err();
     assert_eq!(err.kind(), "wrong_host");
-    assert!(err.detail().contains("HTML"));
+    assert!(err.to_string().contains("HTML"));
 
     // Fresh server for a non-401 status.
     let server = MockServer::start();
@@ -1290,7 +1294,7 @@ fn authenticate_maps_html_and_status_failures() {
     });
     let err = authenticate(&server.base_url(), "mc_test").unwrap_err();
     assert_eq!(err.kind(), "forbidden");
-    assert!(err.detail().contains("username does not match API key"));
+    assert!(err.to_string().contains("username does not match API key"));
 }
 
 #[test]

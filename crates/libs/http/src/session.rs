@@ -252,7 +252,7 @@ mod tests {
         let final_url = reqwest::Url::parse("https://my.messagecrate.app/v1/session").unwrap();
         let err = classify_unauthorized("http://my.messagecrate.app", &requested, &final_url);
         assert_eq!(err.kind(), "https_required");
-        assert!(err.detail().contains("Authorization"));
+        assert!(err.to_string().contains("Authorization"));
     }
 
     #[test]

@@ -9,7 +9,7 @@ import {
   toImportSummaryView,
 } from "./storageUtils";
 
-function detail(partial: Partial<AccountImportRun> = {}): AccountImportRun {
+function accountImportRun(partial: Partial<AccountImportRun> = {}): AccountImportRun {
   return {
     id: 1,
     source: "imessage-ios",
@@ -80,7 +80,7 @@ describe("formatImportDate", () => {
 describe("toImportSummaryView", () => {
   it("maps completed status and summary counts", () => {
     const view = toImportSummaryView(
-      detail({
+      accountImportRun({
         summary: {
           files_total: 3,
           messages_inserted: 7,
@@ -95,26 +95,28 @@ describe("toImportSummaryView", () => {
   });
 
   it("treats unknown status as failed", () => {
-    expect(toImportSummaryView(detail({ status: "exploded" as never })).status).toBe("failed");
+    expect(toImportSummaryView(accountImportRun({ status: "exploded" as never })).status).toBe(
+      "failed",
+    );
   });
 
   it("reads a cancelled Import Run as cancelled, not failed", () => {
-    expect(toImportSummaryView(detail({ status: "cancelled" })).status).toBe("cancelled");
+    expect(toImportSummaryView(accountImportRun({ status: "cancelled" })).status).toBe("cancelled");
   });
 
   it("passes completed_with_issues through", () => {
-    expect(toImportSummaryView(detail({ status: "completed_with_issues" })).status).toBe(
+    expect(toImportSummaryView(accountImportRun({ status: "completed_with_issues" })).status).toBe(
       "completed_with_issues",
     );
   });
 
   it("falls back messagesInserted to message_count", () => {
-    expect(toImportSummaryView(detail({ message_count: 42 })).messagesInserted).toBe(42);
+    expect(toImportSummaryView(accountImportRun({ message_count: 42 })).messagesInserted).toBe(42);
   });
 
   it("sums stage timings when duration_ms is missing", () => {
     const view = toImportSummaryView(
-      detail({
+      accountImportRun({
         duration_ms: null,
         parse_ms: 10,
         attachments_ms: 20,

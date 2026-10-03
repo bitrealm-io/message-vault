@@ -167,7 +167,7 @@ export function importStatusLabel(status: Schema["ImportStatus"]): string {
   }
 }
 
-/** Build the import summary panel model from a server import-detail response. */
+/** Build the import summary panel model from an Account Import Run. */
 export function toImportSummaryView(detail: AccountImportRun): ImportSummaryView {
   // The owner reads the summary's counts and nothing else of it.
   const summary: Record<string, unknown> =

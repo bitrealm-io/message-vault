@@ -969,14 +969,14 @@ pub(crate) async fn get_import(
     AxumPath(import_id): AxumPath<i64>,
 ) -> Result<Json<ImportRun>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    owned_import_run(&mut conn, auth.account_id, import_id)
+    full_import_run(&mut conn, auth.account_id, import_id)
         .await
         .map(Json)
 }
 
 /// One of an account's Import Runs in full. A run that is another account's
 /// is a 404.
-pub(crate) async fn owned_import_run(
+pub(crate) async fn full_import_run(
     conn: &mut SqliteConnection,
     account: i64,
     import_id: i64,
@@ -1397,7 +1397,7 @@ pub(crate) async fn update_import(
         summary_json.as_deref(),
     )
     .await?;
-    owned_import_run(&mut conn, account, import_id)
+    full_import_run(&mut conn, account, import_id)
         .await
         .map(Json)
 }
@@ -1423,7 +1423,7 @@ pub(crate) async fn discard_import(
     let account = resolve_import_account(&auth);
     let mut conn = state.db.acquire().await?;
     crate::db::imports::discard_import(&mut conn, account, import_id).await?;
-    owned_import_run(&mut conn, account, import_id)
+    full_import_run(&mut conn, account, import_id)
         .await
         .map(Json)
 }

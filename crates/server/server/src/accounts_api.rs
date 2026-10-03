@@ -1372,7 +1372,7 @@ pub(crate) async fn get_account_import(
         let run = crate::imports_api::owner_import_run(&mut conn, row).await?;
         return Ok(Json(AccountImportRun::Owner(run)));
     }
-    let run = crate::imports_api::owned_import_run(&mut conn, target, import_id).await?;
+    let run = crate::imports_api::full_import_run(&mut conn, target, import_id).await?;
     Ok(Json(AccountImportRun::Own(run)))
 }
 

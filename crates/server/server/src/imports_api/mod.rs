@@ -445,7 +445,8 @@ async fn stage_all_files(
     };
     let media_work = TempDir::new().context("temp dir for import-time media rewrite")?;
     let mut asset_stats = AssetStats::default();
-    let mut stmts = StagingInserts::new(opts.account_id, opts.import_id);
+    let identities = crate::db::account_profile::account_identity_keys(tx, opts.account_id).await?;
+    let mut stmts = StagingInserts::new(opts.account_id, opts.import_id, identities);
 
     for (idx, path) in paths.iter().enumerate() {
         let file_stats = staging::import_file_to_staging(

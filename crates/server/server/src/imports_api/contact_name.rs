@@ -1,5 +1,7 @@
 //! Contact linking and display-name merging during import.
 
+use std::collections::HashSet;
+
 use anyhow::Result;
 use message_ir::{HandleType, trimmed};
 use sqlx::SqliteConnection;
@@ -7,7 +9,8 @@ use sqlx::SqliteConnection;
 use super::ImportStats;
 use crate::db::contacts;
 use crate::db::handles::{
-    HandleIdCache, infer_handle_type_from_shape as infer_handle_type, upsert_handle_row_cached,
+    HandleIdCache, infer_handle_type_from_shape as infer_handle_type, normalize_handle,
+    upsert_handle_row_cached,
 };
 use crate::db::import_contacts::{self, ContactReason};
 use crate::db::trash;
@@ -110,6 +113,17 @@ pub(super) struct IncomingSender<'a> {
     pub platform: &'a str,
 }
 
+/// True when `address`, read as `handle_type`, is one of the account's
+/// identities: the account holder, on any service.
+pub(super) fn is_account_identity(
+    identities: &HashSet<(String, HandleType)>,
+    address: &str,
+    handle_type: HandleType,
+) -> bool {
+    let (normalized, _) = normalize_handle(address, handle_type);
+    identities.contains(&(normalized, handle_type))
+}
+
 /// The `handles` row for an incoming message's sender, creating it when this
 /// import is the first to meet that address, and the contact that owns it.
 /// `None` for a message the account owner sent, and for one whose source
@@ -117,6 +131,7 @@ pub(super) struct IncomingSender<'a> {
 pub(super) async fn resolve_incoming_sender_handle(
     tx: &mut SqliteConnection,
     cache: &mut HandleIdCache,
+    identities: &HashSet<(String, HandleType)>,
     account_id: i64,
     import_id: Option<i64>,
     sender: IncomingSender<'_>,
@@ -150,8 +165,10 @@ pub(super) async fn resolve_incoming_sender_handle(
     // the same way a participant does, which also replaces a trashed one
     // (ADR-0013). A handle already in the cache went through here, or
     // through a participant or a one-to-one chat, earlier in this run, and
-    // each of those gave it a contact.
-    if !cached {
+    // each of those gave it a contact unless it is one of the account's
+    // identities. A sender at one is the holder, who never gets a contact
+    // here (#1093); the message still records the address it came from.
+    if !cached && !is_account_identity(identities, address, handle_type) {
         ensure_contact_for_handle(tx, account_id, import_id, handle_id, None, stats).await?;
     }
     Ok(Some(handle_id))

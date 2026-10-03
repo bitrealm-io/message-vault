@@ -1,6 +1,6 @@
 //! Stage message-ir JSONL rows into the temporary import tables.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -25,7 +25,8 @@ use crate::models::{
 use media::MediaMode;
 
 use super::contact_name::{
-    IncomingSender, count_other_identity, ensure_contact_for_handle, resolve_incoming_sender_handle,
+    IncomingSender, count_other_identity, ensure_contact_for_handle, is_account_identity,
+    resolve_incoming_sender_handle,
 };
 use super::{ImportFailure, ImportOptions, ImportStats};
 
@@ -229,16 +230,26 @@ pub(super) struct StagingInserts {
     /// address and platform. Apart from `handles`, whose entries each have a
     /// contact: an owner's handle never gets one (ADR-0015).
     owners: HashMap<(String, String), i64>,
+    /// The account's identities, as `(normalized address, handle type)`.
+    /// A participant at one of them is the holder, who is never a
+    /// participant (ADR-0015, #1093).
+    identities: HashSet<(String, HandleType)>,
 }
 
 impl StagingInserts {
-    /// Fresh insert state for one import run.
-    pub(super) fn new(account_id: i64, import_id: Option<i64>) -> Self {
+    /// Fresh insert state for one import run, with the identities the account
+    /// holds when the run starts.
+    pub(super) fn new(
+        account_id: i64,
+        import_id: Option<i64>,
+        identities: HashSet<(String, HandleType)>,
+    ) -> Self {
         Self {
             account_id,
             import_id,
             handles: HandleIdCache::new(),
             owners: HashMap::new(),
+            identities,
         }
     }
 }
@@ -602,6 +613,13 @@ async fn insert_participant(
 ) -> Result<()> {
     // Prefer the source-provided type; fall back to shape inference.
     let handle_type = handle_type.unwrap_or_else(|| infer_handle_type(&handle));
+    // The account holder is never a participant: a member at one of the
+    // account's identities gets no handle, contact or participant row. The
+    // exporters drop the addresses their backup names as the owner's; this
+    // catches the ones only the account knows (#1093).
+    if is_account_identity(&stmts.identities, &handle, handle_type) {
+        return Ok(());
+    }
     let (handle_id, flagged, cached) = upsert_handle_row_cached(
         tx,
         &mut stmts.handles,
@@ -669,6 +687,7 @@ async fn resolve_message_rows(
         let sender_handle_id = resolve_incoming_sender_handle(
             tx,
             &mut stmts.handles,
+            &stmts.identities,
             stmts.account_id,
             stmts.import_id,
             IncomingSender {
@@ -869,6 +888,7 @@ async fn tapback_row(
     let sender_handle_id = resolve_incoming_sender_handle(
         tx,
         &mut stmts.handles,
+        &stmts.identities,
         stmts.account_id,
         stmts.import_id,
         IncomingSender {

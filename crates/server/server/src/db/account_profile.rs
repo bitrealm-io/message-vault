@@ -47,6 +47,48 @@ async fn account_handle_addresses(
     .await?)
 }
 
+/// The account's identities as `(normalized address, handle type)`, whatever
+/// service each is linked under: one number is one person on every service,
+/// so a Text Message identity also names the number on WhatsApp.
+///
+/// Separate from [`account_handle_addresses`], which lists one row per
+/// service for the profile (#1570), and from `IdentitiesOf::Account`, which
+/// lists each identity with its counts. This is the set an import checks;
+/// [`is_account_identity_sql`] is the same match for a query that reads
+/// handles, and the two must agree.
+pub async fn account_identity_keys(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+) -> Result<std::collections::HashSet<(String, HandleType)>> {
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT DISTINCT h.normalized, h.handle_type FROM handles h
+         JOIN account_handles ah ON ah.handle_id = h.id
+         WHERE ah.account_id = $1",
+    )
+    .bind(account_id)
+    .fetch_all(&mut *conn)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(normalized, handle_type)| (normalized, HandleType::parse(&handle_type)))
+        .collect())
+}
+
+/// A SQL condition, true when the `handles` row `handle` names an address
+/// that is one of account `account_id`'s identities: the same normalized
+/// address and type, whatever service. The match [`account_identity_keys`]
+/// makes, for a query; `handle` and `account_id` are SQL expressions.
+#[must_use]
+pub fn is_account_identity_sql(handle: &str, account_id: &str) -> String {
+    format!(
+        "EXISTS (SELECT 1 FROM account_handles ah
+                 JOIN handles ih ON ih.id = ah.handle_id
+                 WHERE ah.account_id = {account_id}
+                   AND ih.normalized = {handle}.normalized
+                   AND ih.handle_type = {handle}.handle_type)"
+    )
+}
+
 /// Ensure an `accounts` row exists at `account_id`, with the id as its stub
 /// username. The demo reset and the tests use it to place a row at a chosen
 /// id, and the import and export paths call it before they write for an

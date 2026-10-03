@@ -4159,3 +4159,98 @@ async fn the_sql_form_of_an_import_groups_name_is_the_name_the_group_is_given() 
         assert_eq!(from_sql, import_contact_group_name(&row), "{finished_at:?}");
     }
 }
+
+/// A group header that names the account holder among its members does not
+/// make them a participant, on any service. The account holds the number as
+/// a Text Message identity, and the exporter did not know it was the
+/// holder's, so only the server's check can drop it (#1093).
+#[tokio::test]
+async fn an_account_identity_listed_among_a_groups_members_is_not_a_participant() {
+    let (state, fixture, token) = importer().await;
+    let account_id: i64 = sqlx::query_scalar("SELECT id FROM accounts WHERE username = 'importer'")
+        .fetch_one(&mut *fixture.conn().await)
+        .await
+        .unwrap();
+    let account = format!("/v1/accounts/{account_id}");
+    let _: serde_json::Value = patch_json(
+        &state,
+        &account,
+        &token,
+        serde_json::json!({ "identities": [{ "address": "+15555550199", "service": "phone" }] }),
+    )
+    .await;
+    let identities_before: serde_json::Value =
+        get_json(&state, &format!("{account}/identities"), &token).await;
+
+    for (source, chat) in [
+        ("sms-backup-restore", "trip-sms"),
+        ("whatsapp", "trip-whatsapp"),
+    ] {
+        let path = batches_path(&state, &token, source).await;
+        let body = format!(
+            concat!(
+                r#"{{"schema_version":4,"export":{{"source":"{source}","tool":"t","tool_version":"1","owner_handle":null,"owner_display_name":null}},"#,
+                r#""conversation":{{"chat_identifier":"{chat}","conversation_type":"group","group_title":"Trip","participants":["#,
+                r#"{{"handle":"+15555550101","display_name":"Ada"}},{{"handle":"+15555550102","display_name":"Bob"}},{{"handle":"+15555550199","display_name":"Me"}}],"#,
+                r#""stats":{{"message_count":2,"attachment_count":0,"first_timestamp_unix_ms":1400773261000,"last_timestamp_unix_ms":1400773262000}}}}}}"#,
+                "\n",
+                r#"{{"guid":"{chat}-1","timestamp_unix_ms":1400773261000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+15555550101","sender_display_name":"Ada","subject":null,"text":"hi","attachments":[],"imessage":null,"source":null}}"#,
+                "\n",
+                // The holder's other device: an incoming message from the
+                // holder's own number, which the exporter did not know.
+                r#"{{"guid":"{chat}-2","timestamp_unix_ms":1400773262000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+15555550199","sender_display_name":"Me","subject":null,"text":"on my way","attachments":[],"imessage":null,"source":null}}"#,
+                "\n",
+            ),
+            source = source,
+            chat = chat,
+        );
+        let (status, text) =
+            crate::test_support::post_raw(&state, &path, &token, "application/jsonl", body).await;
+        assert!(status.is_success(), "{source}: {status} {text}");
+
+        let mut conn = fixture.conn().await;
+        let members: Vec<String> = sqlx::query_scalar(
+            "SELECT h.normalized FROM participants p
+             JOIN conversations c ON c.id = p.conversation_id
+             JOIN handles chat ON chat.id = c.chat_handle_id
+             JOIN handles h ON h.id = p.handle_id
+             WHERE c.account_id = $1 AND chat.normalized = $2
+             ORDER BY h.normalized",
+        )
+        .bind(account_id)
+        .bind(chat)
+        .fetch_all(&mut *conn)
+        .await
+        .unwrap();
+        assert_eq!(members, ["+15555550101", "+15555550102"], "{source}");
+
+        let complete = path.replace("/batches", "/complete");
+        let _: serde_json::Value = post_json(
+            &state,
+            &complete,
+            &token,
+            serde_json::json!({ "status": "completed" }),
+        )
+        .await;
+    }
+
+    let holder_contacts: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM contact_handles ch
+         JOIN handles h ON h.id = ch.handle_id
+         WHERE ch.account_id = $1 AND h.normalized = '+15555550199'",
+    )
+    .bind(account_id)
+    .fetch_one(&mut *fixture.conn().await)
+    .await
+    .unwrap();
+    assert_eq!(
+        holder_contacts, 0,
+        "no contact is made for the holder's address"
+    );
+    let identities_after: serde_json::Value =
+        get_json(&state, &format!("{account}/identities"), &token).await;
+    assert_eq!(
+        identities_after, identities_before,
+        "an import never adds an account identity"
+    );
+}

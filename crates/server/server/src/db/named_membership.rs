@@ -15,8 +15,6 @@ use std::pin::Pin;
 use anyhow::Result as AnyResult;
 use sqlx::{Connection, SqliteConnection};
 
-use crate::db::dialect::{name_eq_ci, order_by_name_ci};
-
 /// Longest allowed name for either kind of set (characters).
 pub const MAX_NAME_LEN: usize = 80;
 
@@ -219,9 +217,8 @@ async fn find_id(
     name: &str,
 ) -> Result<Option<i64>, MembershipError> {
     let sql = format!(
-        "SELECT id FROM {table} WHERE account_id = $1 AND {name_eq}",
+        "SELECT id FROM {table} WHERE account_id = $1 AND lower(name) = lower($2)",
         table = spec.table,
-        name_eq = name_eq_ci("name", "$2"),
     );
     let id = sqlx::query_scalar::<_, i64>(&sql)
         .bind(account_id)
@@ -435,9 +432,8 @@ pub async fn list_sets(
     conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<Vec<(i64, String)>, MembershipError> {
-    let order = order_by_name_ci("name");
     let sql = format!(
-        "SELECT id, name FROM {table} WHERE account_id = $1 {order}",
+        "SELECT id, name FROM {table} WHERE account_id = $1 ORDER BY lower(name)",
         table = spec.table
     );
     let rows = sqlx::query_as::<_, (i64, String)>(&sql)
@@ -697,13 +693,12 @@ pub async fn names_for_item(
     account_id: i64,
     item_id: i64,
 ) -> AnyResult<Vec<String>> {
-    let order = order_by_name_ci("n.name");
     let sql = format!(
         "SELECT n.name
          FROM {table} n
          JOIN {members} m ON m.{name_col} = n.id
          WHERE n.account_id = $1 AND m.{member_col} = $2
-         {order}",
+         ORDER BY lower(n.name)",
         table = spec.table,
         members = spec.members_table,
         name_col = spec.name_column,
@@ -728,13 +723,12 @@ pub async fn names_for_items(
     fold_in_id_chunks(conn, item_ids, |conn, chunk| {
         Box::pin(async move {
             let placeholders = in_placeholders(2, chunk.len());
-            let order = order_by_name_ci("n.name");
             let sql = format!(
                 "SELECT m.{member_col}, n.name
                  FROM {members} m
                  JOIN {table} n ON n.id = m.{name_col}
                  WHERE n.account_id = $1 AND m.{member_col} IN ({placeholders})
-                 {order}",
+                 ORDER BY lower(n.name)",
                 table = spec.table,
                 members = spec.members_table,
                 name_col = spec.name_column,

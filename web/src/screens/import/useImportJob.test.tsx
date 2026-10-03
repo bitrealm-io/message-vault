@@ -317,8 +317,9 @@ describe("useImportJob wiring", () => {
     expect(getServerStateMock.mock.invocationCallOrder[0]).toBeLessThan(
       invokeExtractMock.mock.invocationCallOrder[0] as number,
     );
-    // The Staging Review forecasts against it.
-    expect(invokeSummarizeStagingMock).toHaveBeenCalledWith(
+    // Staging writes it into the staged folder, where the Staging Review's
+    // forecast and the Media stage read it.
+    expect(invokeExtractMock).toHaveBeenCalledWith(
       expect.objectContaining({ asset_max_bytes: 100 * MIB }),
     );
 
@@ -328,18 +329,56 @@ describe("useImportJob wiring", () => {
     );
   });
 
-  it("gives the Media stage the limit the run was created with", async () => {
-    getServerStateMock.mockResolvedValue({ asset_max_bytes: 100 * MIB });
+  it("gives Staging the media settings once and the later stages only the folder", async () => {
+    // Compress with Max FPS cleared: extract is given the real mode and the
+    // fields, so it refuses them before anything is staged.
     runMock.mockImplementationOnce(
       runResult({ summary: "Transcode finished.", transcode: undefined }),
     );
     const { result } = renderHook(() => useImportJob());
     await act(() => result.current.startImport(form({ attachmentMedia: "compress" })));
+    expect(invokeExtractMock).toHaveBeenCalledWith(
+      expect.objectContaining({ attachment_media: "compress", media_max_fps: "" }),
+    );
     await act(() => result.current.approve());
 
-    expect(invokeTranscodeStagingMock).toHaveBeenCalledWith(
-      expect.objectContaining({ asset_max_bytes: 100 * MIB }),
+    // The summaries and the Media stage read the settings from the folder.
+    const folder = { staging_dir: "/home/sam/message-crate/staging-iphone" };
+    expect(invokeSummarizeStagingMock.mock.calls.map((call) => call[0])).toEqual([folder, folder]);
+    expect(invokeTranscodeStagingMock).toHaveBeenCalledWith(folder);
+  });
+
+  it("an iMazing run, whose form shows no attachment option, has no Media stage", async () => {
+    // Compress was chosen on the Apple Messages form; the source then
+    // changed to iMazing and the field kept its value.
+    runMock.mockImplementationOnce(
+      runResult({ summary: "Transcode finished.", transcode: undefined }),
     );
+    const { result } = renderHook(() => useImportJob());
+    await act(() =>
+      result.current.startImport({ ...form({ attachmentMedia: "compress" }), source: "imazing" }),
+    );
+    // extract gets no attachment mode for iMazing, so it stages originals.
+    expect(JSON.stringify(invokeExtractMock.mock.calls[0])).not.toMatch(/attachment_?[mM]edia/);
+    await act(() => result.current.approve());
+
+    expect(invokeTranscodeStagingMock).not.toHaveBeenCalled();
+  });
+
+  it("records Copy for an iMazing or OpenExtract run whatever another source's form chose", async () => {
+    // Skip was chosen on the Apple Messages form; the source then changed.
+    for (const source of ["imazing", "openextract"]) {
+      resetImportRun();
+      createImportMock.mockClear();
+      runMock.mockImplementationOnce(runResult(EXTRACT_RESULT));
+      const { result } = renderHook(() => useImportJob());
+      await act(() => result.current.startImport({ ...form({ attachmentMedia: "skip" }), source }));
+
+      expect(createImportMock).toHaveBeenCalledWith(
+        expect.objectContaining({ form: expect.objectContaining({ attachmentMedia: "copy" }) }),
+      );
+      expect(result.current.form?.attachmentMedia).toBe("copy");
+    }
   });
 
   it("resumes an Upload with the limit stored on the Import Run, not the server's current one", async () => {
@@ -374,8 +413,8 @@ describe("useImportJob wiring", () => {
     );
 
     expect(getServerStateMock).not.toHaveBeenCalled();
-    expect(invokeSummarizeStagingMock).toHaveBeenCalledWith(
-      expect.objectContaining({ asset_max_bytes: 7 * MIB }),
+    expect(invokeExtractMock).toHaveBeenCalledWith(
+      expect.objectContaining({ asset_max_bytes: 7 * MIB, resume: true }),
     );
   });
 
@@ -415,12 +454,12 @@ describe("useImportJob wiring", () => {
     );
   });
 
-  it("asks the exporter to stage originals under convert", async () => {
-    // The desktop runs the media pass itself, after the gate.
+  it("gives extract the mode the person chose under convert", async () => {
+    // extract stages originals for it and records the choice for the Media stage.
     const { result } = renderHook(() => useImportJob());
     await act(() => result.current.startImport(form({ attachmentMedia: "convert" })));
     expect(invokeExtractMock).toHaveBeenCalledWith(
-      expect.objectContaining({ attachment_media: "copy" }),
+      expect.objectContaining({ attachment_media: "convert" }),
     );
   });
 

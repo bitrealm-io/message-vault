@@ -13,18 +13,22 @@
 //! The transcode pass ([`transcode_staged`]) converts or compresses staged
 //! attachments afterwards as its own resumable pass, and
 //! [`summarize_staging`] reads a staging folder back for the Staging Review.
+//! Both work to the media settings Staging recorded in the folder
+//! ([`write_media_settings`], [`read_media_settings`]).
 //!
 //! Formats live in `message-ir-format`; the run model in
 //! `message-crate-core`. Why this is its own crate:
 //! `docs/adr/0012-four-crates-in-the-export-pipeline.md`.
 
 mod export_writer;
+mod media_settings;
 mod spool;
 mod staging_summary;
 mod transcode;
 mod write_queue;
 
 pub use export_writer::{ExportWriter, ExportWriterParts};
+pub use media_settings::{MEDIA_SETTINGS_FILE, read_media_settings, write_media_settings};
 pub use spool::AttachmentSpool;
 pub use staging_summary::{AttachmentForecast, StagingSummary, SummaryProgress, summarize_staging};
 pub use transcode::{TranscodeOptions, TranscodeProgress, TranscodeReport, transcode_staged};

@@ -54,7 +54,8 @@ export function canSubmitMessages(input: MessagesQueryInput): boolean {
     input.nameOrHandle.trim() ||
       input.handle.trim() ||
       input.msgType !== "all" ||
-      composeCountComparison(input.participants),
+      composeCountComparison(input.participants) ||
+      input.sources.length > 0,
   );
 }
 

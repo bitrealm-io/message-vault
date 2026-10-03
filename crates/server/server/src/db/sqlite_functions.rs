@@ -3,7 +3,7 @@
 //! SQLite's built-in `lower()` folds only ASCII letters unless it is built
 //! with ICU, and the bundled build is not, so `lower('Élodie')` is
 //! `'Élodie'`. The search words compare `lower(column)` with `lower(text)`
-//! (see [`crate::db::dialect::like_ci`]), so they need a `lower()` that
+//! (see [`crate::search::bridge::Sql::like`]), so they need a `lower()` that
 //! folds every letter. [`register`] replaces the built-in with one that
 //! lowers each letter Unicode gives a lower-case mapping, one letter at a
 //! time, so a word's start lowers the same alone as inside the word

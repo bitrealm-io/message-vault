@@ -614,6 +614,59 @@ async fn the_owner_sets_each_profile_field_on_its_own() {
     assert_eq!(read["emails"], serde_json::json!(["carol@example.com"]));
 }
 
+/// The display name has three cases on the wire. A body without the field
+/// leaves the name alone, `null` clears it, and a string sets it, with a
+/// string that is empty after trimming clearing it. Settings clears the
+/// name by sending `null`, so reading `null` as "leave alone" made the name
+/// impossible to clear.
+#[tokio::test]
+async fn the_display_name_is_left_alone_when_absent_and_cleared_by_null_or_blank() {
+    let (fixture, account) = fixture_with_account().await;
+    let state = &fixture.state;
+    let path = member(account.account_id);
+    let set_alex = || serde_json::json!({ "preferred_name": "Alex" });
+
+    let _: serde_json::Value = patch_json(state, &path, &account.token, set_alex()).await;
+    let patched: serde_json::Value = patch_json(
+        state,
+        &path,
+        &account.token,
+        serde_json::json!({ "time_zone": "Asia/Tokyo" }),
+    )
+    .await;
+    assert_eq!(
+        patched["preferred_name"], "Alex",
+        "an absent field leaves it"
+    );
+
+    let patched: serde_json::Value = patch_json(
+        state,
+        &path,
+        &account.token,
+        serde_json::json!({ "preferred_name": null }),
+    )
+    .await;
+    assert_eq!(
+        patched["preferred_name"],
+        serde_json::Value::Null,
+        "null clears it"
+    );
+
+    let _: serde_json::Value = patch_json(state, &path, &account.token, set_alex()).await;
+    let patched: serde_json::Value = patch_json(
+        state,
+        &path,
+        &account.token,
+        serde_json::json!({ "preferred_name": "  " }),
+    )
+    .await;
+    assert_eq!(
+        patched["preferred_name"],
+        serde_json::Value::Null,
+        "a blank string clears it"
+    );
+}
+
 /// A phone given when the owner creates an account is linked to it.
 #[tokio::test]
 async fn a_phone_given_at_creation_is_linked_to_the_account() {
@@ -1307,6 +1360,125 @@ async fn deleting_own_messages_needs_the_delete_permission_and_a_confirmation() 
     );
 }
 
+/// A batch that names a file uploaded for the running Import Run before the
+/// account's messages were deleted is stored with that file. The delete
+/// leaves the account's files alone while a run is running, because it
+/// cannot tell which of them the run still needs.
+#[tokio::test]
+async fn deleting_messages_keeps_a_file_a_running_import_has_uploaded() {
+    let (fixture, alice) = fixture_with_account().await;
+    let state = fixture.state.clone();
+    seed_one_message(&state, alice.account_id).await;
+    let (_, run): (String, serde_json::Value) = post_created_json(
+        &state,
+        "/v1/imports",
+        &alice.token,
+        serde_json::json!({ "source": "imessage" }),
+    )
+    .await;
+    let bytes = b"photo uploaded for the next batch";
+    let sha = crate::assets_api::sha256_hex(bytes);
+    let (status, text) = put_raw(
+        &state,
+        &format!("/v1/assets/{sha}?source=imessage"),
+        &alice.token,
+        "application/octet-stream",
+        bytes.to_vec(),
+    )
+    .await;
+    assert!(status.is_success(), "{status} {text}");
+    let blob = state
+        .cfg
+        .paths
+        .assets_dir_for_account(alice.account_id, "imessage")
+        .join(crate::assets_api::shard_rel_path(&sha, ""));
+    assert!(blob.is_file(), "the upload stored {}", blob.display());
+
+    let deleted: DeleteMessagesResponse = delete_json_with_body(
+        &state,
+        &format!("{}/messages", member(alice.account_id)),
+        &alice.token,
+        serde_json::json!({ "confirm": true }),
+    )
+    .await;
+    assert_eq!(deleted.conversations, 1);
+
+    let message = format!(
+        r#"{{"guid":"g-new","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550123","sender_display_name":null,"subject":null,"text":"new","attachments":[{{"path":"attachments/photo.bin","original_name":"photo.bin","mime_type":"application/octet-stream","digest_sha256":"{sha}","is_sticker":false,"transcription":null,"sticker_effect":null}}],"imessage":null,"source":null}}"#
+    );
+    let body = format!(
+        "{}\n{message}\n",
+        r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550123","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550123","display_name":null}],"stats":{"message_count":1,"attachment_count":1,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}"#,
+    );
+    let (status, text) = crate::test_support::post_raw(
+        &state,
+        &format!("/v1/imports/{}/batches", run["id"].as_i64().unwrap()),
+        &alice.token,
+        "application/jsonl",
+        body,
+    )
+    .await;
+    assert!(status.is_success(), "{status} {text}");
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let assets_path: Option<String> = sqlx::query_scalar(
+        "SELECT a.assets_path FROM attachments a JOIN messages m ON m.id = a.message_id
+         WHERE m.body = 'new'",
+    )
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    assert!(
+        assets_path.is_some() && blob.is_file(),
+        "the imported attachment has no file: assets_path={assets_path:?}, file on disk={}",
+        blob.is_file()
+    );
+}
+
+/// The delete takes the account's import lock, as each batch does, so it
+/// runs between two batches and never inside one.
+#[tokio::test]
+async fn deleting_messages_waits_for_a_batch_in_progress() {
+    let (fixture, alice) = fixture_with_account().await;
+    let state = fixture.state.clone();
+    seed_one_message(&state, alice.account_id).await;
+
+    let batch = state
+        .account_import_locks
+        .lock(alice.account_id.to_string())
+        .await;
+    let delete = tokio::spawn({
+        let state = state.clone();
+        let path = format!("{}/messages", member(alice.account_id));
+        let token = alice.token.clone();
+        async move {
+            delete_status_with_body(
+                &state,
+                &path,
+                &token,
+                serde_json::json!({ "confirm": true }),
+            )
+            .await
+        }
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert!(
+        !delete.is_finished(),
+        "the delete finished while a batch held the account's import lock"
+    );
+    let mut conn = state.db.acquire().await.unwrap();
+    let left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM conversations WHERE account_id = $1")
+        .bind(alice.account_id)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    drop(conn);
+    assert_eq!(left, 1, "nothing is deleted while the batch runs");
+
+    drop(batch);
+    assert_eq!(delete.await.unwrap(), StatusCode::OK);
+}
+
 /// A token never destroys data: deleting an account's messages and closing
 /// the account are a person's acts, session only, whatever the token was
 /// asked to carry.
@@ -1938,7 +2110,7 @@ async fn apply_profile_update_sets_name_and_handles() {
     apply_profile_update(
         &mut conn,
         account_id,
-        Some("Alex"),
+        Some(Some("Alex")),
         None,
         &[
             AccountIdentityRequest {
@@ -2006,7 +2178,7 @@ async fn saving_a_profile_clears_the_setup_owed_flag() {
         &mut conn,
         account_id,
         &UpdateAccountRequest {
-            preferred_name: Some("Alex".into()),
+            preferred_name: Some(Some("Alex".into())),
             ..UpdateAccountRequest::default()
         },
         true,
@@ -2169,7 +2341,7 @@ async fn profile_update_rolls_back_when_a_handle_service_is_unsupported() {
         &mut conn,
         account_id,
         &UpdateAccountRequest {
-            preferred_name: Some("Changed Name".into()),
+            preferred_name: Some(Some("Changed Name".into())),
             identities: vec![AccountIdentityRequest {
                 address: "alice@example.com".into(),
                 service: "unsupported".into(),

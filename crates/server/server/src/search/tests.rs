@@ -1931,12 +1931,140 @@ mod kind_words {
             run(&mut conn, ListKind::Messages, "source:whatsapp").await,
             vec![f.archive_msg]
         );
+        // `source:` lifts the duplicate default, so the conversation whose
+        // only message is a duplicate counts with the five others.
         assert_eq!(
             run(&mut conn, ListKind::Conversations, "source:imessage")
                 .await
                 .len(),
-            5
+            6
         );
+    }
+
+    /// The source id each exporter writes into `export.source`, which push
+    /// sends as the Import Run's source and the import stamps on every
+    /// message.
+    const IMPORT_SOURCES: [&str; 7] = [
+        "imessage",
+        "whatsapp",
+        "sms-backup-restore",
+        "imazing",
+        "openextract",
+        "go-sms-pro",
+        "sms-backup-plus",
+    ];
+
+    /// Import, through the whole pipeline, one direct conversation with one
+    /// message from `source`, and return the conversation's and the
+    /// message's ids.
+    async fn import_from(
+        conn: &mut SqliteConnection,
+        dir: &std::path::Path,
+        source: &str,
+        chat: &str,
+    ) -> (i64, i64) {
+        let path = dir.join(format!("{chat}.jsonl"));
+        let header = serde_json::json!({
+            "schema_version": 4,
+            "export": {"source": source, "tool": "test", "tool_version": "0",
+                       "owner_handle": null, "owner_display_name": null},
+            "conversation": {
+                "chat_identifier": chat, "conversation_type": "individual", "group_title": null,
+                "participants": [{"handle": chat, "display_name": null}],
+                "stats": {"message_count": 1, "attachment_count": 0,
+                          "first_timestamp_unix_ms": 1_426_183_462_000_i64,
+                          "last_timestamp_unix_ms": 1_426_183_462_000_i64}
+            }
+        });
+        let line = serde_json::json!({
+            "guid": format!("{source}-{chat}"), "timestamp_unix_ms": 1_426_183_462_000_i64,
+            "direction": "incoming", "service": "sms", "message_kind": "sms",
+            "sender_handle": chat, "sender_display_name": null, "subject": null,
+            "text": format!("hello from {source}"), "attachments": [],
+            "imessage": null, "source": null
+        });
+        std::fs::write(&path, format!("{header}\n{line}\n")).unwrap();
+        let assets = dir.join("assets");
+        let stats = crate::imports_api::import_jsonl_files_on_conn(
+            conn,
+            &[path],
+            &crate::imports_api::ImportOptions::fixed(crate::imports_api::FixedImportArgs {
+                assets_dir: &assets,
+                asset_root: dir,
+                mode: crate::imports_api::ImportMode::Append,
+                source,
+                account_id: ACCOUNT,
+                fill_content_keys: false,
+                import_id: None,
+            }),
+            crate::imports_api::ImportSchemaMode::Ensure,
+        )
+        .await
+        .unwrap();
+        assert_eq!(stats.messages, 1, "{source}");
+        sqlx::query_as(
+            "SELECT m.conversation_id, m.id FROM messages m
+             JOIN handles h ON h.id = (SELECT chat_handle_id FROM conversations WHERE id = m.conversation_id)
+             WHERE h.raw = $1",
+        )
+        .bind(chat)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap()
+    }
+
+    /// `source:` takes each id an import writes, as written, and finds that
+    /// source's messages and conversations and nothing else, duplicates
+    /// included (#1116). Each source has one conversation whose message was
+    /// kept, and one whose only message a later import marked as a copy of
+    /// another source's kept message.
+    #[tokio::test]
+    async fn source_takes_every_id_an_import_writes() {
+        let (pool, dir) = crate::db::engine::test_pool().await;
+        let mut conn = pool.acquire().await.unwrap();
+        let mut kept = Vec::new();
+        let mut copies = Vec::new();
+        for (i, source) in IMPORT_SOURCES.iter().enumerate() {
+            kept.push(import_from(&mut conn, dir.path(), source, &format!("+1555010{i}")).await);
+            copies.push(import_from(&mut conn, dir.path(), source, &format!("+1555020{i}")).await);
+        }
+        for (i, (_, copy)) in copies.iter().enumerate() {
+            let (_, original) = kept[(i + 1) % kept.len()];
+            sqlx::query("UPDATE messages SET duplicate_of = $1 WHERE id = $2")
+                .bind(original)
+                .bind(copy)
+                .execute(&mut *conn)
+                .await
+                .unwrap();
+        }
+        for (i, source) in IMPORT_SOURCES.iter().enumerate() {
+            let q = format!("source:{source}");
+            assert_eq!(
+                run(&mut conn, ListKind::Messages, &q).await,
+                sorted(vec![kept[i].1, copies[i].1]),
+                "{q} on Messages"
+            );
+            assert_eq!(
+                run(&mut conn, ListKind::Conversations, &q).await,
+                sorted(vec![kept[i].0, copies[i].0]),
+                "{q} on Conversations"
+            );
+        }
+    }
+
+    /// `sms` was the SMS Backup & Restore importer's old value; the source is
+    /// now named by its own id, and `sms` is no source at all.
+    #[test]
+    fn source_sms_is_an_unknown_value() {
+        for list in [ListKind::Messages, ListKind::Conversations] {
+            let e = err(list, "source:sms");
+            assert_eq!(
+                e.kind,
+                crate::search::error::QueryErrorKind::BadValue,
+                "{list:?}"
+            );
+            assert!(e.message.contains("sms-backup-restore"), "{}", e.message);
+        }
     }
 
     /// `service:` on Contacts asks about the messages of the contact's
@@ -2855,8 +2983,7 @@ mod coverage {
     fn lifts_a_default(word: &str, list: ListKind) -> bool {
         match word {
             "trashed" => true,
-            "source" => list == ListKind::Messages,
-            "import" => list != ListKind::Contacts,
+            "source" | "import" => list != ListKind::Contacts,
             _ => false,
         }
     }

@@ -176,37 +176,27 @@ describe("staging command wrappers resolve their own staging root", () => {
   });
 
   it("invokeSummarizeStaging resolves the root itself rather than taking one from the caller", async () => {
-    await invokeSummarizeStaging({
-      staging_dir: "/home/sam/message-crate/staging-run",
-      asset_max_bytes: 104857600,
-    });
+    await invokeSummarizeStaging({ staging_dir: "/home/sam/message-crate/staging-run" });
 
     expect(resolveStagingParent).toHaveBeenCalledTimes(1);
+    // Only the folder: the command reads the run's media settings from it.
     expect(invoke).toHaveBeenCalledWith("summarize_staging", {
-      args: expect.objectContaining({
+      args: {
         stagingDir: "/home/sam/message-crate/staging-run",
         stagingRoot: "/home/sam/message-crate",
-        // The command takes the run's limit; it has no number of its own.
-        assetMaxBytes: 104857600,
-      }),
+      },
     });
   });
 
   it("invokeTranscodeStaging resolves the root itself rather than taking one from the caller", async () => {
-    await invokeTranscodeStaging({
-      staging_dir: "/home/sam/message-crate/staging-run",
-      attachment_media: "convert",
-      asset_max_bytes: 104857600,
-    });
+    await invokeTranscodeStaging({ staging_dir: "/home/sam/message-crate/staging-run" });
 
     expect(resolveStagingParent).toHaveBeenCalledTimes(1);
     expect(invoke).toHaveBeenCalledWith("transcode_staging", {
-      args: expect.objectContaining({
+      args: {
         stagingDir: "/home/sam/message-crate/staging-run",
         stagingRoot: "/home/sam/message-crate",
-        attachmentMedia: "convert",
-        assetMaxBytes: 104857600,
-      }),
+      },
     });
   });
 
@@ -248,10 +238,7 @@ describe("staging command wrappers resolve their own staging root", () => {
     resolveStagingParent.mockResolvedValue("");
 
     await expect(
-      invokeSummarizeStaging({
-        staging_dir: "/home/sam/message-crate/staging-run",
-        asset_max_bytes: 104857600,
-      }),
+      invokeSummarizeStaging({ staging_dir: "/home/sam/message-crate/staging-run" }),
     ).rejects.toThrow(/staging directory/i);
     expect(invoke).not.toHaveBeenCalled();
   });

@@ -21,8 +21,8 @@ use crate::config::Config;
 use crate::db::account_profile;
 use crate::db::address_book::{self, LoadCounts, LoadMode};
 use crate::db::demo_account_build;
-use crate::db::dialect;
 use crate::db::engine;
+use crate::db::maintenance;
 use crate::db::schema;
 use crate::dedupe;
 use crate::imports_api::{self, FixedImportArgs, ImportMode, ImportOptions, ImportSchemaMode};
@@ -540,6 +540,18 @@ async fn reset_prepared_bundle(
     bundle: &Path,
     account_id: i64,
 ) -> Result<ResetPreparedStats> {
+    reset_prepared_bundle_with(cfg, bundle, account_id, async |_| Ok(())).await
+}
+
+/// [`reset_prepared_bundle`] with `after_rebuild` run on the prepared
+/// database once the rebuild has finished, so a test can change a row the
+/// rebuild must not change and see the reset refused.
+async fn reset_prepared_bundle_with(
+    cfg: &Config,
+    bundle: &Path,
+    account_id: i64,
+    after_rebuild: impl AsyncFnOnce(&SqlitePool) -> Result<()>,
+) -> Result<ResetPreparedStats> {
     let prepared = validate_prepared_bundle(bundle)?;
     let _operation_lock = crate::operation_lock::acquire_for_reset(&cfg.paths.db)?;
     let mut ready = crate::operation_lock::ReadyWhileRebuilding::clear(&cfg.paths.db)?;
@@ -562,7 +574,11 @@ async fn reset_prepared_bundle(
     temporary_cfg.paths.db = prepared_db.clone();
     temporary_cfg.paths.data_dir = data_work.path().to_path_buf();
     let opened = OpenDb::open(temporary_cfg.clone()).await?;
-    let stats = rebuild_demo_account(&temporary_cfg, &opened.db, &prepared, account_id).await;
+    let stats = match rebuild_demo_account(&temporary_cfg, &opened.db, &prepared, account_id).await
+    {
+        Ok(stats) => after_rebuild(&opened.db).await.map(|()| stats),
+        Err(error) => Err(error),
+    };
     // Closed before anything checks, checkpoints or renames the file.
     opened.close().await;
     let stats = stats?;
@@ -944,30 +960,51 @@ fn sqlite_sidecar(db: &Path, suffix: &str) -> PathBuf {
     PathBuf::from(path)
 }
 
-/// Refuse to install the prepared database if any non-demo account's row counts differ from
-/// the active one: a reset must only ever touch the demo account.
+/// Refuse to install the prepared database when it changed anything outside
+/// the Demo Account: a row of any other account in any table, or a row that
+/// belongs to no account, such as the Server Settings. A reset must only ever
+/// touch the Demo Account (#1225).
 async fn verify_non_demo_state_preserved(
     active: &Path,
     prepared: &Path,
     demo_id: i64,
 ) -> Result<()> {
-    if !active.is_file() {
+    if !active.is_file() || !has_accounts_table(active).await? {
+        // A database with no accounts holds nothing a reset could lose.
         return Ok(());
     }
     let active_state = non_demo_state(active, demo_id).await?;
     let prepared_state = non_demo_state(prepared, demo_id).await?;
-    if active_state != prepared_state {
+    let changed: Vec<String> = active_state
+        .keys()
+        .chain(prepared_state.keys())
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .filter(|table| active_state.get(*table) != prepared_state.get(*table))
+        .map(|table| {
+            let rows = |state: &BTreeMap<String, TableDigest>| {
+                state
+                    .get(table)
+                    .map_or_else(|| "no table".to_owned(), |digest| digest.rows.to_string())
+            };
+            format!(
+                "{table} (active rows={}, prepared rows={})",
+                rows(&active_state),
+                rows(&prepared_state)
+            )
+        })
+        .collect();
+    if !changed.is_empty() {
         bail!(
-            "prepared reset database changed non-demo account state; active={active_state:?}, prepared={prepared_state:?}"
+            "prepared reset database changed rows outside the Demo Account in: {}",
+            changed.join(", ")
         );
     }
     Ok(())
 }
 
-/// Message counts per account for every account except the demo one, used
-/// to prove a reset changed nothing else. The owner is among them: a reset
-/// writes no owner, so one that exists must still be there afterwards.
-async fn non_demo_state(db: &Path, demo_id: i64) -> Result<BTreeMap<i64, i64>> {
+/// Whether the database at `db` has an `accounts` table.
+async fn has_accounts_table(db: &Path) -> Result<bool> {
     let pool = engine::open_pool_for_path(db)
         .await
         .with_context(|| format!("open {} to verify non-demo accounts", db.display()))?;
@@ -975,37 +1012,211 @@ async fn non_demo_state(db: &Path, demo_id: i64) -> Result<BTreeMap<i64, i64>> {
         .acquire()
         .await
         .with_context(|| format!("open {} to verify non-demo accounts", db.display()))?;
-    let has_accounts: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'accounts'",
-    )
-    .fetch_one(&mut *conn)
-    .await
-    .with_context(|| format!("check accounts table in {}", db.display()))?;
-    if has_accounts == 0 {
-        conn.close().await?;
-        pool.close().await;
-        return Ok(BTreeMap::new());
-    }
-    let rows = sqlx::query(
-        "SELECT a.id, COUNT(m.id)
-         FROM accounts a
-         LEFT JOIN messages m ON m.account_id = a.id
-         WHERE a.id != $1
-         GROUP BY a.id
-         ORDER BY a.id",
-    )
-    .bind(demo_id)
-    .fetch_all(&mut *conn)
-    .await?;
-    let mut state = BTreeMap::new();
-    for row in rows {
-        let account_id: i64 = row.try_get(0)?;
-        let message_count: i64 = row.try_get(1)?;
-        state.insert(account_id, message_count);
-    }
+    let exists = schema::table_exists(&mut conn, "accounts")
+        .await
+        .with_context(|| format!("check accounts table in {}", db.display()))?;
     conn.close().await?;
     pool.close().await;
+    Ok(exists)
+}
+
+/// The rows of one table that a reset must leave as they were: how many, and
+/// a SHA-256 over all of them in a fixed order.
+#[derive(Debug, PartialEq, Eq)]
+struct TableDigest {
+    rows: u64,
+    sha256: String,
+}
+
+/// Tables a reset compares no rows of. `demo_account_build` is the build's
+/// own record; it is written and removed by the build itself.
+const UNCOMPARED_TABLES: [&str; 1] = ["demo_account_build"];
+
+/// A digest per table of every row that does not belong to the Demo Account:
+/// the rows of every other account, the owner's among them, and the rows that
+/// belong to no account, such as `server_settings`. A row belongs to the
+/// account in its `account_id` column, or, for a table without one, to the
+/// account of the row a `NOT NULL` foreign key points at.
+///
+/// Full-text index tables are left out: the index is contentless, so it has
+/// no rows to read back, and it is written from `messages`, which is compared.
+async fn non_demo_state(db: &Path, demo_id: i64) -> Result<BTreeMap<String, TableDigest>> {
+    let pool = engine::open_pool_for_path(db)
+        .await
+        .with_context(|| format!("open {} to verify non-demo accounts", db.display()))?;
+    let mut conn = pool
+        .acquire()
+        .await
+        .with_context(|| format!("open {} to verify non-demo accounts", db.display()))?;
+    let state = non_demo_state_on_conn(&mut conn, demo_id)
+        .await
+        .with_context(|| format!("read the non-demo rows of {}", db.display()));
+    conn.close().await?;
+    pool.close().await;
+    state
+}
+
+async fn non_demo_state_on_conn(
+    conn: &mut sqlx::SqliteConnection,
+    demo_id: i64,
+) -> Result<BTreeMap<String, TableDigest>> {
+    use futures_util::TryStreamExt;
+    use sha2::{Digest, Sha256};
+
+    let tables: Vec<(String, String)> = sqlx::query_as(
+        "SELECT name, COALESCE(sql, '') FROM sqlite_master
+         WHERE type = 'table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'
+         ORDER BY name",
+    )
+    .fetch_all(&mut *conn)
+    .await?;
+    let virtual_tables: Vec<&str> = tables
+        .iter()
+        .filter(|(_, sql)| {
+            sql.trim_start()
+                .to_ascii_uppercase()
+                .starts_with("CREATE VIRTUAL TABLE")
+        })
+        .map(|(name, _)| name.as_str())
+        .collect();
+    let mut state = BTreeMap::new();
+    for (table, _) in &tables {
+        let is_index = virtual_tables
+            .iter()
+            .any(|vt| table == vt || table.starts_with(&format!("{vt}_")));
+        if is_index || UNCOMPARED_TABLES.contains(&table.as_str()) {
+            continue;
+        }
+        let columns = table_columns(conn, table).await?;
+        let row_text = columns
+            .iter()
+            .map(|column| format!("quote(t.{})", quote_ident(column)))
+            .collect::<Vec<_>>()
+            .join(" || ',' || ");
+        let owner = row_owner(conn, table, &columns).await?;
+        let selection = match &owner {
+            Some(owner) => format!(
+                "FROM {} t {} WHERE {} != $1",
+                quote_ident(table),
+                owner.join,
+                owner.account
+            ),
+            None => format!("FROM {} t", quote_ident(table)),
+        };
+        let sql = format!("SELECT {row_text} {selection} ORDER BY 1");
+        let query = sqlx::query_scalar::<_, String>(&sql);
+        // Only a table whose rows belong to accounts leaves the Demo
+        // Account's rows out.
+        let query = match owner {
+            Some(_) => query.bind(demo_id),
+            None => query,
+        };
+        let mut rows = query.fetch(&mut *conn);
+        let mut hasher = Sha256::new();
+        let mut count = 0u64;
+        while let Some(row) = rows
+            .try_next()
+            .await
+            .with_context(|| format!("read {table}"))?
+        {
+            hasher.update(row.as_bytes());
+            hasher.update(b"\n");
+            count += 1;
+        }
+        drop(rows);
+        state.insert(
+            table.clone(),
+            TableDigest {
+                rows: count,
+                sha256: crate::assets_api::hex_encode(&hasher.finalize()),
+            },
+        );
+    }
     Ok(state)
+}
+
+/// How to find the account a row of a table belongs to: a join to add after
+/// the table, aliased `t`, and the expression that names the account.
+struct RowOwner {
+    join: String,
+    account: String,
+}
+
+/// The account a row of `table` belongs to, or `None` for a table whose rows
+/// belong to no account (it has no `account_id` and no foreign key).
+///
+/// # Errors
+///
+/// Returns an error for a table with a foreign key but no `NOT NULL` one to a
+/// table that has `account_id`: its rows cannot be told apart, and a new
+/// table like that needs a rule here.
+async fn row_owner(
+    conn: &mut sqlx::SqliteConnection,
+    table: &str,
+    columns: &[String],
+) -> Result<Option<RowOwner>> {
+    if table == "accounts" {
+        return Ok(Some(RowOwner {
+            join: String::new(),
+            account: "t.id".into(),
+        }));
+    }
+    if columns.iter().any(|column| column == "account_id") {
+        return Ok(Some(RowOwner {
+            join: String::new(),
+            account: "t.account_id".into(),
+        }));
+    }
+    let keys: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT fk.\"table\", fk.\"from\", fk.\"to\"
+         FROM pragma_foreign_key_list($1) fk
+         JOIN pragma_table_info($1) col ON col.name = fk.\"from\"
+         WHERE col.\"notnull\" = 1
+         ORDER BY fk.id",
+    )
+    .bind(table)
+    .fetch_all(&mut *conn)
+    .await?;
+    for (parent, from, to) in &keys {
+        if table_columns(conn, parent)
+            .await?
+            .iter()
+            .any(|c| c == "account_id")
+        {
+            return Ok(Some(RowOwner {
+                join: format!(
+                    "JOIN {} p ON p.{} = t.{}",
+                    quote_ident(parent),
+                    quote_ident(to),
+                    quote_ident(from)
+                ),
+                account: "p.account_id".into(),
+            }));
+        }
+    }
+    let any_key: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pragma_foreign_key_list($1)")
+        .bind(table)
+        .fetch_one(&mut *conn)
+        .await?;
+    if any_key > 0 {
+        bail!("cannot tell which account a row of {table} belongs to");
+    }
+    Ok(None)
+}
+
+/// The column names of `table`, in declaration order.
+async fn table_columns(conn: &mut sqlx::SqliteConnection, table: &str) -> Result<Vec<String>> {
+    Ok(
+        sqlx::query_scalar("SELECT name FROM pragma_table_info($1) ORDER BY cid")
+            .bind(table)
+            .fetch_all(&mut *conn)
+            .await?,
+    )
+}
+
+/// `name` as a quoted SQLite identifier.
+fn quote_ident(name: &str) -> String {
+    format!("\"{}\"", name.replace('"', "\"\""))
 }
 
 #[derive(Clone, Copy)]
@@ -1227,7 +1438,7 @@ async fn vacuum_after_demo(db: &SqlitePool) {
             return;
         }
     };
-    dialect::vacuum_import_tables(&mut conn).await;
+    maintenance::vacuum_import_tables(&mut conn).await;
 }
 
 /// Parse `config/seed.toml` from the bundle.

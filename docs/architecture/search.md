@@ -218,7 +218,7 @@ below use these phrases for them:
 | List | Base row | Plain text searches | Defaults | Lifted by |
 |---|---|---|---|---|
 | Contacts | one contact | the contact's name, and the raw and normalized form of each of its identities | a contact in the trash is left out | `trashed:` |
-| Conversations | one conversation | the title, the raw form of the conversation's own identity and of each participant's identity, and each participant's name | a conversation in the trash is left out; a conversation whose every message is a duplicate is left out | `trashed:` lifts the first; `import:` lifts the second |
+| Conversations | one conversation | the title, the raw form of the conversation's own identity and of each participant's identity, and each participant's name | a conversation in the trash is left out; a conversation whose every message is a duplicate is left out | `trashed:` lifts the first; `source:` and `import:` lift the second |
 | Messages | one message | the full-text index (above) and attachment file names | a message whose conversation is in the trash is left out; a duplicate message is left out | `trashed:` lifts the first; `source:` and `import:` lift the second |
 
 A word lifts its default wherever it appears in the query, negated or inside
@@ -352,9 +352,15 @@ Choice: `imessage`, `sms`, `mms`, `rcs`, `whatsapp`.
 
 ### `source:`
 
-Choice: `imessage`, `whatsapp`, `sms`. `sms` is the SMS Backup & Restore importer.
+Choice: `imessage`, `whatsapp`, `sms-backup-restore`, `imazing`,
+`openextract`, `go-sms-pro`, `sms-backup-plus`. Each value is the id an
+exporter writes into `export.source`, which the import stamps on every message
+it writes, so the word compares the stored id with no mapping. A new exporter
+adds its id to the list and nothing else. Why: a person whose messages came
+through iMazing, GO SMS Pro or SMS Backup+ can name that backup, and no value
+quietly takes in or leaves out another (#1116).
 
-- **Conversations**: one of the conversation's messages came from this kind of backup.
+- **Conversations**: one of the conversation's messages, duplicates included, came from this kind of backup.
 - **Messages**: the message came from this kind of backup, duplicates included.
 
 ### `import:`

@@ -18,9 +18,9 @@ import {
   type ImportStage,
   setImportStage,
 } from "../../lib/importSession";
-import { importSessionCreateBody } from "../../lib/importSource";
+import { importSessionCreateBody, showsAttachmentOptions } from "../../lib/importSource";
 import { CANCELLED_MESSAGE, createRunCancel, type RunCancel } from "../../lib/runCancel";
-import { mediaExtractFields, sbrExtractFields } from "../../lib/sbrExtractFields";
+import { sbrExtractFields } from "../../lib/sbrExtractFields";
 import { completeImport, createImport, getServerState } from "../../lib/serverApi";
 import { resolveImportStagingDir } from "../../lib/system-settings";
 import {
@@ -110,13 +110,13 @@ function mediaDoneDetail(mode: AttachmentMediaMode): string {
 }
 
 /**
- * Extract stages originals regardless of the chosen media mode (ffmpeg is
- * only required once Gate 1 is approved, not up front) — convert and
- * compress run afterward, against the staged folder, via
- * `invokeTranscodeStaging`. Copy and skip pass through unchanged.
+ * The form an Import Run is started with, its attachment mode as the form
+ * showed it. iMazing and OpenExtract show no Attachments field, so the
+ * field may still hold what was chosen for another source; their runs copy
+ * attachments, and the run's stored form says so.
  */
-function extractAttachmentMedia(mode: AttachmentMediaMode): AttachmentMediaMode {
-  return mode === "convert" || mode === "compress" ? "copy" : mode;
+function withShownAttachmentMode(form: ImportJobFormValues): ImportJobFormValues {
+  return showsAttachmentOptions(form.source) ? form : { ...form, attachmentMedia: "copy" };
 }
 
 /**
@@ -129,27 +129,6 @@ function assetLimitOf(form: Pick<ImportJobFormValues, "assetMaxBytes">): number 
     throw new Error("This Import Run has no attachment size limit stored with it.");
   }
   return form.assetMaxBytes;
-}
-
-/**
- * The fields `summarize_staging` and `transcode_staging` share: the media
- * fields read from the submitted form, and the run's attachment size limit.
- */
-function stagingMediaFields(
-  form: Pick<
-    ImportJobFormValues,
-    "attachmentMedia" | "maxResolution" | "maxFps" | "minSizeMb" | "assetMaxBytes"
-  >,
-): Omit<StagingConfig, "staging_dir"> {
-  return {
-    ...mediaExtractFields({
-      attachmentMedia: form.attachmentMedia,
-      maxResolution: form.maxResolution,
-      maxFps: form.maxFps,
-      minSizeMb: form.minSizeMb,
-    }),
-    asset_max_bytes: assetLimitOf(form),
-  };
 }
 
 /** What a step is doing and what it counts, for every step but `media`
@@ -358,14 +337,6 @@ type RunScratch = {
   importStartedAt: number;
   form: ImportJobFormValues | null;
   attachmentMode: AttachmentMediaMode;
-  /**
-   * What extract is doing to attachments right now: "copy" under
-   * convert/compress too, since extract only stages originals; the Media
-   * stage, not this, tells the convert/compress story. Kept apart from
-   * `attachmentMode`, the mode the person chose, which drives the Media
-   * row's wording and the row list's shape.
-   */
-  extractMediaMode: AttachmentMediaMode;
   lastAttachmentProgress: AttachmentProgressCounts | null;
   /**
    * The Staging row's latest line for each stage that reports on it. Reading
@@ -405,7 +376,6 @@ function freshScratch(): RunScratch {
     importStartedAt: 0,
     form: null,
     attachmentMode: "copy",
-    extractMediaMode: "copy",
     lastAttachmentProgress: null,
     stagingLines: {},
     reviewAction: false,
@@ -476,7 +446,6 @@ function beginRun(form: ImportJobFormValues, firstStep: ImportIssue["step"]): vo
   scratch.lastAttachmentProgress = null;
   scratch.stagingLines = {};
   scratch.attachmentMode = form.attachmentMedia;
-  scratch.extractMediaMode = extractAttachmentMedia(form.attachmentMedia);
   scratch.form = form;
   scratch.runCancel = createRunCancel();
   scratch.carried = EMPTY_RUN_RECORD;
@@ -613,7 +582,7 @@ function progressDetail(event: ImportProgressEvent): string {
   if (event.step === "attachments") {
     const last = scratch.lastAttachmentProgress;
     return formatAttachmentProgress({
-      mode: scratch.extractMediaMode,
+      mode: scratch.attachmentMode,
       done: event.done,
       total: event.total,
       bytesDone: event.bytes_done ?? last?.bytesDone ?? 0,
@@ -1033,12 +1002,7 @@ async function runMediaPass(
   let threw = false;
   let cancelled = false;
   try {
-    const result = await runJob(() =>
-      invokeTranscodeStaging({
-        staging_dir: outputDir,
-        ...stagingMediaFields(form),
-      }),
-    );
+    const result = await runJob(() => invokeTranscodeStaging({ staging_dir: outputDir }));
     transcodeReport = result.transcode;
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -1079,10 +1043,7 @@ async function runMediaPass(
 
   store.set({ computingSummary: true });
   try {
-    const actual = await summarizeStagingWithProgress({
-      staging_dir: outputDir,
-      ...stagingMediaFields(form),
-    });
+    const actual = await summarizeStagingWithProgress({ staging_dir: outputDir });
     store.set({ mediaSummary: actual, mediaFailedCount: transcodeReport?.failed ?? null });
     await moveStageAtReview(sessionId, "awaiting_gate_2", approvedSummary);
     await saveCarriedRecord();
@@ -1097,11 +1058,14 @@ async function runMediaPass(
   }
 }
 
-/** Fields extract needs for this form's source. */
+/**
+ * Fields extract needs for this form's source. The media fields go only to
+ * a source whose form shows them, as the person chose them: extract checks
+ * them before anything is staged and records them for the later stages.
+ */
 function extractFieldsFor(form: ImportJobFormValues) {
-  const attachmentMedia = extractAttachmentMedia(form.attachmentMedia);
   const media = {
-    attachmentMedia,
+    attachmentMedia: form.attachmentMedia,
     maxResolution: form.maxResolution,
     maxFps: form.maxFps,
     minSizeMb: form.minSizeMb,
@@ -1151,7 +1115,7 @@ async function runImport(
   resumeWrite?: ResumeWrite,
 ): Promise<void> {
   if (!isTauri()) return;
-  let form = submitted;
+  let form = withShownAttachmentMode(submitted);
   beginRun(form, "parse");
   store.set({
     running: true,
@@ -1250,6 +1214,7 @@ async function runImport(
         path: form.backupPath,
         output_dir: outputDir,
         ...(resumeWrite ? { resume: true } : {}),
+        asset_max_bytes: assetLimitOf(form),
         ...extractFieldsFor(form),
       }),
     );
@@ -1261,10 +1226,9 @@ async function runImport(
     const extractFinishedAt = performance.now();
     const { parseMs, attachmentsMs, prepareMs } = stageDurations(scratch.timing, extractFinishedAt);
     scratch.durations = { parseMs, attachmentsMs, prepareMs };
-    // What extract did ("Copied", not "Converted", under convert/compress
-    // too), as the Staging row's done line.
+    // What extract did, as the Staging row's done line.
     const attachmentDoneLine = attachmentDoneDetail(
-      extractAttachmentMedia(form.attachmentMedia),
+      form.attachmentMedia,
       scratch.lastAttachmentProgress,
     );
     store.set({
@@ -1295,10 +1259,7 @@ async function runImport(
     // written above (`awaiting_gate_1`) stays as it is: the next visit's
     // resume check finds the same run and offers this recompute again.
     try {
-      const summary = await summarizeStagingWithProgress({
-        staging_dir: outputDir,
-        ...stagingMediaFields(form),
-      });
+      const summary = await summarizeStagingWithProgress({ staging_dir: outputDir });
       const toolsMissing = await mediaToolsMissingFor(form.attachmentMedia);
       store.set({ stagingSummary: summary, mediaToolsMissing: toolsMissing });
       waitAtReview("staging_review");
@@ -1548,10 +1509,7 @@ export function useImportJob() {
         running: true,
       });
       try {
-        const actual = await summarizeStagingWithProgress({
-          staging_dir: outputDir,
-          ...stagingMediaFields(resumedForm),
-        });
+        const actual = await summarizeStagingWithProgress({ staging_dir: outputDir });
         if (review === "staging_review") {
           const missing = await mediaToolsMissingFor(resumedForm.attachmentMedia);
           store.set({

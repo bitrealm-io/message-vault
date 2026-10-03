@@ -11,4 +11,4 @@ editUrl: false
 | Status | `404 Not Found` |
 | Type | `https://messagecrate.app/docs/developer/reference/errors/not-found` |
 
-No resource at that address exists for this account. An id that belongs to another account answers this too, so an unknown id and a forbidden one look the same. Under `/v1/accounts/{id}` the answer differs: a caller who is neither the owner nor that account gets `403 Forbidden`, whether or not the account exists.
+No resource at that address exists for this account. Outside `/v1/accounts/{id}`, an id that belongs to another account answers this too, so an unknown id and a forbidden one look the same. Under `/v1/accounts/{id}`, a caller who is neither the owner nor that account gets `403 Forbidden` instead, whether or not the account exists.

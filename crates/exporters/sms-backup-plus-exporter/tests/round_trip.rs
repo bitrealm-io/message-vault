@@ -174,3 +174,78 @@ fn each_conversation_is_one_folder_of_one_eml_per_message() {
         "the mail holds the attachment bytes"
     );
 }
+
+/// A received group message whose sender is unknown comes back with no
+/// sender, not credited to a member. A group's title does not become any
+/// member's name. And a text file stays a file instead of joining the text
+/// (#1505 review).
+#[test]
+fn a_group_keeps_who_wrote_what_and_a_text_file_stays_a_file() {
+    let first = tempfile::tempdir().unwrap();
+    let exported = tempfile::tempdir().unwrap();
+    let second = tempfile::tempdir().unwrap();
+    let mut before = import(&fixture(), first.path());
+    for document in &mut before {
+        let group = document.conversation.conversation_type
+            == message_ir::IrConversationType::Group;
+        if group {
+            document.conversation.group_title = Some("Family".into());
+        }
+        for message in &mut document.messages {
+            if group && message.direction == IrDirection::Incoming {
+                message.sender_handle = None;
+                message.sender_display_name = None;
+            }
+            if message.text.starts_with("Hello from Alice") {
+                message.attachments.push(message_ir::IrAttachment {
+                    path: None,
+                    original_name: Some("notes.txt".into()),
+                    mime_type: Some("text/plain".into()),
+                    digest_sha256: None,
+                    is_sticker: false,
+                    transcription: None,
+                    sticker_effect: None,
+                    size_bytes: None,
+                    missing_reason: None,
+                    bytes: Some(b"shopping list".to_vec()),
+                });
+            }
+        }
+    }
+
+    export(before, first.path(), exported.path());
+    let after = import(exported.path(), second.path());
+
+    let messages: Vec<&message_ir::IrMessage> = after
+        .iter()
+        .flat_map(|document| document.messages.iter())
+        .collect();
+    let from_bob = messages
+        .iter()
+        .find(|message| message.text == "Hello group from Bob")
+        .expect("the received group message");
+    assert_eq!(from_bob.sender_handle, None);
+    assert!(
+        after
+            .iter()
+            .flat_map(|document| &document.conversation.participants)
+            .all(|participant| participant.display_name.as_deref() != Some("Family")),
+        "{after:#?}"
+    );
+    assert!(
+        messages
+            .iter()
+            .all(|message| message.sender_display_name.as_deref() != Some("Family"))
+    );
+    let from_alice = messages
+        .iter()
+        .find(|message| message.text.starts_with("Hello from Alice"))
+        .expect("Alice's SMS");
+    assert_eq!(from_alice.text, "Hello from Alice\n");
+    let file = from_alice
+        .attachments
+        .iter()
+        .find(|attachment| attachment.original_name.as_deref() == Some("notes.txt"))
+        .expect("the text file is an attachment");
+    assert_eq!(file.size_bytes, Some(13));
+}

@@ -232,7 +232,7 @@ fn a_group_lists_every_peer_and_names_the_sender() {
         header(raw, "X-smssync-address").unwrap(),
         "+15555550101~+15555550102"
     );
-    assert_eq!(header(raw, "Subject").unwrap(), "SMS with Sam, Bo");
+    assert_eq!(header(raw, "Subject").unwrap(), "SMS with Bo");
     assert!(
         header(raw, "From").unwrap().contains("+15555550102@"),
         "{:?}",
@@ -294,4 +294,43 @@ fn a_message_of_unknown_service_and_sms_kind_is_written() {
         .path();
     let mail = fs::read_to_string(mail).unwrap();
     assert!(mail.contains("an sms of unknown service"), "{mail}");
+}
+
+/// The owner listed in the roster under another spelling of their number
+/// is still the owner, not a second person in a group with the peer.
+#[test]
+fn the_owner_under_another_spelling_is_not_a_peer() {
+    let mut doc = sample_document("hello");
+    doc.export.owner_handle = Some("+15555550100".into());
+    doc.conversation.participants.push(IrParticipant {
+        handle: Some("5555550100".into()),
+        display_name: Some("Me".into()),
+        handle_type: None,
+    });
+    let tmp = tempfile::tempdir().unwrap();
+    archive()
+        .write(tmp.path(), &[doc.clone()], &mut ExportReport::default())
+        .unwrap();
+
+    let written = mails(tmp.path(), &doc.filename_stem());
+    assert_eq!(
+        header(&written[0].1, "X-smssync-address").unwrap(),
+        "+15555550101"
+    );
+}
+
+/// An attachment whose file is gone is counted, so the run's log says so.
+#[test]
+fn an_attachment_whose_file_is_gone_is_counted_as_missing() {
+    let mut doc = sample_document("a photo that is gone");
+    let mut gone = photo(b"");
+    gone.bytes = None;
+    gone.path = Some("attachments/gone.jpg".into());
+    doc.messages[0].attachments.push(gone);
+    let tmp = tempfile::tempdir().unwrap();
+    let mut report = ExportReport::default();
+
+    archive().write(tmp.path(), &[doc], &mut report).unwrap();
+
+    assert_eq!(report.extra(ATTACHMENTS_MISSING), 1);
 }

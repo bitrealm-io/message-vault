@@ -32,6 +32,10 @@ use crate::flat_eml::UNKNOWN_EMAIL_DOMAIN;
 /// holds only SMS and MMS.
 pub(crate) const LEFT_OUT: &str = "messages_not_sms_or_mms_left_out";
 
+/// The export report counter for attachments whose file was gone, which
+/// Convert's log reports.
+const ATTACHMENTS_MISSING: &str = "attachments_missing";
+
 /// Domain of the `Message-ID` and `References` the writer makes up. `.local`
 /// is never routed.
 const DOMAIN: &str = "sms-backup-plus.local";
@@ -106,7 +110,7 @@ impl MergedArchive for SmsBackupPlusArchive {
         let mut docs: Vec<&mut ConversationDocument> = kept.iter_mut().collect();
         give_each_document_its_own_file(&mut docs).map_err(anyhow::Error::msg)?;
         for doc in &kept {
-            self.write_conversation(output_dir, doc)?;
+            self.write_conversation(output_dir, doc, report)?;
         }
         Ok(output_dir.to_path_buf())
     }
@@ -122,7 +126,12 @@ impl MergedArchive for SmsBackupPlusArchive {
 impl SmsBackupPlusArchive {
     /// One folder of `.eml` files, named and ordered as the EML archive
     /// names and orders its own.
-    fn write_conversation(&self, output_dir: &Path, doc: &ConversationDocument) -> Result<()> {
+    fn write_conversation(
+        &self,
+        output_dir: &Path,
+        doc: &ConversationDocument,
+        report: &mut ExportReport,
+    ) -> Result<()> {
         let folder = output_dir.join(doc.filename_stem());
         fs::create_dir_all(&folder).with_context(|| format!("create {}", folder.display()))?;
         let conversation = Conversation::of(doc);
@@ -135,25 +144,29 @@ impl SmsBackupPlusArchive {
         for (index, message) in ordered.into_iter().enumerate() {
             let sequence = u32::try_from(index + 1).context("too many messages")?;
             let path = folder.join(eml_file_name(sequence, message)?);
-            let bytes = self.build_mail(&conversation, message, output_dir)?;
+            let bytes = self.build_mail(&conversation, message, output_dir, report)?;
             fs::write(&path, bytes).with_context(|| format!("write {}", path.display()))?;
         }
         Ok(())
     }
 
-    /// One message as an SMS Backup+ mail.
+    /// One message as an SMS Backup+ mail. An attachment whose file is gone
+    /// is counted in `report` as missing.
     fn build_mail(
         &self,
         conversation: &Conversation<'_>,
         message: &IrMessage,
         output_dir: &Path,
+        report: &mut ExportReport,
     ) -> Result<Vec<u8>> {
         let mut attachments = Vec::with_capacity(message.attachments.len());
         for (i, attachment) in message.attachments.iter().enumerate() {
             let bytes = load_attachment_bytes(attachment, output_dir)?;
             // An attachment whose file is gone has nothing to carry, and
-            // the importer skips an empty part.
+            // the importer skips an empty part, so it is counted and the
+            // run's log says how many.
             if bytes.is_empty() {
+                report.bump(ATTACHMENTS_MISSING, 1);
                 continue;
             }
             let mime = attachment
@@ -161,6 +174,14 @@ impl SmsBackupPlusArchive {
                 .as_deref()
                 .and_then(trimmed)
                 .unwrap_or("application/octet-stream");
+            // Every `text/plain` part of an MMS is message text to the
+            // importer, as it is in an MMS on the phone, so a text file goes
+            // as plain bytes under its own name and stays a file.
+            let mime = if mms_parts::is_text(mime) {
+                "application/octet-stream"
+            } else {
+                mime
+            };
             let name = attachment
                 .original_name
                 .clone()
@@ -179,7 +200,7 @@ impl SmsBackupPlusArchive {
         let builder = MessageBuilder::new()
             .from(from)
             .to(to)
-            .subject(format!("SMS with {}", conversation.name()))
+            .subject(format!("SMS with {}", conversation.subject_name(message)))
             .date(Date::new(message.timestamp_unix_ms.div_euclid(1000)))
             .message_id(format!("{}@{DOMAIN}", message.guid))
             .references(format!("{}@{DOMAIN}", conversation.thread))
@@ -225,13 +246,18 @@ struct Conversation<'a> {
 
 impl<'a> Conversation<'a> {
     fn of(doc: &'a ConversationDocument) -> Self {
-        let owner = doc.export.owner_handle.as_deref().and_then(trimmed);
+        let owner = doc
+            .export
+            .owner_handle
+            .as_deref()
+            .and_then(trimmed)
+            .map(handle_key);
         let mut peers: Vec<&str> = doc
             .conversation
             .participants
             .iter()
             .filter_map(|p| p.handle.as_deref().and_then(trimmed))
-            .filter(|handle| Some(*handle) != owner)
+            .filter(|handle| Some(handle_key(handle)) != owner)
             .collect();
         if peers.is_empty()
             && let Some(id) = trimmed(&doc.conversation.chat_identifier)
@@ -267,29 +293,43 @@ impl<'a> Conversation<'a> {
             .and_then(trimmed)
     }
 
-    /// The name after `SMS with`: a group's title or its peers' names, else
-    /// the peer's name or handle.
-    fn name(&self) -> String {
-        if self.is_group()
-            && let Some(title) = self
-                .doc
-                .conversation
-                .group_title
-                .as_deref()
-                .and_then(trimmed)
-        {
-            return title.to_string();
-        }
-        let names: Vec<&str> = self
-            .peers
-            .iter()
-            .map(|peer| self.display_name(peer).unwrap_or(peer))
-            .collect();
-        if names.is_empty() {
-            "Unknown".to_string()
-        } else {
-            names.join(", ")
-        }
+    /// The name after `SMS with`. The importer takes it as the name of the
+    /// person the mail is with, and credits the message to that name, so it
+    /// names the sender of a received message and the peer of a sent
+    /// one-to-one message. A sent group message, or a received one whose
+    /// sender is unknown, is named by a peer's handle, which the importer
+    /// never takes as a name: a group title or a list of names would be
+    /// given to one person.
+    fn subject_name(&self, message: &IrMessage) -> String {
+        // As `From` names it: a one-to-one message is from its one peer.
+        let sender = message
+            .sender_handle
+            .as_deref()
+            .and_then(trimmed)
+            .or_else(|| {
+                (!self.is_group())
+                    .then(|| self.peers.first().copied())
+                    .flatten()
+            });
+        let named = match message.direction {
+            IrDirection::Incoming => sender.map(|handle| {
+                message
+                    .sender_display_name
+                    .as_deref()
+                    .and_then(trimmed)
+                    .or_else(|| self.display_name(handle))
+                    .unwrap_or(handle)
+            }),
+            IrDirection::Outgoing if !self.is_group() => self
+                .peers
+                .first()
+                .map(|peer| self.display_name(peer).unwrap_or(peer)),
+            IrDirection::Outgoing => None,
+        };
+        named
+            .or_else(|| self.peers.first().copied())
+            .unwrap_or("Unknown")
+            .to_string()
     }
 
     /// `From` and `To`: the sender to the owner for an incoming message,
@@ -311,11 +351,19 @@ impl<'a> Conversation<'a> {
         let owner = address(owner_handle, Some(owner_name));
         match message.direction {
             IrDirection::Incoming => {
+                // A group message whose sender is unknown keeps it unknown: an
+                // address no peer has, which the importer reads as no sender.
+                // A one-to-one message can only be from the one peer.
+                let fallback = if self.is_group() {
+                    None
+                } else {
+                    self.peers.first().copied()
+                };
                 let sender = message
                     .sender_handle
                     .as_deref()
                     .and_then(trimmed)
-                    .or_else(|| self.peers.first().copied())
+                    .or(fallback)
                     .unwrap_or("unknown");
                 let name = message
                     .sender_display_name
@@ -339,6 +387,13 @@ impl<'a> Conversation<'a> {
             }
         }
     }
+}
+
+/// The key two spellings of one handle share: `5555550100` and
+/// `+15555550100` are one number. A handle that is no phone number or email
+/// address is its own key.
+fn handle_key(handle: &str) -> String {
+    phone::Handle::parse(handle).map_or_else(|| handle.to_string(), phone::Handle::into_key)
 }
 
 /// `"Name" <address>`, as SMS Backup+ writes it: an email address as it is,

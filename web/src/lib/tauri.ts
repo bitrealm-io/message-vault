@@ -165,6 +165,31 @@ export async function invokeDeleteStaging(config: { staging_dir: string }): Prom
   });
 }
 
+/**
+ * Read the Import Run record kept in a staging folder
+ * (`read_import_run_record`): what a paused run's earlier parts recorded.
+ * Null when the folder holds none. The caller checks its shape.
+ */
+export async function invokeReadImportRunRecord(config: {
+  staging_dir: string;
+}): Promise<unknown | null> {
+  const stagingRoot = await resolveStagingRoot();
+  return invoke("read_import_run_record", {
+    args: { stagingDir: config.staging_dir, stagingRoot },
+  });
+}
+
+/** Write the Import Run record into its staging folder (`save_import_run_record`). */
+export async function invokeSaveImportRunRecord(config: {
+  staging_dir: string;
+  record: unknown;
+}): Promise<void> {
+  const stagingRoot = await resolveStagingRoot();
+  return invoke("save_import_run_record", {
+    args: { stagingDir: config.staging_dir, stagingRoot, record: config.record },
+  });
+}
+
 export interface PushConfig {
   base_url: string;
   username: string;
@@ -194,6 +219,8 @@ export interface PushFinishedReport {
   conversations_total: number;
   conversations_failed: number;
   conversations_skipped: number;
+  /** Conversations a stop left unsent; the next push sends them. */
+  conversations_cancelled: number;
   results: Array<{
     file: string;
     status: string;
@@ -464,7 +491,8 @@ function isPushFinishedReport(value: unknown): value is PushFinishedReport {
     typeof value.conversations_ok === "number" &&
     typeof value.conversations_total === "number" &&
     typeof value.conversations_failed === "number" &&
-    typeof value.conversations_skipped === "number"
+    typeof value.conversations_skipped === "number" &&
+    typeof value.conversations_cancelled === "number"
   );
 }
 

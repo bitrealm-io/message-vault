@@ -423,9 +423,10 @@ _Avoid_: Data Folder, DB Directory, Database Directory
 The directory where Message Crate writes intermediate files that neither the
 person nor Message Crate keeps — a backup being prepared for import, or JSON
 Lines waiting to be converted into the format an export asked for. It is
-deleted when the job succeeds or is cancelled, the import log and resume
-journal with it; a failed import leaves it in place, since the staged files
-are what a retry reads.
+deleted when the job ends, whether it succeeded, failed or was cancelled,
+the import log, resume journal and run record with it. An Import Run that
+can still be resumed, paused or waiting at a Review, keeps it, since the
+staged files are what Resume reads.
 _Avoid_: Import Staging Directory, Temp Folder, Working Directory
 
 **Tools Directory**:

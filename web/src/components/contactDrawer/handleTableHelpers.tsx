@@ -91,7 +91,11 @@ export function CountCell({
   const text = value.toLocaleString();
   if (value > 0 && onClick) {
     return (
-      <PlainButton className={linkClass} onPress={onClick} aria-label={`Open ${text} threads`}>
+      <PlainButton
+        className={linkClass}
+        onPress={onClick}
+        aria-label={`Open ${text} conversations`}
+      >
         {text}
       </PlainButton>
     );

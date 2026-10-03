@@ -1,5 +1,5 @@
 import { Header, Menu, MenuItem, MenuSection, MenuTrigger, Popover } from "react-aria-components";
-import { menuPopoverClass } from "../lib/uiStyles";
+import { menuItemClass, menuPopoverClass } from "../lib/uiStyles";
 import PlainButton from "./PlainButton";
 
 export type SortOrder = "asc" | "desc";
@@ -95,11 +95,7 @@ export default function SortMenu<Id extends string>({
 
 function SortOption({ id, label }: { id: string; label: string }) {
   return (
-    <MenuItem
-      id={id}
-      textValue={label}
-      className="box-border flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[0.813rem] text-text outline-none data-focused:bg-hover-strong"
-    >
+    <MenuItem id={id} textValue={label} className={`${menuItemClass} text-text`}>
       {({ isSelected }) => (
         <>
           <span className="flex w-4 justify-center text-accent">

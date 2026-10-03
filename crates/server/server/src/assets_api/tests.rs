@@ -418,18 +418,6 @@ fn store_verified_rejects_symlink_source() {
     }
 }
 
-#[test]
-fn gc_stale_incoming_removes_old_sessions() {
-    let dir = tempdir().unwrap();
-    let root = dir.path();
-    let session = root.join(".incoming").join("ab").join("deadbeef");
-    fs::create_dir_all(&session).unwrap();
-    fs::write(session.join("manifest.json"), b"{}").unwrap();
-    let removed = gc_stale_incoming(root, 0).unwrap();
-    assert_eq!(removed, 1);
-    assert!(!session.exists());
-}
-
 #[tokio::test]
 async fn an_asset_put_then_get_returns_the_same_bytes() {
     let (fixture, user) = crate::test_support::fixture_with_account().await;
@@ -1042,7 +1030,7 @@ async fn an_asset_put_keeps_its_media_type_but_not_octet_stream() {
         Some("image/jpeg")
     );
     assert!(
-        !mime_metadata_path(&assets_dir, &blob_sha).exists(),
+        !mime_metadata_path(&assets_dir, &blob_sha).unwrap().exists(),
         "octet-stream must not be recorded as the asset's type"
     );
 }

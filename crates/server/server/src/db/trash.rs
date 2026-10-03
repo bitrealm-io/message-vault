@@ -221,7 +221,7 @@ pub enum DeleteOutcome {
     /// The row was deleted (a conversation) or made Unknown (a contact). The
     /// files are those no remaining message references, for the caller to
     /// remove from disk once the transaction has committed.
-    Deleted(Vec<OrphanedFile>),
+    Deleted(UnreferencedFiles),
     /// The id is not `account_id`'s, or does not exist: a 404, the same
     /// answer [`move_to_trash`] gives.
     NotOwned,
@@ -253,6 +253,19 @@ pub enum OrphanedFile {
     Derived { source: String, assets_path: String },
 }
 
+/// The files a delete left with no attachment naming them, and whether the
+/// account had a running Import Run when the delete committed. That run may
+/// have been told one of these files exists and not yet sent the batch that
+/// names it, so [`crate::asset_store::remove_unreferenced`] keeps the
+/// originals while it runs.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct UnreferencedFiles {
+    pub files: Vec<OrphanedFile>,
+    /// Read inside the delete's own write transaction, so no run can start
+    /// between this answer and the commit.
+    pub import_running: bool,
+}
+
 /// Permanently delete a trashed conversation, or make a trashed contact
 /// Unknown again. See the module notes for what each means.
 ///
@@ -272,15 +285,19 @@ pub async fn delete_trashed(
         return Ok(DeleteOutcome::NotTrashed);
     }
     let mut tx = conn.begin().await?;
-    let orphaned = match target {
+    let files = match target {
         Trashable::Conversation(id) => delete_conversations(&mut tx, account_id, &[id]).await?,
         Trashable::Contact(id) => {
             forget_contacts(&mut tx, account_id, &[id]).await?;
             Vec::new()
         }
     };
+    let import_running = crate::db::imports::has_running_import(&mut tx, account_id).await?;
     tx.commit().await?;
-    Ok(DeleteOutcome::Deleted(orphaned))
+    Ok(DeleteOutcome::Deleted(UnreferencedFiles {
+        files,
+        import_running,
+    }))
 }
 
 /// Empty the trash: delete every trashed conversation permanently and make
@@ -294,7 +311,7 @@ pub async fn delete_trashed(
 pub async fn empty_trash(
     conn: &mut SqliteConnection,
     account_id: i64,
-) -> Result<Vec<OrphanedFile>, sqlx::Error> {
+) -> Result<UnreferencedFiles, sqlx::Error> {
     let mut tx = conn.begin().await?;
     let conversation_ids: Vec<i64> = sqlx::query_scalar(
         "SELECT t.conversation_id
@@ -316,14 +333,18 @@ pub async fn empty_trash(
     .bind(account_id)
     .fetch_all(&mut *tx)
     .await?;
-    let orphaned = delete_conversations(&mut tx, account_id, &conversation_ids).await?;
+    let files = delete_conversations(&mut tx, account_id, &conversation_ids).await?;
     forget_contacts(&mut tx, account_id, &contact_ids).await?;
     // The two calls above cleared the markers for the rows they found; this
     // also drops any marker whose row is already gone, which the marker
     // tables allow because neither carries a foreign key to its target.
     purge_account(&mut tx, account_id).await?;
+    let import_running = crate::db::imports::has_running_import(&mut tx, account_id).await?;
     tx.commit().await?;
-    Ok(orphaned)
+    Ok(UnreferencedFiles {
+        files,
+        import_running,
+    })
 }
 
 /// One attachment's stored files, read before its message is deleted so the

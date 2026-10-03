@@ -13,7 +13,6 @@
 //! how much it holds, never what it says.
 //! See `docs/adr/0008-the-owner-holds-no-messages.md`.
 
-use anyhow::Context;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -852,23 +851,22 @@ pub async fn delete_account(
     // (a permission error, a busy file) is logged with its path rather than
     // answered as a failure. No later account takes this id, so the folder
     // stays out of every account's reach until someone removes it.
-    let account_root = state.cfg.paths.data_dir.join(target.to_string());
-    if account_root.exists() {
-        let root = account_root.clone();
-        let removed = tokio::task::spawn_blocking(move || std::fs::remove_dir_all(&root)).await;
-        let failure = match removed {
-            Ok(Ok(())) => None,
-            Ok(Err(e)) => Some(e.to_string()),
-            Err(e) => Some(e.to_string()),
-        };
-        if let Some(error) = failure {
-            tracing::warn!(
-                account_id = target,
-                path = %account_root.display(),
-                %error,
-                "account deleted, but its data folder could not be removed"
-            );
-        }
+    let paths = state.cfg.paths.clone();
+    let removed =
+        tokio::task::spawn_blocking(move || crate::asset_store::remove_account_dir(&paths, target))
+            .await;
+    let failure = match removed {
+        Ok(Ok(())) => None,
+        Ok(Err(e)) => Some(e.to_string()),
+        Err(e) => Some(e.to_string()),
+    };
+    if let Some(error) = failure {
+        tracing::warn!(
+            account_id = target,
+            path = %crate::asset_store::account_dir(&state.cfg.paths, target).display(),
+            %error,
+            "account deleted, but its data folder could not be removed"
+        );
     }
     Ok(StatusCode::NO_CONTENT)
 }
@@ -1021,48 +1019,19 @@ pub struct DeleteMessagesRequest {
 pub struct DeleteMessagesResponse {
     /// Conversations deleted.
     pub conversations: u64,
-    /// Attachment rows deleted. Their files are removed too, unless the
-    /// account has a running Import Run.
+    /// Attachment rows deleted. Their files are removed too. While the
+    /// account has a running Import Run, the originals stay until it ends.
     pub attachments: u64,
-}
-
-/// Delete on-disk attachment trees for every source under this account.
-fn remove_account_asset_trees(
-    data_dir: &std::path::Path,
-    account_id: i64,
-    assets_name: &str,
-    converted_name: &str,
-) -> anyhow::Result<()> {
-    let account_root = data_dir.join(account_id.to_string());
-    if !account_root.is_dir() {
-        return Ok(());
-    }
-    for entry in std::fs::read_dir(&account_root)
-        .with_context(|| format!("read {}", account_root.display()))?
-    {
-        let entry = entry?;
-        if !entry.file_type()?.is_dir() {
-            continue;
-        }
-        let source_root = entry.path();
-        for name in [assets_name, converted_name] {
-            let dir = source_root.join(name);
-            if dir.exists() {
-                std::fs::remove_dir_all(&dir)
-                    .with_context(|| format!("remove {}", dir.display()))?;
-            }
-        }
-    }
-    Ok(())
 }
 
 /// Destroy one account's conversations, messages, and attachments. The
 /// account itself, its contacts, and its login survive.
 ///
 /// The rows go in one transaction, between two batches of a running Import
-/// Run and never inside one. The attachment files go after it, unless the
-/// account has a running Import Run: that run may have uploaded files for a
-/// batch it has not sent yet, so every file stays on disk.
+/// Run and never inside one. The attachment files go after it. While the
+/// account has a running Import Run, the originals stay: that run may have
+/// uploaded files for a batch it has not sent yet. The run's end removes
+/// the ones no batch named.
 ///
 /// The owner may, on any account. The account itself may with a
 /// session that carries the `delete` permission, and confirms in the body.
@@ -1108,16 +1077,12 @@ pub async fn delete_account_messages(
     let _batch_lock = state.account_import_locks.lock(target.to_string()).await;
     let mut conn = state.db.acquire().await?;
     let stats = account_profile::delete_all_messages_for_account(&mut conn, target).await?;
-    // A running Import Run may have uploaded files for a batch it has not
-    // sent yet, and no row names them, so its account's files stay on disk.
-    if !stats.import_running {
-        remove_account_asset_trees(
-            &state.cfg.paths.data_dir,
-            target,
-            &state.cfg.paths.assets_dir,
-            &state.cfg.paths.assets_converted_dir,
-        )?;
-    }
+    crate::asset_store::remove_all_attachment_files(
+        std::sync::Arc::clone(&state.cfg),
+        target,
+        stats.import_running,
+    )
+    .await;
 
     Ok(Json(DeleteMessagesResponse {
         conversations: stats.conversations,

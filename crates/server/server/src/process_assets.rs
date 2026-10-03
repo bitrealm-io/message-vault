@@ -221,7 +221,7 @@ impl<'a> SourcePass<'a> {
             eprintln!("  skip — assets dir missing");
             return Ok(None);
         }
-        let cleaned = cleanup_incoming_parts(&assets_dir, opts.dry_run);
+        let cleaned = crate::asset_store::sweep_incoming(&assets_dir, opts.dry_run);
         if cleaned > 0 {
             println!("  cleaned {cleaned} abandoned upload temp(s) under .incoming/");
         }
@@ -282,7 +282,7 @@ impl<'a> SourcePass<'a> {
             if self.opts.dry_run {
                 println!("[dry-run] would remove incomplete {}", self.label(row));
             } else {
-                fs::remove_file(source_path)
+                crate::asset_store::remove_file(source_path)
                     .with_context(|| format!("remove incomplete {}", source_path.display()))?;
                 println!("removed incomplete {}", self.label(row));
             }
@@ -502,173 +502,7 @@ async fn update_derived(
 
 /// Incomplete iMessage/SMS transfers and aborted uploads use a `.part` suffix.
 fn is_part_path(path: &str) -> bool {
-    has_part_extension(Path::new(path))
-}
-
-/// True for a `.part` file left by an interrupted upload.
-fn has_part_extension(path: &Path) -> bool {
-    let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
-        return false;
-    };
-    ext.eq_ignore_ascii_case("part")
-}
-
-/// Age after which an upload temp under `.incoming/` counts as abandoned: a
-/// `{sha}-*.part` file or a multipart session folder `{sha}/{upload_id}/`.
-/// A live `PUT /v1/assets/{sha256}` keeps writing its `.part` file while
-/// this sweep runs, so only a temp left untouched this long is removed.
-const STALE_UPLOAD_SECS: u64 = 24 * 60 * 60;
-
-/// Remove abandoned `{sha}-*.part` temps and multipart session folders under
-/// `.incoming/`, and return how many it removed (or would remove, in a dry
-/// run).
-///
-/// The server writes and removes these files while the sweep runs, so a
-/// file that is gone by the time the sweep reaches it is passed over, and
-/// any other failure is logged and the sweep goes on.
-fn cleanup_incoming_parts(assets_dir: &Path, dry_run: bool) -> u64 {
-    let incoming = assets_dir.join(".incoming");
-    let entries = match fs::read_dir(&incoming) {
-        Ok(entries) => entries,
-        Err(err) => {
-            log_sweep_error("read", &incoming, &err);
-            return 0;
-        }
-    };
-    let mut parts = Vec::new();
-    let mut sha_dirs = Vec::new();
-    for entry in entries {
-        let path = match entry {
-            Ok(entry) => entry.path(),
-            Err(err) => {
-                log_sweep_error("read", &incoming, &err);
-                continue;
-            }
-        };
-        if path.is_file() && has_part_extension(&path) {
-            parts.push(path);
-        } else if path.is_dir() {
-            sha_dirs.push(path);
-        }
-    }
-    let now = std::time::SystemTime::now();
-    let mut removed = remove_stale_parts(&parts, now, dry_run);
-    for sha_dir in &sha_dirs {
-        removed += remove_stale_sessions(sha_dir, now, dry_run);
-    }
-    removed
-}
-
-/// Remove each listed `.part` file older than [`STALE_UPLOAD_SECS`] at
-/// `now`, and return how many it removed (or would remove, in a dry run).
-fn remove_stale_parts(parts: &[PathBuf], now: std::time::SystemTime, dry_run: bool) -> u64 {
-    let mut removed = 0u64;
-    for part in parts {
-        match modified_before_limit(part, now) {
-            Ok(true) => {}
-            Ok(false) => continue,
-            Err(err) => {
-                log_sweep_error("read", part, &err);
-                continue;
-            }
-        }
-        if dry_run {
-            println!("[dry-run] would remove {}", part.display());
-            removed += 1;
-            continue;
-        }
-        match fs::remove_file(part) {
-            Ok(()) => removed += 1,
-            Err(err) => log_sweep_error("remove leftover", part, &err),
-        }
-    }
-    removed
-}
-
-/// Remove each multipart session folder under `sha_dir`
-/// (`.incoming/{sha256}/{upload_id}/`) that is stale at `now`, then
-/// `sha_dir` itself once it is empty. Returns how many sessions it removed
-/// (or would remove, in a dry run).
-fn remove_stale_sessions(sha_dir: &Path, now: std::time::SystemTime, dry_run: bool) -> u64 {
-    let entries = match fs::read_dir(sha_dir) {
-        Ok(entries) => entries,
-        Err(err) => {
-            log_sweep_error("read", sha_dir, &err);
-            return 0;
-        }
-    };
-    let mut removed = 0u64;
-    for entry in entries {
-        let session = match entry {
-            Ok(entry) => entry.path(),
-            Err(err) => {
-                log_sweep_error("read", sha_dir, &err);
-                continue;
-            }
-        };
-        if !session.is_dir() {
-            continue;
-        }
-        match upload_session_is_stale(&session, now) {
-            Ok(true) => {}
-            Ok(false) => continue,
-            Err(err) => {
-                log_sweep_error("read", &session, &err);
-                continue;
-            }
-        }
-        if dry_run {
-            println!(
-                "[dry-run] would remove stale upload session {}",
-                session.display()
-            );
-            removed += 1;
-            continue;
-        }
-        match fs::remove_dir_all(&session) {
-            Ok(()) => removed += 1,
-            Err(err) => log_sweep_error("remove stale upload session", &session, &err),
-        }
-    }
-    let is_empty = fs::read_dir(sha_dir).is_ok_and(|mut rest| rest.next().is_none());
-    if is_empty {
-        if dry_run {
-            println!("[dry-run] would remove empty {}", sha_dir.display());
-        } else {
-            // A new upload for this fingerprint may have made a session in
-            // the meantime, and then the folder stays.
-            let _ = fs::remove_dir(sha_dir);
-        }
-    }
-    removed
-}
-
-/// True when a multipart upload session's manifest (or, failing that, its folder) is older than the abandoned-upload limit.
-fn upload_session_is_stale(session: &Path, now: std::time::SystemTime) -> std::io::Result<bool> {
-    let manifest = session.join("manifest.json");
-    if manifest.is_file() {
-        modified_before_limit(&manifest, now)
-    } else {
-        modified_before_limit(session, now)
-    }
-}
-
-/// True when `path` was last modified [`STALE_UPLOAD_SECS`] or more before `now`.
-fn modified_before_limit(path: &Path, now: std::time::SystemTime) -> std::io::Result<bool> {
-    let modified = fs::metadata(path)?
-        .modified()
-        .unwrap_or(std::time::UNIX_EPOCH);
-    let age = now.duration_since(modified).unwrap_or_default();
-    Ok(age.as_secs() >= STALE_UPLOAD_SECS)
-}
-
-/// Log a failed step of the `.incoming/` sweep. A path that no longer
-/// exists is not logged, because the server removes its own temps when an
-/// upload finishes, and that is the outcome the sweep wanted.
-fn log_sweep_error(action: &str, path: &Path, err: &std::io::Error) {
-    if err.kind() != std::io::ErrorKind::NotFound {
-        eprintln!("  could not {action} {}: {err}", path.display());
-    }
+    crate::asset_store::has_part_extension(Path::new(path))
 }
 
 /// What one stored blob needs, decided before any file is touched.

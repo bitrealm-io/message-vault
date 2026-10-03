@@ -13,22 +13,12 @@ import { useUpdateSettingsProfile } from "../../lib/useSettingsAccount";
 import { type Identity, removeBody } from "./identities";
 import { sectionTitleClass } from "./profileStyles";
 
-/** Whether `profile` lists `handle` on `service`, however either was typed. */
-function profileIncludes(p: AccountProfile, handle: string, service: string): boolean {
-  const needle = handle.trim().toLowerCase();
-  if (service === "email") {
-    return p.emails.some((e) => e.toLowerCase() === needle);
-  }
-  // Phone and WhatsApp both come back in profile.phones (E.164 when unambiguous).
-  return p.phones.some((phone) => phonesMatch(handle, phone));
-}
-
 /**
  * Whether `rows` hold `address` on `service`, however the address was typed.
  *
- * A removal is judged here rather than by `profile.phones`, because one number
- * can be a Text Message identity and a WhatsApp identity at once, and
- * `profile.phones` lists it for each with no service.
+ * An add and a removal are judged here rather than by `profile.phones`,
+ * because one number can be a Text Message identity and a WhatsApp identity
+ * at once, and `profile.phones` lists it for each with no service.
  */
 function listsIdentity(rows: Identity[], address: string, service: string): boolean {
   const needle = address.trim().toLowerCase();
@@ -103,8 +93,9 @@ export function IdentitiesSection({
   const confirmAdd = async ({ address, service }: { address: string; service: HandleService }) => {
     setAddError("");
     try {
-      const updated = await updateProfile.mutateAsync({ identities: [{ address, service }] });
-      if (!profileIncludes(updated, address, service)) {
+      await updateProfile.mutateAsync({ identities: [{ address, service }] });
+      const { data } = await identities.refetch({ throwOnError: true });
+      if (!listsIdentity(data ?? [], address, service)) {
         throw new Error("The server did not add that identity.");
       }
       setAdding(false);

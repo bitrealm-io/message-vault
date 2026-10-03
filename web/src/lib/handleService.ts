@@ -14,8 +14,7 @@ export const EXAMPLE_PHONE = "+1 555-555-0119";
  * The services an identity can be on, offered wherever one is added: setup,
  * the account profile, and the contact drawer. Each carries the example shown
  * in an empty field, on the same line as its service. The phone services take
- * `EXAMPLE_PHONE`, which `PhoneTokenField` and `handleValidationError` show
- * too, so a phone example is changed there.
+ * `EXAMPLE_PHONE`, the web app's one phone example; change it there.
  */
 export const HANDLE_SERVICE_OPTIONS = [
   { value: "phone", label: "Text Message", placeholder: EXAMPLE_PHONE },

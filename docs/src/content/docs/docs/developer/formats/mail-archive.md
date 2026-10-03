@@ -245,7 +245,7 @@ Sticker tapback: include sticker image MIME part + `X-ME-Attachment-Meta` with `
 **Optional aggregate on parent** (translator cache only):
 
 ```http title="X-ME-Tapbacks"
-X-ME-Tapbacks: [{"part_index":0,"kind":"loved","reactor_handle":"+1555…","reactor_display_name":"Alex"}]
+X-ME-Tapbacks: [{"part_index":0,"kind":"loved","is_from_me":false,"reactor_handle":"+1555…","reactor_display_name":"Alex"}]
 ```
 
 Readers SHOULD prefer per-message tapback EMLs. Do **not** store reactions only as free text in the parent body.

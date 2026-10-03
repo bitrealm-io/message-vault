@@ -56,11 +56,32 @@ async fn every_operation_keeps_the_rules_the_document_can_show() {
     // wrongly accepts (a delete, a logout) cannot change what the next
     // operation sees.
     let shared = Shared::build().await;
+    let mut refuse_the_demo_account = BTreeSet::new();
     for (n, op) in operations.iter().enumerate() {
         let world = World::build(&shared, n).await;
         let spec = &doc["paths"][&op.path][&op.method];
         for rule in called_rules(&doc, &world, op, spec).await {
             broken.push(format!("{}: {rule}", op.label()));
+        }
+        match demo_account_rule(&world, op, spec).await {
+            DemoAnswer::RefusedAsDocumented => {
+                refuse_the_demo_account.insert(op.label());
+            }
+            DemoAnswer::RefusedBreaking(rule) => {
+                refuse_the_demo_account.insert(op.label());
+                broken.push(format!("{}: {rule}", op.label()));
+            }
+            DemoAnswer::Other => {}
+        }
+    }
+    // The check above is only as good as the routes that reach it: an import
+    // start, a delete for good and an address book load must each refuse the
+    // Demo Account by its id.
+    for label in ["POST /v1/imports", "DELETE /v1/trash", "POST /v1/contacts"] {
+        if !refuse_the_demo_account.contains(label) {
+            broken.push(format!(
+                "{label}: the Demo Account was not refused by its id"
+            ));
         }
     }
 
@@ -243,6 +264,45 @@ async fn called_rules(doc: &Value, world: &World<'_>, op: &Operation, spec: &Val
         }
     }
     broken
+}
+
+/// What the Demo Account was answered.
+enum DemoAnswer {
+    /// `demo-account-protected`, as the document lists it.
+    RefusedAsDocumented,
+    /// `demo-account-protected`, breaking the rule named.
+    RefusedBreaking(String),
+    /// Anything else.
+    Other,
+}
+
+/// Call the operation as the Demo Account, whose row grants every
+/// permission, so a refusal comes from its id alone (ADR 0016). Wherever the
+/// server answers `demo-account-protected`, the document must list it. A
+/// `HEAD` answer has no body to tell the problem type by, so it is skipped.
+async fn demo_account_rule(world: &World<'_>, op: &Operation, spec: &Value) -> DemoAnswer {
+    if !op.path.starts_with("/v1/") || op.method == "head" || !takes_a_credential_only(op) {
+        return DemoAnswer::Other;
+    }
+    let path = world.path_for(op);
+    let body =
+        credential_matrix::body_for(op, 0).map(|(content_type, body)| (Some(content_type), body));
+    let token = world.demo_session().await;
+    let answer = call(world, op, &path, Some(&token), body).await;
+    let refused = serde_json::from_str::<Problem>(&answer.text)
+        .is_ok_and(|problem| problem.kind == ProblemType::DemoAccountProtected.url());
+    if !refused {
+        return DemoAnswer::Other;
+    }
+    match answer.problem_rule(
+        op,
+        spec,
+        ProblemType::DemoAccountProtected,
+        "the Demo Account",
+    ) {
+        Some(rule) => DemoAnswer::RefusedBreaking(rule),
+        None => DemoAnswer::RefusedAsDocumented,
+    }
 }
 
 /// A response, read whole.

@@ -223,8 +223,7 @@ describe("ConversationList", () => {
       await waitFor(() => expect(vi.mocked(updateMessageTagMembers)).toHaveBeenCalledTimes(1));
       // Setting a Message Tag reloads the list, every page of it.
       const lastPageReads = () =>
-        vi.mocked(listConversations).mock.calls.filter(([params]) => params.offset === 1040)
-          .length;
+        vi.mocked(listConversations).mock.calls.filter(([params]) => params.offset === 1040).length;
       await waitFor(() => expect(lastPageReads()).toBe(2));
       await waitFor(() => expect(box).toBeChecked());
 

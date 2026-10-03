@@ -218,11 +218,33 @@ impl OwnedSession {
         };
         // The import itself is done either way; a failure to record that is
         // worth a log line, not an error the caller would have to unwind.
-        if let Err(error) = imports::complete_import(conn, self.account_id, self.id, &outcome).await
-        {
+        if let Err(error) = complete_run(conn, self.account_id, self.id, &outcome).await {
             tracing::warn!(import_id = self.id, error = %error, "complete_import failed");
         }
     }
+}
+
+/// Record an Import Run's outcome, then make the run's Saved Search and
+/// Contact Group. Every path that completes a run calls this: the HTTP
+/// `complete_import`, the server's `import` command and the Demo Account
+/// build (through [`OwnedSession::finish`]), so each run gets the same
+/// shortcuts however it was made.
+///
+/// # Errors
+///
+/// Returns the error of recording the outcome, such as
+/// [`imports::ImportLookupError`] for a run that is not running. A shortcut
+/// that cannot be made is a warning, never an error.
+pub(crate) async fn complete_run(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    import_id: i64,
+    outcome: &CompleteImportArgs,
+) -> Result<imports::ImportRow> {
+    let row = imports::complete_import(conn, account_id, import_id, outcome).await?;
+    create_import_saved_search(conn, account_id, &row).await;
+    create_import_contact_group(conn, account_id, &row).await;
+    Ok(row)
 }
 
 /// Whether import should run DDL/schema ensure on the connection.
@@ -941,7 +963,7 @@ pub(crate) async fn complete_import(
             .collect(),
     };
     let mut conn = state.db.acquire().await?;
-    let row = crate::db::imports::complete_import(&mut conn, account, import_id, &args)
+    let row = complete_run(&mut conn, account, import_id, &args)
         .await
         .map_err(
             |e| match e.downcast::<crate::db::imports::ImportLookupError>() {
@@ -949,9 +971,6 @@ pub(crate) async fn complete_import(
                 Err(other) => ApiError::Internal(other),
             },
         )?;
-
-    create_import_saved_search(&mut conn, account, &row).await;
-    create_import_contact_group(&mut conn, account, &row).await;
 
     Ok(Json(CompleteImportResponse {
         id: row.id,

@@ -100,23 +100,41 @@ Done when every agent thread is resolved and every user thread has a reply.
 Run Standards and Correctness once more, on the fix commits only: give them
 the fix commit SHAs to read with `git show`. A rebase in step 4 changes those
 SHAs, so use the ones that were pushed. Post and close their findings as in
-steps 3 and 4. This is the last review round.
+steps 3 and 4. This is the last review of the PR's own changes.
 
-### 6. Green CI
+### 6. Resolve conflicts with the base
 
-Wait for the required checks (AGENTS.md step 5). A check that fails because of
+Check whether the PR conflicts with its base (AGENTS.md step 5). If it does,
+merge the base into the worktree and resolve each conflict so both sides'
+intent survives (the `resolving-merge-conflicts` skill). Run
+`./scripts/check-pr.sh`. Then spawn a Correctness sub-agent with its step 2
+brief and output rule, scoped to the remerge diff of the merge commit
+(AGENTS.md step 5), so it reviews the resolution alone. Every merge commit
+you make that resolves a conflict gets this review, including one made after
+a rejected push. Close its findings as in steps 3 and 4, and push.
+
+Done when GitHub reports the PR `MERGEABLE`.
+
+### 7. Green CI
+
+Wait for the required checks (AGENTS.md step 6). A check that fails because of
 the PR is a finding. Fix it in the worktree, push, and wait again. A check that
 fails for a reason outside the PR (a red `main`, a runner fault, a network
 fetch) gets one rerun of its failed jobs. If it fails again, stop and report
 it without changing the code for it.
 
-### 7. Summarise and queue
+### 8. Summarise and queue
+
+Check the PR against its base once more (AGENTS.md step 5), because the base
+may have moved while CI ran. On `CONFLICTING`, go back to step 6. Continue
+once it is `MERGEABLE`.
 
 Post one top-level comment, starting with the marker:
 
 - Findings per axis, and how many were Fixed, Declined, and Deferred, with
   the deferred issues linked.
-- Commits made for CI failures.
+- Commits made for CI failures, and any merge of the base with the files
+  whose conflicts it resolved.
 - Any Spec skip, and any user thread still open.
 
 Queue the PR when "Merging" says it is ready. Otherwise, say in the summary

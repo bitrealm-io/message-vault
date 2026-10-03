@@ -89,7 +89,9 @@ only the user resolves it.
 
    If the push is rejected because the branch moved, rebase the fix commits
    onto it (`git fetch origin <headRefName> && git rebase origin/<headRefName>`),
-   rerun the checks, and push again.
+   rerun the checks, and push again. The rebase applies only while HEAD has
+   no merge commit from step 5. Step 5 says how to handle a rejected push
+   after that.
 4. **Answer every thread**, with the commit that fixes it or the reason it
    stays as it is. Then resolve it if it is an agent thread:
 
@@ -103,7 +105,30 @@ only the user resolves it.
    ```
 
    Never resolve a thread without a reply in it.
-5. **Wait for the required checks.** GitHub moves the pull request's head to
+5. **Merge the base into a conflicting pull request.** The merge queue drops
+   a pull request it cannot merge onto the base, so resolve the conflict on
+   the branch first. Merge rather than rebase: a rebase needs a force-push,
+   and the queue squashes the merge commit away. GitHub reports `UNKNOWN`
+   for a few seconds after a push, so wait for a settled answer:
+
+   ```bash
+   until m=$(gh pr view <N> --json mergeable -q .mergeable) && [ "$m" != UNKNOWN ]; do sleep 10; done
+   echo "$m"                      # CONFLICTING means merge the base
+   git fetch origin <baseRefName>
+   git merge origin/<baseRefName> # stops at each conflict, with nothing committed
+   # resolve every conflict, git add the files, git commit, ./scripts/check-pr.sh
+   git show --remerge-diff HEAD   # the conflict resolution alone, for review
+   git push origin HEAD:<headRefName>
+   ```
+
+   If this push is rejected because the branch moved, fetch it and merge
+   `origin/<headRefName>` in (`git merge origin/<headRefName>`). A rebase
+   would drop the merge commit and replay the base's commits one by one,
+   which brings the conflict back. If that merge conflicts too, resolve it,
+   commit, run `./scripts/check-pr.sh`, and review its remerge diff like the
+   first one. Then push again.
+
+6. **Wait for the required checks.** GitHub moves the pull request's head to
    a pushed commit a few seconds after the push, and starts its checks after
    that. Until both happen, `gh pr checks` reports the previous head, or exits
    with "no required checks reported". So wait until the head is the pushed

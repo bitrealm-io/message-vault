@@ -446,38 +446,47 @@ pub fn placeholder_rel_path(class: MediaClass) -> &'static str {
     }
 }
 
-/// Delete every real file under `output_dir/attachments/` and write the three
-/// shared placeholder files there.
+/// Delete every real file under `output_dir/attachments/`, in subfolders too,
+/// and write the three shared placeholder files there.
+///
+/// Each entry's type is read without following a symlink. A folder goes
+/// whole, with everything in it. A symlink is removed, never followed, so a
+/// link to a folder outside the export leaves that folder alone. A symlink
+/// with a placeholder's name is removed too, so writing the placeholder
+/// cannot write through it to a file outside the export.
 ///
 /// # Errors
 ///
-/// Returns an error when the directory cannot be created, a real file cannot
-/// be removed (the error names that file), or a placeholder cannot be written.
+/// Returns an error when the directory cannot be created, an entry cannot be
+/// removed (the error names it), or a placeholder cannot be written.
 pub fn materialize_placeholders(output_dir: &Path) -> Result<()> {
     let dir = output_dir.join("attachments");
     fs::create_dir_all(&dir)?;
-    // Remove prior real media.
-    if dir.is_dir() {
-        for entry in fs::read_dir(&dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_file() {
-                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                if name != "placeholder.jpg"
-                    && name != "placeholder.mp4"
-                    && name != "placeholder.bin"
-                {
-                    // A real file left behind is the content the obfuscated
-                    // export exists to leave out, so a failed delete fails the pass.
-                    fs::remove_file(&path).with_context(|| {
-                        format!(
-                            "could not remove real attachment {} from the obfuscated export",
-                            path.display()
-                        )
-                    })?;
-                }
-            }
+    for entry in fs::read_dir(&dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        let file_type = entry.file_type()?;
+        let is_placeholder = file_type.is_file()
+            && matches!(
+                path.file_name().and_then(|n| n.to_str()),
+                Some("placeholder.jpg" | "placeholder.mp4" | "placeholder.bin")
+            );
+        if is_placeholder {
+            continue;
         }
+        // A real file left behind is the content the obfuscated export
+        // exists to leave out, so a failed delete fails the pass.
+        let removed = if file_type.is_dir() {
+            fs::remove_dir_all(&path)
+        } else {
+            fs::remove_file(&path)
+        };
+        removed.with_context(|| {
+            format!(
+                "could not remove real attachment {} from the obfuscated export",
+                path.display()
+            )
+        })?;
     }
     fs::write(dir.join("placeholder.jpg"), PLACEHOLDER_JPG)?;
     fs::write(dir.join("placeholder.mp4"), PLACEHOLDER_MP4)?;
@@ -830,6 +839,79 @@ mod tests {
         assert!(
             photo.is_file(),
             "the test's premise: the file is still there"
+        );
+    }
+
+    /// A real attachment in a subfolder of `attachments/` is real content
+    /// too, and the obfuscated export exists to leave it out (#1406).
+    #[test]
+    fn materializing_placeholders_removes_real_media_in_a_subfolder() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let sub = dir.path().join("attachments").join("sub");
+        fs::create_dir_all(&sub).expect("subfolder");
+        fs::write(sub.join("photo.jpg"), b"real photo bytes").expect("write");
+
+        materialize_placeholders(dir.path()).expect("materialize");
+
+        assert!(
+            !sub.exists(),
+            "the subfolder and the photo in it must be gone"
+        );
+    }
+
+    /// A symlink under `attachments/` is removed, never followed: the folder
+    /// it points at, outside the export, keeps its files.
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_to_a_folder_outside_the_export_is_removed_not_followed() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let outside = tempfile::tempdir().expect("outside");
+        fs::write(outside.path().join("keep.jpg"), b"not the export's").expect("write");
+        let attachments = dir.path().join("attachments");
+        fs::create_dir_all(&attachments).expect("attachments dir");
+        let link = attachments.join("linked");
+        std::os::unix::fs::symlink(outside.path(), &link).expect("symlink");
+
+        materialize_placeholders(dir.path()).expect("materialize");
+
+        assert!(
+            fs::symlink_metadata(&link).is_err(),
+            "the symlink must be gone"
+        );
+        assert_eq!(
+            fs::read(outside.path().join("keep.jpg")).expect("read"),
+            b"not the export's",
+            "the folder the symlink pointed at must be untouched"
+        );
+    }
+
+    /// A symlink with a placeholder's name is not kept as a placeholder:
+    /// writing the placeholder through it would overwrite a file outside the
+    /// export.
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_named_like_a_placeholder_is_replaced_by_a_real_placeholder() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let outside = tempfile::tempdir().expect("outside");
+        let target = outside.path().join("elsewhere.jpg");
+        fs::write(&target, b"not the export's").expect("write");
+        let attachments = dir.path().join("attachments");
+        fs::create_dir_all(&attachments).expect("attachments dir");
+        let placeholder = attachments.join("placeholder.jpg");
+        std::os::unix::fs::symlink(&target, &placeholder).expect("symlink");
+
+        materialize_placeholders(dir.path()).expect("materialize");
+
+        let meta = fs::symlink_metadata(&placeholder).expect("placeholder");
+        assert!(
+            meta.file_type().is_file(),
+            "the placeholder must be a real file"
+        );
+        assert_eq!(fs::read(&placeholder).expect("read"), PLACEHOLDER_JPG);
+        assert_eq!(
+            fs::read(&target).expect("read target"),
+            b"not the export's",
+            "the file the symlink pointed at must be untouched"
         );
     }
 

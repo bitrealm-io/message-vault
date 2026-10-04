@@ -458,6 +458,10 @@ released versions carry their date on the heading.
 
 #### Exporting and converting
 
+- 2026-10-03 **An obfuscated export leaves out attachments in subfolders
+  too.** A real photo or file inside a subfolder of the export's
+  attachments stayed in the export that exists to leave it out. A link
+  there to a folder elsewhere on the computer is now removed, not followed.
 - 2026-10-03 **Android XML holds only SMS and MMS.** Export and Convert
   wrote every message as a text message, so an iMessage or a WhatsApp
   message came back from a re-import as an SMS. They now leave every other

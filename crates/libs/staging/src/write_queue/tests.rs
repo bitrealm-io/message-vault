@@ -392,18 +392,19 @@ fn parallel_drain_stops_on_the_first_error() {
     );
 }
 
-/// The last attachment count a run reported, from both kinds of drain.
-fn last_attachment_bytes(writer_count: usize) -> (u64, u64) {
+/// One attachments event's counts.
+#[derive(Debug)]
+struct AttachmentCounts {
+    done: usize,
+    bytes_done: u64,
+    bytes_total: u64,
+}
+
+/// Every attachments event a drain of `units` reported, in order, from a
+/// sequential drain (`writer_count` 1) or a parallel one.
+fn attachment_bytes(units: Vec<ConversationUnit>, writer_count: usize) -> Vec<AttachmentCounts> {
     let tmp = tempfile::tempdir().unwrap();
     let out = tmp.path().join("out");
-    // Each source claims 100 bytes for a 5-byte file.
-    let units: Vec<_> = (1..=3)
-        .map(|i| {
-            ConversationUnit::from_doc(doc_with(&test_number(i), 1), |_, _| {
-                (AttachmentSource::Bytes(b"xxxxx".to_vec()), Some(100))
-            })
-        })
-        .collect();
     let mut options = options(MediaMode::Clone, false);
     options.writer_count = writer_count;
     let seen = Arc::new(Mutex::new(Vec::<ProgressEvent>::new()));
@@ -429,13 +430,34 @@ fn last_attachment_bytes(writer_count: usize) -> (u64, u64) {
     seen.iter()
         .filter_map(|event| match event {
             ProgressEvent::Attachments {
-                done: 3,
+                done,
                 bytes_done,
                 bytes_total,
                 ..
-            } => Some((*bytes_done, *bytes_total)),
+            } => Some(AttachmentCounts {
+                done: *done,
+                bytes_done: *bytes_done,
+                bytes_total: *bytes_total,
+            }),
             _ => None,
         })
+        .collect()
+}
+
+/// The last attachment count a run reported, from both kinds of drain.
+fn last_attachment_bytes(writer_count: usize) -> (u64, u64) {
+    // Each source claims 100 bytes for a 5-byte file.
+    let units: Vec<_> = (1..=3)
+        .map(|i| {
+            ConversationUnit::from_doc(doc_with(&test_number(i), 1), |_, _| {
+                (AttachmentSource::Bytes(b"xxxxx".to_vec()), Some(100))
+            })
+        })
+        .collect();
+    attachment_bytes(units, writer_count)
+        .into_iter()
+        .filter(|counts| counts.done == 3)
+        .map(|counts| (counts.bytes_done, counts.bytes_total))
         .max()
         .unwrap()
 }
@@ -444,6 +466,43 @@ fn last_attachment_bytes(writer_count: usize) -> (u64, u64) {
 fn the_byte_total_comes_down_to_the_files_when_hints_overstate_them() {
     assert_eq!(last_attachment_bytes(1), (15, 15), "sequential drain");
     assert_eq!(last_attachment_bytes(3), (15, 15), "parallel drain");
+}
+
+/// An attachment with no file is never copied, so the byte total leaves it
+/// out from the first event, in the sequential and the parallel drain. With
+/// one unit the parallel drain runs one writer, so its events keep their
+/// order. Counting its hint and
+/// taking it off when the run reached it made the bar jump forward mid-run
+/// (#1409).
+#[test]
+fn the_byte_total_leaves_out_an_attachment_with_no_file_from_the_start() {
+    for (drain, writer_count) in [("sequential", 1), ("parallel", 3)] {
+        // The real attachment comes first, so the first event is sent before
+        // the run reaches the missing one and could take its hint off.
+        let mut sources = vec![
+            (AttachmentSource::Bytes(b"xxxxx".to_vec()), Some(5)),
+            (AttachmentSource::Missing, Some(1_000)),
+        ]
+        .into_iter();
+        let unit = ConversationUnit::from_doc(doc_with(&test_number(7), 2), |_, _| {
+            sources.next().unwrap()
+        });
+
+        let bytes = attachment_bytes(vec![unit], writer_count);
+
+        assert_eq!(
+            bytes.first().map(|counts| counts.bytes_total),
+            Some(5),
+            "first total, {drain} drain: {bytes:?}"
+        );
+        assert_eq!(
+            bytes
+                .last()
+                .map(|counts| (counts.bytes_done, counts.bytes_total)),
+            Some((5, 5)),
+            "last event, {drain} drain: {bytes:?}"
+        );
+    }
 }
 
 #[test]
@@ -856,7 +915,14 @@ fn a_missing_attachment_is_not_counted_against_the_disk() {
     let mut doc = doc_with(&test_number(6), 1);
     doc.messages[0].attachments[0].size_bytes = Some(u64::MAX / 2);
     let unit = ConversationUnit::from_doc(doc, |_, att| AttachmentSource::take_bytes(att));
-    assert_eq!(unit.attachments[0].size_hint, Some(u64::MAX / 2));
+    assert!(matches!(
+        unit.attachments[0].source,
+        AttachmentSource::Missing
+    ));
+    assert_eq!(
+        unit.attachments[0].size_hint, None,
+        "a Missing source keeps no hint, so nothing sums it"
+    );
 
     let result = drain(tmp.path(), vec![unit], &options(MediaMode::Clone, false));
     assert!(result.is_ok(), "refused: {:?}", result.err());

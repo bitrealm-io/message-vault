@@ -392,18 +392,12 @@ fn parallel_drain_stops_on_the_first_error() {
     );
 }
 
-/// The last attachment count a run reported, from both kinds of drain.
-fn last_attachment_bytes(writer_count: usize) -> (u64, u64) {
+/// Every `(done, bytes_done, bytes_total)` an attachments event reported for
+/// `units`, in order, from a sequential drain (`writer_count` 1) or a
+/// parallel one.
+fn attachment_bytes(units: Vec<ConversationUnit>, writer_count: usize) -> Vec<(usize, u64, u64)> {
     let tmp = tempfile::tempdir().unwrap();
     let out = tmp.path().join("out");
-    // Each source claims 100 bytes for a 5-byte file.
-    let units: Vec<_> = (1..=3)
-        .map(|i| {
-            ConversationUnit::from_doc(doc_with(&test_number(i), 1), |_, _| {
-                (AttachmentSource::Bytes(b"xxxxx".to_vec()), Some(100))
-            })
-        })
-        .collect();
     let mut options = options(MediaMode::Clone, false);
     options.writer_count = writer_count;
     let seen = Arc::new(Mutex::new(Vec::<ProgressEvent>::new()));
@@ -429,13 +423,30 @@ fn last_attachment_bytes(writer_count: usize) -> (u64, u64) {
     seen.iter()
         .filter_map(|event| match event {
             ProgressEvent::Attachments {
-                done: 3,
+                done,
                 bytes_done,
                 bytes_total,
                 ..
-            } => Some((*bytes_done, *bytes_total)),
+            } => Some((*done, *bytes_done, *bytes_total)),
             _ => None,
         })
+        .collect()
+}
+
+/// The last attachment count a run reported, from both kinds of drain.
+fn last_attachment_bytes(writer_count: usize) -> (u64, u64) {
+    // Each source claims 100 bytes for a 5-byte file.
+    let units: Vec<_> = (1..=3)
+        .map(|i| {
+            ConversationUnit::from_doc(doc_with(&test_number(i), 1), |_, _| {
+                (AttachmentSource::Bytes(b"xxxxx".to_vec()), Some(100))
+            })
+        })
+        .collect();
+    attachment_bytes(units, writer_count)
+        .into_iter()
+        .filter(|&(done, ..)| done == 3)
+        .map(|(_, bytes_done, bytes_total)| (bytes_done, bytes_total))
         .max()
         .unwrap()
 }
@@ -447,53 +458,36 @@ fn the_byte_total_comes_down_to_the_files_when_hints_overstate_them() {
 }
 
 /// An attachment with no file is never copied, so the byte total leaves it
-/// out from the first event. Counting its hint and taking it off when the
-/// run reached it made the bar jump forward mid-run (#1409).
+/// out from the first event, in both kinds of drain. Counting its hint and
+/// taking it off when the run reached it made the bar jump forward mid-run
+/// (#1409).
 #[test]
 fn the_byte_total_leaves_out_an_attachment_with_no_file_from_the_start() {
-    let tmp = tempfile::tempdir().unwrap();
-    // The real attachment comes first, so the first event is sent before the
-    // run reaches the missing one and could take its hint off.
-    let mut sources = vec![
-        (AttachmentSource::Bytes(b"xxxxx".to_vec()), Some(5)),
-        (AttachmentSource::Missing, Some(1_000)),
-    ]
-    .into_iter();
-    let unit =
-        ConversationUnit::from_doc(doc_with(&test_number(7), 2), |_, _| sources.next().unwrap());
-    let seen = Arc::new(Mutex::new(Vec::<ProgressEvent>::new()));
-    let sink_seen = Arc::clone(&seen);
-    let sink = ProgressSink::unpaced(move |event| sink_seen.lock().unwrap().push(event));
+    for writer_count in [1, 3] {
+        // The real attachment comes first, so the first event is sent before
+        // the run reaches the missing one and could take its hint off.
+        let mut sources = vec![
+            (AttachmentSource::Bytes(b"xxxxx".to_vec()), Some(5)),
+            (AttachmentSource::Missing, Some(1_000)),
+        ]
+        .into_iter();
+        let unit = ConversationUnit::from_doc(doc_with(&test_number(7), 2), |_, _| {
+            sources.next().unwrap()
+        });
 
-    drain_write_queue_with_loader(
-        tmp.path(),
-        vec![unit],
-        &options(MediaMode::Clone, false),
-        &mut load_attachment_source,
-        None,
-        Some(&sink),
-        None,
-    )
-    .unwrap();
+        let bytes = attachment_bytes(vec![unit], writer_count);
 
-    let seen = seen.lock().unwrap();
-    let bytes: Vec<(u64, u64)> = seen
-        .iter()
-        .filter_map(|event| match event {
-            ProgressEvent::Attachments {
-                bytes_done,
-                bytes_total,
-                ..
-            } => Some((*bytes_done, *bytes_total)),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(
-        bytes.first().map(|b| b.1),
-        Some(5),
-        "first total: {bytes:?}"
-    );
-    assert_eq!(bytes.last(), Some(&(5, 5)), "last event: {bytes:?}");
+        assert_eq!(
+            bytes.first().map(|b| b.2),
+            Some(5),
+            "first total, {writer_count} writer(s): {bytes:?}"
+        );
+        assert_eq!(
+            bytes.last().map(|b| (b.1, b.2)),
+            Some((5, 5)),
+            "last event, {writer_count} writer(s): {bytes:?}"
+        );
+    }
 }
 
 #[test]
@@ -910,6 +904,10 @@ fn a_missing_attachment_is_not_counted_against_the_disk() {
         unit.attachments[0].source,
         AttachmentSource::Missing
     ));
+    assert_eq!(
+        unit.attachments[0].size_hint, None,
+        "a Missing source keeps no hint, so nothing sums it"
+    );
 
     let result = drain(tmp.path(), vec![unit], &options(MediaMode::Clone, false));
     assert!(result.is_ok(), "refused: {:?}", result.err());

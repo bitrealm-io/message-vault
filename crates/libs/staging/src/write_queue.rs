@@ -74,6 +74,8 @@ pub struct UnitAttachment {
     /// Message timestamp, which dates the staged filename.
     pub timestamp_unix_ms: i64,
     /// Size from the backup when known; byte totals grow as unhinted files load.
+    /// Always `None` for a `Missing` source, which is never copied, even when
+    /// the backup knew its size.
     pub size_hint: Option<u64>,
 }
 
@@ -562,8 +564,8 @@ const DISK_HEADROOM_SLACK: u64 = 64 * 1024 * 1024;
 /// sum plus a fixed slack is the honest requirement.
 ///
 /// With media turned off nothing is copied, so nothing is counted. A
-/// `Missing` source is never copied either, though an exporter can still
-/// size it: SMS Backup & Restore takes the size from the XML.
+/// `Missing` source is never copied either, and [`ConversationUnit::from_doc`]
+/// already drops its hint, so the sum leaves it out.
 fn check_headroom(output_dir: &Path, units: &[ConversationUnit], media: MediaMode) -> Result<()> {
     if media == MediaMode::Disabled {
         return Ok(());

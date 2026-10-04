@@ -237,6 +237,11 @@ released versions carry their date on the heading.
 
 #### Importing
 
+- 2026-10-03 **An attachment with a blank file name is refused.** An
+  import that gave an attachment a blank file name, empty or only spaces,
+  stored that blank name when the server already held the file. The import
+  is now refused and names the line of the file that holds it, as it
+  already was when the server did not hold the file.
 - 2026-10-03 **Staging's progress no longer jumps forward.** When a backup
   listed photos or files it did not hold, their sizes counted toward the
   total and came off only as Staging reached each one, so the percentage

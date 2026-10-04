@@ -2004,6 +2004,47 @@ async fn a_batch_with_an_unsafe_attachment_path_is_a_422_naming_the_path() {
     );
 }
 
+/// A path of spaces is refused as `.` is, even when the batch states the
+/// fingerprint of a file the server holds: the row would keep the path as
+/// sent, and the server's own check refuses it (#1410).
+#[tokio::test]
+async fn a_blank_attachment_path_is_refused_even_with_a_stored_fingerprint() {
+    let (fixture, account) = fixture_with_account().await;
+    let state = fixture.state.clone();
+    let path = batches_path(&state, &account.token, "whatsapp").await;
+    let assets_dir = state.cfg.paths.assets_dir_for_account(account.account_id);
+    fs::create_dir_all(&assets_dir).unwrap();
+    let held = fixture.dir().join("held.bin");
+    fs::write(&held, b"bytes the server holds").unwrap();
+    let mut stats = assets_api::AssetStats::default();
+    let stored = assets_api::hash_and_store(&held, &assets_dir, None, &mut stats)
+        .unwrap()
+        .expect("stored");
+    let body = one_attachment_batch("   ", Some(&stored.sha256));
+
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &account.token, "application/jsonl", body)
+            .await;
+
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    assert_eq!(problem.line, Some(2), "{text}");
+    assert!(
+        problem.errors.unwrap()[0].contains(message_ir::UNSAFE_ATTACHMENT_PATH),
+        "refused as an unsafe path, as `.` is: {text}"
+    );
+    let rows: i64 = sqlx::query_scalar(
+        "SELECT (SELECT COUNT(*) FROM attachments) + (SELECT COUNT(*) FROM staging_attachments)",
+    )
+    .fetch_one(&state.db)
+    .await
+    .unwrap();
+    assert_eq!(rows, 0, "no attachment row is stored");
+}
+
 /// S1-11: a file whose bytes do not hash to the SHA-256 the batch states is
 /// the sender's to fix, so it answers 422 naming the file, not 500.
 #[tokio::test]

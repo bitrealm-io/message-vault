@@ -61,6 +61,8 @@ fn try_store_converted(
     if !matches!(media, MediaMode::Convert | MediaMode::Compress) {
         return Ok(None);
     }
+    // A blank path converts nothing. `store_claimed_or_path`, which runs
+    // next, refuses it through `safe_source`.
     let Some(rel) = att.path.as_deref().and_then(trimmed) else {
         return Ok(None);
     };
@@ -95,11 +97,11 @@ fn store_claimed_or_path(
 ) -> Result<Option<StoredAsset>> {
     // Checked before the stored-fingerprint lookup, which never reads the
     // file: `attachments.path` keeps the path as sent, and an Export writes
-    // the file there, so a path the check refuses is never stored.
-    let checked = att
+    // the file there, so a path the check refuses is never stored. A path of
+    // spaces is checked too, and refused as `.` is.
+    let safe_path = att
         .path
         .as_deref()
-        .and_then(trimmed)
         .map(|rel| safe_source(export_dir, rel, line))
         .transpose()?;
     if let Some(sha) = att.sha256.as_deref().and_then(trimmed) {
@@ -113,7 +115,7 @@ fn store_claimed_or_path(
                 ..found
             }));
         }
-        if let Some(source) = checked {
+        if let Some(source) = safe_path {
             let claimed = match claimed {
                 Ok(claimed) => claimed,
                 Err(_) if !source.is_file() => {
@@ -169,8 +171,7 @@ fn store_claimed_or_path(
         return Ok(None);
     }
 
-    if let Some(rel) = att.path.as_deref() {
-        let source = safe_source(export_dir, rel, line)?;
+    if let Some(source) = safe_path {
         return assets_api::hash_and_store(
             &source,
             assets_dir,

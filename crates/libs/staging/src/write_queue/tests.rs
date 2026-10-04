@@ -446,6 +446,56 @@ fn the_byte_total_comes_down_to_the_files_when_hints_overstate_them() {
     assert_eq!(last_attachment_bytes(3), (15, 15), "parallel drain");
 }
 
+/// An attachment with no file is never copied, so the byte total leaves it
+/// out from the first event. Counting its hint and taking it off when the
+/// run reached it made the bar jump forward mid-run (#1409).
+#[test]
+fn the_byte_total_leaves_out_an_attachment_with_no_file_from_the_start() {
+    let tmp = tempfile::tempdir().unwrap();
+    // The real attachment comes first, so the first event is sent before the
+    // run reaches the missing one and could take its hint off.
+    let mut sources = vec![
+        (AttachmentSource::Bytes(b"xxxxx".to_vec()), Some(5)),
+        (AttachmentSource::Missing, Some(1_000)),
+    ]
+    .into_iter();
+    let unit =
+        ConversationUnit::from_doc(doc_with(&test_number(7), 2), |_, _| sources.next().unwrap());
+    let seen = Arc::new(Mutex::new(Vec::<ProgressEvent>::new()));
+    let sink_seen = Arc::clone(&seen);
+    let sink = ProgressSink::unpaced(move |event| sink_seen.lock().unwrap().push(event));
+
+    drain_write_queue_with_loader(
+        tmp.path(),
+        vec![unit],
+        &options(MediaMode::Clone, false),
+        &mut load_attachment_source,
+        None,
+        Some(&sink),
+        None,
+    )
+    .unwrap();
+
+    let seen = seen.lock().unwrap();
+    let bytes: Vec<(u64, u64)> = seen
+        .iter()
+        .filter_map(|event| match event {
+            ProgressEvent::Attachments {
+                bytes_done,
+                bytes_total,
+                ..
+            } => Some((*bytes_done, *bytes_total)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        bytes.first().map(|b| b.1),
+        Some(5),
+        "first total: {bytes:?}"
+    );
+    assert_eq!(bytes.last(), Some(&(5, 5)), "last event: {bytes:?}");
+}
+
 #[test]
 fn typed_progress_covers_prepare_and_attachments_across_units() {
     // The desktop's progress bar reads these events and nothing else, so
@@ -856,7 +906,10 @@ fn a_missing_attachment_is_not_counted_against_the_disk() {
     let mut doc = doc_with(&test_number(6), 1);
     doc.messages[0].attachments[0].size_bytes = Some(u64::MAX / 2);
     let unit = ConversationUnit::from_doc(doc, |_, att| AttachmentSource::take_bytes(att));
-    assert_eq!(unit.attachments[0].size_hint, Some(u64::MAX / 2));
+    assert!(matches!(
+        unit.attachments[0].source,
+        AttachmentSource::Missing
+    ));
 
     let result = drain(tmp.path(), vec![unit], &options(MediaMode::Clone, false));
     assert!(result.is_ok(), "refused: {:?}", result.err());

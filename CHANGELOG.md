@@ -237,6 +237,10 @@ released versions carry their date on the heading.
 
 #### Importing
 
+- 2026-10-03 **Staging's progress no longer jumps forward.** When a backup
+  listed photos or files it did not hold, their sizes counted toward the
+  total and came off only as Staging reached each one, so the percentage
+  jumped. The total now leaves them out from the start.
 - 2026-10-03 **An Upload that cannot read its staged files pauses and names
   the folder.** When the app could not read part of the files an Import Run
   had staged, the conversations it could not see were left out without a

@@ -392,10 +392,17 @@ fn parallel_drain_stops_on_the_first_error() {
     );
 }
 
-/// Every `(done, bytes_done, bytes_total)` an attachments event reported for
-/// `units`, in order, from a sequential drain (`writer_count` 1) or a
-/// parallel one.
-fn attachment_bytes(units: Vec<ConversationUnit>, writer_count: usize) -> Vec<(usize, u64, u64)> {
+/// One attachments event's counts.
+#[derive(Debug)]
+struct AttachmentCounts {
+    done: usize,
+    bytes_done: u64,
+    bytes_total: u64,
+}
+
+/// Every attachments event a drain of `units` reported, in order, from a
+/// sequential drain (`writer_count` 1) or a parallel one.
+fn attachment_bytes(units: Vec<ConversationUnit>, writer_count: usize) -> Vec<AttachmentCounts> {
     let tmp = tempfile::tempdir().unwrap();
     let out = tmp.path().join("out");
     let mut options = options(MediaMode::Clone, false);
@@ -427,7 +434,11 @@ fn attachment_bytes(units: Vec<ConversationUnit>, writer_count: usize) -> Vec<(u
                 bytes_done,
                 bytes_total,
                 ..
-            } => Some((*done, *bytes_done, *bytes_total)),
+            } => Some(AttachmentCounts {
+                done: *done,
+                bytes_done: *bytes_done,
+                bytes_total: *bytes_total,
+            }),
             _ => None,
         })
         .collect()
@@ -445,8 +456,8 @@ fn last_attachment_bytes(writer_count: usize) -> (u64, u64) {
         .collect();
     attachment_bytes(units, writer_count)
         .into_iter()
-        .filter(|&(done, ..)| done == 3)
-        .map(|(_, bytes_done, bytes_total)| (bytes_done, bytes_total))
+        .filter(|counts| counts.done == 3)
+        .map(|counts| (counts.bytes_done, counts.bytes_total))
         .max()
         .unwrap()
 }
@@ -458,12 +469,14 @@ fn the_byte_total_comes_down_to_the_files_when_hints_overstate_them() {
 }
 
 /// An attachment with no file is never copied, so the byte total leaves it
-/// out from the first event, in both kinds of drain. Counting its hint and
+/// out from the first event, in the sequential and the parallel drain. With
+/// one unit the parallel drain runs one writer, so its events keep their
+/// order. Counting its hint and
 /// taking it off when the run reached it made the bar jump forward mid-run
 /// (#1409).
 #[test]
 fn the_byte_total_leaves_out_an_attachment_with_no_file_from_the_start() {
-    for writer_count in [1, 3] {
+    for (drain, writer_count) in [("sequential", 1), ("parallel", 3)] {
         // The real attachment comes first, so the first event is sent before
         // the run reaches the missing one and could take its hint off.
         let mut sources = vec![
@@ -478,14 +491,16 @@ fn the_byte_total_leaves_out_an_attachment_with_no_file_from_the_start() {
         let bytes = attachment_bytes(vec![unit], writer_count);
 
         assert_eq!(
-            bytes.first().map(|b| b.2),
+            bytes.first().map(|counts| counts.bytes_total),
             Some(5),
-            "first total, {writer_count} writer(s): {bytes:?}"
+            "first total, {drain} drain: {bytes:?}"
         );
         assert_eq!(
-            bytes.last().map(|b| (b.1, b.2)),
+            bytes
+                .last()
+                .map(|counts| (counts.bytes_done, counts.bytes_total)),
             Some((5, 5)),
-            "last event, {writer_count} writer(s): {bytes:?}"
+            "last event, {drain} drain: {bytes:?}"
         );
     }
 }

@@ -2032,6 +2032,10 @@ async fn a_blank_attachment_path_is_refused_even_with_a_stored_fingerprint() {
         crate::problem::ProblemType::ValidationFailed,
     );
     assert_eq!(problem.line, Some(2), "{text}");
+    assert!(
+        problem.errors.unwrap()[0].contains(message_ir::UNSAFE_ATTACHMENT_PATH),
+        "refused as an unsafe path, as `.` is: {text}"
+    );
     let rows: i64 = sqlx::query_scalar(
         "SELECT (SELECT COUNT(*) FROM attachments) + (SELECT COUNT(*) FROM staging_attachments)",
     )

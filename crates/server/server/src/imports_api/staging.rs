@@ -61,6 +61,8 @@ fn try_store_converted(
     if !matches!(media, MediaMode::Convert | MediaMode::Compress) {
         return Ok(None);
     }
+    // A blank path converts nothing. `store_claimed_or_path`, which runs
+    // next, refuses it as it refuses any path the check refuses.
     let Some(rel) = att.path.as_deref().and_then(trimmed) else {
         return Ok(None);
     };
@@ -169,8 +171,7 @@ fn store_claimed_or_path(
         return Ok(None);
     }
 
-    if let Some(rel) = att.path.as_deref() {
-        let source = safe_source(export_dir, rel, line)?;
+    if let Some(source) = checked {
         return assets_api::hash_and_store(
             &source,
             assets_dir,

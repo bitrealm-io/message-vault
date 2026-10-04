@@ -236,33 +236,41 @@ fn materializing_placeholders_twice_keeps_them() {
     assert!(attachments.join("placeholder.bin").is_file());
 }
 
+/// Run `materialize_placeholders` on `output_dir` with `folder` read-only,
+/// so a delete inside it fails on Unix, and put the permissions back.
+/// `None` when the user can delete from a read-only folder (root): such a
+/// user cannot exercise the failure, so the test has nothing to check.
+#[cfg(unix)]
+fn materialize_with_folder_read_only(folder: &Path, output_dir: &Path) -> Option<Result<()>> {
+    use std::os::unix::fs::PermissionsExt;
+
+    fs::set_permissions(folder, fs::Permissions::from_mode(0o555)).expect("read-only");
+    let probe = folder.join("probe");
+    let result = if fs::write(&probe, b"").is_ok() {
+        let _ = fs::remove_file(&probe);
+        None
+    } else {
+        Some(materialize_placeholders(output_dir))
+    };
+    fs::set_permissions(folder, fs::Permissions::from_mode(0o755)).expect("restore");
+    result
+}
+
 /// A real attachment the pass cannot delete stays in the obfuscated
 /// export, and that export exists to be shared without the real content.
 /// The pass must fail and name the file, not report success (#1139).
-/// A read-only `attachments/` folder makes the delete fail on Unix.
 #[cfg(unix)]
 #[test]
 fn a_real_attachment_that_cannot_be_removed_fails_the_pass_and_names_the_file() {
-    use std::os::unix::fs::PermissionsExt;
-
     let dir = tempfile::tempdir().expect("tempdir");
     let attachments = dir.path().join("attachments");
     fs::create_dir_all(&attachments).expect("attachments dir");
     let photo = attachments.join("IMG_0001.jpg");
     fs::write(&photo, b"real photo bytes").expect("write");
-    fs::set_permissions(&attachments, fs::Permissions::from_mode(0o555)).expect("read-only");
 
-    // A user who can delete from a read-only folder (root) cannot
-    // exercise the failure, so the test has nothing to check there.
-    let probe = attachments.join("probe");
-    if fs::write(&probe, b"").is_ok() {
-        let _ = fs::remove_file(&probe);
-        fs::set_permissions(&attachments, fs::Permissions::from_mode(0o755)).expect("restore");
+    let Some(result) = materialize_with_folder_read_only(&attachments, dir.path()) else {
         return;
-    }
-
-    let result = materialize_placeholders(dir.path());
-    fs::set_permissions(&attachments, fs::Permissions::from_mode(0o755)).expect("restore");
+    };
 
     let err = result.expect_err("a file that cannot be removed must fail the pass");
     let message = format!("{err:#}");
@@ -277,31 +285,19 @@ fn a_real_attachment_that_cannot_be_removed_fails_the_pass_and_names_the_file() 
 }
 
 /// A real attachment in a subfolder that the pass cannot delete fails the
-/// pass, and the error names that file, not only its folder (#1406). A
-/// read-only subfolder makes the delete fail on Unix.
+/// pass, and the error names that file, not only its folder (#1406).
 #[cfg(unix)]
 #[test]
 fn a_file_in_a_subfolder_that_cannot_be_removed_is_the_one_the_error_names() {
-    use std::os::unix::fs::PermissionsExt;
-
     let dir = tempfile::tempdir().expect("tempdir");
     let sub = dir.path().join("attachments").join("sub");
     fs::create_dir_all(&sub).expect("subfolder");
     let photo = sub.join("photo.jpg");
     fs::write(&photo, b"real photo bytes").expect("write");
-    fs::set_permissions(&sub, fs::Permissions::from_mode(0o555)).expect("read-only");
 
-    // A user who can delete from a read-only folder (root) cannot exercise
-    // the failure, so the test has nothing to check there.
-    let probe = sub.join("probe");
-    if fs::write(&probe, b"").is_ok() {
-        let _ = fs::remove_file(&probe);
-        fs::set_permissions(&sub, fs::Permissions::from_mode(0o755)).expect("restore");
+    let Some(result) = materialize_with_folder_read_only(&sub, dir.path()) else {
         return;
-    }
-
-    let result = materialize_placeholders(dir.path());
-    fs::set_permissions(&sub, fs::Permissions::from_mode(0o755)).expect("restore");
+    };
 
     let message = format!("{:#}", result.expect_err("the pass must fail"));
     assert!(

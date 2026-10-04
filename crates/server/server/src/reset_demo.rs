@@ -19,7 +19,7 @@ use serde::Deserialize;
 use sqlx::{Row, SqlitePool};
 
 use crate::config::Config;
-use crate::db::account_profile;
+use crate::db::account_profile::{self, MessageBatch, MessagesToDelete};
 use crate::db::address_book::{self, LoadCounts, LoadMode};
 use crate::db::audit_trail::AuditActor;
 use crate::db::demo_account_build;
@@ -1573,12 +1573,14 @@ async fn seed_demo_account_on_conn(
 
 /// The most messages the wipe deletes in one transaction, with their
 /// attachments, tapbacks and search-index rows. One batch must finish far
-/// inside the 15-second busy timeout another writer waits.
+/// inside the 15-second busy timeout another writer waits: a batch of 5,000
+/// took about 0.13 s on the medium Demo Data.
 const WIPE_BATCH_ROWS: NonZeroU32 = NonZeroU32::new(5_000).expect("5,000 is not zero");
 
 /// Delete the demo account, `actor` acting, and its on-disk attachments.
 /// Leaves the database and other accounts intact. Its messages, nearly all
-/// its rows, go first in batches of [`WIPE_BATCH_ROWS`], each its own
+/// its rows, go first, duplicates before the rest, in batches of
+/// [`WIPE_BATCH_ROWS`], each its own
 /// transaction, so another account's write waits for one batch at most
 /// (#1404). The rest of its rows follow the account row via CASCADE; its
 /// Audit Trail stays, unlinked, with an `account_deleted` entry, as any
@@ -1593,8 +1595,8 @@ async fn wipe_demo_account(
 }
 
 /// [`wipe_demo_account`] in batches of at most `batch_rows` messages, calling
-/// `after_batch` once each batch that may have more after it is committed,
-/// so a test can write for another account between two batches.
+/// `after_batch` once each batch is committed, so a test can write for
+/// another account between two batches.
 async fn wipe_demo_account_with(
     cfg: &Config,
     db: &SqlitePool,
@@ -1611,8 +1613,17 @@ async fn wipe_demo_account_with(
         .acquire()
         .await
         .with_context(|| format!("open {} for demo account wipe", cfg.paths.db.display()))?;
-    while account_profile::delete_account_messages_batch(&mut conn, account_id, batch_rows).await? {
-        after_batch().await?;
+    for which in [MessagesToDelete::Duplicates, MessagesToDelete::Any] {
+        loop {
+            let batch = account_profile::delete_account_messages_batch(
+                &mut conn, account_id, which, batch_rows,
+            )
+            .await?;
+            after_batch().await?;
+            if batch == MessageBatch::Done {
+                break;
+            }
+        }
     }
     let deleted = account_profile::delete_account(&mut conn, account_id, actor).await?;
     println!("  sql:      demo account rows removed (account existed={deleted})");

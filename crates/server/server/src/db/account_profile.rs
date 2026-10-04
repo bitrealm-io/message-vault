@@ -291,39 +291,68 @@ pub async fn delete_account(
     Ok(existed)
 }
 
-/// Delete up to `limit` of `account_id`'s messages in one write transaction
-/// of its own. Their attachments, tapbacks and search-index rows go with
-/// them, through `ON DELETE CASCADE` and the search triggers. Returns
-/// whether messages may be left: a batch that deleted fewer than `limit`
-/// found none after it.
-///
-/// Duplicates go before the messages they duplicate. `duplicate_of` is
-/// `ON DELETE SET NULL`, so deleting an original first would show its
-/// duplicates, which dedupe had hidden, to a reader between two batches.
-/// No index serves that order, so each batch sorts the account's message
-/// ids; the sort is a small part of a batch next to the deletes it feeds.
+/// Which of an account's messages a batch deletes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MessagesToDelete {
+    /// Messages dedupe marked as duplicates (`duplicate_of` set).
+    Duplicates,
+    /// Any of the account's messages.
+    Any,
+}
+
+/// What a batch of [`delete_account_messages_batch`] left.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MessageBatch {
+    /// The batch was full, so messages of its kind may remain.
+    MoreMayRemain,
+    /// The batch was short: none of its kind remain.
+    Done,
+}
+
+/// Delete up to `limit` of `account_id`'s messages of the kind `which`, in
+/// one write transaction of its own. Their attachments, tapbacks and
+/// search-index rows go with them, through `ON DELETE CASCADE` and the
+/// search triggers.
 ///
 /// Messages are nearly all of an account's rows, so deleting them this way
-/// before [`delete_account`] leaves that one statement little to do.
+/// before [`delete_account`] leaves that one statement little to do. A
+/// caller deletes the duplicates first: `duplicate_of` is
+/// `ON DELETE SET NULL`, so deleting an original first would show its
+/// duplicates, which dedupe had hidden, to a reader between two batches,
+/// and cost an UPDATE for each. Neither select sorts, so each stops after
+/// `limit` rows: the duplicates' select reads the partial index
+/// `ix_messages_duplicate_of`, and the other an index on `account_id`.
 pub async fn delete_account_messages_batch(
     conn: &mut SqliteConnection,
     account_id: i64,
+    which: MessagesToDelete,
     limit: std::num::NonZeroU32,
-) -> Result<bool> {
+) -> Result<MessageBatch> {
+    let sql = match which {
+        MessagesToDelete::Duplicates => {
+            "DELETE FROM messages WHERE id IN
+             (SELECT id FROM messages
+              WHERE account_id = $1 AND duplicate_of IS NOT NULL LIMIT $2)"
+        }
+        MessagesToDelete::Any => {
+            "DELETE FROM messages WHERE id IN
+             (SELECT id FROM messages WHERE account_id = $1 LIMIT $2)"
+        }
+    };
     let mut tx = begin_write(conn).await?;
-    let deleted = sqlx::query(
-        "DELETE FROM messages WHERE id IN
-         (SELECT id FROM messages WHERE account_id = $1
-          ORDER BY duplicate_of IS NULL LIMIT $2)",
-    )
-    .bind(account_id)
-    .bind(i64::from(limit.get()))
-    .execute(&mut *tx)
-    .await
-    .with_context(|| format!("delete a batch of account {account_id}'s messages"))?
-    .rows_affected();
+    let deleted = sqlx::query(sql)
+        .bind(account_id)
+        .bind(i64::from(limit.get()))
+        .execute(&mut *tx)
+        .await
+        .with_context(|| format!("delete a batch of account {account_id}'s messages"))?
+        .rows_affected();
     tx.commit().await?;
-    Ok(deleted == u64::from(limit.get()))
+    Ok(if deleted == u64::from(limit.get()) {
+        MessageBatch::MoreMayRemain
+    } else {
+        MessageBatch::Done
+    })
 }
 
 /// Stable id for the seeded demo account (`reset-demo`).

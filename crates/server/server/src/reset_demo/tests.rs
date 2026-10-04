@@ -2331,8 +2331,8 @@ async fn another_account_writes_between_the_demo_wipes_delete_batches() {
 
     assert_eq!(
         demo_messages_left,
-        [2, 1, 0],
-        "one message per batch, messages first: {demo_messages_left:?}"
+        [3, 2, 1, 0, 0],
+        "an empty batch of duplicates, then one message per batch until a short one: {demo_messages_left:?}"
     );
     let mut conn = build.conn().await.expect("acquire");
     let demo_rows = count(

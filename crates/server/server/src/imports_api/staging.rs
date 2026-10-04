@@ -95,11 +95,11 @@ fn store_claimed_or_path(
 ) -> Result<Option<StoredAsset>> {
     // Checked before the stored-fingerprint lookup, which never reads the
     // file: `attachments.path` keeps the path as sent, and an Export writes
-    // the file there, so a path the check refuses is never stored.
+    // the file there, so a path the check refuses is never stored. A path of
+    // spaces is checked too, and refused as `.` is.
     let checked = att
         .path
         .as_deref()
-        .and_then(trimmed)
         .map(|rel| safe_source(export_dir, rel, line))
         .transpose()?;
     if let Some(sha) = att.sha256.as_deref().and_then(trimmed) {

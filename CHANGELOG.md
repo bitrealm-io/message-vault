@@ -237,6 +237,10 @@ released versions carry their date on the heading.
 
 #### Importing
 
+- 2026-10-03 **An attachment whose file name is only spaces is refused.**
+  An import that named a file the server already held, with a file name
+  made only of spaces, stored that blank name. It is now refused with the
+  line of the message, as any other file name that names no file is.
 - 2026-10-03 **Staging's progress no longer jumps forward.** When a backup
   listed photos or files it did not hold, their sizes counted toward the
   total and came off only as Staging reached each one, so the percentage

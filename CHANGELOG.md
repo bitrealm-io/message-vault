@@ -780,6 +780,14 @@ released versions carry their date on the heading.
   file alone. Before it puts the rebuilt database in place, it checks every
   row of every other account and the Server Settings, and refuses if any of
   them changed.
+- 2026-10-03 **Rebuilding the Demo Account no longer holds up other
+  accounts.** The rebuild deleted the old Demo Account in one step and then
+  compacted the whole database file, and on the large Demo Data another
+  account's Upload or edit could wait long enough to fail. The old Demo
+  Account's messages are now deleted a few thousand at a time, so other
+  accounts' changes go through in between. Only `reset-demo`, which runs
+  while the server is stopped, still compacts the file; a new Message Crate
+  also starts listening sooner.
 
 ### Upgrading
 

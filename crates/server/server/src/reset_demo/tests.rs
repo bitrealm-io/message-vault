@@ -2235,6 +2235,7 @@ async fn every_import_contact_group_of_a_built_demo_has_members() {
         &prepared,
         DEMO_ACCOUNT_ID,
         AuditActor::CommandLine,
+        Vacuum::Skip,
     )
     .await
     .expect("build the demo account");
@@ -2261,4 +2262,340 @@ async fn every_import_contact_group_of_a_built_demo_has_members() {
         );
     }
     close_test_db(pool, conn).await;
+}
+
+/// The wipe deletes the old Demo Account's rows in batches, each its own
+/// transaction, messages first, so another account's write between two
+/// batches succeeds at once instead of waiting out the busy timeout, and the
+/// Demo Account ends with no rows (#1404).
+#[tokio::test]
+async fn another_account_writes_between_the_demo_wipes_delete_batches() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let bundle = temp.path().join("bundle");
+    write_tiny_reset_bundle(&bundle);
+    let cfg = crate::open_db::fresh_config(temp.path());
+    let build = OpenDb::create_or_open(cfg.clone())
+        .await
+        .expect("open the database");
+    let other = {
+        let mut conn = build.conn().await.expect("acquire");
+        account_profile::insert_account(&mut conn, "someone", None, None)
+            .await
+            .expect("add another account")
+    };
+    let prepared = validate_prepared_bundle(&bundle).expect("a complete bundle");
+    rebuild_demo_account(
+        &cfg,
+        &build.db,
+        &prepared,
+        DEMO_ACCOUNT_ID,
+        AuditActor::Server,
+        Vacuum::Skip,
+    )
+    .await
+    .expect("build the demo account");
+
+    // The other account's requests come in on a connection of their own,
+    // which gives up at once when the database is locked.
+    let others = engine::open_pool_for_path(&cfg.paths.db)
+        .await
+        .expect("open a second pool");
+    let mut demo_messages_left = Vec::new();
+    wipe_demo_account_with(
+        &cfg,
+        &build.db,
+        DEMO_ACCOUNT_ID,
+        AuditActor::Owner,
+        NonZeroU32::MIN,
+        async || {
+            let mut conn = others.acquire().await?;
+            sqlx::query("PRAGMA busy_timeout = 0")
+                .execute(&mut *conn)
+                .await?;
+            let left: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE account_id = $1")
+                    .bind(DEMO_ACCOUNT_ID)
+                    .fetch_one(&mut *conn)
+                    .await?;
+            demo_messages_left.push(left);
+            sqlx::query("UPDATE accounts SET preferred_name = $1 WHERE id = $2")
+                .bind(format!("write {}", demo_messages_left.len()))
+                .bind(other)
+                .execute(&mut *conn)
+                .await?;
+            Ok(())
+        },
+    )
+    .await
+    .expect("the wipe finishes, and every write between batches succeeds");
+
+    assert_eq!(
+        demo_messages_left,
+        [3, 2, 1, 0, 0],
+        "an empty batch of duplicates, then one message per batch until a short one: {demo_messages_left:?}"
+    );
+    let mut conn = build.conn().await.expect("acquire");
+    let demo_rows = count(
+        &mut conn,
+        "SELECT (SELECT COUNT(*) FROM accounts WHERE id = $1)
+              + (SELECT COUNT(*) FROM messages WHERE account_id = $1)
+              + (SELECT COUNT(*) FROM conversations WHERE account_id = $1)
+              + (SELECT COUNT(*) FROM contacts WHERE account_id = $1)
+              + (SELECT COUNT(*) FROM handles WHERE account_id = $1)",
+    )
+    .await;
+    assert_eq!(demo_rows, 0, "the Demo Account and its rows are gone");
+    let name: Option<String> =
+        sqlx::query_scalar("SELECT preferred_name FROM accounts WHERE id = $1")
+            .bind(other)
+            .fetch_one(&mut *conn)
+            .await
+            .expect("read the other account");
+    assert_eq!(
+        name,
+        Some(format!("write {}", demo_messages_left.len())),
+        "the other account keeps its last write"
+    );
+    drop(conn);
+    others.close().await;
+    build.close().await;
+}
+
+/// The number of free pages in the database at `db`: pages a delete freed
+/// and no `VACUUM` has taken out of the file since.
+async fn free_pages(db: &Path) -> i64 {
+    let pool = engine::open_pool_for_path(db)
+        .await
+        .expect("open the database");
+    let pages: i64 = sqlx::query_scalar("PRAGMA freelist_count")
+        .fetch_one(&pool)
+        .await
+        .expect("read the free page count");
+    pool.close().await;
+    pages
+}
+
+/// Give the database at `db` a Demo Account of 2,000 messages of 1,000
+/// characters each, so deleting it frees hundreds of pages that only a
+/// `VACUUM` takes out of the file.
+async fn seed_bulky_demo(db: &Path) {
+    let (pool, mut conn) = test_db(db).await;
+    account_profile::ensure_account_row(&mut conn, DEMO_ACCOUNT_ID)
+        .await
+        .expect("seed the previous demo account");
+    let handle_id: i64 = sqlx::query_scalar(
+        "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
+         VALUES ($1, '+15555550100', '+15555550100', 'phone', 'phone')
+         RETURNING id",
+    )
+    .bind(DEMO_ACCOUNT_ID)
+    .fetch_one(&mut *conn)
+    .await
+    .expect("insert the previous handle");
+    let conversation_id: i64 = sqlx::query_scalar(
+        "INSERT INTO conversations (account_id, chat_handle_id, conversation_type, source_file)
+         VALUES ($1, $2, 'individual', 'previous.jsonl')
+         RETURNING id",
+    )
+    .bind(DEMO_ACCOUNT_ID)
+    .bind(handle_id)
+    .fetch_one(&mut *conn)
+    .await
+    .expect("insert the previous conversation");
+    sqlx::query(
+        "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 2000)
+         INSERT INTO messages (
+            conversation_id, account_id, source, guid, timestamp,
+            is_from_me, body, sort_order
+         )
+         SELECT $1, $2, 'whatsapp', 'previous-' || i, '2026-01-01T00:00:00Z',
+                0, printf('%.1000c', 'x'), i
+         FROM n",
+    )
+    .bind(conversation_id)
+    .bind(DEMO_ACCOUNT_ID)
+    .execute(&mut *conn)
+    .await
+    .expect("insert the previous messages");
+    close_test_db(pool, conn).await;
+    checkpoint_and_clean_sidecars(db, "while seeding the previous demo")
+        .await
+        .expect("checkpoint the previous demo");
+}
+
+/// A bundle generator for a running server's build: the tiny bundle.
+fn tiny_bundle(_size: DemoSize, bundle: &Path) -> Result<()> {
+    write_tiny_reset_bundle(bundle);
+    Ok(())
+}
+
+/// A Demo Account build on a running server runs no `VACUUM`, which would
+/// rewrite every account's rows while holding the write lock: the pages the
+/// old Demo Account freed stay free in the file (#1404).
+#[tokio::test]
+async fn a_running_servers_demo_build_runs_no_vacuum() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let cfg = crate::open_db::fresh_config(temp.path());
+    fs::create_dir_all(cfg.paths.db.parent().expect("database parent"))
+        .expect("create database parent");
+    seed_bulky_demo(&cfg.paths.db).await;
+    let served = OpenDb::create_or_open(cfg.clone())
+        .await
+        .expect("open the database");
+
+    build_demo_account(
+        served.db.clone(),
+        std::sync::Arc::new(cfg.clone()),
+        DemoSize::Medium,
+        tiny_bundle,
+    )
+    .await
+    .expect("build the demo account");
+    served.close().await;
+
+    assert!(
+        free_pages(&cfg.paths.db).await > 0,
+        "the old Demo Account's pages stay free"
+    );
+}
+
+/// `serve` seeding a new database runs no `VACUUM`: it would only reclaim
+/// the staging tables' churn, while the desktop app waits for the server to
+/// listen (#1404).
+#[tokio::test]
+async fn a_first_start_seed_runs_no_vacuum() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let mut cfg = crate::open_db::fresh_config(temp.path());
+    cfg.paths.db = temp.path().join("new/messagecrate.db");
+
+    seed_new_database_with(&cfg, |bundle| {
+        write_tiny_reset_bundle(bundle);
+        let imessage = bundle.join("staging").join(IMESSAGE_SOURCE).join("a.jsonl");
+        let first = fs::read_to_string(&imessage)?;
+        let (header, message) = first.split_once('\n').expect("a header line");
+        let mut text = format!("{header}\n");
+        for i in 0..2000 {
+            text.push_str(
+                &message
+                    .replace("pg-demo-imessage", &format!("pg-demo-imessage-{i}"))
+                    .replace("\"hello\"", &format!("\"{}\"", "x".repeat(1000))),
+            );
+        }
+        fs::write(&imessage, text)?;
+        Ok(())
+    })
+    .await
+    .expect("seeding succeeds");
+
+    assert!(
+        free_pages(&cfg.paths.db).await > 0,
+        "the staging tables' freed pages stay free"
+    );
+}
+
+/// The `reset-demo` command runs `VACUUM`: it serves no one while it runs,
+/// and builds on a copy swapped in afterwards, so the pages the old Demo
+/// Account freed are taken out of the file (#1404).
+#[tokio::test]
+async fn the_reset_demo_command_runs_vacuum() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let bundle = temp.path().join("bundle");
+    write_tiny_reset_bundle(&bundle);
+    let cfg = crate::open_db::fresh_config(temp.path());
+    fs::create_dir_all(cfg.paths.db.parent().expect("database parent"))
+        .expect("create database parent");
+    seed_bulky_demo(&cfg.paths.db).await;
+
+    reset_prepared_bundle(&cfg, &bundle, DEMO_ACCOUNT_ID)
+        .await
+        .expect("a complete bundle resets");
+
+    assert_eq!(
+        free_pages(&cfg.paths.db).await,
+        0,
+        "VACUUM left no free page"
+    );
+}
+
+/// The wipe deletes a duplicate before the message it duplicates. Deleting
+/// the original first sets the duplicate's `duplicate_of` to NULL, so
+/// between two batches the Demo Account would show the duplicate that
+/// dedupe had hidden (#1404).
+#[tokio::test]
+async fn the_wipe_deletes_duplicates_before_the_messages_they_duplicate() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let cfg = crate::open_db::fresh_config(temp.path());
+    fs::create_dir_all(cfg.paths.db.parent().expect("database parent"))
+        .expect("create database parent");
+    let (pool, mut conn) = test_db(&cfg.paths.db).await;
+    account_profile::ensure_account_row(&mut conn, DEMO_ACCOUNT_ID)
+        .await
+        .expect("seed the demo account");
+    let handle_id: i64 = sqlx::query_scalar(
+        "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
+         VALUES ($1, '+15555550100', '+15555550100', 'phone', 'phone')
+         RETURNING id",
+    )
+    .bind(DEMO_ACCOUNT_ID)
+    .fetch_one(&mut *conn)
+    .await
+    .expect("insert a handle");
+    let conversation_id: i64 = sqlx::query_scalar(
+        "INSERT INTO conversations (account_id, chat_handle_id, conversation_type, source_file)
+         VALUES ($1, $2, 'individual', 'a.jsonl')
+         RETURNING id",
+    )
+    .bind(DEMO_ACCOUNT_ID)
+    .bind(handle_id)
+    .fetch_one(&mut *conn)
+    .await
+    .expect("insert a conversation");
+    let mut insert_message = async |guid: &str, duplicate_of: Option<i64>| -> i64 {
+        sqlx::query_scalar(
+            "INSERT INTO messages (
+                conversation_id, account_id, source, guid, timestamp,
+                is_from_me, body, sort_order, duplicate_of
+             ) VALUES ($1, $2, 'sms', $3, '2026-01-01T00:00:00Z', 0, 'hello', 0, $4)
+             RETURNING id",
+        )
+        .bind(conversation_id)
+        .bind(DEMO_ACCOUNT_ID)
+        .bind(guid)
+        .bind(duplicate_of)
+        .fetch_one(&mut *conn)
+        .await
+        .expect("insert a message")
+    };
+    let original = insert_message("original", None).await;
+    let duplicate = insert_message("duplicate", Some(original)).await;
+    close_test_db(pool, conn).await;
+
+    let build = build_pool(&cfg.paths.db).await;
+    let mut left_after_batches: Vec<Vec<(i64, Option<i64>)>> = Vec::new();
+    wipe_demo_account_with(
+        &cfg,
+        &build,
+        DEMO_ACCOUNT_ID,
+        AuditActor::Server,
+        NonZeroU32::MIN,
+        async || {
+            let left = sqlx::query_as(
+                "SELECT id, duplicate_of FROM messages WHERE account_id = $1 ORDER BY id",
+            )
+            .bind(DEMO_ACCOUNT_ID)
+            .fetch_all(&build)
+            .await?;
+            left_after_batches.push(left);
+            Ok(())
+        },
+    )
+    .await
+    .expect("wipe the demo account");
+    build.close().await;
+
+    assert_eq!(
+        left_after_batches.first(),
+        Some(&vec![(original, None)]),
+        "the first batch deletes the duplicate {duplicate} and leaves the original"
+    );
 }
